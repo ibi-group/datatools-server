@@ -34,6 +34,6 @@ public class DataManager {
         String apiPrefix = "/api/manager/";
         ConfigController.register(apiPrefix);
         ProjectController.register(apiPrefix);
-        
+
     }
 }

@@ -4,11 +4,16 @@ import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.utils.JsonUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Iterator;
+import java.util.Map;
 
 import spark.Request;
 import spark.Response;
@@ -53,10 +58,43 @@ public class ProjectController {
         // TODO: fail gracefully
         System.out.println();
         proj.name = req.queryParams("name");
-        //System.out.println("new proj name=" + proj.name);
-        //c.setUser(userProfile);
 
         proj.save();
+
+        return proj;
+    }
+
+    public static Project updateProject(Request req, Response res) throws IOException {
+        String id = req.params("id");
+        Project proj = Project.get(id);
+        System.out.println("updating project " + id);
+        System.out.println(req.body());
+        System.out.println("proj=" + proj);
+
+        /*jObject = new JSONObject(contents.trim());
+        Iterator<?> keys = jObject.keys();
+
+        while( keys.hasNext() ) {
+            String key = (String)keys.next();
+            if ( jObject.get(key) instanceof JSONObject ) {
+
+            }
+        }*/
+
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode node = mapper.readTree(req.body());
+        Iterator<Map.Entry<String, JsonNode>> fieldsIter = node.fields();
+        while (fieldsIter.hasNext()) {
+            Map.Entry<String, JsonNode> entry = fieldsIter.next();
+            System.out.println("entry key=" + entry.getKey());
+
+            if(entry.getKey().equals("name")) {
+                System.out.println(entry.getValue().toString());
+                //proj.name = entry.getValue().asText();
+            }
+        }
+
+        //proj.save();
 
         return proj;
     }
@@ -65,6 +103,7 @@ public class ProjectController {
         get(apiPrefix + "project/:id", ProjectController::getProject, JsonUtil.objectMapper::writeValueAsString);
         get(apiPrefix + "project", ProjectController::getAllProjects, JsonUtil.objectMapper::writeValueAsString);
         post(apiPrefix + "project", ProjectController::createProject, JsonUtil.objectMapper::writeValueAsString);
+        put(apiPrefix + "project/:id", ProjectController::updateProject, JsonUtil.objectMapper::writeValueAsString);
     }
 
 }
