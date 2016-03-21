@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.models;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonView;
 
+import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -23,7 +24,7 @@ import java.util.UUID;
  */
 
 @MappedSuperclass
-public abstract class Model {
+public abstract class Model implements Serializable {
     private static final long serialVersionUID = 1L;
 
     public Model () {

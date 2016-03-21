@@ -67,34 +67,19 @@ public class ProjectController {
     public static Project updateProject(Request req, Response res) throws IOException {
         String id = req.params("id");
         Project proj = Project.get(id);
-        System.out.println("updating project " + id);
-        System.out.println(req.body());
-        System.out.println("proj=" + proj);
-
-        /*jObject = new JSONObject(contents.trim());
-        Iterator<?> keys = jObject.keys();
-
-        while( keys.hasNext() ) {
-            String key = (String)keys.next();
-            if ( jObject.get(key) instanceof JSONObject ) {
-
-            }
-        }*/
 
         ObjectMapper mapper = new ObjectMapper();
         JsonNode node = mapper.readTree(req.body());
         Iterator<Map.Entry<String, JsonNode>> fieldsIter = node.fields();
         while (fieldsIter.hasNext()) {
             Map.Entry<String, JsonNode> entry = fieldsIter.next();
-            System.out.println("entry key=" + entry.getKey());
-
             if(entry.getKey().equals("name")) {
                 System.out.println(entry.getValue().toString());
-                //proj.name = entry.getValue().asText();
+                proj.name = entry.getValue().asText();
             }
         }
 
-        //proj.save();
+        proj.save();
 
         return proj;
     }
