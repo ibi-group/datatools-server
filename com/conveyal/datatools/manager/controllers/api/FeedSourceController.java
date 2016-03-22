@@ -15,9 +15,7 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.Map;
 
-import static spark.Spark.get;
-import static spark.Spark.post;
-import static spark.Spark.put;
+import static spark.Spark.*;
 
 /**
  * Created by demory on 3/21/16.
@@ -84,10 +82,18 @@ public class FeedSourceController {
         }
     }
 
+    public static FeedSource deleteFeedSource(Request req, Response res) {
+        String id = req.params("id");
+        FeedSource source = FeedSource.get(id);
+        source.delete();
+        return source;
+    }
+
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/feedsource/:id", FeedSourceController::getFeedSource, JsonUtil.objectMapper::writeValueAsString);
         get(apiPrefix + "secure/feedsource", FeedSourceController::getAllFeedSources, JsonUtil.objectMapper::writeValueAsString);
         post(apiPrefix + "secure/feedsource", FeedSourceController::createFeedSource, JsonUtil.objectMapper::writeValueAsString);
         put(apiPrefix + "secure/feedsource/:id", FeedSourceController::updateFeedSource, JsonUtil.objectMapper::writeValueAsString);
+        delete(apiPrefix + "secure/feedsource/:id", FeedSourceController::deleteFeedSource, JsonUtil.objectMapper::writeValueAsString);
     }
 }

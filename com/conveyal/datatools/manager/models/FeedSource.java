@@ -311,13 +311,13 @@ public class FeedSource extends Model {
     /**
      * Delete this feed source and everything that it contains.
      */
-    /*public void delete() {
-        for (FeedVersion v : getFeedVersions()) {
+    public void delete() {
+        /*for (FeedVersion v : getFeedVersions()) {
             v.delete();
-        }
+        }*/
 
         sourceStore.delete(this.id);
-    }*/
+    }
 
     /*@JsonIgnore
     public AgencyBranding getAgencyBranding(String agencyId) {
