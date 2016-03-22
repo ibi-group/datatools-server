@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.controllers.api;
 
+import com.conveyal.datatools.manager.controllers.AuthenticatedController;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.utils.JsonUtil;
@@ -83,10 +84,10 @@ public class ProjectController {
     }
 
     public static void register (String apiPrefix) {
-        get(apiPrefix + "project/:id", ProjectController::getProject, JsonUtil.objectMapper::writeValueAsString);
-        get(apiPrefix + "project", ProjectController::getAllProjects, JsonUtil.objectMapper::writeValueAsString);
-        post(apiPrefix + "project", ProjectController::createProject, JsonUtil.objectMapper::writeValueAsString);
-        put(apiPrefix + "project/:id", ProjectController::updateProject, JsonUtil.objectMapper::writeValueAsString);
+        get(apiPrefix + "secure/project/:id", ProjectController::getProject, JsonUtil.objectMapper::writeValueAsString);
+        get(apiPrefix + "secure/project", ProjectController::getAllProjects, JsonUtil.objectMapper::writeValueAsString);
+        post(apiPrefix + "secure/project", ProjectController::createProject, JsonUtil.objectMapper::writeValueAsString);
+        put(apiPrefix + "secure/project/:id", ProjectController::updateProject, JsonUtil.objectMapper::writeValueAsString);
     }
 
 }

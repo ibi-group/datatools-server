@@ -8,15 +8,9 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonView;
-
-import com.conveyal.datatools.manager.utils.Auth0UserProfile;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 
 import javax.persistence.MappedSuperclass;
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
 
 /**
  * The base class for all of the models used by GTFS Data Manager.
