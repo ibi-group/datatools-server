@@ -1,10 +1,12 @@
 package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.manager.persistence.DataStore;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 
 import java.io.Serializable;
+import java.util.ArrayList;
 import java.util.Collection;
 
 /**
@@ -17,7 +19,7 @@ import java.util.Collection;
  *
  */
 @JsonInclude(Include.ALWAYS)
-public class Project extends Model implements Serializable {
+public class Project extends Model {
     private static final long serialVersionUID = 1L;
 
     private static DataStore<Project> projectStore = new DataStore<>("projects");
@@ -75,19 +77,19 @@ public class Project extends Model implements Serializable {
      * Get all the feed sources for this feed collection
      */
 
-    /*@JsonIgnore
+    @JsonIgnore
     public Collection<FeedSource> getFeedSources () {
         ArrayList<FeedSource> ret = new ArrayList<FeedSource>();
 
         // TODO: use index, but not important for now because we generally only have one FeedCollection
         for (FeedSource fs : FeedSource.getAll()) {
-            if (this.id.equals(fs.feedCollectionId)) {
+            if (this.id.equals(fs.projectId)) {
                 ret.add(fs);
             }
         }
 
         return ret;
-    }*/
+    }
 
     /**
      * Get all the deployments for this feed collection

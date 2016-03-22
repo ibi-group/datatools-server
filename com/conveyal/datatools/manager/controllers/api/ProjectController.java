@@ -1,6 +1,5 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.conveyal.datatools.manager.controllers.AuthenticatedController;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.utils.JsonUtil;

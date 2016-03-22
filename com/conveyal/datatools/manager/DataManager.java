@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager;
 
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.controllers.api.ConfigController;
+import com.conveyal.datatools.manager.controllers.api.FeedSourceController;
 import com.conveyal.datatools.manager.controllers.api.ProjectController;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
@@ -35,9 +36,9 @@ public class DataManager {
         String apiPrefix = "/api/manager/";
         ConfigController.register(apiPrefix);
         ProjectController.register(apiPrefix);
+        FeedSourceController.register(apiPrefix);
 
         before(apiPrefix + "secure/*", (request, response) -> {
-            System.out.println("auth check");
             Auth0Connection.checkUser(request);
         });
 
