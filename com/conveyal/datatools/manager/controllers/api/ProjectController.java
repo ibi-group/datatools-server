@@ -51,14 +51,10 @@ public class ProjectController {
         return Project.get(id);
     }
 
-    public static Project createProject(Request req, Response res) {
-
+    public static Project createProject(Request req, Response res) throws IOException {
         Project proj = new Project();
 
-        // TODO: fail gracefully
-        System.out.println();
-        proj.name = req.queryParams("name");
-
+        applyJsonToProject(proj, req.body());
         proj.save();
 
         return proj;
@@ -68,20 +64,22 @@ public class ProjectController {
         String id = req.params("id");
         Project proj = Project.get(id);
 
+        applyJsonToProject(proj, req.body());
+        proj.save();
+
+        return proj;
+    }
+
+    public static void applyJsonToProject(Project proj, String json) throws IOException {
         ObjectMapper mapper = new ObjectMapper();
-        JsonNode node = mapper.readTree(req.body());
+        JsonNode node = mapper.readTree(json);
         Iterator<Map.Entry<String, JsonNode>> fieldsIter = node.fields();
         while (fieldsIter.hasNext()) {
             Map.Entry<String, JsonNode> entry = fieldsIter.next();
             if(entry.getKey().equals("name")) {
-                System.out.println(entry.getValue().toString());
                 proj.name = entry.getValue().asText();
             }
         }
-
-        proj.save();
-
-        return proj;
     }
 
     public static void register (String apiPrefix) {
