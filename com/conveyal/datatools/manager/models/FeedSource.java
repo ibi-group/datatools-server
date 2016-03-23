@@ -92,6 +92,7 @@ public class FeedSource extends Model {
      */
     public FeedSource () {
         // do nothing
+        this.retrievalMethod = FeedRetrievalMethod.MANUALLY_UPLOADED;
     }
 
 

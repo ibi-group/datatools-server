@@ -79,6 +79,11 @@ public class FeedSourceController {
                 source.name = entry.getValue().asText();
             }
 
+            if(entry.getKey().equals("retrievalMethod")) {
+                source.retrievalMethod = FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.valueOf(entry.getValue().asText());
+            }
+
+
         }
     }
 
