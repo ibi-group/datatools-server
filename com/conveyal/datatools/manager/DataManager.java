@@ -3,7 +3,9 @@ package com.conveyal.datatools.manager;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.controllers.api.ConfigController;
 import com.conveyal.datatools.manager.controllers.api.FeedSourceController;
+import com.conveyal.datatools.manager.controllers.api.FeedVersionController;
 import com.conveyal.datatools.manager.controllers.api.ProjectController;
+import com.conveyal.datatools.manager.models.FeedVersion;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 
 import java.io.File;
@@ -37,6 +39,7 @@ public class DataManager {
         ConfigController.register(apiPrefix);
         ProjectController.register(apiPrefix);
         FeedSourceController.register(apiPrefix);
+        FeedVersionController.register(apiPrefix);
 
         before(apiPrefix + "secure/*", (request, response) -> {
             Auth0Connection.checkUser(request);

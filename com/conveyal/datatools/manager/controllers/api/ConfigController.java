@@ -1,8 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.manager.DataManager;
-import com.conveyal.datatools.manager.models.Project;
-import com.conveyal.datatools.manager.utils.JsonUtil;
+import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -10,17 +9,8 @@ import spark.Request;
 import spark.Response;
 
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.Collection;
 
 import static spark.Spark.get;
-
-import com.conveyal.datatools.manager.utils.JsonUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import spark.Request;
-import spark.Response;
 
 /**
  * Created by demory on 3/15/16.

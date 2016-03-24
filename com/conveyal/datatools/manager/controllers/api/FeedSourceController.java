@@ -1,8 +1,9 @@
 package com.conveyal.datatools.manager.controllers.api;
 
+import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Project;
-import com.conveyal.datatools.manager.utils.JsonUtil;
+import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -10,6 +11,7 @@ import spark.Request;
 import spark.Response;
 
 import java.io.IOException;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
@@ -79,6 +81,10 @@ public class FeedSourceController {
                 source.name = entry.getValue().asText();
             }
 
+            if(entry.getKey().equals("url")) {
+                source.url = new URL(entry.getValue().asText());
+            }
+
             if(entry.getKey().equals("retrievalMethod")) {
                 source.retrievalMethod = FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.valueOf(entry.getValue().asText());
             }
@@ -94,11 +100,35 @@ public class FeedSourceController {
         return source;
     }
 
+    /**
+     * Refetch this feed
+     * @throws JsonProcessingException
+     */
+    public static Boolean fetch (Request req, Response res) throws JsonProcessingException {
+
+        FeedSource s = FeedSource.get(req.params("id"));
+
+        System.out.println("fetching feed for source "+ s.name);
+        // ways to have permission to do this:
+        // 1) be an admin
+        // 2) have access to this feed through project permissions
+        // if all fail, the user cannot do this.
+
+        //if (!userProfile.canAdministerProject(s.feedCollectionId) && !userProfile.canManageFeed(s.feedCollectionId, s.id))
+        //    return unauthorized();
+
+        FetchSingleFeedJob job = new FetchSingleFeedJob(s);
+        job.run();
+        return true;
+    }
+
+
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/feedsource/:id", FeedSourceController::getFeedSource, JsonUtil.objectMapper::writeValueAsString);
         get(apiPrefix + "secure/feedsource", FeedSourceController::getAllFeedSources, JsonUtil.objectMapper::writeValueAsString);
         post(apiPrefix + "secure/feedsource", FeedSourceController::createFeedSource, JsonUtil.objectMapper::writeValueAsString);
         put(apiPrefix + "secure/feedsource/:id", FeedSourceController::updateFeedSource, JsonUtil.objectMapper::writeValueAsString);
         delete(apiPrefix + "secure/feedsource/:id", FeedSourceController::deleteFeedSource, JsonUtil.objectMapper::writeValueAsString);
+        post(apiPrefix + "secure/feedsource/:id/fetch", FeedSourceController::fetch, JsonUtil.objectMapper::writeValueAsString);
     }
 }

@@ -1,9 +1,13 @@
 package com.conveyal.datatools.manager.models;
 
+import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.persistence.DataStore;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonView;
+import org.mapdb.Fun;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -18,6 +22,10 @@ import java.util.Date;
  * Created by demory on 3/22/16.
  */
 public class FeedSource extends Model {
+    private static final long serialVersionUID = 1L;
+
+    public static final Logger LOG = LoggerFactory.getLogger(FeedSource.class);
+
     private static DataStore<FeedSource> sourceStore = new DataStore<FeedSource>("feedsources");
 
     /**
@@ -99,9 +107,9 @@ public class FeedSource extends Model {
     /**
      * Fetch the latest version of the feed.
      */
-    /*public FeedVersion fetch () {
+    public FeedVersion fetch () {
         if (this.retrievalMethod.equals(FeedRetrievalMethod.MANUALLY_UPLOADED)) {
-            Logger.info("not fetching feed {}, not a fetchable feed", this.toString());
+            LOG.info("not fetching feed {}, not a fetchable feed", this.toString());
             return null;
         }
 
@@ -120,11 +128,11 @@ public class FeedSource extends Model {
             url = this.url;
         else if (this.retrievalMethod.equals(FeedRetrievalMethod.PRODUCED_IN_HOUSE)) {
             if (this.snapshotVersion == null) {
-                Logger.error("Feed {} has no editor id; cannot fetch", this);
+                LOG.error("Feed {} has no editor id; cannot fetch", this);
                 return null;
             }
 
-            String baseUrl = Play.application().configuration().getString("application.editor_url");
+            String baseUrl = DataManager.config.getProperty("application.editor_url");
 
             if (!baseUrl.endsWith("/"))
                 baseUrl += "/";
@@ -133,30 +141,30 @@ public class FeedSource extends Model {
             try {
                 url = new URL(baseUrl + "api/mgrsnapshot/" + this.snapshotVersion + ".zip");
             } catch (MalformedURLException e) {
-                Logger.error("Invalid URL for editor, check your config.");
+                LOG.error("Invalid URL for editor, check your config.");
                 return null;
             }
         }
         else {
-            Logger.error("Unknown retrieval method" + this.retrievalMethod);
+            LOG.error("Unknown retrieval method" + this.retrievalMethod);
             return null;
         }
 
-        Logger.info(url.toString());
+        LOG.info(url.toString());
 
         // make the request, using the proper HTTP caching headers to prevent refetch, if applicable
         HttpURLConnection conn;
         try {
             conn = (HttpURLConnection) url.openConnection();
         } catch (IOException e) {
-            Logger.error("Unable to open connection to {}; not fetching feed {}", url, this);
+            LOG.error("Unable to open connection to {}; not fetching feed {}", url, this);
             return null;
         }
 
         conn.setDefaultUseCaches(true);
 
-        if (oauthToken != null)
-            conn.addRequestProperty("Authorization", "Bearer " + oauthToken);
+        /*if (oauthToken != null)
+            conn.addRequestProperty("Authorization", "Bearer " + oauthToken);*/
 
         // lastFetched is set to null when the URL changes
         if (latest != null && this.lastFetched != null)
@@ -166,24 +174,24 @@ public class FeedSource extends Model {
             conn.connect();
 
             if (conn.getResponseCode() == HttpURLConnection.HTTP_NOT_MODIFIED) {
-                Logger.info("Feed {} has not been modified", this);
+                LOG.info("Feed {} has not been modified", this);
                 return null;
             }
 
             // TODO: redirects
             else if (conn.getResponseCode() == HttpURLConnection.HTTP_OK) {
-                Logger.info("Saving feed {}", this);
+                LOG.info("Saving feed {}", this);
 
                 File out = newFeed.newFeed(conn.getInputStream());
 
             }
 
             else {
-                Logger.error("HTTP status {} retrieving feed {}", conn.getResponseMessage(), this);
+                LOG.error("HTTP status {} retrieving feed {}", conn.getResponseMessage(), this);
                 return null;
             }
         } catch (IOException e) {
-            Logger.error("Unable to connect to {}; not fetching feed {}", url, this);
+            LOG.error("Unable to connect to {}; not fetching feed {}", url, this);
             return null;
         }
 
@@ -192,7 +200,7 @@ public class FeedSource extends Model {
         newFeed.hash();
 
         if (latest != null && newFeed.hash.equals(latest.hash)) {
-            Logger.warn("Feed {} was fetched but has not changed; server operators should add If-Modified-Since support to avoid wasting bandwidth", this);
+            LOG.warn("Feed {} was fetched but has not changed; server operators should add If-Modified-Since support to avoid wasting bandwidth", this);
             newFeed.getFeed().delete();
             return null;
         }
@@ -206,7 +214,7 @@ public class FeedSource extends Model {
 
             return newFeed;
         }
-    }*/
+    }
 
     public int compareTo(FeedSource o) {
         return this.name.compareTo(o.name);
@@ -231,7 +239,7 @@ public class FeedSource extends Model {
      * Get the latest version of this feed
      * @return the latest version of this feed
      */
-    /*@JsonIgnore
+    @JsonIgnore
     public FeedVersion getLatest () {
         FeedVersion v = FeedVersion.versionStore.findFloor("version", new Fun.Tuple2(this.id, Fun.HI));
 
@@ -240,14 +248,14 @@ public class FeedSource extends Model {
             return null;
 
         return v;
-    }*/
+    }
 
-    /*@JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
     public String getLatestVersionId () {
         FeedVersion latest = getLatest();
         return latest != null ? latest.id : null;
-    }*/
+    }
 
     /**
      * We can't pass the entire latest feed version back, because it contains references back to this feedsource,
@@ -256,14 +264,14 @@ public class FeedSource extends Model {
      * @return
      */
     // TODO: use summarized feed source here. requires serious refactoring on client side.
-    /*@JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
     public Date getLastUpdated() {
         FeedVersion latest = getLatest();
         return latest != null ? latest.updated : null;
     }
 
-    @JsonInclude(JsonInclude.Include.NON_NULL)
+    /*@JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
     public FeedValidationResultSummary getLatestValidation () {
         FeedVersion latest = getLatest();
@@ -282,7 +290,7 @@ public class FeedSource extends Model {
      * Get all of the feed versions for this source
      * @return
      */
-    /*@JsonIgnore
+    @JsonIgnore
     public Collection<FeedVersion> getFeedVersions() {
         // TODO Indices
         ArrayList<FeedVersion> ret = new ArrayList<FeedVersion>();
@@ -294,7 +302,7 @@ public class FeedSource extends Model {
         }
 
         return ret;
-    }*/
+    }
 
     /**
      * Represents ways feeds can be retrieved
@@ -313,9 +321,9 @@ public class FeedSource extends Model {
      * Delete this feed source and everything that it contains.
      */
     public void delete() {
-        /*for (FeedVersion v : getFeedVersions()) {
+        for (FeedVersion v : getFeedVersions()) {
             v.delete();
-        }*/
+        }
 
         sourceStore.delete(this.id);
     }

@@ -1,4 +1,4 @@
-package com.conveyal.datatools.manager.utils;
+package com.conveyal.datatools.manager.utils.json;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 

@@ -1,8 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Project;
-import com.conveyal.datatools.manager.utils.JsonUtil;
+import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
