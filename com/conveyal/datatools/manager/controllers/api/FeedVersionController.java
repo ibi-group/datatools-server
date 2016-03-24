@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.controllers.api;
 
+import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
@@ -7,15 +8,25 @@ import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
 
+import java.io.*;
 import java.util.Collection;
+import java.util.Map;
 
 //import jobs.ProcessSingleFeedJob;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import spark.Request;
 import spark.Response;
+
+import javax.servlet.MultipartConfigElement;
+import javax.servlet.ServletException;
+import javax.servlet.http.Part;
 
 import static spark.Spark.*;
 
 public class FeedVersionController  {
+
+    public static final Logger LOG = LoggerFactory.getLogger(FeedVersionController.class);
 
     public static JsonManager<FeedVersion> json =
             new JsonManager<FeedVersion>(FeedVersion.class, JsonViews.UserInterface.class);
@@ -87,41 +98,34 @@ public class FeedVersionController  {
      * @return
      * @throws JsonProcessingException
      */
-    /*public static Result create () throws JsonProcessingException {
+    public static Boolean createFeedVersion (Request req, Response res) throws IOException, ServletException {
 
-        Auth0UserProfile userProfile = getSessionProfile();
-        if(userProfile == null) return unauthorized();
 
-        MultipartFormData body = request().body().asMultipartFormData();
-        Map<String, String[]> params = body.asFormUrlEncoded();
+        FeedSource s = FeedSource.get(req.queryParams("feedSourceId"));
 
-        FeedSource s = FeedSource.get(params.get("feedSourceId")[0]);
-
-        if (!userProfile.canAdministerProject(s.feedCollectionId) && !userProfile.canManageFeed(s.feedCollectionId, s.id))
-            return unauthorized();
-
-        if (FeedRetrievalMethod.FETCHED_AUTOMATICALLY.equals(s.retrievalMethod))
-            return badRequest("Feed is autofetched! Cannot upload.");
+        if (FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.equals(s.retrievalMethod))
+            halt("Feed is autofetched! Cannot upload.");
 
         FeedVersion v = new FeedVersion(s);
-        v.setUser(userProfile);
+        //v.setUser(req.attribute("auth0User"));
 
-//        File toSave = v.newFeed(uploadStream);
-        FilePart uploadPart = body.getFile("feed");
-        File upload = uploadPart.getFile();
+        if (req.raw().getAttribute("org.eclipse.jetty.multipartConfig") == null) {
+            MultipartConfigElement multipartConfigElement = new MultipartConfigElement(System.getProperty("java.io.tmpdir"));
+            req.raw().setAttribute("org.eclipse.jetty.multipartConfig", multipartConfigElement);
+        }
 
-        Logger.info("Saving feed {} from upload", s);
+        Part part = req.raw().getPart("file");
+
+        LOG.info("Saving feed {} from upload", s);
 
 
-        FileInputStream uploadStream;
-        File toSave;
+        InputStream uploadStream;
         try {
-            uploadStream = new FileInputStream(upload);
-            toSave = v.newFeed(uploadStream);
-        } catch (FileNotFoundException e) {
-            Logger.error("Unable to open input stream from upload {}", upload);
-
-            return internalServerError("Unable to read uploaded feed");
+            uploadStream = part.getInputStream();
+            v.newFeed(uploadStream);
+        } catch (Exception e) {
+            LOG.error("Unable to open input stream from upload");
+            halt("Unable to read uploaded feed");
         }
 
         v.hash();
@@ -129,20 +133,20 @@ public class FeedVersionController  {
         FeedVersion latest = s.getLatest();
         if (latest != null && latest.hash.equals(v.hash)) {
             v.getFeed().delete();
-            return redirect("/#feed/" + s.id);
+            return null;
         }
 
         // for now run sychronously so the user sees something after the redirect
         // it's pretty fast
         new ProcessSingleFeedJob(v).run();
 
-        return redirect("/#feed/" + s.id);
-    }*/
+        return true;
+    }
 
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/feedversion/:id", FeedVersionController::getFeedVersion, JsonUtil.objectMapper::writeValueAsString);
         get(apiPrefix + "secure/feedversion", FeedVersionController::getAllFeedVersions, json::write);
-        //post(apiPrefix + "secure/project", ProjectController::createProject, JsonUtil.objectMapper::writeValueAsString);
+        post(apiPrefix + "secure/feedversion", FeedVersionController::createFeedVersion, JsonUtil.objectMapper::writeValueAsString);
     }
 
 }
