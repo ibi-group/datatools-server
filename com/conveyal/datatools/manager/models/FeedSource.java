@@ -27,6 +27,66 @@ public class FeedSource extends Model {
     public static final Logger LOG = LoggerFactory.getLogger(FeedSource.class);
 
     private static DataStore<FeedSource> sourceStore = new DataStore<FeedSource>("feedsources");
+    public enum FeedSourceType {
+        STANDARD,
+        MTC,
+        TRANSITLAND,
+        TRANSITFEEDS
+    }
+    public FeedSourceType type;
+
+    // MTC fields
+    public String defaultGtfsId;
+    public String shortName;
+    public String AgencyPhone;
+    public String RttAgencyName;
+    public String RttEnabled;
+    public String AgencyShortName;
+    public String AgencyPublicId;
+    public String AddressLat;
+    public String AddressLon;
+    public String DefaultRouteType;
+    public String CarrierStatus;
+    public String AgencyAddress;
+    public String AgencyEmail;
+    public String AgencyUrl;
+    public String AgencyFareUrl;
+
+
+    // Transitland fields
+    public String onestop_id;
+//    public String url;
+    public String feed_format;
+    public String tags;
+    public String geometry;
+//    public String type;
+    public String coordinates;
+    public String license_name;
+    public String license_url;
+    public String license_use_without_attribution;
+    public String license_create_derived_product;
+    public String license_redistribute;
+    public String license_attribution_text;
+    public String last_fetched_at;
+    public String last_imported_at;
+    public String latest_fetch_exception_log;
+    public String import_status;
+    public String created_at;
+    public String updated_at;
+    public String feed_versions_count;
+    public String feed_versions_url;
+    public String[] feed_versions;
+    public String active_feed_version;
+    public String import_level_of_active_feed_version;
+    public String created_or_updated_in_changeset_id;
+    public String changesets_imported_from_this_feed;
+    public String operators_in_feed;
+    public String gtfs_agency_id;
+    public String operator_onestop_id;
+    public String feed_onestop_id;
+    public String operator_url;
+    public String feed_url;
+
 
     /**
      * The collection of which this feed is a part
@@ -94,6 +154,17 @@ public class FeedSource extends Model {
         this.name = name;
     }
 
+    public FeedSource (FeedSourceType type, String name){
+        switch (type) {
+            case MTC:
+                new MtcFeedSource(name);
+                break;
+            case TRANSITLAND:
+                new TransitLandFeedSource(name);
+                break;
+        }
+    }
+
     /**
      * No-arg constructor to yield an uninitialized feed source, for dump/restore.
      * Should not be used in general code.
@@ -101,6 +172,7 @@ public class FeedSource extends Model {
     public FeedSource () {
         // do nothing
         this.retrievalMethod = FeedRetrievalMethod.MANUALLY_UPLOADED;
+        this.type = FeedSourceType.STANDARD;
     }
 
 
@@ -227,7 +299,10 @@ public class FeedSource extends Model {
     public void save () {
         save(true);
     }
-
+    public void setName(String name){
+        this.name = name;
+        this.save();
+    }
     public void save (boolean commit) {
         if (commit)
             sourceStore.save(this.id, this);
@@ -241,6 +316,10 @@ public class FeedSource extends Model {
      */
     @JsonIgnore
     public FeedVersion getLatest () {
+//        DataStore<FeedVersion> vs = new FeedVersion(this);
+//        if (vs == null){
+//            return null;
+//        }
         FeedVersion v = FeedVersion.versionStore.findFloor("version", new Fun.Tuple2(this.id, Fun.HI));
 
         // the ID doesn't necessarily match, because it will fall back to the previous source in the store if there are no versions for this source
@@ -260,7 +339,6 @@ public class FeedSource extends Model {
     /**
      * We can't pass the entire latest feed version back, because it contains references back to this feedsource,
      * so Jackson doesn't work. So instead we specifically expose the validation results and the latest update.
-     * @param id
      * @return
      */
     // TODO: use summarized feed source here. requires serious refactoring on client side.
@@ -345,4 +423,37 @@ public class FeedSource extends Model {
         }
         branding.add(agencyBranding);
     }*/
+
+}
+
+class TransitLandFeedSource extends FeedSource {
+    public String oneStopId;
+    public TransitLandFeedSource(String name){
+        super();
+        this.name = name;
+        this.type = FeedSourceType.TRANSITLAND;
+    }
+}
+
+class MtcFeedSource extends FeedSource {
+    public String shortName;
+    public String AgencyPhone;
+    public String RttAgencyName;
+    public String RttEnabled;
+    public String AgencyShortName;
+    public String AgencyPublicId;
+    public String AddressLat;
+    public String AddressLon;
+    public String DefaultRouteType;
+    public String CarrierStatus;
+    public String AgencyAddress;
+    public String AgencyEmail;
+    public String AgencyUrl;
+    public String AgencyFareUrl;
+
+    public MtcFeedSource(String name) {
+        super();
+        this.name = name;
+        this.type = FeedSourceType.MTC;
+    }
 }

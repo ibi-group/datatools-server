@@ -45,12 +45,26 @@ public class FeedSourceController {
     }
 
     public static FeedSource createFeedSource(Request req, Response res) throws IOException {
-        FeedSource source = new FeedSource();
+        FeedSource source;
+        if (req.queryParams("type") != null){
+            FeedSource.FeedSourceType type = FeedSource.FeedSourceType.TRANSITLAND;
+            source = new FeedSource(type, "onestop-id");
+            applyJsonToFeedSource(source, req.body());
+            source.save();
+
+            return source;
+        }
+        else {
+            source = new FeedSource();
+
+        }
 
         applyJsonToFeedSource(source, req.body());
         source.save();
 
         return source;
+
+
     }
 
     public static FeedSource updateFeedSource(Request req, Response res) throws IOException {
