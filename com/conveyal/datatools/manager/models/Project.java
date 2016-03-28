@@ -4,10 +4,11 @@ import com.conveyal.datatools.manager.persistence.DataStore;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import com.vividsolutions.jts.geom.Envelope;
 
 import java.io.Serializable;
-import java.util.ArrayList;
-import java.util.Collection;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Represents a collection of feed sources that can be made into a deployment.
@@ -40,6 +41,10 @@ public class Project extends Model {
     public String defaultLanguage;
 
     public Double defaultLocationLat, defaultLocationLon;
+
+//    public Map<String, Double> boundingBox = new HashMap<>();
+
+    public Double north, south, east, west;
 
     public Project() {
         /*this.buildConfig = new OtpBuildConfig();
@@ -78,17 +83,12 @@ public class Project extends Model {
      */
 
     @JsonIgnore
-    public Collection<FeedSource> getFeedSources () {
-        ArrayList<FeedSource> ret = new ArrayList<FeedSource>();
+    public Collection<? extends FeedSource> getFeedSources () {
+//        ArrayList<? extends FeedSource> ret = new ArrayList<>();
 
         // TODO: use index, but not important for now because we generally only have one FeedCollection
-        for (FeedSource fs : FeedSource.getAll()) {
-            if (this.id.equals(fs.projectId)) {
-                ret.add(fs);
-            }
-        }
+        return FeedSource.getAll().stream().filter(fs -> this.id.equals(fs.projectId)).collect(Collectors.toList());
 
-        return ret;
     }
 
     /**
