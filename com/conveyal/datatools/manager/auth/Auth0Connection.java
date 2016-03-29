@@ -20,6 +20,7 @@ public class Auth0Connection {
 
     public static void checkUser(Request req) {
         String token = getToken(req);
+
         if(token == null) {
             halt(401, "Could not find authorization token");
         }
@@ -46,7 +47,7 @@ public class Auth0Connection {
         String scheme = parts[0];
         String credentials = parts[1];
 
-        if (scheme.equals("Bearer:")) token = credentials;
+        if (scheme.equals("Bearer")) token = credentials;
         return token;
     }
 
