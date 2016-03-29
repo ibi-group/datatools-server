@@ -231,6 +231,9 @@ public class FeedSource extends Model {
         } catch (IOException e) {
             LOG.error("Unable to open connection to {}; not fetching feed {}", url, this);
             return null;
+        } catch (ClassCastException e) {
+            LOG.error("Unable to open connection to {}; not fetching feed {}", url, this);
+            return null;
         }
 
         conn.setDefaultUseCaches(true);
@@ -349,7 +352,8 @@ public class FeedSource extends Model {
         return latest != null ? latest.updated : null;
     }
 
-    /*@JsonInclude(JsonInclude.Include.NON_NULL)
+    /*
+    @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
     public FeedValidationResultSummary getLatestValidation () {
         FeedVersion latest = getLatest();

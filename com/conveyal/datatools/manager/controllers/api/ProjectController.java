@@ -82,13 +82,22 @@ public class ProjectController {
         return proj;
     }
 
+    public static Project deleteProject(Request req, Response res) throws IOException {
+        String id = req.params("id");
+        Project proj = Project.get(id);
+
+        proj.delete();
+
+        return proj;
+
+    }
+
     public static Boolean fetch(Request req, Response res) {
         String id = req.params("id");
         System.out.println("project fetch for " + id);
         Project proj = Project.get(id);
         FetchProjectFeedsJob job = new FetchProjectFeedsJob(proj);
         job.run();
-        System.out.println(job.result.toString());
         return true;
     }
 
@@ -385,6 +394,7 @@ public class ProjectController {
         get(apiPrefix + "secure/project", ProjectController::getAllProjects, JsonUtil.objectMapper::writeValueAsString);
         post(apiPrefix + "secure/project", ProjectController::createProject, JsonUtil.objectMapper::writeValueAsString);
         put(apiPrefix + "secure/project/:id", ProjectController::updateProject, JsonUtil.objectMapper::writeValueAsString);
+        delete(apiPrefix + "secure/project/:id", ProjectController::deleteProject, JsonUtil.objectMapper::writeValueAsString);
         get(apiPrefix + "secure/project/:id/thirdPartySync/:type", ProjectController::thirdPartySync, JsonUtil.objectMapper::writeValueAsString);
         post(apiPrefix + "secure/project/:id/fetch", ProjectController::fetch, JsonUtil.objectMapper::writeValueAsString);
     }

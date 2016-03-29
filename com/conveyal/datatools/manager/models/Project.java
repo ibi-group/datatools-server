@@ -74,6 +74,14 @@ public class Project extends Model {
             projectStore.saveWithoutCommit(this.id, this);
     }
 
+    public void delete() {
+        for (FeedSource s : getFeedSources()) {
+            s.delete();
+        }
+
+        projectStore.delete(this.id);
+    }
+
     public static void commit () {
         projectStore.commit();
     }
