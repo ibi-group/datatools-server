@@ -12,10 +12,7 @@ import spark.Response;
 
 import java.io.IOException;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Iterator;
-import java.util.Map;
+import java.util.*;
 
 import static spark.Spark.*;
 
@@ -34,12 +31,25 @@ public class FeedSourceController {
         Collection<FeedSource> sources = new ArrayList<>();
 
         String projectId = req.queryParams("projectId");
+        Boolean publicFilter = Boolean.valueOf(req.queryParams("public"));
         if(projectId != null) {
             for (FeedSource source: FeedSource.getAll()) {
-                if(source.projectId.equals(projectId)) sources.add(source);
+                if(source.projectId.equals(projectId)) {
+                    // if requesting public sources and source is not public; skip source
+                    if (publicFilter && !source.isPublic)
+                        continue;
+                    sources.add(source);
+                }
             }
         }
-        else sources = FeedSource.getAll();
+        else {
+            for (FeedSource source: FeedSource.getAll()) {
+                // if requesting public sources and source is not public; skip source
+                if (publicFilter && !source.isPublic)
+                    continue;
+                sources.add(source);
+            }
+        }
 
         return sources;
     }
@@ -103,6 +113,10 @@ public class FeedSourceController {
                 source.retrievalMethod = FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.valueOf(entry.getValue().asText());
             }
 
+            if(entry.getKey().equals("isPublic")) {
+                source.isPublic = entry.getValue().asBoolean();
+            }
+
 
         }
     }
@@ -144,5 +158,9 @@ public class FeedSourceController {
         put(apiPrefix + "secure/feedsource/:id", FeedSourceController::updateFeedSource, JsonUtil.objectMapper::writeValueAsString);
         delete(apiPrefix + "secure/feedsource/:id", FeedSourceController::deleteFeedSource, JsonUtil.objectMapper::writeValueAsString);
         post(apiPrefix + "secure/feedsource/:id/fetch", FeedSourceController::fetch, JsonUtil.objectMapper::writeValueAsString);
+
+        // Public routes
+        get(apiPrefix + "public/feedsource/:id", FeedSourceController::getFeedSource, JsonUtil.objectMapper::writeValueAsString);
+        get(apiPrefix + "public/feedsource", FeedSourceController::getAllFeedSources, JsonUtil.objectMapper::writeValueAsString);
     }
 }

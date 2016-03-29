@@ -222,7 +222,7 @@ public class FeedSource extends Model {
             return null;
         }
 
-        LOG.info(url.toString());
+//        LOG.info(url.toString());
 
         // make the request, using the proper HTTP caching headers to prevent refetch, if applicable
         HttpURLConnection conn;
@@ -232,6 +232,9 @@ public class FeedSource extends Model {
             LOG.error("Unable to open connection to {}; not fetching feed {}", url, this);
             return null;
         } catch (ClassCastException e) {
+            LOG.error("Unable to open connection to {}; not fetching feed {}", url, this);
+            return null;
+        } catch (NullPointerException e) {
             LOG.error("Unable to open connection to {}; not fetching feed {}", url, this);
             return null;
         }
