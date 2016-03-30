@@ -44,6 +44,43 @@ public class UserController {
         request.setHeader("Accept-Charset", charset);
         HttpResponse response = client.execute(request);
         String result = EntityUtils.toString(response.getEntity());
+//        System.out.println(result);
+
+        return result;
+    }
+
+    public static Object getAllUsers(Request req, Response res) throws IOException {
+        String url = "https://" + AUTH0_DOMAIN + "/api/v2/users";
+        System.out.println(url);
+        String charset = "UTF-8";
+        HttpClient client = new DefaultHttpClient();
+        HttpGet request = new HttpGet(url);
+        request.addHeader("Authorization", "Bearer " + AUTH0_API_TOKEN);
+        request.setHeader("Accept-Charset", charset);
+        HttpResponse response = client.execute(request);
+        String result = EntityUtils.toString(response.getEntity());
+//        System.out.println(result);
+
+        return result;
+    }
+
+    public static Object createPublicUser(Request req, Response res) throws IOException {
+        String url = "https://" + AUTH0_DOMAIN + "/api/v2/users";
+        System.out.println(url);
+        String charset = "UTF-8";
+        JsonNode jsonNode = new ObjectMapper().readTree(req.body());
+        HttpClient client = new DefaultHttpClient();
+        HttpPost request = new HttpPost(url);
+        request.addHeader("Authorization", "Bearer " + AUTH0_API_TOKEN);
+        request.setHeader("Accept-Charset", charset);
+        request.setHeader("Content-Type", "application/json");
+//        System.out.println(jsonNode.get("data"));
+        String json = String.format("{ \"connection\": \"Username-Password-Authentication\", \"email\": %s, \"password\": %s, \"app_metadata\": {\"datatools\": {\"permissions\": [], \"projects\": [] } } }", jsonNode.get("email"), jsonNode.get("password"));
+//        System.out.println(json);
+        HttpEntity entity = new ByteArrayEntity(json.getBytes(charset));
+        request.setEntity(entity);
+        HttpResponse response = client.execute(request);
+        String result = EntityUtils.toString(response.getEntity());
 
         System.out.println(result);
 
@@ -60,9 +97,9 @@ public class UserController {
         request.addHeader("Authorization", "Bearer " + AUTH0_API_TOKEN);
         request.setHeader("Accept-Charset", charset);
         request.setHeader("Content-Type", "application/json");
-        System.out.println(jsonNode.get("data"));
-        String json = String.format("{ \"connection\": \"Username-Password-Authentication\", \"email\": %s, \"password\": %s, \"app_metadata\": {\"datatools\": {\"permissions\": [], \"projects\": [] } } }", jsonNode.get("email"), jsonNode.get("password"));
-        System.out.println(json);
+//        System.out.println(jsonNode.get("data"));
+        String json = String.format("{ \"connection\": \"Username-Password-Authentication\", \"email\": %s, \"password\": %s, \"app_metadata\": {\"datatools\": %s } }", jsonNode.get("email"), jsonNode.get("password"), jsonNode.get("permissions"));
+//        System.out.println(json);
         HttpEntity entity = new ByteArrayEntity(json.getBytes(charset));
         request.setEntity(entity);
         HttpResponse response = client.execute(request);
@@ -83,15 +120,15 @@ public class UserController {
         request.addHeader("Authorization", "Bearer " + AUTH0_API_TOKEN);
         request.setHeader("Accept-Charset", charset);
         request.setHeader("Content-Type", "application/json");
-        System.out.println(jsonNode.get("data"));
+//        System.out.println(jsonNode.get("data"));
         String json = "{ \"app_metadata\": { \"datatools\" : " + jsonNode.get("data") + " }}";
-        System.out.println(json);
+//        System.out.println(json);
         HttpEntity entity = new ByteArrayEntity(json.getBytes(charset));
         request.setEntity(entity);
         HttpResponse response = client.execute(request);
         String result = EntityUtils.toString(response.getEntity());
 
-        System.out.println(result);
+//        System.out.println(result);
 
         return result;
     }
@@ -102,8 +139,11 @@ public class UserController {
 
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/user/:id", UserController::getUser, json::write);
-        post(apiPrefix + "public/user", UserController::createUser, json::write);
+        get(apiPrefix + "secure/user", UserController::getAllUsers, json::write);
+        post(apiPrefix + "secure/user", UserController::createUser, json::write);
         put(apiPrefix + "secure/user/:id", UserController::updateUser, json::write);
         delete(apiPrefix + "secure/user/:id", UserController::deleteUser, json::write);
+
+        post(apiPrefix + "public/user", UserController::createPublicUser, json::write);
     }
 }
