@@ -30,6 +30,7 @@ public class Auth0Connection {
             req.attribute("user", profile);
         }
         catch(Exception e) {
+            System.out.println(e);
             halt(401, "Could not verify user");
         }
     }

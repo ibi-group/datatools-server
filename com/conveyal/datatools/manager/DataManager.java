@@ -1,10 +1,7 @@
 package com.conveyal.datatools.manager;
 
 import com.conveyal.datatools.manager.auth.Auth0Connection;
-import com.conveyal.datatools.manager.controllers.api.ConfigController;
-import com.conveyal.datatools.manager.controllers.api.FeedSourceController;
-import com.conveyal.datatools.manager.controllers.api.FeedVersionController;
-import com.conveyal.datatools.manager.controllers.api.ProjectController;
+import com.conveyal.datatools.manager.controllers.api.*;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import spark.Filter;
@@ -45,6 +42,7 @@ public class DataManager {
         ProjectController.register(apiPrefix);
         FeedSourceController.register(apiPrefix);
         FeedVersionController.register(apiPrefix);
+        UserController.register(apiPrefix);
 
         before(apiPrefix + "secure/*", (request, response) -> {
             if(request.requestMethod().equals("OPTIONS")) return;
