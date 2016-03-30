@@ -26,7 +26,7 @@ public class FetchProjectFeedsJob implements Runnable {
         LOG.info("fetch job running for proj: " + proj.name);
         result = new HashMap<>();
 
-        for(FeedSource feedSource : proj.getFeedSources()) {
+        for(FeedSource feedSource : proj.getProjectFeedSources()) {
             if (!FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.equals(feedSource.retrievalMethod))
                 continue;
 

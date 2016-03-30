@@ -4,10 +4,7 @@ import com.conveyal.datatools.manager.persistence.DataStore;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
-import com.fasterxml.jackson.annotation.JsonView;
-import com.vividsolutions.jts.geom.Envelope;
 
-import java.io.Serializable;
 import java.util.*;
 import java.util.stream.Collectors;
 
@@ -41,7 +38,7 @@ public class Project extends Model {
 
     public String defaultLanguage;
 
-    @JsonView
+    //@JsonView
     public Collection<FeedSource> feedSources;
 
     public int numberOfFeeds;
@@ -81,7 +78,7 @@ public class Project extends Model {
     }
 
     public void delete() {
-        for (FeedSource s : getFeedSources()) {
+        for (FeedSource s : getProjectFeedSources()) {
             s.delete();
         }
 
@@ -97,7 +94,7 @@ public class Project extends Model {
      */
 
     @JsonIgnore
-    public Collection<? extends FeedSource> getFeedSources () {
+    public Collection<? extends FeedSource> getProjectFeedSources() {
 //        ArrayList<? extends FeedSource> ret = new ArrayList<>();
 
         // TODO: use index, but not important for now because we generally only have one FeedCollection

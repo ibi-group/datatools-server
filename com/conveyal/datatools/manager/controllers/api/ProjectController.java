@@ -6,26 +6,19 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
-import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.core.JsonGenerationException;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.ObjectReader;
-import com.sun.org.apache.xpath.internal.operations.Bool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.lang.reflect.Method;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
-import java.net.ProtocolException;
 import java.net.URL;
 import java.util.*;
 
@@ -72,7 +65,7 @@ public class ProjectController {
                 filteredFCs.add(proj);
             }*/
             Collection<FeedSource> feedSources = new ArrayList<>();
-            for (FeedSource fs : proj.getFeedSources()){
+            for (FeedSource fs : proj.getProjectFeedSources()){
                 if (fs.isPublic){
                     feedSources.add(fs);
                 }
@@ -233,7 +226,7 @@ public class ProjectController {
             TransitLandFeed car = new TransitLandFeed(feed);
 
             FeedSource source = null;
-            for (FeedSource existingSource : proj.getFeedSources()) {
+            for (FeedSource existingSource : proj.getProjectFeedSources()) {
                 if (car.onestop_id.equals(existingSource.onestop_id)) {
                     source = existingSource;
                 }
@@ -292,7 +285,7 @@ public class ProjectController {
             System.out.println("car id=" + car.AgencyId + " name=" + car.AgencyName);
 
             FeedSource source = null;
-            for (FeedSource existingSource : proj.getFeedSources()) {
+            for (FeedSource existingSource : proj.getProjectFeedSources()) {
                 if (car.AgencyId.equals(existingSource.defaultGtfsId)) {
                     System.out.println("already exists: " + car.AgencyId);
                     source = existingSource;
@@ -383,7 +376,7 @@ public class ProjectController {
 //                System.out.println("transitfeed_id=" + car.onestop_id);
 
                     FeedSource source = null;
-                    for (FeedSource existingSource : proj.getFeedSources()) {
+                    for (FeedSource existingSource : proj.getProjectFeedSources()) {
                         if (car.onestop_id.equals(existingSource.onestop_id)) {
                             System.out.println("already exists: " + car.onestop_id);
                             source = existingSource;
