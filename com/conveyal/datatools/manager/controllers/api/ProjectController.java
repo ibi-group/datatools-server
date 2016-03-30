@@ -58,6 +58,29 @@ public class ProjectController {
         return filteredProjects;
     }
 
+    public static Collection<Project> getAllProjectsWithPublicFeeds(Request req, Response res) throws JsonProcessingException {
+        Collection<Project> filteredProjects = new ArrayList<Project>();
+
+        System.out.println("found projects: " + Project.getAll().size());
+        for (Project proj : Project.getAll()) {
+            /*if (userProfile.canAdministerApplication() || userProfile.hasProject(proj.id)) {
+                filteredFCs.add(proj);
+            }*/
+            Collection<FeedSource> feedSources = new ArrayList<>();
+            for (FeedSource fs : proj.getFeedSources()){
+                if (fs.isPublic){
+                    feedSources.add(fs);
+                }
+            }
+            if (!feedSources.isEmpty()) {
+                proj.feedSources = feedSources;
+                filteredProjects.add(proj);
+            }
+        }
+
+        return filteredProjects;
+    }
+
     public static Project getProject(Request req, Response res) {
         String id = req.params("id");
         return Project.get(id);
@@ -397,6 +420,9 @@ public class ProjectController {
         delete(apiPrefix + "secure/project/:id", ProjectController::deleteProject, JsonUtil.objectMapper::writeValueAsString);
         get(apiPrefix + "secure/project/:id/thirdPartySync/:type", ProjectController::thirdPartySync, JsonUtil.objectMapper::writeValueAsString);
         post(apiPrefix + "secure/project/:id/fetch", ProjectController::fetch, JsonUtil.objectMapper::writeValueAsString);
+
+        get(apiPrefix + "public/project/:id", ProjectController::getProject, JsonUtil.objectMapper::writeValueAsString);
+        get(apiPrefix + "public/project", ProjectController::getAllProjectsWithPublicFeeds, JsonUtil.objectMapper::writeValueAsString);
     }
 
     public static class RtdCarrier {

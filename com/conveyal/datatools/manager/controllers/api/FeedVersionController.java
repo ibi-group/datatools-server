@@ -9,6 +9,7 @@ import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
 
 import java.io.*;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Map;
 
@@ -83,10 +84,20 @@ public class FeedVersionController  {
         if (sourceId == null) {
             halt("Please specify a feedsource");
         }
+        Boolean publicFilter = Boolean.valueOf(req.queryParams("public"));
 
         FeedSource s = FeedSource.get(sourceId);
 
-        return s.getFeedVersions();
+        Collection<FeedVersion> versions = new ArrayList<>();
+
+        for (FeedVersion v : s.getFeedVersions()){
+            // if requesting public sources and source is not public; skip source
+            if (publicFilter && !s.isPublic)
+                continue;
+            versions.add(v);
+        }
+
+        return versions;
     }
 
 
@@ -147,6 +158,9 @@ public class FeedVersionController  {
         get(apiPrefix + "secure/feedversion/:id", FeedVersionController::getFeedVersion, JsonUtil.objectMapper::writeValueAsString);
         get(apiPrefix + "secure/feedversion", FeedVersionController::getAllFeedVersions, json::write);
         post(apiPrefix + "secure/feedversion", FeedVersionController::createFeedVersion, JsonUtil.objectMapper::writeValueAsString);
+
+        get(apiPrefix + "public/feedversion", FeedVersionController::getAllFeedVersions, JsonUtil.objectMapper::writeValueAsString);
+
     }
 
 }
