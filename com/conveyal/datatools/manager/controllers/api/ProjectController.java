@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.FetchProjectFeedsJob;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.JsonViews;
@@ -38,19 +39,16 @@ public class ProjectController {
     public static final Logger LOG = LoggerFactory.getLogger(ProjectController.class);
 
     public static Collection<Project> getAllProjects(Request req, Response res) throws JsonProcessingException {
-        /*String token = getToken();
-        if (token == null) return unauthorized("Could not find authorization token");
-        Auth0UserProfile userProfile = verifyUser();
-        if (userProfile == null) return unauthorized();*/
+
+        Auth0UserProfile userProfile = req.attribute("user");
 
         Collection<Project> filteredProjects = new ArrayList<Project>();
 
         System.out.println("found projects: " + Project.getAll().size());
         for (Project proj : Project.getAll()) {
-            /*if (userProfile.canAdministerApplication() || userProfile.hasProject(proj.id)) {
-                filteredFCs.add(proj);
-            }*/
-            filteredProjects.add(proj);
+            if (userProfile.canAdministerApplication() || userProfile.hasProject(proj.id)) {
+                filteredProjects.add(proj);
+            }
         }
 
         return filteredProjects;
