@@ -155,11 +155,11 @@ public class FeedVersionController  {
     }
 
     public static void register (String apiPrefix) {
-        get(apiPrefix + "secure/feedversion/:id", FeedVersionController::getFeedVersion, JsonUtil.objectMapper::writeValueAsString);
+        get(apiPrefix + "secure/feedversion/:id", FeedVersionController::getFeedVersion, json::write);
         get(apiPrefix + "secure/feedversion", FeedVersionController::getAllFeedVersions, json::write);
-        post(apiPrefix + "secure/feedversion", FeedVersionController::createFeedVersion, JsonUtil.objectMapper::writeValueAsString);
+        post(apiPrefix + "secure/feedversion", FeedVersionController::createFeedVersion, json::write);
 
-        get(apiPrefix + "public/feedversion", FeedVersionController::getAllFeedVersions, JsonUtil.objectMapper::writeValueAsString);
+        get(apiPrefix + "public/feedversion", FeedVersionController::getAllFeedVersions, json::write);
 
     }
 
