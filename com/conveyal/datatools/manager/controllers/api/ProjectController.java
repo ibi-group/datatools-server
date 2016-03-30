@@ -153,6 +153,12 @@ public class ProjectController {
             else if(entry.getKey().equals("west")) {
                 proj.west = entry.getValue().asDouble();
             }
+            else if(entry.getKey().equals("defaultLanguage")) {
+                proj.defaultLanguage = entry.getValue().asText();
+            }
+            else if(entry.getKey().equals("defaultTimeZone")) {
+                proj.defaultTimeZone = entry.getValue().asText();
+            }
         }
     }
 
