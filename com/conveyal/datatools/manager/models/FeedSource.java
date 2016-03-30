@@ -97,13 +97,16 @@ public class FeedSource extends Model {
     /**
      * Get the Project of which this feed is a part
      */
-    @JsonView(JsonViews.UserInterface.class)
+    @JsonIgnore
     public Project getProject () {
         return Project.get(projectId);
     }
 
-    public void setProject(Project c) {
-        this.projectId = c.id;
+    public void setProject(Project proj) {
+        this.projectId = proj.id;
+        this.save();
+        proj.numberOfFeeds = proj.getFeedSources().size();
+        proj.save();
     }
 
     /** The name of this feed source, e.g. MTA New York City Subway */

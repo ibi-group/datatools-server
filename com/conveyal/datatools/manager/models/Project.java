@@ -4,6 +4,7 @@ import com.conveyal.datatools.manager.persistence.DataStore;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import com.fasterxml.jackson.annotation.JsonView;
 import com.vividsolutions.jts.geom.Envelope;
 
 import java.io.Serializable;
@@ -39,6 +40,11 @@ public class Project extends Model {
     public String defaultTimeZone;
 
     public String defaultLanguage;
+
+    @JsonView
+    public Collection<FeedSource> feedSources;
+
+    public int numberOfFeeds;
 
     public Double defaultLocationLat, defaultLocationLon;
 
