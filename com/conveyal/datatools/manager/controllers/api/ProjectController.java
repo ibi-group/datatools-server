@@ -3,7 +3,9 @@ package com.conveyal.datatools.manager.controllers.api;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.jobs.FetchProjectFeedsJob;
 import com.conveyal.datatools.manager.models.FeedSource;
+import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -36,6 +38,9 @@ import static spark.Spark.*;
  * Created by demory on 3/14/16.
  */
 public class ProjectController {
+
+    public static JsonManager<Project> json =
+            new JsonManager<>(Project.class, JsonViews.UserInterface.class);
 
     public static final Logger LOG = LoggerFactory.getLogger(ProjectController.class);
 
@@ -420,16 +425,16 @@ public class ProjectController {
 
     public static void register (String apiPrefix) {
         options(apiPrefix + "secure/project/:id", (q, s) -> "");
-        get(apiPrefix + "secure/project/:id", ProjectController::getProject, JsonUtil.objectMapper::writeValueAsString);
-        get(apiPrefix + "secure/project", ProjectController::getAllProjects, JsonUtil.objectMapper::writeValueAsString);
-        post(apiPrefix + "secure/project", ProjectController::createProject, JsonUtil.objectMapper::writeValueAsString);
-        put(apiPrefix + "secure/project/:id", ProjectController::updateProject, JsonUtil.objectMapper::writeValueAsString);
-        delete(apiPrefix + "secure/project/:id", ProjectController::deleteProject, JsonUtil.objectMapper::writeValueAsString);
-        get(apiPrefix + "secure/project/:id/thirdPartySync/:type", ProjectController::thirdPartySync, JsonUtil.objectMapper::writeValueAsString);
-        post(apiPrefix + "secure/project/:id/fetch", ProjectController::fetch, JsonUtil.objectMapper::writeValueAsString);
+        get(apiPrefix + "secure/project/:id", ProjectController::getProject, json::write);
+        get(apiPrefix + "secure/project", ProjectController::getAllProjects, json::write);
+        post(apiPrefix + "secure/project", ProjectController::createProject, json::write);
+        put(apiPrefix + "secure/project/:id", ProjectController::updateProject, json::write);
+        delete(apiPrefix + "secure/project/:id", ProjectController::deleteProject, json::write);
+        get(apiPrefix + "secure/project/:id/thirdPartySync/:type", ProjectController::thirdPartySync, json::write);
+        post(apiPrefix + "secure/project/:id/fetch", ProjectController::fetch, json::write);
 
-        get(apiPrefix + "public/project/:id", ProjectController::getProject, JsonUtil.objectMapper::writeValueAsString);
-        get(apiPrefix + "public/project", ProjectController::getAllProjectsWithPublicFeeds, JsonUtil.objectMapper::writeValueAsString);
+        get(apiPrefix + "public/project/:id", ProjectController::getProject, json::write);
+        get(apiPrefix + "public/project", ProjectController::getAllProjectsWithPublicFeeds, json::write);
     }
 
     public static class RtdCarrier {
