@@ -91,7 +91,7 @@ public class FeedSource extends Model {
     /**
      * The collection of which this feed is a part
      */
-    @JsonView(JsonViews.DataDump.class)
+    //@JsonView(JsonViews.DataDump.class)
     public String projectId;
 
     /**
@@ -198,7 +198,6 @@ public class FeedSource extends Model {
 
         // build the URL from which to fetch
         URL url;
-        String oauthToken = null;
         if (this.retrievalMethod.equals(FeedRetrievalMethod.FETCHED_AUTOMATICALLY))
             url = this.url;
         else if (this.retrievalMethod.equals(FeedRetrievalMethod.PRODUCED_IN_HOUSE)) {
@@ -225,7 +224,7 @@ public class FeedSource extends Model {
             return null;
         }
 
-//        LOG.info(url.toString());
+        LOG.info(url.toString());
 
         // make the request, using the proper HTTP caching headers to prevent refetch, if applicable
         HttpURLConnection conn;
@@ -358,13 +357,13 @@ public class FeedSource extends Model {
         return latest != null ? latest.updated : null;
     }
 
-    /*
+
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
     public FeedValidationResultSummary getLatestValidation () {
         FeedVersion latest = getLatest();
         return latest != null ? new FeedValidationResultSummary(latest.validationResult) : null;
-    }*/
+    }
 
     public static FeedSource get(String id) {
         return sourceStore.getById(id);

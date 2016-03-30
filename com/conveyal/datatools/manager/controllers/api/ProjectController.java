@@ -413,6 +413,7 @@ public class ProjectController {
     }
 
     public static void register (String apiPrefix) {
+        options(apiPrefix + "secure/project/:id", (q, s) -> "");
         get(apiPrefix + "secure/project/:id", ProjectController::getProject, JsonUtil.objectMapper::writeValueAsString);
         get(apiPrefix + "secure/project", ProjectController::getAllProjects, JsonUtil.objectMapper::writeValueAsString);
         post(apiPrefix + "secure/project", ProjectController::createProject, JsonUtil.objectMapper::writeValueAsString);

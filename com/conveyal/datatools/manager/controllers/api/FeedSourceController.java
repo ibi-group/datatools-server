@@ -2,7 +2,10 @@ package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
 import com.conveyal.datatools.manager.models.FeedSource;
+import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -21,6 +24,9 @@ import static spark.Spark.*;
  */
 
 public class FeedSourceController {
+
+    public static JsonManager<FeedSource> json =
+            new JsonManager<>(FeedSource.class, JsonViews.UserInterface.class);
 
     public static FeedSource getFeedSource(Request req, Response res) {
         String id = req.params("id");
@@ -113,10 +119,13 @@ public class FeedSourceController {
                 source.retrievalMethod = FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.valueOf(entry.getValue().asText());
             }
 
+            if(entry.getKey().equals("snapshotVersion")) {
+                source.snapshotVersion = entry.getValue().asText();
+            }
+
             if(entry.getKey().equals("isPublic")) {
                 source.isPublic = entry.getValue().asBoolean();
             }
-
 
         }
     }
@@ -152,15 +161,16 @@ public class FeedSourceController {
 
 
     public static void register (String apiPrefix) {
-        get(apiPrefix + "secure/feedsource/:id", FeedSourceController::getFeedSource, JsonUtil.objectMapper::writeValueAsString);
-        get(apiPrefix + "secure/feedsource", FeedSourceController::getAllFeedSources, JsonUtil.objectMapper::writeValueAsString);
-        post(apiPrefix + "secure/feedsource", FeedSourceController::createFeedSource, JsonUtil.objectMapper::writeValueAsString);
-        put(apiPrefix + "secure/feedsource/:id", FeedSourceController::updateFeedSource, JsonUtil.objectMapper::writeValueAsString);
-        delete(apiPrefix + "secure/feedsource/:id", FeedSourceController::deleteFeedSource, JsonUtil.objectMapper::writeValueAsString);
+        get(apiPrefix + "secure/feedsource/:id", FeedSourceController::getFeedSource, json::write);
+        options(apiPrefix + "secure/feedsource", (q, s) -> "");
+        get(apiPrefix + "secure/feedsource", FeedSourceController::getAllFeedSources, json::write);
+        post(apiPrefix + "secure/feedsource", FeedSourceController::createFeedSource, json::write);
+        put(apiPrefix + "secure/feedsource/:id", FeedSourceController::updateFeedSource, json::write);
+        delete(apiPrefix + "secure/feedsource/:id", FeedSourceController::deleteFeedSource, json::write);
         post(apiPrefix + "secure/feedsource/:id/fetch", FeedSourceController::fetch, JsonUtil.objectMapper::writeValueAsString);
 
         // Public routes
-        get(apiPrefix + "public/feedsource/:id", FeedSourceController::getFeedSource, JsonUtil.objectMapper::writeValueAsString);
-        get(apiPrefix + "public/feedsource", FeedSourceController::getAllFeedSources, JsonUtil.objectMapper::writeValueAsString);
+        get(apiPrefix + "public/feedsource/:id", FeedSourceController::getFeedSource, json::write);
+        get(apiPrefix + "public/feedsource", FeedSourceController::getAllFeedSources, json::write);
     }
 }

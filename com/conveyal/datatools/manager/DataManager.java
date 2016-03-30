@@ -7,6 +7,9 @@ import com.conveyal.datatools.manager.controllers.api.FeedVersionController;
 import com.conveyal.datatools.manager.controllers.api.ProjectController;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import spark.Filter;
+import spark.Request;
+import spark.Response;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -35,6 +38,8 @@ public class DataManager {
 
         staticFileLocation("/public");
 
+        enableCORS("*", "*", "Authorization");
+
         String apiPrefix = "/api/manager/";
         ConfigController.register(apiPrefix);
         ProjectController.register(apiPrefix);
@@ -42,8 +47,18 @@ public class DataManager {
         FeedVersionController.register(apiPrefix);
 
         before(apiPrefix + "secure/*", (request, response) -> {
+            if(request.requestMethod().equals("OPTIONS")) return;
             Auth0Connection.checkUser(request);
         });
 
+
+    }
+
+    private static void enableCORS(final String origin, final String methods, final String headers) {
+        after((request, response) -> {
+            response.header("Access-Control-Allow-Origin", origin);
+            response.header("Access-Control-Request-Method", methods);
+            response.header("Access-Control-Allow-Headers", headers);
+        });
     }
 }
