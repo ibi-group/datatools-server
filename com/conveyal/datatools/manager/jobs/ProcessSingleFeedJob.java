@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.jobs;
 
+import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedVersion;
 
 
@@ -22,6 +23,10 @@ public class ProcessSingleFeedJob implements Runnable {
     public void run() {
         feedVersion.validate();
         feedVersion.save();
+
+        for(String resourceType : DataManager.feedResources.keySet()) {
+            DataManager.feedResources.get(resourceType).feedVersionUpdated(feedVersion);
+        }
     }
 
 }

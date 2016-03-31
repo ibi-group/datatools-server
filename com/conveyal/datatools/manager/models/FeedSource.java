@@ -1,10 +1,12 @@
 package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.persistence.DataStore;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonView;
+import org.mapdb.Atomic;
 import org.mapdb.Fun;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,9 +16,7 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Date;
+import java.util.*;
 
 /**
  * Created by demory on 3/22/16.
@@ -27,66 +27,6 @@ public class FeedSource extends Model {
     public static final Logger LOG = LoggerFactory.getLogger(FeedSource.class);
 
     private static DataStore<FeedSource> sourceStore = new DataStore<FeedSource>("feedsources");
-    public enum FeedSourceType {
-        STANDARD,
-        MTC,
-        TRANSITLAND,
-        TRANSITFEEDS
-    }
-    public FeedSourceType type;
-
-    // MTC fields
-    public String defaultGtfsId;
-    public String shortName;
-    public String AgencyPhone;
-    public String RttAgencyName;
-    public String RttEnabled;
-    public String AgencyShortName;
-    public String AgencyPublicId;
-    public String AddressLat;
-    public String AddressLon;
-    public String DefaultRouteType;
-    public String CarrierStatus;
-    public String AgencyAddress;
-    public String AgencyEmail;
-    public String AgencyUrl;
-    public String AgencyFareUrl;
-
-
-    // Transitland fields
-    public String onestop_id;
-//    public String url;
-    public String feed_format;
-    public String tags;
-    public String geometry;
-//    public String type;
-    public String coordinates;
-    public String license_name;
-    public String license_url;
-    public String license_use_without_attribution;
-    public String license_create_derived_product;
-    public String license_redistribute;
-    public String license_attribution_text;
-    public String last_fetched_at;
-    public String last_imported_at;
-    public String latest_fetch_exception_log;
-    public String import_status;
-    public String created_at;
-    public String updated_at;
-    public String feed_versions_count;
-    public String feed_versions_url;
-    public String[] feed_versions;
-    public String active_feed_version;
-    public String import_level_of_active_feed_version;
-    public String created_or_updated_in_changeset_id;
-    public String changesets_imported_from_this_feed;
-    public String operators_in_feed;
-    public String gtfs_agency_id;
-    public String operator_onestop_id;
-    public String feed_onestop_id;
-    public String operator_url;
-    public String feed_url;
-
 
     /**
      * The collection of which this feed is a part
@@ -157,17 +97,6 @@ public class FeedSource extends Model {
         this.name = name;
     }
 
-    public FeedSource (FeedSourceType type, String name){
-        switch (type) {
-            case MTC:
-                new MtcFeedSource(name);
-                break;
-            case TRANSITLAND:
-                new TransitLandFeedSource(name);
-                break;
-        }
-    }
-
     /**
      * No-arg constructor to yield an uninitialized feed source, for dump/restore.
      * Should not be used in general code.
@@ -175,9 +104,7 @@ public class FeedSource extends Model {
     public FeedSource () {
         // do nothing
         this.retrievalMethod = FeedRetrievalMethod.MANUALLY_UPLOADED;
-        this.type = FeedSourceType.STANDARD;
     }
-
 
     /**
      * Fetch the latest version of the feed.
@@ -286,8 +213,8 @@ public class FeedSource extends Model {
         }
         else {
             newFeed.userId = this.userId;
-            newFeed.validate();
-            newFeed.save();
+
+            new ProcessSingleFeedJob(newFeed).run();
 
             this.lastFetched = newFeed.updated;
             this.save();
@@ -365,6 +292,26 @@ public class FeedSource extends Model {
         return latest != null ? new FeedValidationResultSummary(latest.validationResult) : null;
     }
 
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonView(JsonViews.UserInterface.class)
+    public Map<String, Map<String, String>> getExternalProperties() {
+
+        Map<String, Map<String, String>> resourceTable = new HashMap<>();
+
+        for(String resourceType : DataManager.feedResources.keySet()) {
+            Map<String, String> propTable = new HashMap<>();
+
+            for (ExternalFeedSourceProperty prop : ExternalFeedSourceProperty.getAll()) {
+                if (prop.getFeedSourceId().equals(this.id)) {
+                    propTable.put(prop.name, prop.value);
+                }
+            }
+
+            resourceTable.put(resourceType, propTable);
+        }
+        return resourceTable;
+    }
+
     public static FeedSource get(String id) {
         return sourceStore.getById(id);
     }
@@ -412,6 +359,12 @@ public class FeedSource extends Model {
             v.delete();
         }
 
+        for (ExternalFeedSourceProperty prop : ExternalFeedSourceProperty.getAll()) {
+            if(prop.getFeedSourceId().equals(this.id)) {
+                prop.delete();
+            }
+        }
+
         sourceStore.delete(this.id);
     }
 
@@ -433,36 +386,4 @@ public class FeedSource extends Model {
         branding.add(agencyBranding);
     }*/
 
-}
-
-class TransitLandFeedSource extends FeedSource {
-    public String oneStopId;
-    public TransitLandFeedSource(String name){
-        super();
-        this.name = name;
-        this.type = FeedSourceType.TRANSITLAND;
-    }
-}
-
-class MtcFeedSource extends FeedSource {
-    public String shortName;
-    public String AgencyPhone;
-    public String RttAgencyName;
-    public String RttEnabled;
-    public String AgencyShortName;
-    public String AgencyPublicId;
-    public String AddressLat;
-    public String AddressLon;
-    public String DefaultRouteType;
-    public String CarrierStatus;
-    public String AgencyAddress;
-    public String AgencyEmail;
-    public String AgencyUrl;
-    public String AgencyFareUrl;
-
-    public MtcFeedSource(String name) {
-        super();
-        this.name = name;
-        this.type = FeedSourceType.MTC;
-    }
 }

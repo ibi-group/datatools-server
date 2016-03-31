@@ -54,6 +54,7 @@ public class JsonManager<T> {
     }
 
     public String write(Object o) throws JsonProcessingException{
+        System.out.println(o.toString());
         return ow.writeValueAsString(o);
     }
 

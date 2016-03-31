@@ -1,10 +1,8 @@
 package com.conveyal.datatools.manager.controllers.api;
 
+import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
-import com.conveyal.datatools.manager.models.FeedSource;
-import com.conveyal.datatools.manager.models.FeedVersion;
-import com.conveyal.datatools.manager.models.JsonViews;
-import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.models.*;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -63,8 +61,8 @@ public class FeedSourceController {
     public static FeedSource createFeedSource(Request req, Response res) throws IOException {
         FeedSource source;
         if (req.queryParams("type") != null){
-            FeedSource.FeedSourceType type = FeedSource.FeedSourceType.TRANSITLAND;
-            source = new FeedSource(type, "onestop-id");
+            //FeedSource.FeedSourceType type = FeedSource.FeedSourceType.TRANSITLAND;
+            source = new FeedSource("onestop-id");
             applyJsonToFeedSource(source, req.body());
             source.save();
 
@@ -85,9 +83,7 @@ public class FeedSourceController {
 
     public static FeedSource updateFeedSource(Request req, Response res) throws IOException {
         String id = req.params("id");
-        System.out.println(">>> updating FS " + id);
         FeedSource source = FeedSource.get(id);
-
 
         applyJsonToFeedSource(source, req.body());
         source.save();
@@ -130,6 +126,36 @@ public class FeedSourceController {
         }
     }
 
+    public static FeedSource updateExternalFeedResource(Request req, Response res) throws IOException {
+        String id = req.params("id");
+        FeedSource source = FeedSource.get(id);
+        String resourceType = req.queryParams("resourceType");
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode node = mapper.readTree(req.body());
+        Iterator<Map.Entry<String, JsonNode>> fieldsIter = node.fields();
+
+        while (fieldsIter.hasNext()) {
+            Map.Entry<String, JsonNode> entry = fieldsIter.next();
+            ExternalFeedSourceProperty prop =
+                    ExternalFeedSourceProperty.find(source, resourceType, entry.getKey());
+
+            if (prop != null) {
+                // update the property in our DB
+                prop.value = entry.getValue().asText();
+                prop.save();
+
+                // trigger an event on the external resource
+                if(DataManager.feedResources.containsKey(resourceType)) {
+                    DataManager.feedResources.get(resourceType).propertyUpdated(prop);
+                }
+
+            }
+
+        }
+
+        return source;
+    }
+
     public static FeedSource deleteFeedSource(Request req, Response res) {
         String id = req.params("id");
         FeedSource source = FeedSource.get(id);
@@ -166,6 +192,7 @@ public class FeedSourceController {
         get(apiPrefix + "secure/feedsource", FeedSourceController::getAllFeedSources, json::write);
         post(apiPrefix + "secure/feedsource", FeedSourceController::createFeedSource, json::write);
         put(apiPrefix + "secure/feedsource/:id", FeedSourceController::updateFeedSource, json::write);
+        put(apiPrefix + "secure/feedsource/:id/updateExternal", FeedSourceController::updateExternalFeedResource, json::write);
         delete(apiPrefix + "secure/feedsource/:id", FeedSourceController::deleteFeedSource, json::write);
         post(apiPrefix + "secure/feedsource/:id/fetch", FeedSourceController::fetch, JsonUtil.objectMapper::writeValueAsString);
 
