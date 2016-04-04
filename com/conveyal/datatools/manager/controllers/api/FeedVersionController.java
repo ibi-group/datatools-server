@@ -154,10 +154,19 @@ public class FeedVersionController  {
         return true;
     }
 
+    public static FeedVersion deleteFeedVersion(Request req, Response res) {
+        String id = req.params("id");
+        FeedVersion version = FeedVersion.get(id);
+        version.delete();
+        return version;
+    }
+
+
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/feedversion/:id", FeedVersionController::getFeedVersion, json::write);
         get(apiPrefix + "secure/feedversion", FeedVersionController::getAllFeedVersions, json::write);
         post(apiPrefix + "secure/feedversion", FeedVersionController::createFeedVersion, json::write);
+        delete(apiPrefix + "secure/feedversion/:id", FeedVersionController::deleteFeedVersion, json::write);
 
         get(apiPrefix + "public/feedversion", FeedVersionController::getAllFeedVersions, json::write);
 
