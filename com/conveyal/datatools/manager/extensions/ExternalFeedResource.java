@@ -11,9 +11,9 @@ public interface ExternalFeedResource {
 
     public String getResourceType();
 
-    public void importFeedsForProject(Project project);
+    public void importFeedsForProject(Project project, String authHeader);
 
-    public void propertyUpdated(ExternalFeedSourceProperty property);
+    public void propertyUpdated(ExternalFeedSourceProperty property, String authHeader);
 
-    public void feedVersionUpdated(FeedVersion feedVersion);
+    public void feedVersionUpdated(FeedVersion feedVersion, String authHeader);
 }

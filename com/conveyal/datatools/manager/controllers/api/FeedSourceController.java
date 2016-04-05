@@ -146,7 +146,8 @@ public class FeedSourceController {
 
                 // trigger an event on the external resource
                 if(DataManager.feedResources.containsKey(resourceType)) {
-                    DataManager.feedResources.get(resourceType).propertyUpdated(prop);
+                    System.out.println(">> AUTH HEADER: " + req.headers("Authorization"));
+                    DataManager.feedResources.get(resourceType).propertyUpdated(prop, req.headers("Authorization"));
                 }
 
             }

@@ -39,7 +39,7 @@ public class TransitLandFeedResource implements ExternalFeedResource {
     }
 
     @Override
-    public void importFeedsForProject(Project project) {
+    public void importFeedsForProject(Project project, String authHeader) {
         LOG.info("Importing TransitLand feeds");
         URL url = null;
         ObjectMapper mapper = new ObjectMapper();
@@ -124,12 +124,12 @@ public class TransitLandFeedResource implements ExternalFeedResource {
     }
 
     @Override
-    public void propertyUpdated(ExternalFeedSourceProperty property) {
+    public void propertyUpdated(ExternalFeedSourceProperty property, String authHeader) {
 
     }
 
     @Override
-    public void feedVersionUpdated(FeedVersion feedVersion) {
+    public void feedVersionUpdated(FeedVersion feedVersion, String authHeader) {
 
     }
 }

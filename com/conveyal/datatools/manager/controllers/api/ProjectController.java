@@ -168,7 +168,7 @@ public class ProjectController {
         LOG.info("syncing with third party " + syncType);
 
         if(DataManager.feedResources.containsKey(syncType)) {
-            DataManager.feedResources.get(syncType).importFeedsForProject(proj);
+            DataManager.feedResources.get(syncType).importFeedsForProject(proj, req.headers("Authorization"));
             return proj;
         }
 

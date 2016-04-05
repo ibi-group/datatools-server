@@ -19,6 +19,7 @@ import org.slf4j.LoggerFactory;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.io.OutputStreamWriter;
 import java.lang.reflect.Field;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
@@ -46,7 +47,7 @@ public class MtcFeedResource implements ExternalFeedResource {
     }
 
     @Override
-    public void importFeedsForProject(Project project) {
+    public void importFeedsForProject(Project project, String authHeader) {
         URL url;
         ObjectMapper mapper = new ObjectMapper();
         // single list from MTC
@@ -65,6 +66,9 @@ public class MtcFeedResource implements ExternalFeedResource {
 
             //add request header
             con.setRequestProperty("User-Agent", "User-Agent");
+
+            // add auth header
+            con.setRequestProperty("Authorization", authHeader);
 
             int responseCode = con.getResponseCode();
             System.out.println("\nSending 'GET' request to URL : " + url);
@@ -87,7 +91,7 @@ public class MtcFeedResource implements ExternalFeedResource {
                 //                    String className = "RtdCarrier";
                 //                    Object car = Class.forName(className).newInstance();
                 RtdCarrier car = results[i];
-                System.out.println("car id=" + car.AgencyId + " name=" + car.AgencyName);
+                //System.out.println("car id=" + car.AgencyId + " name=" + car.AgencyName);
 
                 FeedSource source = null;
 
@@ -96,7 +100,7 @@ public class MtcFeedResource implements ExternalFeedResource {
                     ExternalFeedSourceProperty agencyIdProp =
                             ExternalFeedSourceProperty.find(existingSource, this.getResourceType(), "AgencyId");
                     if (agencyIdProp != null && agencyIdProp.value.equals(car.AgencyId)) {
-                        System.out.println("already exists: " + car.AgencyId);
+                        //System.out.println("already exists: " + car.AgencyId);
                         source = existingSource;
                     }
                 }
@@ -133,12 +137,60 @@ public class MtcFeedResource implements ExternalFeedResource {
     }
 
     @Override
-    public void propertyUpdated(ExternalFeedSourceProperty property) {
+    public void propertyUpdated(ExternalFeedSourceProperty property, String authHeader) {
         LOG.info("Update property in MTC carrier table: " + property.name);
+
+        // sync w/ RTD
+        RtdCarrier carrier = new RtdCarrier();
+        String feedSourceId = property.getFeedSourceId();
+        FeedSource source = FeedSource.get(feedSourceId);
+
+        carrier.AgencyId = ExternalFeedSourceProperty.find(source, this.getResourceType(), "AgencyId").value;
+        carrier.AgencyPhone = ExternalFeedSourceProperty.find(source, this.getResourceType(), "AgencyPhone").value;
+        carrier.AgencyName = ExternalFeedSourceProperty.find(source, this.getResourceType(), "AgencyName").value;
+        carrier.RttAgencyName = ExternalFeedSourceProperty.find(source, this.getResourceType(), "RttAgencyName").value;
+        carrier.RttEnabled = ExternalFeedSourceProperty.find(source, this.getResourceType(), "RttEnabled").value;
+        carrier.AgencyShortName = ExternalFeedSourceProperty.find(source, this.getResourceType(), "AgencyShortName").value;
+        carrier.AgencyPublicId = ExternalFeedSourceProperty.find(source, this.getResourceType(), "AgencyPublicId").value;
+        carrier.AddressLat = ExternalFeedSourceProperty.find(source, this.getResourceType(), "AddressLon").value;
+        carrier.AddressLon = ExternalFeedSourceProperty.find(source, this.getResourceType(), "AgencyPhone").value;
+        carrier.DefaultRouteType = ExternalFeedSourceProperty.find(source, this.getResourceType(), "DefaultRouteType").value;
+        carrier.CarrierStatus = ExternalFeedSourceProperty.find(source, this.getResourceType(), "CarrierStatus").value;
+        carrier.AgencyAddress = ExternalFeedSourceProperty.find(source, this.getResourceType(), "AgencyAddress").value;
+        carrier.AgencyEmail = ExternalFeedSourceProperty.find(source, this.getResourceType(), "AgencyEmail").value;
+        carrier.AgencyUrl = ExternalFeedSourceProperty.find(source, this.getResourceType(), "AgencyUrl").value;
+        carrier.AgencyFareUrl = ExternalFeedSourceProperty.find(source, this.getResourceType(), "AgencyFareUrl").value;
+
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+
+            String carrierJson = mapper.writeValueAsString(carrier);
+
+            URL rtdUrl = new URL(rtdApi + "/Carrier/" + carrier.AgencyId);
+            LOG.info("Writing to RTD URL: " + rtdUrl);
+            HttpURLConnection connection = (HttpURLConnection) rtdUrl.openConnection();
+
+            connection.setRequestMethod("PUT");
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Content-Type", "application/json");
+            connection.setRequestProperty("Accept", "application/json");
+            connection.setRequestProperty("Authorization", authHeader);
+
+
+
+            OutputStreamWriter osw = new OutputStreamWriter(connection.getOutputStream());
+            osw.write(carrierJson);
+            osw.flush();
+            osw.close();
+            LOG.info("RTD API response: " + connection.getResponseCode());
+        } catch (Exception e) {
+            LOG.error("error writing to RTD");
+            e.printStackTrace();
+        }
     }
 
     @Override
-    public void feedVersionUpdated(FeedVersion feedVersion) {
+    public void feedVersionUpdated(FeedVersion feedVersion, String authHeader) {
 
         LOG.info("Pushing to MTC S3 Bucket " + s3Bucket);
 
