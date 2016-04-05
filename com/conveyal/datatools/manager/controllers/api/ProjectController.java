@@ -177,6 +177,7 @@ public class ProjectController {
     }
 
     public static void register (String apiPrefix) {
+        options(apiPrefix + "secure/project", (q, s) -> "");
         options(apiPrefix + "secure/project/:id", (q, s) -> "");
         get(apiPrefix + "secure/project/:id", ProjectController::getProject, json::write);
         get(apiPrefix + "secure/project", ProjectController::getAllProjects, json::write);
