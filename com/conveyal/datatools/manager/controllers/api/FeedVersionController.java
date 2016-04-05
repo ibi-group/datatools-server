@@ -6,6 +6,8 @@ import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
+import com.conveyal.gtfs.model.ValidationResult;
+import com.conveyal.gtfs.validator.json.FeedValidationResult;
 import com.fasterxml.jackson.core.JsonProcessingException;
 
 import java.io.*;
@@ -161,9 +163,16 @@ public class FeedVersionController  {
         return version;
     }
 
+    public static FeedValidationResult getValidationResult(Request req, Response res) {
+        String id = req.params("id");
+        FeedVersion version = FeedVersion.get(id);
+        return version.validationResult;
+    }
+
 
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/feedversion/:id", FeedVersionController::getFeedVersion, json::write);
+        get(apiPrefix + "secure/feedversion/:id/validation", FeedVersionController::getValidationResult, json::write);
         get(apiPrefix + "secure/feedversion", FeedVersionController::getAllFeedVersions, json::write);
         post(apiPrefix + "secure/feedversion", FeedVersionController::createFeedVersion, json::write);
         delete(apiPrefix + "secure/feedversion/:id", FeedVersionController::deleteFeedVersion, json::write);
