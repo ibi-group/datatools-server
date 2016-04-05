@@ -9,6 +9,7 @@ import spark.Request;
 import spark.Response;
 
 import java.io.Serializable;
+import java.util.Collection;
 
 import static spark.Spark.get;
 
@@ -36,5 +37,6 @@ class Config implements Serializable {
     public final String userAdminUrl = DataManager.config.getProperty("application.user_admin_url");
     public final String logo = DataManager.config.getProperty("application.logo");
     public final String title = DataManager.config.getProperty("application.title");
+    public final Collection<String> resourceTypes = DataManager.feedResources.keySet();
 }
 
