@@ -1,5 +1,11 @@
 package com.conveyal.datatools.manager.extensions.mtc;
 
+import com.amazonaws.auth.AWSCredentials;
+import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
+import com.amazonaws.auth.profile.ProfileCredentialsProvider;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3Client;
+import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
@@ -25,10 +31,13 @@ public class MtcFeedResource implements ExternalFeedResource {
 
     public static final Logger LOG = LoggerFactory.getLogger(MtcFeedResource.class);
 
-    private String rtdApi;
+    private String rtdApi, s3Bucket, s3Prefix, s3CredentialsFilename;
 
     public MtcFeedResource() {
         rtdApi = DataManager.config.getProperty("application.extensions.mtc.rtd_api");
+        s3Bucket = DataManager.config.getProperty("application.extensions.mtc.s3_bucket");
+        s3Prefix = DataManager.config.getProperty("application.extensions.mtc.s3_prefix");
+        s3CredentialsFilename = DataManager.config.getProperty("application.extensions.mtc.s3_credentials_file");
     }
 
     @Override
@@ -130,6 +139,35 @@ public class MtcFeedResource implements ExternalFeedResource {
 
     @Override
     public void feedVersionUpdated(FeedVersion feedVersion) {
-        LOG.info("Pushing to MTC S3 Bucket");
+
+        LOG.info("Pushing to MTC S3 Bucket " + s3Bucket);
+
+        if(s3Bucket == null) return;
+
+        AWSCredentials creds;
+        if (this.s3CredentialsFilename != null) {
+            creds = new ProfileCredentialsProvider(this.s3CredentialsFilename, "default").getCredentials();
+            LOG.info("Writing to S3 using supplied credentials file");
+        }
+        else {
+            // default credentials providers, e.g. IAM role
+            creds = new DefaultAWSCredentialsProviderChain().getCredentials();
+        }
+
+        ExternalFeedSourceProperty agencyIdProp =
+                ExternalFeedSourceProperty.find(feedVersion.getFeedSource(), this.getResourceType(), "AgencyId");
+
+        if(agencyIdProp == null) {
+            LOG.error("Could not read AgencyId for FeedSource " + feedVersion.feedSourceId);
+            return;
+        }
+
+        String keyName = this.s3Prefix + agencyIdProp.value + ".zip";
+        LOG.info("Pushing to MTC S3 Bucket: " + keyName);
+
+        AmazonS3 s3client = new AmazonS3Client(creds);
+        s3client.putObject(new PutObjectRequest(
+                s3Bucket, keyName, feedVersion.getFeed()));
+
     }
 }
