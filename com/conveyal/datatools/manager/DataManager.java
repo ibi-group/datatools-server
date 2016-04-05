@@ -13,16 +13,19 @@ import com.conveyal.datatools.manager.extensions.transitfeeds.TransitFeedsFeedRe
 import com.conveyal.datatools.manager.extensions.transitland.TransitLandFeedResource;
 
 import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.gtfs.api.ApiMain;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Filter;
 import spark.Request;
 import spark.Response;
+import spark.utils.IOUtils;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
@@ -51,7 +54,7 @@ public class DataManager {
             port(Integer.parseInt(config.getProperty("application.port")));
         }
 
-        staticFileLocation("/public");
+//        staticFileLocation("/public");
 
         enableCORS("*", "*", "Authorization");
 
@@ -67,6 +70,25 @@ public class DataManager {
             Auth0Connection.checkUser(request);
         });
 
+        get("/main.js", (request, response) -> {
+            try (InputStream stream = ApiMain.class.getResourceAsStream("/public/main.js")) {
+                return IOUtils.toString(stream);
+            } catch (IOException e) {
+                return null;
+                // if the resource doesn't exist we just carry on.
+            }
+        });
+
+        // return index.html for any sub-directory
+        get("/*", (request, response) -> {
+            response.type("text/html");
+            try (InputStream stream = ApiMain.class.getResourceAsStream("/public/index.html")) {
+                return IOUtils.toString(stream);
+            } catch (IOException e) {
+                return null;
+                // if the resource doesn't exist we just carry on.
+            }
+        });
         registerExternalResources();
     }
 
