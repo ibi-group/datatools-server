@@ -34,6 +34,7 @@ class Config implements Serializable {
     public final String auth0Domain = DataManager.config.getProperty("application.auth0.domain");
     public final String auth0ClientId = DataManager.config.getProperty("application.auth0.client_id");
     public final String editorUrl = DataManager.config.getProperty("application.editor_url");
+    public final String alertsUrl = DataManager.config.getProperty("application.alerts_url");
     public final String userAdminUrl = DataManager.config.getProperty("application.user_admin_url");
     public final String logo = DataManager.config.getProperty("application.logo");
     public final String title = DataManager.config.getProperty("application.title");
