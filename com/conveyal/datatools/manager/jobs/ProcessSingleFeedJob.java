@@ -25,7 +25,7 @@ public class ProcessSingleFeedJob implements Runnable {
         feedVersion.save();
 
         for(String resourceType : DataManager.feedResources.keySet()) {
-            DataManager.feedResources.get(resourceType).feedVersionUpdated(feedVersion, null);
+            DataManager.feedResources.get(resourceType).feedVersionCreated(feedVersion, null);
         }
     }
 

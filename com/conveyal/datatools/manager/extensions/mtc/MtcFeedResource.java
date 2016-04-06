@@ -127,7 +127,6 @@ public class MtcFeedResource implements ExternalFeedResource {
                 for(Field carrierField : car.getClass().getDeclaredFields()) {
                     String fieldName = carrierField.getName();
                     String fieldValue = carrierField.get(car) != null ? carrierField.get(car).toString() : null;
-
                     ExternalFeedSourceProperty.updateOrCreate(source, this.getResourceType(), fieldName, fieldValue);
                 }
             }
@@ -138,7 +137,25 @@ public class MtcFeedResource implements ExternalFeedResource {
     }
 
     @Override
-    public void propertyUpdated(ExternalFeedSourceProperty property, String authHeader) {
+    public void feedSourceCreated(FeedSource source, String authHeader) {
+        LOG.info("Processing new FeedSource " + source.name + " for RTD");
+
+        RtdCarrier carrier = new RtdCarrier();
+        carrier.AgencyName = source.name;
+
+        try {
+            for (Field carrierField : carrier.getClass().getDeclaredFields()) {
+                String fieldName = carrierField.getName();
+                String fieldValue = carrierField.get(carrier) != null ? carrierField.get(carrier).toString() : null;
+                ExternalFeedSourceProperty.updateOrCreate(source, this.getResourceType(), fieldName, fieldValue);
+            }
+        } catch (Exception e) {
+            LOG.error("Error creating external properties for new FeedSource");
+        }
+    }
+
+    @Override
+    public void propertyUpdated(ExternalFeedSourceProperty property, String previousValue, String authHeader) {
         LOG.info("Update property in MTC carrier table: " + property.name);
 
         // sync w/ RTD
@@ -162,36 +179,16 @@ public class MtcFeedResource implements ExternalFeedResource {
         carrier.AgencyUrl = ExternalFeedSourceProperty.find(source, this.getResourceType(), "AgencyUrl").value;
         carrier.AgencyFareUrl = ExternalFeedSourceProperty.find(source, this.getResourceType(), "AgencyFareUrl").value;
 
-        try {
-            ObjectMapper mapper = new ObjectMapper();
-
-            String carrierJson = mapper.writeValueAsString(carrier);
-
-            URL rtdUrl = new URL(rtdApi + "/Carrier/" + carrier.AgencyId);
-            LOG.info("Writing to RTD URL: " + rtdUrl);
-            HttpURLConnection connection = (HttpURLConnection) rtdUrl.openConnection();
-
-            connection.setRequestMethod("PUT");
-            connection.setDoOutput(true);
-            connection.setRequestProperty("Content-Type", "application/json");
-            connection.setRequestProperty("Accept", "application/json");
-            connection.setRequestProperty("Authorization", authHeader);
-
-
-
-            OutputStreamWriter osw = new OutputStreamWriter(connection.getOutputStream());
-            osw.write(carrierJson);
-            osw.flush();
-            osw.close();
-            LOG.info("RTD API response: " + connection.getResponseCode());
-        } catch (Exception e) {
-            LOG.error("error writing to RTD");
-            e.printStackTrace();
+        if(property.name.equals("AgencyId") && previousValue == null) {
+            writeCarrierToRtd(carrier, true, authHeader);
+        }
+        else {
+            writeCarrierToRtd(carrier, false, authHeader);
         }
     }
 
     @Override
-    public void feedVersionUpdated(FeedVersion feedVersion, String authHeader) {
+    public void feedVersionCreated(FeedVersion feedVersion, String authHeader) {
 
         LOG.info("Pushing to MTC S3 Bucket " + s3Bucket);
 
@@ -222,5 +219,33 @@ public class MtcFeedResource implements ExternalFeedResource {
         s3client.putObject(new PutObjectRequest(
                 s3Bucket, keyName, feedVersion.getFeed()));
 
+    }
+
+    private void writeCarrierToRtd(RtdCarrier carrier, boolean createNew, String authHeader) {
+
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+
+            String carrierJson = mapper.writeValueAsString(carrier);
+
+            URL rtdUrl = new URL(rtdApi + "/Carrier/" + (createNew ? "" : carrier.AgencyId));
+            LOG.info("Writing to RTD URL: " + rtdUrl);
+            HttpURLConnection connection = (HttpURLConnection) rtdUrl.openConnection();
+
+            connection.setRequestMethod(createNew ? "POST" : "PUT");
+            connection.setDoOutput(true);
+            connection.setRequestProperty("Content-Type", "application/json");
+            connection.setRequestProperty("Accept", "application/json");
+            connection.setRequestProperty("Authorization", authHeader);
+
+            OutputStreamWriter osw = new OutputStreamWriter(connection.getOutputStream());
+            osw.write(carrierJson);
+            osw.flush();
+            osw.close();
+            LOG.info("RTD API response: " + connection.getResponseCode() + " / " + connection.getResponseMessage());
+        } catch (Exception e) {
+            LOG.error("error writing to RTD");
+            e.printStackTrace();
+        }
     }
 }

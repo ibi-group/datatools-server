@@ -124,12 +124,17 @@ public class TransitLandFeedResource implements ExternalFeedResource {
     }
 
     @Override
-    public void propertyUpdated(ExternalFeedSourceProperty property, String authHeader) {
+    public void feedSourceCreated(FeedSource source, String authHeader) {
 
     }
 
     @Override
-    public void feedVersionUpdated(FeedVersion feedVersion, String authHeader) {
+    public void propertyUpdated(ExternalFeedSourceProperty property, String previousValue, String authHeader) {
+
+    }
+
+    @Override
+    public void feedVersionCreated(FeedVersion feedVersion, String authHeader) {
 
     }
 }

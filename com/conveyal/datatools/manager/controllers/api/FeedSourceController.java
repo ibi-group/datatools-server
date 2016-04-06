@@ -60,7 +60,7 @@ public class FeedSourceController {
 
     public static FeedSource createFeedSource(Request req, Response res) throws IOException {
         FeedSource source;
-        if (req.queryParams("type") != null){
+        /*if (req.queryParams("type") != null){
             //FeedSource.FeedSourceType type = FeedSource.FeedSourceType.TRANSITLAND;
             source = new FeedSource("onestop-id");
             applyJsonToFeedSource(source, req.body());
@@ -71,14 +71,18 @@ public class FeedSourceController {
         else {
             source = new FeedSource();
 
-        }
+        }*/
+
+        source = new FeedSource();
 
         applyJsonToFeedSource(source, req.body());
         source.save();
 
+        for(String resourceType : DataManager.feedResources.keySet()) {
+            DataManager.feedResources.get(resourceType).feedSourceCreated(source, req.headers("Authorization"));
+        }
+
         return source;
-
-
     }
 
     public static FeedSource updateFeedSource(Request req, Response res) throws IOException {
@@ -141,13 +145,13 @@ public class FeedSourceController {
 
             if (prop != null) {
                 // update the property in our DB
+                String previousValue = prop.value;
                 prop.value = entry.getValue().asText();
                 prop.save();
 
                 // trigger an event on the external resource
                 if(DataManager.feedResources.containsKey(resourceType)) {
-                    System.out.println(">> AUTH HEADER: " + req.headers("Authorization"));
-                    DataManager.feedResources.get(resourceType).propertyUpdated(prop, req.headers("Authorization"));
+                    DataManager.feedResources.get(resourceType).propertyUpdated(prop, previousValue, req.headers("Authorization"));
                 }
 
             }
