@@ -101,17 +101,21 @@ public class DataManager {
     }
 
     private static void registerExternalResources() {
-        if (config.getProperty("application.extensions.mtc.enabled").equals("true")) {
+
+        String mtcEnabled = config.getProperty("application.extensions.mtc.enabled");
+        if (mtcEnabled != null && mtcEnabled.equals("true")) {
             LOG.info("Registering MTC Resource");
             registerExternalResource(new MtcFeedResource());
         }
 
-        if (config.getProperty("application.extensions.transitland.enabled").equals("true")) {
+        String transitLandEnabled = config.getProperty("application.extensions.transitland.enabled");
+        if (transitLandEnabled != null && transitLandEnabled.equals("true")) {
             LOG.info("Registering TransitLand Resource");
             registerExternalResource(new TransitLandFeedResource());
         }
 
-        if (config.getProperty("application.extensions.transitfeeds.enabled").equals("true")) {
+        String transitFeedsEnabled = config.getProperty("application.extensions.transitfeeds.enabled");
+        if (transitFeedsEnabled != null && transitFeedsEnabled.equals("true")) {
             LOG.info("Registering TransitFeeds Resource");
             registerExternalResource(new TransitFeedsFeedResource());
         }
