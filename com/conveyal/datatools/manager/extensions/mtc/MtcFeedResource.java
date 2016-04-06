@@ -85,7 +85,6 @@ public class MtcFeedResource implements ExternalFeedResource {
             in.close();
 
             String json = response.toString();
-            System.out.println(json);
             RtdCarrier[] results = mapper.readValue(json, RtdCarrier[].class);
             for (int i = 0; i < results.length; i++) {
                 //                    String className = "RtdCarrier";
@@ -114,7 +113,9 @@ public class MtcFeedResource implements ExternalFeedResource {
                     feedName = car.AgencyId;
                 }
 
-                if (source == null) source = new FeedSource(feedName);
+                if (source == null) {
+                    source = new FeedSource(feedName);
+                }
                 else source.name = feedName;
 
                 source.setProject(project);

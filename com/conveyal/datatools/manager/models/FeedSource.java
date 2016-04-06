@@ -95,6 +95,7 @@ public class FeedSource extends Model {
     public FeedSource (String name) {
         super();
         this.name = name;
+        this.retrievalMethod = FeedRetrievalMethod.MANUALLY_UPLOADED;
     }
 
     /**
@@ -102,8 +103,7 @@ public class FeedSource extends Model {
      * Should not be used in general code.
      */
     public FeedSource () {
-        // do nothing
-        this.retrievalMethod = FeedRetrievalMethod.MANUALLY_UPLOADED;
+        this(null);
     }
 
     /**
