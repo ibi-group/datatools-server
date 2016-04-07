@@ -70,6 +70,8 @@ public class DataManager {
             Auth0Connection.checkUser(request);
         });
 
+        after(apiPrefix + "*", (request, response) -> response.type("application/json"));
+
         get("/main.js", (request, response) -> {
             try (InputStream stream = ApiMain.class.getResourceAsStream("/public/main.js")) {
                 return IOUtils.toString(stream);
