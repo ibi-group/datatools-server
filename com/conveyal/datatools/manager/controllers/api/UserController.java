@@ -59,8 +59,8 @@ public class UserController {
         request.setHeader("Accept-Charset", charset);
         HttpResponse response = client.execute(request);
         String result = EntityUtils.toString(response.getEntity());
-//        System.out.println(result);
-
+        System.out.println(result);
+        res.type("application/json");
         return result;
     }
 
@@ -127,7 +127,7 @@ public class UserController {
         request.setEntity(entity);
         HttpResponse response = client.execute(request);
         String result = EntityUtils.toString(response.getEntity());
-
+//        res.type("application/json");
 //        System.out.println(result);
 
         return result;
