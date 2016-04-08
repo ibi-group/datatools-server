@@ -33,9 +33,9 @@ public class ConfigController {
 class Config implements Serializable {
     public final String auth0Domain = DataManager.config.get("auth0").get("domain").asText();
     public final String auth0ClientId = DataManager.config.get("auth0").get("client_id").asText();
-    public final String editorUrl = DataManager.config.get("application").get("editor_url").asText();
-    public final String alertsUrl = DataManager.config.get("application").get("alerts_url").asText();
-    public final String userAdminUrl = DataManager.config.get("application").get("user_admin_url").asText();
+    public final String editorUrl = DataManager.config.get("modules").get("editor").get("url").asText();
+    public final String alertsUrl = DataManager.config.get("modules").get("alerts").get("url").asText();
+    public final String userAdminUrl = DataManager.config.get("modules").get("user_admin").get("url").asText();
     public final String logo = DataManager.config.get("application").get("logo").asText();
     public final String title = DataManager.config.get("application").get("title").asText();
     public final Collection<String> resourceTypes = DataManager.feedResources.keySet();
