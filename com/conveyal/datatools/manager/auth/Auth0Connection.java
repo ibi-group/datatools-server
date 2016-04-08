@@ -54,7 +54,7 @@ public class Auth0Connection {
 
     public static Auth0UserProfile getUserProfile(String token) throws Exception {
 
-        URL url = new URL("https://" + DataManager.config.getProperty("application.auth0.domain") + "/tokeninfo");
+        URL url = new URL("https://" + DataManager.config.get("auth0").get("domain").asText() + "/tokeninfo");
         HttpsURLConnection con = (HttpsURLConnection) url.openConnection();
 
         //add request header

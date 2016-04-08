@@ -28,8 +28,8 @@ public class TransitFeedsFeedResource implements ExternalFeedResource {
     private String api, apiKey;
 
     public TransitFeedsFeedResource () {
-        api = DataManager.config.getProperty("application.extensions.transitfeeds.api");
-        apiKey = DataManager.config.getProperty("application.extensions.transitfeeds.key");
+        api = DataManager.config.get("extensions").get("transitfeeds").get("api").asText();
+        apiKey = DataManager.config.get("extensions").get("transitfeeds").get("key").asText();
     }
 
     @Override

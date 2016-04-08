@@ -14,7 +14,10 @@ import com.conveyal.datatools.manager.extensions.transitland.TransitLandFeedReso
 
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.gtfs.api.ApiMain;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Filter;
@@ -36,7 +39,8 @@ public class DataManager {
 
     public static final Logger LOG = LoggerFactory.getLogger(DataManager.class);
 
-    public static final Properties config = new Properties();
+    public static JsonNode config;
+    public static JsonNode serverConfig;
 
     public static final Map<String, ExternalFeedResource> feedResources = new HashMap<>();
 
@@ -44,14 +48,17 @@ public class DataManager {
         FileInputStream in;
 
         if (args.length == 0)
-            in = new FileInputStream(new File("application.conf"));
+            in = new FileInputStream(new File("config.yml"));
         else
             in = new FileInputStream(new File(args[0]));
+        ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
+        config = mapper.readTree(in);
 
-        config.load(in);
+        ObjectMapper serverMapper = new ObjectMapper(new YAMLFactory());
+        serverConfig = serverMapper.readTree(new File("config_server.yml"));
 
-        if(config.containsKey("application.port")) {
-            port(Integer.parseInt(config.getProperty("application.port")));
+        if(config.get("application").has("port")) {
+            port(Integer.parseInt(config.get("application").get("port").asText()));
         }
 
 //        staticFileLocation("/public");
@@ -104,19 +111,19 @@ public class DataManager {
 
     private static void registerExternalResources() {
 
-        String mtcEnabled = config.getProperty("application.extensions.mtc.enabled");
+        String mtcEnabled = config.get("extensions").get("mtc").get("enabled").asText();
         if (mtcEnabled != null && mtcEnabled.equals("true")) {
             LOG.info("Registering MTC Resource");
             registerExternalResource(new MtcFeedResource());
         }
 
-        String transitLandEnabled = config.getProperty("application.extensions.transitland.enabled");
+        String transitLandEnabled = config.get("extensions").get("transitland").get("enabled").asText();
         if (transitLandEnabled != null && transitLandEnabled.equals("true")) {
             LOG.info("Registering TransitLand Resource");
             registerExternalResource(new TransitLandFeedResource());
         }
 
-        String transitFeedsEnabled = config.getProperty("application.extensions.transitfeeds.enabled");
+        String transitFeedsEnabled = config.get("extensions").get("transitfeeds").get("enabled").asText();
         if (transitFeedsEnabled != null && transitFeedsEnabled.equals("true")) {
             LOG.info("Registering TransitFeeds Resource");
             registerExternalResource(new TransitFeedsFeedResource());

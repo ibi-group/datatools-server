@@ -29,8 +29,8 @@ import static spark.Spark.*;
  * Created by landon on 3/29/16.
  */
 public class UserController {
-    private static String AUTH0_DOMAIN = DataManager.config.getProperty("application.auth0.domain");
-    private static String AUTH0_API_TOKEN = DataManager.config.getProperty("application.auth0.api_token");
+    private static String AUTH0_DOMAIN = DataManager.config.get("auth0").get("domain").asText();
+    private static String AUTH0_API_TOKEN = DataManager.serverConfig.get("auth0").get("api_token").asText();
     public static JsonManager<Project> json =
             new JsonManager<>(Project.class, JsonViews.UserInterface.class);
 
