@@ -5,8 +5,10 @@ import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.controllers.api.ConfigController;
 import com.conveyal.datatools.manager.controllers.api.FeedSourceController;
 import com.conveyal.datatools.manager.controllers.api.FeedVersionController;
+import com.conveyal.datatools.manager.controllers.api.GtfsApiController;
 import com.conveyal.datatools.manager.controllers.api.ProjectController;
 import com.conveyal.datatools.manager.controllers.api.UserController;
+
 import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
 import com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource;
 import com.conveyal.datatools.manager.extensions.transitfeeds.TransitFeedsFeedResource;
@@ -71,6 +73,8 @@ public class DataManager {
         FeedSourceController.register(apiPrefix);
         FeedVersionController.register(apiPrefix);
         UserController.register(apiPrefix);
+        //        ServiceAlertsController.register(apiPrefix);
+        GtfsApiController.register(apiPrefix);
 
         before(apiPrefix + "secure/*", (request, response) -> {
             if(request.requestMethod().equals("OPTIONS")) return;
