@@ -38,7 +38,7 @@ public class MtcFeedResource implements ExternalFeedResource {
         rtdApi = DataManager.config.get("extensions").get("mtc").get("rtd_api").asText();
         s3Bucket = DataManager.config.get("extensions").get("mtc").get("s3_bucket").asText();
         s3Prefix = DataManager.config.get("extensions").get("mtc").get("s3_prefix").asText();
-        s3CredentialsFilename = DataManager.config.get("extensions").get("mtc").get("s3_credentials_file").asText();
+        //s3CredentialsFilename = DataManager.config.get("extensions").get("mtc").get("s3_credentials_file").asText();
     }
 
     @Override
@@ -68,6 +68,7 @@ public class MtcFeedResource implements ExternalFeedResource {
             con.setRequestProperty("User-Agent", "User-Agent");
 
             // add auth header
+            System.out.println("authHeader="+authHeader);
             con.setRequestProperty("Authorization", authHeader);
 
             int responseCode = con.getResponseCode();

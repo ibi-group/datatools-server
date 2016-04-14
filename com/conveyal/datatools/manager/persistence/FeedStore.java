@@ -48,6 +48,10 @@ public class FeedStore {
     private String s3CredentialsFilename;
 
     public FeedStore() {
+        this(null);
+    }
+
+    public FeedStore(String subdir) {
         // s3 storage
         if (DataManager.config.get("application").get("data").get("use_s3_storage").asBoolean()){
             this.s3Bucket = DataManager.config.get("application").get("data").get("gtfs_s3_bucket").asText();
@@ -55,6 +59,7 @@ public class FeedStore {
         // local storage
         else {
             String pathString = DataManager.config.get("application").get("data").get("gtfs").asText();
+            if(subdir != null) pathString += File.separator + subdir;
             File path = new File(pathString);
             if (!path.exists() || !path.isDirectory()) {
                 throw new IllegalArgumentException("Not a directory or not found: " + path.getAbsolutePath());
