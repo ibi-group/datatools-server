@@ -169,9 +169,37 @@ public class FeedVersionController  {
         return version.validationResult;
     }
 
+    private static Object downloadFeedVersion(Request req, Response res) {
+        LOG.info("Downloading FeedVersion: " + req.params("id"));
+        FeedVersion version = FeedVersion.get(req.params("id"));
+
+        File file = version.getFeed();
+
+        res.raw().setContentType("application/octet-stream");
+        res.raw().setHeader("Content-Disposition", "attachment; filename=" + file.getName());
+
+        try {
+            BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(res.raw().getOutputStream());
+            BufferedInputStream bufferedInputStream = new BufferedInputStream(new FileInputStream(file));
+
+            byte[] buffer = new byte[1024];
+            int len;
+            while ((len = bufferedInputStream.read(buffer)) > 0) {
+                bufferedOutputStream.write(buffer, 0, len);
+            }
+
+            bufferedOutputStream.flush();
+            bufferedOutputStream.close();
+        } catch (Exception e) {
+            halt(500, "Error serving GTFS file");
+        }
+
+        return res.raw();
+    }
 
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/feedversion/:id", FeedVersionController::getFeedVersion, json::write);
+        get(apiPrefix + "secure/feedversion/:id/download", FeedVersionController::downloadFeedVersion);
         get(apiPrefix + "secure/feedversion/:id/validation", FeedVersionController::getValidationResult, json::write);
         get(apiPrefix + "secure/feedversion", FeedVersionController::getAllFeedVersions, json::write);
         post(apiPrefix + "secure/feedversion", FeedVersionController::createFeedVersion, json::write);
