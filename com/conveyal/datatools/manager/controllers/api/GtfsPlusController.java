@@ -85,7 +85,7 @@ public class GtfsPlusController {
 
     public static void register(String apiPrefix) {
         post(apiPrefix + "secure/gtfsplus", GtfsPlusController::uploadGtfsPlusFile, JsonUtil.objectMapper::writeValueAsString);
-        get(apiPrefix + "gtfsplus/:id", GtfsPlusController::downloadGtfsPlusFile);
+        get(apiPrefix + "secure/gtfsplus/:id", GtfsPlusController::downloadGtfsPlusFile);
 
     }
 }
