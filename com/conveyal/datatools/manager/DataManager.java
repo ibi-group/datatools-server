@@ -69,7 +69,7 @@ public class DataManager {
         FeedVersionController.register(apiPrefix);
         UserController.register(apiPrefix);
         //        ServiceAlertsController.register(apiPrefix);
-        GtfsApiController.register(apiPrefix);
+        //GtfsApiController.register(apiPrefix);
 
         GtfsPlusController.register(apiPrefix);
 

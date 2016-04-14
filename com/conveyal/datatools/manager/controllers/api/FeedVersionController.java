@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
+import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
@@ -169,9 +170,9 @@ public class FeedVersionController  {
         return version.validationResult;
     }
 
-    private static Object downloadFeedVersion(Request req, Response res) {
-        LOG.info("Downloading FeedVersion: " + req.params("id"));
-        FeedVersion version = FeedVersion.get(req.params("id"));
+
+    private static Object downloadFeedVersion(FeedVersion version, Response res) {
+        if(version == null) halt(500, "FeedVersion is null");
 
         File file = version.getFeed();
 
@@ -197,15 +198,43 @@ public class FeedVersionController  {
         return res.raw();
     }
 
+    private static Object downloadFeedVersionDirectly(Request req, Response res) {
+        FeedVersion version = FeedVersion.get(req.params("id"));
+        return downloadFeedVersion(version, res);
+    }
+
+    private static FeedDownloadToken getDownloadToken (Request req, Response res) {
+        FeedVersion version = FeedVersion.get(req.params("id"));
+        FeedDownloadToken token = new FeedDownloadToken(version);
+        token.save();
+        return token;
+    }
+
+    private static Object downloadFeedVersionWithToken (Request req, Response res) {
+        FeedDownloadToken token = FeedDownloadToken.get(req.params("token"));
+
+        if(token == null || !token.isValid()) {
+            halt(400, "Feed download token not valid");
+        }
+
+        FeedVersion version = token.getFeedVersion();
+
+        token.delete();
+
+        return downloadFeedVersion(version, res);
+    }
+
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/feedversion/:id", FeedVersionController::getFeedVersion, json::write);
-        get(apiPrefix + "secure/feedversion/:id/download", FeedVersionController::downloadFeedVersion);
+        get(apiPrefix + "secure/feedversion/:id/download", FeedVersionController::downloadFeedVersionDirectly);
+        get(apiPrefix + "secure/feedversion/:id/downloadtoken", FeedVersionController::getDownloadToken, json::write);
         get(apiPrefix + "secure/feedversion/:id/validation", FeedVersionController::getValidationResult, json::write);
         get(apiPrefix + "secure/feedversion", FeedVersionController::getAllFeedVersions, json::write);
         post(apiPrefix + "secure/feedversion", FeedVersionController::createFeedVersion, json::write);
         delete(apiPrefix + "secure/feedversion/:id", FeedVersionController::deleteFeedVersion, json::write);
 
         get(apiPrefix + "public/feedversion", FeedVersionController::getAllFeedVersions, json::write);
+        get(apiPrefix + "downloadfeed/:token", FeedVersionController::downloadFeedVersionWithToken);
 
     }
 
