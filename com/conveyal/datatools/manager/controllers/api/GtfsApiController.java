@@ -41,7 +41,7 @@ public class GtfsApiController {
         else {
             LOG.warn("No extension provided");
             // if work_offline, use local directory
-            if (DataManager.config.get("application").get("data").get("use_s3_storage").asBoolean()) {
+            if (!DataManager.config.get("application").get("data").get("use_s3_storage").asBoolean()) {
                 ApiMain.initialize(DataManager.config.get("application").get("data").get("gtfs").asText());
             }
 //         else, use s3
