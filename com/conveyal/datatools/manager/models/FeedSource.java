@@ -17,6 +17,7 @@ import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Created by demory on 3/22/16.
@@ -34,12 +35,18 @@ public class FeedSource extends Model {
     //@JsonView(JsonViews.DataDump.class)
     public String projectId;
 
+    public String[] regions = {"1"};
     /**
      * Get the Project of which this feed is a part
      */
     @JsonIgnore
     public Project getProject () {
         return Project.get(projectId);
+    }
+
+    @JsonIgnore
+    public List<Region> getRegionList () {
+        return Region.getAll().stream().filter(r -> Arrays.asList(regions).contains(r.id)).collect(Collectors.toList());
     }
 
     public void setProject(Project proj) {
