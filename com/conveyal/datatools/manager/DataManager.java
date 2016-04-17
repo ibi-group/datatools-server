@@ -14,6 +14,7 @@ import com.conveyal.gtfs.api.ApiMain;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.util.JSONPObject;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,6 +40,8 @@ public class DataManager {
     public static JsonNode config;
     public static JsonNode serverConfig;
 
+    public static JsonNode gtfsPlusConfig;
+
     public static final Map<String, ExternalFeedResource> feedResources = new HashMap<>();
 
     public static void main(String[] args) throws IOException {
@@ -48,6 +51,7 @@ public class DataManager {
             in = new FileInputStream(new File("config.yml"));
         else
             in = new FileInputStream(new File(args[0]));
+
         ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
         config = mapper.readTree(in);
 
@@ -70,8 +74,12 @@ public class DataManager {
         UserController.register(apiPrefix);
         //        ServiceAlertsController.register(apiPrefix);
         GtfsApiController.register(apiPrefix);
-        GtfsPlusController.register(apiPrefix);
         RegionController.register(apiPrefix);
+
+        if ("true".equals(getConfigPropertyAsText("modules.gtfsplus.enabled"))) {
+            GtfsPlusController.register(apiPrefix);
+            gtfsPlusConfig = mapper.readTree("gtfsplus.yml");
+        }
 
         before(apiPrefix + "secure/*", (request, response) -> {
             if(request.requestMethod().equals("OPTIONS")) return;
@@ -102,6 +110,30 @@ public class DataManager {
         registerExternalResources();
     }
 
+
+    private static JsonNode getConfigProperty(String name) {
+        // try the server config first, then the main config
+        JsonNode fromServerConfig = getConfigProperty(serverConfig, name);
+        if(fromServerConfig != null) return fromServerConfig;
+
+        return getConfigProperty(config, name);
+    }
+
+    private static JsonNode getConfigProperty(JsonNode config, String name) {
+        String parts[] = name.split("\\.");
+        JsonNode node = config;
+        for(int i = 0; i < parts.length; i++) {
+            if(node == null) return null;
+            node = node.get(parts[i]);
+        }
+        return node;
+    }
+
+    private static String getConfigPropertyAsText(String name) {
+        JsonNode node = getConfigProperty(name);
+        return (node != null) ? node.asText() : null;
+    }
+
     private static void enableCORS(final String origin, final String methods, final String headers) {
         after((request, response) -> {
             response.header("Access-Control-Allow-Origin", origin);
@@ -112,20 +144,17 @@ public class DataManager {
 
     private static void registerExternalResources() {
 
-        String mtcEnabled = config.get("extensions").get("mtc").get("enabled").asText();
-        if (mtcEnabled != null && mtcEnabled.equals("true")) {
+        if ("true".equals(getConfigPropertyAsText("extensions.mtc.enabled"))) {
             LOG.info("Registering MTC Resource");
             registerExternalResource(new MtcFeedResource());
         }
 
-        String transitLandEnabled = config.get("extensions").get("transitland").get("enabled").asText();
-        if (transitLandEnabled != null && transitLandEnabled.equals("true")) {
+        if ("true".equals(getConfigPropertyAsText("extensions.transitland.enabled"))) {
             LOG.info("Registering TransitLand Resource");
             registerExternalResource(new TransitLandFeedResource());
         }
 
-        String transitFeedsEnabled = config.get("extensions").get("transitfeeds").get("enabled").asText();
-        if (transitFeedsEnabled != null && transitFeedsEnabled.equals("true")) {
+        if ("true".equals(getConfigPropertyAsText("extensions.transitfeeds.enabled"))) {
             LOG.info("Registering TransitFeeds Resource");
             registerExternalResource(new TransitFeedsFeedResource());
         }
