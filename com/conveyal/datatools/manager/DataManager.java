@@ -78,7 +78,7 @@ public class DataManager {
 
         if ("true".equals(getConfigPropertyAsText("modules.gtfsplus.enabled"))) {
             GtfsPlusController.register(apiPrefix);
-            gtfsPlusConfig = mapper.readTree("gtfsplus.yml");
+            gtfsPlusConfig = mapper.readTree(new File("gtfsplus.yml"));
         }
 
         before(apiPrefix + "secure/*", (request, response) -> {
