@@ -20,7 +20,7 @@ public class Note extends Model implements Serializable {
     private static DataStore<Note> noteStore = new DataStore<>("notes");
 
     /** The content of the note */
-    public String note;
+    public String body;
 
     /** What type of object it is recorded on */
     public NoteType type;
