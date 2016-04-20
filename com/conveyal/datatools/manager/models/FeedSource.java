@@ -345,6 +345,11 @@ public class FeedSource extends Model {
         return ret;
     }
 
+    @JsonView(JsonViews.UserInterface.class)
+    public int getNoteCount() {
+        return this.noteIds != null ? this.noteIds.size() : 0;
+    }
+
     /**
      * Represents ways feeds can be retrieved
      */

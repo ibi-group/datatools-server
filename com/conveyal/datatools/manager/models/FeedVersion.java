@@ -217,6 +217,10 @@ public class FeedVersion extends Model implements Serializable {
         return false;
     }*/
 
+    @JsonView(JsonViews.UserInterface.class)
+    public int getNoteCount() {
+        return this.noteIds != null ? this.noteIds.size() : 0;
+    }
 
     /**
      * Delete this feed version.
