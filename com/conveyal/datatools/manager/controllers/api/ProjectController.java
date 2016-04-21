@@ -66,7 +66,7 @@ public class ProjectController {
             Collection<FeedSource> feeds = proj.getProjectFeedSources().stream().filter(fs -> fs.isPublic).collect(Collectors.toList());
             proj.feedSources = feeds;
         }
-        else {
+        else if (proj.feedSources != null) {
             proj.feedSources = null;
         }
         return proj;
