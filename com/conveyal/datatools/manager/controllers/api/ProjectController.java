@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import spark.Request;
 import spark.Response;
@@ -40,30 +41,14 @@ public class ProjectController {
 
         System.out.println("found projects: " + Project.getAll().size());
         for (Project proj : Project.getAll()) {
-            if (userProfile.canAdministerApplication() || userProfile.hasProject(proj.id)) {
-                filteredProjects.add(proj);
+            // Get feedSources if making a public call
+            if (req.pathInfo().contains("public")) {
+                proj.feedSources = proj.getProjectFeedSources().stream().filter(fs -> fs.isPublic).collect(Collectors.toList());
             }
-        }
-
-        return filteredProjects;
-    }
-
-    public static Collection<Project> getAllProjectsWithPublicFeeds(Request req, Response res) throws JsonProcessingException {
-        Collection<Project> filteredProjects = new ArrayList<Project>();
-
-        System.out.println("found projects: " + Project.getAll().size());
-        for (Project proj : Project.getAll()) {
-            /*if (userProfile.canAdministerApplication() || userProfile.hasProject(proj.id)) {
-                filteredFCs.add(proj);
-            }*/
-            Collection<FeedSource> feedSources = new ArrayList<>();
-            for (FeedSource fs : proj.getProjectFeedSources()){
-                if (fs.isPublic){
-                    feedSources.add(fs);
-                }
+            else {
+                proj.feedSources = null;
             }
-            if (!feedSources.isEmpty()) {
-                proj.feedSources = feedSources;
+            if (userProfile.canAdministerApplication() || userProfile.hasProject(proj.id) || req.pathInfo().contains("public")) {
                 filteredProjects.add(proj);
             }
         }
@@ -73,7 +58,16 @@ public class ProjectController {
 
     public static Project getProject(Request req, Response res) {
         String id = req.params("id");
-        return Project.get(id);
+        Project proj = Project.get(id);
+
+        // Get feedSources if making a public call
+        if (req.pathInfo().contains("public")) {
+            proj.feedSources = proj.getProjectFeedSources().stream().filter(fs -> fs.isPublic).collect(Collectors.toList());
+        }
+        else {
+            proj.feedSources = null;
+        }
+        return proj;
     }
 
     public static Project createProject(Request req, Response res) throws IOException {
@@ -188,7 +182,7 @@ public class ProjectController {
         post(apiPrefix + "secure/project/:id/fetch", ProjectController::fetch, json::write);
 
         get(apiPrefix + "public/project/:id", ProjectController::getProject, json::write);
-        get(apiPrefix + "public/project", ProjectController::getAllProjectsWithPublicFeeds, json::write);
+        get(apiPrefix + "public/project", ProjectController::getAllProjects, json::write);
     }
 
 }
