@@ -60,13 +60,13 @@ public class ProjectController {
     public static Project getProject(Request req, Response res) {
         String id = req.params("id");
         Project proj = Project.get(id);
-
+        if (proj == null) return null
         // Get feedSources if making a public call
         if (req.pathInfo().contains("public")) {
             Collection<FeedSource> feeds = proj.getProjectFeedSources().stream().filter(fs -> fs.isPublic).collect(Collectors.toList());
             proj.feedSources = feeds;
         }
-        else if (proj.feedSources != null) {
+        else {
             proj.feedSources = null;
         }
         return proj;
