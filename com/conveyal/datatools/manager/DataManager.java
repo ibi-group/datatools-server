@@ -112,7 +112,7 @@ public class DataManager {
     }
 
 
-    private static JsonNode getConfigProperty(String name) {
+    public static JsonNode getConfigProperty(String name) {
         // try the server config first, then the main config
         JsonNode fromServerConfig = getConfigProperty(serverConfig, name);
         if(fromServerConfig != null) return fromServerConfig;
@@ -120,7 +120,7 @@ public class DataManager {
         return getConfigProperty(config, name);
     }
 
-    private static JsonNode getConfigProperty(JsonNode config, String name) {
+    public static JsonNode getConfigProperty(JsonNode config, String name) {
         String parts[] = name.split("\\.");
         JsonNode node = config;
         for(int i = 0; i < parts.length; i++) {
@@ -130,7 +130,7 @@ public class DataManager {
         return node;
     }
 
-    private static String getConfigPropertyAsText(String name) {
+    public static String getConfigPropertyAsText(String name) {
         JsonNode node = getConfigProperty(name);
         return (node != null) ? node.asText() : null;
     }

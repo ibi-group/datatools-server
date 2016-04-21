@@ -139,7 +139,7 @@ public class FeedSource extends Model {
                 return null;
             }
 
-            String baseUrl = DataManager.config.get("application").get("editor_url").asText();
+            String baseUrl = DataManager.getConfigPropertyAsText("modules.editor.url");
 
             if (!baseUrl.endsWith("/"))
                 baseUrl += "/";
