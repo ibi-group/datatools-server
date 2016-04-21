@@ -42,13 +42,14 @@ public class ProjectController {
         System.out.println("found projects: " + Project.getAll().size());
         for (Project proj : Project.getAll()) {
             // Get feedSources if making a public call
+//            Supplier<Collection<FeedSource>> supplier = () -> new LinkedList<FeedSource>();
             if (req.pathInfo().contains("public")) {
-                proj.feedSources = proj.getProjectFeedSources().stream().filter(fs -> fs.isPublic).collect(Collectors.toList());
+                proj.feedSources = proj.getProjectFeedSources().stream().filter(fs -> fs != null && fs.isPublic).collect(Collectors.toList());
             }
             else {
                 proj.feedSources = null;
             }
-            if (userProfile.canAdministerApplication() || userProfile.hasProject(proj.id) || req.pathInfo().contains("public")) {
+            if (req.pathInfo().contains("public") || userProfile.canAdministerApplication() || userProfile.hasProject(proj.id)) {
                 filteredProjects.add(proj);
             }
         }
@@ -62,7 +63,8 @@ public class ProjectController {
 
         // Get feedSources if making a public call
         if (req.pathInfo().contains("public")) {
-            proj.feedSources = proj.getProjectFeedSources().stream().filter(fs -> fs.isPublic).collect(Collectors.toList());
+            Collection<FeedSource> feeds = proj.getProjectFeedSources().stream().filter(fs -> fs.isPublic).collect(Collectors.toList());
+            proj.feedSources = feeds;
         }
         else {
             proj.feedSources = null;
