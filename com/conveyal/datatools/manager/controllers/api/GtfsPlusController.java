@@ -307,7 +307,7 @@ public class GtfsPlusController {
         for(int i = 0; i < fieldsNode.size(); i++) {
             JsonNode fieldNode = fieldsNode.get(i);
             int index = fieldList.indexOf(fieldNode.get("name").asText());
-            fieldNodes[index] = fieldNode;
+            if(index != -1) fieldNodes[index] = fieldNode;
         }
 
         int rowIndex = 0;
