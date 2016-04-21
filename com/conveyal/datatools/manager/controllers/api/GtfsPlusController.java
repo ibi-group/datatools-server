@@ -321,6 +321,7 @@ public class GtfsPlusController {
     }
 
     private static void validateTableValue(Collection<ValidationIssue> issues, String tableId, int rowIndex, String value, JsonNode fieldNode, GTFSFeed gtfsFeed) {
+        if(fieldNode == null) return;
         String fieldName = fieldNode.get("name").asText();
 
         if(fieldNode.get("required") != null && fieldNode.get("required").asBoolean()) {
