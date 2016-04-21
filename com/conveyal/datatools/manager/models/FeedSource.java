@@ -52,7 +52,6 @@ public class FeedSource extends Model {
     public void setProject(Project proj) {
         this.projectId = proj.id;
         this.save();
-        proj.numberOfFeeds = proj.getProjectFeedSources().size();
         proj.save();
     }
 

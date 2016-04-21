@@ -41,8 +41,6 @@ public class Project extends Model {
     //@JsonView
     public Collection<FeedSource> feedSources;
 
-    public int numberOfFeeds;
-
     public Double defaultLocationLat, defaultLocationLon;
 
 //    public Map<String, Double> boundingBox = new HashMap<>();
@@ -92,7 +90,6 @@ public class Project extends Model {
     /**
      * Get all the feed sources for this feed collection
      */
-
     @JsonIgnore
     public Collection<? extends FeedSource> getProjectFeedSources() {
 //        ArrayList<? extends FeedSource> ret = new ArrayList<>();
@@ -101,7 +98,9 @@ public class Project extends Model {
         return FeedSource.getAll().stream().filter(fs -> this.id.equals(fs.projectId)).collect(Collectors.toList());
 
     }
-
+    public int getNumberOfFeeds () {
+        return FeedSource.getAll().stream().filter(fs -> this.id.equals(fs.projectId)).collect(Collectors.toList()).size();
+    }
     /**
      * Get all the deployments for this feed collection
      */
