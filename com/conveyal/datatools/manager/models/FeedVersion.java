@@ -222,6 +222,22 @@ public class FeedVersion extends Model implements Serializable {
         return this.noteIds != null ? this.noteIds.size() : 0;
     }
 
+    @JsonInclude(Include.NON_NULL)
+    @JsonView(JsonViews.UserInterface.class)
+    public Long getFileTimestamp() {
+        File file = getFeed();
+        if(file == null) return null;
+        return file.lastModified();
+    }
+
+    @JsonInclude(Include.NON_NULL)
+    @JsonView(JsonViews.UserInterface.class)
+    public Long getFileSize() {
+        File file = getFeed();
+        if(file == null) return null;
+        return file.length();
+    }
+
     /**
      * Delete this feed version.
      */
