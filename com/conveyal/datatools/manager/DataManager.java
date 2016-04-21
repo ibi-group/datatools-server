@@ -10,6 +10,7 @@ import com.conveyal.datatools.manager.extensions.transitfeeds.TransitFeedsFeedRe
 import com.conveyal.datatools.manager.extensions.transitland.TransitLandFeedResource;
 
 import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.utils.CorsFilter;
 import com.conveyal.gtfs.api.ApiMain;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -62,9 +63,7 @@ public class DataManager {
             port(Integer.parseInt(config.get("application").get("port").asText()));
         }
 
-//        staticFileLocation("/public");
-
-        enableCORS("*", "*", "Authorization");
+        CorsFilter.apply();
 
         String apiPrefix = "/api/manager/";
         ConfigController.register(apiPrefix);
@@ -133,14 +132,6 @@ public class DataManager {
     public static String getConfigPropertyAsText(String name) {
         JsonNode node = getConfigProperty(name);
         return (node != null) ? node.asText() : null;
-    }
-
-    private static void enableCORS(final String origin, final String methods, final String headers) {
-        after((request, response) -> {
-            response.header("Access-Control-Allow-Origin", origin);
-            response.header("Access-Control-Request-Method", methods);
-            response.header("Access-Control-Allow-Headers", headers);
-        });
     }
 
     private static void registerExternalResources() {
