@@ -51,14 +51,14 @@ public class GisExport implements Runnable {
         GlobalTx gtx = VersionedDataStore.getGlobalTx();
         AgencyTx atx = null;
         try {
-            ShapefileDataStoreFactory com.conveyal.datatools.editor.datastoreFactory = new ShapefileDataStoreFactory();
+            ShapefileDataStoreFactory dataStoreFactory = new ShapefileDataStoreFactory();
 
             Map<String, Serializable> params = new HashMap<String, Serializable>();
             params.put("url", outShp.toURI().toURL());
             params.put("create spatial index", Boolean.TRUE);
 
-            ShapefileDataStore com.conveyal.datatools.editor.datastore = (ShapefileDataStore)dataStoreFactory.createNewDataStore(params);
-            com.conveyal.datatools.editor.datastore.forceSchemaCRS(DefaultGeographicCRS.WGS84);
+            ShapefileDataStore datastore = (ShapefileDataStore) dataStoreFactory.createNewDataStore(params);
+            datastore.forceSchemaCRS(DefaultGeographicCRS.WGS84);
 
             SimpleFeatureType STOP_TYPE = DataUtilities.createType(
                     "Stop",
@@ -94,7 +94,7 @@ public class GisExport implements Runnable {
 
             if (type.equals(Type.STOPS)) {
                 collectionType = STOP_TYPE;
-                com.conveyal.datatools.editor.datastore.createSchema(STOP_TYPE);
+                datastore.createSchema(STOP_TYPE);
                 featureBuilder = new SimpleFeatureBuilder(STOP_TYPE);
 
                 for (String agencyId : agencyIds) {
@@ -116,7 +116,7 @@ public class GisExport implements Runnable {
                 }
             } else if (type.equals(Type.ROUTES)) {
                 collectionType = ROUTE_TYPE;
-                com.conveyal.datatools.editor.datastore.createSchema(ROUTE_TYPE);
+                datastore.createSchema(ROUTE_TYPE);
                 featureBuilder = new SimpleFeatureBuilder(ROUTE_TYPE);
 
                 GeometryFactory gf = new GeometryFactory();
@@ -175,8 +175,8 @@ public class GisExport implements Runnable {
 
             Transaction transaction = new DefaultTransaction("create");
 
-            String typeName = com.conveyal.datatools.editor.datastore.getTypeNames()[0];
-            SimpleFeatureSource featureSource = com.conveyal.datatools.editor.datastore.getFeatureSource(typeName);
+            String typeName = datastore.getTypeNames()[0];
+            SimpleFeatureSource featureSource = datastore.getFeatureSource(typeName);
 
             if (featureSource instanceof SimpleFeatureStore)
             {
