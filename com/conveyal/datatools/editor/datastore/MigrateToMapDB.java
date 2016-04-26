@@ -27,7 +27,7 @@ import java.util.NavigableMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-import static org.opentripplanner.common.LoggingUtil.human;
+//import static org.opentripplanner.common.LoggingUtil.human;
 
 /**
  * Migrate a Postgres database dump to the MapDB format.
@@ -325,7 +325,7 @@ public class MigrateToMapDB {
 
         while (reader.readRecord()) {
             if (++count % 100000 == 0) {
-                System.out.println(human(count) + " stop times read . . .");
+                System.out.println(count + " stop times read . . .");
             }
 
             StopTime st = new StopTime();

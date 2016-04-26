@@ -1,5 +1,6 @@
 package com.conveyal.datatools.editor.datastore;
 
+import com.conveyal.datatools.manager.DataManager;
 import com.google.common.collect.Maps;
 import com.conveyal.datatools.editor.models.Snapshot;
 import com.conveyal.datatools.editor.models.transit.Stop;
@@ -9,7 +10,6 @@ import org.mapdb.DBMaker;
 import org.mapdb.TxMaker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import play.Play;
 import com.conveyal.datatools.editor.utils.ClassLoaderSerializer;
 
 import java.io.File;
@@ -26,7 +26,7 @@ import java.util.NavigableSet;
  */
 public class VersionedDataStore {
     public static final Logger LOG = LoggerFactory.getLogger(VersionedDataStore.class);
-    private static File dataDirectory = new File((String) Play.configuration.get("application.database-directory"));
+    private static File dataDirectory = new File((String) DataManager.config.get("application").get("data").get("editor_mapdb").asText());
     private static TxMaker globalTxMaker;
 
     private static Map<String, TxMaker> agencyTxMakers = Maps.newConcurrentMap();
