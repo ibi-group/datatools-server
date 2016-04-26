@@ -1,15 +1,8 @@
 package com.conveyal.datatools.editor.controllers;
 
-import play.Play;
-import play.data.validation.*;
-import play.libs.*;
-import static spark.Spark.*;
-import play.mvc.Controller;
-import play.utils.*;
-
 import java.lang.reflect.InvocationTargetException;
 
-public class Secure extends Controller {
+public class Secure {
 
     // ~~~ Login
 
@@ -34,7 +27,7 @@ public class Secure extends Controller {
         //login();
     }
 
-    public static class Security extends Controller {
+    public static class Security {
 
         /**
          * @Deprecated

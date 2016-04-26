@@ -20,19 +20,18 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.List;
 
+import spark.Request;
+import spark.Response;
+
 import static spark.Spark.*;
 
-@With(Secure.class)
-public class SnapshotController extends Controller {
+
+public class SnapshotController {
 
     public static final Logger LOG = LoggerFactory.getLogger(SnapshotController.class);
 
-    @Before
-    static void initSession() throws Throwable {
 
-        if(!Security.isConnected() && !Application.checkOAuth(request, session))
-            Secure.login("");
-    }
+
 
     public static void getSnapshot(String agencyId, String id) throws IOException {
         GlobalTx gtx = VersionedDataStore.getGlobalTx();
@@ -43,7 +42,7 @@ public class SnapshotController extends Controller {
                 if (gtx.snapshots.containsKey(sid))
                     renderJSON(Base.toJson(gtx.snapshots.get(sid), false));
                 else
-                    notFound();
+                    halt(404);
 
                 return;
             }
@@ -94,7 +93,7 @@ public class SnapshotController extends Controller {
             renderJSON(Base.toJson(s, false));
         } catch (IOException e) {
             e.printStackTrace();
-            badRequest();
+            halt(400);
             if (gtx != null) gtx.rollbackIfOpen();
         }
     }
@@ -108,14 +107,14 @@ public class SnapshotController extends Controller {
 
             if (s == null || s.id == null || !s.id.equals(sid)) {
                 LOG.warn("snapshot ID not matched, not updating: %s, %s", s.id, id);
-                badRequest();
+                halt(400);
             }
 
             gtx = VersionedDataStore.getGlobalTx();
 
             if (!gtx.snapshots.containsKey(s.id)) {
                 gtx.rollback();
-                notFound();
+                halt(404);
             }
 
             gtx.snapshots.put(s.id, s);
@@ -126,7 +125,7 @@ public class SnapshotController extends Controller {
         } catch (IOException e) {
             e.printStackTrace();
             if (gtx != null) gtx.rollbackIfOpen();
-            badRequest();
+            halt(400);
         }
     }
 
@@ -135,7 +134,7 @@ public class SnapshotController extends Controller {
         try {
             decodedId = JacksonSerializers.Tuple2IntDeserializer.deserialize(id);
         } catch (IOException e1) {
-            badRequest();
+            halt(400);
             return;
         }
 
@@ -143,7 +142,7 @@ public class SnapshotController extends Controller {
         Snapshot local;
         try {
             if (!gtx.snapshots.containsKey(decodedId)) {
-                notFound();
+                halt(404);
                 return;
             }
 
@@ -169,7 +168,7 @@ public class SnapshotController extends Controller {
             renderJSON(Base.toJson(stops, false));
         } catch (IOException e) {
             e.printStackTrace();
-            badRequest();
+            halt(400);
         } finally {
             gtx.rollbackIfOpen();
         }
@@ -181,7 +180,7 @@ public class SnapshotController extends Controller {
         try {
             decodedId = JacksonSerializers.Tuple2IntDeserializer.deserialize(id);
         } catch (IOException e1) {
-            badRequest();
+            halt(400);
             return;
         }
 
@@ -189,7 +188,7 @@ public class SnapshotController extends Controller {
         Snapshot local;
         try {
             if (!gtx.snapshots.containsKey(decodedId)) {
-                notFound();
+                halt(404);
                 return;
             }
 

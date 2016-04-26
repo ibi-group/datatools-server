@@ -15,23 +15,22 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
+import spark.Request;
+import spark.Response;
+
 import static spark.Spark.*;
 
-@With(Secure.class)
-public class StopController extends Controller {
-    @Before
-    static void initSession() throws Throwable {
 
-        if(!Security.isConnected() && !Application.checkOAuth(request, session))
-            Secure.login("");
-    }
+public class StopController {
+
+
 
     public static void getStop(String id, String patternId, String agencyId, Boolean majorStops, Double west, Double east, Double north, Double south) {
         if (agencyId == null)
             agencyId = session.get("agencyId");
 
         if (agencyId == null) {
-            badRequest();
+            halt(400);
             return;
         }
 
@@ -41,7 +40,7 @@ public class StopController extends Controller {
               if (id != null) {
                 if (!tx.stops.containsKey(id)) {
                     tx.rollback();
-                    notFound();
+                    halt(404);
                     return;
                 }
 
@@ -71,7 +70,7 @@ public class StopController extends Controller {
             }
             else if (patternId != null) {
                 if (!tx.tripPatterns.containsKey(patternId)) {
-                    notFound();
+                    halt(404);
                     return;
                 }
 
@@ -90,12 +89,12 @@ public class StopController extends Controller {
             }
             else {
                 tx.rollback();
-                badRequest();
+                halt(400);
             }
 
         } catch (Exception e) {
             e.printStackTrace();
-            badRequest();
+            halt(400);
             tx.rollback();
         }
 
@@ -107,17 +106,17 @@ public class StopController extends Controller {
             Stop stop = Base.mapper.readValue(params.get("body"), Stop.class);
             
             if (session.contains("agencyId") && !session.get("agencyId").equals(stop.agencyId))
-                badRequest();
+                halt(400);
             
             if (!VersionedDataStore.agencyExists(stop.agencyId)) {
-                badRequest();
+                halt(400);
                 return;
             }
             
             tx = VersionedDataStore.getAgencyTx(stop.agencyId);
             
             if (tx.stops.containsKey(stop.id)) {
-                badRequest();
+                halt(400);
                 return;
             }
             
@@ -126,7 +125,7 @@ public class StopController extends Controller {
             renderJSON(Base.toJson(stop, false));
         } catch (Exception e) {
             e.printStackTrace();
-            badRequest();
+            halt(400);
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }
@@ -140,17 +139,17 @@ public class StopController extends Controller {
             Stop stop = Base.mapper.readValue(params.get("body"), Stop.class);
             
             if (session.contains("agencyId") && !session.get("agencyId").equals(stop.agencyId))
-                badRequest();
+                halt(400);
             
             if (!VersionedDataStore.agencyExists(stop.agencyId)) {
-                badRequest();
+                halt(400);
                 return;
             }
             
             tx = VersionedDataStore.getAgencyTx(stop.agencyId);
             
             if (!tx.stops.containsKey(stop.id)) {
-                badRequest();
+                halt(400);
                 return;
             }
             
@@ -159,7 +158,7 @@ public class StopController extends Controller {
             renderJSON(Base.toJson(stop, false));
         } catch (Exception e) {
             e.printStackTrace();
-            badRequest();
+            halt(400);
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }
@@ -170,19 +169,19 @@ public class StopController extends Controller {
             agencyId = session.get("agencyId");
 
         if (agencyId == null) {
-            badRequest();
+            halt(400);
             return;
         }
 
         AgencyTx tx = VersionedDataStore.getAgencyTx(agencyId);
         try {
             if (!tx.stops.containsKey(id)) {
-                notFound();
+                halt(404);
                 return;
             }
 
             if (!tx.getTripPatternsByStop(id).isEmpty()) {
-                badRequest();
+                halt(400);
                 return;
             }
 
@@ -190,7 +189,7 @@ public class StopController extends Controller {
             tx.commit();
             renderJSON(Base.toJson(s, false));
         } catch (Exception e) {
-            badRequest();
+            halt(400);
             e.printStackTrace();
         } finally {
             tx.rollbackIfOpen();
@@ -203,7 +202,7 @@ public class StopController extends Controller {
             agencyId = session.get("agencyId");
 
         if (agencyId == null) {
-            badRequest();
+            halt(400);
             return;
         }
 
@@ -248,7 +247,7 @@ public class StopController extends Controller {
             renderJSON(Base.toJson(ret, false));
          } catch (Exception e) {
              e.printStackTrace();
-             badRequest();
+             halt(400);
          }
         finally {
             atx.rollback();
@@ -257,7 +256,7 @@ public class StopController extends Controller {
 
     public static void mergeStops(String agencyId, @As(",") List<String> mergedStopIds) {
         if (mergedStopIds.size() <= 1) {
-            badRequest();
+            halt(400);
             return;
         }
 
@@ -265,7 +264,7 @@ public class StopController extends Controller {
             agencyId = session.get("agencyId");
 
         if (agencyId == null) {
-            badRequest();
+            halt(400);
             return;
         }
 

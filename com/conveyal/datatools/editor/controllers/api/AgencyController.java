@@ -8,26 +8,22 @@ import com.conveyal.datatools.editor.datastore.AgencyTx;
 import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.Agency;
+import spark.Request;
+import spark.Response;
 
 import static spark.Spark.*;
 
-@With(Secure.class)
-public class AgencyController extends Controller {
-    @Before
-    static void initSession() throws Throwable {
+public class AgencyController {
 
-        if(!Security.isConnected() && !Application.checkOAuth(request, session))
-            Secure.login("");
-    }
-
-    public static void getAgency(String id) {
+    public static void getAgency(Request req, Response res) {
+        String id = req.params("id");
         try {
             GlobalTx tx = VersionedDataStore.getGlobalTx();
 
             if(id != null) {
                 if (!tx.agencies.containsKey(id)) {
                     tx.rollback();
-                    notFound();
+                    halt(404);
                     return;
                 }
 
@@ -40,15 +36,15 @@ public class AgencyController extends Controller {
             tx.rollback();
         } catch (Exception e) {
             e.printStackTrace();
-            badRequest();
+            halt(400);
         }
     }
 
-    public static void createAgency() {
+    public static void createAgency(Request req, Response res) {
         Agency agency;
 
         try {
-            agency = Base.mapper.readValue(params.get("body"), Agency.class);
+            agency = Base.mapper.readValue(req.params("body"), Agency.class);
             
             // check if gtfsAgencyId is specified, if not create from DB id
             if(agency.gtfsAgencyId == null) {
@@ -59,7 +55,7 @@ public class AgencyController extends Controller {
             
             if (tx.agencies.containsKey(agency.id)) {
                 tx.rollback();
-                badRequest();
+                halt(400);
                 return;
             }
             
@@ -69,22 +65,22 @@ public class AgencyController extends Controller {
             renderJSON(Base.toJson(agency, false));
         } catch (Exception e) {
             e.printStackTrace();
-            badRequest();
+            halt(400);
         }
     }
 
 
-    public static void updateAgency() {
+    public static void updateAgency(Request req, Response res) {
         Agency agency;
 
         try {
-            agency = Base.mapper.readValue(params.get("body"), Agency.class);
+            agency = Base.mapper.readValue(req.params("body"), Agency.class);
             
             GlobalTx tx = VersionedDataStore.getGlobalTx();
 
             if(!tx.agencies.containsKey(agency.id)) {
                 tx.rollback();
-                badRequest();
+                halt(400);
                 return;
             }
             
@@ -98,40 +94,42 @@ public class AgencyController extends Controller {
             renderJSON(Base.toJson(agency, false));
         } catch (Exception e) {
             e.printStackTrace();
-            badRequest();
+            halt(400);
         }
     }
 
-    public static void deleteAgency(String id) {
+    public static void deleteAgency(Request req, Response res) {
         GlobalTx tx = VersionedDataStore.getGlobalTx();
-
+        String id = req.params("id");
         if(id == null) {
-            badRequest();
+            halt(400);
             return;
         }
         
         if (!tx.agencies.containsKey(id)) {
-            notFound();
+            halt(404);
             return;
         }
 
         tx.agencies.remove(id);
         tx.commit();
         
-        ok();
+        return true; // ok();
     }
     
     /** duplicate an agency */
-    public static void duplicateAgency(String id) {
+    public static void duplicateAgency(Request req, Response res) {
+
+        String id = req.params("id");
         // make sure the agency exists
         GlobalTx gtx = VersionedDataStore.getGlobalTx();
         if (!gtx.agencies.containsKey(id)) {
             gtx.rollback();
-            notFound();
+            halt(404);
         }
         gtx.rollback();
 
         AgencyTx.duplicate(id);
-        ok();
+        return true; // ok();
     }
 }

@@ -8,16 +8,15 @@ import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.RouteType;
 
+import spark.Request;
+import spark.Response;
+
 import static spark.Spark.*;
 
-@With(Secure.class)
-public class RouteTypeController extends Controller {
-    @Before
-    static void initSession() throws Throwable {
 
-        if(!Security.isConnected() && !Application.checkOAuth(request, session))
-            Secure.login("");
-    }
+public class RouteTypeController {
+
+
 
     public static void getRouteType(String id) {
         try {
@@ -27,7 +26,7 @@ public class RouteTypeController extends Controller {
                 if(tx.routeTypes.containsKey(id))
                     renderJSON(Base.toJson(tx.routeTypes.get(id), false));
                 else
-                    notFound();
+                    halt(404);
 
                 tx.rollback();
             }
@@ -37,7 +36,7 @@ public class RouteTypeController extends Controller {
             }
         } catch (Exception e) {
             e.printStackTrace();
-            badRequest();
+            halt(400);
         }
 
     }
@@ -52,7 +51,7 @@ public class RouteTypeController extends Controller {
 
             if (tx.routeTypes.containsKey(routeType.id)) {
                 tx.rollback();
-                badRequest();
+                halt(400);
                 return;
             }
 
@@ -62,7 +61,7 @@ public class RouteTypeController extends Controller {
             renderJSON(Base.toJson(routeType, false));
         } catch (Exception e) {
             e.printStackTrace();
-            badRequest();
+            halt(400);
         }
     }
 
@@ -74,14 +73,14 @@ public class RouteTypeController extends Controller {
             routeType = Base.mapper.readValue(params.get("body"), RouteType.class);
 
             if(routeType.id == null) {
-                badRequest();
+                halt(400);
                 return;
             }
 
             GlobalTx tx = VersionedDataStore.getGlobalTx();
             if (!tx.routeTypes.containsKey(routeType.id)) {
                 tx.rollback();
-                notFound();
+                halt(404);
                 return;
             }
 
@@ -91,27 +90,27 @@ public class RouteTypeController extends Controller {
             renderJSON(Base.toJson(routeType, false));
         } catch (Exception e) {
             e.printStackTrace();
-            badRequest();
+            halt(400);
         }
     }
 
     // TODO: cascaded delete, etc.
     public static void deleteRouteType(String id) {
         if (id == null)
-            badRequest();
+            halt(400);
 
         GlobalTx tx = VersionedDataStore.getGlobalTx();
 
         if (!tx.routeTypes.containsKey(id)) {
             tx.rollback();
-            badRequest();
+            halt(400);
             return;
         }
 
         tx.routeTypes.remove(id);
         tx.commit();
 
-        ok();
+        return true; // ok();
     }
 
 }

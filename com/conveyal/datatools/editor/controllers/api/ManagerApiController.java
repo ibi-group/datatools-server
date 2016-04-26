@@ -14,14 +14,16 @@ import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
+import spark.Request;
+import spark.Response;
 
 import static spark.Spark.*;
 
-public class ManagerApiController extends Controller {
+public class ManagerApiController {
 
     // todo: Auth0 authentication
 
-    @Before
+
     public static void setCORS()  {
         Http.Header origin = new Http.Header();
         origin.name = "Access-Control-Allow-Origin";
@@ -49,7 +51,7 @@ public class ManagerApiController extends Controller {
                 if (gtx.snapshots.containsKey(sid))
                     renderJSON(Base.toJson(gtx.snapshots.get(sid), false));
                 else
-                    notFound();
+                    halt(404);
 
                 return;
             } else {
@@ -79,7 +81,7 @@ public class ManagerApiController extends Controller {
         try {
             decodedId = JacksonSerializers.Tuple2IntDeserializer.deserialize(id);
         } catch (IOException e1) {
-            badRequest();
+            halt(400);
             return;
         }
 
@@ -87,7 +89,7 @@ public class ManagerApiController extends Controller {
         Snapshot local;
         try {
             if (!gtx.snapshots.containsKey(decodedId)) {
-                notFound();
+                halt(404);
                 return;
             }
 

@@ -10,7 +10,7 @@ import play.libs.*;
 import static spark.Spark.*;
 import play.utils.*;
 
-public class Bootstrap extends Controller {
+public class Bootstrap {
 
     public static void index() {
         GlobalTx tx = VersionedDataStore.getGlobalTx();
@@ -63,7 +63,7 @@ public class Bootstrap extends Controller {
             }
 
             if (tx.accounts.containsKey(username)) {
-                badRequest();
+                halt(400);
                 adminForm();
                 return;
             }
@@ -135,16 +135,16 @@ public class Bootstrap extends Controller {
     public static void migrate () {
         GlobalTx gtx = VersionedDataStore.getGlobalTx();
         if (!gtx.accounts.isEmpty()) {
-            badRequest();
+            halt(400);
             return;
         }
 
         try {
             new MigrateToMapDB().migrate(new File("dump"));
-            ok();
+            return true; // ok();
         } catch (Exception e) {
             e.printStackTrace();
-            badRequest();
+            halt(400);
         }
     }*/
 }

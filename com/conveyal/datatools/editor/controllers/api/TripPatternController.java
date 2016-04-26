@@ -16,23 +16,22 @@ import org.mapdb.Fun.Tuple2;
 import java.util.Collection;
 import java.util.Set;
 
+import spark.Request;
+import spark.Response;
+
 import static spark.Spark.*;
 
-@With(Secure.class)
-public class TripPatternController extends Controller {
-    @Before
-    static void initSession() throws Throwable {
 
-        if(!Security.isConnected() && !Application.checkOAuth(request, session))
-            Secure.login("");
-    }
+public class TripPatternController {
+
+
 
     public static void getTripPattern(String id, String routeId, String agencyId) {
         if (agencyId == null)
             agencyId = session.get("agencyId");
 
         if (agencyId == null) {
-            badRequest();
+            halt(400);
             return;
         }
 
@@ -42,14 +41,14 @@ public class TripPatternController extends Controller {
 
             if(id != null) {
                if (!tx.tripPatterns.containsKey(id))
-                   notFound();
+                   halt(404);
                else
                    renderJSON(Base.toJson(tx.tripPatterns.get(id), false));
             }
             else if (routeId != null) {
 
                 if (!tx.routes.containsKey(routeId))
-                    notFound();
+                    halt(404);
                 else {
                     Set<Tuple2<String, String>> tpKeys = tx.tripPatternsByRoute.subSet(new Tuple2(routeId, null), new Tuple2(routeId, Fun.HI));
 
@@ -65,7 +64,7 @@ public class TripPatternController extends Controller {
                 }
             }
             else {
-                badRequest();
+                halt(400);
             }
             
             tx.rollback();
@@ -73,7 +72,7 @@ public class TripPatternController extends Controller {
         } catch (Exception e) {
             tx.rollback();
             e.printStackTrace();
-            badRequest();
+            halt(400);
         }
     }
 
@@ -84,10 +83,10 @@ public class TripPatternController extends Controller {
             tripPattern = Base.mapper.readValue(params.get("body"), TripPattern.class);
             
             if (session.contains("agencyId") && !session.get("agencyId").equals(tripPattern.agencyId))
-                badRequest();
+                halt(400);
             
             if (!VersionedDataStore.agencyExists(tripPattern.agencyId)) {
-                badRequest();
+                halt(400);
                 return;
             }
             
@@ -95,7 +94,7 @@ public class TripPatternController extends Controller {
             
             if (tx.tripPatterns.containsKey(tripPattern.id)) {
                 tx.rollback();
-                badRequest();
+                halt(400);
             }
             
             tripPattern.calcShapeDistTraveled();
@@ -106,7 +105,7 @@ public class TripPatternController extends Controller {
             renderJSON(Base.toJson(tripPattern, false));
         } catch (Exception e) {
             e.printStackTrace();
-            badRequest();
+            halt(400);
         }
     }
 
@@ -117,15 +116,15 @@ public class TripPatternController extends Controller {
             tripPattern = Base.mapper.readValue(params.get("body"), TripPattern.class);
             
             if (session.contains("agencyId") && !session.get("agencyId").equals(tripPattern.agencyId))
-                badRequest();
+                halt(400);
             
             if (!VersionedDataStore.agencyExists(tripPattern.agencyId)) {
-                badRequest();
+                halt(400);
                 return;
             }
             
             if (tripPattern.id == null) {
-                badRequest();
+                halt(400);
                 return;
             }
             
@@ -135,7 +134,7 @@ public class TripPatternController extends Controller {
             
             if(originalTripPattern == null) {
                 tx.rollback();
-                badRequest();
+                halt(400);
                 return;
             }
                         
@@ -144,7 +143,7 @@ public class TripPatternController extends Controller {
                 TripPattern.reconcilePatternStops(originalTripPattern, tripPattern, tx);
             } catch (IllegalStateException e) {
                 tx.rollback();
-                badRequest();
+                halt(400);
                 return;
             }
             
@@ -157,7 +156,7 @@ public class TripPatternController extends Controller {
         } catch (Exception e) {
             if (tx != null) tx.rollback();
             e.printStackTrace();
-            badRequest();
+            halt(400);
         }
     }
 
@@ -166,7 +165,7 @@ public class TripPatternController extends Controller {
             agencyId = session.get("agencyId");
 
         if(id == null || agencyId == null) {
-            badRequest();
+            halt(400);
             return;
         }
 

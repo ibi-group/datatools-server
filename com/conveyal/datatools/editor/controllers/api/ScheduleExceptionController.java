@@ -9,16 +9,15 @@ import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.ScheduleException;
 import org.joda.time.LocalDate;
 
+import spark.Request;
+import spark.Response;
+
 import static spark.Spark.*;
 
-@With(Secure.class)
-public class ScheduleExceptionController extends Controller {
-    @Before
-    static void initSession() throws Throwable {
 
-        if(!Security.isConnected() && !Application.checkOAuth(request, session))
-            Secure.login("");
-    }
+public class ScheduleExceptionController {
+
+
 
     /** Get all of the schedule exceptions for an agency */
     public static void getScheduleException (String exceptionId, String agencyId) {
@@ -26,7 +25,7 @@ public class ScheduleExceptionController extends Controller {
             agencyId = session.get("agencyId");
 
         if (agencyId == null) {
-            badRequest();
+            halt(400);
             return;
         }
 
@@ -37,7 +36,7 @@ public class ScheduleExceptionController extends Controller {
 
             if (exceptionId != null) {
                 if (!tx.exceptions.containsKey(exceptionId))
-                    badRequest();
+                    halt(400);
                 else
                     renderJSON(Base.toJson(tx.exceptions.get(exceptionId), false));
             }
@@ -48,7 +47,7 @@ public class ScheduleExceptionController extends Controller {
         } catch (Exception e) {
             if (tx != null) tx.rollback();
             e.printStackTrace();
-            badRequest();
+            halt(400);
         }
     }
     
@@ -58,12 +57,12 @@ public class ScheduleExceptionController extends Controller {
             ScheduleException ex = Base.mapper.readValue(params.get("body"), ScheduleException.class);
 
             if (!VersionedDataStore.agencyExists(ex.agencyId)) {
-                badRequest();
+                halt(400);
                 return;
             }
 
             if (session.contains("agencyId") && !session.get("agencyId").equals(ex.agencyId))
-                badRequest();
+                halt(400);
 
             tx = VersionedDataStore.getAgencyTx(ex.agencyId);
 
@@ -71,7 +70,7 @@ public class ScheduleExceptionController extends Controller {
                 for (String cal : ex.customSchedule) {
                     if (!tx.calendars.containsKey(cal)) {
                         tx.rollback();
-                        badRequest();
+                        halt(400);
                         return;
                     }
                 }
@@ -79,14 +78,14 @@ public class ScheduleExceptionController extends Controller {
 
             if (tx.exceptions.containsKey(ex.id)) {
                 tx.rollback();
-                badRequest();
+                halt(400);
                 return;
             }
 
             for (LocalDate date : ex.dates) {
                 if (tx.scheduleExceptionCountByDate.containsKey(date) && tx.scheduleExceptionCountByDate.get(date) > 0) {
                     tx.rollback();
-                    badRequest();
+                    halt(400);
                     return;
                 }
             }
@@ -99,7 +98,7 @@ public class ScheduleExceptionController extends Controller {
         } catch (Exception e) {
             if (tx != null) tx.rollback();
             e.printStackTrace();
-            badRequest();
+            halt(400);
         }
     }
     
@@ -109,10 +108,10 @@ public class ScheduleExceptionController extends Controller {
             ScheduleException ex = Base.mapper.readValue(params.get("body"), ScheduleException.class);
 
             if (session.contains("agencyId") && !session.get("agencyId").equals(ex.agencyId))
-                badRequest();
+                halt(400);
 
             if (!VersionedDataStore.agencyExists(ex.agencyId)) {
-                badRequest();
+                halt(400);
                 return;
             }
 
@@ -122,7 +121,7 @@ public class ScheduleExceptionController extends Controller {
                 for (String cal : ex.customSchedule) {
                     if (!tx.calendars.containsKey(cal)) {
                         tx.rollback();
-                        badRequest();
+                        halt(400);
                         return;
                     }
                 }
@@ -130,7 +129,7 @@ public class ScheduleExceptionController extends Controller {
 
             if (!tx.exceptions.containsKey(ex.id)) {
                 tx.rollback();
-                badRequest();
+                halt(400);
                 return;
             }
 
@@ -142,7 +141,7 @@ public class ScheduleExceptionController extends Controller {
         } catch (Exception e) {
             if (tx != null) tx.rollback();
             e.printStackTrace();
-            badRequest();
+            halt(400);
         }
     }
     
@@ -151,7 +150,7 @@ public class ScheduleExceptionController extends Controller {
             agencyId = session.get("agencyId");
 
         if (agencyId == null) {
-            badRequest();
+            halt(400);
             return;
         }
 
@@ -159,6 +158,6 @@ public class ScheduleExceptionController extends Controller {
         tx.exceptions.remove(id);
         tx.commit();
 
-        ok();
+        return true; // ok();
     }
 }

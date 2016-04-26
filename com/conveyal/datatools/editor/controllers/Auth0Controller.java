@@ -13,7 +13,7 @@ import java.util.regex.Pattern;
 
 import static spark.Spark.*;
 
-public class Auth0Controller extends Controller {
+public class Auth0Controller {
     public static void auth0Login(String token) {
         System.out.println("auth0Login token="+token);
 
@@ -41,7 +41,7 @@ public class Auth0Controller extends Controller {
             redirect("/auth0logout");
         }
 
-        ok();
+        return true; // ok();
     }
 
     public static void auth0Logout(String token) {

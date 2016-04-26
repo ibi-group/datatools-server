@@ -30,12 +30,12 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
-@With(Secure.class)
-public class Application extends Controller {
+
+public class Application {
     /** used to give almost-friendly names to exported files */
     public static AtomicLong nextExportId = new AtomicLong(1);
 
-    @Before
+
     static void initSession() throws Throwable {
 
         GlobalTx tx = VersionedDataStore.getGlobalTx();
@@ -300,7 +300,7 @@ public class Application extends Controller {
 
     public static void setLang(String lang) {
         Lang.change(lang);
-        ok();
+        return true; // ok();
     }
     
     public static void setAgency(String agencyId) {
@@ -308,7 +308,7 @@ public class Application extends Controller {
 
         try {
             if(!tx.agencies.containsKey(agencyId)) {
-                badRequest();
+                halt(400);
                 return;
             }
 
@@ -320,7 +320,7 @@ public class Application extends Controller {
             session.put("lon", agency.defaultLon);
             session.put("zoom", 12);
 
-            ok();
+            return true; // ok();
         } finally {
             tx.rollback();
         }
@@ -332,7 +332,7 @@ public class Application extends Controller {
         session.put("lat", lat);
         session.put("lon", lon);
 
-        ok();
+        return true; // ok();
     }
     
     public static void timetable () {
@@ -396,7 +396,7 @@ public class Application extends Controller {
     
     public static void createGis(List<String> agencySelect, String exportType) {
         if (agencySelect.isEmpty()) {
-            badRequest();
+            halt(400);
             return;
         }
 
@@ -592,7 +592,7 @@ public class Application extends Controller {
         try {
             renderJSON(Base.toJson(ret, true));
         } catch (Exception e) {
-            badRequest();
+            halt(400);
         }
     }
 

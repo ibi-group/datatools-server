@@ -4,14 +4,18 @@ import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.Account;
 import com.conveyal.datatools.editor.models.transit.Agency;
+
+import spark.Request;
+import spark.Response;
+
 import static spark.Spark.*;
 
 import java.util.Collection;
 
-@With(Secure.class)
-public class Admin extends Controller {
 
-    @Before
+public class Admin {
+
+
     static void setConnectedUser() {
         if(Security.isConnected() && Security.check("admin")) {
             renderArgs.put("user", Security.connected());
@@ -55,7 +59,7 @@ public class Admin extends Controller {
         GlobalTx tx = VersionedDataStore.getGlobalTx();
 
         if (!tx.accounts.containsKey(username)) {
-            badRequest();
+            halt(400);
             return;
         }
 
@@ -79,7 +83,7 @@ public class Admin extends Controller {
         tx.rollback();
 
         if (account == null)
-            notFound();
+            halt(404);
         else
             renderJSON(account);
     }
@@ -91,9 +95,9 @@ public class Admin extends Controller {
         tx.rollback();
 
         if (exists)
-            badRequest();
+            halt(400);
         else
-            ok();
+            return true; // ok();
 
     }
 
@@ -102,7 +106,7 @@ public class Admin extends Controller {
         GlobalTx tx = VersionedDataStore.getGlobalTx();
         if (!tx.accounts.containsKey(username)) {
             tx.rollback();
-            notFound();
+            halt(404);
             return;
         }
 
@@ -112,7 +116,7 @@ public class Admin extends Controller {
 
         tx.commit();
 
-        ok();
+        return true; // ok();
 
     }
 

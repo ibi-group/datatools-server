@@ -15,24 +15,23 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
+import spark.Request;
+import spark.Response;
+
 import static spark.Spark.*;
 
-@With(Secure.class)
-public class TripController extends Controller {
-    public static final Logger LOG = LoggerFactory.getLogger(TripController.class);
-    @Before
-    static void initSession() throws Throwable {
 
-        if(!Security.isConnected() && !Application.checkOAuth(request, session))
-            Secure.login("");
-    }
+public class TripController {
+    public static final Logger LOG = LoggerFactory.getLogger(TripController.class);
+
+
 
     public static void getTrip(String id, String patternId, String calendarId, String agencyId) {
         if (agencyId == null)
             agencyId = session.get("agencyId");
 
         if (agencyId == null) {
-            badRequest();
+            halt(400);
             return;
         }
 
@@ -43,11 +42,11 @@ public class TripController extends Controller {
                 if (tx.trips.containsKey(id))
                     renderJSON(Base.toJson(tx.trips.get(id), false));
                 else
-                    notFound();
+                    halt(404);
             }
             else if (patternId != null && calendarId != null) {
                 if (!tx.tripPatterns.containsKey(patternId) || !tx.calendars.containsKey(calendarId)) {
-                    notFound();
+                    halt(404);
                 }
                 else {
                     renderJSON(Base.toJson(tx.getTripsByPatternAndCalendar(patternId, calendarId), false));
@@ -64,7 +63,7 @@ public class TripController extends Controller {
         } catch (Exception e) {
             tx.rollback();
             e.printStackTrace();
-            badRequest();
+            halt(400);
         }
 
     }
@@ -76,10 +75,10 @@ public class TripController extends Controller {
             Trip trip = Base.mapper.readValue(params.get("body"), Trip.class);
 
             if (session.contains("agencyId") && !session.get("agencyId").equals(trip.agencyId))
-                badRequest();
+                halt(400);
 
             if (!VersionedDataStore.agencyExists(trip.agencyId)) {
-                badRequest();
+                halt(400);
                 return;
             }
 
@@ -87,13 +86,13 @@ public class TripController extends Controller {
 
             if (tx.trips.containsKey(trip.id)) {
                 tx.rollback();
-                badRequest();
+                halt(400);
                 return;
             }
 
             if (!tx.tripPatterns.containsKey(trip.patternId) || trip.stopTimes.size() != tx.tripPatterns.get(trip.patternId).patternStops.size()) {
                 tx.rollback();
-                badRequest();
+                halt(400);
                 return;
             }
 
@@ -104,7 +103,7 @@ public class TripController extends Controller {
         } catch (Exception e) {
             e.printStackTrace();
             if (tx != null) tx.rollbackIfOpen();
-            badRequest();
+            halt(400);
         }
     }
     
@@ -115,10 +114,10 @@ public class TripController extends Controller {
             Trip trip = Base.mapper.readValue(params.get("body"), Trip.class);
 
             if (session.contains("agencyId") && !session.get("agencyId").equals(trip.agencyId))
-                badRequest();
+                halt(400);
 
             if (!VersionedDataStore.agencyExists(trip.agencyId)) {
-                badRequest();
+                halt(400);
                 return;
             }
 
@@ -126,13 +125,13 @@ public class TripController extends Controller {
 
             if (!tx.trips.containsKey(trip.id)) {
                 tx.rollback();
-                badRequest();
+                halt(400);
                 return;
             }
 
             if (!tx.tripPatterns.containsKey(trip.patternId) || trip.stopTimes.size() != tx.tripPatterns.get(trip.patternId).patternStops.size()) {
                 tx.rollback();
-                badRequest();
+                halt(400);
                 return;
             }
 
@@ -151,7 +150,7 @@ public class TripController extends Controller {
                 if (!st.stopId.equals(ps.stopId)) {
                     LOG.error("Mismatch between stop sequence in trip and pattern at position %s, pattern: %s, stop: %s", i, ps.stopId, st.stopId);
                     tx.rollback();
-                    badRequest();
+                    halt(400);
                     return;
                 }
             }
@@ -163,7 +162,7 @@ public class TripController extends Controller {
         } catch (Exception e) {
             if (tx != null) tx.rollbackIfOpen();
             e.printStackTrace();
-            badRequest();
+            halt(400);
         }
     }
 
@@ -172,7 +171,7 @@ public class TripController extends Controller {
             agencyId = session.get("agencyId");
 
         if (id == null || agencyId == null) {
-            badRequest();
+            halt(400);
             return;
         }
 
@@ -182,7 +181,7 @@ public class TripController extends Controller {
         try {
             json = Base.toJson(trip, false);
         } catch (IOException e) {
-            badRequest();
+            halt(400);
             return;
         }
         tx.commit();

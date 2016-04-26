@@ -14,20 +14,16 @@ import com.conveyal.datatools.editor.models.transit.ServiceCalendar;
 import com.conveyal.datatools.editor.models.transit.ServiceCalendar.ServiceCalendarForPattern;
 import com.conveyal.datatools.editor.models.transit.Trip;
 import org.mapdb.Fun;
+import spark.Request;
+import spark.Response;
 
 import static spark.Spark.*;
 
 import java.util.Collection;
 import java.util.Set;
 
-@With(Secure.class)
-public class CalendarController extends Controller {
-    @Before
-    static void initSession() throws Throwable {
 
-        if(!Security.isConnected() && !Application.checkOAuth(request, session))
-            Secure.login("");
-    }
+public class CalendarController {
 
     public static void getCalendar(String id, String agencyId, final String patternId) {
         if (agencyId == null) {
@@ -35,7 +31,7 @@ public class CalendarController extends Controller {
         }
 
         if (agencyId == null) {
-            badRequest();
+            halt(400);
             return;
         }
 
@@ -44,7 +40,7 @@ public class CalendarController extends Controller {
         try {
             if (id != null) {
                 if (!tx.calendars.containsKey(id)) {
-                    notFound();
+                    halt(404);
                     tx.rollback();
                     return;
                 }
@@ -58,7 +54,7 @@ public class CalendarController extends Controller {
             else if (patternId != null) {
                 if (!tx.tripPatterns.containsKey(patternId)) {
                     tx.rollback();
-                    notFound();
+                    halt(404);
                     return;
                 }
 
@@ -97,12 +93,12 @@ public class CalendarController extends Controller {
         } catch (Exception e) {
             tx.rollback();
             e.printStackTrace();
-            badRequest();
+            halt(400);
         }
 
     }
 
-    public static void createCalendar() {
+    public static void createCalendar(Request req, Response res) {
         ServiceCalendar cal;
         AgencyTx tx = null;
 
@@ -110,18 +106,18 @@ public class CalendarController extends Controller {
             cal = Base.mapper.readValue(params.get("body"), ServiceCalendar.class);
 
             if (!VersionedDataStore.agencyExists(cal.agencyId)) {
-                badRequest();
+                halt(400);
                 return;
             }
 
             if (session.contains("agencyId") && !session.get("agencyId").equals(cal.agencyId))
-                badRequest();
+                halt(400);
             
             tx = VersionedDataStore.getAgencyTx(cal.agencyId);
             
             if (tx.calendars.containsKey(cal.id)) {
                 tx.rollback();
-                badRequest();
+                halt(400);
                 return;
             }
             
@@ -139,7 +135,7 @@ public class CalendarController extends Controller {
         } catch (Exception e) {
             if (tx != null) tx.rollback();
             e.printStackTrace();
-            badRequest();
+            halt(400);
         }
     }
 
@@ -151,18 +147,18 @@ public class CalendarController extends Controller {
             cal = Base.mapper.readValue(params.get("body"), ServiceCalendar.class);
 
             if (!VersionedDataStore.agencyExists(cal.agencyId)) {
-                badRequest();
+                halt(400);
                 return;
             }
             
             if (session.contains("agencyId") && !session.get("agencyId").equals(cal.agencyId))
-                badRequest();
+                halt(400);
 
             tx = VersionedDataStore.getAgencyTx(cal.agencyId);
             
             if (!tx.calendars.containsKey(cal.id)) {
                 tx.rollback();
-                badRequest();
+                halt(400);
                 return;
             }
             
@@ -183,7 +179,7 @@ public class CalendarController extends Controller {
         } catch (Exception e) {
             if (tx != null) tx.rollback();
             e.printStackTrace();
-            badRequest();
+            halt(400);
         }
     }
 
@@ -192,7 +188,7 @@ public class CalendarController extends Controller {
 
         if (id == null || !tx.calendars.containsKey(id)) {
             tx.rollback();
-            notFound();
+            halt(404);
             return;
         }
 
@@ -200,7 +196,7 @@ public class CalendarController extends Controller {
         Long count = tx.tripCountByCalendar.get(id);
         if (count != null && count > 0) {
             tx.rollback();
-            badRequest();
+            halt(400);
             return;
         }
 
@@ -214,6 +210,6 @@ public class CalendarController extends Controller {
 
         tx.commit();
 
-        ok();
+        return true; // ok();
     }
 }

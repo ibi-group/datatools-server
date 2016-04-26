@@ -17,24 +17,22 @@ import org.mapdb.Fun.Tuple2;
 
 import java.util.Collection;
 import java.util.Set;
+import spark.Request;
+import spark.Response;
 
 import static spark.Spark.*;
 
-@With(Secure.class)
-public class RouteController extends Controller {
-    @Before
-    static void initSession() throws Throwable {
 
-        if(!Security.isConnected() && !Application.checkOAuth(request, session))
-            Secure.login("");
-    }
+public class RouteController {
+
+
 
     public static void getRoute(String id, String agencyId) {
         if (agencyId == null)
             agencyId = session.get("agencyId");
 
         if (agencyId == null) {
-            badRequest();
+            halt(400);
             return;
         }
 
@@ -44,7 +42,7 @@ public class RouteController extends Controller {
             if (id != null) {
                 if (!tx.routes.containsKey(id)) {
                     tx.rollback();
-                    badRequest();
+                    halt(400);
                     return;
                 }
 
@@ -68,7 +66,7 @@ public class RouteController extends Controller {
         } catch (Exception e) {
             tx.rollbackIfOpen();
             e.printStackTrace();
-            badRequest();
+            halt(400);
         }
     }
 
@@ -81,12 +79,12 @@ public class RouteController extends Controller {
             GlobalTx gtx = VersionedDataStore.getGlobalTx();
             if (!gtx.agencies.containsKey(route.agencyId)) {
                 gtx.rollback();
-                badRequest();
+                halt(400);
                 return;
             }
             
             if (session.contains("agencyId") && !session.get("agencyId").equals(route.agencyId))
-                badRequest();
+                halt(400);
             
             gtx.rollback();
    
@@ -94,7 +92,7 @@ public class RouteController extends Controller {
             
             if (tx.routes.containsKey(route.id)) {
                 tx.rollback();
-                badRequest();
+                halt(400);
                 return;
             }
 
@@ -109,7 +107,7 @@ public class RouteController extends Controller {
             renderJSON(Base.toJson(route, false));
         } catch (Exception e) {
             e.printStackTrace();
-            badRequest();
+            halt(400);
         }
     }
 
@@ -124,12 +122,12 @@ public class RouteController extends Controller {
             
             if (!tx.routes.containsKey(route.id)) {
                 tx.rollback();
-                notFound();
+                halt(404);
                 return;
             }
             
             if (session.contains("agencyId") && !session.get("agencyId").equals(route.agencyId))
-                badRequest();
+                halt(400);
 
             // check if gtfsRouteId is specified, if not create from DB id
             if(route.gtfsRouteId == null) {
@@ -142,7 +140,7 @@ public class RouteController extends Controller {
             renderJSON(Base.toJson(route, false));
         } catch (Exception e) {
             e.printStackTrace();
-            badRequest();
+            halt(400);
         }
     }
 
@@ -151,7 +149,7 @@ public class RouteController extends Controller {
             agencyId = session.get("agencyId");
 
         if(id == null || agencyId == null)
-            badRequest();
+            halt(400);
 
         AgencyTx tx = VersionedDataStore.getAgencyTx(agencyId);
         
@@ -160,7 +158,7 @@ public class RouteController extends Controller {
         try {
             if (!tx.routes.containsKey(id)) {
                 tx.rollback();
-                notFound();
+                halt(404);
                 return;
             }
             
@@ -181,7 +179,7 @@ public class RouteController extends Controller {
             
             tx.routes.remove(id);
             tx.commit();
-            ok();
+            return true; // ok();
         } catch (Exception e) {
             tx.rollback();
             e.printStackTrace();
@@ -195,7 +193,7 @@ public class RouteController extends Controller {
             agencyId = session.get("agencyId");
 
         if (agencyId == null || from == null || into == null)
-            badRequest();
+            halt(400);
 
         final AgencyTx tx = VersionedDataStore.getAgencyTx(agencyId);
 
@@ -203,7 +201,7 @@ public class RouteController extends Controller {
             // ensure the routes exist
             if (!tx.routes.containsKey(from) || !tx.routes.containsKey(into)) {
                 tx.rollback();
-                badRequest();
+                halt(400);
             }
 
             // get all the trip patterns for route from
@@ -251,7 +249,7 @@ public class RouteController extends Controller {
              tx.routes.remove(from);
 
              tx.commit();
-             ok();
+             return true; // ok();
         }
         catch (Exception e) {
             e.printStackTrace();
