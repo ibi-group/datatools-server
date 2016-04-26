@@ -54,6 +54,7 @@ public class Auth0UserProfile {
 
         Project[] projects;
         Permission[] permissions;
+        Subscription[] subscriptions;
 
         public DatatoolsInfo() {
         }
@@ -61,6 +62,7 @@ public class Auth0UserProfile {
         public DatatoolsInfo(Project[] projects, Permission[] permissions) {
             this.projects = projects;
             this.permissions = permissions;
+            this.subscriptions = subscriptions;
         }
 
         public void setProjects(Project[] projects) {
@@ -69,6 +71,10 @@ public class Auth0UserProfile {
 
         public void setPermissions(Permission[] permissions) {
             this.permissions = permissions;
+        }
+
+        public void setSubscriptions(Subscription[] subscriptions) {
+            this.subscriptions = subscriptions;
         }
 
     }
@@ -120,6 +126,28 @@ public class Auth0UserProfile {
 
         public void setFeeds(String[] feeds) {
             this.feeds = feeds;
+        }
+    }
+
+    public static class Subscription {
+
+        String type;
+        String[] target;
+
+        public Subscription() {
+        }
+
+        public Subscription(String type, String[] target) {
+            this.type = type;
+            this.target = target;
+        }
+
+        public void setType(String type) {
+            this.type = type;
+        }
+
+        public void setTarget(String[] target) {
+            this.target = target;
         }
     }
 

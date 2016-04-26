@@ -23,6 +23,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.net.URLEncoder;
 
+import static com.conveyal.datatools.manager.auth.Auth0Users.*;
 import static spark.Spark.*;
 
 /**
@@ -50,18 +51,8 @@ public class UserController {
     }
 
     public static Object getAllUsers(Request req, Response res) throws IOException {
-        String url = "https://" + AUTH0_DOMAIN + "/api/v2/users";
-        System.out.println(url);
-        String charset = "UTF-8";
-        HttpClient client = new DefaultHttpClient();
-        HttpGet request = new HttpGet(url);
-        request.addHeader("Authorization", "Bearer " + AUTH0_API_TOKEN);
-        request.setHeader("Accept-Charset", charset);
-        HttpResponse response = client.execute(request);
-        String result = EntityUtils.toString(response.getEntity());
-        System.out.println(result);
         res.type("application/json");
-        return result;
+        return getAuth0Users();
     }
 
     public static Object createPublicUser(Request req, Response res) throws IOException {
@@ -128,7 +119,7 @@ public class UserController {
         HttpResponse response = client.execute(request);
         String result = EntityUtils.toString(response.getEntity());
 //        res.type("application/json");
-//        System.out.println(result);
+        System.out.println(result);
 
         return result;
     }

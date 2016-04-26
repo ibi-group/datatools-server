@@ -19,6 +19,8 @@ import java.net.URL;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static com.conveyal.datatools.manager.utils.NotificationsUtils.notifyUsersForSubscription;
+
 /**
  * Created by demory on 3/22/16.
  */
@@ -224,7 +226,7 @@ public class FeedSource extends Model {
 
             this.lastFetched = newFeed.updated;
             this.save();
-
+            notifyUsersForSubscription("feed-updated", this.id);
             return newFeed;
         }
     }

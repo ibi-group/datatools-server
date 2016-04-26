@@ -15,6 +15,8 @@ import java.io.IOException;
 import java.net.URL;
 import java.util.*;
 
+import static com.conveyal.datatools.manager.auth.Auth0Users.getUsersBySubscription;
+import static com.conveyal.datatools.manager.utils.NotificationsUtils.notifyUsersForSubscription;
 import static spark.Spark.*;
 
 /**
@@ -25,17 +27,21 @@ public class FeedSourceController {
 
     public static JsonManager<FeedSource> json =
             new JsonManager<>(FeedSource.class, JsonViews.UserInterface.class);
-
     public static FeedSource getFeedSource(Request req, Response res) {
         String id = req.params("id");
-        return FeedSource.get(id);
+        Boolean publicFilter = req.pathInfo().contains("public");
+        FeedSource fs = FeedSource.get(id);
+        if (publicFilter && !fs.isPublic) {
+            return null;
+        }
+        return fs;
     }
 
     public static Collection<FeedSource> getAllFeedSources(Request req, Response res) throws JsonProcessingException {
         Collection<FeedSource> sources = new ArrayList<>();
 
         String projectId = req.queryParams("projectId");
-        Boolean publicFilter = Boolean.valueOf(req.queryParams("public"));
+        Boolean publicFilter = req.pathInfo().contains("public");
         if(projectId != null) {
             for (FeedSource source: FeedSource.getAll()) {
                 if(source.projectId.equals(projectId)) {
@@ -88,7 +94,7 @@ public class FeedSourceController {
     public static FeedSource updateFeedSource(Request req, Response res) throws IOException {
         String id = req.params("id");
         FeedSource source = FeedSource.get(id);
-
+        notifyUsersForSubscription("feed-updated", id);
         applyJsonToFeedSource(source, req.body());
         source.save();
 

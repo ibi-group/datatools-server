@@ -13,6 +13,7 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.Date;
 
+import static com.conveyal.datatools.manager.utils.NotificationsUtils.notifyUsersForSubscription;
 import static spark.Spark.*;
 import static spark.Spark.get;
 import static spark.Spark.post;
@@ -129,6 +130,10 @@ public class NoteController {
             model.addNote(n);
             n.save();
             model.save();
+
+            // send notifications
+            notifyUsersForSubscription("feed-commented-on", s.id);
+
             return n;
         }
         else {
