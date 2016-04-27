@@ -1,11 +1,10 @@
 package com.conveyal.datatools.editor.controllers.api;
 
+import com.conveyal.datatools.manager.models.JsonViews;
+import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.google.common.base.Function;
 import com.google.common.collect.Collections2;
-import com.conveyal.datatools.editor.controllers.Application;
 import com.conveyal.datatools.editor.controllers.Base;
-import com.conveyal.datatools.editor.controllers.Secure;
-import com.conveyal.datatools.editor.controllers.Security;
 import com.conveyal.datatools.editor.datastore.AgencyTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.Trip;
@@ -24,15 +23,20 @@ import static spark.Spark.*;
 
 public class TripPatternController {
 
+    public static JsonManager<TripPattern> json =
+            new JsonManager<>(TripPattern.class, JsonViews.UserInterface.class);
 
+    public static Object getTripPattern(Request req, Response res) {
+        String id = req.params("id");
+        String routeId = req.queryParams("routeId");
+        String agencyId = req.queryParams("agencyId");
+        String json = null;
 
-    public static void getTripPattern(String id, String routeId, String agencyId) {
         if (agencyId == null)
-            agencyId = session.get("agencyId");
+            agencyId = req.session().attribute("agencyId");
 
         if (agencyId == null) {
             halt(400);
-            return;
         }
 
         final AgencyTx tx = VersionedDataStore.getAgencyTx(agencyId);
@@ -43,7 +47,7 @@ public class TripPatternController {
                if (!tx.tripPatterns.containsKey(id))
                    halt(404);
                else
-                   renderJSON(Base.toJson(tx.tripPatterns.get(id), false));
+                   json = Base.toJson(tx.tripPatterns.get(id), false);
             }
             else if (routeId != null) {
 
@@ -60,7 +64,7 @@ public class TripPatternController {
                         }
                     });
 
-                    renderJSON(Base.toJson(patts, false));
+                    json = Base.toJson(patts, false);
                 }
             }
             else {
@@ -74,20 +78,20 @@ public class TripPatternController {
             e.printStackTrace();
             halt(400);
         }
+        return json;
     }
 
-    public static void createTripPattern() {
+    public static Object createTripPattern(Request req, Response res) {
         TripPattern tripPattern;
         
         try {
-            tripPattern = Base.mapper.readValue(params.get("body"), TripPattern.class);
+            tripPattern = Base.mapper.readValue(req.body(), TripPattern.class);
             
-            if (session.contains("agencyId") && !session.get("agencyId").equals(tripPattern.agencyId))
+            if (req.session().attribute("agencyId") != null && !req.session().attribute("agencyId").equals(tripPattern.agencyId))
                 halt(400);
             
             if (!VersionedDataStore.agencyExists(tripPattern.agencyId)) {
                 halt(400);
-                return;
             }
             
             AgencyTx tx = VersionedDataStore.getAgencyTx(tripPattern.agencyId);
@@ -102,30 +106,29 @@ public class TripPatternController {
             tx.tripPatterns.put(tripPattern.id, tripPattern);
             tx.commit();
 
-            renderJSON(Base.toJson(tripPattern, false));
+            return Base.toJson(tripPattern, false);
         } catch (Exception e) {
             e.printStackTrace();
             halt(400);
         }
+        return null;
     }
 
-    public static void updateTripPattern() {
+    public static Object updateTripPattern(Request req, Response res) {
         TripPattern tripPattern;
         AgencyTx tx = null;
         try {
-            tripPattern = Base.mapper.readValue(params.get("body"), TripPattern.class);
+            tripPattern = Base.mapper.readValue(req.body(), TripPattern.class);
             
-            if (session.contains("agencyId") && !session.get("agencyId").equals(tripPattern.agencyId))
+            if (req.session().attribute("agencyId") != null && !req.session().attribute("agencyId").equals(tripPattern.agencyId))
                 halt(400);
             
             if (!VersionedDataStore.agencyExists(tripPattern.agencyId)) {
                 halt(400);
-                return;
             }
             
             if (tripPattern.id == null) {
                 halt(400);
-                return;
             }
             
             tx = VersionedDataStore.getAgencyTx(tripPattern.agencyId);
@@ -135,7 +138,6 @@ public class TripPatternController {
             if(originalTripPattern == null) {
                 tx.rollback();
                 halt(400);
-                return;
             }
                         
             // update stop times
@@ -144,7 +146,6 @@ public class TripPatternController {
             } catch (IllegalStateException e) {
                 tx.rollback();
                 halt(400);
-                return;
             }
             
             tripPattern.calcShapeDistTraveled();
@@ -152,21 +153,24 @@ public class TripPatternController {
             tx.tripPatterns.put(tripPattern.id, tripPattern);
             tx.commit();
 
-            renderJSON(Base.toJson(tripPattern, false));
+            return Base.toJson(tripPattern, false);
         } catch (Exception e) {
             if (tx != null) tx.rollback();
             e.printStackTrace();
             halt(400);
         }
+        return null;
     }
 
-    public static void deleteTripPattern(String id, String agencyId) {
+    public static Object deleteTripPattern(Request req, Response res) {
+        String id = req.params("id");
+        String agencyId = req.queryParams("agencyId");
+
         if (agencyId == null)
-            agencyId = session.get("agencyId");
+            agencyId = req.session().attribute("agencyId");
 
         if(id == null || agencyId == null) {
             halt(400);
-            return;
         }
 
         AgencyTx tx = VersionedDataStore.getAgencyTx(agencyId);
@@ -182,5 +186,15 @@ public class TripPatternController {
         } finally {
             tx.rollbackIfOpen();
         }
+        return null;
+    }
+
+    public static void register (String apiPrefix) {
+        get(apiPrefix + "secure/trippattern/:id", TripPatternController::getTripPattern, json::write);
+        options(apiPrefix + "secure/trippattern", (q, s) -> "");
+        get(apiPrefix + "secure/trippattern", TripPatternController::getTripPattern, json::write);
+        post(apiPrefix + "secure/trippattern", TripPatternController::createTripPattern, json::write);
+        put(apiPrefix + "secure/trippattern/:id", TripPatternController::updateTripPattern, json::write);
+        delete(apiPrefix + "secure/trippattern/:id", TripPatternController::deleteTripPattern, json::write);
     }
 }

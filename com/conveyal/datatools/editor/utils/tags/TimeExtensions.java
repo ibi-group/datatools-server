@@ -1,10 +1,10 @@
 package com.conveyal.datatools.editor.utils.tags;
 
-import play.templates.JavaExtensions;
+//import play.templates.JavaExtensions;
 
 import java.text.DecimalFormat;
 
-public class TimeExtensions extends JavaExtensions {
+public class TimeExtensions {
 
     public static String ccyAmount(Number number) {
          Integer min = (int)Math.floor(number.doubleValue()/new Double(60));

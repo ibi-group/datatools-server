@@ -2,13 +2,13 @@ package com.conveyal.datatools.editor.controllers.api;
 
 import com.conveyal.datatools.editor.controllers.Application;
 import com.conveyal.datatools.editor.controllers.Base;
-import com.conveyal.datatools.editor.controllers.Secure;
-import com.conveyal.datatools.editor.controllers.Security;
 import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.jobs.ProcessGtfsSnapshotExport;
 import com.conveyal.datatools.editor.models.Snapshot;
 import com.conveyal.datatools.editor.models.transit.Stop;
+import com.conveyal.datatools.manager.models.JsonViews;
+import com.conveyal.datatools.manager.utils.json.JsonManager;
 import org.mapdb.Fun;
 import org.mapdb.Fun.Tuple2;
 import org.slf4j.Logger;
@@ -29,26 +29,28 @@ import static spark.Spark.*;
 public class SnapshotController {
 
     public static final Logger LOG = LoggerFactory.getLogger(SnapshotController.class);
+    public static JsonManager<Snapshot> json =
+            new JsonManager<>(Snapshot.class, JsonViews.UserInterface.class);
 
 
 
+    public static Object getSnapshot(Request req, Response res) throws IOException {
+        String id = req.params("id");
+        String agencyId = req.queryParams("agencyId");
 
-    public static void getSnapshot(String agencyId, String id) throws IOException {
         GlobalTx gtx = VersionedDataStore.getGlobalTx();
-
+        String json = null;
         try {
             if (id != null) {
                 Tuple2<String, Integer> sid = JacksonSerializers.Tuple2IntDeserializer.deserialize(id);
                 if (gtx.snapshots.containsKey(sid))
-                    renderJSON(Base.toJson(gtx.snapshots.get(sid), false));
+                    json = Base.toJson(gtx.snapshots.get(sid), false);
                 else
                     halt(404);
-
-                return;
             }
             else {
                 if (agencyId == null)
-                    agencyId = session.get("agencyId");
+                    agencyId = req.session().attribute("agencyId");
 
                 Collection<Snapshot> snapshots;
                 if (agencyId == null) {
@@ -61,18 +63,19 @@ public class SnapshotController {
                     snapshots = gtx.snapshots.subMap(new Tuple2(agencyId, null), new Tuple2(agencyId, Fun.HI)).values();
                 }
 
-                renderJSON(Base.toJson(snapshots, false));
+                json = Base.toJson(snapshots, false);
             }
         } finally {
             gtx.rollback();
         }
+        return json;
     }
 
-    public static void createSnapshot () {
+    public static Object createSnapshot (Request req, Response res) {
         GlobalTx gtx = null;
         try {
             // create a dummy snapshot from which to get values
-            Snapshot original = Base.mapper.readValue(params.get("body"), Snapshot.class);
+            Snapshot original = Base.mapper.readValue(req.body(), Snapshot.class);
             Snapshot s = VersionedDataStore.takeSnapshot(original.agencyId, original.name, original.comment);
             s.validFrom = original.validFrom;
             s.validTo = original.validTo;
@@ -90,7 +93,7 @@ public class SnapshotController {
 
             gtx.commit();
 
-            renderJSON(Base.toJson(s, false));
+            return Base.toJson(s, false);
         } catch (IOException e) {
             e.printStackTrace();
             halt(400);
@@ -98,10 +101,11 @@ public class SnapshotController {
         }
     }
 
-    public static void updateSnapshot (String id) {
+    public static Object updateSnapshot (Request req, Response res) {
+        String id = req.params("id");
         GlobalTx gtx = null;
         try {
-            Snapshot s = Base.mapper.readValue(params.get("body"), Snapshot.class);
+            Snapshot s = Base.mapper.readValue(req.body(), Snapshot.class);
 
             Tuple2<String, Integer> sid = JacksonSerializers.Tuple2IntDeserializer.deserialize(id);
 
@@ -121,7 +125,7 @@ public class SnapshotController {
 
             gtx.commit();
 
-            renderJSON(Base.toJson(s, false));
+            return Base.toJson(s, false);
         } catch (IOException e) {
             e.printStackTrace();
             if (gtx != null) gtx.rollbackIfOpen();
@@ -129,13 +133,14 @@ public class SnapshotController {
         }
     }
 
-    public static void restoreSnapshot (String id) {
+    public static Object restoreSnapshot (Request req, Response res) {
+        String id = req.params("id");
+        String json = null;
         Tuple2<String, Integer> decodedId;
         try {
             decodedId = JacksonSerializers.Tuple2IntDeserializer.deserialize(id);
         } catch (IOException e1) {
             halt(400);
-            return;
         }
 
         GlobalTx gtx = VersionedDataStore.getGlobalTx();
@@ -143,7 +148,6 @@ public class SnapshotController {
         try {
             if (!gtx.snapshots.containsKey(decodedId)) {
                 halt(404);
-                return;
             }
 
             local = gtx.snapshots.get(decodedId);
@@ -165,17 +169,19 @@ public class SnapshotController {
             gtx.snapshots.put(local.id, clone);
             gtx.commit();
 
-            renderJSON(Base.toJson(stops, false));
+            json = Base.toJson(stops, false);
         } catch (IOException e) {
             e.printStackTrace();
             halt(400);
         } finally {
             gtx.rollbackIfOpen();
         }
+        return json;
     }
 
     /** Export a snapshot as GTFS */
-    public static void exportSnapshot (String id) {
+    public static Object exportSnapshot (Request req, Response res) {
+        String id = req.params("id");
         Tuple2<String, Integer> decodedId;
         try {
             decodedId = JacksonSerializers.Tuple2IntDeserializer.deserialize(id);
@@ -202,5 +208,14 @@ public class SnapshotController {
         } finally {
             gtx.rollbackIfOpen();
         }
+    }
+
+    public static void register (String apiPrefix) {
+        get(apiPrefix + "secure/snapshot/:id", SnapshotController::getSnapshot, json::write);
+        options(apiPrefix + "secure/snapshot", (q, s) -> "");
+        get(apiPrefix + "secure/snapshot", SnapshotController::getSnapshot, json::write);
+        post(apiPrefix + "secure/snapshot", SnapshotController::createSnapshot, json::write);
+        put(apiPrefix + "secure/snapshot/:id", SnapshotController::updateSnapshot, json::write);
+//        delete(apiPrefix + "secure/snapshot/:id", SnapshotController::deleteSnapshot, json::write);
     }
 }

@@ -8,7 +8,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class FeatureAttributeFormatter {
-
+    public static final Logger LOG = LoggerFactory.getLogger(FeatureAttributeFormatter.class);
     String formatString;
     Matcher matches;
 

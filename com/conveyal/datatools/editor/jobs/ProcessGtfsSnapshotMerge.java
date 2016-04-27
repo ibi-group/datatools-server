@@ -22,13 +22,13 @@ import gnu.trove.map.TIntObjectMap;
 import gnu.trove.map.hash.TIntObjectHashMap;
 import com.conveyal.datatools.editor.models.transit.*;
 import org.joda.time.DateTimeConstants;
-import org.joda.time.LocalDate;
+import java.time.LocalDate;
 import org.mapdb.DBMaker;
 import org.mapdb.Fun;
 import org.mapdb.Fun.Tuple2;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import play.i18n.Messages;
+//import play.i18n.Messages;
 
 import java.io.File;
 import java.util.ArrayList;
@@ -41,6 +41,7 @@ import java.util.SortedSet;
 
 
 public class ProcessGtfsSnapshotMerge implements Runnable {
+    public static final Logger LOG = LoggerFactory.getLogger(ProcessGtfsSnapshotMerge.class);
     /** map from GTFS agency IDs to Agencies */
     private Map<String, Agency> agencyIdMap = new HashMap<String, Agency>();
     private Map<String, Route> routeIdMap = new HashMap<String, Route>();
@@ -249,7 +250,7 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
                         if (endDate == null || cd.date.isAfter(endDate))
                             endDate = cd.date;
 
-                        int dayOfWeek = cd.date.getDayOfWeek();
+                        int dayOfWeek = cd.date.getDayOfWeek().getValue();
 
                         switch (dayOfWeek) {
                         case DateTimeConstants.MONDAY:
@@ -285,7 +286,7 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
                     if (startDate == null) {
                         // no service whatsoever
                         LOG.warn("Service ID " + svc.service_id + " has no service whatsoever");
-                        startDate = new LocalDate().minusMonths(1);
+                        startDate = LocalDate.now().minusMonths(1);
                         endDate = startDate.plusYears(1);
                         cal.monday = cal.tuesday = cal.wednesday = cal.thursday = cal.friday = cal.saturday = cal.sunday = false;
                     }
@@ -430,9 +431,9 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
         if (gtfsTrip.trip_headsign != null && !gtfsTrip.trip_headsign.isEmpty())
             patt.name = gtfsTrip.trip_headsign;
         else if (gtfsTrip.route.route_long_name != null)
-            patt.name = Messages.get("gtfs.named-route-pattern", gtfsTrip.route.route_long_name, input.stops.get(stopTimes[stopTimes.length - 1].stop_id).stop_name, stopTimes.length);
+            patt.name = String.format("%s to %s (%s stops)", gtfsTrip.route.route_long_name, input.stops.get(stopTimes[stopTimes.length - 1].stop_id).stop_name, stopTimes.length); // Messages.get("gtfs.named-route-pattern", gtfsTrip.route.route_long_name, input.stops.get(stopTimes[stopTimes.length - 1].stop_id).stop_name, stopTimes.length);
         else
-            patt.name = Messages.get("gtfs.unnamed-route-pattern", input.stops.get(stopTimes[stopTimes.length - 1].stop_id).stop_name, stopTimes.length);
+            patt.name = String.format("to %s ({%s stops)", input.stops.get(stopTimes[stopTimes.length - 1].stop_id).stop_name, stopTimes.length); // Messages.get("gtfs.unnamed-route-pattern", input.stops.get(stopTimes[stopTimes.length - 1].stop_id).stop_name, stopTimes.length);
 
         for (com.conveyal.gtfs.model.StopTime st : stopTimes) {
             TripPatternStop tps = new TripPatternStop();

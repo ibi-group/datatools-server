@@ -12,11 +12,16 @@ import com.google.common.io.BaseEncoding;
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.GeometryFactory;
 import com.vividsolutions.jts.geom.LineString;
-import org.joda.time.DateTimeZone;
-import org.joda.time.LocalDate;
-import org.joda.time.LocalTime;
-import org.joda.time.format.DateTimeFormat;
-import org.joda.time.format.DateTimeFormatter;
+
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.LocalDate;
+import java.time.LocalTime;
+//import java.time.format.D;
+import java.time.format.DateTimeFormatter;
 import org.mapdb.Fun.Tuple2;
 
 import java.io.IOException;
@@ -154,7 +159,8 @@ public class JacksonSerializers {
         public void serialize(LocalDate ld, JsonGenerator jgen,
                               SerializerProvider arg2) throws IOException,
                 JsonGenerationException {
-            jgen.writeNumber(ld.toDateTime(new LocalTime(12, 0, 0), DateTimeZone.UTC).getMillis());
+//            jgen.writeNumber(ld.toDateTime(LocalTime.of(12, 0, 0), ZoneOffset.UTC).getMillis());
+            jgen.writeNumber(LocalDateTime.of(LocalDate.now(), LocalTime.of(12, 0, 0)).toEpochSecond(ZoneOffset.UTC));
         }
     }
 
@@ -168,11 +174,11 @@ public class JacksonSerializers {
         public LocalDate deserialize(JsonParser jp,
                                      DeserializationContext arg1) throws IOException,
                 JsonProcessingException {
-            return new LocalDate(jp.getLongValue(), DateTimeZone.UTC);
+            return LocalDateTime.ofInstant(Instant.ofEpochMilli(jp.getLongValue()), ZoneOffset.UTC).toLocalDate();
         }
     }
 
-    public static final DateTimeFormatter format = DateTimeFormat.forPattern("yyyy-MM-dd");
+    public static final DateTimeFormatter format = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
     /** Serialize a local date to an ISO date (year-month-day) */
     public static class LocalDateIsoSerializer extends StdScalarSerializer<LocalDate> {
@@ -182,7 +188,7 @@ public class JacksonSerializers {
 
         @Override
         public void serialize(LocalDate localDate, JsonGenerator jsonGenerator, SerializerProvider serializerProvider) throws IOException, JsonGenerationException {
-            jsonGenerator.writeString(localDate.toString(format));
+            jsonGenerator.writeString(localDate.format(format));
         }
     }
 

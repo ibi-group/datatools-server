@@ -1,9 +1,13 @@
 package com.conveyal.datatools.editor.jobs;
 
-import play.jobs.Job;
+//import play.jobs.Job;
 
-public class ProcessGtfsSnapshotUpload extends Job {
-/*
+public class ProcessGtfsSnapshotUpload implements Runnable {
+    @Override
+    public void run() {
+
+    }
+    /*
     private Long _gtfsSnapshotMergeId;
 
     private Map<String, BigInteger> agencyIdMap = new HashMap<String, BigInteger>();

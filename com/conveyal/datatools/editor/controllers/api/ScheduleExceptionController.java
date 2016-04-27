@@ -7,8 +7,10 @@ import com.conveyal.datatools.editor.controllers.Security;
 import com.conveyal.datatools.editor.datastore.AgencyTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.ScheduleException;
-import org.joda.time.LocalDate;
+import java.time.LocalDate;
 
+import com.conveyal.datatools.manager.models.JsonViews;
+import com.conveyal.datatools.manager.utils.json.JsonManager;
 import spark.Request;
 import spark.Response;
 
@@ -16,17 +18,18 @@ import static spark.Spark.*;
 
 
 public class ScheduleExceptionController {
-
-
-
+    public static JsonManager<ScheduleException> json =
+            new JsonManager<>(ScheduleException.class, JsonViews.UserInterface.class);
     /** Get all of the schedule exceptions for an agency */
-    public static void getScheduleException (String exceptionId, String agencyId) {
+    public static Object getScheduleException (Request req, Response res) {
+        String exceptionId = req.params("exceptionId");
+        String agencyId = req.queryParams("agencyId");
+        String json = null;
         if (agencyId == null)
-            agencyId = session.get("agencyId");
+            agencyId = req.session().attribute("agencyId");
 
         if (agencyId == null) {
             halt(400);
-            return;
         }
 
         AgencyTx tx = null;
@@ -38,10 +41,10 @@ public class ScheduleExceptionController {
                 if (!tx.exceptions.containsKey(exceptionId))
                     halt(400);
                 else
-                    renderJSON(Base.toJson(tx.exceptions.get(exceptionId), false));
+                    json = Base.toJson(tx.exceptions.get(exceptionId), false);
             }
             else {
-                renderJSON(Base.toJson(tx.exceptions.values(), false));
+                json = Base.toJson(tx.exceptions.values(), false);
             }
             tx.rollback();
         } catch (Exception e) {
@@ -49,19 +52,19 @@ public class ScheduleExceptionController {
             e.printStackTrace();
             halt(400);
         }
+        return json;
     }
     
-    public static void createScheduleException () {
+    public static Object createScheduleException (Request req, Response res) {
         AgencyTx tx = null;
         try {
-            ScheduleException ex = Base.mapper.readValue(params.get("body"), ScheduleException.class);
+            ScheduleException ex = Base.mapper.readValue(req.body(), ScheduleException.class);
 
             if (!VersionedDataStore.agencyExists(ex.agencyId)) {
                 halt(400);
-                return;
             }
 
-            if (session.contains("agencyId") && !session.get("agencyId").equals(ex.agencyId))
+            if (req.session().attribute("agencyId") != null && !req.session().attribute("agencyId").equals(ex.agencyId))
                 halt(400);
 
             tx = VersionedDataStore.getAgencyTx(ex.agencyId);
@@ -71,7 +74,6 @@ public class ScheduleExceptionController {
                     if (!tx.calendars.containsKey(cal)) {
                         tx.rollback();
                         halt(400);
-                        return;
                     }
                 }
             }
@@ -79,14 +81,12 @@ public class ScheduleExceptionController {
             if (tx.exceptions.containsKey(ex.id)) {
                 tx.rollback();
                 halt(400);
-                return;
             }
 
             for (LocalDate date : ex.dates) {
                 if (tx.scheduleExceptionCountByDate.containsKey(date) && tx.scheduleExceptionCountByDate.get(date) > 0) {
                     tx.rollback();
                     halt(400);
-                    return;
                 }
             }
 
@@ -94,25 +94,25 @@ public class ScheduleExceptionController {
 
             tx.commit();
 
-            renderJSON(Base.toJson(ex, false));
+            return Base.toJson(ex, false);
         } catch (Exception e) {
             if (tx != null) tx.rollback();
             e.printStackTrace();
             halt(400);
         }
+        return null;
     }
     
-    public static void updateScheduleException () {
+    public static Object updateScheduleException (Request req, Response res) {
         AgencyTx tx = null;
         try {
-            ScheduleException ex = Base.mapper.readValue(params.get("body"), ScheduleException.class);
+            ScheduleException ex = Base.mapper.readValue(req.body(), ScheduleException.class);
 
-            if (session.contains("agencyId") && !session.get("agencyId").equals(ex.agencyId))
+            if (req.session().attribute("agencyId") != null && !req.session().attribute("agencyId").equals(ex.agencyId))
                 halt(400);
 
             if (!VersionedDataStore.agencyExists(ex.agencyId)) {
                 halt(400);
-                return;
             }
 
             tx = VersionedDataStore.getAgencyTx(ex.agencyId);
@@ -122,7 +122,6 @@ public class ScheduleExceptionController {
                     if (!tx.calendars.containsKey(cal)) {
                         tx.rollback();
                         halt(400);
-                        return;
                     }
                 }
             }
@@ -130,28 +129,30 @@ public class ScheduleExceptionController {
             if (!tx.exceptions.containsKey(ex.id)) {
                 tx.rollback();
                 halt(400);
-                return;
             }
 
             tx.exceptions.put(ex.id, ex);
 
             tx.commit();
 
-            renderJSON(Base.toJson(ex, false));
+            return ex;
         } catch (Exception e) {
             if (tx != null) tx.rollback();
             e.printStackTrace();
             halt(400);
         }
+        return null;
     }
     
-    public static void deleteScheduleException (String id, String agencyId) {
+    public static Object deleteScheduleException (Request req, Response res) {
+        String id = req.params("id");
+        String agencyId = req.queryParams("agencyId");
+
         if (agencyId == null)
-            agencyId = session.get("agencyId");
+            agencyId = req.session().attribute("agencyId");
 
         if (agencyId == null) {
             halt(400);
-            return;
         }
 
         AgencyTx tx = VersionedDataStore.getAgencyTx(agencyId);
@@ -159,5 +160,14 @@ public class ScheduleExceptionController {
         tx.commit();
 
         return true; // ok();
+    }
+
+    public static void register (String apiPrefix) {
+        get(apiPrefix + "secure/scheduleexception/:id", ScheduleExceptionController::getScheduleException, json::write);
+        options(apiPrefix + "secure/scheduleexception", (q, s) -> "");
+        get(apiPrefix + "secure/scheduleexception", ScheduleExceptionController::getScheduleException, json::write);
+        post(apiPrefix + "secure/scheduleexception", ScheduleExceptionController::createScheduleException, json::write);
+        put(apiPrefix + "secure/scheduleexception/:id", ScheduleExceptionController::updateScheduleException, json::write);
+        delete(apiPrefix + "secure/scheduleexception/:id", ScheduleExceptionController::deleteScheduleException, json::write);
     }
 }

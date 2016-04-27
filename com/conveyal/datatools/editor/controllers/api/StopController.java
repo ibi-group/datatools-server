@@ -1,17 +1,17 @@
 package com.conveyal.datatools.editor.controllers.api;
 
+import com.conveyal.datatools.manager.models.JsonViews;
+import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.google.common.base.Function;
 import com.google.common.collect.Collections2;
-import com.conveyal.datatools.editor.controllers.Application;
 import com.conveyal.datatools.editor.controllers.Base;
-import com.conveyal.datatools.editor.controllers.Secure;
-import com.conveyal.datatools.editor.controllers.Security;
 import com.conveyal.datatools.editor.datastore.AgencyTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.*;
 import org.geotools.referencing.GeodeticCalculator;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
@@ -23,15 +23,34 @@ import static spark.Spark.*;
 
 public class StopController {
 
+    public static JsonManager<Stop> json =
+            new JsonManager<>(Stop.class, JsonViews.UserInterface.class);
 
+    public static Object getStop(Request req, Response res
+//            String id, String patternId, String agencyId, Boolean majorStops, Double west, Double east, Double north, Double south
+    ) {
+        String id = req.params("id");
+        String agencyId = req.queryParams("agencyId");
+        String patternId = req.queryParams("patternId");
+        Boolean majorStops = Boolean.valueOf(req.queryParams("majorStops"));
+        Double west = null;
+        if (req.queryParams("west") != null)
+            west = Double.valueOf(req.queryParams("west"));
+        Double east = null;
+        if (req.queryParams("east") != null)
+            east = Double.valueOf(req.queryParams("east"));
+        Double north = null;
+        if (req.queryParams("north") != null)
+            north = Double.valueOf(req.queryParams("north"));
+        Double south = null;
+        if (req.queryParams("south") != null)
+            south = Double.valueOf(req.queryParams("south"));
 
-    public static void getStop(String id, String patternId, String agencyId, Boolean majorStops, Double west, Double east, Double north, Double south) {
         if (agencyId == null)
-            agencyId = session.get("agencyId");
+            agencyId = req.session().attribute("agencyId");
 
         if (agencyId == null) {
             halt(400);
-            return;
         }
 
         final AgencyTx tx = VersionedDataStore.getAgencyTx(agencyId);
@@ -41,12 +60,11 @@ public class StopController {
                 if (!tx.stops.containsKey(id)) {
                     tx.rollback();
                     halt(404);
-                    return;
                 }
 
                 String stopJson = Base.toJson(tx.stops.get(id), false);
                 tx.rollback();
-                renderJSON(stopJson);
+                return stopJson;
             }
               else if (Boolean.TRUE.equals(majorStops)) {
                   // get the major stops for the agency
@@ -60,18 +78,17 @@ public class StopController {
 
                   String stopsJson = Base.toJson(stops, false);
                   tx.rollback();
-                  renderJSON(stopsJson);
+                  return stopsJson;
               }
             else if (west != null && east != null && south != null && north != null) {
                 Collection<Stop> matchedStops = tx.getStopsWithinBoundingBox(north, east, south, west);
                 String stp = Base.toJson(matchedStops, false);
                 tx.rollback();
-                renderJSON(stp);
+                return stp;
             }
             else if (patternId != null) {
                 if (!tx.tripPatterns.containsKey(patternId)) {
                     halt(404);
-                    return;
                 }
 
                 TripPattern p = tx.tripPatterns.get(patternId);
@@ -85,7 +102,7 @@ public class StopController {
 
                 String json = Base.toJson(ret, false);
                 tx.rollback();
-                renderJSON(json);
+                return json;
             }
             else {
                 tx.rollback();
@@ -97,113 +114,116 @@ public class StopController {
             halt(400);
             tx.rollback();
         }
-
+        return null;
     }
 
-    public static void createStop() {
+    public static Object createStop(Request req, Response res) {
         AgencyTx tx = null;
+        String json = null;
         try {
-            Stop stop = Base.mapper.readValue(params.get("body"), Stop.class);
+            Stop stop = Base.mapper.readValue(req.body(), Stop.class);
             
-            if (session.contains("agencyId") && !session.get("agencyId").equals(stop.agencyId))
+            if (req.session().attribute("agencyId") != null && !req.session().attribute("agencyId").equals(stop.agencyId))
                 halt(400);
             
             if (!VersionedDataStore.agencyExists(stop.agencyId)) {
                 halt(400);
-                return;
             }
             
             tx = VersionedDataStore.getAgencyTx(stop.agencyId);
             
             if (tx.stops.containsKey(stop.id)) {
                 halt(400);
-                return;
             }
             
             tx.stops.put(stop.id, stop);
             tx.commit();
-            renderJSON(Base.toJson(stop, false));
+            json = Base.toJson(stop, false);
         } catch (Exception e) {
             e.printStackTrace();
             halt(400);
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }
-
+        return json;
     }
 
 
-    public static void updateStop() {
+    public static Object updateStop(Request req, Response res) {
         AgencyTx tx = null;
+        String json = null;
         try {
-            Stop stop = Base.mapper.readValue(params.get("body"), Stop.class);
+            Stop stop = Base.mapper.readValue(req.body(), Stop.class);
             
-            if (session.contains("agencyId") && !session.get("agencyId").equals(stop.agencyId))
+            if (req.session().attribute("agencyId") != null && !req.session().attribute("agencyId").equals(stop.agencyId))
                 halt(400);
             
             if (!VersionedDataStore.agencyExists(stop.agencyId)) {
                 halt(400);
-                return;
             }
             
             tx = VersionedDataStore.getAgencyTx(stop.agencyId);
             
             if (!tx.stops.containsKey(stop.id)) {
                 halt(400);
-                return;
             }
             
             tx.stops.put(stop.id, stop);
             tx.commit();
-            renderJSON(Base.toJson(stop, false));
+            json = Base.toJson(stop, false);
         } catch (Exception e) {
             e.printStackTrace();
             halt(400);
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }
+        return json;
     }
 
-    public static void deleteStop(String id, String agencyId) {
+    public static Object deleteStop(Request req, Response res) {
+        String id = req.params("id");
+        String agencyId = req.queryParams("agencyId");
+        String json = null;
+
         if (agencyId == null)
-            agencyId = session.get("agencyId");
+            agencyId = req.session().attribute("agencyId");
 
         if (agencyId == null) {
             halt(400);
-            return;
         }
 
         AgencyTx tx = VersionedDataStore.getAgencyTx(agencyId);
         try {
             if (!tx.stops.containsKey(id)) {
                 halt(404);
-                return;
             }
 
             if (!tx.getTripPatternsByStop(id).isEmpty()) {
                 halt(400);
-                return;
             }
 
             Stop s = tx.stops.remove(id);
             tx.commit();
-            renderJSON(Base.toJson(s, false));
+            json = Base.toJson(s, false);
         } catch (Exception e) {
             halt(400);
             e.printStackTrace();
         } finally {
             tx.rollbackIfOpen();
         }
+        return json;
     }
     
     
-    public static void findDuplicateStops(String agencyId) {
+    public static Object findDuplicateStops(Request req, Response res) {
+        String agencyId = req.queryParams("agencyId");
+        String json = null;
+
         if (agencyId == null)
-            agencyId = session.get("agencyId");
+            agencyId = req.session().attribute("agencyId");
 
         if (agencyId == null) {
             halt(400);
-            return;
         }
 
         AgencyTx atx = VersionedDataStore.getAgencyTx(agencyId);
@@ -244,7 +264,7 @@ public class StopController {
                 }
             }
 
-            renderJSON(Base.toJson(ret, false));
+            json = Base.toJson(ret, false);
          } catch (Exception e) {
              e.printStackTrace();
              halt(400);
@@ -252,20 +272,22 @@ public class StopController {
         finally {
             atx.rollback();
         }
+        return json;
     }
 
-    public static void mergeStops(String agencyId, @As(",") List<String> mergedStopIds) {
+    public static Object mergeStops(Request req, Response res) {
+        List<String> mergedStopIds = Arrays.asList(req.queryParams("mergedStopIds").split(","));
+        String agencyId = req.queryParams("agencyId");
+
         if (mergedStopIds.size() <= 1) {
             halt(400);
-            return;
         }
 
         if (agencyId == null)
-            agencyId = session.get("agencyId");
+            agencyId = req.session().attribute("agencyId");
 
         if (agencyId == null) {
             halt(400);
-            return;
         }
 
         AgencyTx tx = VersionedDataStore.getAgencyTx(agencyId);
@@ -276,5 +298,16 @@ public class StopController {
         } finally {
             tx.rollbackIfOpen();
         }
+        return true;
+    }
+
+    public static void register (String apiPrefix) {
+        get(apiPrefix + "secure/stop/:id", StopController::getStop, json::write);
+        options(apiPrefix + "secure/stop", (q, s) -> "");
+        get(apiPrefix + "secure/stop", StopController::getStop, json::write);
+        get(apiPrefix + "secure/stop/mergeStops", StopController::mergeStops, json::write);
+        post(apiPrefix + "secure/stop", StopController::createStop, json::write);
+        put(apiPrefix + "secure/stop/:id", StopController::updateStop, json::write);
+        delete(apiPrefix + "secure/stop/:id", StopController::deleteStop, json::write);
     }
 }

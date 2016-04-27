@@ -9,7 +9,7 @@ import com.google.common.base.Function;
 import com.google.common.collect.Collections2;
 import com.conveyal.datatools.editor.datastore.AgencyTx;
 import com.conveyal.datatools.editor.models.Model;
-import org.joda.time.LocalDate;
+import java.time.LocalDate;
 
 import java.io.Serializable;
 import java.util.Collection;
@@ -59,7 +59,7 @@ public class ServiceCalendar extends Model implements Cloneable, Serializable {
         date -= month * 100;
         int year = date / 10000;
 
-        return new LocalDate(year, month, day);
+        return LocalDate.of(year, month, day);
     }
 
     // give the UI a little information about the content of this calendar

@@ -1,5 +1,7 @@
 package com.conveyal.datatools.editor.controllers.api;
 
+import com.conveyal.datatools.manager.models.JsonViews;
+import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.google.common.base.Function;
 import com.google.common.collect.Collections2;
 import com.conveyal.datatools.editor.controllers.Application;
@@ -24,16 +26,17 @@ import static spark.Spark.*;
 
 
 public class RouteController {
+    public static JsonManager<Route> json =
+            new JsonManager<>(Route.class, JsonViews.UserInterface.class);
+    public static Object getRoute(Request req, Response res) {
+        String id = req.params("id");
+        String agencyId = req.queryParams("agencyId");
 
-
-
-    public static void getRoute(String id, String agencyId) {
         if (agencyId == null)
-            agencyId = session.get("agencyId");
+            agencyId = req.session().attribute("agencyId");
 
         if (agencyId == null) {
             halt(400);
-            return;
         }
 
         final AgencyTx tx = VersionedDataStore.getAgencyTx(agencyId);
@@ -43,14 +46,13 @@ public class RouteController {
                 if (!tx.routes.containsKey(id)) {
                     tx.rollback();
                     halt(400);
-                    return;
                 }
 
                 Route route = tx.routes.get(id);
 
                 route.addDerivedInfo(tx);
 
-                renderJSON(Base.toJson(route, false));
+                return route;
             }
             else {
                 Route[] ret = tx.routes.values().toArray(new Route[tx.routes.size()]);
@@ -61,29 +63,29 @@ public class RouteController {
 
                 String json = Base.toJson(ret, false);
                 tx.rollback();
-                renderJSON(json);
+                return json;
             }
         } catch (Exception e) {
             tx.rollbackIfOpen();
             e.printStackTrace();
             halt(400);
         }
+        return null;
     }
 
-    public static void createRoute() {
+    public static Object createRoute(Request req, Response res) {
         Route route;
 
         try {
-            route = Base.mapper.readValue(params.get("body"), Route.class);
+            route = Base.mapper.readValue(req.body(), Route.class);
             
             GlobalTx gtx = VersionedDataStore.getGlobalTx();
             if (!gtx.agencies.containsKey(route.agencyId)) {
                 gtx.rollback();
                 halt(400);
-                return;
             }
             
-            if (session.contains("agencyId") && !session.get("agencyId").equals(route.agencyId))
+            if (req.session().attribute("agencyId") != null && !req.session().attribute("agencyId").equals(route.agencyId))
                 halt(400);
             
             gtx.rollback();
@@ -93,7 +95,6 @@ public class RouteController {
             if (tx.routes.containsKey(route.id)) {
                 tx.rollback();
                 halt(400);
-                return;
             }
 
             // check if gtfsRouteId is specified, if not create from DB id
@@ -104,29 +105,29 @@ public class RouteController {
             tx.routes.put(route.id, route);
             tx.commit();
 
-            renderJSON(Base.toJson(route, false));
+            return route;
         } catch (Exception e) {
             e.printStackTrace();
             halt(400);
         }
+        return null;
     }
 
 
-    public static void updateRoute() {
+    public static Object updateRoute(Request req, Response res) {
         Route route;
 
         try {
-            route = Base.mapper.readValue(params.get("body"), Route.class);
+            route = Base.mapper.readValue(req.body(), Route.class);
    
             AgencyTx tx = VersionedDataStore.getAgencyTx(route.agencyId);
             
             if (!tx.routes.containsKey(route.id)) {
                 tx.rollback();
                 halt(404);
-                return;
             }
             
-            if (session.contains("agencyId") && !session.get("agencyId").equals(route.agencyId))
+            if (req.session().attribute("agencyId") != null && !req.session().attribute("agencyId").equals(route.agencyId))
                 halt(400);
 
             // check if gtfsRouteId is specified, if not create from DB id
@@ -137,16 +138,20 @@ public class RouteController {
             tx.routes.put(route.id, route);
             tx.commit();
 
-            renderJSON(Base.toJson(route, false));
+            return route;
         } catch (Exception e) {
             e.printStackTrace();
             halt(400);
         }
+        return null;
     }
 
-    public static void deleteRoute(String id, String agencyId) {
+    public static Object deleteRoute(Request req, Response res) {
+        String id = req.params("id");
+        String agencyId = req.session().attribute("agencyId");
+
         if (agencyId == null)
-            agencyId = session.get("agencyId");
+            agencyId = req.session().attribute("agencyId");
 
         if(id == null || agencyId == null)
             halt(400);
@@ -159,7 +164,6 @@ public class RouteController {
             if (!tx.routes.containsKey(id)) {
                 tx.rollback();
                 halt(404);
-                return;
             }
             
             Route r = tx.routes.get(id);
@@ -183,14 +187,20 @@ public class RouteController {
         } catch (Exception e) {
             tx.rollback();
             e.printStackTrace();
-            error(e);
+            halt(404, e.getMessage());
         }
+        return null;
     }
     
     /** merge route from into route into, for the given agency ID */
-    public static void mergeRoutes (String from, String into, String agencyId) {
+    public static Object mergeRoutes (Request req, Response res) {
+        String from = req.queryParams("from");
+        String into = req.queryParams("into");
+
+        String agencyId = req.queryParams("agencyId");
+
         if (agencyId == null)
-            agencyId = session.get("agencyId");
+            agencyId = req.session().attribute("agencyId");
 
         if (agencyId == null || from == null || into == null)
             halt(400);
@@ -256,5 +266,15 @@ public class RouteController {
             tx.rollback();
             throw e;
         }
+    }
+
+    public static void register (String apiPrefix) {
+        get(apiPrefix + "secure/route/:id", RouteController::getRoute, json::write);
+        options(apiPrefix + "secure/route", (q, s) -> "");
+        get(apiPrefix + "secure/route", RouteController::getRoute, json::write);
+        post(apiPrefix + "secure/route/merge", RouteController::mergeRoutes, json::write);
+        post(apiPrefix + "secure/route", RouteController::createRoute, json::write);
+        put(apiPrefix + "secure/route/:id", RouteController::updateRoute, json::write);
+        delete(apiPrefix + "secure/route/:id", RouteController::deleteRoute, json::write);
     }
 }

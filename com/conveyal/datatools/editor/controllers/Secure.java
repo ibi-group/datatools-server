@@ -9,23 +9,23 @@ public class Secure {
     //public static void loginAndRedirect(String redirectTo) throws Throwable {
     //}
 
-    public static void login(String redirectTo) throws Throwable {
-        System.out.println("redirectTo = " + redirectTo);
-        System.out.println("login path = " + request.path);
-        String auth0Domain = Play.configuration.getProperty("application.auth0Domain");
-        String auth0ClientId = Play.configuration.getProperty("application.auth0ClientId");
-        String logo = Play.configuration.getProperty("application.logo");
-        render(redirectTo, auth0Domain, auth0ClientId, logo);
-    }
-
-    public static void logout() throws Throwable {
-        Security.invoke("onDisconnect");
-        session.clear();
-        response.removeCookie("rememberme");
-        Security.invoke("onDisconnected");
-        flash.success("secure.logout");
-        //login();
-    }
+//    public static void login(String redirectTo) throws Throwable {
+//        System.out.println("redirectTo = " + redirectTo);
+//        System.out.println("login path = " + request.path);
+//        String auth0Domain = Play.configuration.getProperty("application.auth0Domain");
+//        String auth0ClientId = Play.configuration.getProperty("application.auth0ClientId");
+//        String logo = Play.configuration.getProperty("application.logo");
+//        render(redirectTo, auth0Domain, auth0ClientId, logo);
+//    }
+//
+//    public static void logout() throws Throwable {
+//        Security.invoke("onDisconnect");
+//        session.clear();
+//        response.removeCookie("rememberme");
+//        Security.invoke("onDisconnected");
+//        flash.success("secure.logout");
+//        //login();
+//    }
 
     public static class Security {
 
@@ -68,55 +68,55 @@ public class Secure {
          * This method returns the current connected username
          * @return
          */
-        static String connected() {
-            return session.get("username");
-        }
+//        static String connected() {
+//            return req.session().attribute("username");
+//        }
 
         /**
          * Indicate if a (non-anonymous) user is currently connected
          * @return  true if the user is connected
          */
-        public static boolean isConnected() {
-            return session.contains("username");
-        }
+//        public static boolean isConnected() {
+//            return session.contains("username");
+//        }
 
         /**
          * This method is called after a successful authentication.
          * You need to override this method if you with to perform specific actions (eg. Record the time the user signed in)
          */
-        static void onAuthenticated() {
-        }
+//        static void onAuthenticated() {
+//        }
 
          /**
          * This method is called before a user tries to sign off.
          * You need to override this method if you wish to perform specific actions (eg. Record the name of the user who signed off)
          */
-        static void onDisconnect() {
-        }
+//        static void onDisconnect() {
+//        }
 
          /**
          * This method is called after a successful sign off.
          * You need to override this method if you wish to perform specific actions (eg. Record the time the user signed off)
          */
-        static void onDisconnected() {
-        }
+//        static void onDisconnected() {
+//        }
 
         /**
          * This method is called if a check does not succeed. By default it shows the not allowed page (the controller forbidden method).
          * @param profile
          */
-        static void onCheckFailed(String profile) {
-            forbidden();
-        }
-
-        private static Object invoke(String m, Object... args) throws Throwable {
-
-            try {
-                return Java.invokeChildOrStatic(Security.class, m, args);       
-            } catch(InvocationTargetException e) {
-                throw e.getTargetException();
-            }
-        }
+//        static void onCheckFailed(String profile) {
+//            forbidden();
+//        }
+//
+//        private static Object invoke(String m, Object... args) throws Throwable {
+//
+//            try {
+//                return Java.invokeChildOrStatic(Security.class, m, args);
+//            } catch(InvocationTargetException e) {
+//                throw e.getTargetException();
+//            }
+//        }
 
     }
 

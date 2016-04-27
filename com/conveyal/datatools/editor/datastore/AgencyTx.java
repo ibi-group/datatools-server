@@ -10,7 +10,7 @@ import com.conveyal.datatools.editor.models.transit.TripPattern;
 import com.google.common.base.Function;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.Iterators;
-import org.joda.time.LocalDate;
+import java.time.LocalDate;
 import org.mapdb.Atomic;
 import org.mapdb.BTreeMap;
 import org.mapdb.Bind;
@@ -360,7 +360,7 @@ public class AgencyTx extends DatabaseTx {
         }
 
         a2.id = newId;
-        a2.name = Messages.get("agency.copy-of", a2.name);
+//        a2.name = Messages.get("agency.copy-of", a2.name);
 
         gtx.agencies.put(a2.id, a2);
 

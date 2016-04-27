@@ -16,13 +16,13 @@ import java.util.Collection;
 public class Admin {
 
 
-    static void setConnectedUser() {
-        if(Security.isConnected() && Security.check("admin")) {
-            renderArgs.put("user", Security.connected());
-        }
-        else
-            Application.index();
-    }
+//    static void setConnectedUser() {
+//        if(Security.isConnected() && Security.check("admin")) {
+//            renderArgs.put("user", Security.connected());
+//        }
+//        else
+//            Application.index();
+//    }
 
 
     public static void accounts() {
@@ -32,7 +32,7 @@ public class Admin {
             Collection<Account> accounts = tx.accounts.values();
             Collection<Agency> agencies = tx.agencies.values();
 
-            render(accounts, agencies);
+//            render(accounts, agencies);
         } finally {
             tx.rollback();
         }
@@ -84,30 +84,32 @@ public class Admin {
 
         if (account == null)
             halt(404);
-        else
-            renderJSON(account);
+//        else
+//            renderJSON(account);
     }
 
 
-    public static void checkUsername(String username) {
+    public static Boolean checkUsername(String username) {
         GlobalTx tx = VersionedDataStore.getGlobalTx();
         boolean exists = tx.accounts.containsKey(username);
         tx.rollback();
 
-        if (exists)
+        if (exists) {
             halt(400);
+            return false;
+        }
         else
             return true; // ok();
 
     }
 
-    public static void resetPassword(String username, String newPassword)
+    public static Boolean resetPassword(String username, String newPassword)
     {
         GlobalTx tx = VersionedDataStore.getGlobalTx();
         if (!tx.accounts.containsKey(username)) {
             tx.rollback();
             halt(404);
-            return;
+            return false;
         }
 
         Account acct = tx.accounts.get(username).clone();

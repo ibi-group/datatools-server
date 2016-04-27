@@ -8,15 +8,20 @@ import com.conveyal.datatools.editor.datastore.AgencyTx;
 import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.Agency;
+import com.conveyal.datatools.manager.models.JsonViews;
+import com.conveyal.datatools.manager.utils.json.JsonManager;
+import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import spark.Request;
 import spark.Response;
 
 import static spark.Spark.*;
 
 public class AgencyController {
-
-    public static void getAgency(Request req, Response res) {
+    public static JsonManager<Agency> json =
+            new JsonManager<>(Agency.class, JsonViews.UserInterface.class);
+    public static Object getAgency(Request req, Response res) {
         String id = req.params("id");
+        String json = null;
         try {
             GlobalTx tx = VersionedDataStore.getGlobalTx();
 
@@ -24,13 +29,12 @@ public class AgencyController {
                 if (!tx.agencies.containsKey(id)) {
                     tx.rollback();
                     halt(404);
-                    return;
                 }
 
-                renderJSON(Base.toJson(tx.agencies.get(id), false));
+                json = Base.toJson(tx.agencies.get(id), false);
             }
             else {
-                renderJSON(Base.toJson(tx.agencies.values(), false));
+                json = Base.toJson(tx.agencies.values(), false);
             }
             
             tx.rollback();
@@ -38,9 +42,10 @@ public class AgencyController {
             e.printStackTrace();
             halt(400);
         }
+        return json;
     }
 
-    public static void createAgency(Request req, Response res) {
+    public static Object createAgency(Request req, Response res) {
         Agency agency;
 
         try {
@@ -56,21 +61,21 @@ public class AgencyController {
             if (tx.agencies.containsKey(agency.id)) {
                 tx.rollback();
                 halt(400);
-                return;
             }
             
             tx.agencies.put(agency.id, agency);
             tx.commit();
 
-            renderJSON(Base.toJson(agency, false));
+            return Base.toJson(agency, false);
         } catch (Exception e) {
             e.printStackTrace();
             halt(400);
         }
+        return null;
     }
 
 
-    public static void updateAgency(Request req, Response res) {
+    public static Object updateAgency(Request req, Response res) {
         Agency agency;
 
         try {
@@ -81,7 +86,6 @@ public class AgencyController {
             if(!tx.agencies.containsKey(agency.id)) {
                 tx.rollback();
                 halt(400);
-                return;
             }
             
             // check if gtfsAgencyId is specified, if not create from DB id
@@ -91,24 +95,23 @@ public class AgencyController {
             tx.agencies.put(agency.id, agency);
             tx.commit();
 
-            renderJSON(Base.toJson(agency, false));
+            return Base.toJson(agency, false);
         } catch (Exception e) {
             e.printStackTrace();
             halt(400);
         }
+        return null;
     }
 
-    public static void deleteAgency(Request req, Response res) {
+    public static Object deleteAgency(Request req, Response res) {
         GlobalTx tx = VersionedDataStore.getGlobalTx();
         String id = req.params("id");
         if(id == null) {
             halt(400);
-            return;
         }
         
         if (!tx.agencies.containsKey(id)) {
             halt(404);
-            return;
         }
 
         tx.agencies.remove(id);
@@ -118,7 +121,7 @@ public class AgencyController {
     }
     
     /** duplicate an agency */
-    public static void duplicateAgency(Request req, Response res) {
+    public static Object duplicateAgency(Request req, Response res) {
 
         String id = req.params("id");
         // make sure the agency exists
@@ -131,5 +134,19 @@ public class AgencyController {
 
         AgencyTx.duplicate(id);
         return true; // ok();
+    }
+
+    public static void register (String apiPrefix) {
+        get(apiPrefix + "secure/agency/:id", AgencyController::getAgency, json::write);
+        options(apiPrefix + "secure/agency", (q, s) -> "");
+        get(apiPrefix + "secure/agency", AgencyController::getAgency, json::write);
+        post(apiPrefix + "secure/agency", AgencyController::createAgency, json::write);
+        put(apiPrefix + "secure/agency/:id", AgencyController::updateAgency, json::write);
+        post(apiPrefix + "secure/agency/:id/duplicate", AgencyController::duplicateAgency, json::write);
+        delete(apiPrefix + "secure/agency/:id", AgencyController::deleteAgency, json::write);
+
+        // Public routes
+//        get(apiPrefix + "public/agency/:id", AgencyController::getFeedSource, json::write);
+//        get(apiPrefix + "public/agency", AgencyController::getAllFeedSources, json::write);
     }
 }

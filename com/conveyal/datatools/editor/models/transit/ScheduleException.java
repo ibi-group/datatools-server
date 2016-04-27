@@ -1,7 +1,7 @@
 package com.conveyal.datatools.editor.models.transit;
 
 import com.conveyal.datatools.editor.models.Model;
-import org.joda.time.LocalDate;
+import java.time.LocalDate;
 
 import java.io.Serializable;
 import java.util.ArrayList;

@@ -1,5 +1,14 @@
 package com.conveyal.datatools.manager;
 
+import com.conveyal.datatools.editor.controllers.api.AgencyController;
+import com.conveyal.datatools.editor.controllers.api.CalendarController;
+import com.conveyal.datatools.editor.controllers.api.RouteController;
+import com.conveyal.datatools.editor.controllers.api.RouteTypeController;
+import com.conveyal.datatools.editor.controllers.api.ScheduleExceptionController;
+import com.conveyal.datatools.editor.controllers.api.StopController;
+import com.conveyal.datatools.editor.controllers.api.TripController;
+import com.conveyal.datatools.editor.controllers.api.TripPatternController;
+import com.conveyal.datatools.editor.models.transit.ScheduleException;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 
 import com.conveyal.datatools.manager.controllers.api.*;
@@ -75,6 +84,16 @@ public class DataManager {
         GtfsApiController.register(apiPrefix);
         RegionController.register(apiPrefix);
         NoteController.register(apiPrefix);
+
+        // Editor routes
+        AgencyController.register(apiPrefix);
+        CalendarController.register(apiPrefix);
+        RouteController.register(apiPrefix);
+        RouteTypeController.register(apiPrefix);
+        ScheduleExceptionController.register(apiPrefix);
+        StopController.register(apiPrefix);
+        TripController.register(apiPrefix);
+        TripPatternController.register(apiPrefix);
 
         if ("true".equals(getConfigPropertyAsText("modules.gtfsplus.enabled"))) {
             GtfsPlusController.register(apiPrefix);

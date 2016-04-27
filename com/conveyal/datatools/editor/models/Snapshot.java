@@ -2,7 +2,7 @@ package com.conveyal.datatools.editor.models;
 
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
-import org.joda.time.LocalDate;
+import java.time.LocalDate;
 import org.mapdb.Fun.Tuple2;
 import com.conveyal.datatools.editor.utils.JacksonSerializers;
 

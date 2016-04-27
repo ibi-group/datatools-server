@@ -55,12 +55,12 @@ public class Account extends Model implements Serializable {
     {
         try
         {
-            byte[] bytes = (password.trim() + Play.secretKey).getBytes("UTF-8");
+//            byte[] bytes = (password.trim() + Play.secretKey).getBytes("UTF-8");
 
-            MessageDigest md = MessageDigest.getInstance("MD5");
-            byte[] digest = md.digest(bytes);
+//            MessageDigest md = MessageDigest.getInstance("MD5");
+//            byte[] digest = md.digest(bytes);
 
-            String hexString = new String(Hex.encodeHex(digest));
+            String hexString = "blah"; // new String(Hex.encodeHex(digest));
 
             return hexString;
         }

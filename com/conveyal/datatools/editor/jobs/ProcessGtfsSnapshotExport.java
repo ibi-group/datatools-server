@@ -13,19 +13,20 @@ import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.Snapshot;
 import com.conveyal.datatools.editor.models.transit.*;
-import org.joda.time.LocalDate;
+import java.time.LocalDate;
 import org.mapdb.Fun.Tuple2;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import scala.actors.threadpool.Arrays;
 import com.conveyal.datatools.editor.utils.GeoUtils;
 
 import java.io.File;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.Map;
 
 public class ProcessGtfsSnapshotExport implements Runnable {
+    public static final Logger LOG = LoggerFactory.getLogger(ProcessGtfsSnapshotExport.class);
     private Collection<Tuple2<String, Integer>> snapshots;
     private File output;
     private LocalDate startDate;
@@ -274,7 +275,7 @@ public class ProcessGtfsSnapshotExport implements Runnable {
     }
 
     public static int toGtfsDate (LocalDate date) {
-        return date.getYear() * 10000 + date.getMonthOfYear() * 100 + date.getDayOfMonth();
+        return date.getYear() * 10000 + date.getMonthValue() * 100 + date.getDayOfMonth();
     }
 }
 
