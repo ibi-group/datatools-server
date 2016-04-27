@@ -116,6 +116,12 @@ public class DataManager {
             }
         });
 
+        // return 404 for any api response that's not found
+        get(apiPrefix + "*", (request, response) -> {
+            halt(404);
+            return null;
+        });
+
         // return index.html for any sub-directory
         get("/*", (request, response) -> {
             response.type("text/html");
