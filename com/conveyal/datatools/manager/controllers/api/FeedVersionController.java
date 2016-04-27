@@ -12,9 +12,7 @@ import com.conveyal.gtfs.validator.json.FeedValidationResult;
 import com.fasterxml.jackson.core.JsonProcessingException;
 
 import java.io.*;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Map;
+import java.util.*;
 
 //import jobs.ProcessSingleFeedJob;
 import org.slf4j.Logger;
@@ -161,6 +159,17 @@ public class FeedVersionController  {
         String id = req.params("id");
         FeedVersion version = FeedVersion.get(id);
         version.delete();
+
+        // renumber the versions
+        Collection<FeedVersion> versions = version.getFeedSource().getFeedVersions();
+        FeedVersion[] versionArray = versions.toArray(new FeedVersion[versions.size()]);
+        Arrays.sort(versionArray, (v1, v2) -> v1.updated.compareTo(v2.updated));
+        for(int i = 0; i < versionArray.length; i++) {
+            FeedVersion v = versionArray[i];
+            v.version = i + 1;
+            v.save();
+        }
+
         return version;
     }
 
