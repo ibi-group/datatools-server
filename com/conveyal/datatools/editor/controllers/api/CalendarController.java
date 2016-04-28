@@ -108,7 +108,7 @@ public class CalendarController {
         AgencyTx tx = null;
 
         try {
-            cal = Base.mapper.readValue(req.params("body"), ServiceCalendar.class);
+            cal = Base.mapper.readValue(req.body(), ServiceCalendar.class);
 
             if (!VersionedDataStore.agencyExists(cal.feedId)) {
                 halt(400);
@@ -148,7 +148,7 @@ public class CalendarController {
         AgencyTx tx = null;
 
         try {
-            cal = Base.mapper.readValue(req.params("body"), ServiceCalendar.class);
+            cal = Base.mapper.readValue(req.body(), ServiceCalendar.class);
 
             if (!VersionedDataStore.agencyExists(cal.feedId)) {
                 halt(400);

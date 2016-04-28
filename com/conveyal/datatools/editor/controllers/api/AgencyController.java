@@ -49,7 +49,7 @@ public class AgencyController {
         Agency agency;
 
         try {
-            agency = Base.mapper.readValue(req.params("body"), Agency.class);
+            agency = Base.mapper.readValue(req.body(), Agency.class);
             
             // check if gtfsAgencyId is specified, if not create from DB id
             if(agency.gtfsAgencyId == null) {
@@ -79,7 +79,7 @@ public class AgencyController {
         Agency agency;
 
         try {
-            agency = Base.mapper.readValue(req.params("body"), Agency.class);
+            agency = Base.mapper.readValue(req.body(), Agency.class);
             
             GlobalTx tx = VersionedDataStore.getGlobalTx();
 
