@@ -36,7 +36,7 @@ public class SnapshotController {
 
     public static Object getSnapshot(Request req, Response res) throws IOException {
         String id = req.params("id");
-        String agencyId = req.queryParams("agencyId");
+        String feedId = req.queryParams("feedId");
 
         GlobalTx gtx = VersionedDataStore.getGlobalTx();
         String json = null;
@@ -49,18 +49,18 @@ public class SnapshotController {
                     halt(404);
             }
             else {
-                if (agencyId == null)
-                    agencyId = req.session().attribute("agencyId");
+                if (feedId == null)
+                    feedId = req.session().attribute("feedId");
 
                 Collection<Snapshot> snapshots;
-                if (agencyId == null) {
+                if (feedId == null) {
                     // if it's still null just give them everything
                     // this is used in GTFS Data Manager to get snapshots in bulk
                     // TODO this allows any authenticated user to fetch GTFS data for any agency
                     snapshots = gtx.snapshots.values();
                 }
                 else {
-                    snapshots = gtx.snapshots.subMap(new Tuple2(agencyId, null), new Tuple2(agencyId, Fun.HI)).values();
+                    snapshots = gtx.snapshots.subMap(new Tuple2(feedId, null), new Tuple2(feedId, Fun.HI)).values();
                 }
 
                 json = Base.toJson(snapshots, false);
@@ -76,13 +76,13 @@ public class SnapshotController {
         try {
             // create a dummy snapshot from which to get values
             Snapshot original = Base.mapper.readValue(req.body(), Snapshot.class);
-            Snapshot s = VersionedDataStore.takeSnapshot(original.agencyId, original.name, original.comment);
+            Snapshot s = VersionedDataStore.takeSnapshot(original.feedId, original.name, original.comment);
             s.validFrom = original.validFrom;
             s.validTo = original.validTo;
             gtx = VersionedDataStore.getGlobalTx();
 
             // the snapshot we have just taken is now current; make the others not current
-            for (Snapshot o : gtx.snapshots.subMap(new Tuple2(s.agencyId, null), new Tuple2(s.agencyId, Fun.HI)).values()) {
+            for (Snapshot o : gtx.snapshots.subMap(new Tuple2(s.feedId, null), new Tuple2(s.feedId, Fun.HI)).values()) {
                 if (o.id.equals(s.id))
                     continue;
 
@@ -155,7 +155,7 @@ public class SnapshotController {
             List<Stop> stops = VersionedDataStore.restore(local);
 
             // the snapshot we have just restored is now current; make the others not current
-            for (Snapshot o : gtx.snapshots.subMap(new Tuple2(local.agencyId, null), new Tuple2(local.agencyId, Fun.HI)).values()) {
+            for (Snapshot o : gtx.snapshots.subMap(new Tuple2(local.feedId, null), new Tuple2(local.feedId, Fun.HI)).values()) {
                 if (o.id.equals(local.id))
                     continue;
 

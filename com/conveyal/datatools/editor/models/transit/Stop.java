@@ -34,6 +34,7 @@ public class Stop extends Model implements Cloneable, Serializable {
     public String stopIconUrl;
 
     public String agencyId;
+    public String feedId;
 
     public LocationType locationType;
 
@@ -69,12 +70,14 @@ public class Stop extends Model implements Cloneable, Serializable {
         this.dropOffType = StopTimePickupDropOffType.SCHEDULED;
         
         this.location  =  geometryFactory.createPoint(new Coordinate(stop.stop_lon,stop.stop_lat));
-        
+
         this.agencyId = agency.id;
+//        this.feedId = agency.id;
     }
 
     public Stop(Agency agency, String stopName,  String stopCode,  String stopUrl, String stopDesc, Double lat, Double lon) {
         this.agencyId = agency.id;
+//        this.feedId = agency.id;
         this.stopCode = stopCode;
         this.stopName = stopName;
         this.stopDesc = stopDesc;

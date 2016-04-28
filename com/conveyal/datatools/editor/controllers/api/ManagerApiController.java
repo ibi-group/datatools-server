@@ -60,7 +60,7 @@ public class ManagerApiController {
 //
 //                allSnapshots = gtx.snapshots.values();
 //                for(Snapshot snapshot : allSnapshots) {
-//                    Agency agency = gtx.agencies.get(snapshot.agencyId);
+//                    Agency agency = gtx.agencies.get(snapshot.feedId);
 //                    if(agency == null || agency.sourceId == null) continue;
 //                    if(agency.sourceId.equals(sourceId)) {
 //                        System.out.println("found!");

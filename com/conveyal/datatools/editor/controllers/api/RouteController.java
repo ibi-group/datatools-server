@@ -30,16 +30,16 @@ public class RouteController {
             new JsonManager<>(Route.class, JsonViews.UserInterface.class);
     public static Object getRoute(Request req, Response res) {
         String id = req.params("id");
-        String agencyId = req.queryParams("agencyId");
+        String feedId = req.queryParams("feedId");
 
-        if (agencyId == null)
-            agencyId = req.session().attribute("agencyId");
+        if (feedId == null)
+            feedId = req.session().attribute("feedId");
 
-        if (agencyId == null) {
+        if (feedId == null) {
             halt(400);
         }
 
-        final AgencyTx tx = VersionedDataStore.getAgencyTx(agencyId);
+        final AgencyTx tx = VersionedDataStore.getAgencyTx(feedId);
 
         try {
             if (id != null) {
@@ -80,17 +80,17 @@ public class RouteController {
             route = Base.mapper.readValue(req.body(), Route.class);
             
             GlobalTx gtx = VersionedDataStore.getGlobalTx();
-            if (!gtx.agencies.containsKey(route.agencyId)) {
+            if (!gtx.agencies.containsKey(route.feedId)) {
                 gtx.rollback();
                 halt(400);
             }
             
-            if (req.session().attribute("agencyId") != null && !req.session().attribute("agencyId").equals(route.agencyId))
+            if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(route.feedId))
                 halt(400);
             
             gtx.rollback();
    
-            AgencyTx tx = VersionedDataStore.getAgencyTx(route.agencyId);
+            AgencyTx tx = VersionedDataStore.getAgencyTx(route.feedId);
             
             if (tx.routes.containsKey(route.id)) {
                 tx.rollback();
@@ -120,14 +120,14 @@ public class RouteController {
         try {
             route = Base.mapper.readValue(req.body(), Route.class);
    
-            AgencyTx tx = VersionedDataStore.getAgencyTx(route.agencyId);
+            AgencyTx tx = VersionedDataStore.getAgencyTx(route.feedId);
             
             if (!tx.routes.containsKey(route.id)) {
                 tx.rollback();
                 halt(404);
             }
             
-            if (req.session().attribute("agencyId") != null && !req.session().attribute("agencyId").equals(route.agencyId))
+            if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(route.feedId))
                 halt(400);
 
             // check if gtfsRouteId is specified, if not create from DB id
@@ -148,15 +148,15 @@ public class RouteController {
 
     public static Object deleteRoute(Request req, Response res) {
         String id = req.params("id");
-        String agencyId = req.session().attribute("agencyId");
+        String feedId = req.session().attribute("feedId");
 
-        if (agencyId == null)
-            agencyId = req.session().attribute("agencyId");
+        if (feedId == null)
+            feedId = req.session().attribute("feedId");
 
-        if(id == null || agencyId == null)
+        if(id == null || feedId == null)
             halt(400);
 
-        AgencyTx tx = VersionedDataStore.getAgencyTx(agencyId);
+        AgencyTx tx = VersionedDataStore.getAgencyTx(feedId);
         
 
         
@@ -197,15 +197,15 @@ public class RouteController {
         String from = req.queryParams("from");
         String into = req.queryParams("into");
 
-        String agencyId = req.queryParams("agencyId");
+        String feedId = req.queryParams("feedId");
 
-        if (agencyId == null)
-            agencyId = req.session().attribute("agencyId");
+        if (feedId == null)
+            feedId = req.session().attribute("feedId");
 
-        if (agencyId == null || from == null || into == null)
+        if (feedId == null || from == null || into == null)
             halt(400);
 
-        final AgencyTx tx = VersionedDataStore.getAgencyTx(agencyId);
+        final AgencyTx tx = VersionedDataStore.getAgencyTx(feedId);
 
         try {
             // ensure the routes exist

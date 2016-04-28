@@ -27,10 +27,10 @@ public class StopController {
             new JsonManager<>(Stop.class, JsonViews.UserInterface.class);
 
     public static Object getStop(Request req, Response res
-//            String id, String patternId, String agencyId, Boolean majorStops, Double west, Double east, Double north, Double south
+//            String id, String patternId, String feedId, Boolean majorStops, Double west, Double east, Double north, Double south
     ) {
         String id = req.params("id");
-        String agencyId = req.queryParams("agencyId");
+        String feedId = req.queryParams("feedId");
         String patternId = req.queryParams("patternId");
         Boolean majorStops = Boolean.valueOf(req.queryParams("majorStops"));
         Double west = null;
@@ -46,14 +46,14 @@ public class StopController {
         if (req.queryParams("south") != null)
             south = Double.valueOf(req.queryParams("south"));
 
-        if (agencyId == null)
-            agencyId = req.session().attribute("agencyId");
+        if (feedId == null)
+            feedId = req.session().attribute("feedId");
 
-        if (agencyId == null) {
+        if (feedId == null) {
             halt(400);
         }
 
-        final AgencyTx tx = VersionedDataStore.getAgencyTx(agencyId);
+        final AgencyTx tx = VersionedDataStore.getAgencyTx(feedId);
  
         try {
               if (id != null) {
@@ -123,14 +123,14 @@ public class StopController {
         try {
             Stop stop = Base.mapper.readValue(req.body(), Stop.class);
             
-            if (req.session().attribute("agencyId") != null && !req.session().attribute("agencyId").equals(stop.agencyId))
+            if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(stop.feedId))
                 halt(400);
             
-            if (!VersionedDataStore.agencyExists(stop.agencyId)) {
+            if (!VersionedDataStore.agencyExists(stop.feedId)) {
                 halt(400);
             }
             
-            tx = VersionedDataStore.getAgencyTx(stop.agencyId);
+            tx = VersionedDataStore.getAgencyTx(stop.feedId);
             
             if (tx.stops.containsKey(stop.id)) {
                 halt(400);
@@ -155,14 +155,14 @@ public class StopController {
         try {
             Stop stop = Base.mapper.readValue(req.body(), Stop.class);
             
-            if (req.session().attribute("agencyId") != null && !req.session().attribute("agencyId").equals(stop.agencyId))
+            if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(stop.feedId))
                 halt(400);
             
-            if (!VersionedDataStore.agencyExists(stop.agencyId)) {
+            if (!VersionedDataStore.agencyExists(stop.feedId)) {
                 halt(400);
             }
             
-            tx = VersionedDataStore.getAgencyTx(stop.agencyId);
+            tx = VersionedDataStore.getAgencyTx(stop.feedId);
             
             if (!tx.stops.containsKey(stop.id)) {
                 halt(400);
@@ -182,17 +182,17 @@ public class StopController {
 
     public static Object deleteStop(Request req, Response res) {
         String id = req.params("id");
-        String agencyId = req.queryParams("agencyId");
+        String feedId = req.queryParams("feedId");
         String json = null;
 
-        if (agencyId == null)
-            agencyId = req.session().attribute("agencyId");
+        if (feedId == null)
+            feedId = req.session().attribute("feedId");
 
-        if (agencyId == null) {
+        if (feedId == null) {
             halt(400);
         }
 
-        AgencyTx tx = VersionedDataStore.getAgencyTx(agencyId);
+        AgencyTx tx = VersionedDataStore.getAgencyTx(feedId);
         try {
             if (!tx.stops.containsKey(id)) {
                 halt(404);
@@ -216,17 +216,17 @@ public class StopController {
     
     
     public static Object findDuplicateStops(Request req, Response res) {
-        String agencyId = req.queryParams("agencyId");
+        String feedId = req.queryParams("feedId");
         String json = null;
 
-        if (agencyId == null)
-            agencyId = req.session().attribute("agencyId");
+        if (feedId == null)
+            feedId = req.session().attribute("feedId");
 
-        if (agencyId == null) {
+        if (feedId == null) {
             halt(400);
         }
 
-        AgencyTx atx = VersionedDataStore.getAgencyTx(agencyId);
+        AgencyTx atx = VersionedDataStore.getAgencyTx(feedId);
 
         try {
             List<List<Stop>> ret = new ArrayList<List<Stop>>();
@@ -277,20 +277,20 @@ public class StopController {
 
     public static Object mergeStops(Request req, Response res) {
         List<String> mergedStopIds = Arrays.asList(req.queryParams("mergedStopIds").split(","));
-        String agencyId = req.queryParams("agencyId");
+        String feedId = req.queryParams("feedId");
 
         if (mergedStopIds.size() <= 1) {
             halt(400);
         }
 
-        if (agencyId == null)
-            agencyId = req.session().attribute("agencyId");
+        if (feedId == null)
+            feedId = req.session().attribute("feedId");
 
-        if (agencyId == null) {
+        if (feedId == null) {
             halt(400);
         }
 
-        AgencyTx tx = VersionedDataStore.getAgencyTx(agencyId);
+        AgencyTx tx = VersionedDataStore.getAgencyTx(feedId);
 
         try {
             Stop.merge(mergedStopIds, tx);

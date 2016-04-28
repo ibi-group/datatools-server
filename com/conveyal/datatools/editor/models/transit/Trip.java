@@ -42,7 +42,8 @@ public class Trip extends Model implements Cloneable, Serializable {
     public List<StopTime> stopTimes;
 
     public String agencyId;
-    
+    public String feedId;
+
     public Trip () {}
   
     /** Create a trips entry from a GTFS trip. Does not import stop times. */
@@ -56,6 +57,7 @@ public class Trip extends Model implements Cloneable, Serializable {
         this.patternId = pattern.id;
         this.calendarId = serviceCalendar.id;
         this.agencyId = route.agencyId;
+        this.feedId = route.feedId;
         this.stopTimes = new ArrayList<StopTime>();
 
         if (trip.wheelchair_accessible == 1)

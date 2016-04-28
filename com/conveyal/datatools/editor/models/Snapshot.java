@@ -34,7 +34,7 @@ public class Snapshot implements Cloneable, Serializable {
     public Tuple2<String, Integer> id;
 
     /** The agency associated with this */
-    public String agencyId;
+    public String feedId;
 
     /** the date/time this snapshot was taken (millis since epoch) */
     public long snapshotTime;
@@ -53,15 +53,15 @@ public class Snapshot implements Cloneable, Serializable {
     /** Used for Jackson deserialization */
     public Snapshot () {}
 
-    public Snapshot (String agencyId, int version) {
-        this.agencyId = agencyId;
+    public Snapshot (String feedId, int version) {
+        this.feedId = feedId;
         this.version = version;
         this.computeId();
     }
 
     /** create an ID for this snapshot based on agency ID and version */
     public void computeId () {
-        this.id = new Tuple2(agencyId, version);
+        this.id = new Tuple2(feedId, version);
     }
 
     public Snapshot clone () {

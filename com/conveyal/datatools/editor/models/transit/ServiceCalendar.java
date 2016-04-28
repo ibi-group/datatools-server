@@ -18,7 +18,7 @@ import java.util.Set;
 public class ServiceCalendar extends Model implements Cloneable, Serializable {
     public static final long serialVersionUID = 1;
 
-    public String agencyId;
+    public String feedId;
     public String gtfsServiceId;
     public String description;
     public Boolean monday;

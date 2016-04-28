@@ -27,21 +27,21 @@ public class TripController {
             new JsonManager<>(Trip.class, JsonViews.UserInterface.class);
 
     public static Object getTrip(Request req, Response res
-//            String id, String patternId, String calendarId, String agencyId
+//            String id, String patternId, String calendarId, String feedId
     ) {
         String id = req.params("id");
-        String agencyId = req.queryParams("agencyId");
+        String feedId = req.queryParams("feedId");
         String patternId = req.queryParams("patternId");
         String calendarId = req.queryParams("calendarId");
 
-        if (agencyId == null)
-            agencyId = req.session().attribute("agencyId");
+        if (feedId == null)
+            feedId = req.session().attribute("feedId");
 
-        if (agencyId == null) {
+        if (feedId == null) {
             halt(400);
         }
 
-        AgencyTx tx = VersionedDataStore.getAgencyTx(agencyId);
+        AgencyTx tx = VersionedDataStore.getAgencyTx(feedId);
 
         try {
             if (id != null) {
@@ -80,14 +80,14 @@ public class TripController {
         try {
             Trip trip = Base.mapper.readValue(req.body(), Trip.class);
 
-            if (req.session().attribute("agencyId") != null && !req.session().attribute("agencyId").equals(trip.agencyId))
+            if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(trip.feedId))
                 halt(400);
 
-            if (!VersionedDataStore.agencyExists(trip.agencyId)) {
+            if (!VersionedDataStore.agencyExists(trip.feedId)) {
                 halt(400);
             }
 
-            tx = VersionedDataStore.getAgencyTx(trip.agencyId);
+            tx = VersionedDataStore.getAgencyTx(trip.feedId);
 
             if (tx.trips.containsKey(trip.id)) {
                 tx.rollback();
@@ -117,14 +117,14 @@ public class TripController {
         try {
             Trip trip = Base.mapper.readValue(req.body(), Trip.class);
 
-            if (req.session().attribute("agencyId") != null && !req.session().attribute("agencyId").equals(trip.agencyId))
+            if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(trip.feedId))
                 halt(400);
 
-            if (!VersionedDataStore.agencyExists(trip.agencyId)) {
+            if (!VersionedDataStore.agencyExists(trip.feedId)) {
                 halt(400);
             }
 
-            tx = VersionedDataStore.getAgencyTx(trip.agencyId);
+            tx = VersionedDataStore.getAgencyTx(trip.feedId);
 
             if (!tx.trips.containsKey(trip.id)) {
                 tx.rollback();
@@ -169,17 +169,17 @@ public class TripController {
 
     public static Object deleteTrip(Request req, Response res) {
         String id = req.params("id");
-        String agencyId = req.queryParams("agencyId");
+        String feedId = req.queryParams("feedId");
         String json = null;
 
-        if (agencyId == null)
-            agencyId = req.session().attribute("agencyId");
+        if (feedId == null)
+            feedId = req.session().attribute("feedId");
 
-        if (id == null || agencyId == null) {
+        if (id == null || feedId == null) {
             halt(400);
         }
 
-        AgencyTx tx = VersionedDataStore.getAgencyTx(agencyId);
+        AgencyTx tx = VersionedDataStore.getAgencyTx(feedId);
         Trip trip = tx.trips.remove(id);
         try {
             json = Base.toJson(trip, false);

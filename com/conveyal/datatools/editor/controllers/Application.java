@@ -13,6 +13,8 @@ import com.conveyal.datatools.editor.models.transit.*;
 import org.joda.time.DateTimeZone;
 import java.time.LocalDate;
 import com.conveyal.datatools.editor.utils.Auth0UserProfile;
+import spark.Request;
+import spark.Response;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -30,12 +32,14 @@ import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 
+import static spark.Spark.halt;
+
 
 public class Application {
     /** used to give almost-friendly names to exported files */
 //    public static AtomicLong nextExportId = new AtomicLong(1);
-//
-//
+
+
 //    static void initSession() throws Throwable {
 //
 //        GlobalTx tx = VersionedDataStore.getGlobalTx();
@@ -132,19 +136,19 @@ public class Application {
 //            tx.rollback();
 //        }
 //    }
-//
+
 //    public static boolean checkOAuth(Request request, Session session) {
 //        GlobalTx tx = VersionedDataStore.getGlobalTx();
 //        boolean ret = checkOAuth(request, session, tx);
 //        tx.rollback();
 //        return ret;
 //    }
-//
-//    /**
-//     * Check if a user has access via OAuth.
-//     * @param session
-//     * @return
-//     */
+
+    /**
+     * Check if a user has access via OAuth.
+     * @param session
+     * @return
+     */
 //    public static boolean checkOAuth(Request request, Session session, GlobalTx tx) {
 //        if (!"true".equals(Play.configuration.getProperty("application.oauthEnabled")))
 //            return false;
@@ -159,11 +163,11 @@ public class Application {
 //        long timeout = Long.parseLong(Play.configuration.getProperty("application.oauthKeyTimeout"));
 //        return token.creationDate + timeout > now;
 //    }
-//
-//    /**
-//     * Get the OAuth token from the request/session.
-//     * Note that we support OAuth tokens in Authorization headers, or in the session, or in the GET param oauth_token.
-//     */
+
+    /**
+     * Get the OAuth token from the request/session.
+     * Note that we support OAuth tokens in Authorization headers, or in the session, or in the GET param oauth_token.
+     */
 //    public static OAuthToken getToken (Request request, Session session, GlobalTx tx) {
 //        String token = null;
 //        if (request.params.get("oauth_token") != null)
@@ -185,7 +189,7 @@ public class Application {
 //            return tx.tokens.get(token);
 //        }
 //    }
-//
+
 //    public static void changePassword(String currentPassword, String newPassword)
 //    {
 //        if (currentPassword == null || newPassword == null) {
@@ -205,7 +209,7 @@ public class Application {
 //            Application.index();
 //        }
 //    }
-//
+
 //    public static void passwordChanged() {
 //
 //        render();
@@ -224,10 +228,10 @@ public class Application {
 //     * Helper to go to the search page for a particular agency (never called from the router directly).
 //     * @param agencyId
 //     */
-//    public static void search(String agencyId) {
+//    public static void search(Request req, Response res) {
 //        GlobalTx tx = VersionedDataStore.getGlobalTx();
 //        AgencyTx atx = null;
-//
+//        String agencyId = req.queryParams("agencyId");
 //        try {
 //            Agency selectedAgency;
 //            if (agencyId == null) {
@@ -418,21 +422,16 @@ public class Application {
 //
 //        render();
 //    }
-//
-//    public static void uploadGtfs(File gtfsUpload) {
-//
+
+//    public static void uploadGtfs(Request req, Response res) {
+////        File gtfsUpload = req.params("gtfsUpload");
 //        System.out.println("uploadGtfs " + gtfsUpload);
 //
 //        validation.required(gtfsUpload).message("GTFS file required.");
 //
 //        if(gtfsUpload != null && !gtfsUpload.getName().contains(".zip"))
-//            validation.addError("gtfsUpload", "GTFS must have .zip extension.");
+//            halt(404, "gtfsUpload", "GTFS must have .zip extension.");
 //
-//        if(validation.hasErrors()) {
-//            params.flash();
-//            validation.keep();
-//            importGtfs();
-//        }
 //        else {
 //            ProcessGtfsSnapshotMerge merge;
 //            try {
@@ -452,8 +451,8 @@ public class Application {
 //            search(merge.agencyId);
 //        }
 //    }
-//
-//    public static void fetchGtfs(String gtfsUrl) {
+
+//    public static void fetchGtfs(Request req, Response res) {
 //        String feedVersionId = request.params.get("feedVersionId");
 //        String feedSourceId = request.params.get("feedSourceId");
 //        System.out.println("fetchGtfs " + feedVersionId);

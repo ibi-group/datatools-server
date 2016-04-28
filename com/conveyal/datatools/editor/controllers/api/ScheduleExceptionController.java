@@ -23,19 +23,19 @@ public class ScheduleExceptionController {
     /** Get all of the schedule exceptions for an agency */
     public static Object getScheduleException (Request req, Response res) {
         String exceptionId = req.params("exceptionId");
-        String agencyId = req.queryParams("agencyId");
+        String feedId = req.queryParams("feedId");
         String json = null;
-        if (agencyId == null)
-            agencyId = req.session().attribute("agencyId");
+        if (feedId == null)
+            feedId = req.session().attribute("feedId");
 
-        if (agencyId == null) {
+        if (feedId == null) {
             halt(400);
         }
 
         AgencyTx tx = null;
 
         try {
-            tx = VersionedDataStore.getAgencyTx(agencyId);
+            tx = VersionedDataStore.getAgencyTx(feedId);
 
             if (exceptionId != null) {
                 if (!tx.exceptions.containsKey(exceptionId))
@@ -60,14 +60,14 @@ public class ScheduleExceptionController {
         try {
             ScheduleException ex = Base.mapper.readValue(req.body(), ScheduleException.class);
 
-            if (!VersionedDataStore.agencyExists(ex.agencyId)) {
+            if (!VersionedDataStore.agencyExists(ex.feedId)) {
                 halt(400);
             }
 
-            if (req.session().attribute("agencyId") != null && !req.session().attribute("agencyId").equals(ex.agencyId))
+            if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(ex.feedId))
                 halt(400);
 
-            tx = VersionedDataStore.getAgencyTx(ex.agencyId);
+            tx = VersionedDataStore.getAgencyTx(ex.feedId);
 
             if (ex.customSchedule != null) {
                 for (String cal : ex.customSchedule) {
@@ -108,14 +108,14 @@ public class ScheduleExceptionController {
         try {
             ScheduleException ex = Base.mapper.readValue(req.body(), ScheduleException.class);
 
-            if (req.session().attribute("agencyId") != null && !req.session().attribute("agencyId").equals(ex.agencyId))
+            if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(ex.feedId))
                 halt(400);
 
-            if (!VersionedDataStore.agencyExists(ex.agencyId)) {
+            if (!VersionedDataStore.agencyExists(ex.feedId)) {
                 halt(400);
             }
 
-            tx = VersionedDataStore.getAgencyTx(ex.agencyId);
+            tx = VersionedDataStore.getAgencyTx(ex.feedId);
 
             if (ex.customSchedule != null) {
                 for (String cal : ex.customSchedule) {
@@ -146,16 +146,16 @@ public class ScheduleExceptionController {
     
     public static Object deleteScheduleException (Request req, Response res) {
         String id = req.params("id");
-        String agencyId = req.queryParams("agencyId");
+        String feedId = req.queryParams("feedId");
 
-        if (agencyId == null)
-            agencyId = req.session().attribute("agencyId");
+        if (feedId == null)
+            feedId = req.session().attribute("feedId");
 
-        if (agencyId == null) {
+        if (feedId == null) {
             halt(400);
         }
 
-        AgencyTx tx = VersionedDataStore.getAgencyTx(agencyId);
+        AgencyTx tx = VersionedDataStore.getAgencyTx(feedId);
         tx.exceptions.remove(id);
         tx.commit();
 

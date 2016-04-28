@@ -29,17 +29,17 @@ public class TripPatternController {
     public static Object getTripPattern(Request req, Response res) {
         String id = req.params("id");
         String routeId = req.queryParams("routeId");
-        String agencyId = req.queryParams("agencyId");
+        String feedId = req.queryParams("feedId");
         String json = null;
 
-        if (agencyId == null)
-            agencyId = req.session().attribute("agencyId");
+        if (feedId == null)
+            feedId = req.session().attribute("feedId");
 
-        if (agencyId == null) {
+        if (feedId == null) {
             halt(400);
         }
 
-        final AgencyTx tx = VersionedDataStore.getAgencyTx(agencyId);
+        final AgencyTx tx = VersionedDataStore.getAgencyTx(feedId);
 
         try {
 
@@ -87,14 +87,14 @@ public class TripPatternController {
         try {
             tripPattern = Base.mapper.readValue(req.body(), TripPattern.class);
             
-            if (req.session().attribute("agencyId") != null && !req.session().attribute("agencyId").equals(tripPattern.agencyId))
+            if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(tripPattern.feedId))
                 halt(400);
             
-            if (!VersionedDataStore.agencyExists(tripPattern.agencyId)) {
+            if (!VersionedDataStore.agencyExists(tripPattern.feedId)) {
                 halt(400);
             }
             
-            AgencyTx tx = VersionedDataStore.getAgencyTx(tripPattern.agencyId);
+            AgencyTx tx = VersionedDataStore.getAgencyTx(tripPattern.feedId);
             
             if (tx.tripPatterns.containsKey(tripPattern.id)) {
                 tx.rollback();
@@ -120,10 +120,10 @@ public class TripPatternController {
         try {
             tripPattern = Base.mapper.readValue(req.body(), TripPattern.class);
             
-            if (req.session().attribute("agencyId") != null && !req.session().attribute("agencyId").equals(tripPattern.agencyId))
+            if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(tripPattern.feedId))
                 halt(400);
             
-            if (!VersionedDataStore.agencyExists(tripPattern.agencyId)) {
+            if (!VersionedDataStore.agencyExists(tripPattern.feedId)) {
                 halt(400);
             }
             
@@ -131,7 +131,7 @@ public class TripPatternController {
                 halt(400);
             }
             
-            tx = VersionedDataStore.getAgencyTx(tripPattern.agencyId);
+            tx = VersionedDataStore.getAgencyTx(tripPattern.feedId);
             
             TripPattern originalTripPattern = tx.tripPatterns.get(tripPattern.id);
             
@@ -164,16 +164,16 @@ public class TripPatternController {
 
     public static Object deleteTripPattern(Request req, Response res) {
         String id = req.params("id");
-        String agencyId = req.queryParams("agencyId");
+        String feedId = req.queryParams("feedId");
 
-        if (agencyId == null)
-            agencyId = req.session().attribute("agencyId");
+        if (feedId == null)
+            feedId = req.session().attribute("feedId");
 
-        if(id == null || agencyId == null) {
+        if(id == null || feedId == null) {
             halt(400);
         }
 
-        AgencyTx tx = VersionedDataStore.getAgencyTx(agencyId);
+        AgencyTx tx = VersionedDataStore.getAgencyTx(feedId);
 
         try {
             // first zap all trips on this trip pattern

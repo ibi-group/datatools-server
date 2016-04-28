@@ -31,18 +31,18 @@ public class CalendarController {
             new JsonManager<>(Calendar.class, JsonViews.UserInterface.class);
     public static Object getCalendar(Request req, Response res) {
         String id = req.params("id");
-        String agencyId = req.queryParams("agencyId");
+        String feedId = req.queryParams("feedId");
         String patternId = req.queryParams("patternId");
 
-        if (agencyId == null) {
-            agencyId = req.session().attribute("agencyId");
+        if (feedId == null) {
+            feedId = req.session().attribute("feedId");
         }
 
-        if (agencyId == null) {
+        if (feedId == null) {
             halt(400);
         }
 
-        final AgencyTx tx = VersionedDataStore.getAgencyTx(agencyId);
+        final AgencyTx tx = VersionedDataStore.getAgencyTx(feedId);
 
         try {
             if (id != null) {
@@ -110,14 +110,14 @@ public class CalendarController {
         try {
             cal = Base.mapper.readValue(req.params("body"), ServiceCalendar.class);
 
-            if (!VersionedDataStore.agencyExists(cal.agencyId)) {
+            if (!VersionedDataStore.agencyExists(cal.feedId)) {
                 halt(400);
             }
 
-            if (req.session().attribute("agencyId") != null && !req.session().attribute("agencyId").equals(cal.agencyId))
+            if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(cal.feedId))
                 halt(400);
             
-            tx = VersionedDataStore.getAgencyTx(cal.agencyId);
+            tx = VersionedDataStore.getAgencyTx(cal.feedId);
             
             if (tx.calendars.containsKey(cal.id)) {
                 tx.rollback();
@@ -150,14 +150,14 @@ public class CalendarController {
         try {
             cal = Base.mapper.readValue(req.params("body"), ServiceCalendar.class);
 
-            if (!VersionedDataStore.agencyExists(cal.agencyId)) {
+            if (!VersionedDataStore.agencyExists(cal.feedId)) {
                 halt(400);
             }
 
-            if (req.session().attribute("agencyId") != null && !req.session().attribute("agencyId").equals(cal.agencyId))
+            if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(cal.feedId))
                 halt(400);
 
-            tx = VersionedDataStore.getAgencyTx(cal.agencyId);
+            tx = VersionedDataStore.getAgencyTx(cal.feedId);
             
             if (!tx.calendars.containsKey(cal.id)) {
                 tx.rollback();
@@ -188,9 +188,9 @@ public class CalendarController {
 
     public static Object deleteCalendar(Request req, Response res) {
         String id = req.params("id");
-        String agencyId = req.queryParams("agencyId");
+        String feedId = req.queryParams("feedId");
 
-        AgencyTx tx = VersionedDataStore.getAgencyTx(agencyId);
+        AgencyTx tx = VersionedDataStore.getAgencyTx(feedId);
 
         if (id == null || !tx.calendars.containsKey(id)) {
             tx.rollback();

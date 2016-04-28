@@ -23,7 +23,7 @@ public class ScheduleException extends Model implements Cloneable, Serializable 
     public static final long serialVersionUID = 1;
 
     /** The agency whose service this schedule exception describes */
-    public String agencyId;
+    public String feedId;
 
     /**
      * If non-null, run service that would ordinarily run on this day of the week.

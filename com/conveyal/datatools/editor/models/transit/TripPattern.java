@@ -36,8 +36,9 @@ public class TripPattern extends Model implements Cloneable, Serializable {
     public boolean useFrequency;
     
     public String routeId;
-    
+
     public String agencyId;
+    public String feedId;
 
     public List<TripPatternStop> patternStops;
     

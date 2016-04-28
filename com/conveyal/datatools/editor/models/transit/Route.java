@@ -35,6 +35,7 @@ public class Route extends Model implements Cloneable, Serializable {
     public Boolean publiclyVisible;
 
     public String agencyId;
+    public String feedId;
 
     //public GisRoute gisRoute;
 
@@ -97,6 +98,7 @@ public class Route extends Model implements Cloneable, Serializable {
         this.routeTextColor = route.route_text_color;
 
         this.agencyId = agency.id;
+//        this.feedId = agency.id;
     }
 
 
@@ -107,6 +109,7 @@ public class Route extends Model implements Cloneable, Serializable {
         this.routeDesc = routeDescription;
 
         this.agencyId = agency.id;
+//        this.feedId = agency.id;
     }
 
     public com.conveyal.gtfs.model.Route toGtfs(com.conveyal.gtfs.model.Agency a, GlobalTx tx) {
