@@ -36,8 +36,12 @@ public class FeedUpdater {
 
     }
 
-    public void addFeedETags(String eTag){
+    public void addFeedETag(String eTag){
         this.eTags.add(eTag);
+    }
+
+    public void addFeedETags(List<String> eTagList){
+        this.eTags.addAll(eTagList);
     }
 
     public void cancel(){
@@ -63,7 +67,7 @@ public class FeedUpdater {
                     LOG.info("Updating feed " + keyName);
                     String feedId = keyName.split("/")[1];
                     ApiMain.loadFeedFromBucket(GtfsApiController.feedBucket, feedId, GtfsApiController.prefix);
-                    addFeedETags(eTag);
+                    addFeedETag(eTag);
                     feedsUpdated = true;
                 }
             }

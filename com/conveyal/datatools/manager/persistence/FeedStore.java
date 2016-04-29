@@ -146,8 +146,22 @@ public class FeedStore {
             File out = new File(path, id);
             FileOutputStream outStream;
 
+            // store latest as feed-source-id.zip
+            if (feedSource != null) {
+                File copy = new File(path, feedSource.id + ".zip");
+                FileOutputStream copyStream;
+                try {
+                    copyStream = new FileOutputStream(copy);
+
+                } catch (FileNotFoundException e) {
+                    LOG.error("Unable to save latest at {}", copy);
+                    return null;
+                }
+            }
+
             try {
                 outStream = new FileOutputStream(out);
+
             } catch (FileNotFoundException e) {
                 LOG.error("Unable to open {}", out);
                 return null;

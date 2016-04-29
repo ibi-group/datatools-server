@@ -26,13 +26,13 @@ public class Project extends Model {
     /** The name of this feed collection, e.g. NYSDOT. */
     public String name;
 
-    //public Boolean useCustomOsmBounds;
+    public Boolean useCustomOsmBounds;
 
-    //public Double osmNorth, osmSouth, osmEast, osmWest;
+    public Double osmNorth, osmSouth, osmEast, osmWest;
 
-    //public OtpBuildConfig buildConfig;
+    public OtpBuildConfig buildConfig;
 
-    //public OtpRouterConfig routerConfig;
+    public OtpRouterConfig routerConfig;
 
     public String defaultTimeZone;
 

@@ -66,7 +66,7 @@ public class FeedSource extends Model {
     public boolean isPublic;
 
     /** Is this feed deployable? */
-    //public boolean deployable;
+    public boolean deployable;
 
     /**
      * How do we receive this feed?
