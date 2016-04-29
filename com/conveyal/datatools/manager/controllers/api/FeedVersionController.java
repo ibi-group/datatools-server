@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.controllers.api;
 
+import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -9,9 +10,23 @@ import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.conveyal.gtfs.model.ValidationResult;
 import com.conveyal.gtfs.validator.json.FeedValidationResult;
+import com.conveyal.r5.analyst.IsochroneFeature;
+import com.conveyal.r5.analyst.PointSet;
+import com.conveyal.r5.analyst.cluster.AnalystClusterRequest;
+import com.conveyal.r5.analyst.cluster.TaskStatistics;
+import com.conveyal.r5.api.util.LegMode;
+import com.conveyal.r5.api.util.TransitModes;
+import com.conveyal.r5.model.json_serialization.TransitModeSetSerializer;
+import com.conveyal.r5.profile.ProfileRequest;
+import com.conveyal.r5.profile.RepeatedRaptorProfileRouter;
+import com.conveyal.r5.profile.StreetMode;
+import com.conveyal.r5.streets.LinkedPointSet;
+import com.conveyal.r5.transit.TransportNetwork;
 import com.fasterxml.jackson.core.JsonProcessingException;
 
 import java.io.*;
+import java.nio.file.AccessMode;
+import java.time.LocalDate;
 import java.util.*;
 
 //import jobs.ProcessSingleFeedJob;
@@ -179,6 +194,48 @@ public class FeedVersionController  {
         return version.validationResult;
     }
 
+    public static String getIsochrones(Request req, Response res) {
+        String id = req.params("id");
+        FeedVersion version = FeedVersion.get(id);
+
+        if (version.transportNetwork == null) {
+            InputStream is = null;
+            try {
+                is = new FileInputStream(DataManager.config.get("application").get("data").get("gtfs").asText() + "/" + version.id + "_network.dat");
+                version.transportNetwork = TransportNetwork.read(is);
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        if (version.transportNetwork != null) {
+            AnalystClusterRequest clusterRequest = new AnalystClusterRequest();
+            clusterRequest.profileRequest = new ProfileRequest();
+            clusterRequest.profileRequest.transitModes = EnumSet.of(TransitModes.TRANSIT);
+            clusterRequest.profileRequest.accessModes = EnumSet.of(LegMode.WALK, LegMode.CAR);
+            clusterRequest.profileRequest.date = LocalDate.now();
+            // -84.3869304657,33.7547228173,-84.3744850159,33.7552178875
+            clusterRequest.profileRequest.fromLat = 33.7547228173;
+            clusterRequest.profileRequest.fromLon = -84.3869304657;
+            clusterRequest.profileRequest.toLat = 33.7552178875;
+            clusterRequest.profileRequest.toLon = -84.3744850159;
+            PointSet targets = version.transportNetwork.getGridPointSet();
+            StreetMode mode = StreetMode.WALK;
+            final LinkedPointSet linkedTargets = targets.link(version.transportNetwork.streetLayer, mode);
+            RepeatedRaptorProfileRouter router = new RepeatedRaptorProfileRouter(version.transportNetwork, clusterRequest, linkedTargets, new TaskStatistics());
+            IsochroneFeature[] isochrones = router.route().avgCase.isochrones;
+            System.out.println(isochrones);
+            String out = "";
+            for (IsochroneFeature iso : isochrones) {
+                System.out.println(iso.geometry.toText());
+                out = out + iso.geometry;
+            }
+            return out;
+        }
+        return null;
+    }
 
     private static Object downloadFeedVersion(FeedVersion version, Response res) {
         if(version == null) halt(500, "FeedVersion is null");
@@ -238,6 +295,7 @@ public class FeedVersionController  {
         get(apiPrefix + "secure/feedversion/:id/download", FeedVersionController::downloadFeedVersionDirectly);
         get(apiPrefix + "secure/feedversion/:id/downloadtoken", FeedVersionController::getDownloadToken, json::write);
         get(apiPrefix + "secure/feedversion/:id/validation", FeedVersionController::getValidationResult, json::write);
+        get(apiPrefix + "secure/feedversion/:id/isochrones", FeedVersionController::getIsochrones, json::write);
         get(apiPrefix + "secure/feedversion", FeedVersionController::getAllFeedVersions, json::write);
         post(apiPrefix + "secure/feedversion", FeedVersionController::createFeedVersion, json::write);
         delete(apiPrefix + "secure/feedversion/:id", FeedVersionController::deleteFeedVersion, json::write);
