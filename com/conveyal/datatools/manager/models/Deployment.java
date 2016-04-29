@@ -1,5 +1,9 @@
 package com.conveyal.datatools.manager.models;
 
+import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.persistence.DataStore;
+import com.conveyal.datatools.manager.utils.StringUtils;
+import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
@@ -7,16 +11,18 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.io.ByteStreams;
-import controllers.api.JsonManager;
-import play.Logger;
-import play.Play;
-import utils.DataStore;
-import utils.StringUtils;
 
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
-import java.io.*;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.Serializable;
 import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
@@ -27,6 +33,9 @@ import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * A deployment of (a given version of) OTP on a given set of feeds.
  * @author mattwigway
@@ -35,7 +44,7 @@ import java.util.zip.ZipOutputStream;
 @JsonInclude(Include.ALWAYS)
 public class Deployment extends Model implements Serializable {
     private static final long serialVersionUID = 1L;
-
+    private static final Logger LOG = LoggerFactory.getLogger(Deployment.class);
     private static DataStore<Deployment> deploymentStore = new DataStore<Deployment>("deployments");
 
     public String name;
@@ -46,15 +55,15 @@ public class Deployment extends Model implements Serializable {
     public Date dateCreated;
 
     @JsonView(JsonViews.DataDump.class)
-    public String feedCollectionId;
+    public String projectId;
 
     @JsonView(JsonViews.UserInterface.class)
-    public FeedCollection getFeedCollection () {
-        return FeedCollection.get(feedCollectionId);
+    public Project getProject () {
+        return Project.get(projectId);
     }
 
-    public void setFeedCollection (FeedCollection feedCollection) {
-        this.feedCollectionId = feedCollection.id;
+    public void setProject (Project project) {
+        this.projectId = project.id;
     }
 
     @JsonView(JsonViews.DataDump.class)
@@ -70,7 +79,7 @@ public class Deployment extends Model implements Serializable {
             if (v != null)
                 ret.add(v);
             else
-                Logger.error("Reference integrity error for deployment {} ({}), feed version {} does not exist", this.name, this.id, id);
+                LOG.error("Reference integrity error for deployment {} ({}), feed version {} does not exist", this.name, this.id, id);
         }
 
         return ret;
@@ -88,7 +97,7 @@ public class Deployment extends Model implements Serializable {
             if (v != null)
                 ret.add(new SummarizedFeedVersion(FeedVersion.get(id)));
             else
-                Logger.error("Reference integrity error for deployment {} ({}), feed version {} does not exist", this.name, this.id, id);
+                LOG.error("Reference integrity error for deployment {} ({}), feed version {} does not exist", this.name, this.id, id);
         }
 
         return ret;
@@ -148,7 +157,7 @@ public class Deployment extends Model implements Serializable {
         super();
 
         this.feedSourceId = feedSource.id;
-        this.setFeedCollection(feedSource.getFeedCollection());
+        this.setProject(feedSource.getProject());
         this.dateCreated = new Date();
         this.feedVersionIds = new ArrayList<String>();
 
@@ -165,19 +174,19 @@ public class Deployment extends Model implements Serializable {
     }
 
     /** Create a new deployment plan for the given feed collection */
-    public Deployment(FeedCollection feedCollection) {
+    public Deployment(Project project) {
         super();
 
         this.feedSourceId = null;
 
-        this.setFeedCollection(feedCollection);
+        this.setProject(project);
 
         this.dateCreated = new Date();
 
         this.feedVersionIds = new ArrayList<String>();
         this.invalidFeedSourceIds = new ArrayList<String>();
 
-        FEEDSOURCE: for (FeedSource s : feedCollection.getFeedSources()) {
+        FEEDSOURCE: for (FeedSource s : project.getProjectFeedSources()) {
             // only include deployable feeds
             if (s.deployable) {
                 FeedVersion latest = s.getLatest();
@@ -313,44 +322,36 @@ public class Deployment extends Model implements Serializable {
             // extract OSM and insert it into the deployment bundle
             ZipEntry e = new ZipEntry("osm.pbf");
             out.putNextEntry(e);
-
-            // figure out the bounds
-            Rectangle2D bounds = getBounds();
-
-            // call vex server
-            URL vexUrl = new URL(String.format("%s/?n=%.6f&e=%.6f&s=%.6f&w=%.6f",
-                    Play.application().configuration().getString("application.deployment.osm_vex"),
-                    bounds.getMaxY(), bounds.getMaxX(), bounds.getMinY(), bounds.getMinX()));
-
-            HttpURLConnection conn = (HttpURLConnection) vexUrl.openConnection();
-            conn.connect();
-
-            InputStream is = conn.getInputStream();
+            InputStream is = getOsmExtract(getProjectBounds());
             ByteStreams.copy(is, out);
-            is.close();
+            try {
+                is.close();
+            } catch (IOException e1) {
+                e1.printStackTrace();
+            }
 
             out.closeEntry();
         }
 
         if (includeOtpConfig) {
             // write build-config.json and router-config.json
-            FeedCollection feedColl = this.getFeedCollection();
+            Project proj = this.getProject();
 
-            if (feedColl.buildConfig != null) {
+            if (proj.buildConfig != null) {
                 ZipEntry buildConfigEntry = new ZipEntry("build-config.json");
                 out.putNextEntry(buildConfigEntry);
 
                 ObjectMapper mapper = new ObjectMapper();
                 mapper.setSerializationInclusion(Include.NON_NULL);
-                byte[] buildConfig = mapper.writer().writeValueAsBytes(feedColl.buildConfig);
+                byte[] buildConfig = mapper.writer().writeValueAsBytes(proj.buildConfig);
                 out.write(buildConfig);
 
                 out.closeEntry();
             }
 
-            String brandingUrlRoot = Play.application().configuration()
-                    .getString("application.data.branding_public");
-            OtpRouterConfig routerConfig = feedColl.routerConfig;
+            String brandingUrlRoot = DataManager.config
+                    .get("application.data.branding_public").asText();
+            OtpRouterConfig routerConfig = proj.routerConfig;
             if (routerConfig == null && brandingUrlRoot != null) {
                 routerConfig = new OtpRouterConfig();
             }
@@ -370,14 +371,52 @@ public class Deployment extends Model implements Serializable {
         out.close();
     }
 
+    // Get OSM extract
+    public static InputStream getOsmExtract(Rectangle2D bounds) {
+        // call vex server
+        URL vexUrl = null;
+        try {
+            vexUrl = new URL(String.format("%s/?n=%.6f&e=%.6f&s=%.6f&w=%.6f",
+                    DataManager.config.get("deployment").get("osm_vex").asText(),
+                    bounds.getMaxY(), bounds.getMaxX(), bounds.getMinY(), bounds.getMinX()));
+            LOG.info(vexUrl.toString());
+        } catch (MalformedURLException e1) {
+            e1.printStackTrace();
+        }
+
+        HttpURLConnection conn = null;
+        try {
+            conn = (HttpURLConnection) vexUrl.openConnection();
+        } catch (IOException e1) {
+            e1.printStackTrace();
+        }
+        try {
+            conn.connect();
+        } catch (IOException e1) {
+            e1.printStackTrace();
+        }
+
+        InputStream is = null;
+        try {
+            is = conn.getInputStream();
+        } catch (IOException e1) {
+            e1.printStackTrace();
+        }
+        return is;
+    }
+
+    public static Rectangle2D getFeedVersionBounds(FeedVersion version) {
+        return null;
+    }
+
     // Get the union of the bounds of all the feeds in this deployment
     @JsonView(JsonViews.UserInterface.class)
-    public Rectangle2D getBounds() {
+    public Rectangle2D getProjectBounds() {
 
-        FeedCollection feedColl = this.getFeedCollection();
-        if(feedColl.useCustomOsmBounds) {
-            Rectangle2D bounds = new Rectangle2D.Double(feedColl.osmWest, feedColl.osmSouth,
-                    feedColl.osmEast - feedColl.osmWest, feedColl.osmNorth - feedColl.osmSouth);
+        Project proj = this.getProject();
+        if(proj.useCustomOsmBounds) {
+            Rectangle2D bounds = new Rectangle2D.Double(proj.osmWest, proj.osmSouth,
+                    proj.osmEast - proj.osmWest, proj.osmNorth - proj.osmSouth);
             return bounds;
         }
 
@@ -392,17 +431,18 @@ public class Deployment extends Model implements Serializable {
         // i = 1 because we've already included bounds 0
         for (int i = 0; i < versions.size(); i++) {
             SummarizedFeedVersion version = versions.get(i);
+//            return getFeedVersionBounds(version);
             if (version.validationResult != null && version.validationResult.bounds != null) {
                 if (!boundsSet) {
                     // set the bounds, don't expand the null bounds
                     bounds.setRect(versions.get(0).validationResult.bounds);
                     boundsSet = true;
                 } else {
-                    bounds.add(versions.get(i).validationResult.bounds);
+                    bounds.add(version.validationResult.bounds);
                 }
             }
             else
-                Logger.warn("Feed version %s has no bounds", version);
+                LOG.warn("Feed version %s has no bounds", version);
         }
 
         // expand the bounds by (about) 10 km in every direction
@@ -414,8 +454,8 @@ public class Deployment extends Model implements Serializable {
 
 
         double bufferKm = 10;
-        if(Play.application().configuration().keys().contains("application.deployment.osm_buffer_km")) {
-            bufferKm = Play.application().configuration().getDouble("application.deployment.osm_buffer_km");
+        if(DataManager.config.get("application").get("deployment").has("osm_buffer_km")) {
+            bufferKm = DataManager.config.get("application").get("deployment").get("osm_buffer_km").asDouble();
         }
 
         // south-west
