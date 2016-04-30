@@ -9,6 +9,8 @@ import com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource;
 import com.conveyal.datatools.manager.extensions.transitfeeds.TransitFeedsFeedResource;
 import com.conveyal.datatools.manager.extensions.transitland.TransitLandFeedResource;
 
+import com.conveyal.datatools.manager.jobs.LoadGtfsApiFeedJob;
+import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.utils.CorsFilter;
 import com.conveyal.gtfs.api.ApiMain;
@@ -84,6 +86,22 @@ public class DataManager {
         before(apiPrefix + "secure/*", (request, response) -> {
             if(request.requestMethod().equals("OPTIONS")) return;
             Auth0Connection.checkUser(request);
+        });
+
+        // lazy load feeds if new one is requested
+        before(apiPrefix + "*", (request, response) -> {
+            String feeds = request.queryParams("feed");
+            if (feeds != null) {
+                String[] feedIds = feeds.split(",");
+                for (String feedId : feedIds) {
+                    FeedSource fs = FeedSource.get(feedId);
+                    if (fs != null && !GtfsApiController.gtfsApi.feedSources.keySet().contains(feedId)) {
+                        new LoadGtfsApiFeedJob(fs).run();
+//                        halt(503, "Loading feed, please try again later");
+                    }
+                }
+
+            }
         });
 
         after(apiPrefix + "*", (request, response) -> response.type("application/json"));

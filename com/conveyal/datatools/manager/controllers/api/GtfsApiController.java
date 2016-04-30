@@ -19,6 +19,7 @@ public class GtfsApiController {
     public static final Logger LOG = LoggerFactory.getLogger(ProjectController.class);
     public static String feedBucket;
     public static FeedUpdater feedUpdater;
+    public static ApiMain gtfsApi;
     public static String prefix;
     public static void register (String apiPrefix) throws IOException {
 
@@ -34,7 +35,7 @@ public class GtfsApiController {
             prefix = DataManager.config.get("extensions").get(extensionType).get("s3_download_prefix").asText();
 
             // get all feeds in completed folder and save list of eTags from initialize
-            eTagList.addAll(ApiMain.initialize(null, false, feedBucket, null, null, prefix));
+            eTagList.addAll(gtfsApi.initialize(null, false, feedBucket, null, null, prefix));
 
             // set feedUpdater to poll for new feeds every half hour
             feedUpdater = new FeedUpdater(eTagList, 0, DataManager.config.get("modules").get("gtfsapi").get("update_frequency").asInt());
@@ -51,14 +52,14 @@ public class GtfsApiController {
             String[] feedList = feeds.toArray(new String[0]);
             if (!DataManager.config.get("application").get("data").get("use_s3_storage").asBoolean()) {
                 String dir = DataManager.config.get("application").get("data").get("gtfs").asText();
-                eTagList.addAll(ApiMain.initialize(dir, feedList));
+                eTagList.addAll(gtfsApi.initialize(dir, feedList));
             }
 //         else, use s3
             else {
                 feedBucket = DataManager.config.get("application").get("data").get("gtfs_s3_bucket").asText();
 
                 // get all feeds in completed folder and save list of eTags from initialize
-                eTagList.addAll(ApiMain.initialize(null, false, feedBucket, null, null, null));
+                eTagList.addAll(gtfsApi.initialize(null, false, feedBucket, null, null, null));
 
                 // set feedUpdater to poll for new feeds every half hour
                 feedUpdater = new FeedUpdater(eTagList, 0, DataManager.config.get("modules").get("gtfsapi").get("update_frequency").asInt());
