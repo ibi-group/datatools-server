@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.jobs.BuildTransportNetworkJob;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -174,6 +175,8 @@ public class FeedVersionController  {
         // it's pretty fast
         new ProcessSingleFeedJob(v).run();
 
+        new BuildTransportNetworkJob(v).run();
+
         return true;
     }
 
@@ -202,6 +205,8 @@ public class FeedVersionController  {
     }
 
     public static String getIsochrones(Request req, Response res) {
+        LOG.info(req.uri());
+
         String id = req.params("id");
         FeedVersion version = FeedVersion.get(id);
         Double fromLat = Double.valueOf(req.queryParams("fromLat"));
@@ -214,10 +219,10 @@ public class FeedVersionController  {
             try {
                 is = new FileInputStream(DataManager.config.get("application").get("data").get("gtfs").asText() + "/" + version.id + "_network.dat");
                 version.transportNetwork = TransportNetwork.read(is);
-            } catch (FileNotFoundException e) {
-                e.printStackTrace();
             } catch (Exception e) {
                 e.printStackTrace();
+                new BuildTransportNetworkJob(version).run();
+                halt(503, "Try again later. Building transport network");
             }
         }
 

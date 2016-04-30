@@ -42,8 +42,6 @@ public class ProcessSingleFeedJob implements Runnable {
         feedVersion.validate();
         feedVersion.save();
 
-        feedVersion.buildTransportNetwork();
-
         for(String resourceType : DataManager.feedResources.keySet()) {
             DataManager.feedResources.get(resourceType).feedVersionCreated(feedVersion, null);
         }

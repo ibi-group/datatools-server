@@ -208,7 +208,7 @@ public class FeedVersion extends Model implements Serializable {
         versionStore.commit();
     }
 
-    public void buildTransportNetwork() {
+    public TransportNetwork buildTransportNetwork() {
         String gtfsDir = DataManager.config.get("application").get("data").get("gtfs").asText() + "/";
 
         // Fetch OSM extract
@@ -233,11 +233,13 @@ public class FeedVersion extends Model implements Serializable {
         try {
             tnOut = new FileOutputStream(tnFile);
             tn.write(tnOut);
+            return transportNetwork;
         } catch (FileNotFoundException e) {
             e.printStackTrace();
         } catch (IOException e) {
             e.printStackTrace();
         }
+        return null;
     }
 
 
