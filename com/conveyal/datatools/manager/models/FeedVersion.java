@@ -171,6 +171,7 @@ public class FeedVersion extends Model implements Serializable {
 
         // load feed into GTFS api
         if (DataManager.config.get("modules").get("gtfsapi").get("load_on_fetch").asBoolean()) {
+            LOG.info("Loading feed into GTFS api");
             String md5 = ApiMain.loadFeedFromFile(feed, this.feedSourceId);
             if (GtfsApiController.feedUpdater != null) {
                 GtfsApiController.feedUpdater.addFeedETag(md5);
@@ -206,6 +207,39 @@ public class FeedVersion extends Model implements Serializable {
     public static void commit() {
         versionStore.commit();
     }
+
+    public void buildTransportNetwork() {
+        String gtfsDir = DataManager.config.get("application").get("data").get("gtfs").asText() + "/";
+
+        // Fetch OSM extract
+        File osmExtract = new File(gtfsDir + this.feedSourceId + ".osm.pbf");
+        InputStream is = getOsmExtract(this.validationResult.bounds);
+        OutputStream out = null;
+        try {
+            out = new FileOutputStream(osmExtract);
+            IOUtils.copy(is, out);
+            is.close();
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+        // Create/save r5 network
+        TransportNetwork tn = TransportNetwork.fromFiles(osmExtract.getAbsolutePath(), gtfsDir + this.id, TNBuilderConfig.defaultConfig());
+        this.transportNetwork = tn;
+        File tnFile = new File(gtfsDir + this.id + "_network.dat");
+        OutputStream tnOut = null;
+        try {
+            tnOut = new FileOutputStream(tnFile);
+            tn.write(tnOut);
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
 
     /**
      * Does this feed version have any critical errors that would prevent it being loaded to OTP?

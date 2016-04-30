@@ -379,11 +379,10 @@ public class Deployment extends Model implements Serializable {
             vexUrl = new URL(String.format("%s/?n=%.6f&e=%.6f&s=%.6f&w=%.6f",
                     DataManager.config.get("deployment").get("osm_vex").asText(),
                     bounds.getMaxY(), bounds.getMaxX(), bounds.getMinY(), bounds.getMinX()));
-            LOG.info(vexUrl.toString());
         } catch (MalformedURLException e1) {
             e1.printStackTrace();
         }
-
+        LOG.info("Getting OSM extract at " + vexUrl.toString());
         HttpURLConnection conn = null;
         try {
             conn = (HttpURLConnection) vexUrl.openConnection();

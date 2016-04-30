@@ -42,36 +42,7 @@ public class ProcessSingleFeedJob implements Runnable {
         feedVersion.validate();
         feedVersion.save();
 
-        String gtfsDir = DataManager.config.get("application").get("data").get("gtfs").asText() + "/";
-
-        // Fetch OSM extract
-        File osmExtract = new File(gtfsDir + feedVersion.feedSourceId + ".osm.pbf");
-        InputStream is = getOsmExtract(feedVersion.validationResult.bounds);
-        OutputStream out = null;
-        try {
-            out = new FileOutputStream(osmExtract);
-            IOUtils.copy(is, out);
-            is.close();
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
-        // Create/save r5 network
-        TransportNetwork tn = TransportNetwork.fromFiles(osmExtract.getAbsolutePath(), gtfsDir + feedVersion.id, TNBuilderConfig.defaultConfig());
-        feedVersion.transportNetwork = tn;
-        File tnFile = new File(gtfsDir + feedVersion.id + "_network.dat");
-        OutputStream tnOut = null;
-        try {
-            tnOut = new FileOutputStream(tnFile);
-            tn.write(tnOut);
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-
+        feedVersion.buildTransportNetwork();
 
         for(String resourceType : DataManager.feedResources.keySet()) {
             DataManager.feedResources.get(resourceType).feedVersionCreated(feedVersion, null);

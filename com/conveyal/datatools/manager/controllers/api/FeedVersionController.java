@@ -13,6 +13,7 @@ import com.conveyal.gtfs.validator.json.FeedValidationResult;
 import com.conveyal.r5.analyst.IsochroneFeature;
 import com.conveyal.r5.analyst.PointSet;
 import com.conveyal.r5.analyst.cluster.AnalystClusterRequest;
+import com.conveyal.r5.analyst.cluster.ResultEnvelope;
 import com.conveyal.r5.analyst.cluster.TaskStatistics;
 import com.conveyal.r5.api.util.LegMode;
 import com.conveyal.r5.api.util.TransitModes;
@@ -22,14 +23,20 @@ import com.conveyal.r5.profile.RepeatedRaptorProfileRouter;
 import com.conveyal.r5.profile.StreetMode;
 import com.conveyal.r5.streets.LinkedPointSet;
 import com.conveyal.r5.transit.TransportNetwork;
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonProcessingException;
 
 import java.io.*;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.AccessMode;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.*;
 
 //import jobs.ProcessSingleFeedJob;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectWriter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
@@ -197,6 +204,10 @@ public class FeedVersionController  {
     public static String getIsochrones(Request req, Response res) {
         String id = req.params("id");
         FeedVersion version = FeedVersion.get(id);
+        Double fromLat = Double.valueOf(req.queryParams("fromLat"));
+        Double fromLon = Double.valueOf(req.queryParams("fromLon"));
+        Double toLat = Double.valueOf(req.queryParams("toLat"));
+        Double toLon = Double.valueOf(req.queryParams("toLon"));
 
         if (version.transportNetwork == null) {
             InputStream is = null;
@@ -214,25 +225,31 @@ public class FeedVersionController  {
             AnalystClusterRequest clusterRequest = new AnalystClusterRequest();
             clusterRequest.profileRequest = new ProfileRequest();
             clusterRequest.profileRequest.transitModes = EnumSet.of(TransitModes.TRANSIT);
-            clusterRequest.profileRequest.accessModes = EnumSet.of(LegMode.WALK, LegMode.CAR);
+            clusterRequest.profileRequest.accessModes = EnumSet.of(LegMode.WALK);
             clusterRequest.profileRequest.date = LocalDate.now();
-            // -84.3869304657,33.7547228173,-84.3744850159,33.7552178875
-            clusterRequest.profileRequest.fromLat = 33.7547228173;
-            clusterRequest.profileRequest.fromLon = -84.3869304657;
-            clusterRequest.profileRequest.toLat = 33.7552178875;
-            clusterRequest.profileRequest.toLon = -84.3744850159;
+            clusterRequest.profileRequest.fromLat = fromLat;
+            clusterRequest.profileRequest.fromLon = fromLon;
+            clusterRequest.profileRequest.toLat = toLat;
+            clusterRequest.profileRequest.toLon = toLon;
+            clusterRequest.profileRequest.fromTime = 9*3600;
+            clusterRequest.profileRequest.egressModes = EnumSet.of(LegMode.WALK);
+            clusterRequest.profileRequest.zoneId = ZoneId.of("America/New_York");
             PointSet targets = version.transportNetwork.getGridPointSet();
             StreetMode mode = StreetMode.WALK;
             final LinkedPointSet linkedTargets = targets.link(version.transportNetwork.streetLayer, mode);
             RepeatedRaptorProfileRouter router = new RepeatedRaptorProfileRouter(version.transportNetwork, clusterRequest, linkedTargets, new TaskStatistics());
-            IsochroneFeature[] isochrones = router.route().avgCase.isochrones;
+            ResultEnvelope result = router.route();
+            IsochroneFeature[] isochrones = result.avgCase.isochrones;
+
             System.out.println(isochrones);
-            String out = "";
-            for (IsochroneFeature iso : isochrones) {
-                System.out.println(iso.geometry.toText());
-                out = out + iso.geometry;
+            ByteArrayOutputStream out = new ByteArrayOutputStream();
+            try {
+                JsonGenerator jgen = new JsonFactory().createGenerator(out);
+                result.avgCase.writeIsochrones(jgen);
+                return new String( out.toByteArray(), StandardCharsets.UTF_8 );
+            } catch (IOException e) {
+                e.printStackTrace();
             }
-            return out;
         }
         return null;
     }
