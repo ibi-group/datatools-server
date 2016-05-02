@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.models;
 
 
+import java.awt.geom.Rectangle2D;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
@@ -8,6 +9,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
+import java.nio.file.Path;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Collection;
@@ -210,25 +212,33 @@ public class FeedVersion extends Model implements Serializable {
 
     public TransportNetwork buildTransportNetwork() {
         String gtfsDir = DataManager.config.get("application").get("data").get("gtfs").asText() + "/";
-
+        String feedSourceDir = gtfsDir + feedSourceId + "/";
+        File fsPath = new File(feedSourceDir);
+        if (!fsPath.isDirectory()) {
+            fsPath.mkdir();
+        }
         // Fetch OSM extract
-        File osmExtract = new File(gtfsDir + this.feedSourceId + ".osm.pbf");
-        InputStream is = getOsmExtract(this.validationResult.bounds);
-        OutputStream out = null;
-        try {
-            out = new FileOutputStream(osmExtract);
-            IOUtils.copy(is, out);
-            is.close();
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        } catch (IOException e) {
-            e.printStackTrace();
+        Rectangle2D bounds = this.validationResult.bounds;
+        String osmFileName = String.format("%s%.6f_%.6f_%.6f_%.6f.osm.pbf",feedSourceDir, bounds.getMaxX(), bounds.getMaxY(), bounds.getMinX(), bounds.getMinY());
+        File osmExtract = new File(osmFileName);
+        if (!osmExtract.exists()) {
+            InputStream is = getOsmExtract(this.validationResult.bounds);
+            OutputStream out = null;
+            try {
+                out = new FileOutputStream(osmExtract);
+                IOUtils.copy(is, out);
+                is.close();
+            } catch (FileNotFoundException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
 
         // Create/save r5 network
         TransportNetwork tn = TransportNetwork.fromFiles(osmExtract.getAbsolutePath(), gtfsDir + this.id, TNBuilderConfig.defaultConfig());
         this.transportNetwork = tn;
-        File tnFile = new File(gtfsDir + this.id + "_network.dat");
+        File tnFile = new File(feedSourceDir + this.id + "_network.dat");
         OutputStream tnOut = null;
         try {
             tnOut = new FileOutputStream(tnFile);

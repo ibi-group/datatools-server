@@ -38,6 +38,7 @@ import java.util.*;
 //import jobs.ProcessSingleFeedJob;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectWriter;
+import com.vividsolutions.jts.geom.Coordinate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
@@ -204,7 +205,7 @@ public class FeedVersionController  {
         return version.validationResult;
     }
 
-    public static String getIsochrones(Request req, Response res) {
+    public static Object getIsochrones(Request req, Response res) {
         LOG.info(req.uri());
 
         String id = req.params("id");
@@ -217,7 +218,7 @@ public class FeedVersionController  {
         if (version.transportNetwork == null) {
             InputStream is = null;
             try {
-                is = new FileInputStream(DataManager.config.get("application").get("data").get("gtfs").asText() + "/" + version.id + "_network.dat");
+                is = new FileInputStream(DataManager.config.get("application").get("data").get("gtfs").asText() + "/"  + version.feedSourceId + "/" + version.id + "_network.dat");
                 version.transportNetwork = TransportNetwork.read(is);
             } catch (Exception e) {
                 e.printStackTrace();
@@ -237,6 +238,7 @@ public class FeedVersionController  {
             clusterRequest.profileRequest.toLat = toLat;
             clusterRequest.profileRequest.toLon = toLon;
             clusterRequest.profileRequest.fromTime = 9*3600;
+            clusterRequest.profileRequest.toTime = 10*3600;
             clusterRequest.profileRequest.egressModes = EnumSet.of(LegMode.WALK);
             clusterRequest.profileRequest.zoneId = ZoneId.of("America/New_York");
             PointSet targets = version.transportNetwork.getGridPointSet();
@@ -244,17 +246,24 @@ public class FeedVersionController  {
             final LinkedPointSet linkedTargets = targets.link(version.transportNetwork.streetLayer, mode);
             RepeatedRaptorProfileRouter router = new RepeatedRaptorProfileRouter(version.transportNetwork, clusterRequest, linkedTargets, new TaskStatistics());
             ResultEnvelope result = router.route();
-            IsochroneFeature[] isochrones = result.avgCase.isochrones;
-
-            System.out.println(isochrones);
             ByteArrayOutputStream out = new ByteArrayOutputStream();
             try {
                 JsonGenerator jgen = new JsonFactory().createGenerator(out);
+                jgen.writeStartObject();
                 result.avgCase.writeIsochrones(jgen);
-                return new String( out.toByteArray(), StandardCharsets.UTF_8 );
+                jgen.writeEndObject();
+                jgen.close();
+                out.close();
+                String outString = new String( out.toByteArray(), StandardCharsets.UTF_8 );
+//            return outString;
+                System.out.println(outString);
+                ObjectMapper mapper = new ObjectMapper();
+                return mapper.readTree(outString);
             } catch (IOException e) {
                 e.printStackTrace();
             }
+
+
         }
         return null;
     }
