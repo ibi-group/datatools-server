@@ -32,6 +32,6 @@ public class BuildTransportNetworkJob implements Runnable {
     @Override
     public void run() {
         System.out.println("Building network");
-        result = feedVersion.buildTransportNetwork();
+        feedVersion.buildTransportNetwork();
     }
 }

@@ -124,7 +124,18 @@ public class UserController {
         return result;
     }
 
-    public static Object deleteUser(Request req, Response res){
+    public static Object deleteUser(Request req, Response res) throws IOException {
+        String url = "https://" + AUTH0_DOMAIN + "/api/v2/users/" + URLEncoder.encode(req.params("id"), "UTF-8");
+        System.out.println("delete " + url);
+        String charset = "UTF-8";
+        HttpClient client = new DefaultHttpClient();
+        HttpDelete request = new HttpDelete(url);
+        request.addHeader("Authorization", "Bearer " + AUTH0_API_TOKEN);
+        request.setHeader("Accept-Charset", charset);
+        HttpResponse response = client.execute(request);
+        int statusCode = response.getStatusLine().getStatusCode();
+        System.out.println(statusCode);
+        halt(statusCode);
         return true;
     }
 

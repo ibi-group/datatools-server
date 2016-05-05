@@ -8,17 +8,13 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
-import com.conveyal.datatools.manager.utils.json.JsonUtil;
-import com.conveyal.gtfs.model.ValidationResult;
 import com.conveyal.gtfs.validator.json.FeedValidationResult;
-import com.conveyal.r5.analyst.IsochroneFeature;
 import com.conveyal.r5.analyst.PointSet;
 import com.conveyal.r5.analyst.cluster.AnalystClusterRequest;
 import com.conveyal.r5.analyst.cluster.ResultEnvelope;
 import com.conveyal.r5.analyst.cluster.TaskStatistics;
 import com.conveyal.r5.api.util.LegMode;
 import com.conveyal.r5.api.util.TransitModes;
-import com.conveyal.r5.model.json_serialization.TransitModeSetSerializer;
 import com.conveyal.r5.profile.ProfileRequest;
 import com.conveyal.r5.profile.RepeatedRaptorProfileRouter;
 import com.conveyal.r5.profile.StreetMode;
@@ -30,15 +26,11 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.AccessMode;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.*;
 
-//import jobs.ProcessSingleFeedJob;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.ObjectWriter;
-import com.vividsolutions.jts.geom.Coordinate;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
@@ -176,7 +168,9 @@ public class FeedVersionController  {
         // it's pretty fast
         new ProcessSingleFeedJob(v).run();
 
-        new BuildTransportNetworkJob(v).run();
+        if (DataManager.config.get("modules").get("validator").get("enabled").asBoolean()) {
+            new BuildTransportNetworkJob(v).run();
+        }
 
         return true;
     }
