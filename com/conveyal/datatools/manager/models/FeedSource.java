@@ -224,7 +224,9 @@ public class FeedSource extends Model {
             newFeed.userId = this.userId;
 
             new ProcessSingleFeedJob(newFeed).run();
-            new BuildTransportNetworkJob(newFeed).run();
+            if (DataManager.config.get("modules").get("validator").get("enabled").asBoolean()) {
+                new BuildTransportNetworkJob(newFeed).run();
+            }
 
             this.lastFetched = newFeed.updated;
             this.save();

@@ -216,7 +216,9 @@ public class FeedVersionController  {
                 version.transportNetwork = TransportNetwork.read(is);
             } catch (Exception e) {
                 e.printStackTrace();
-                new BuildTransportNetworkJob(version).run();
+                if (DataManager.config.get("modules").get("validator").get("enabled").asBoolean()) {
+                    new BuildTransportNetworkJob(version).run();
+                }
                 halt(503, "Try again later. Building transport network");
             }
         }
