@@ -1,5 +1,14 @@
 package com.conveyal.datatools.manager.controllers.api;
 
+import com.amazonaws.AmazonServiceException;
+import com.amazonaws.auth.AWSCredentials;
+import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
+import com.amazonaws.auth.profile.ProfileCredentialsProvider;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3Client;
+import com.amazonaws.services.s3.model.AmazonS3Exception;
+import com.amazonaws.services.s3.model.GetObjectRequest;
+import com.amazonaws.services.s3.model.S3Object;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.jobs.BuildTransportNetworkJob;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
@@ -30,7 +39,9 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.*;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
@@ -193,10 +204,40 @@ public class FeedVersionController  {
         return version;
     }
 
-    public static FeedValidationResult getValidationResult(Request req, Response res) {
+    public static Object getValidationResult(Request req, Response res) {
         String id = req.params("id");
         FeedVersion version = FeedVersion.get(id);
-        return version.validationResult;
+        String s3Bucket = DataManager.config.get("application").get("data").get("gtfs_s3_bucket").asText();
+        String keyName = "validation/" + version.id + ".json";
+        if (s3Bucket != null) {
+            AWSCredentials creds;
+            // default credentials providers, e.g. IAM role
+            creds = new DefaultAWSCredentialsProviderChain().getCredentials();
+            try {
+                LOG.info("Getting validation results from s3");
+                AmazonS3 s3Client = new AmazonS3Client(new ProfileCredentialsProvider());
+                S3Object object = s3Client.getObject(
+                        new GetObjectRequest(s3Bucket, keyName));
+                InputStream objectData = object.getObjectContent();
+
+                // Process the objectData stream.
+                ObjectMapper mapper = new ObjectMapper();
+                JsonNode n = mapper.readTree(objectData);
+
+                return n;
+            } catch (IOException e) {
+                e.printStackTrace();
+            } catch (AmazonS3Exception e) {
+                // if json file does not exist, validate feed.
+                version.validate();
+                halt(503, "Try again later. Validating feed");
+            } catch (AmazonServiceException ase) {
+                LOG.error("Error downloading from s3");
+                ase.printStackTrace();
+            }
+
+        }
+        return null;
     }
 
     public static Object getIsochrones(Request req, Response res) {

@@ -14,19 +14,34 @@ import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.Collection;
 import java.util.Date;
+import java.util.List;
 import java.util.regex.Pattern;
 
+import com.amazonaws.AmazonServiceException;
+import com.amazonaws.auth.AWSCredentials;
+import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
+import com.amazonaws.auth.profile.ProfileCredentialsProvider;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3Client;
+import com.amazonaws.services.s3.model.CopyObjectRequest;
+import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.controllers.api.GtfsApiController;
 import com.conveyal.datatools.manager.persistence.DataStore;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.utils.HashUtils;
+import com.conveyal.gtfs.GTFSFeed;
 import com.conveyal.gtfs.api.ApiMain;
+import com.conveyal.gtfs.error.GTFSError;
 import com.conveyal.gtfs.validator.json.FeedProcessor;
 import com.conveyal.gtfs.validator.json.FeedValidationResult;
 import com.conveyal.gtfs.validator.json.LoadStatus;
 import com.conveyal.r5.point_to_point.builder.TNBuilderConfig;
 import com.conveyal.r5.transit.TransportNetwork;
+import com.fasterxml.jackson.core.JsonGenerationException;
+import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.io.IOUtils;
 import org.mapdb.Fun.Function2;
 import org.mapdb.Fun.Tuple2;
@@ -146,6 +161,9 @@ public class FeedVersion extends Model implements Serializable {
     @JsonView(JsonViews.DataDump.class)
     public FeedValidationResult validationResult;
 
+//    @JsonIgnore
+//    public List<GTFSError> errors;
+
     @JsonView(JsonViews.UserInterface.class)
     public FeedValidationResultSummary getValidationSummary() {
         return new FeedValidationResultSummary(validationResult);
@@ -170,6 +188,7 @@ public class FeedVersion extends Model implements Serializable {
     public void validate() {
         File feed = getFeed();
         FeedProcessor fp = new FeedProcessor(feed);
+        GTFSFeed f = GTFSFeed.fromFile(feed.getAbsolutePath());
 
         // load feed into GTFS api
         if (DataManager.config.get("modules").get("gtfsapi").get("load_on_fetch").asBoolean()) {
@@ -181,13 +200,44 @@ public class FeedVersion extends Model implements Serializable {
         }
 
         try {
+            f.validate();
             fp.run();
-        } catch (IOException e) {
+        } catch (Exception e) {
             LOG.error("Unable to validate feed {}", this);
             this.validationResult = null;
             return;
         }
+//        this.errors = f.errors;
+        String s3Bucket = DataManager.config.get("application").get("data").get("gtfs_s3_bucket").asText();
+        // upload to S3, if applicable
+        if(s3Bucket != null) {
+            AWSCredentials creds;
 
+            // default credentials providers, e.g. IAM role
+            creds = new DefaultAWSCredentialsProviderChain().getCredentials();
+
+            String keyName = "validation/" + this.id + ".json";
+            ObjectMapper mapper = new ObjectMapper();
+            try {
+                // Use tempfile
+                File tempFile = File.createTempFile(this.id, ".json");
+                tempFile.deleteOnExit();
+                mapper.writeValue(tempFile, f.errors);
+
+                LOG.info("Uploading validation json to S3");
+                AmazonS3 s3client = new AmazonS3Client(creds);
+                s3client.putObject(new PutObjectRequest(
+                        s3Bucket, keyName, tempFile));
+            } catch (JsonGenerationException e) {
+                e.printStackTrace();
+            } catch (JsonMappingException e) {
+                e.printStackTrace();
+            } catch (IOException e) {
+                e.printStackTrace();
+            } catch (AmazonServiceException ase) {
+                LOG.error("Error uploading feed to S3");
+            }
+        }
         this.validationResult = fp.getOutput();
     }
 

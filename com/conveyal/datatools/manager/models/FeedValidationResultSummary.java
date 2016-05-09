@@ -47,24 +47,27 @@ public class FeedValidationResultSummary implements Serializable {
      * @param result
      */
     public FeedValidationResultSummary (FeedValidationResult result) {
-        this.loadStatus = result.loadStatus;
-        this.loadFailureReason = result.loadFailureReason;
-        this.agencies = result.agencies;
+        if (result != null) {
+            this.loadStatus = result.loadStatus;
+            this.loadFailureReason = result.loadFailureReason;
+            this.agencies = result.agencies;
 
-        if (loadStatus == LoadStatus.SUCCESS) {
-            this.errorCount =
-                    result.routes.invalidValues.size() +
-                            result.stops.invalidValues.size() +
-                            result.trips.invalidValues.size() +
-                            result.shapes.invalidValues.size();
+            if (loadStatus == LoadStatus.SUCCESS) {
+                this.errorCount =
+                        result.routes.invalidValues.size() +
+                                result.stops.invalidValues.size() +
+                                result.trips.invalidValues.size() +
+                                result.shapes.invalidValues.size();
 
-            this.agencyCount = result.agencyCount;
-            this.routeCount = result.routeCount;
-            this.tripCount = result.tripCount;
-            this.stopTimesCount = result.stopTimesCount;
-            this.startDate = result.startDate;
-            this.endDate = result.endDate;
-            this.bounds = result.bounds;
+                this.agencyCount = result.agencyCount;
+                this.routeCount = result.routeCount;
+                this.tripCount = result.tripCount;
+                this.stopTimesCount = result.stopTimesCount;
+                this.startDate = result.startDate;
+                this.endDate = result.endDate;
+                this.bounds = result.bounds;
+            }
         }
+
     }
 }
