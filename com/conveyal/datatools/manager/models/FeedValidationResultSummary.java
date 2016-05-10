@@ -5,7 +5,6 @@ import java.io.Serializable;
 import java.util.Collection;
 import java.util.Date;
 
-import com.conveyal.gtfs.validator.json.FeedValidationResult;
 import com.conveyal.gtfs.validator.json.LoadStatus;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
@@ -53,12 +52,13 @@ public class FeedValidationResultSummary implements Serializable {
             this.agencies = result.agencies;
 
             if (loadStatus == LoadStatus.SUCCESS) {
-                this.errorCount =
-                        result.routes.invalidValues.size() +
-                                result.stops.invalidValues.size() +
-                                result.trips.invalidValues.size() +
-                                result.shapes.invalidValues.size();
-
+                if (result.routes != null) {
+                    this.errorCount =
+                            result.routes.invalidValues.size() +
+                                    result.stops.invalidValues.size() +
+                                    result.trips.invalidValues.size() +
+                                    result.shapes.invalidValues.size();
+                }
                 this.agencyCount = result.agencyCount;
                 this.routeCount = result.routeCount;
                 this.tripCount = result.tripCount;

@@ -12,18 +12,16 @@ import java.io.Serializable;
 import java.nio.file.Path;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.time.ZoneId;
 import java.util.Collection;
 import java.util.Date;
-import java.util.List;
-import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
-import com.amazonaws.auth.profile.ProfileCredentialsProvider;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
-import com.amazonaws.services.s3.model.CopyObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.controllers.api.GtfsApiController;
@@ -32,15 +30,12 @@ import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.utils.HashUtils;
 import com.conveyal.gtfs.GTFSFeed;
 import com.conveyal.gtfs.api.ApiMain;
-import com.conveyal.gtfs.error.GTFSError;
-import com.conveyal.gtfs.validator.json.FeedProcessor;
-import com.conveyal.gtfs.validator.json.FeedValidationResult;
 import com.conveyal.gtfs.validator.json.LoadStatus;
+import com.conveyal.gtfs.validator.service.impl.FeedStats;
 import com.conveyal.r5.point_to_point.builder.TNBuilderConfig;
 import com.conveyal.r5.transit.TransportNetwork;
 import com.fasterxml.jackson.core.JsonGenerationException;
 import com.fasterxml.jackson.databind.JsonMappingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.io.IOUtils;
 import org.mapdb.Fun.Function2;
@@ -187,7 +182,7 @@ public class FeedVersion extends Model implements Serializable {
 
     public void validate() {
         File feed = getFeed();
-        FeedProcessor fp = new FeedProcessor(feed);
+//        FeedProcessor fp = new FeedProcessor(feed);
         GTFSFeed f = GTFSFeed.fromFile(feed.getAbsolutePath());
 
         // load feed into GTFS api
@@ -201,15 +196,31 @@ public class FeedVersion extends Model implements Serializable {
 
         try {
             f.validate();
-            fp.run();
+            FeedStats stats = f.calculateStats();
+            validationResult = new FeedValidationResult();
+            validationResult.agencies = stats.getAllAgencies().stream().map(agency -> agency.agency_id).collect(Collectors.toList());
+            validationResult.agencyCount = stats.getAgencyCount();
+            validationResult.routeCount = stats.getRouteCount();
+            validationResult.bounds = stats.getBounds();
+            validationResult.endDate = Date.from(stats.getCalendarDateEnd().atStartOfDay(ZoneId.systemDefault()).toInstant());
+            validationResult.startDate = Date.from(stats.getCalendarDateStart().atStartOfDay(ZoneId.systemDefault()).toInstant());
+            validationResult.loadStatus = LoadStatus.SUCCESS;
+            validationResult.tripCount = stats.getTripCount();
+            validationResult.stopTimesCount = stats.getStopTimesCount();
+//            validationResult.stops = f.errors.stream().filter(gtfsError -> gtfsError.file == "stop").collect(Collectors.toList());
+//            validationResult.routes = f.errors.stream().filter(gtfsError -> gtfsError.file == "route").collect(Collectors.toList());
+//            validationResult.trips = f.errors.stream().filter(gtfsError -> gtfsError.file == "trip").collect(Collectors.toList());
+
+//            fp.run();
         } catch (Exception e) {
             LOG.error("Unable to validate feed {}", this);
+            e.printStackTrace();
             this.validationResult = null;
             return;
         }
-//        this.errors = f.errors;
+
         String s3Bucket = DataManager.config.get("application").get("data").get("gtfs_s3_bucket").asText();
-        // upload to S3, if applicable
+        // upload to S3, if we have bucket name
         if(s3Bucket != null) {
             AWSCredentials creds;
 
@@ -238,7 +249,7 @@ public class FeedVersion extends Model implements Serializable {
                 LOG.error("Error uploading feed to S3");
             }
         }
-        this.validationResult = fp.getOutput();
+//        this.validationResult = fp.getOutput();
     }
 
     public void save () {

@@ -104,7 +104,10 @@ public class DataManager {
             }
         });
 
-        after(apiPrefix + "*", (request, response) -> response.type("application/json"));
+        after(apiPrefix + "*", (request, response) -> {
+            response.type("application/json");
+            response.header("Content-Encoding", "gzip");
+        });
 
         get("/main.js", (request, response) -> {
             try (InputStream stream = ApiMain.class.getResourceAsStream("/public/main.js")) {
