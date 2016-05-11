@@ -12,6 +12,7 @@ import java.io.Serializable;
 import java.nio.file.Path;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
+import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Collection;
 import java.util.Date;
@@ -202,8 +203,14 @@ public class FeedVersion extends Model implements Serializable {
             validationResult.agencyCount = stats.getAgencyCount();
             validationResult.routeCount = stats.getRouteCount();
             validationResult.bounds = stats.getBounds();
-            validationResult.endDate = Date.from(stats.getCalendarDateEnd().atStartOfDay(ZoneId.systemDefault()).toInstant());
-            validationResult.startDate = Date.from(stats.getCalendarDateStart().atStartOfDay(ZoneId.systemDefault()).toInstant());
+            LocalDate endDate = stats.getCalendarDateEnd();
+            if (endDate != null) {
+                validationResult.endDate = Date.from(endDate.atStartOfDay(ZoneId.systemDefault()).toInstant());
+            }
+            LocalDate startDate = stats.getCalendarDateStart();
+            if (startDate != null) {
+                validationResult.startDate = Date.from(startDate.atStartOfDay(ZoneId.systemDefault()).toInstant());
+            }
             validationResult.loadStatus = LoadStatus.SUCCESS;
             validationResult.tripCount = stats.getTripCount();
             validationResult.stopTimesCount = stats.getStopTimesCount();
