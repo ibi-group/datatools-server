@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.models;
 
 import java.awt.geom.Rectangle2D;
 import java.io.Serializable;
+import java.time.ZoneId;
 import java.util.Collection;
 import java.util.Date;
 
@@ -52,19 +53,20 @@ public class FeedValidationResultSummary implements Serializable {
             this.agencies = result.agencies;
 
             if (loadStatus == LoadStatus.SUCCESS) {
-                if (result.routes != null) {
-                    this.errorCount =
-                            result.routes.invalidValues.size() +
-                                    result.stops.invalidValues.size() +
-                                    result.trips.invalidValues.size() +
-                                    result.shapes.invalidValues.size();
-                }
+//                if (result.routes != null) {
+//                    this.errorCount =
+//                            result.routes.invalidValues.size() +
+//                                    result.stops.invalidValues.size() +
+//                                    result.trips.invalidValues.size() +
+//                                    result.shapes.invalidValues.size();
+//                }
+                this.errorCount = result.errorCount;
                 this.agencyCount = result.agencyCount;
                 this.routeCount = result.routeCount;
                 this.tripCount = result.tripCount;
                 this.stopTimesCount = result.stopTimesCount;
-                this.startDate = result.startDate;
-                this.endDate = result.endDate;
+                this.startDate = Date.from(result.startDate.atStartOfDay(ZoneId.systemDefault()).toInstant());
+                this.endDate = Date.from(result.endDate.atStartOfDay(ZoneId.systemDefault()).toInstant());
                 this.bounds = result.bounds;
             }
         }

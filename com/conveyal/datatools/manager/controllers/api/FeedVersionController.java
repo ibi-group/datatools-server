@@ -180,7 +180,9 @@ public class FeedVersionController  {
         new ProcessSingleFeedJob(v).run();
 
         if (DataManager.config.get("modules").get("validator").get("enabled").asBoolean()) {
-            new BuildTransportNetworkJob(v).run();
+            BuildTransportNetworkJob btnj = new BuildTransportNetworkJob(v);
+            Thread tnThread = new Thread(btnj);
+            tnThread.start();
         }
 
         return true;
@@ -258,7 +260,10 @@ public class FeedVersionController  {
             } catch (Exception e) {
                 e.printStackTrace();
                 if (DataManager.config.get("modules").get("validator").get("enabled").asBoolean()) {
-                    new BuildTransportNetworkJob(version).run();
+//                    new BuildTransportNetworkJob(version).run();
+                    BuildTransportNetworkJob btnj = new BuildTransportNetworkJob(version);
+                    Thread tnThread = new Thread(btnj);
+                    tnThread.start();
                 }
                 halt(503, "Try again later. Building transport network");
             }
@@ -292,7 +297,6 @@ public class FeedVersionController  {
                 jgen.close();
                 out.close();
                 String outString = new String( out.toByteArray(), StandardCharsets.UTF_8 );
-//            return outString;
                 System.out.println(outString);
                 ObjectMapper mapper = new ObjectMapper();
                 return mapper.readTree(outString);

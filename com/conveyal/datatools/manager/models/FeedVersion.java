@@ -203,22 +203,35 @@ public class FeedVersion extends Model implements Serializable {
             validationResult.agencyCount = stats.getAgencyCount();
             validationResult.routeCount = stats.getRouteCount();
             validationResult.bounds = stats.getBounds();
-            LocalDate endDate = stats.getCalendarDateEnd();
-            if (endDate != null) {
-                validationResult.endDate = Date.from(endDate.atStartOfDay(ZoneId.systemDefault()).toInstant());
-            }
-            LocalDate startDate = stats.getCalendarDateStart();
-            if (startDate != null) {
-                validationResult.startDate = Date.from(startDate.atStartOfDay(ZoneId.systemDefault()).toInstant());
-            }
+            LocalDate calDateStart = stats.getCalendarDateStart();
+            LocalDate calSvcStart = stats.getCalendarServiceRangeStart();
+            LocalDate calDateEnd = stats.getCalendarDateEnd();
+            LocalDate calSvcEnd = stats.getCalendarServiceRangeEnd();
+
+            if (calDateStart == null && calSvcStart == null)
+                // no service . . . this is bad
+                validationResult.startDate = null;
+            else if (calDateStart == null)
+                validationResult.startDate = calSvcStart;
+            else if (calSvcStart == null)
+                validationResult.startDate = calDateStart;
+            else
+                validationResult.startDate = calDateStart.isBefore(calSvcStart) ? calDateStart : calSvcStart;
+
+            if (calDateEnd == null && calSvcEnd == null)
+                // no service . . . this is bad
+                validationResult.endDate = null;
+            else if (calDateEnd == null)
+                validationResult.endDate = calSvcEnd;
+            else if (calSvcEnd == null)
+                validationResult.endDate = calDateEnd;
+            else
+                validationResult.endDate = calDateEnd.isAfter(calSvcEnd) ? calDateEnd : calSvcEnd;
             validationResult.loadStatus = LoadStatus.SUCCESS;
             validationResult.tripCount = stats.getTripCount();
             validationResult.stopTimesCount = stats.getStopTimesCount();
-//            validationResult.stops = f.errors.stream().filter(gtfsError -> gtfsError.file == "stop").collect(Collectors.toList());
-//            validationResult.routes = f.errors.stream().filter(gtfsError -> gtfsError.file == "route").collect(Collectors.toList());
-//            validationResult.trips = f.errors.stream().filter(gtfsError -> gtfsError.file == "trip").collect(Collectors.toList());
+            validationResult.errorCount = f.errors.size();
 
-//            fp.run();
         } catch (Exception e) {
             LOG.error("Unable to validate feed {}", this);
             e.printStackTrace();
@@ -326,7 +339,7 @@ public class FeedVersion extends Model implements Serializable {
      * @return
      */
     public boolean hasCriticalErrors() {
-        if (hasCriticalErrorsExceptingDate() || (new Date()).after(validationResult.endDate))
+        if (hasCriticalErrorsExceptingDate() || (LocalDate.now()).isAfter(validationResult.endDate))
             return true;
 
         else

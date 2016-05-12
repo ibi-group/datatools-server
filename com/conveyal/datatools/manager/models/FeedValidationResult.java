@@ -6,8 +6,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.awt.geom.Rectangle2D;
 import java.io.Serializable;
+import java.time.LocalDate;
 import java.util.Collection;
-import java.util.Date;
 
 /**
  * Created by landon on 5/10/16.
@@ -26,8 +26,9 @@ public class FeedValidationResult implements Serializable {
     public int routeCount;
     public int tripCount;
     public int stopTimesCount;
-    public Date startDate;
-    public Date endDate;
+    public int errorCount;
+    public LocalDate startDate;
+    public LocalDate endDate;
     public Rectangle2D bounds;
 
     public FeedValidationResult() {
