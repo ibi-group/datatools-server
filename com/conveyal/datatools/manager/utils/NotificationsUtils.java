@@ -1,11 +1,14 @@
 package com.conveyal.datatools.manager.utils;
 
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.models.FeedSource;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sparkpost.Client;
 import com.sparkpost.exception.SparkPostException;
 import com.sparkpost.model.responses.Response;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.xml.crypto.Data;
 import java.io.IOException;
@@ -16,6 +19,7 @@ import static com.conveyal.datatools.manager.auth.Auth0Users.getUsersBySubscript
  * Created by landon on 4/26/16.
  */
 public class NotificationsUtils {
+    private static final Logger LOG = LoggerFactory.getLogger(NotificationsUtils.class);
     public static ObjectMapper mapper = new ObjectMapper();
 
     public static void sendNotification(String to_email, String subject, String text, String html) {
@@ -35,7 +39,7 @@ public class NotificationsUtils {
         }
     }
 
-    public static void notifyUsersForSubscription(String subscriptionType, String target) {
+    public static void notifyUsersForSubscription(String subscriptionType, String target, String message) {
         if (!DataManager.config.get("application").get("notifications_enabled").asBoolean()) {
             return;
         }
@@ -50,11 +54,18 @@ public class NotificationsUtils {
             String email = user.get("email").asText();
             Boolean emailVerified = user.get("email_verified").asBoolean();
             System.out.println(email);
-            String subject = subscriptionType + " notification for " + target;
 
             // only send email if address has been verified
-            if (emailVerified)
-                sendNotification(email, subject, "Body", "<p>html</p>");
+            if (emailVerified) {
+                try {
+                    FeedSource fs = FeedSource.get(target);
+                    String subject = "Datatools Notification: " + subscriptionType.replace("-", " ") + " (" + fs.name + ")";
+                    String url = DataManager.config.get("application").get("url").asText();
+                    sendNotification(email, subject, "Body", "<p>" + message + "</p><p>View <a href='" + url + "/feed/" + fs.id + "'>this feed</a>.</p>");
+                } catch (Exception e) {
+                    LOG.error(e.getMessage());
+                }
+            }
         }
     }
 }

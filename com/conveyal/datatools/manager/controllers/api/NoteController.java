@@ -132,7 +132,7 @@ public class NoteController {
             model.save();
 
             // send notifications
-            notifyUsersForSubscription("feed-commented-on", s.id);
+            notifyUsersForSubscription("feed-commented-on", s.id, n.userEmail + " commented on " + s.name + " at " + n.date.toString() + ":<blockquote>" + n.body + "</blockquote>");
 
             return n;
         }

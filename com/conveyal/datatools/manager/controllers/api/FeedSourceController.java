@@ -94,7 +94,7 @@ public class FeedSourceController {
     public static FeedSource updateFeedSource(Request req, Response res) throws IOException {
         String id = req.params("id");
         FeedSource source = FeedSource.get(id);
-        notifyUsersForSubscription("feed-updated", id);
+        notifyUsersForSubscription("feed-updated", id, "Feed property updated for " + source.name);
         applyJsonToFeedSource(source, req.body());
         source.save();
 

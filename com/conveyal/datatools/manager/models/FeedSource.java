@@ -233,7 +233,7 @@ public class FeedSource extends Model {
 
             this.lastFetched = newFeed.updated;
             this.save();
-            notifyUsersForSubscription("feed-updated", this.id);
+            notifyUsersForSubscription("feed-updated", this.id, "New feed version created for " + this.name);
             return newFeed;
         }
     }

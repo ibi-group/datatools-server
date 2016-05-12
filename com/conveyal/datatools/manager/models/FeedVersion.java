@@ -111,7 +111,7 @@ public class FeedVersion extends Model implements Serializable {
     public String feedSourceId;
 
     @JsonIgnore
-    public TransportNetwork transportNetwork;
+    public transient TransportNetwork transportNetwork;
 
     @JsonView(JsonViews.UserInterface.class)
     public FeedSource getFeedSource () {
