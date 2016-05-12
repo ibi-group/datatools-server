@@ -14,8 +14,11 @@ import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.Collection;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import com.amazonaws.AmazonServiceException;
@@ -37,6 +40,7 @@ import com.conveyal.r5.point_to_point.builder.TNBuilderConfig;
 import com.conveyal.r5.transit.TransportNetwork;
 import com.fasterxml.jackson.core.JsonGenerationException;
 import com.fasterxml.jackson.databind.JsonMappingException;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.io.IOUtils;
 import org.mapdb.Fun.Function2;
@@ -185,7 +189,7 @@ public class FeedVersion extends Model implements Serializable {
         File feed = getFeed();
 //        FeedProcessor fp = new FeedProcessor(feed);
         GTFSFeed f = GTFSFeed.fromFile(feed.getAbsolutePath());
-
+        Map<LocalDate, Integer> tripsPerDate;
         // load feed into GTFS api
         if (DataManager.config.get("modules").get("gtfsapi").get("load_on_fetch").asBoolean()) {
             LOG.info("Loading feed into GTFS api");
@@ -231,7 +235,7 @@ public class FeedVersion extends Model implements Serializable {
             validationResult.tripCount = stats.getTripCount();
             validationResult.stopTimesCount = stats.getStopTimesCount();
             validationResult.errorCount = f.errors.size();
-
+            tripsPerDate = stats.getTripsPerDateOfService();
         } catch (Exception e) {
             LOG.error("Unable to validate feed {}", this);
             e.printStackTrace();
@@ -253,7 +257,15 @@ public class FeedVersion extends Model implements Serializable {
                 // Use tempfile
                 File tempFile = File.createTempFile(this.id, ".json");
                 tempFile.deleteOnExit();
-                mapper.writeValue(tempFile, f.errors);
+                Map<String, Object> validation = new HashMap<>();
+                validation.put("errors", f.errors);
+                validation.put("tripsPerDate", tripsPerDate
+//                        .entrySet()
+//                        .stream()
+//                        .map(entry -> entry.getKey().format(DateTimeFormatter.BASIC_ISO_DATE))
+//                        .collect(Collectors.toList())
+                );
+                mapper.writeValue(tempFile, validation);
 
                 LOG.info("Uploading validation json to S3");
                 AmazonS3 s3client = new AmazonS3Client(creds);

@@ -225,6 +225,9 @@ public class FeedVersionController  {
                 // Process the objectData stream.
                 ObjectMapper mapper = new ObjectMapper();
                 JsonNode n = mapper.readTree(objectData);
+                if (!n.has("errors") || !n.has("tripsPerDate")) {
+                    throw new Exception("Validation for feed version not up to date");
+                }
 
                 return n;
             } catch (IOException e) {
@@ -236,6 +239,10 @@ public class FeedVersionController  {
             } catch (AmazonServiceException ase) {
                 LOG.error("Error downloading from s3");
                 ase.printStackTrace();
+            } catch (Exception e) {
+                e.printStackTrace();
+                version.validate();
+                halt(503, "Try again later. Validating feed");
             }
 
         }
