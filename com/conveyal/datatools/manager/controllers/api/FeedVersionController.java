@@ -304,7 +304,7 @@ public class FeedVersionController  {
                 jgen.close();
                 out.close();
                 String outString = new String( out.toByteArray(), StandardCharsets.UTF_8 );
-                System.out.println(outString);
+                //System.out.println(outString);
                 ObjectMapper mapper = new ObjectMapper();
                 return mapper.readTree(outString);
             } catch (IOException e) {
