@@ -105,16 +105,16 @@ public class Project extends Model {
      * Get all the deployments for this feed collection
      */
 
-    /*@JsonIgnore
+    @JsonIgnore
     public Collection<Deployment> getDeployments () {
         ArrayList<Deployment> ret = new ArrayList<Deployment>();
 
         for (Deployment d : Deployment.getAll()) {
-            if (this.id.equals(d.feedCollectionId)) {
+            if (this.id.equals(d.projectId)) {
                 ret.add(d);
             }
         }
 
         return ret;
-    }*/
+    }
 }

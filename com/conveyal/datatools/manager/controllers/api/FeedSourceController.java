@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
 import com.conveyal.datatools.manager.models.*;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
@@ -133,6 +134,10 @@ public class FeedSourceController {
                 source.isPublic = entry.getValue().asBoolean();
             }
 
+            if(entry.getKey().equals("deployable")) {
+                source.deployable = entry.getValue().asBoolean();
+            }
+
         }
     }
 
@@ -170,8 +175,15 @@ public class FeedSourceController {
     public static FeedSource deleteFeedSource(Request req, Response res) {
         String id = req.params("id");
         FeedSource source = FeedSource.get(id);
-        source.delete();
-        return source;
+
+        if (source != null) {
+            source.delete();
+            return source;
+        }
+        else {
+            halt(404);
+            return null;
+        }
     }
 
     /**
@@ -179,7 +191,7 @@ public class FeedSourceController {
      * @throws JsonProcessingException
      */
     public static Boolean fetch (Request req, Response res) throws JsonProcessingException {
-
+        Auth0UserProfile userProfile = req.attribute("user");
         FeedSource s = FeedSource.get(req.params("id"));
 
         System.out.println("fetching feed for source "+ s.name);
@@ -188,8 +200,8 @@ public class FeedSourceController {
         // 2) have access to this feed through project permissions
         // if all fail, the user cannot do this.
 
-        //if (!userProfile.canAdministerProject(s.feedCollectionId) && !userProfile.canManageFeed(s.feedCollectionId, s.id))
-        //    return unauthorized();
+        if (!userProfile.canAdministerProject(s.projectId) && !userProfile.canManageFeed(s.projectId, s.id))
+            halt(401);
 
         FetchSingleFeedJob job = new FetchSingleFeedJob(s);
         job.run();

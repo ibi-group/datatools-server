@@ -385,6 +385,8 @@ public class FeedSource extends Model {
             }
         }
 
+        // TODO: add delete for osm extract and r5 network (maybe that goes with version)
+
         sourceStore.delete(this.id);
     }
 

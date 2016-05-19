@@ -264,7 +264,9 @@ public class FeedVersionController  {
             try {
                 is = new FileInputStream(DataManager.config.get("application").get("data").get("gtfs").asText() + "/"  + version.feedSourceId + "/" + version.id + "_network.dat");
                 version.transportNetwork = TransportNetwork.read(is);
-            } catch (Exception e) {
+            }
+            // Catch if transport network not built yet
+            catch (Exception e) {
                 e.printStackTrace();
                 if (DataManager.config.get("modules").get("validator").get("enabled").asBoolean()) {
 //                    new BuildTransportNetworkJob(version).run();

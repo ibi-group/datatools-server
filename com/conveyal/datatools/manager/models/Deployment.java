@@ -238,6 +238,13 @@ public class Deployment extends Model implements Serializable {
             deploymentStore.saveWithoutCommit(id, this);
     }
 
+    /**
+     * Delete this deployment and everything that it contains.
+     */
+    public void delete() {
+        deploymentStore.delete(this.id);
+    }
+
     /** Dump this deployment to the given file
      * @param output the output file
      * @param includeOsm should an osm.pbf file be included in the dump?
@@ -377,7 +384,7 @@ public class Deployment extends Model implements Serializable {
         URL vexUrl = null;
         try {
             vexUrl = new URL(String.format("%s/?n=%.6f&e=%.6f&s=%.6f&w=%.6f",
-                    DataManager.config.get("deployment").get("osm_vex").asText(),
+                    DataManager.config.get("application").get("osm_vex").asText(),
                     bounds.getMaxY(), bounds.getMaxX(), bounds.getMinY(), bounds.getMinX()));
         } catch (MalformedURLException e1) {
             e1.printStackTrace();
@@ -413,7 +420,7 @@ public class Deployment extends Model implements Serializable {
     public Rectangle2D getProjectBounds() {
 
         Project proj = this.getProject();
-        if(proj.useCustomOsmBounds) {
+        if(proj.useCustomOsmBounds != null && proj.useCustomOsmBounds) {
             Rectangle2D bounds = new Rectangle2D.Double(proj.osmWest, proj.osmSouth,
                     proj.osmEast - proj.osmWest, proj.osmNorth - proj.osmSouth);
             return bounds;
@@ -453,8 +460,8 @@ public class Deployment extends Model implements Serializable {
 
 
         double bufferKm = 10;
-        if(DataManager.config.get("application").get("deployment").has("osm_buffer_km")) {
-            bufferKm = DataManager.config.get("application").get("deployment").get("osm_buffer_km").asDouble();
+        if(DataManager.config.get("modules").get("deployment").has("osm_buffer_km")) {
+            bufferKm = DataManager.config.get("modules").get("deployment").get("osm_buffer_km").asDouble();
         }
 
         // south-west

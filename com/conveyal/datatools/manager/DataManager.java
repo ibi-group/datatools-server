@@ -77,6 +77,7 @@ public class DataManager {
         GtfsApiController.register(apiPrefix);
         RegionController.register(apiPrefix);
         NoteController.register(apiPrefix);
+        DeploymentController.register(apiPrefix);
 
         if ("true".equals(getConfigPropertyAsText("modules.gtfsplus.enabled"))) {
             GtfsPlusController.register(apiPrefix);

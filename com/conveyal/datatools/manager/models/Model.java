@@ -59,7 +59,14 @@ public abstract class Model implements Serializable {
         // even if there were no notes, return an empty list
         return ret;
     }
-
+    /**
+     * Get the user who owns this object.
+     * @return the String user_id
+     */
+    @JsonView(JsonViews.UserInterface.class)
+    public String getUser () {
+        return this.userId;
+    }
     /**
      * Set the owner of this object
      */
