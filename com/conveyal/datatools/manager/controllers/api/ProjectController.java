@@ -145,6 +145,29 @@ public class ProjectController {
             else if(entry.getKey().equals("defaultTimeZone")) {
                 proj.defaultTimeZone = entry.getValue().asText();
             }
+            else if(entry.getKey().equals("autoFetchHour")) {
+                proj.autoFetchHour = entry.getValue().asInt();
+            }
+            else if(entry.getKey().equals("autoFetchMinute")) {
+                proj.autoFetchMinute = entry.getValue().asInt();
+            }
+            else if(entry.getKey().equals("autoFetchMinute")) {
+                proj.autoFetchMinute = entry.getValue().asInt();
+            }
+            else if(entry.getKey().equals("autoFetchFeeds")) {
+                proj.autoFetchFeeds = entry.getValue().asBoolean();
+
+//                // If auto fetch flag is turned on
+//                if (proj.autoFetchFeeds){
+//                    int interval = 1; // once per day interval
+//                    autoFetchMap.put(proj.id, scheduleAutoFeedFetch(proj.id, proj.autoFetchHour, proj.autoFetchMinute, interval, proj.defaultTimeZone));
+//                }
+//
+//                // otherwise, cancel any existing task for this id
+//                else{
+//                    cancelAutoFetch(c.id);
+//                }
+            }
         }
     }
 

@@ -103,7 +103,6 @@ public class DeploymentController {
 
         if (projectId != null) {
             Project p = Project.get(projectId);
-            p.getDeployments().forEach(deployment -> System.out.println(deployment.name));
             return p.getDeployments();
         }
         else {

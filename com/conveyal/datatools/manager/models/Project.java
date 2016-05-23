@@ -42,6 +42,8 @@ public class Project extends Model {
     public Collection<FeedSource> feedSources;
 
     public Double defaultLocationLat, defaultLocationLon;
+    public Boolean autoFetchFeeds;
+    public int autoFetchHour, autoFetchMinute;
 
 //    public Map<String, Double> boundingBox = new HashMap<>();
 
