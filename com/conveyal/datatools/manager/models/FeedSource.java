@@ -353,6 +353,10 @@ public class FeedSource extends Model {
         return ret;
     }
 
+    public int getFeedVersionCount() {
+        return getFeedVersions().size();
+    }
+
     @JsonView(JsonViews.UserInterface.class)
     public int getNoteCount() {
         return this.noteIds != null ? this.noteIds.size() : 0;

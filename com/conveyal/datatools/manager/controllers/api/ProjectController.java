@@ -5,6 +5,8 @@ import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.FetchProjectFeedsJob;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.JsonViews;
+import com.conveyal.datatools.manager.models.OtpBuildConfig;
+import com.conveyal.datatools.manager.models.OtpRouterConfig;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -139,6 +141,21 @@ public class ProjectController {
             else if(entry.getKey().equals("west")) {
                 proj.west = entry.getValue().asDouble();
             }
+            else if(entry.getKey().equals("osmNorth")) {
+                proj.osmNorth = entry.getValue().asDouble();
+            }
+            else if(entry.getKey().equals("osmSouth")) {
+                proj.osmSouth = entry.getValue().asDouble();
+            }
+            else if(entry.getKey().equals("osmEast")) {
+                proj.osmEast = entry.getValue().asDouble();
+            }
+            else if(entry.getKey().equals("osmWest")) {
+                proj.osmWest = entry.getValue().asDouble();
+            }
+            else if(entry.getKey().equals("useCustomOsmBounds")) {
+                proj.useCustomOsmBounds = entry.getValue().asBoolean();
+            }
             else if(entry.getKey().equals("defaultLanguage")) {
                 proj.defaultLanguage = entry.getValue().asText();
             }
@@ -156,17 +173,93 @@ public class ProjectController {
             }
             else if(entry.getKey().equals("autoFetchFeeds")) {
                 proj.autoFetchFeeds = entry.getValue().asBoolean();
+            }
+            else if (entry.getKey().equals("buildConfig")) {
+                JsonNode buildConfig = entry.getValue();
+                if(proj.buildConfig == null) proj.buildConfig = new OtpBuildConfig();
 
-//                // If auto fetch flag is turned on
-//                if (proj.autoFetchFeeds){
-//                    int interval = 1; // once per day interval
-//                    autoFetchMap.put(proj.id, scheduleAutoFeedFetch(proj.id, proj.autoFetchHour, proj.autoFetchMinute, interval, proj.defaultTimeZone));
-//                }
-//
-//                // otherwise, cancel any existing task for this id
-//                else{
-//                    cancelAutoFetch(c.id);
-//                }
+                if(buildConfig.has("subwayAccessTime")) {
+                    JsonNode subwayAccessTime = buildConfig.get("subwayAccessTime");
+                    // allow client to un-set option via 'null' value
+                    proj.buildConfig.subwayAccessTime = subwayAccessTime.isNull() ? null : subwayAccessTime.asDouble();
+                }
+
+                if(buildConfig.has("fetchElevationUS")) {
+                    JsonNode fetchElevationUS = buildConfig.get("fetchElevationUS");
+                    proj.buildConfig.fetchElevationUS = fetchElevationUS.isNull() ? null : fetchElevationUS.asBoolean();
+                }
+
+                if(buildConfig.has("stationTransfers")) {
+                    JsonNode stationTransfers = buildConfig.get("stationTransfers");
+                    proj.buildConfig.stationTransfers = stationTransfers.isNull() ? null : stationTransfers.asBoolean();
+                }
+
+                if (buildConfig.has("fares")) {
+                    JsonNode fares = buildConfig.get("fares");
+                    proj.buildConfig.fares = fares.isNull() ? null : fares.asText();
+                }
+            }
+            else if (entry.getKey().equals("routerConfig")) {
+                JsonNode routerConfig = entry.getValue();
+                if (proj.routerConfig == null) proj.routerConfig = new OtpRouterConfig();
+
+                if (routerConfig.has("numItineraries")) {
+                    JsonNode numItineraries = routerConfig.get("numItineraries");
+                    proj.routerConfig.numItineraries = numItineraries.isNull() ? null : numItineraries.asInt();
+                }
+
+                if (routerConfig.has("walkSpeed")) {
+                    JsonNode walkSpeed = routerConfig.get("walkSpeed");
+                    proj.routerConfig.walkSpeed = walkSpeed.isNull() ? null : walkSpeed.asDouble();
+                }
+
+                if (routerConfig.has("carDropoffTime")) {
+                    JsonNode carDropoffTime = routerConfig.get("carDropoffTime");
+                    proj.routerConfig.carDropoffTime = carDropoffTime.isNull() ? null : carDropoffTime.asDouble();
+                }
+
+                if (routerConfig.has("stairsReluctance")) {
+                    JsonNode stairsReluctance = routerConfig.get("stairsReluctance");
+                    proj.routerConfig.stairsReluctance = stairsReluctance.isNull() ? null : stairsReluctance.asDouble();
+                }
+
+                if (routerConfig.has("updaters")) {
+                    JsonNode updaters = routerConfig.get("updaters");
+                    if (updaters.isArray()) {
+                        proj.routerConfig.updaters = new ArrayList<>();
+                        for (int i = 0; i < updaters.size(); i++) {
+                            JsonNode updater = updaters.get(i);
+
+                            OtpRouterConfig.Updater updaterObj = new OtpRouterConfig.Updater();
+                            if(updater.has("type")) {
+                                JsonNode type = updater.get("type");
+                                updaterObj.type = type.isNull() ? null : type.asText();
+                            }
+
+                            if(updater.has("sourceType")) {
+                                JsonNode sourceType = updater.get("sourceType");
+                                updaterObj.sourceType = sourceType.isNull() ? null : sourceType.asText();
+                            }
+
+                            if(updater.has("defaultAgencyId")) {
+                                JsonNode defaultAgencyId = updater.get("defaultAgencyId");
+                                updaterObj.defaultAgencyId = defaultAgencyId.isNull() ? null : defaultAgencyId.asText();
+                            }
+
+                            if(updater.has("url")) {
+                                JsonNode url = updater.get("url");
+                                updaterObj.url = url.isNull() ? null : url.asText();
+                            }
+
+                            if(updater.has("frequencySec")) {
+                                JsonNode frequencySec = updater.get("frequencySec");
+                                updaterObj.frequencySec = frequencySec.isNull() ? null : frequencySec.asInt();
+                            }
+
+                            proj.routerConfig.updaters.add(updaterObj);
+                        }
+                    }
+                }
             }
         }
     }

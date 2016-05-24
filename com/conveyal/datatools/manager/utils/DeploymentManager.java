@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.utils;
 
 import com.conveyal.datatools.manager.DataManager;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.util.HashSet;
 import java.util.List;
@@ -11,8 +12,10 @@ import java.util.Set;
  * Created by landon on 5/18/16.
  */
 public class DeploymentManager {
+    private static ObjectMapper mapper = new ObjectMapper();
+
     private static Map<String, Map<String, Object>> getServers () {
-        return (Map<String, Map<String, Object>>) DataManager.config.get("deployment").get("servers");
+        return mapper.convertValue(DataManager.config.get("modules").get("deployment").get("servers"), Map.class);
     }
 
     /**

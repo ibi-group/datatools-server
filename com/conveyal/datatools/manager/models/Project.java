@@ -50,9 +50,9 @@ public class Project extends Model {
     public Double north, south, east, west;
 
     public Project() {
-        /*this.buildConfig = new OtpBuildConfig();
+        this.buildConfig = new OtpBuildConfig();
         this.routerConfig = new OtpRouterConfig();
-        this.useCustomOsmBounds = false;*/
+        this.useCustomOsmBounds = false;
     }
 
     /**

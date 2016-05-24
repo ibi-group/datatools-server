@@ -13,12 +13,15 @@ import com.conveyal.datatools.manager.jobs.LoadGtfsApiFeedJob;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.utils.CorsFilter;
+import com.conveyal.datatools.manager.utils.ResponseError;
+import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.gtfs.api.ApiMain;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.util.JSONPObject;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.google.gson.Gson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Filter;
@@ -128,6 +131,10 @@ public class DataManager {
                 return null;
                 // if the resource doesn't exist we just carry on.
             }
+        });
+        exception(IllegalArgumentException.class,(e,req,res) -> {
+            res.status(400);
+            res.body(new Gson().toJson(new ResponseError(e)));
         });
         registerExternalResources();
     }

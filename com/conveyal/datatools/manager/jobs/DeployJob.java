@@ -80,6 +80,7 @@ public class DeployJob implements Runnable {
         File temp;
         try {
             temp = File.createTempFile("deployment", ".zip");
+
         } catch (IOException e) {
             LOG.error("Could not create temp file");
             e.printStackTrace();
@@ -346,6 +347,8 @@ public class DeployJob implements Runnable {
             status.completed = true;
             status.baseUrl = this.publicUrl;
         }
+
+        temp.deleteOnExit();
     }
 
     /**

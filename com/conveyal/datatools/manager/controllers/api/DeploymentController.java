@@ -22,7 +22,9 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
+import java.util.Map;
 
 import static spark.Spark.*;
 import static spark.Spark.get;
@@ -188,26 +190,30 @@ public class DeploymentController {
      * @param params
      */
     private static void applyJsonToDeployment(Deployment d, JsonNode params) {
-        JsonNode versions = params.get("feedVersions");
-
-        if (versions != null && !(versions instanceof NullNode)) {
-            ArrayList<FeedVersion> versionsToInsert = new ArrayList<FeedVersion>(versions.size());
-
-            for (JsonNode version : versions) {
-                FeedVersion v = FeedVersion.get(version.get("id").asText());
-
-                if (v.getFeedSource().projectId.equals(d.projectId)) {
-                    versionsToInsert.add(v);
+        Iterator<Map.Entry<String, JsonNode>> fieldsIter = params.fields();
+        while (fieldsIter.hasNext()) {
+            Map.Entry<String, JsonNode> entry = fieldsIter.next();
+            if (entry.getKey() == "feedVersions") {
+                JsonNode versions = entry.getValue();
+                ArrayList<FeedVersion> versionsToInsert = new ArrayList<FeedVersion>(versions.size());
+                for (JsonNode version : versions) {
+                    if (!version.has("id")) {
+                        halt(400, "Version not supplied");
+                    }
+                    FeedVersion v = FeedVersion.get(version.get("id").asText());
+                    if (v == null) {
+                        halt(404, "Version not found");
+                    }
+                    if (v.getFeedSource().projectId.equals(d.projectId)) {
+                        versionsToInsert.add(v);
+                    }
                 }
+
+                d.setFeedVersions(versionsToInsert);
             }
-
-            d.setFeedVersions(versionsToInsert);
-        }
-
-        String name = params.get("name").asText();
-
-        if (name != null) {
-            d.name = name;
+            if (entry.getKey() == "name") {
+                d.name = entry.getValue().asText();
+            }
         }
     }
 
@@ -233,7 +239,7 @@ public class DeploymentController {
             if (currentJob != null && !currentJob.getStatus().completed) {
                 // send a 503 service unavailable as it is not possible to deploy to this target right now;
                 // someone else is deploying
-                halt(503);
+                halt(503, "Deployment currently in progress for target: " + target);
             }
         }
 
@@ -255,7 +261,7 @@ public class DeploymentController {
         Thread tnThread = new Thread(job);
         tnThread.start();
 
-        halt(200);
+        halt(200, "{status: \"ok\"}");
         return null;
     }
 
@@ -266,16 +272,17 @@ public class DeploymentController {
     public static Object deploymentStatus (Request req, Response res) throws JsonProcessingException {
         // this is not access-controlled beyond requiring auth, which is fine
         // there's no good way to know who should be able to see this.
-        String target = req.params("target");
+        String target = req.queryParams("target");
+        deploymentJobsByServer.forEach((s, deployJob) -> System.out.println(s));
         if (!deploymentJobsByServer.containsKey(target))
-            halt(404);
+            halt(404, "Deployment target '"+target+"' not found");
 
         DeployJob j = deploymentJobsByServer.get(target);
 
         if (j == null)
-            halt(404);
+            halt(404, "No active job for " + target + " found");
 
-        return statusJson.write(j.getStatus());
+        return j.getStatus();
     }
 
     /**
@@ -288,7 +295,7 @@ public class DeploymentController {
 
     public static void register (String apiPrefix) {
         post(apiPrefix + "secure/deployments/:id/deploy/:target", DeploymentController::deploy, json::write);
-//        options(apiPrefix + "secure/deployments", (q, s) -> "");
+        options(apiPrefix + "secure/deployments", (q, s) -> "");
         get(apiPrefix + "secure/deployments/status/:target", DeploymentController::deploymentStatus, json::write);
         get(apiPrefix + "secure/deployments/targets", DeploymentController::deploymentTargets, json::write);
         get(apiPrefix + "secure/deployments/:id/download", DeploymentController::downloadDeployment, json::write);
