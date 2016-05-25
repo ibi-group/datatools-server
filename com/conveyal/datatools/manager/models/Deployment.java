@@ -357,7 +357,7 @@ public class Deployment extends Model implements Serializable {
             }
 
             String brandingUrlRoot = DataManager.config
-                    .get("application.data.branding_public").asText();
+                    .get("application").get("data").get("branding_public").asText();
             OtpRouterConfig routerConfig = proj.routerConfig;
             if (routerConfig == null && brandingUrlRoot != null) {
                 routerConfig = new OtpRouterConfig();
