@@ -103,7 +103,18 @@ public class DumpController {
         version.save(false);
     }
 
+    public static boolean validateAll (Request req, Response res) throws Exception {
+        for(FeedVersion version: FeedVersion.getAll()) {
+            if(version.validationResult != null) continue;
+            System.out.println("Validating " + version.id);
+            version.validate();
+            version.save();
+        }
+        return true;
+    }
+
     public static void register (String apiPrefix) {
         post(apiPrefix + "loadLegacy", DumpController::loadLegacy, JsonUtil.objectMapper::writeValueAsString);
+        post(apiPrefix + "validateAll", DumpController::validateAll, JsonUtil.objectMapper::writeValueAsString);
     }
 }
