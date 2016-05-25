@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager;
 
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 
+import com.conveyal.datatools.manager.controllers.DumpController;
 import com.conveyal.datatools.manager.controllers.api.*;
 
 import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
@@ -11,22 +12,15 @@ import com.conveyal.datatools.manager.extensions.transitland.TransitLandFeedReso
 
 import com.conveyal.datatools.manager.jobs.LoadGtfsApiFeedJob;
 import com.conveyal.datatools.manager.models.FeedSource;
-import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.utils.CorsFilter;
 import com.conveyal.datatools.manager.utils.ResponseError;
-import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.gtfs.api.ApiMain;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.fasterxml.jackson.databind.util.JSONPObject;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.google.gson.Gson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import spark.Filter;
-import spark.Request;
-import spark.Response;
 import spark.utils.IOUtils;
 
 import java.io.File;
@@ -35,7 +29,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Properties;
 
 import static spark.Spark.*;
 
@@ -71,21 +64,30 @@ public class DataManager {
         CorsFilter.apply();
 
         String apiPrefix = "/api/manager/";
-        ConfigController.register(apiPrefix);
+
+        // core controllers
         ProjectController.register(apiPrefix);
         FeedSourceController.register(apiPrefix);
         FeedVersionController.register(apiPrefix);
-        UserController.register(apiPrefix);
-        //        ServiceAlertsController.register(apiPrefix);
-        GtfsApiController.register(apiPrefix);
         RegionController.register(apiPrefix);
         NoteController.register(apiPrefix);
-        DeploymentController.register(apiPrefix);
-        DumpController.register("/");
 
+        // module-specific controllers
+        if ("true".equals(getConfigPropertyAsText("modules.deployer.enabled"))) {
+            DeploymentController.register(apiPrefix);
+        }
+        if ("true".equals(getConfigPropertyAsText("modules.gtfsapi.enabled"))) {
+            GtfsApiController.register(apiPrefix);
+        }
         if ("true".equals(getConfigPropertyAsText("modules.gtfsplus.enabled"))) {
             GtfsPlusController.register(apiPrefix);
             gtfsPlusConfig = mapper.readTree(new File("gtfsplus.yml"));
+        }
+        if ("true".equals(getConfigPropertyAsText("modules.user_admin.enabled"))) {
+            UserController.register(apiPrefix);
+        }
+        if ("true".equals(getConfigPropertyAsText("modules.dump.enabled"))) {
+            DumpController.register("/");
         }
 
         before(apiPrefix + "secure/*", (request, response) -> {

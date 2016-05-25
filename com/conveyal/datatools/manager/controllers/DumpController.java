@@ -1,4 +1,4 @@
-package com.conveyal.datatools.manager.controllers.api;
+package com.conveyal.datatools.manager.controllers;
 
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
