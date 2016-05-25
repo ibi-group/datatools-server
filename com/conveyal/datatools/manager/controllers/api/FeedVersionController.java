@@ -235,6 +235,7 @@ public class FeedVersionController  {
             } catch (AmazonS3Exception e) {
                 // if json file does not exist, validate feed.
                 version.validate();
+                version.save();
                 halt(503, "Try again later. Validating feed");
             } catch (AmazonServiceException ase) {
                 LOG.error("Error downloading from s3");
@@ -242,6 +243,7 @@ public class FeedVersionController  {
             } catch (Exception e) {
                 e.printStackTrace();
                 version.validate();
+                version.save();
                 halt(503, "Try again later. Validating feed");
             }
 
