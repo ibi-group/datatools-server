@@ -24,7 +24,8 @@ public class Auth0Users {
     private static String AUTH0_API_TOKEN = DataManager.serverConfig.get("auth0").get("api_token").asText();
 
     private static URI getUrl(String searchQuery, int page, int perPage, boolean includeTotals) {
-
+        String clientId = DataManager.config.get("auth0").get("client_id").asText();
+        String defaultQuery = "app_metadata.datatools.client_id:" + clientId;
         URIBuilder builder = new URIBuilder();
         builder.setScheme("https").setHost(AUTH0_DOMAIN).setPath("/api/v2/users");
         builder.setParameter("sort", "email:1");
@@ -33,13 +34,18 @@ public class Auth0Users {
         builder.setParameter("include_totals", Boolean.toString(includeTotals));
         if (searchQuery != null) {
             builder.setParameter("search_engine", "v2");
-            builder.setParameter("q", searchQuery);
+            builder.setParameter("q", searchQuery + " AND " + defaultQuery);
+        }
+        else {
+            builder.setParameter("search_engine", "v2");
+            builder.setParameter("q", defaultQuery);
         }
 
         URI uri = null;
 
         try {
             uri = builder.build();
+
         } catch (URISyntaxException e) {
             e.printStackTrace();
             return null;
@@ -79,6 +85,21 @@ public class Auth0Users {
     public static String getAuth0Users(String searchQuery, int page) {
 
         URI uri = getUrl(searchQuery, page, 10, false);
+        return doRequest(uri);
+    }
+
+    public static String getUserById(String id) {
+
+        URIBuilder builder = new URIBuilder();
+        builder.setScheme("https").setHost(AUTH0_DOMAIN).setPath("/api/v2/users/" + id);
+        URI uri = null;
+        try {
+            uri = builder.build();
+
+        } catch (URISyntaxException e) {
+            e.printStackTrace();
+            return null;
+        }
         return doRequest(uri);
     }
 
