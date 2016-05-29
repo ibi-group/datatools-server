@@ -65,8 +65,8 @@ public class FeedValidationResultSummary implements Serializable {
                 this.routeCount = result.routeCount;
                 this.tripCount = result.tripCount;
                 this.stopTimesCount = result.stopTimesCount;
-                this.startDate = Date.from(result.startDate.atStartOfDay(ZoneId.systemDefault()).toInstant());
-                this.endDate = Date.from(result.endDate.atStartOfDay(ZoneId.systemDefault()).toInstant());
+                this.startDate = result.startDate != null ? Date.from(result.startDate.atStartOfDay(ZoneId.systemDefault()).toInstant()) : null;
+                this.endDate = result.endDate != null ? Date.from(result.endDate.atStartOfDay(ZoneId.systemDefault()).toInstant()) : null;
                 this.bounds = result.bounds;
             }
         }

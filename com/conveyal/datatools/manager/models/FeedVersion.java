@@ -209,6 +209,7 @@ public class FeedVersion extends Model implements Serializable {
             validationResult.bounds = stats.getBounds();
             LocalDate calDateStart = stats.getCalendarDateStart();
             LocalDate calSvcStart = stats.getCalendarServiceRangeStart();
+
             LocalDate calDateEnd = stats.getCalendarDateEnd();
             LocalDate calSvcEnd = stats.getCalendarServiceRangeEnd();
 
