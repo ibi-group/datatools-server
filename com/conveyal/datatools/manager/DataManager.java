@@ -88,7 +88,7 @@ public class DataManager {
         }
 
         // module-specific controllers
-        if ("true".equals(getConfigPropertyAsText("modules.deployer.enabled"))) {
+        if ("true".equals(getConfigPropertyAsText("modules.deployment.enabled"))) {
             DeploymentController.register(apiPrefix);
         }
         if ("true".equals(getConfigPropertyAsText("modules.gtfsapi.enabled"))) {

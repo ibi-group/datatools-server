@@ -300,7 +300,7 @@ public class DeploymentController {
         options(apiPrefix + "secure/deployments", (q, s) -> "");
         get(apiPrefix + "secure/deployments/status/:target", DeploymentController::deploymentStatus, json::write);
 //        get(apiPrefix + "secure/deployments/targets", DeploymentController::deploymentTargets, json::write);
-        get(apiPrefix + "secure/deployments/:id/download", DeploymentController::downloadDeployment, json::write);
+        get(apiPrefix + "secure/deployments/:id/download", DeploymentController::downloadDeployment);
         get(apiPrefix + "secure/deployments/:id", DeploymentController::getDeployment, json::write);
         delete(apiPrefix + "secure/deployments/:id", DeploymentController::deleteDeployment, json::write);
         get(apiPrefix + "secure/deployments", DeploymentController::getAllDeployments, json::write);

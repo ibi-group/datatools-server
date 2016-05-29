@@ -23,12 +23,22 @@ public class FeedDownloadToken extends Model {
         timestamp = new Date();
     }
 
+    public FeedDownloadToken (Project project) {
+        super();
+        feedVersionId = project.id;
+        timestamp = new Date();
+    }
+
     public static FeedDownloadToken get (String id) {
         return tokenStore.getById(id);
     }
 
     public FeedVersion getFeedVersion () {
         return FeedVersion.get(feedVersionId);
+    }
+
+    public Project getProject () {
+        return Project.get(feedVersionId);
     }
 
     public boolean isValid () {
