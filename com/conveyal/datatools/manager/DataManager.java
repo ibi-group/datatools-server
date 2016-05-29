@@ -72,6 +72,16 @@ public class DataManager {
         RegionController.register(apiPrefix);
         NoteController.register(apiPrefix);
 
+        // Editor routes
+        AgencyController.register(apiPrefix);
+        CalendarController.register(apiPrefix);
+        RouteController.register(apiPrefix);
+        RouteTypeController.register(apiPrefix);
+        ScheduleExceptionController.register(apiPrefix);
+        StopController.register(apiPrefix);
+        TripController.register(apiPrefix);
+        TripPatternController.register(apiPrefix);
+
         // module-specific controllers
         if ("true".equals(getConfigPropertyAsText("modules.deployer.enabled"))) {
             DeploymentController.register(apiPrefix);
@@ -123,6 +133,12 @@ public class DataManager {
                 return null;
                 // if the resource doesn't exist we just carry on.
             }
+        });
+
+        // return 404 for any api response that's not found
+        get(apiPrefix + "*", (request, response) -> {
+            halt(404);
+            return null;
         });
 
         // return index.html for any sub-directory
