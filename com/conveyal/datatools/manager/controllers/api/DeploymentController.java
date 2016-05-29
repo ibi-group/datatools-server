@@ -6,8 +6,8 @@ import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
+import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
-import com.conveyal.datatools.manager.utils.DeploymentManager;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -21,6 +21,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
@@ -138,8 +139,8 @@ public class DeploymentController {
      */
     public static Object createDeploymentFromFeedSource (Request req, Response res) throws JsonProcessingException {
         Auth0UserProfile userProfile = req.attribute("user");
-        String feedSourceId = req.params("feedSourceId");
-        FeedSource s = FeedSource.get(feedSourceId);
+        String id = req.params("id");
+        FeedSource s = FeedSource.get(id);
 
         // three ways to have permission to do this:
         // 1) be an admin
@@ -226,11 +227,12 @@ public class DeploymentController {
         String target = req.params("target");
         String id = req.params("id");
         Deployment d = Deployment.get(id);
+        Project p = Project.get(d.projectId);
 
         if (!userProfile.canAdministerProject(d.projectId) && !userProfile.getUser_id().equals(d.getUser()))
             halt(401);
 
-        if (!userProfile.canAdministerProject(d.projectId) && DeploymentManager.isDeploymentAdmin(target))
+        if (!userProfile.canAdministerProject(d.projectId) && p.getServer(target).admin)
             halt(401);
 
         // check if we can deploy
@@ -242,8 +244,8 @@ public class DeploymentController {
                 halt(503, "Deployment currently in progress for target: " + target);
             }
         }
-
-        List<String> targetUrls = DeploymentManager.getDeploymentUrls(target);
+        OtpServer otpServer = p.getServer(target);
+        List<String> targetUrls = otpServer.internalUrl;
 
         Deployment oldD = Deployment.getDeploymentForServerAndRouterId(target, d.routerId);
         if (oldD != null) {
@@ -254,7 +256,7 @@ public class DeploymentController {
         d.deployedTo = target;
         d.save();
 
-        DeployJob job = new DeployJob(d, targetUrls, DeploymentManager.getPublicUrl(target), DeploymentManager.getS3Bucket(target), DeploymentManager.getS3Credentials(target));
+        DeployJob job = new DeployJob(d, targetUrls, p.getServer(target).publicUrl, p.getServer(target).s3Bucket, p.getServer(target).s3Credentials);
 
         deploymentJobsByServer.put(target, job);
 
@@ -288,16 +290,16 @@ public class DeploymentController {
     /**
      * The servers that it is possible to deploy to.
      */
-    public static Object deploymentTargets (Request req, Response res) {
-        Auth0UserProfile userProfile = req.attribute("user");
-        return DeploymentManager.getDeploymentNames(userProfile.canAdministerApplication());
-    }
+//    public static Object deploymentTargets (Request req, Response res) {
+//        Auth0UserProfile userProfile = req.attribute("user");
+//        return DeploymentManager.getDeploymentNames(userProfile.canAdministerApplication());
+//    }
 
     public static void register (String apiPrefix) {
         post(apiPrefix + "secure/deployments/:id/deploy/:target", DeploymentController::deploy, json::write);
         options(apiPrefix + "secure/deployments", (q, s) -> "");
         get(apiPrefix + "secure/deployments/status/:target", DeploymentController::deploymentStatus, json::write);
-        get(apiPrefix + "secure/deployments/targets", DeploymentController::deploymentTargets, json::write);
+//        get(apiPrefix + "secure/deployments/targets", DeploymentController::deploymentTargets, json::write);
         get(apiPrefix + "secure/deployments/:id/download", DeploymentController::downloadDeployment, json::write);
         get(apiPrefix + "secure/deployments/:id", DeploymentController::getDeployment, json::write);
         delete(apiPrefix + "secure/deployments/:id", DeploymentController::deleteDeployment, json::write);

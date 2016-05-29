@@ -6,6 +6,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 
 import java.util.*;
+import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 /**
@@ -33,6 +34,18 @@ public class Project extends Model {
     public OtpBuildConfig buildConfig;
 
     public OtpRouterConfig routerConfig;
+
+    public Collection<OtpServer> otpServers;
+
+    @JsonIgnore
+    public OtpServer getServer (String name) {
+        for (OtpServer otpServer : otpServers) {
+            if (otpServer.name.equals(name)) {
+                return otpServer;
+            }
+        }
+        return null;
+    }
 
     public String defaultTimeZone;
 
@@ -93,7 +106,7 @@ public class Project extends Model {
      * Get all the feed sources for this feed collection
      */
     @JsonIgnore
-    public Collection<? extends FeedSource> getProjectFeedSources() {
+    public Collection<FeedSource> getProjectFeedSources() {
 //        ArrayList<? extends FeedSource> ret = new ArrayList<>();
 
         // TODO: use index, but not important for now because we generally only have one FeedCollection
