@@ -41,6 +41,7 @@ public class DataManager {
     public static JsonNode serverConfig;
 
     public static JsonNode gtfsPlusConfig;
+    public static JsonNode gtfsConfig;
 
     public static final Map<String, ExternalFeedResource> feedResources = new HashMap<>();
 
@@ -74,14 +75,17 @@ public class DataManager {
         NoteController.register(apiPrefix);
 
         // Editor routes
-        AgencyController.register(apiPrefix);
-        CalendarController.register(apiPrefix);
-        RouteController.register(apiPrefix);
-        RouteTypeController.register(apiPrefix);
-        ScheduleExceptionController.register(apiPrefix);
-        StopController.register(apiPrefix);
-        TripController.register(apiPrefix);
-        TripPatternController.register(apiPrefix);
+        if ("true".equals(getConfigPropertyAsText("modules.editor.enabled"))) {
+            gtfsConfig = mapper.readTree(new File("gtfs.yml"));
+            AgencyController.register(apiPrefix);
+            CalendarController.register(apiPrefix);
+            RouteController.register(apiPrefix);
+            RouteTypeController.register(apiPrefix);
+            ScheduleExceptionController.register(apiPrefix);
+            StopController.register(apiPrefix);
+            TripController.register(apiPrefix);
+            TripPatternController.register(apiPrefix);
+        }
 
         // module-specific controllers
         if ("true".equals(getConfigPropertyAsText("modules.deployer.enabled"))) {
