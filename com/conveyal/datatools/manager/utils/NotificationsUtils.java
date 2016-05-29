@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.utils;
 
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
+import com.conveyal.datatools.manager.models.Project;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sparkpost.Client;
@@ -39,6 +40,7 @@ public class NotificationsUtils {
         }
     }
 
+    // TODO: modify method so that it receives both a feed param and a updateFor param?
     public static void notifyUsersForSubscription(String subscriptionType, String target, String message) {
         if (!DataManager.config.get("application").get("notifications_enabled").asBoolean()) {
             return;
@@ -58,12 +60,27 @@ public class NotificationsUtils {
             // only send email if address has been verified
             if (emailVerified) {
                 try {
-                    FeedSource fs = FeedSource.get(target);
-                    String subject = "Datatools Notification: " + subscriptionType.replace("-", " ") + " (" + fs.name + ")";
-                    String url = DataManager.config.get("application").get("url").asText();
-                    sendNotification(email, subject, "Body", "<p>" + message + "</p><p>View <a href='" + url + "/feed/" + fs.id + "'>this feed</a>.</p>");
+                    String subject = null;
+                    String url = null;
+                    String bodyAction = null;
+                    String[] subType = subscriptionType.split("-");
+                    if (subType[0] == "feed"){
+                        FeedSource fs = FeedSource.get(target);
+                        subject = "Datatools Notification: " + subscriptionType.replace("-", " ") + " (" + fs.name + ")";
+                        url = DataManager.config.get("application").get("url").asText();
+                        bodyAction = "</p><p>View <a href='" + url + "/feed/" + fs.id + "'>this feed</a>.</p>";
+
+                    }
+                    else if (subType[0] == "project") {
+                        Project p = Project.get(target);
+                        subject = "Datatools Notification: " + subscriptionType.replace("-", " ") + " (" + p.name + ")";
+                        url = DataManager.config.get("application").get("url").asText();
+                        bodyAction = "</p><p>View <a href='" + url + "/project/" + p.id + "'>this project</a>.</p>";
+                    }
+
+                    sendNotification(email, subject, "Body", "<p>" + message + bodyAction);
                 } catch (Exception e) {
-                    LOG.error(e.getMessage());
+                    e.printStackTrace();
                 }
             }
         }

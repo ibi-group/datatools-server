@@ -32,8 +32,11 @@ public class FeedSourceController {
         String id = req.params("id");
         Boolean publicFilter = req.pathInfo().contains("public");
         FeedSource fs = FeedSource.get(id);
+        if (fs == null) {
+            halt(404, null);
+        }
         if (publicFilter && !fs.isPublic) {
-            return null;
+            halt(503);
         }
         return fs;
     }
@@ -95,7 +98,11 @@ public class FeedSourceController {
     public static FeedSource updateFeedSource(Request req, Response res) throws IOException {
         String id = req.params("id");
         FeedSource source = FeedSource.get(id);
+        if (source == null) {
+            halt(404);
+        }
         notifyUsersForSubscription("feed-updated", id, "Feed property updated for " + source.name);
+        notifyUsersForSubscription("project-updated", source.projectId, "Project updated (feed source property" + source.name + ")");
         applyJsonToFeedSource(source, req.body());
         source.save();
 
