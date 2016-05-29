@@ -457,7 +457,7 @@ public class AgencyTx extends DatabaseTx {
                                 e.printStackTrace();
                                 throw new RuntimeException(e);
                             }
-                            st.agencyId = newAgencyId;
+                            st.feedId = newAgencyId;
                             return new Tuple2(input.a, st);
                         }
             });
@@ -475,7 +475,7 @@ public class AgencyTx extends DatabaseTx {
                                 e.printStackTrace();
                                 throw new RuntimeException(e);
                             }
-                            st.agencyId = newAgencyId;
+                            st.feedId = newAgencyId;
                             return new Tuple2(input.a, st);
                         }
             });

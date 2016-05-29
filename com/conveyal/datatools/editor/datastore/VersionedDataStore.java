@@ -144,11 +144,11 @@ public class VersionedDataStore {
      * @return a list of stops that were restored from deletion to make this snapshot valid.
      */
     public static List<Stop> restore (Snapshot s) {
-        SnapshotTx tx = new SnapshotTx(getSnapshotDb(s.agencyId, s.version, true));
+        SnapshotTx tx = new SnapshotTx(getSnapshotDb(s.feedId, s.version, true));
         try {
-            LOG.info("Restoring snapshot %s of agency %s", s.version, s.agencyId);
+            LOG.info("Restoring snapshot %s of agency %s", s.version, s.feedId);
             long startTime = System.currentTimeMillis();
-            List<Stop> ret = tx.restore(s.agencyId);
+            List<Stop> ret = tx.restore(s.feedId);
             LOG.info("Restored snapshot in %.2f seconds", (System.currentTimeMillis() - startTime) / 1000D);
             return ret;
         } finally {

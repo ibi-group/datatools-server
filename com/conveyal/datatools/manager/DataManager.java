@@ -4,6 +4,7 @@ import com.conveyal.datatools.manager.auth.Auth0Connection;
 
 import com.conveyal.datatools.manager.controllers.DumpController;
 import com.conveyal.datatools.manager.controllers.api.*;
+import com.conveyal.datatools.editor.controllers.api.*;
 
 import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
 import com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource;
