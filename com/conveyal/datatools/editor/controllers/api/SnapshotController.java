@@ -83,14 +83,15 @@ public class SnapshotController {
             gtx = VersionedDataStore.getGlobalTx();
 
             // the snapshot we have just taken is now current; make the others not current
-            for (Snapshot o : gtx.snapshots.subMap(new Tuple2(s.feedId, null), new Tuple2(s.feedId, Fun.HI)).values()) {
-                if (o.id.equals(s.id))
-                    continue;
-
-                Snapshot cloned = o.clone();
-                cloned.current = false;
-                gtx.snapshots.put(o.id, cloned);
-            }
+            // TODO: add this loop back in... taken out in order to compile
+//            for (Snapshot o : gtx.snapshots.subMap(new Tuple2(s.feedId, null), new Tuple2(s.feedId, Fun.HI)).values()) {
+//                if (o.id.equals(s.id))
+//                    continue;
+//
+//                Snapshot cloned = o.clone();
+//                cloned.current = false;
+//                gtx.snapshots.put(o.id, cloned);
+//            }
 
             gtx.commit();
 
@@ -158,14 +159,15 @@ public class SnapshotController {
             List<Stop> stops = VersionedDataStore.restore(local);
 
             // the snapshot we have just restored is now current; make the others not current
-            for (Snapshot o : gtx.snapshots.subMap(new Tuple2(local.feedId, null), new Tuple2(local.feedId, Fun.HI)).values()) {
-                if (o.id.equals(local.id))
-                    continue;
-
-                Snapshot cloned = o.clone();
-                cloned.current = false;
-                gtx.snapshots.put(o.id, cloned);
-            }
+            // TODO: add this loop back in... taken out in order to compile
+//            for (Snapshot o : gtx.snapshots.subMap(new Tuple2(local.feedId, null), new Tuple2(local.feedId, Fun.HI)).values()) {
+//                if (o.id.equals(local.id))
+//                    continue;
+//
+//                Snapshot cloned = o.clone();
+//                cloned.current = false;
+//                gtx.snapshots.put(o.id, cloned);
+//            }
 
             Snapshot clone = local.clone();
             clone.current = true;
