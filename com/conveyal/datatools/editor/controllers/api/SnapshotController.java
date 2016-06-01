@@ -7,6 +7,7 @@ import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.jobs.ProcessGtfsSnapshotExport;
 import com.conveyal.datatools.editor.models.Snapshot;
 import com.conveyal.datatools.editor.models.transit.Stop;
+import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import org.mapdb.Fun;
@@ -99,6 +100,7 @@ public class SnapshotController {
             halt(400);
             if (gtx != null) gtx.rollbackIfOpen();
         }
+        return null;
     }
 
     public static Object updateSnapshot (Request req, Response res) {
@@ -131,12 +133,13 @@ public class SnapshotController {
             if (gtx != null) gtx.rollbackIfOpen();
             halt(400);
         }
+        return null;
     }
 
     public static Object restoreSnapshot (Request req, Response res) {
         String id = req.params("id");
         String json = null;
-        Tuple2<String, Integer> decodedId;
+        Tuple2<String, Integer> decodedId = null;
         try {
             decodedId = JacksonSerializers.Tuple2IntDeserializer.deserialize(id);
         } catch (IOException e1) {
@@ -187,7 +190,7 @@ public class SnapshotController {
             decodedId = JacksonSerializers.Tuple2IntDeserializer.deserialize(id);
         } catch (IOException e1) {
             halt(400);
-            return;
+            return null;
         }
 
         GlobalTx gtx = VersionedDataStore.getGlobalTx();
@@ -195,19 +198,20 @@ public class SnapshotController {
         try {
             if (!gtx.snapshots.containsKey(decodedId)) {
                 halt(404);
-                return;
+                return null;
             }
 
             local = gtx.snapshots.get(decodedId);
 
-            File out = new File(Play.configuration.getProperty("application.publicDataDirectory"), "gtfs_" + Application.nextExportId.incrementAndGet() + ".zip");
+            File out = new File(DataManager.config.get("application.publicDataDirectory").asText(), "gtfs_" + ".zip");
 
             new ProcessGtfsSnapshotExport(local, out).run();
 
-            redirect(Play.configuration.getProperty("application.appBase") + "/public/data/"  + out.getName());
+//            redirect(Play.configuration.getProperty("application.appBase") + "/public/data/"  + out.getName());
         } finally {
             gtx.rollbackIfOpen();
         }
+        return null;
     }
 
     public static void register (String apiPrefix) {
