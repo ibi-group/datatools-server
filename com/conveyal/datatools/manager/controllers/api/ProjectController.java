@@ -348,7 +348,7 @@ public class ProjectController {
         File mergedFile;
         try {
             mergedFile = File.createTempFile(p.id + "-merged", ".zip");
-            mergedFile.deleteOnExit();
+//            mergedFile.deleteOnExit();
 
         } catch (IOException e) {
             LOG.error("Could not create temp file");
@@ -415,48 +415,65 @@ public class ProjectController {
             }
 
         }
+        out.close();
 
 
 
-        FileInputStream fis = new FileInputStream(mergedFile);
+//        FileInputStream fis = new FileInputStream(mergedFile);
 
-        res.type("application/zip");
-        res.header("Content-Disposition", "attachment;filename=" + p.name.replaceAll("[^a-zA-Z0-9]", "") + "-gtfs.zip");
+//        res.type("application/zip");
+//        res.header("Content-Disposition", "attachment;filename=" + p.name.replaceAll("[^a-zA-Z0-9]", "") + "-gtfs.zip");
 
         // will not actually be deleted until download has completed
         // http://stackoverflow.com/questions/24372279
-        mergedFile.delete();
+//        mergedFile.delete();
 
-        return fis;
+//        return fis;
 
 //        // Deliver zipfile
-//        res.raw().setContentType("application/octet-stream");
-//        res.raw().setHeader("Content-Disposition", "attachment; filename=" + mergedFile.getName());
+        res.raw().setContentType("application/octet-stream");
+        res.raw().setHeader("Content-Disposition", "attachment; filename=" + mergedFile.getName());
 
 
-//        try {
-//            BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(res.raw().getOutputStream());
-//            BufferedInputStream bufferedInputStream = new BufferedInputStream(new FileInputStream(mergedFile));
-//
-//            byte[] buffer = new byte[1024];
-//            int len;
-//            while ((len = bufferedInputStream.read(buffer)) > 0) {
-//                bufferedOutputStream.write(buffer, 0, len);
-//            }
-//
-//            bufferedOutputStream.flush();
-//            bufferedOutputStream.close();
-//        } catch (Exception e) {
-//            halt(500, "Error serving GTFS file");
-//        }
-//
-//        return res.raw();
+        try {
+            BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(res.raw().getOutputStream());
+            BufferedInputStream bufferedInputStream = new BufferedInputStream(new FileInputStream(mergedFile));
+
+            byte[] buffer = new byte[1024];
+            int len;
+            while ((len = bufferedInputStream.read(buffer)) > 0) {
+                bufferedOutputStream.write(buffer, 0, len);
+            }
+
+            bufferedOutputStream.flush();
+            bufferedOutputStream.close();
+        } catch (Exception e) {
+            halt(500, "Error serving GTFS file");
+        }
+
+        return res.raw();
     }
 
     private static byte[] mergeTables(JsonNode tableNode, Map<FeedSource, ZipFile> feedSourceMap) throws IOException {
 
         String tableName = tableNode.get("name").asText();
         ByteArrayOutputStream tableOut = new ByteArrayOutputStream();
+
+        int feedIndex = 0;
+
+        JsonNode fieldsNode = tableNode.get("fields");
+        String[] headers = new String[fieldsNode.size()];
+        for (int i = 0; i < fieldsNode.size(); i++) {
+            JsonNode fieldNode = fieldsNode.get(i);
+            String fieldName = fieldNode.get("name").asText();
+
+            headers[i] = fieldName;
+        }
+
+        // write headers to table
+        tableOut.write(String.join(",", headers).getBytes());
+        tableOut.write("\n".getBytes());
+
         for ( Map.Entry<FeedSource, ZipFile> mapEntry : feedSourceMap.entrySet()) {
             FeedSource fs = mapEntry.getKey();
             ZipFile zipFile = mapEntry.getValue();
@@ -473,12 +490,6 @@ public class ProjectController {
                     String[] fields = line.split(",");
 
                     List<String> fieldList = Arrays.asList(fields);
-
-                    JsonNode fieldsNode = tableNode.get("fields");
-
-                    JsonNode[] fieldNodes = new JsonNode[fieldList.size()];
-
-                    Map<String, JsonNode> fieldMap = new HashMap<>();
 
                     int rowIndex = 0;
                     while((line = in.readLine()) != null) {
@@ -508,10 +519,12 @@ public class ProjectController {
                         }
                         String newLine = String.join(",", newValues);
                         tableOut.write(newLine.getBytes());
+                        tableOut.write("\n".getBytes());
                         rowIndex++;
                     }
                 }
             }
+            feedIndex++;
         }
         return tableOut.toByteArray();
     }
@@ -550,7 +563,8 @@ public class ProjectController {
         delete(apiPrefix + "secure/project/:id", ProjectController::deleteProject, json::write);
         get(apiPrefix + "secure/project/:id/thirdPartySync/:type", ProjectController::thirdPartySync, json::write);
         post(apiPrefix + "secure/project/:id/fetch", ProjectController::fetch, json::write);
-        get(apiPrefix + "secure/project/:id/download", ProjectController::downloadMergedFeed);
+
+        get(apiPrefix + "public/project/:id/download", ProjectController::downloadMergedFeed);
 
         get(apiPrefix + "public/project/:id", ProjectController::getProject, json::write);
         get(apiPrefix + "public/project", ProjectController::getAllProjects, json::write);
