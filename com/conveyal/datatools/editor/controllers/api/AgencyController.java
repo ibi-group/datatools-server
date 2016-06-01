@@ -1,16 +1,12 @@
 package com.conveyal.datatools.editor.controllers.api;
 
-import com.conveyal.datatools.editor.controllers.Application;
 import com.conveyal.datatools.editor.controllers.Base;
-import com.conveyal.datatools.editor.controllers.Secure;
-import com.conveyal.datatools.editor.controllers.Security;
 import com.conveyal.datatools.editor.datastore.AgencyTx;
 import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.Agency;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
-import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import spark.Request;
 import spark.Response;
 
@@ -21,6 +17,7 @@ public class AgencyController {
             new JsonManager<>(Agency.class, JsonViews.UserInterface.class);
     public static Object getAgency(Request req, Response res) {
         String id = req.params("id");
+        String feedId = req.queryParams("feedId");
         String json = null;
         try {
             GlobalTx tx = VersionedDataStore.getGlobalTx();
@@ -47,6 +44,7 @@ public class AgencyController {
 
     public static Object createAgency(Request req, Response res) {
         Agency agency;
+        String feedId = req.queryParams("feedId");
 
         try {
             agency = Base.mapper.readValue(req.body(), Agency.class);
@@ -77,6 +75,7 @@ public class AgencyController {
 
     public static Object updateAgency(Request req, Response res) {
         Agency agency;
+        String feedId = req.queryParams("feedId");
 
         try {
             agency = Base.mapper.readValue(req.body(), Agency.class);
@@ -106,6 +105,7 @@ public class AgencyController {
     public static Object deleteAgency(Request req, Response res) {
         GlobalTx tx = VersionedDataStore.getGlobalTx();
         String id = req.params("id");
+        String feedId = req.queryParams("feedId");
         if(id == null) {
             halt(400);
         }
@@ -124,6 +124,8 @@ public class AgencyController {
     public static Object duplicateAgency(Request req, Response res) {
 
         String id = req.params("id");
+        String feedId = req.queryParams("feedId");
+
         // make sure the agency exists
         GlobalTx gtx = VersionedDataStore.getGlobalTx();
         if (!gtx.agencies.containsKey(id)) {

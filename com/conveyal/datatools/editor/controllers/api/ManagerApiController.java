@@ -1,6 +1,5 @@
 package com.conveyal.datatools.editor.controllers.api;
 
-import com.conveyal.datatools.editor.controllers.Application;
 import com.conveyal.datatools.editor.controllers.Base;
 import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
