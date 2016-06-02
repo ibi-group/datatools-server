@@ -8,7 +8,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.vividsolutions.jts.geom.LineString;
 import java.time.LocalDate;
-import static spark.Spark.*;
+
 import com.conveyal.datatools.editor.utils.JacksonSerializers;
 
 import java.io.IOException;

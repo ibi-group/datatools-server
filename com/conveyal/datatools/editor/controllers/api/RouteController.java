@@ -58,7 +58,7 @@ public class RouteController {
                     r.addDerivedInfo(tx);
                 }
 
-                String json = Base.toJson(ret, false);
+                Object json = Base.toJson(ret, false);
                 tx.rollback();
                 return json;
             }

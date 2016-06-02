@@ -39,7 +39,7 @@ public class SnapshotController {
         String feedId = req.queryParams("feedId");
 
         GlobalTx gtx = VersionedDataStore.getGlobalTx();
-        String json = null;
+        Object json = null;
         try {
             if (id != null) {
                 Tuple2<String, Integer> sid = JacksonSerializers.Tuple2IntDeserializer.deserialize(id);
@@ -138,7 +138,7 @@ public class SnapshotController {
 
     public static Object restoreSnapshot (Request req, Response res) {
         String id = req.params("id");
-        String json = null;
+        Object json = null;
         Tuple2<String, Integer> decodedId = null;
         try {
             decodedId = JacksonSerializers.Tuple2IntDeserializer.deserialize(id);

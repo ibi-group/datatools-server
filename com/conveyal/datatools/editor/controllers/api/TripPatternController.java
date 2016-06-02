@@ -30,7 +30,7 @@ public class TripPatternController {
         String id = req.params("id");
         String routeId = req.queryParams("routeId");
         String feedId = req.queryParams("feedId");
-        String json = null;
+        Object json = null;
 
         if (feedId == null)
             feedId = req.session().attribute("feedId");

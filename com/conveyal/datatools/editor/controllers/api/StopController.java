@@ -62,9 +62,9 @@ public class StopController {
                     halt(404);
                 }
 
-                String stopJson = Base.toJson(tx.stops.get(id), false);
+                Object json = Base.toJson(tx.stops.get(id), false);
                 tx.rollback();
-                return stopJson;
+                return json;
             }
               else if (Boolean.TRUE.equals(majorStops)) {
                   // get the major stops for the agency
@@ -76,15 +76,15 @@ public class StopController {
                     }
                   });
 
-                  String stopsJson = Base.toJson(stops, false);
+                  Object stopsJson = Base.toJson(stops, false);
                   tx.rollback();
                   return stopsJson;
               }
             else if (west != null && east != null && south != null && north != null) {
                 Collection<Stop> matchedStops = tx.getStopsWithinBoundingBox(north, east, south, west);
-                String stp = Base.toJson(matchedStops, false);
+                Object json = Base.toJson(matchedStops, false);
                 tx.rollback();
-                return stp;
+                return json;
             }
             else if (patternId != null) {
                 if (!tx.tripPatterns.containsKey(patternId)) {
@@ -100,7 +100,7 @@ public class StopController {
                     }
                 });
 
-                String json = Base.toJson(ret, false);
+                Object json = Base.toJson(ret, false);
                 tx.rollback();
                 return json;
             }
@@ -119,7 +119,7 @@ public class StopController {
 
     public static Object createStop(Request req, Response res) {
         AgencyTx tx = null;
-        String json = null;
+        Object json = null;
         try {
             Stop stop = Base.mapper.readValue(req.body(), Stop.class);
             
@@ -151,7 +151,7 @@ public class StopController {
 
     public static Object updateStop(Request req, Response res) {
         AgencyTx tx = null;
-        String json = null;
+        Object json = null;
         try {
             Stop stop = Base.mapper.readValue(req.body(), Stop.class);
             
@@ -183,7 +183,7 @@ public class StopController {
     public static Object deleteStop(Request req, Response res) {
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
-        String json = null;
+        Object json = null;
 
         if (feedId == null)
             feedId = req.session().attribute("feedId");
@@ -217,7 +217,7 @@ public class StopController {
     
     public static Object findDuplicateStops(Request req, Response res) {
         String feedId = req.queryParams("feedId");
-        String json = null;
+        Object json = null;
 
         if (feedId == null)
             feedId = req.session().attribute("feedId");

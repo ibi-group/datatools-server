@@ -18,7 +18,7 @@ public class RouteTypeController {
             new JsonManager<>(RouteType.class, JsonViews.UserInterface.class);
     public static Object getRouteType(Request req, Response res) {
         String id = req.params("id");
-        String json = null;
+        Object json = null;
         try {
             GlobalTx tx = VersionedDataStore.getGlobalTx();
 

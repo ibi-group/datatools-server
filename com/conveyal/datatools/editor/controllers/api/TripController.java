@@ -170,7 +170,7 @@ public class TripController {
     public static Object deleteTrip(Request req, Response res) {
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
-        String json = null;
+        Object json = null;
 
         if (feedId == null)
             feedId = req.session().attribute("feedId");

@@ -21,7 +21,7 @@ public class ScheduleExceptionController {
     public static Object getScheduleException (Request req, Response res) {
         String exceptionId = req.params("exceptionId");
         String feedId = req.queryParams("feedId");
-        String json = null;
+        Object json = null;
         if (feedId == null)
             feedId = req.session().attribute("feedId");
 

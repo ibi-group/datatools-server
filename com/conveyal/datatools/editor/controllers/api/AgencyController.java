@@ -18,7 +18,7 @@ public class AgencyController {
     public static Object getAgency(Request req, Response res) {
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
-        String json = null;
+        Object json = null;
         try {
             GlobalTx tx = VersionedDataStore.getGlobalTx();
 
@@ -55,16 +55,17 @@ public class AgencyController {
             }
             
             GlobalTx tx = VersionedDataStore.getGlobalTx();
-            
+
+            // if agency id already exists
             if (tx.agencies.containsKey(agency.id)) {
                 tx.rollback();
-                halt(400);
+                halt(400, "Agency " + agency.id + " already exists");
             }
             
             tx.agencies.put(agency.id, agency);
             tx.commit();
 
-            return Base.toJson(agency, false);
+            return agency;
         } catch (Exception e) {
             e.printStackTrace();
             halt(400);

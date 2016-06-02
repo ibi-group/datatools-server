@@ -1,6 +1,7 @@
 package com.conveyal.datatools.editor.models.transit;
 
 import com.conveyal.datatools.editor.models.Model;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -8,6 +9,7 @@ import java.io.Serializable;
 import java.net.MalformedURLException;
 import java.net.URL;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class Agency extends Model implements Cloneable, Serializable, Comparable {
     public static final long serialVersionUID = 1;
     public static final Logger LOG = LoggerFactory.getLogger(Agency.class);

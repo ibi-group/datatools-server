@@ -170,7 +170,7 @@ public class CalendarController {
             
             tx.calendars.put(cal.id, cal);
             
-            String json = Base.toJson(cal, false);
+            Object json = Base.toJson(cal, false);
             
             tx.commit();
 
