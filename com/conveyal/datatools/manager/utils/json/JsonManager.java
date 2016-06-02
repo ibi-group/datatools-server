@@ -54,6 +54,9 @@ public class JsonManager<T> {
     }
 
     public String write(Object o) throws JsonProcessingException{
+        if (o instanceof String) {
+            return (String) o;
+        }
         return ow.writeValueAsString(o);
     }
 
