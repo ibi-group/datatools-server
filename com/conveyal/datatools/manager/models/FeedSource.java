@@ -21,11 +21,12 @@ import java.util.*;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.manager.utils.NotificationsUtils.notifyUsersForSubscription;
+import static spark.Spark.halt;
 
 /**
  * Created by demory on 3/22/16.
  */
-public class FeedSource extends Model {
+public class FeedSource extends Model implements Cloneable {
     private static final long serialVersionUID = 1L;
 
     public static final Logger LOG = LoggerFactory.getLogger(FeedSource.class);
@@ -120,7 +121,9 @@ public class FeedSource extends Model {
      */
     public FeedVersion fetch () {
         if (this.retrievalMethod.equals(FeedRetrievalMethod.MANUALLY_UPLOADED)) {
-            LOG.info("not fetching feed {}, not a fetchable feed", this.toString());
+            String message = String.format("not fetching feed %s, not a fetchable feed", this.toString());
+            LOG.info(message);
+            halt(400, message);
             return null;
         }
 
@@ -138,7 +141,9 @@ public class FeedSource extends Model {
             url = this.url;
         else if (this.retrievalMethod.equals(FeedRetrievalMethod.PRODUCED_IN_HOUSE)) {
             if (this.snapshotVersion == null) {
-                LOG.error("Feed {} has no editor id; cannot fetch", this);
+                String message = String.format("Feed %s has no editor id; cannot fetch", this);
+                LOG.error(message);
+                halt(400, message);
                 return null;
             }
 
@@ -151,12 +156,16 @@ public class FeedSource extends Model {
             try {
                 url = new URL(baseUrl + "api/mgrsnapshot/" + this.snapshotVersion + ".zip");
             } catch (MalformedURLException e) {
-                LOG.error("Invalid URL for editor, check your config.");
+                String message = "Invalid URL for editor, check your config.";
+                LOG.error(message);
+                halt(400, message);
                 return null;
             }
         }
         else {
-            LOG.error("Unknown retrieval method" + this.retrievalMethod);
+            String message = "Unknown retrieval method: " + this.retrievalMethod;
+            LOG.error(message);
+            halt(400, message);
             return null;
         }
 
@@ -167,13 +176,19 @@ public class FeedSource extends Model {
         try {
             conn = (HttpURLConnection) url.openConnection();
         } catch (IOException e) {
-            LOG.error("Unable to open connection to {}; not fetching feed {}", url, this);
+            String message = String.format("Unable to open connection to %s; not fetching feed %s", url, this);
+            LOG.error(message);
+            halt(400, message);
             return null;
         } catch (ClassCastException e) {
-            LOG.error("Unable to open connection to {}; not fetching feed {}", url, this);
+            String message = String.format("Unable to open connection to %s; not fetching feed %s", url, this);
+            LOG.error(message);
+            halt(400, message);
             return null;
         } catch (NullPointerException e) {
-            LOG.error("Unable to open connection to {}; not fetching feed {}", url, this);
+            String message = String.format("Unable to open connection to %s; not fetching feed %s", url, this);
+            LOG.error(message);
+            halt(400, message);
             return null;
         }
 
@@ -190,7 +205,9 @@ public class FeedSource extends Model {
             conn.connect();
 
             if (conn.getResponseCode() == HttpURLConnection.HTTP_NOT_MODIFIED) {
-                LOG.info("Feed {} has not been modified", this);
+                String message = String.format("Feed %s has not been modified", this);
+                LOG.info(message);
+                halt(304, message);
                 return null;
             }
 
@@ -203,11 +220,15 @@ public class FeedSource extends Model {
             }
 
             else {
-                LOG.error("HTTP status {} retrieving feed {}", conn.getResponseMessage(), this);
+                String message = String.format("HTTP status %s retrieving feed %s", conn.getResponseMessage(), this);
+                LOG.error(message);
+                halt(conn.getResponseCode(), message);
                 return null;
             }
         } catch (IOException e) {
-            LOG.error("Unable to connect to {}; not fetching feed {}", url, this);
+            String message = String.format("Unable to connect to %s; not fetching feed %s", url, this);
+            LOG.error(message);
+            halt(400, message);
             return null;
         }
 
@@ -216,7 +237,7 @@ public class FeedSource extends Model {
         newFeed.hash();
 
         if (latest != null && newFeed.hash.equals(latest.hash)) {
-            LOG.warn("Feed {} was fetched but has not changed; server operators should add If-Modified-Since support to avoid wasting bandwidth", this);
+            LOG.warn("Feed %s was fetched but has not changed; server operators should add If-Modified-Since support to avoid wasting bandwidth", this);
             newFeed.getFeed().delete();
             return null;
         }
@@ -411,5 +432,9 @@ public class FeedSource extends Model {
         }
         branding.add(agencyBranding);
     }*/
+
+    public FeedSource clone () throws CloneNotSupportedException {
+        return (FeedSource) super.clone();
+    }
 
 }

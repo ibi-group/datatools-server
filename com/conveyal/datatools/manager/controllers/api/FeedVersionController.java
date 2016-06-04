@@ -143,7 +143,7 @@ public class FeedVersionController  {
         FeedSource s = FeedSource.get(req.queryParams("feedSourceId"));
 
         if (FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.equals(s.retrievalMethod))
-            halt("Feed is autofetched! Cannot upload.");
+            halt(400, "Feed is autofetched! Cannot upload.");
 
         FeedVersion v = new FeedVersion(s);
         //v.setUser(req.attribute("auth0User"));
@@ -164,7 +164,7 @@ public class FeedVersionController  {
             v.newFeed(uploadStream);
         } catch (Exception e) {
             LOG.error("Unable to open input stream from upload");
-            halt("Unable to read uploaded feed");
+            halt(400, "Unable to read uploaded feed");
         }
 
         v.hash();
@@ -172,7 +172,8 @@ public class FeedVersionController  {
         FeedVersion latest = s.getLatest();
         if (latest != null && latest.hash.equals(v.hash)) {
             v.getFeed().delete();
-            return null;
+            // Uploaded feed is same as latest version
+            halt(304);
         }
 
         // for now run sychronously so the user sees something after the redirect
