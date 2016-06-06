@@ -25,7 +25,7 @@ public class SnapshotTx extends DatabaseTx {
     }
 
     /** make the snapshot */
-    public void make (AgencyTx master) {
+    public void make (FeedTx master) {
         // make sure it's empty
         if (tx.getAll().size() != 0)
             throw new IllegalStateException("Cannot snapshot into non-empty db");
@@ -58,7 +58,7 @@ public class SnapshotTx extends DatabaseTx {
      * @return any stop IDs that had been deleted and were restored so that this snapshot would be valid.
      */
     public List<Stop> restore (String agencyId) {
-        DB targetTx = VersionedDataStore.getRawAgencyTx(agencyId);
+        DB targetTx = VersionedDataStore.getRawFeedTx(agencyId);
 
         for (String obj : targetTx.getAll().keySet()) {
             if (obj.equals("snapshotVersion") || obj.equals("stops"))
@@ -109,9 +109,9 @@ public class SnapshotTx extends DatabaseTx {
             pump(targetTx, "tripCountByPatternAndCalendar",
                     (BTreeMap) this.<Tuple2<String, String>, Long>getMap("tripCountByPatternAndCalendar"));
 
-        // make an agencytx to build indices and restore stops
+        // make an FeedTx to build indices and restore stops
         LOG.info("Rebuilding indices, this could take a little while . . . ");
-        AgencyTx atx = new AgencyTx(targetTx);
+        FeedTx atx = new FeedTx(targetTx);
         LOG.info("done.");
 
         LOG.info("Restoring deleted stops");

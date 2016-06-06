@@ -7,7 +7,7 @@ import com.conveyal.gtfs.model.Service;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.base.Function;
 import com.google.common.collect.Collections2;
-import com.conveyal.datatools.editor.datastore.AgencyTx;
+import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.models.Model;
 import java.time.LocalDate;
 
@@ -199,7 +199,7 @@ public class ServiceCalendar extends Model implements Cloneable, Serializable {
     }
 
     /** add transient info for UI with number of routes, number of trips */
-    public void addDerivedInfo(final AgencyTx tx) {
+    public void addDerivedInfo(final FeedTx tx) {
         this.numberOfTrips = tx.tripCountByCalendar.get(this.id);
 
         if (this.numberOfTrips == null)

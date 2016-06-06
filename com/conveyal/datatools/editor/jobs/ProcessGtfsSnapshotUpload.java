@@ -44,7 +44,7 @@ public class ProcessGtfsSnapshotUpload implements Runnable {
             reader.setEntityStore(store);
             reader.run();
 
-            LOG.info("GtfsImporter: listing agencies...");
+            LOG.info("GtfsImporter: listing feeds...");
 
             for (org.onebusaway.gtfs.model.Agency gtfsAgency : reader.getAgencies()) {
 

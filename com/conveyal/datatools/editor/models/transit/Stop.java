@@ -7,7 +7,7 @@ import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.GeometryFactory;
 import com.vividsolutions.jts.geom.Point;
 import com.vividsolutions.jts.geom.PrecisionModel;
-import com.conveyal.datatools.editor.datastore.AgencyTx;
+import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.models.Model;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -132,8 +132,8 @@ public class Stop extends Model implements Cloneable, Serializable {
         return ret;
     }
 
-    /** Merge the given stops IDs within the given AgencyTx, deleting stops and updating trip patterns and trips */
-    public static void merge (List<String> stopIds, AgencyTx tx) {
+    /** Merge the given stops IDs within the given FeedTx, deleting stops and updating trip patterns and trips */
+    public static void merge (List<String> stopIds, FeedTx tx) {
         Stop target = tx.stops.get(stopIds.get(0));
         for (int i = 1; i < stopIds.size(); i++) {
             Stop source = tx.stops.get(stopIds.get(i));

@@ -1,10 +1,11 @@
 package com.conveyal.datatools.editor.jobs;
 
+import com.conveyal.datatools.editor.datastore.FeedTx;
+import com.conveyal.datatools.manager.models.FeedSource;
 import com.google.common.io.Files;
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.GeometryFactory;
 import com.vividsolutions.jts.geom.LineString;
-import com.conveyal.datatools.editor.datastore.AgencyTx;
 import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.*;
@@ -49,7 +50,7 @@ public class GisExport implements Runnable {
         File outShp = new File(outDir, file.getName().replaceAll("\\.zip", "") + ".shp");
 
         GlobalTx gtx = VersionedDataStore.getGlobalTx();
-        AgencyTx atx = null;
+        FeedTx atx = null;
         try {
             ShapefileDataStoreFactory dataStoreFactory = new ShapefileDataStoreFactory();
 
@@ -97,17 +98,17 @@ public class GisExport implements Runnable {
                 datastore.createSchema(STOP_TYPE);
                 featureBuilder = new SimpleFeatureBuilder(STOP_TYPE);
 
-                for (String agencyId : agencyIds) {
-                    Agency agency = gtx.agencies.get(agencyId);
+                for (String feedId : agencyIds) {
+                    FeedSource fs = gtx.feeds.get(feedId);
 
-                    atx = VersionedDataStore.getAgencyTx(agencyId);
+                    atx = VersionedDataStore.getFeedTx(feedId);
                     for (Stop s : atx.stops.values()) {
                         featureBuilder.add(s.location);
                         featureBuilder.add(s.stopName);
                         featureBuilder.add(s.stopCode);
                         featureBuilder.add(s.stopDesc);
                         featureBuilder.add(s.getGtfsId());
-                        featureBuilder.add(agency.name);
+                        featureBuilder.add(fs.name);
                         SimpleFeature feature = featureBuilder.buildFeature(null);
                         features.add(feature);
                     }
@@ -121,10 +122,10 @@ public class GisExport implements Runnable {
 
                 GeometryFactory gf = new GeometryFactory();
 
-                for (String agencyId : agencyIds) {
-                    Agency agency = gtx.agencies.get(agencyId);
+                for (String feedId : agencyIds) {
+                    FeedSource fs = gtx.feeds.get(feedId);
 
-                    atx = VersionedDataStore.getAgencyTx(agencyId);
+                    atx = VersionedDataStore.getFeedTx(feedId);
 
                     // we loop over trip patterns. Note that this will yield several lines for routes that have
                     // multiple patterns. There's no real good way to reconcile the shapes of multiple patterns.
@@ -159,7 +160,7 @@ public class GisExport implements Runnable {
                         featureBuilder.add(r.routeUrl);
                         featureBuilder.add(r.routeColor);
                         featureBuilder.add(r.routeTextColor);
-                        featureBuilder.add(agency.name);
+                        featureBuilder.add(fs.name);
                         SimpleFeature feature = featureBuilder.buildFeature(null);
                         features.add(feature);
                     }

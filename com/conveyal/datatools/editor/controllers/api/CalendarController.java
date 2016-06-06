@@ -1,12 +1,12 @@
 package com.conveyal.datatools.editor.controllers.api;
 
+import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.google.common.base.Function;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.Sets;
 import com.conveyal.datatools.editor.controllers.Base;
-import com.conveyal.datatools.editor.datastore.AgencyTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.ScheduleException;
 import com.conveyal.datatools.editor.models.transit.ServiceCalendar;
@@ -39,7 +39,7 @@ public class CalendarController {
             halt(400);
         }
 
-        final AgencyTx tx = VersionedDataStore.getAgencyTx(feedId);
+        final FeedTx tx = VersionedDataStore.getFeedTx(feedId);
 
         try {
             if (id != null) {
@@ -102,7 +102,7 @@ public class CalendarController {
 
     public static Object createCalendar(Request req, Response res) {
         ServiceCalendar cal;
-        AgencyTx tx = null;
+        FeedTx tx = null;
 
         try {
             cal = Base.mapper.readValue(req.body(), ServiceCalendar.class);
@@ -114,7 +114,7 @@ public class CalendarController {
             if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(cal.feedId))
                 halt(400);
             
-            tx = VersionedDataStore.getAgencyTx(cal.feedId);
+            tx = VersionedDataStore.getFeedTx(cal.feedId);
             
             if (tx.calendars.containsKey(cal.id)) {
                 tx.rollback();
@@ -142,7 +142,7 @@ public class CalendarController {
 
     public static Object updateCalendar(Request req, Response res) {
         ServiceCalendar cal;
-        AgencyTx tx = null;
+        FeedTx tx = null;
 
         try {
             cal = Base.mapper.readValue(req.body(), ServiceCalendar.class);
@@ -154,7 +154,7 @@ public class CalendarController {
             if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(cal.feedId))
                 halt(400);
 
-            tx = VersionedDataStore.getAgencyTx(cal.feedId);
+            tx = VersionedDataStore.getFeedTx(cal.feedId);
             
             if (!tx.calendars.containsKey(cal.id)) {
                 tx.rollback();
@@ -187,7 +187,7 @@ public class CalendarController {
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
 
-        AgencyTx tx = VersionedDataStore.getAgencyTx(feedId);
+        FeedTx tx = VersionedDataStore.getFeedTx(feedId);
 
         if (id == null || !tx.calendars.containsKey(id)) {
             tx.rollback();

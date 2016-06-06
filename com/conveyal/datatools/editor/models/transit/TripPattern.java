@@ -1,6 +1,7 @@
 package com.conveyal.datatools.editor.models.transit;
 
 
+import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Geometry;
@@ -8,7 +9,6 @@ import com.vividsolutions.jts.geom.LineString;
 import com.vividsolutions.jts.geom.Polygon;
 import com.vividsolutions.jts.linearref.LinearLocation;
 import com.vividsolutions.jts.linearref.LocationIndexedLine;
-import com.conveyal.datatools.editor.datastore.AgencyTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.Model;
 import org.geotools.referencing.GeodeticCalculator;
@@ -51,7 +51,7 @@ public class TripPattern extends Model implements Cloneable, Serializable {
         if (useStraightLineDistances || shape == null)
             return null;
 
-        AgencyTx tx = VersionedDataStore.getAgencyTx(this.agencyId);
+        FeedTx tx = VersionedDataStore.getFeedTx(this.agencyId);
 
         try {
             LineString[] ret = new LineString[patternStops.size()];
@@ -121,7 +121,7 @@ public class TripPattern extends Model implements Cloneable, Serializable {
      * of course, we check to ensure that that is the case and fail if it's not
      * this lets us easily detect what has happened simply by length
      */
-    public static void reconcilePatternStops(TripPattern originalTripPattern, TripPattern newTripPattern, AgencyTx tx) {        
+    public static void reconcilePatternStops(TripPattern originalTripPattern, TripPattern newTripPattern, FeedTx tx) {
         // convenience
         List<TripPatternStop> originalStops = originalTripPattern.patternStops;
         List<TripPatternStop> newStops = newTripPattern.patternStops;
@@ -270,7 +270,7 @@ public class TripPattern extends Model implements Cloneable, Serializable {
     }
 
     public void calcShapeDistTraveled () {
-        AgencyTx tx = VersionedDataStore.getAgencyTx(agencyId);
+        FeedTx tx = VersionedDataStore.getFeedTx(agencyId);
         calcShapeDistTraveled(tx);
         tx.rollback();
     }
@@ -288,7 +288,7 @@ public class TripPattern extends Model implements Cloneable, Serializable {
      * 5. otherwise, mark it to be returned to on the second pass
      * 6. on the second pass, just snap to the closest point on the subsection of the shape defined by the previous and next stop positions.
      */
-    public void calcShapeDistTraveled(AgencyTx tx) {
+    public void calcShapeDistTraveled(FeedTx tx) {
         if (patternStops.size() == 0)
             return;
 
@@ -440,7 +440,7 @@ public class TripPattern extends Model implements Cloneable, Serializable {
     }
 
     /** Calculate distances using straight line geometries */
-    public void calcShapeDistTraveledStraightLine(AgencyTx tx) {
+    public void calcShapeDistTraveledStraightLine(FeedTx tx) {
         useStraightLineDistances = true;
         GeodeticCalculator gc = new GeodeticCalculator();
         Stop prev = tx.stops.get(patternStops.get(0).stopId);

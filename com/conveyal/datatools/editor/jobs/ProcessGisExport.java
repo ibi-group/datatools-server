@@ -92,7 +92,7 @@ public class ProcessGisExport implements Runnable {
                 com.conveyal.datatools.editor.datastore.createSchema(STOP_TYPE);
                 featureBuilder = new SimpleFeatureBuilder(STOP_TYPE);
 
-                List<Stop> stops = Stop.find("agency in (:ids)").bind("ids", gisExport.agencies).fetch();
+                List<Stop> stops = Stop.find("agency in (:ids)").bind("ids", gisExport.feeds).fetch();
 
                 for(Stop s : stops)
                 {
@@ -112,7 +112,7 @@ public class ProcessGisExport implements Runnable {
                 com.conveyal.datatools.editor.datastore.createSchema(ROUTE_TYPE);
                 featureBuilder = new SimpleFeatureBuilder(ROUTE_TYPE);
 
-                List<Route> routes = Route.find("agency in (:ids)").bind("ids", gisExport.agencies).fetch();
+                List<Route> routes = Route.find("agency in (:ids)").bind("ids", gisExport.feeds).fetch();
 
                 // check for duplicates
 

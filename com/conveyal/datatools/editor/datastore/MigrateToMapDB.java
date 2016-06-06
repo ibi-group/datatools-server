@@ -38,8 +38,8 @@ public class MigrateToMapDB {
 //
 //    private static GeometryFactory gf = new GeometryFactory();
 //
-//    /** keep track of transactions for all agencies */
-//    private Map<String, AgencyTx> atxes = Maps.newHashMap();
+//    /** keep track of transactions for all feeds */
+//    private Map<String, FeedTx> atxes = Maps.newHashMap();
 //
 //    /** cache shapes; use a mapdb so it's not huge */
 //    private Map<String, LineString> shapeCache = DBMaker.newTempHashMap();
@@ -92,20 +92,20 @@ public class MigrateToMapDB {
 //
 //            gtx.commit();
 //
-//            for (AgencyTx atx : atxes.values()) {
+//            for (FeedTx atx : atxes.values()) {
 //                atx.commit();
 //            }
 //        } finally {
 //            gtx.rollbackIfOpen();
 //
-//            for (AgencyTx atx : atxes.values()) {
+//            for (FeedTx atx : atxes.values()) {
 //                atx.rollbackIfOpen();
 //            }
 //        }
 //    }
 //
 //    private void readAgencies () throws Exception {
-//        System.out.println("Reading agencies");
+//        System.out.println("Reading feeds");
 //
 //        DatabaseCsv reader = getCsvReader("agency.csv");
 //
@@ -127,11 +127,11 @@ public class MigrateToMapDB {
 //            // easy to maintain referential integrity; we're retaining DB IDs.
 //            a.routeTypeId = reader.get("defaultroutetype_id");
 //
-//            gtx.agencies.put(a.id, a);
+//            gtx.feeds.put(a.id, a);
 //            count++;
 //        }
 //
-//        System.out.println("imported " + count + " agencies");
+//        System.out.println("imported " + count + " feeds");
 //    }
 //
 //    private void readAccounts () throws Exception {
@@ -188,7 +188,7 @@ public class MigrateToMapDB {
 //            s.zoneId = reader.get("zoneid");
 //            s.id = reader.get("id");
 //
-//            getAgencyTx(s.agencyId).stops.put(s.id, s);
+//            getFeedTx(s.agencyId).stops.put(s.id, s);
 //            count ++;
 //        }
 //
@@ -224,7 +224,7 @@ public class MigrateToMapDB {
 //            // cache the agency ID
 //            routeAgencyMap.put(Long.parseLong(r.id), Long.parseLong(r.agencyId));
 //
-//            getAgencyTx(r.agencyId).routes.put(r.id, r);
+//            getFeedTx(r.agencyId).routes.put(r.id, r);
 //            count++;
 //        }
 //
@@ -306,9 +306,9 @@ public class MigrateToMapDB {
 //            p.agencyId = routeAgencyMap.get(Long.parseLong(p.routeId)) + "";
 //            patternAgencyMap.put(Long.parseLong(p.id), Long.parseLong(p.agencyId));
 //
-//            p.calcShapeDistTraveled(getAgencyTx(p.agencyId));
+//            p.calcShapeDistTraveled(getFeedTx(p.agencyId));
 //
-//            getAgencyTx(p.agencyId).tripPatterns.put(p.id, p);
+//            getFeedTx(p.agencyId).tripPatterns.put(p.id, p);
 //            count++;
 //        }
 //
@@ -394,7 +394,7 @@ public class MigrateToMapDB {
 //
 //            count++;
 //
-//            getAgencyTx(t.agencyId).trips.put(t.id, t);
+//            getFeedTx(t.agencyId).trips.put(t.id, t);
 //        }
 //
 //        System.out.println("Read " + count + " trips");
@@ -447,7 +447,7 @@ public class MigrateToMapDB {
 //            c.sunday = reader.getBoolean("sunday");
 //            c.agencyId = reader.get("agency_id");
 //
-//            getAgencyTx(c.agencyId).calendars.put(c.id, c);
+//            getFeedTx(c.agencyId).calendars.put(c.id, c);
 //            count++;
 //        }
 //
@@ -501,7 +501,7 @@ public class MigrateToMapDB {
 //            e.dates = new ArrayList<LocalDate>(exceptionDates.get(e.id));
 //            e.customSchedule = new ArrayList<String>(exceptionCalendars.get(e.id));
 //
-//            getAgencyTx(e.agencyId).exceptions.put(e.id, e);
+//            getFeedTx(e.agencyId).exceptions.put(e.id, e);
 //            count++;
 //        }
 //
@@ -518,9 +518,9 @@ public class MigrateToMapDB {
 //        }
 //    }
 //
-//    private AgencyTx getAgencyTx (String agencyId) {
+//    private FeedTx getFeedTx (String agencyId) {
 //        if (!atxes.containsKey(agencyId))
-//            atxes.put(agencyId, VersionedDataStore.getAgencyTx(agencyId));
+//            atxes.put(agencyId, VersionedDataStore.getFeedTx(agencyId));
 //
 //        return atxes.get(agencyId);
 //    }

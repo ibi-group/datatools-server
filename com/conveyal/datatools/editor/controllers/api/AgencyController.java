@@ -1,7 +1,7 @@
 package com.conveyal.datatools.editor.controllers.api;
 
 import com.conveyal.datatools.editor.controllers.Base;
-import com.conveyal.datatools.editor.datastore.AgencyTx;
+import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.Agency;
@@ -20,8 +20,8 @@ public class AgencyController {
         String feedId = req.queryParams("feedId");
         Object json = null;
         try {
-            GlobalTx tx = VersionedDataStore.getGlobalTx();
-
+//            GlobalTx tx = VersionedDataStore.getGlobalTx();
+            final FeedTx tx = VersionedDataStore.getFeedTx(feedId);
             if(id != null) {
                 if (!tx.agencies.containsKey(id)) {
                     tx.rollback();
@@ -54,8 +54,8 @@ public class AgencyController {
                 agency.gtfsAgencyId = "AGENCY_" + agency.id;
             }
             
-            GlobalTx tx = VersionedDataStore.getGlobalTx();
-
+//            GlobalTx tx = VersionedDataStore.getGlobalTx();
+            final FeedTx tx = VersionedDataStore.getFeedTx(feedId);
             // if agency id already exists
             if (tx.agencies.containsKey(agency.id)) {
                 tx.rollback();
@@ -81,8 +81,8 @@ public class AgencyController {
         try {
             agency = Base.mapper.readValue(req.body(), Agency.class);
             
-            GlobalTx tx = VersionedDataStore.getGlobalTx();
-
+//            GlobalTx tx = VersionedDataStore.getGlobalTx();
+            final FeedTx tx = VersionedDataStore.getFeedTx(feedId);
             if(!tx.agencies.containsKey(agency.id)) {
                 tx.rollback();
                 halt(400);
@@ -111,11 +111,11 @@ public class AgencyController {
             halt(400);
         }
         
-        if (!tx.agencies.containsKey(id)) {
+        if (!tx.feeds.containsKey(id)) {
             halt(404);
         }
 
-        tx.agencies.remove(id);
+        tx.feeds.remove(id);
         tx.commit();
         
         return true; // ok();
@@ -128,14 +128,15 @@ public class AgencyController {
         String feedId = req.queryParams("feedId");
 
         // make sure the agency exists
-        GlobalTx gtx = VersionedDataStore.getGlobalTx();
-        if (!gtx.agencies.containsKey(id)) {
-            gtx.rollback();
+//        GlobalTx gtx = VersionedDataStore.getGlobalTx();
+        final FeedTx tx = VersionedDataStore.getFeedTx(feedId);
+        if (!tx.agencies.containsKey(id)) {
+            tx.rollback();
             halt(404);
         }
-        gtx.rollback();
+        tx.rollback();
 
-        AgencyTx.duplicate(id);
+        FeedTx.duplicate(id);
         return true; // ok();
     }
 

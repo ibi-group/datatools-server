@@ -1,11 +1,11 @@
 package com.conveyal.datatools.editor.controllers.api;
 
+import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.google.common.base.Function;
 import com.google.common.collect.Collections2;
 import com.conveyal.datatools.editor.controllers.Base;
-import com.conveyal.datatools.editor.datastore.AgencyTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.*;
 import org.geotools.referencing.GeodeticCalculator;
@@ -53,7 +53,7 @@ public class StopController {
             halt(400);
         }
 
-        final AgencyTx tx = VersionedDataStore.getAgencyTx(feedId);
+        final FeedTx tx = VersionedDataStore.getFeedTx(feedId);
  
         try {
               if (id != null) {
@@ -118,7 +118,7 @@ public class StopController {
     }
 
     public static Object createStop(Request req, Response res) {
-        AgencyTx tx = null;
+        FeedTx tx = null;
         Object json = null;
         try {
             Stop stop = Base.mapper.readValue(req.body(), Stop.class);
@@ -130,7 +130,7 @@ public class StopController {
                 halt(400);
             }
             
-            tx = VersionedDataStore.getAgencyTx(stop.feedId);
+            tx = VersionedDataStore.getFeedTx(stop.feedId);
             
             if (tx.stops.containsKey(stop.id)) {
                 halt(400);
@@ -150,7 +150,7 @@ public class StopController {
 
 
     public static Object updateStop(Request req, Response res) {
-        AgencyTx tx = null;
+        FeedTx tx = null;
         Object json = null;
         try {
             Stop stop = Base.mapper.readValue(req.body(), Stop.class);
@@ -162,7 +162,7 @@ public class StopController {
                 halt(400);
             }
             
-            tx = VersionedDataStore.getAgencyTx(stop.feedId);
+            tx = VersionedDataStore.getFeedTx(stop.feedId);
             
             if (!tx.stops.containsKey(stop.id)) {
                 halt(400);
@@ -192,7 +192,7 @@ public class StopController {
             halt(400);
         }
 
-        AgencyTx tx = VersionedDataStore.getAgencyTx(feedId);
+        FeedTx tx = VersionedDataStore.getFeedTx(feedId);
         try {
             if (!tx.stops.containsKey(id)) {
                 halt(404);
@@ -226,7 +226,7 @@ public class StopController {
             halt(400);
         }
 
-        AgencyTx atx = VersionedDataStore.getAgencyTx(feedId);
+        FeedTx atx = VersionedDataStore.getFeedTx(feedId);
 
         try {
             List<List<Stop>> ret = new ArrayList<List<Stop>>();
@@ -290,7 +290,7 @@ public class StopController {
             halt(400);
         }
 
-        AgencyTx tx = VersionedDataStore.getAgencyTx(feedId);
+        FeedTx tx = VersionedDataStore.getFeedTx(feedId);
 
         try {
             Stop.merge(mergedStopIds, tx);

@@ -29,7 +29,7 @@ public class VersionedDataStore {
     private static File dataDirectory = new File((String) DataManager.config.get("application").get("data").get("editor_mapdb").asText());
     private static TxMaker globalTxMaker;
 
-    private static Map<String, TxMaker> agencyTxMakers = Maps.newConcurrentMap();
+    private static Map<String, TxMaker> feedTxMakers = Maps.newConcurrentMap();
 
     static {
         File globalDataDirectory = new File(dataDirectory, "global");
@@ -51,19 +51,19 @@ public class VersionedDataStore {
      * Start a transaction in an agency database. No checking is done to ensure the agency exists;
      * if it does not you will get a (hopefully) empty DB, unless you've done the same thing previously.
      */
-    public static AgencyTx getAgencyTx (String agencyId) {
-        return new AgencyTx(getRawAgencyTx(agencyId));
+    public static FeedTx getFeedTx(String feedId) {
+        return new FeedTx(getRawFeedTx(feedId));
     }
 
     /**
      * Get a raw MapDB transaction for the given database. Use at your own risk - doesn't properly handle indexing, etc.
      * Intended for use primarily with database restore
      */
-    static DB getRawAgencyTx (String agencyId) {
-        if (!agencyTxMakers.containsKey(agencyId)) {
-            synchronized (agencyTxMakers) {
-                if (!agencyTxMakers.containsKey(agencyId)) {
-                    File path = new File(dataDirectory, agencyId);
+    static DB getRawFeedTx(String feedId) {
+        if (!feedTxMakers.containsKey(feedId)) {
+            synchronized (feedTxMakers) {
+                if (!feedTxMakers.containsKey(feedId)) {
+                    File path = new File(dataDirectory, feedId);
                     path.mkdirs();
 
                     TxMaker agencyTxm = DBMaker.newFileDB(new File(path, "master.db"))
@@ -71,17 +71,17 @@ public class VersionedDataStore {
                             .compressionEnable()
                             .makeTxMaker();
 
-                    agencyTxMakers.put(agencyId, agencyTxm);
+                    feedTxMakers.put(feedId, agencyTxm);
                 }
             }
         }
 
-        return agencyTxMakers.get(agencyId).makeTx();
+        return feedTxMakers.get(feedId).makeTx();
     }
 
     /** Take a snapshot of an agency database. The snapshot will be saved in the global database. */
-    public static Snapshot takeSnapshot (String agencyId, String name, String comment) {
-        AgencyTx tx = getAgencyTx(agencyId);
+    public static Snapshot takeSnapshot (String feedId, String name, String comment) {
+        FeedTx tx = getFeedTx(feedId);
         GlobalTx gtx = getGlobalTx();
         int version = -1;
         DB snapshot = null;
@@ -89,10 +89,10 @@ public class VersionedDataStore {
         try {
             version = tx.getNextSnapshotId();
 
-            LOG.info("Creating snapshot %s for agency %s", agencyId, version);
+            LOG.info("Creating snapshot %s for feed %s", feedId, version);
             long startTime = System.currentTimeMillis();
 
-            ret = new Snapshot(agencyId, version);
+            ret = new Snapshot(feedId, version);
 
             if (gtx.snapshots.containsKey(ret.id))
                 throw new IllegalStateException("Duplicate snapshot IDs");
@@ -102,7 +102,7 @@ public class VersionedDataStore {
             ret.comment = comment;
             ret.current = true;
 
-            snapshot = getSnapshotDb(agencyId, version, false);
+            snapshot = getSnapshotDb(feedId, version, false);
 
             new SnapshotTx(snapshot).make(tx);
             // for good measure
@@ -122,7 +122,7 @@ public class VersionedDataStore {
                 snapshot.close();
 
             if (version >= 0) {
-                File snapshotDir = getSnapshotDir(agencyId, version);
+                File snapshotDir = getSnapshotDir(feedId, version);
 
                 if (snapshotDir.exists()) {
                     for (File file : snapshotDir.listFiles()) {
@@ -157,8 +157,8 @@ public class VersionedDataStore {
     }
 
     /** get the directory in which to store a snapshot */
-    public static DB getSnapshotDb (String agencyId, int version, boolean readOnly) {
-        File thisSnapshotDir = getSnapshotDir(agencyId, version);
+    public static DB getSnapshotDb (String feedId, int version, boolean readOnly) {
+        File thisSnapshotDir = getSnapshotDir(feedId, version);
         thisSnapshotDir.mkdirs();
         File snapshotFile = new File(thisSnapshotDir, "snapshot_" + version + ".db");
 
@@ -177,24 +177,24 @@ public class VersionedDataStore {
     }
 
     /** get the directory in which a snapshot is stored */
-    public static File getSnapshotDir (String agencyId, int version) {
-        File agencyDir = new File(dataDirectory, agencyId);
+    public static File getSnapshotDir (String feedId, int version) {
+        File agencyDir = new File(dataDirectory, feedId);
         File snapshotsDir = new File(agencyDir, "snapshots");
         return new File(snapshotsDir, "" + version);
     }
 
     /** Convenience function to check if an agency exists */
-    public static boolean agencyExists (String agencyId) {
+    public static boolean agencyExists (String feedId) {
         GlobalTx tx = getGlobalTx();
-        boolean exists = tx.agencies.containsKey(agencyId);
+        boolean exists = tx.feeds.containsKey(feedId);
         tx.rollback();
         return exists;
     }
 
     /** Get a (read-only) agency TX into a particular snapshot version of an agency */
-    public static AgencyTx getAgencyTx(String agencyId, int version) {
-        DB db = getSnapshotDb(agencyId, version, true);
-        return new AgencyTx(db, false);
+    public static FeedTx getFeedTx(String feedId, int version) {
+        DB db = getSnapshotDb(feedId, version, true);
+        return new FeedTx(db, false);
     }
 
     /** A wrapped transaction, so the database just looks like a POJO */

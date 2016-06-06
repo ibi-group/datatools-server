@@ -5,7 +5,7 @@ import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.google.common.base.Function;
 import com.google.common.collect.Collections2;
 import com.conveyal.datatools.editor.controllers.Base;
-import com.conveyal.datatools.editor.datastore.AgencyTx;
+import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.Trip;
 import com.conveyal.datatools.editor.models.transit.TripPattern;
@@ -39,7 +39,7 @@ public class TripPatternController {
             halt(400);
         }
 
-        final AgencyTx tx = VersionedDataStore.getAgencyTx(feedId);
+        final FeedTx tx = VersionedDataStore.getFeedTx(feedId);
 
         try {
 
@@ -94,7 +94,7 @@ public class TripPatternController {
                 halt(400);
             }
             
-            AgencyTx tx = VersionedDataStore.getAgencyTx(tripPattern.feedId);
+            FeedTx tx = VersionedDataStore.getFeedTx(tripPattern.feedId);
             
             if (tx.tripPatterns.containsKey(tripPattern.id)) {
                 tx.rollback();
@@ -116,7 +116,7 @@ public class TripPatternController {
 
     public static Object updateTripPattern(Request req, Response res) {
         TripPattern tripPattern;
-        AgencyTx tx = null;
+        FeedTx tx = null;
         try {
             tripPattern = Base.mapper.readValue(req.body(), TripPattern.class);
             
@@ -131,7 +131,7 @@ public class TripPatternController {
                 halt(400);
             }
             
-            tx = VersionedDataStore.getAgencyTx(tripPattern.feedId);
+            tx = VersionedDataStore.getFeedTx(tripPattern.feedId);
             
             TripPattern originalTripPattern = tx.tripPatterns.get(tripPattern.id);
             
@@ -173,7 +173,7 @@ public class TripPatternController {
             halt(400);
         }
 
-        AgencyTx tx = VersionedDataStore.getAgencyTx(feedId);
+        FeedTx tx = VersionedDataStore.getFeedTx(feedId);
 
         try {
             // first zap all trips on this trip pattern

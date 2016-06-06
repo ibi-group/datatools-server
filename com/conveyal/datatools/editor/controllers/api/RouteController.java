@@ -1,11 +1,11 @@
 package com.conveyal.datatools.editor.controllers.api;
 
+import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.google.common.base.Function;
 import com.google.common.collect.Collections2;
 import com.conveyal.datatools.editor.controllers.Base;
-import com.conveyal.datatools.editor.datastore.AgencyTx;
 import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.Route;
@@ -36,7 +36,7 @@ public class RouteController {
             halt(400);
         }
 
-        final AgencyTx tx = VersionedDataStore.getAgencyTx(feedId);
+        final FeedTx tx = VersionedDataStore.getFeedTx(feedId);
 
         try {
             if (id != null) {
@@ -77,7 +77,7 @@ public class RouteController {
             route = Base.mapper.readValue(req.body(), Route.class);
             
             GlobalTx gtx = VersionedDataStore.getGlobalTx();
-            if (!gtx.agencies.containsKey(route.feedId)) {
+            if (!gtx.feeds.containsKey(route.feedId)) {
                 gtx.rollback();
                 halt(400);
             }
@@ -87,7 +87,7 @@ public class RouteController {
             
             gtx.rollback();
    
-            AgencyTx tx = VersionedDataStore.getAgencyTx(route.feedId);
+            FeedTx tx = VersionedDataStore.getFeedTx(route.feedId);
             
             if (tx.routes.containsKey(route.id)) {
                 tx.rollback();
@@ -117,7 +117,7 @@ public class RouteController {
         try {
             route = Base.mapper.readValue(req.body(), Route.class);
    
-            AgencyTx tx = VersionedDataStore.getAgencyTx(route.feedId);
+            FeedTx tx = VersionedDataStore.getFeedTx(route.feedId);
             
             if (!tx.routes.containsKey(route.id)) {
                 tx.rollback();
@@ -153,7 +153,7 @@ public class RouteController {
         if(id == null || feedId == null)
             halt(400);
 
-        AgencyTx tx = VersionedDataStore.getAgencyTx(feedId);
+        FeedTx tx = VersionedDataStore.getFeedTx(feedId);
         
 
         
@@ -202,7 +202,7 @@ public class RouteController {
         if (feedId == null || from == null || into == null)
             halt(400);
 
-        final AgencyTx tx = VersionedDataStore.getAgencyTx(feedId);
+        final FeedTx tx = VersionedDataStore.getFeedTx(feedId);
 
         try {
             // ensure the routes exist

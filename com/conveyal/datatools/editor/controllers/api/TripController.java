@@ -1,7 +1,7 @@
 package com.conveyal.datatools.editor.controllers.api;
 
 import com.conveyal.datatools.editor.controllers.Base;
-import com.conveyal.datatools.editor.datastore.AgencyTx;
+import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.StopTime;
 import com.conveyal.datatools.editor.models.transit.Trip;
@@ -41,7 +41,7 @@ public class TripController {
             halt(400);
         }
 
-        AgencyTx tx = VersionedDataStore.getAgencyTx(feedId);
+        FeedTx tx = VersionedDataStore.getFeedTx(feedId);
 
         try {
             if (id != null) {
@@ -75,7 +75,7 @@ public class TripController {
     }
     
     public static Object createTrip(Request req, Response res) {
-        AgencyTx tx = null;
+        FeedTx tx = null;
 
         try {
             Trip trip = Base.mapper.readValue(req.body(), Trip.class);
@@ -87,7 +87,7 @@ public class TripController {
                 halt(400);
             }
 
-            tx = VersionedDataStore.getAgencyTx(trip.feedId);
+            tx = VersionedDataStore.getFeedTx(trip.feedId);
 
             if (tx.trips.containsKey(trip.id)) {
                 tx.rollback();
@@ -112,7 +112,7 @@ public class TripController {
     }
     
     public static Object updateTrip(Request req, Response res) {
-        AgencyTx tx = null;
+        FeedTx tx = null;
 
         try {
             Trip trip = Base.mapper.readValue(req.body(), Trip.class);
@@ -124,7 +124,7 @@ public class TripController {
                 halt(400);
             }
 
-            tx = VersionedDataStore.getAgencyTx(trip.feedId);
+            tx = VersionedDataStore.getFeedTx(trip.feedId);
 
             if (!tx.trips.containsKey(trip.id)) {
                 tx.rollback();
@@ -179,7 +179,7 @@ public class TripController {
             halt(400);
         }
 
-        AgencyTx tx = VersionedDataStore.getAgencyTx(feedId);
+        FeedTx tx = VersionedDataStore.getFeedTx(feedId);
         Trip trip = tx.trips.remove(id);
         try {
             json = Base.toJson(trip, false);

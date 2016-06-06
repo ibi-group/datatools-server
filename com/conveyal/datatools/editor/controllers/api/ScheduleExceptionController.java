@@ -1,7 +1,7 @@
 package com.conveyal.datatools.editor.controllers.api;
 
 import com.conveyal.datatools.editor.controllers.Base;
-import com.conveyal.datatools.editor.datastore.AgencyTx;
+import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.ScheduleException;
 import java.time.LocalDate;
@@ -29,10 +29,10 @@ public class ScheduleExceptionController {
             halt(400);
         }
 
-        AgencyTx tx = null;
+        FeedTx tx = null;
 
         try {
-            tx = VersionedDataStore.getAgencyTx(feedId);
+            tx = VersionedDataStore.getFeedTx(feedId);
 
             if (exceptionId != null) {
                 if (!tx.exceptions.containsKey(exceptionId))
@@ -53,7 +53,7 @@ public class ScheduleExceptionController {
     }
     
     public static Object createScheduleException (Request req, Response res) {
-        AgencyTx tx = null;
+        FeedTx tx = null;
         try {
             ScheduleException ex = Base.mapper.readValue(req.body(), ScheduleException.class);
 
@@ -64,7 +64,7 @@ public class ScheduleExceptionController {
             if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(ex.feedId))
                 halt(400);
 
-            tx = VersionedDataStore.getAgencyTx(ex.feedId);
+            tx = VersionedDataStore.getFeedTx(ex.feedId);
 
             if (ex.customSchedule != null) {
                 for (String cal : ex.customSchedule) {
@@ -101,7 +101,7 @@ public class ScheduleExceptionController {
     }
     
     public static Object updateScheduleException (Request req, Response res) {
-        AgencyTx tx = null;
+        FeedTx tx = null;
         try {
             ScheduleException ex = Base.mapper.readValue(req.body(), ScheduleException.class);
 
@@ -112,7 +112,7 @@ public class ScheduleExceptionController {
                 halt(400);
             }
 
-            tx = VersionedDataStore.getAgencyTx(ex.feedId);
+            tx = VersionedDataStore.getFeedTx(ex.feedId);
 
             if (ex.customSchedule != null) {
                 for (String cal : ex.customSchedule) {
@@ -152,7 +152,7 @@ public class ScheduleExceptionController {
             halt(400);
         }
 
-        AgencyTx tx = VersionedDataStore.getAgencyTx(feedId);
+        FeedTx tx = VersionedDataStore.getFeedTx(feedId);
         tx.exceptions.remove(id);
         tx.commit();
 

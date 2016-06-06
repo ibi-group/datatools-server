@@ -2,7 +2,7 @@ package com.conveyal.datatools.editor.models.transit;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.conveyal.datatools.editor.datastore.AgencyTx;
+import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.models.Model;
 import org.slf4j.Logger;
@@ -162,7 +162,7 @@ public class Route extends Model implements Cloneable, Serializable {
     }
 
     // Add information about the days of week this route is active
-    public void addDerivedInfo(AgencyTx tx) {
+    public void addDerivedInfo(FeedTx tx) {
         monday = tuesday = wednesday = thursday = friday = saturday = sunday = false;
 
         for (Trip trip : tx.getTripsByRoute(this.id)) {
