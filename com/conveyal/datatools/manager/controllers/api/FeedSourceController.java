@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.controllers.api;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
+import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.models.*;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
@@ -13,11 +14,10 @@ import spark.Request;
 import spark.Response;
 
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.*;
 
-import static com.conveyal.datatools.manager.auth.Auth0Users.getUsersBySubscription;
-import static com.conveyal.datatools.manager.utils.NotificationsUtils.notifyUsersForSubscription;
 import static spark.Spark.*;
 
 /**
@@ -28,6 +28,7 @@ public class FeedSourceController {
 
     public static JsonManager<FeedSource> json =
             new JsonManager<>(FeedSource.class, JsonViews.UserInterface.class);
+    private static HashMap<String, FetchSingleFeedJob> fetchJobsByFeed = new HashMap<String, FetchSingleFeedJob>();
     public static FeedSource getFeedSource(Request req, Response res) {
         String id = req.params("id");
         Boolean publicFilter = req.pathInfo().contains("public");
@@ -101,10 +102,18 @@ public class FeedSourceController {
         if (source == null) {
             halt(404);
         }
-        notifyUsersForSubscription("feed-updated", id, "Feed property updated for " + source.name);
-        notifyUsersForSubscription("project-updated", source.projectId, "Project updated (feed source property" + source.name + ")");
+
         applyJsonToFeedSource(source, req.body());
         source.save();
+
+        // notify users after successful save
+        NotifyUsersForSubscriptionJob notifyFeedJob = new NotifyUsersForSubscriptionJob("feed-updated", id, "Feed property updated for " + source.name);
+        Thread notifyThread = new Thread(notifyFeedJob);
+        notifyThread.start();
+
+        NotifyUsersForSubscriptionJob notifyProjectJob = new NotifyUsersForSubscriptionJob("project-updated", source.projectId, "Project updated (feed source property for " + source.name + ")");
+        Thread notifyProjectThread = new Thread(notifyProjectJob);
+        notifyProjectThread.start();
 
         return source;
     }
@@ -126,7 +135,17 @@ public class FeedSourceController {
             }
 
             if(entry.getKey().equals("url")) {
-                source.url = new URL(entry.getValue().asText());
+                String url = entry.getValue().asText();
+                try {
+                    source.url = new URL(url);
+
+                    // reset the last fetched date so it can be fetched again
+                    source.lastFetched = null;
+
+                } catch (MalformedURLException e) {
+                    halt(400, "URL '" + url + "' not valid.");
+                }
+
             }
 
             if(entry.getKey().equals("retrievalMethod")) {
@@ -211,14 +230,35 @@ public class FeedSourceController {
             halt(401);
 
         FetchSingleFeedJob job = new FetchSingleFeedJob(s);
+        fetchJobsByFeed.put(s.id, job);
         job.run();
         return true;
     }
 
+//    /**
+//     * The current status of a deployment, polled to update the progress dialog.
+//     * @throws JsonProcessingException
+//     */
+//    public static Object fetchFeedStatus (Request req, Response res) throws JsonProcessingException {
+//        // this is not access-controlled beyond requiring auth, which is fine
+//        // there's no good way to know who should be able to see this.
+//        String id = req.params("id");
+//        fetchJobsByFeed.forEach((s, deployJob) -> System.out.println(s));
+//        if (!fetchJobsByFeed.containsKey(id))
+//            halt(404, "Feed source id '"+id+"' not found");
+//
+//        FetchSingleFeedJob j = fetchJobsByFeed.get(id);
+//
+//        if (j == null)
+//            halt(404, "No active job for " + id + " found");
+//
+//        return j.getStatus();
+//    }
 
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/feedsource/:id", FeedSourceController::getFeedSource, json::write);
         options(apiPrefix + "secure/feedsource", (q, s) -> "");
+//        get(apiPrefix + "secure/feedsource/:id/status", FeedSourceController::fetchFeedStatus, json::write);
         get(apiPrefix + "secure/feedsource", FeedSourceController::getAllFeedSources, json::write);
         post(apiPrefix + "secure/feedsource", FeedSourceController::createFeedSource, json::write);
         put(apiPrefix + "secure/feedsource/:id", FeedSourceController::updateFeedSource, json::write);

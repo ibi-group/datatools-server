@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.jobs.BuildTransportNetworkJob;
+import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.persistence.DataStore;
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -20,7 +21,6 @@ import java.net.URL;
 import java.util.*;
 import java.util.stream.Collectors;
 
-import static com.conveyal.datatools.manager.utils.NotificationsUtils.notifyUsersForSubscription;
 import static spark.Spark.halt;
 
 /**
@@ -254,7 +254,11 @@ public class FeedSource extends Model implements Cloneable {
 
             this.lastFetched = newFeed.updated;
             this.save();
-            notifyUsersForSubscription("feed-updated", this.id, "New feed version created for " + this.name);
+
+            NotifyUsersForSubscriptionJob notifyFeedJob = new NotifyUsersForSubscriptionJob("feed-updated", this.id, "New feed version created for " + this.name);
+            Thread notifyThread = new Thread(notifyFeedJob);
+            notifyThread.start();
+
             return newFeed;
         }
     }

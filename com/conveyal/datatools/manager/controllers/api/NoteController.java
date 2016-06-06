@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.models.*;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -13,7 +14,6 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.Date;
 
-import static com.conveyal.datatools.manager.utils.NotificationsUtils.notifyUsersForSubscription;
 import static spark.Spark.*;
 import static spark.Spark.get;
 import static spark.Spark.post;
@@ -132,7 +132,9 @@ public class NoteController {
             model.save();
 
             // send notifications
-            notifyUsersForSubscription("feed-commented-on", s.id, n.userEmail + " commented on " + s.name + " at " + n.date.toString() + ":<blockquote>" + n.body + "</blockquote>");
+            NotifyUsersForSubscriptionJob notifyFeedJob = new NotifyUsersForSubscriptionJob("feed-commented-on", s.id, n.userEmail + " commented on " + s.name + " at " + n.date.toString() + ":<blockquote>" + n.body + "</blockquote>");
+            Thread notifyThread = new Thread(notifyFeedJob);
+            notifyThread.start();
 
             return n;
         }
