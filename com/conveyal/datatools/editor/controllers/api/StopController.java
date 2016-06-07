@@ -15,6 +15,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 
+import org.mapdb.BTreeMap;
 import spark.Request;
 import spark.Response;
 
@@ -26,9 +27,7 @@ public class StopController {
     public static JsonManager<Stop> json =
             new JsonManager<>(Stop.class, JsonViews.UserInterface.class);
 
-    public static Object getStop(Request req, Response res
-//            String id, String patternId, String feedId, Boolean majorStops, Double west, Double east, Double north, Double south
-    ) {
+    public static Object getStop(Request req, Response res) {
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
         String patternId = req.queryParams("patternId");
@@ -104,9 +103,19 @@ public class StopController {
                 tx.rollback();
                 return json;
             }
+              // return all
             else {
                 tx.rollback();
-                halt(400);
+                  BTreeMap<String, Stop> stops;
+                  try {
+                      stops = tx.stops;
+                      Collection<Stop> matchedStops = stops.values();
+                      Object json = Base.toJson(matchedStops, false);
+                      return json;
+                  } catch (IllegalAccessError e) {
+                      return new ArrayList<>();
+                  }
+
             }
 
         } catch (Exception e) {

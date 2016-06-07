@@ -45,6 +45,8 @@ public class AgencyController {
     public static Object createAgency(Request req, Response res) {
         Agency agency;
         String feedId = req.queryParams("feedId");
+        if (feedId == null)
+            halt(400, "You must provide a valid feedId");
 
         try {
             agency = Base.mapper.readValue(req.body(), Agency.class);

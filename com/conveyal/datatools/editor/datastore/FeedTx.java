@@ -107,6 +107,7 @@ public class FeedTx extends DatabaseTx {
         exceptions = getMap("exceptions");
         snapshotVersion = tx.getAtomicInteger("snapshotVersion");
         stops = getMap("stops");
+        agencies = getMap("agencies");
 
         if (buildSecondaryIndices)
             buildSecondaryIndices();
