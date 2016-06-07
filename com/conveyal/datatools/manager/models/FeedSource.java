@@ -239,6 +239,7 @@ public class FeedSource extends Model implements Cloneable {
         if (latest != null && newFeed.hash.equals(latest.hash)) {
             LOG.warn("Feed %s was fetched but has not changed; server operators should add If-Modified-Since support to avoid wasting bandwidth", this);
             newFeed.getFeed().delete();
+            halt(304);
             return null;
         }
         else {
