@@ -55,6 +55,7 @@ import org.slf4j.LoggerFactory;
 
 import static com.conveyal.datatools.manager.models.Deployment.getOsmExtract;
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
+import static spark.Spark.halt;
 
 /**
  * Represents a version of a feed.
@@ -94,13 +95,15 @@ public class FeedVersion extends Model implements Serializable {
         this.id = getCleanName(source.name) + "_" + df.format(this.updated) + "_" + source.id + ".zip";
 
         // infer the version
-        FeedVersion prev = source.getLatest();
-        if (prev != null) {
-            this.version = prev.version + 1;
-        }
-        else {
-            this.version = 1;
-        }
+//        FeedVersion prev = source.getLatest();
+//        if (prev != null) {
+//            this.version = prev.version + 1;
+//        }
+//        else {
+//            this.version = 1;
+//        }
+        int count = source.getFeedVersionCount();
+        this.version = count + 1;
     }
 
     /**
@@ -186,9 +189,23 @@ public class FeedVersion extends Model implements Serializable {
     }
 
     public void validate() {
-        File feed = getFeed();
+        File feed = null;
+        try {
+            feed = getFeed();
+        } catch (Exception e) {
+//            halt(400, "No GTFS feed exists for this version.");
+            LOG.warn("No GTFS feed exists for version: {}", this.id);
+            return;
+        }
+        
 //        FeedProcessor fp = new FeedProcessor(feed);
-        GTFSFeed f = GTFSFeed.fromFile(feed.getAbsolutePath());
+        GTFSFeed f = null;
+        try {
+            f = GTFSFeed.fromFile(feed.getAbsolutePath());
+        } catch (Exception e) {
+            e.printStackTrace();
+            return;
+        }
         Map<LocalDate, Integer> tripsPerDate;
         // load feed into GTFS api
         if (DataManager.config.get("modules").get("gtfsapi").get("load_on_fetch").asBoolean()) {
