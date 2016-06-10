@@ -44,6 +44,8 @@ public class FeedStore {
     /** An optional AWS S3 bucket to store the feeds */
     private String s3Bucket;
 
+    private String s3Prefix = "gtfs/";
+
     /** An AWS credentials file to use when uploading to S3 */
     private String s3CredentialsFilename;
 
@@ -101,6 +103,7 @@ public class FeedStore {
         else {
 
             if(this.s3Bucket != null) {
+                String keyName = s3Prefix + id;
                 AWSCredentials creds;
                 if (this.s3CredentialsFilename != null) {
                     creds = new ProfileCredentialsProvider(this.s3CredentialsFilename, "default").getCredentials();
@@ -112,7 +115,7 @@ public class FeedStore {
                     LOG.info("Downloading feed from s3");
                     AmazonS3 s3Client = new AmazonS3Client(new ProfileCredentialsProvider());
                     S3Object object = s3Client.getObject(
-                            new GetObjectRequest(s3Bucket, id));
+                            new GetObjectRequest(s3Bucket, keyName));
                     InputStream objectData = object.getObjectContent();
 
                     // Process the objectData stream.
@@ -182,7 +185,10 @@ public class FeedStore {
         else {
             // upload to S3, if applicable
             if(this.s3Bucket != null) {
+
+                String keyName = s3Prefix + id;
                 AWSCredentials creds;
+
                 if (this.s3CredentialsFilename != null) {
                     creds = new ProfileCredentialsProvider(this.s3CredentialsFilename, "default").getCredentials();
                 }
@@ -190,9 +196,6 @@ public class FeedStore {
                     // default credentials providers, e.g. IAM role
                     creds = new DefaultAWSCredentialsProviderChain().getCredentials();
                 }
-
-
-                String keyName = id;
 
                 try {
                     // Use tempfile
@@ -212,7 +215,7 @@ public class FeedStore {
                     if (feedSource != null){
                         LOG.info("Copying feed on s3 to latest version");
                         // copy to [name]-latest.zip
-                        String copyKey = feedSource.id + ".zip";
+                        String copyKey = s3Prefix + feedSource.id + ".zip";
                         CopyObjectRequest copyObjRequest = new CopyObjectRequest(
                                 this.s3Bucket, keyName, this.s3Bucket, copyKey);
                         s3client.copyObject(copyObjRequest);
