@@ -41,7 +41,7 @@ public class GtfsApiController {
             feedUpdater = new FeedUpdater(eTagList, 0, DataManager.config.get("modules").get("gtfsapi").get("update_frequency").asInt());
         }
         // else, set up GTFS Api to use normal data storage
-        else {
+        else if ("true".equals(DataManager.getConfigPropertyAsText("modules.gtfsapi.load_on_startup"))) {
             LOG.warn("No extension provided");
             // if work_offline, use local directory
             List<String> feeds = new ArrayList<>();
