@@ -47,7 +47,10 @@ public class DeploymentController {
         Auth0UserProfile userProfile = req.attribute("user");
         String id = req.params("id");
         Deployment d = Deployment.get(id);
-
+        if (d == null) {
+            halt(400, "Deployment does not exist.");
+            return null;
+        }
         if (!userProfile.canAdministerProject(d.projectId) && !userProfile.getUser_id().equals(d.getUser()))
             halt(401);
         else
@@ -60,7 +63,10 @@ public class DeploymentController {
         Auth0UserProfile userProfile = req.attribute("user");
         String id = req.params("id");
         Deployment d = Deployment.get(id);
-
+        if (d == null) {
+            halt(400, "Deployment does not exist.");
+            return null;
+        }
         if (!userProfile.canAdministerProject(d.projectId) && !userProfile.getUser_id().equals(d.getUser()))
             halt(401);
         else {
@@ -77,6 +83,11 @@ public class DeploymentController {
         String id = req.params("id");
         System.out.println(id);
         Deployment d = Deployment.get(id);
+
+        if (d == null) {
+            halt(400, "Deployment does not exist.");
+            return null;
+        }
 
         if (!userProfile.canAdministerProject(d.projectId) && !userProfile.getUser_id().equals(d.getUser()))
             halt(401);
