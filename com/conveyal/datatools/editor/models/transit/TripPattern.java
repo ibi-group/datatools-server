@@ -37,7 +37,6 @@ public class TripPattern extends Model implements Cloneable, Serializable {
     
     public String routeId;
 
-    public String agencyId;
     public String feedId;
 
     public List<TripPatternStop> patternStops;
@@ -51,7 +50,7 @@ public class TripPattern extends Model implements Cloneable, Serializable {
         if (useStraightLineDistances || shape == null)
             return null;
 
-        FeedTx tx = VersionedDataStore.getFeedTx(this.agencyId);
+        FeedTx tx = VersionedDataStore.getFeedTx(this.feedId);
 
         try {
             LineString[] ret = new LineString[patternStops.size()];
@@ -270,7 +269,7 @@ public class TripPattern extends Model implements Cloneable, Serializable {
     }
 
     public void calcShapeDistTraveled () {
-        FeedTx tx = VersionedDataStore.getFeedTx(agencyId);
+        FeedTx tx = VersionedDataStore.getFeedTx(feedId);
         calcShapeDistTraveled(tx);
         tx.rollback();
     }

@@ -1,12 +1,6 @@
 package com.conveyal.datatools.editor.datastore;
 
-import com.conveyal.datatools.editor.models.transit.Agency;
-import com.conveyal.datatools.editor.models.transit.Route;
-import com.conveyal.datatools.editor.models.transit.ScheduleException;
-import com.conveyal.datatools.editor.models.transit.ServiceCalendar;
-import com.conveyal.datatools.editor.models.transit.Stop;
-import com.conveyal.datatools.editor.models.transit.Trip;
-import com.conveyal.datatools.editor.models.transit.TripPattern;
+import com.conveyal.datatools.editor.models.transit.*;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.google.common.base.Function;
 import com.google.common.collect.Collections2;
@@ -334,27 +328,27 @@ public class FeedTx extends DatabaseTx {
         return snapshotVersion.incrementAndGet();
     }
 
-    /** duplicate an agency in its entirety. Return the new agency ID */
+    /** duplicate an EditorFeed in its entirety. Return the new feed ID */
     public static String duplicate (String feedId) {
         final String newId = UUID.randomUUID().toString();
 
-        FeedTx atx = VersionedDataStore.getFeedTx(feedId);
+        FeedTx feedTx = VersionedDataStore.getFeedTx(feedId);
 
         DB newDb = VersionedDataStore.getRawFeedTx(newId);
 
-        copy(atx, newDb, newId);
+        copy(feedTx, newDb, newId);
 
         // rebuild indices
         FeedTx newTx = new FeedTx(newDb);
         newTx.commit();
 
-        atx.rollback();
+        feedTx.rollback();
 
         GlobalTx gtx = VersionedDataStore.getGlobalTx();
-        FeedSource a2;
+        EditorFeed feedCopy;
 
         try {
-            a2 = gtx.feeds.get(feedId).clone();
+            feedCopy = gtx.feeds.get(feedId).clone();
         } catch (CloneNotSupportedException e) {
             // not likely
             e.printStackTrace();
@@ -362,22 +356,22 @@ public class FeedTx extends DatabaseTx {
             return null;
         }
 
-        a2.id = newId;
+        feedCopy.id = newId;
 //        a2.name = Messages.get("agency.copy-of", a2.name);
 
-        gtx.feeds.put(a2.id, a2);
+        gtx.feeds.put(feedCopy.id, feedCopy);
 
         gtx.commit();
 
         return newId;
     }
 
-    /** copy an agency database */
-    static void copy (FeedTx atx, DB newDb, final String newFeedId) {
+    /** copy a feed database */
+    static void copy (FeedTx feedTx, DB newDb, final String newFeedId) {
         // copy everything
         try {
             Iterator<Tuple2<String, Stop>> stopSource = Iterators.transform(
-                    FeedTx.<String, Stop>pumpSourceForMap(atx.stops),
+                    FeedTx.<String, Stop>pumpSourceForMap(feedTx.stops),
                     new Function<Tuple2<String, Stop>, Tuple2<String, Stop>>() {
                         @Override
                         public Tuple2<String, Stop> apply(Tuple2<String, Stop> input) {
@@ -388,14 +382,14 @@ public class FeedTx extends DatabaseTx {
                                 e.printStackTrace();
                                 throw new RuntimeException(e);
                             }
-                            st.agencyId = newFeedId;
+                            st.feedId = newFeedId;
                             return new Tuple2(input.a, st);
                         }
             });
             pump(newDb, "stops", stopSource);
 
             Iterator<Tuple2<String, Trip>> tripSource = Iterators.transform(
-                    FeedTx.<String, Trip>pumpSourceForMap(atx.trips),
+                    FeedTx.<String, Trip>pumpSourceForMap(feedTx.trips),
                     new Function<Tuple2<String, Trip>, Tuple2<String, Trip>>() {
                         @Override
                         public Tuple2<String, Trip> apply(Tuple2<String, Trip> input) {
@@ -406,14 +400,14 @@ public class FeedTx extends DatabaseTx {
                                 e.printStackTrace();
                                 throw new RuntimeException(e);
                             }
-                            st.agencyId = newFeedId;
+                            st.feedId = newFeedId;
                             return new Tuple2(input.a, st);
                         }
             });
             pump(newDb, "trips", tripSource);
 
             Iterator<Tuple2<String, TripPattern>> pattSource = Iterators.transform(
-                    FeedTx.<String, TripPattern>pumpSourceForMap(atx.tripPatterns),
+                    FeedTx.<String, TripPattern>pumpSourceForMap(feedTx.tripPatterns),
                     new Function<Tuple2<String, TripPattern>, Tuple2<String, TripPattern>>() {
                         @Override
                         public Tuple2<String, TripPattern> apply(Tuple2<String, TripPattern> input) {
@@ -424,14 +418,14 @@ public class FeedTx extends DatabaseTx {
                                 e.printStackTrace();
                                 throw new RuntimeException(e);
                             }
-                            st.agencyId = newFeedId;
+                            st.feedId = newFeedId;
                             return new Tuple2(input.a, st);
                         }
             });
             pump(newDb, "tripPatterns", pattSource);
 
             Iterator<Tuple2<String, Route>> routeSource = Iterators.transform(
-                    FeedTx.<String, Route>pumpSourceForMap(atx.routes),
+                    FeedTx.<String, Route>pumpSourceForMap(feedTx.routes),
                     new Function<Tuple2<String, Route>, Tuple2<String, Route>>() {
                         @Override
                         public Tuple2<String, Route> apply(Tuple2<String, Route> input) {
@@ -442,14 +436,14 @@ public class FeedTx extends DatabaseTx {
                                 e.printStackTrace();
                                 throw new RuntimeException(e);
                             }
-                            st.agencyId = newFeedId;
+                            st.feedId = newFeedId;
                             return new Tuple2(input.a, st);
                         }
             });
             pump(newDb, "routes", routeSource);
 
             Iterator<Tuple2<String, ServiceCalendar>> calSource = Iterators.transform(
-                    FeedTx.<String, ServiceCalendar>pumpSourceForMap(atx.calendars),
+                    FeedTx.<String, ServiceCalendar>pumpSourceForMap(feedTx.calendars),
                     new Function<Tuple2<String, ServiceCalendar>, Tuple2<String, ServiceCalendar>>() {
                         @Override
                         public Tuple2<String, ServiceCalendar> apply(Tuple2<String, ServiceCalendar> input) {
@@ -467,7 +461,7 @@ public class FeedTx extends DatabaseTx {
             pump(newDb, "calendars", calSource);
 
             Iterator<Tuple2<String, ScheduleException>> exSource = Iterators.transform(
-                    FeedTx.<String, ScheduleException>pumpSourceForMap(atx.exceptions),
+                    FeedTx.<String, ScheduleException>pumpSourceForMap(feedTx.exceptions),
                     new Function<Tuple2<String, ScheduleException>, Tuple2<String, ScheduleException>>() {
                         @Override
                         public Tuple2<String, ScheduleException> apply(Tuple2<String, ScheduleException> input) {
@@ -486,14 +480,14 @@ public class FeedTx extends DatabaseTx {
 
 
             // copy histograms
-            pump(newDb, "tripCountByCalendar", (BTreeMap) atx.tripCountByCalendar);
-            pump(newDb, "scheduleExceptionCountByDate", (BTreeMap) atx.scheduleExceptionCountByDate);
-            pump(newDb, "tripCountByPatternAndCalendar", (BTreeMap) atx.tripCountByPatternAndCalendar);
+            pump(newDb, "tripCountByCalendar", (BTreeMap) feedTx.tripCountByCalendar);
+            pump(newDb, "scheduleExceptionCountByDate", (BTreeMap) feedTx.scheduleExceptionCountByDate);
+            pump(newDb, "tripCountByPatternAndCalendar", (BTreeMap) feedTx.tripCountByPatternAndCalendar);
 
         }
         catch (Exception e) {
             newDb.rollback();
-            atx.rollback();
+            feedTx.rollback();
             throw new RuntimeException(e);
         }
     }

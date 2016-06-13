@@ -33,7 +33,7 @@ public class Snapshot implements Cloneable, Serializable {
     @JsonDeserialize(using=JacksonSerializers.Tuple2IntDeserializer.class)
     public Tuple2<String, Integer> id;
 
-    /** The agency associated with this */
+    /** The feed associated with this */
     public String feedId;
 
     /** the date/time this snapshot was taken (millis since epoch) */

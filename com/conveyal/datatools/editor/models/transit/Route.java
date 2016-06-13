@@ -85,7 +85,7 @@ public class Route extends Model implements Cloneable, Serializable {
 
     public Route () {}
 
-    public Route(com.conveyal.gtfs.model.Route route,  Agency agency, String routeTypeId) {
+    public Route(com.conveyal.gtfs.model.Route route, EditorFeed feed, Agency agency, String routeTypeId) {
         this.gtfsRouteId = route.route_id;
         this.routeShortName = route.route_short_name;
         this.routeLongName = route.route_long_name;
@@ -97,19 +97,19 @@ public class Route extends Model implements Cloneable, Serializable {
         this.routeColor = route.route_color;
         this.routeTextColor = route.route_text_color;
 
+        this.feedId = feed.id;
         this.agencyId = agency.id;
-//        this.feedId = agency.id;
     }
 
 
-    public Route(String routeShortName, String routeLongName, RouteType routeType, String routeDescription,  Agency agency) {
+    public Route(String routeShortName, String routeLongName, RouteType routeType, String routeDescription, EditorFeed feed, Agency agency) {
         this.routeShortName = routeShortName;
         this.routeLongName = routeLongName;
         this.routeTypeId = routeType.id;
         this.routeDesc = routeDescription;
 
+        this.feedId = feed.id;
         this.agencyId = agency.id;
-//        this.feedId = agency.id;
     }
 
     public com.conveyal.gtfs.model.Route toGtfs(com.conveyal.gtfs.model.Agency a, GlobalTx tx) {

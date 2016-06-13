@@ -1,6 +1,7 @@
 package com.conveyal.datatools.editor.datastore;
 
 import com.conveyal.datatools.editor.models.Snapshot;
+import com.conveyal.datatools.editor.models.transit.EditorFeed;
 import com.conveyal.datatools.editor.models.transit.RouteType;
 import com.conveyal.datatools.manager.models.FeedSource;
 import org.mapdb.BTreeMap;
@@ -9,7 +10,7 @@ import org.mapdb.Fun.Tuple2;
 
 /** a transaction in the global database */
 public class GlobalTx extends DatabaseTx {
-    public BTreeMap<String, FeedSource> feeds;
+    public BTreeMap<String, EditorFeed> feeds;
 
     /** Accounts */
 //    public BTreeMap<String, Account> accounts;

@@ -104,6 +104,7 @@ public class DumpController {
     }
 
     public static boolean validateAll (Request req, Response res) throws Exception {
+        System.out.println("validating all feeds...");
         for(FeedVersion version: FeedVersion.getAll()) {
             if(version.validationResult != null) continue;
             System.out.println("Validating " + version.id);
@@ -116,5 +117,6 @@ public class DumpController {
     public static void register (String apiPrefix) {
         post(apiPrefix + "loadLegacy", DumpController::loadLegacy, JsonUtil.objectMapper::writeValueAsString);
         post(apiPrefix + "validateAll", DumpController::validateAll, JsonUtil.objectMapper::writeValueAsString);
+        System.out.println("registered dump w/ prefix " + apiPrefix);
     }
 }

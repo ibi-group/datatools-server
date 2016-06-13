@@ -20,14 +20,14 @@ public class Agency extends Model implements Cloneable, Serializable, Comparable
     public String lang;
     public String phone;
     
-    public String color;
+    /*public String color;
 
     public Double defaultLat;
     public Double defaultLon;
     
     public String routeTypeId;
 
-    public String sourceId;
+    public String sourceId;*/
     /*
     @JsonCreator
     public static Agency factory(long id) {

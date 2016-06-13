@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.jobs;
 
+import com.conveyal.datatools.editor.jobs.ProcessGtfsSnapshotMerge;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.r5.analyst.IsochroneFeature;
@@ -39,12 +40,18 @@ public class ProcessSingleFeedJob implements Runnable {
     }
 
     public void run() {
+
+        // validate and save this version
         feedVersion.validate();
         feedVersion.save();
 
+        // notify any extensions of the change
         for(String resourceType : DataManager.feedResources.keySet()) {
             DataManager.feedResources.get(resourceType).feedVersionCreated(feedVersion, null);
         }
+
+        // initialize the feed in the editor db
+        new ProcessGtfsSnapshotMerge(feedVersion).run();
     }
 
 }

@@ -85,6 +85,7 @@ public class DataManager {
             StopController.register(apiPrefix);
             TripController.register(apiPrefix);
             TripPatternController.register(apiPrefix);
+            SnapshotController.register(apiPrefix);
         }
 
         // module-specific controllers

@@ -99,7 +99,7 @@ public class GisExport implements Runnable {
                 featureBuilder = new SimpleFeatureBuilder(STOP_TYPE);
 
                 for (String feedId : agencyIds) {
-                    FeedSource fs = gtx.feeds.get(feedId);
+                    EditorFeed fs = gtx.feeds.get(feedId);
 
                     atx = VersionedDataStore.getFeedTx(feedId);
                     for (Stop s : atx.stops.values()) {
@@ -108,7 +108,7 @@ public class GisExport implements Runnable {
                         featureBuilder.add(s.stopCode);
                         featureBuilder.add(s.stopDesc);
                         featureBuilder.add(s.getGtfsId());
-                        featureBuilder.add(fs.name);
+                        featureBuilder.add(fs.feedPublisherName);
                         SimpleFeature feature = featureBuilder.buildFeature(null);
                         features.add(feature);
                     }
@@ -123,7 +123,7 @@ public class GisExport implements Runnable {
                 GeometryFactory gf = new GeometryFactory();
 
                 for (String feedId : agencyIds) {
-                    FeedSource fs = gtx.feeds.get(feedId);
+                    EditorFeed fs = gtx.feeds.get(feedId);
 
                     atx = VersionedDataStore.getFeedTx(feedId);
 
@@ -160,7 +160,7 @@ public class GisExport implements Runnable {
                         featureBuilder.add(r.routeUrl);
                         featureBuilder.add(r.routeColor);
                         featureBuilder.add(r.routeTextColor);
-                        featureBuilder.add(fs.name);
+                        featureBuilder.add(fs.feedPublisherName);
                         SimpleFeature feature = featureBuilder.buildFeature(null);
                         features.add(feature);
                     }

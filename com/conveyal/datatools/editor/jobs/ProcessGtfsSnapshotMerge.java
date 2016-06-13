@@ -1,6 +1,8 @@
 package com.conveyal.datatools.editor.jobs;
 
 import com.conveyal.datatools.editor.datastore.FeedTx;
+import com.conveyal.datatools.editor.models.Snapshot;
+import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.gtfs.GTFSFeed;
 import com.conveyal.gtfs.model.CalendarDate;
 import com.conveyal.gtfs.model.Entity;
@@ -31,13 +33,8 @@ import org.slf4j.LoggerFactory;
 //import play.i18n.Messages;
 
 import java.io.File;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.SortedSet;
 
 
 public class ProcessGtfsSnapshotMerge implements Runnable {
@@ -53,19 +50,21 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
     private GTFSFeed input;
     private File gtfsFile;
 
+    private EditorFeed feed;
+
     /** once the merge runs this will have the ID of the created agency */
-    public String agencyId;
+    //public String agencyId;
 
-    public String sourceId;
+    public FeedVersion feedVersion;
 
-    public ProcessGtfsSnapshotMerge (File gtfsFile) {
+    /*public ProcessGtfsSnapshotMerge (File gtfsFile) {
         this(gtfsFile, null);
-    }
+    }*/
 
-    public ProcessGtfsSnapshotMerge (File gtfsFile, String sourceId) {
-        this.gtfsFile = gtfsFile;
-        this.sourceId = sourceId;
-        System.out.println(">> Merge w/ sourceID " + sourceId);
+    public ProcessGtfsSnapshotMerge (FeedVersion feedVersion) {
+        this.gtfsFile = feedVersion.getFeed();
+        this.feedVersion = feedVersion;
+        System.out.println(">> Merge w/ feedVersion = " + feedVersion.id);
     }
 
     public void run () {
@@ -79,18 +78,32 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
         long shapeCount = 0;
 
         GlobalTx gtx = VersionedDataStore.getGlobalTx();
-        // map from (non-gtfs) agency IDs to transactions.
-        Map<String, FeedTx> agencyTxs = Maps.newHashMap();
-        
-        try {
-               input = GTFSFeed.fromFile(gtfsFile.getAbsolutePath());
 
-            LOG.info("GtfsImporter: importing feeds...");
-            // store feeds
+        // map from (non-gtfs) agency IDs to transactions.
+        //Map<String, FeedTx> agencyTxs = Maps.newHashMap();
+
+
+        // create a new feed for this version. TODO: check if feed for version already exists?
+        String feedId = UUID.randomUUID().toString();
+        FeedTx feedTx = VersionedDataStore.getFeedTx(feedId);
+        feed = new EditorFeed();
+        feed.feedSourceId = feedVersion.feedSourceId;
+        gtx.feeds.put(feedId, feed);
+
+
+        try {
+            input = GTFSFeed.fromFile(gtfsFile.getAbsolutePath());
+
+            LOG.info("GtfsImporter: importing feed...");
+
+            // load the basic feed info
+
+
+            // load the GTFS agencies
             for (com.conveyal.gtfs.model.Agency gtfsAgency : input.agency.values()) {
-                      Agency agency = new Agency(gtfsAgency);
-                agencyId = agency.id;
-                agency.sourceId = sourceId;
+                Agency agency = new Agency(gtfsAgency);
+                //agencyId = agency.id;
+                //agency.sourceId = sourceId;
                 // don't save the agency until we've come up with the stop centroid, below.
                 agencyCount++;
                 // we do want to use the modified agency ID here, because everything that refers to it has a reference
@@ -99,9 +112,9 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
             }
 
             // agency-specific stuff: start transactions for all relevant feeds
-            for (Agency a : agencyIdMap.values()) {
+            /*for (Agency a : agencyIdMap.values()) {
                 agencyTxs.put(a.id, VersionedDataStore.getFeedTx(a.id));
-            }
+            }*/
 
             LOG.info("Agencies loaded: " + agencyCount);
 
@@ -120,6 +133,11 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
 
             GeometryFactory geometryFactory = new GeometryFactory(new PrecisionModel(), 4326);
             for (com.conveyal.gtfs.model.Stop gtfsStop : input.stops.values()) {
+                Stop stop = new Stop(gtfsStop, geometryFactory, feed);
+                feedTx.stops.put(stop.id, stop);
+                stopIdMap.put(new Tuple2(gtfsStop.stop_id, feed.id), stop);
+
+                /*
                 // duplicate the stop for all of the feeds by which it is used
                 Collection<Agency> agencies = Collections2.transform(
                         stopsByAgency.subSet(new Tuple2(gtfsStop.stop_id, null), new Tuple2(gtfsStop.stop_id, Fun.HI)),
@@ -141,7 +159,7 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
                     agencyTxs.get(agency.id).stops.put(stop.id, stop);
                     stopIdMap.put(new Tuple2(gtfsStop.stop_id, agency.id), stop);
                     stopEnvelopes.get(agency.id).expandToInclude(gtfsStop.stop_lon, gtfsStop.stop_lat);
-                }
+                }*/
             }
 
             // set the agency default zoom locations and save the feeds
@@ -170,9 +188,9 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
                     routeTypeIdMap.put(gtfsRoute.route_type, rt.id);
                 }
 
-                Route route = new Route(gtfsRoute, agency, routeTypeIdMap.get(gtfsRoute.route_type));
+                Route route = new Route(gtfsRoute, feed, agency, routeTypeIdMap.get(gtfsRoute.route_type));
 
-                agencyTxs.get(agency.id).routes.put(route.id, route);
+                feedTx.routes.put(route.id, route);
                 routeIdMap.put(gtfsRoute.route_id, route);
                 routeCount++;
             }
@@ -331,12 +349,12 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
 
                 for (String tripId : pattern.getValue()) {
                     com.conveyal.gtfs.model.Trip gtfsTrip = input.trips.get(tripId);
-                    String agencyId = agencyIdMap.get(gtfsTrip.route.agency.agency_id).id;
-                    FeedTx tx = agencyTxs.get(agencyId);
+                    //String agencyId = agencyIdMap.get(gtfsTrip.route.agency.agency_id).id;
+                    //FeedTx tx = agencyTxs.get(agencyId);
 
                     if (!tripPatternsByRoute.containsKey(gtfsTrip.route.route_id)) {
-                        TripPattern pat = createTripPatternFromTrip(gtfsTrip, tx);
-                        tx.tripPatterns.put(pat.id, pat);
+                        TripPattern pat = createTripPatternFromTrip(gtfsTrip, feedTx);
+                        feedTx.tripPatterns.put(pat.id, pat);
                         tripPatternsByRoute.put(gtfsTrip.route.route_id, pat);
                     }
 
@@ -349,9 +367,9 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
 
                     ServiceCalendar cal = calendars.get(gtfsTrip.service.service_id);
                     // if the service calendar has not yet been imported, import it
-                    if (!tx.calendars.containsKey(cal.id)) {
+                    if (!feedTx.calendars.containsKey(cal.id)) {
                         // no need to clone as they are going into completely separate mapdbs
-                        tx.calendars.put(cal.id, cal);
+                        feedTx.calendars.put(cal.id, cal);
                     }
 
                     Trip trip = new Trip(gtfsTrip, routeIdMap.get(gtfsTrip.route.route_id), pat, cal);
@@ -360,10 +378,10 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
                             input.stop_times.subMap(new Tuple2(gtfsTrip.trip_id, null), new Tuple2(gtfsTrip.trip_id, Fun.HI)).values();
 
                     for (com.conveyal.gtfs.model.StopTime st : stopTimes) {
-                        trip.stopTimes.add(new StopTime(st, stopIdMap.get(new Tuple2<String, String>(st.stop_id, agencyId)).id));
+                        trip.stopTimes.add(new StopTime(st, stopIdMap.get(new Tuple2<String, String>(st.stop_id, feed.id)).id));
                     }
 
-                    tx.trips.put(trip.id, trip);
+                    feedTx.trips.put(trip.id, trip);
 
                     tripCount++;
 
@@ -376,17 +394,27 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
             LOG.info("Trips loaded: " + tripCount);
 
             // commit the agency TXs first, so that we have orphaned data rather than inconsistent data on a commit failure
-            for (FeedTx tx : agencyTxs.values()) {
+            /*for (FeedTx tx : agencyTxs.values()) {
                 tx.commit();
-            }
+            }*/
+
+
+            feedTx.commit();
             gtx.commit();
+
+
+            // create an initial snapshot for this FeedVersion
+            Snapshot snapshot = VersionedDataStore.takeSnapshot(feed.id, "Initial state for " + feedVersion.id, "none");
+            //gtx.snapshots.put(snapshot.id, snapshot);
+
 
             LOG.info("Imported GTFS file: " + agencyCount + " feeds; " + routeCount + " routes;" + stopCount + " stops; " +  stopTimeCount + " stopTimes; " + tripCount + " trips;" + shapePointCount + " shapePoints");
         }
         finally {
-            for (FeedTx tx : agencyTxs.values()) {
+            /*for (FeedTx tx : agencyTxs.values()) {
                 tx.rollbackIfOpen();
-            }
+            }*/
+            feedTx.rollbackIfOpen();
             gtx.rollbackIfOpen();
         }
     }
@@ -414,7 +442,7 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
     public TripPattern createTripPatternFromTrip (com.conveyal.gtfs.model.Trip gtfsTrip, FeedTx tx) {
         TripPattern patt = new TripPattern();
         patt.routeId = routeIdMap.get(gtfsTrip.route.route_id).id;
-        patt.agencyId = agencyIdMap.get(gtfsTrip.route.agency.agency_id).id;
+        patt.feedId = feed.id; //agencyId = agencyIdMap.get(gtfsTrip.route.agency.agency_id).id;
         if (gtfsTrip.shape_id != null) {
             if (!shapes.containsKey(gtfsTrip.shape_id)) {
                 LOG.warn("Missing shape for shape ID %s, referenced by trip %s", gtfsTrip.shape_id, gtfsTrip.trip_id);
@@ -438,7 +466,7 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
 
         for (com.conveyal.gtfs.model.StopTime st : stopTimes) {
             TripPatternStop tps = new TripPatternStop();
-            Stop stop = stopIdMap.get(new Tuple2(st.stop_id, patt.agencyId));
+            Stop stop = stopIdMap.get(new Tuple2(st.stop_id, patt.feedId));
             tps.stopId = stop.id;
 
             if (st.timepoint != Entity.INT_MISSING)
