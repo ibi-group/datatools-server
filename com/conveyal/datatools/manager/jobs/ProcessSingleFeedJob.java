@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.editor.jobs.ProcessGtfsSnapshotMerge;
+import com.conveyal.datatools.editor.models.Snapshot;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.r5.analyst.IsochroneFeature;
@@ -19,6 +20,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.Collection;
 
 import static com.conveyal.datatools.manager.models.Deployment.getOsmExtract;
 
@@ -50,8 +52,11 @@ public class ProcessSingleFeedJob implements Runnable {
             DataManager.feedResources.get(resourceType).feedVersionCreated(feedVersion, null);
         }
 
-        // initialize the feed in the editor db
-        new ProcessGtfsSnapshotMerge(feedVersion).run();
+        // use this FeedVersion to seed Editor DB provided no snapshots for feed already exist
+        Collection<Snapshot> snapshots = Snapshot.getSnapshots(feedVersion.feedSourceId);
+        if(snapshots.size() == 0) {
+            new ProcessGtfsSnapshotMerge(feedVersion).run();
+        }
     }
 
 }

@@ -1,12 +1,18 @@
 package com.conveyal.datatools.editor.models;
 
+import com.conveyal.datatools.editor.datastore.GlobalTx;
+import com.conveyal.datatools.editor.datastore.VersionedDataStore;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import java.time.LocalDate;
+
+import org.mapdb.Fun;
 import org.mapdb.Fun.Tuple2;
 import com.conveyal.datatools.editor.utils.JacksonSerializers;
 
 import java.io.Serializable;
+import java.util.Collection;
 
 /**
  * Represents a snapshot of an agency database.
@@ -70,5 +76,11 @@ public class Snapshot implements Cloneable, Serializable {
         } catch (CloneNotSupportedException e) {
             throw new RuntimeException(e);
         }
+    }
+
+    @JsonIgnore
+    public static Collection<Snapshot> getSnapshots(String feedId) {
+        GlobalTx gtx = VersionedDataStore.getGlobalTx();
+        return gtx.snapshots.subMap(new Tuple2(feedId, null), new Tuple2(feedId, Fun.HI)).values();
     }
 }

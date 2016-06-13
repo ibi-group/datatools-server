@@ -83,12 +83,11 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
         //Map<String, FeedTx> agencyTxs = Maps.newHashMap();
 
 
-        // create a new feed for this version. TODO: check if feed for version already exists?
-        String feedId = UUID.randomUUID().toString();
-        FeedTx feedTx = VersionedDataStore.getFeedTx(feedId);
+        // create a new feed based on this version
+        FeedTx feedTx = VersionedDataStore.getFeedTx(feedVersion.feedSourceId);
         feed = new EditorFeed();
-        feed.feedSourceId = feedVersion.feedSourceId;
-        gtx.feeds.put(feedId, feed);
+        feed.setId(feedVersion.feedSourceId);
+        gtx.feeds.put(feedVersion.feedSourceId, feed);
 
 
         try {
@@ -108,13 +107,9 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
                 agencyCount++;
                 // we do want to use the modified agency ID here, because everything that refers to it has a reference
                 // to the agency object we updated.
+                feedTx.agencies.put(agency.id, agency);
                 agencyIdMap.put(gtfsAgency.agency_id, agency);
             }
-
-            // agency-specific stuff: start transactions for all relevant feeds
-            /*for (Agency a : agencyIdMap.values()) {
-                agencyTxs.put(a.id, VersionedDataStore.getFeedTx(a.id));
-            }*/
 
             LOG.info("Agencies loaded: " + agencyCount);
 
@@ -136,6 +131,7 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
                 Stop stop = new Stop(gtfsStop, geometryFactory, feed);
                 feedTx.stops.put(stop.id, stop);
                 stopIdMap.put(new Tuple2(gtfsStop.stop_id, feed.id), stop);
+                stopCount++;
 
                 /*
                 // duplicate the stop for all of the feeds by which it is used
@@ -330,6 +326,7 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
                     cal.gtfsServiceId = svc.service_id;
                 }
 
+                feedTx.calendars.put(cal.gtfsServiceId, cal);
                 calendars.put(svc.service_id, cal);
 
                 serviceCalendarCount++;
@@ -393,27 +390,17 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
 
             LOG.info("Trips loaded: " + tripCount);
 
-            // commit the agency TXs first, so that we have orphaned data rather than inconsistent data on a commit failure
-            /*for (FeedTx tx : agencyTxs.values()) {
-                tx.commit();
-            }*/
-
-
+            // commit the feed TXs first, so that we have orphaned data rather than inconsistent data on a commit failure
             feedTx.commit();
             gtx.commit();
 
-
             // create an initial snapshot for this FeedVersion
             Snapshot snapshot = VersionedDataStore.takeSnapshot(feed.id, "Initial state for " + feedVersion.id, "none");
-            //gtx.snapshots.put(snapshot.id, snapshot);
 
 
-            LOG.info("Imported GTFS file: " + agencyCount + " feeds; " + routeCount + " routes;" + stopCount + " stops; " +  stopTimeCount + " stopTimes; " + tripCount + " trips;" + shapePointCount + " shapePoints");
+            LOG.info("Imported GTFS file: " + agencyCount + " agencies; " + routeCount + " routes;" + stopCount + " stops; " +  stopTimeCount + " stopTimes; " + tripCount + " trips;" + shapePointCount + " shapePoints");
         }
         finally {
-            /*for (FeedTx tx : agencyTxs.values()) {
-                tx.rollbackIfOpen();
-            }*/
             feedTx.rollbackIfOpen();
             gtx.rollbackIfOpen();
         }

@@ -26,7 +26,7 @@ public class EditorFeed extends Model implements Cloneable, Serializable {
     public Date feedEndDate;
 
     // the associated FeedSource in the data manager DB
-    public String feedSourceId;
+    //public String feedSourceId;
 
     public EditorFeed clone () throws CloneNotSupportedException {
         return (EditorFeed) super.clone();
