@@ -28,6 +28,7 @@ public class RouteController {
     public static Object getRoute(Request req, Response res) {
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
+        Object json = null;
 
         if (feedId == null)
             feedId = req.session().attribute("feedId");
@@ -46,10 +47,11 @@ public class RouteController {
                 }
 
                 Route route = tx.routes.get(id);
-
                 route.addDerivedInfo(tx);
 
-                return route;
+                json = Base.toJson(route, false);
+
+//                return route;
             }
             else {
                 Route[] ret = tx.routes.values().toArray(new Route[tx.routes.size()]);
@@ -58,16 +60,18 @@ public class RouteController {
                     r.addDerivedInfo(tx);
                 }
 
-                Object json = Base.toJson(ret, false);
+                json = Base.toJson(ret, false);
                 tx.rollback();
-                return json;
+//                return json;
             }
         } catch (Exception e) {
             tx.rollbackIfOpen();
             e.printStackTrace();
             halt(400);
+        } finally {
+            tx.rollbackIfOpen();
         }
-        return null;
+        return json;
     }
 
     public static Object createRoute(Request req, Response res) {

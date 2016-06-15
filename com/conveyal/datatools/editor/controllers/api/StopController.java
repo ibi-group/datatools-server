@@ -105,12 +105,12 @@ public class StopController {
             }
               // return all
             else {
-                tx.rollback();
                   BTreeMap<String, Stop> stops;
                   try {
                       stops = tx.stops;
                       Collection<Stop> matchedStops = stops.values();
                       Object json = Base.toJson(matchedStops, false);
+                      tx.rollback();
                       return json;
                   } catch (IllegalAccessError e) {
                       return new ArrayList<>();
