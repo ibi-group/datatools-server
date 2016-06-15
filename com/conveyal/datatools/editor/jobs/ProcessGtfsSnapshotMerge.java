@@ -24,6 +24,8 @@ import gnu.trove.map.TIntObjectMap;
 import gnu.trove.map.hash.TIntObjectHashMap;
 import com.conveyal.datatools.editor.models.transit.*;
 import org.joda.time.DateTimeConstants;
+
+import java.awt.geom.Rectangle2D;
 import java.time.LocalDate;
 import org.mapdb.DBMaker;
 import org.mapdb.Fun;
@@ -87,6 +89,9 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
         FeedTx feedTx = VersionedDataStore.getFeedTx(feedVersion.feedSourceId);
         feed = new EditorFeed();
         feed.setId(feedVersion.feedSourceId);
+        Rectangle2D bounds = feedVersion.getValidationSummary().bounds;
+        feed.defaultLat = bounds.getCenterY();
+        feed.defaultLon = bounds.getCenterX();
         gtx.feeds.put(feedVersion.feedSourceId, feed);
 
 

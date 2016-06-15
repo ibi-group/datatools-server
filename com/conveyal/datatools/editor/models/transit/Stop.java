@@ -49,7 +49,9 @@ public class Stop extends Model implements Cloneable, Serializable {
     public StopTimePickupDropOffType dropOffType;
 
     public String parentStation;
-    
+
+    public String stopTimezone;
+
     // Major stop is a custom field; it has no corrolary in the GTFS.
     public Boolean majorStop;
     

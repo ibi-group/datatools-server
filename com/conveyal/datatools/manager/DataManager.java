@@ -12,6 +12,7 @@ import com.conveyal.datatools.manager.extensions.transitfeeds.TransitFeedsFeedRe
 import com.conveyal.datatools.manager.extensions.transitland.TransitLandFeedResource;
 
 import com.conveyal.datatools.manager.jobs.LoadGtfsApiFeedJob;
+import com.conveyal.datatools.manager.jobs.MonitorableJob;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.utils.CorsFilter;
 import com.conveyal.datatools.manager.utils.ResponseError;
@@ -30,6 +31,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 import static spark.Spark.*;
 
@@ -44,6 +46,8 @@ public class DataManager {
     public static JsonNode gtfsConfig;
 
     public static final Map<String, ExternalFeedResource> feedResources = new HashMap<>();
+
+    public static Map<String, Set<MonitorableJob>> userJobsMap = new HashMap<>();
 
     public static void main(String[] args) throws IOException {
         FileInputStream in;
@@ -73,6 +77,7 @@ public class DataManager {
         FeedVersionController.register(apiPrefix);
         RegionController.register(apiPrefix);
         NoteController.register(apiPrefix);
+        StatusController.register(apiPrefix);
 
         // Editor routes
         if ("true".equals(getConfigPropertyAsText("modules.editor.enabled"))) {
@@ -86,6 +91,7 @@ public class DataManager {
             TripController.register(apiPrefix);
             TripPatternController.register(apiPrefix);
             SnapshotController.register(apiPrefix);
+            FeedInfoController.register(apiPrefix);
         }
 
         // module-specific controllers
