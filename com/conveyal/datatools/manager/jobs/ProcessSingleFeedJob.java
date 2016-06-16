@@ -30,15 +30,17 @@ import static com.conveyal.datatools.manager.models.Deployment.getOsmExtract;
  * @author mattwigway
  *
  */
-public class ProcessSingleFeedJob implements Runnable {
+public class ProcessSingleFeedJob implements MonitorableJob {
     FeedVersion feedVersion;
+    private Status status;
 
     /**
      * Create a job for the given feed version.
      * @param feedVersion
      */
-    public ProcessSingleFeedJob (FeedVersion feedVersion) {
+    public ProcessSingleFeedJob (FeedVersion feedVersion, String owner) {
         this.feedVersion = feedVersion;
+        this.status = new Status(owner);
     }
 
     public void run() {
@@ -59,4 +61,10 @@ public class ProcessSingleFeedJob implements Runnable {
         }
     }
 
+    @Override
+    public Status getStatus() {
+        synchronized (status) {
+            return status.clone();
+        }
+    }
 }

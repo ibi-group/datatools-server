@@ -121,10 +121,11 @@ public class ProjectController {
     }
 
     public static Boolean fetch(Request req, Response res) {
+        Auth0UserProfile userProfile = req.attribute("user");
         String id = req.params("id");
         System.out.println("project fetch for " + id);
         Project proj = Project.get(id);
-        FetchProjectFeedsJob job = new FetchProjectFeedsJob(proj);
+        FetchProjectFeedsJob job = new FetchProjectFeedsJob(proj, userProfile.getUser_id());
         job.run();
         return true;
     }

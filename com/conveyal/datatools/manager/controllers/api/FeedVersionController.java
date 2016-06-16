@@ -10,6 +10,7 @@ import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.amazonaws.services.s3.model.GetObjectRequest;
 import com.amazonaws.services.s3.model.S3Object;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.BuildTransportNetworkJob;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
@@ -65,8 +66,15 @@ public class FeedVersionController  {
      * If you pass in ?summarized=true, don't include the full tree of validation results, only the counts.
      */
     public static FeedVersion getFeedVersion (Request req, Response res) throws JsonProcessingException {
+        String id = req.params("id");
+        if (id == null) {
+            halt(404, "Must specify feed version ID");
+        }
+        FeedVersion v = FeedVersion.get(id);
 
-        FeedVersion v = FeedVersion.get(req.params("id"));
+        if (v == null) {
+            halt(404, "Version ID does not exist");
+        }
         FeedSource s = v.getFeedSource();
 
         return v;
@@ -139,7 +147,7 @@ public class FeedVersionController  {
      */
     public static Boolean createFeedVersion (Request req, Response res) throws IOException, ServletException {
 
-
+        Auth0UserProfile userProfile = req.attribute("user");
         FeedSource s = FeedSource.get(req.queryParams("feedSourceId"));
 
         if (FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.equals(s.retrievalMethod))
@@ -178,7 +186,7 @@ public class FeedVersionController  {
 
         // for now run sychronously so the user sees something after the redirect
         // it's pretty fast
-        new ProcessSingleFeedJob(v).run();
+        new ProcessSingleFeedJob(v, userProfile.getUser_id()).run();
 
         if (DataManager.config.get("modules").get("validator").get("enabled").asBoolean()) {
             BuildTransportNetworkJob btnj = new BuildTransportNetworkJob(v);

@@ -14,6 +14,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.NullNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import spark.Request;
 import spark.Response;
 
@@ -40,6 +42,8 @@ public class DeploymentController {
 
     private static JsonManager<DeployJob.DeployStatus> statusJson =
             new JsonManager<DeployJob.DeployStatus>(DeployJob.DeployStatus.class, JsonViews.UserInterface.class);
+
+    public static final Logger LOG = LoggerFactory.getLogger(DeploymentController.class);
 
     private static HashMap<String, DeployJob> deploymentJobsByServer = new HashMap<String, DeployJob>();
 
@@ -253,6 +257,7 @@ public class DeploymentController {
                 // send a 503 service unavailable as it is not possible to deploy to this target right now;
                 // someone else is deploying
                 halt(503, "Deployment currently in progress for target: " + target);
+                LOG.warn("Deployment currently in progress for target: " + target);
             }
         }
         OtpServer otpServer = p.getServer(target);
@@ -267,8 +272,8 @@ public class DeploymentController {
         d.deployedTo = target;
         d.save();
 
-        DeployJob job = new DeployJob(d, targetUrls, p.getServer(target).publicUrl, p.getServer(target).s3Bucket, p.getServer(target).s3Credentials);
-
+        DeployJob job = new DeployJob(d, userProfile.getUser_id(), targetUrls, p.getServer(target).publicUrl, p.getServer(target).s3Bucket, p.getServer(target).s3Credentials);
+        job.storeJob();
         deploymentJobsByServer.put(target, job);
 
         Thread tnThread = new Thread(job);
@@ -286,7 +291,7 @@ public class DeploymentController {
         // this is not access-controlled beyond requiring auth, which is fine
         // there's no good way to know who should be able to see this.
         String target = req.queryParams("target");
-        deploymentJobsByServer.forEach((s, deployJob) -> System.out.println(s));
+
         if (!deploymentJobsByServer.containsKey(target))
             halt(404, "Deployment target '"+target+"' not found");
 

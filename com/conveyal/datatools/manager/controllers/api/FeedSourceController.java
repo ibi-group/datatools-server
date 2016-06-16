@@ -229,7 +229,7 @@ public class FeedSourceController {
         if (!userProfile.canAdministerProject(s.projectId) && !userProfile.canManageFeed(s.projectId, s.id))
             halt(401);
 
-        FetchSingleFeedJob job = new FetchSingleFeedJob(s);
+        FetchSingleFeedJob job = new FetchSingleFeedJob(s, userProfile.getUser_id());
         fetchJobsByFeed.put(s.id, job);
         job.run();
         return true;

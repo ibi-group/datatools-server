@@ -22,9 +22,15 @@ import java.net.URL;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
+import java.time.LocalDate;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
+import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
+import org.apache.http.auth.AUTH;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,7 +39,7 @@ import org.slf4j.LoggerFactory;
  * @author mattwigway
  *
  */
-public class DeployJob implements Runnable {
+public class DeployJob implements MonitorableJob {
 
     private static final Logger LOG = LoggerFactory.getLogger(DeployJob.class);
 
@@ -55,15 +61,13 @@ public class DeployJob implements Runnable {
     /** The deployment to deploy */
     private Deployment deployment;
 
-    public DeployJob(Deployment deployment, List<String> targets, String publicUrl, String s3Bucket, String s3CredentialsFilename) {
+    public DeployJob(Deployment deployment, String owner, List<String> targets, String publicUrl, String s3Bucket, String s3CredentialsFilename) {
         this.deployment = deployment;
         this.targets = targets;
         this.publicUrl = publicUrl;
         this.s3Bucket = s3Bucket;
         this.s3CredentialsFilename = s3CredentialsFilename;
-        this.status = new DeployStatus();
-        status.error = false;
-        status.completed = false;
+        this.status = new DeployStatus(owner);
         status.built = false;
         status.numServersCompleted = 0;
         status.totalServers = targets == null ? 0 : targets.size();
@@ -74,6 +78,17 @@ public class DeployJob implements Runnable {
             return status.clone();
         }
     }
+
+//    @Override
+//    public void storeJob() {
+//        Set<MonitorableJob> userJobs = DataManager.userJobsMap.get(status.owner);
+//        if (userJobs == null) {
+//            userJobs = new HashSet<>();
+//        }
+//        userJobs.add(this);
+//
+//        DataManager.userJobsMap.put(status.owner, userJobs);
+//    }
 
     public void run() {
         // create a temporary file in which to save the deployment
@@ -354,21 +369,21 @@ public class DeployJob implements Runnable {
     /**
      * Represents the current status of this job.
      */
-    public static class DeployStatus implements Cloneable {
-        /** What error message (defined in messages.<lang>) should be displayed to the user? */
-        public String message;
+    public static class DeployStatus extends Status {
+//        /** What error message (defined in messages.<lang>) should be displayed to the user? */
+//        public String message;
+//
+//        /** Is this deployment completed (successfully or unsuccessfully) */
+//        public boolean completed;
 
-        /** Is this deployment completed (successfully or unsuccessfully) */
-        public boolean completed;
-
-        /** Was there an error? */
-        public boolean error;
+//        /** Was there an error? */
+//        public boolean error;
 
         /** Did the manager build the bundle successfully */
         public boolean built;
 
-        /** Is the bundle currently being uploaded to the server? */
-        public boolean uploading;
+//        /** Is the bundle currently being uploaded to the server? */
+//        public boolean uploading;
 
         /** Is the bundle currently being uploaded to an S3 bucket? */
         public boolean uploadingS3;
@@ -385,8 +400,12 @@ public class DeployJob implements Runnable {
         /** Where can the user see the result? */
         public String baseUrl;
 
+        public DeployStatus(String owner) {
+            super(owner);
+        }
+
         public DeployStatus clone () {
-            DeployStatus ret = new DeployStatus();
+            DeployStatus ret = new DeployStatus(owner);
             ret.message = message;
             ret.completed = completed;
             ret.error = error;

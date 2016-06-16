@@ -245,14 +245,6 @@ public class FeedSource extends Model implements Cloneable {
         else {
             newFeed.userId = this.userId;
 
-            new ProcessSingleFeedJob(newFeed).run();
-            if (DataManager.config.get("modules").get("validator").get("enabled").asBoolean()) {
-//                new BuildTransportNetworkJob(newFeed).run();
-                BuildTransportNetworkJob btnj = new BuildTransportNetworkJob(newFeed);
-                Thread tnThread = new Thread(btnj);
-                tnThread.start();
-            }
-
             this.lastFetched = newFeed.updated;
             this.save();
 
