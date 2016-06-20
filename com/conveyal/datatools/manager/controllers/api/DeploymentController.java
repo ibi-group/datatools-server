@@ -273,7 +273,6 @@ public class DeploymentController {
         d.save();
 
         DeployJob job = new DeployJob(d, userProfile.getUser_id(), targetUrls, p.getServer(target).publicUrl, p.getServer(target).s3Bucket, p.getServer(target).s3Credentials);
-        job.storeJob();
         deploymentJobsByServer.put(target, job);
 
         Thread tnThread = new Thread(job);

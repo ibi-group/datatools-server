@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.jobs;
 
+import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -19,19 +20,32 @@ import static com.conveyal.datatools.manager.models.Deployment.getOsmExtract;
 /**
  * Created by landon on 4/30/16.
  */
-public class BuildTransportNetworkJob implements Runnable {
+public class BuildTransportNetworkJob extends MonitorableJob {
 
     public FeedVersion feedVersion;
     public TransportNetwork result;
+    public Status status;
 
-    public BuildTransportNetworkJob (FeedVersion feedVersion) {
+    public BuildTransportNetworkJob (FeedVersion feedVersion, String owner) {
+        super(owner, "Building Transport Network for " + feedVersion.getFeedSource().name, JobType.BUILD_TRANSPORT_NETWORK);
         this.feedVersion = feedVersion;
         this.result = null;
+        this.status = new Status();
     }
 
     @Override
     public void run() {
         System.out.println("Building network");
         feedVersion.buildTransportNetwork();
+        jobFinished();
     }
+
+    @Override
+    public Status getStatus() {
+        synchronized (status) {
+            return status.clone();
+        }
+    }
+
+
 }

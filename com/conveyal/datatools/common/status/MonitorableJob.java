@@ -1,36 +1,78 @@
-package com.conveyal.datatools.manager.jobs;
+package com.conveyal.datatools.common.status;
 
-import com.conveyal.datatools.editor.utils.Auth0UserProfile;
 import com.conveyal.datatools.manager.DataManager;
-import org.apache.http.auth.AUTH;
+import jdk.nashorn.internal.scripts.JO;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.HashSet;
-import java.util.Set;
+import java.util.*;
 
 /**
  * Created by landon on 6/13/16.
  */
-public interface MonitorableJob extends Runnable {
+public abstract class MonitorableJob implements Runnable {
 
-    Status getStatus();
+    protected String owner;
+    protected String name;
+    protected JobType type;
 
-    default void storeJob() {
-        Set<MonitorableJob> userJobs = DataManager.userJobsMap.get(this.getStatus().owner);
+    public String jobId = UUID.randomUUID().toString();
+
+    protected List<MonitorableJob> nextJobs = new ArrayList<>();
+
+    public enum JobType { UNKNOWN_TYPE, BUILD_TRANSPORT_NETWORK, VALIDATE_FEED }
+
+    public MonitorableJob(String owner, String name, JobType type) {
+        this.owner = owner;
+        this.name = name;
+        this.type = type;
+        storeJob();
+    }
+
+    public MonitorableJob(String owner) {
+        this(owner, "Unnamed Job", JobType.UNKNOWN_TYPE);
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public JobType getType() {
+        return type;
+    }
+
+    public abstract Status getStatus();
+
+    protected void storeJob() {
+        Set<MonitorableJob> userJobs = DataManager.userJobsMap.get(this.owner);
         if (userJobs == null) {
             userJobs = new HashSet<>();
         }
         userJobs.add(this);
 
-        DataManager.userJobsMap.put(this.getStatus().owner, userJobs);
+        DataManager.userJobsMap.put(this.owner, userJobs);
+    }
+
+    protected void jobFinished() {
+        // kick off any next jobs
+        for(MonitorableJob job : nextJobs) {
+            new Thread(job).start();
+        }
+
+        // remove this job from the user-job map
+        Set<MonitorableJob> userJobs = DataManager.userJobsMap.get(this.owner);
+        if (userJobs != null) userJobs.remove(this);
+    }
+
+    public void addNextJob(MonitorableJob job) {
+        nextJobs.add(job);
     }
 
     /**
      * Represents the current status of this job.
      */
     public static class Status implements Cloneable {
-        /** What error message (defined in messages.<lang>) should be displayed to the user? */
+        /** What message (defined in messages.<lang>) should be displayed to the user? */
         public String message;
 
         /** Is this deployment completed (successfully or unsuccessfully) */
@@ -54,23 +96,19 @@ public interface MonitorableJob extends Runnable {
         // When was the job last modified?
         public String modified;
 
-        // Who initialized the job?
-        public String owner;
-
         // Name of file/item once completed
         public String completedName;
 
-        public Status(String owner) {
+        public Status() {
             this.error = false;
-            this.owner = owner;
             this.completed = false;
             this.initialized = LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME);
             this.modified= LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME);
-            this.percentComplete = 0.0;
+            this.percentComplete = 0;
         }
 
         public Status clone () {
-            Status ret = new Status(owner);
+            Status ret = new Status();
             ret.message = message;
             ret.completed = completed;
             ret.error = error;
@@ -79,7 +117,6 @@ public interface MonitorableJob extends Runnable {
             ret.percentComplete = percentComplete;
             ret.initialized = initialized;
             ret.modified = modified;
-            ret.owner = owner;
             ret.completedName = completedName;
             return ret;
         }

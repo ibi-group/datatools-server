@@ -184,15 +184,14 @@ public class FeedVersionController  {
             halt(304);
         }
 
-        // for now run sychronously so the user sees something after the redirect
-        // it's pretty fast
+        v.save();
         new ProcessSingleFeedJob(v, userProfile.getUser_id()).run();
 
-        if (DataManager.config.get("modules").get("validator").get("enabled").asBoolean()) {
+        /*if (DataManager.config.get("modules").get("validator").get("enabled").asBoolean()) {
             BuildTransportNetworkJob btnj = new BuildTransportNetworkJob(v);
             Thread tnThread = new Thread(btnj);
             tnThread.start();
-        }
+        }*/
 
         return true;
     }
@@ -262,6 +261,7 @@ public class FeedVersionController  {
 
     public static Object getIsochrones(Request req, Response res) {
         LOG.info(req.uri());
+        Auth0UserProfile userProfile = req.attribute("user");
 
         String id = req.params("id");
         FeedVersion version = FeedVersion.get(id);
@@ -281,7 +281,7 @@ public class FeedVersionController  {
                 e.printStackTrace();
                 if (DataManager.config.get("modules").get("validator").get("enabled").asBoolean()) {
 //                    new BuildTransportNetworkJob(version).run();
-                    BuildTransportNetworkJob btnj = new BuildTransportNetworkJob(version);
+                    BuildTransportNetworkJob btnj = new BuildTransportNetworkJob(version, userProfile.getUser_id());
                     Thread tnThread = new Thread(btnj);
                     tnThread.start();
                 }

@@ -12,7 +12,7 @@ import com.conveyal.datatools.manager.extensions.transitfeeds.TransitFeedsFeedRe
 import com.conveyal.datatools.manager.extensions.transitland.TransitLandFeedResource;
 
 import com.conveyal.datatools.manager.jobs.LoadGtfsApiFeedJob;
-import com.conveyal.datatools.manager.jobs.MonitorableJob;
+import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.utils.CorsFilter;
 import com.conveyal.datatools.manager.utils.ResponseError;
@@ -95,20 +95,20 @@ public class DataManager {
         }
 
         // module-specific controllers
-        if ("true".equals(getConfigPropertyAsText("modules.deployment.enabled"))) {
+        if (isModuleEnabled("deployment")) {
             DeploymentController.register(apiPrefix);
         }
-        if ("true".equals(getConfigPropertyAsText("modules.gtfsapi.enabled"))) {
+        if (isModuleEnabled("gtfsapi")) {
             GtfsApiController.register(apiPrefix);
         }
-        if ("true".equals(getConfigPropertyAsText("modules.gtfsplus.enabled"))) {
+        if (isModuleEnabled("gtfsplus")) {
             GtfsPlusController.register(apiPrefix);
             gtfsPlusConfig = mapper.readTree(new File("gtfsplus.yml"));
         }
-        if ("true".equals(getConfigPropertyAsText("modules.user_admin.enabled"))) {
+        if (isModuleEnabled("user_admin")) {
             UserController.register(apiPrefix);
         }
-        if ("true".equals(getConfigPropertyAsText("modules.dump.enabled"))) {
+        if (isModuleEnabled("dump")) {
             DumpController.register("/");
         }
 
@@ -192,6 +192,10 @@ public class DataManager {
     public static String getConfigPropertyAsText(String name) {
         JsonNode node = getConfigProperty(name);
         return (node != null) ? node.asText() : null;
+    }
+
+    public static boolean isModuleEnabled(String moduleName) {
+        return "true".equals(getConfigPropertyAsText("modules." + moduleName + ".enabled"));
     }
 
     private static void registerExternalResources() {
