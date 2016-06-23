@@ -1,5 +1,6 @@
 package com.conveyal.datatools.editor.jobs;
 
+import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.models.Snapshot;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -40,7 +41,7 @@ import java.util.*;
 import java.util.Map.Entry;
 
 
-public class ProcessGtfsSnapshotMerge implements Runnable {
+public class ProcessGtfsSnapshotMerge extends MonitorableJob {
     public static final Logger LOG = LoggerFactory.getLogger(ProcessGtfsSnapshotMerge.class);
     /** map from GTFS agency IDs to Agencies */
     private Map<String, Agency> agencyIdMap = new HashMap<String, Agency>();
@@ -52,7 +53,7 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
 
     private GTFSFeed input;
     private File gtfsFile;
-
+    private Status status;
     private EditorFeed feed;
 
     /** once the merge runs this will have the ID of the created agency */
@@ -64,9 +65,11 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
         this(gtfsFile, null);
     }*/
 
-    public ProcessGtfsSnapshotMerge (FeedVersion feedVersion) {
+    public ProcessGtfsSnapshotMerge (FeedVersion feedVersion, String owner) {
+        super(owner, "Processing snapshot for " + feedVersion.getFeedSource().name, JobType.PROCESS_SNAPSHOT);
         this.gtfsFile = feedVersion.getFeed();
         this.feedVersion = feedVersion;
+        status = new Status();
         System.out.println(">> Merge w/ feedVersion = " + feedVersion.id);
     }
 
@@ -411,6 +414,9 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
         finally {
             feedTx.rollbackIfOpen();
             gtx.rollbackIfOpen();
+
+            // set job as complete
+            jobFinished();
         }
     }
 
@@ -506,6 +512,11 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
         }
 
         return patt;
+    }
+
+    @Override
+    public Status getStatus() {
+        return null;
     }
 }
 

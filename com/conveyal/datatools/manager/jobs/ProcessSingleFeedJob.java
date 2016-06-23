@@ -34,21 +34,24 @@ public class ProcessSingleFeedJob implements Runnable {
         // set up the validation job to run first
         ValidateFeedJob validateJob = new ValidateFeedJob(feedVersion, owner);
 
+        // use this FeedVersion to seed Editor DB provided no snapshots for feed already exist
+        if(DataManager.isModuleEnabled("editor")) {
+            // TODO: make this a monitorable job
+            Collection<Snapshot> snapshots = Snapshot.getSnapshots(feedVersion.feedSourceId);
+            ProcessGtfsSnapshotMerge processGtfsSnapshotMergeJob = new ProcessGtfsSnapshotMerge(feedVersion, owner);
+
+            // chain job
+            if (snapshots.size() == 0) {
+                validateJob.addNextJob(processGtfsSnapshotMergeJob);
+            }
+        }
+
         // chain on a network builder job, if applicable
         if(DataManager.isModuleEnabled("validator")) {
             validateJob.addNextJob(new BuildTransportNetworkJob(feedVersion, owner));
         }
 
         new Thread(validateJob).start();
-
-        // use this FeedVersion to seed Editor DB provided no snapshots for feed already exist
-        if(DataManager.isModuleEnabled("editor")) {
-            // TODO: make this a monitorable job
-            Collection<Snapshot> snapshots = Snapshot.getSnapshots(feedVersion.feedSourceId);
-            if (snapshots.size() == 0) {
-                new ProcessGtfsSnapshotMerge(feedVersion).run();
-            }
-        }
 
         // notify any extensions of the change
         for(String resourceType : DataManager.feedResources.keySet()) {

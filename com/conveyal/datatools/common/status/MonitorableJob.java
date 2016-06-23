@@ -20,7 +20,7 @@ public abstract class MonitorableJob implements Runnable {
 
     protected List<MonitorableJob> nextJobs = new ArrayList<>();
 
-    public enum JobType { UNKNOWN_TYPE, BUILD_TRANSPORT_NETWORK, VALIDATE_FEED }
+    public enum JobType { UNKNOWN_TYPE, BUILD_TRANSPORT_NETWORK, VALIDATE_FEED, PROCESS_SNAPSHOT }
 
     public MonitorableJob(String owner, String name, JobType type) {
         this.owner = owner;
