@@ -2,6 +2,7 @@ package com.conveyal.datatools.editor.models.transit;
 
 
 import com.conveyal.datatools.editor.datastore.FeedTx;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Geometry;
@@ -22,6 +23,7 @@ import java.util.List;
 
 import static com.conveyal.datatools.editor.utils.GeoUtils.getCoordDistances;
 
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class TripPattern extends Model implements Cloneable, Serializable {
     public static final long serialVersionUID = 1;
     public static final Logger LOG = LoggerFactory.getLogger(TripPattern.class);
@@ -39,7 +41,7 @@ public class TripPattern extends Model implements Cloneable, Serializable {
 
     public String feedId;
 
-    public List<TripPatternStop> patternStops;
+    public List<TripPatternStop> patternStops = new ArrayList<TripPatternStop>();
     
     /**
      * Lines showing how stops are being snapped to the shape.
