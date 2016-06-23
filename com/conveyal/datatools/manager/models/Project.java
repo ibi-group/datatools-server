@@ -6,7 +6,6 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 
 import java.util.*;
-import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 /**
@@ -94,6 +93,9 @@ public class Project extends Model {
         for (FeedSource s : getProjectFeedSources()) {
             s.delete();
         }
+        for (Deployment d : getProjectDeployments()) {
+            d.delete();
+        }
 
         projectStore.delete(this.id);
     }
@@ -121,7 +123,7 @@ public class Project extends Model {
      */
 
     @JsonIgnore
-    public Collection<Deployment> getDeployments () {
+    public Collection<Deployment> getProjectDeployments() {
         ArrayList<Deployment> ret = new ArrayList<Deployment>();
 
         for (Deployment d : Deployment.getAll()) {
