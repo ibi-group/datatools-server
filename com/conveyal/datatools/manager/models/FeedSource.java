@@ -1,5 +1,7 @@
 package com.conveyal.datatools.manager.models;
 
+import com.conveyal.datatools.editor.datastore.GlobalTx;
+import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.jobs.BuildTransportNetworkJob;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
@@ -399,6 +401,17 @@ public class FeedSource extends Model implements Cloneable {
     public void delete() {
         for (FeedVersion v : getFeedVersions()) {
             v.delete();
+        }
+
+        // Delete editor feed mapdb
+        // TODO: does the mapdb folder need to be deleted separately?
+        GlobalTx gtx = VersionedDataStore.getGlobalTx();
+        if (!gtx.feeds.containsKey(id)) {
+            gtx.rollback();
+        }
+        else {
+            gtx.feeds.remove(id);
+            gtx.commit();
         }
 
         for (ExternalFeedSourceProperty prop : ExternalFeedSourceProperty.getAll()) {
