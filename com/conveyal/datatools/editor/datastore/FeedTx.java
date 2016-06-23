@@ -36,6 +36,7 @@ public class FeedTx extends DatabaseTx {
     public BTreeMap<String, ScheduleException> exceptions;
     public BTreeMap<String, Stop> stops;
     public BTreeMap<String, Agency> agencies;
+    public BTreeMap<String, Fare> fares;
     // if you add anything here, see warning above!
 
     // secondary indices
@@ -102,6 +103,7 @@ public class FeedTx extends DatabaseTx {
         snapshotVersion = tx.getAtomicInteger("snapshotVersion");
         stops = getMap("stops");
         agencies = getMap("agencies");
+        fares = getMap("fares");
 
         if (buildSecondaryIndices)
             buildSecondaryIndices();

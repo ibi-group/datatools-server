@@ -1,13 +1,15 @@
 package com.conveyal.datatools.editor.models.transit;
 
+import com.conveyal.datatools.editor.models.Model;
 import com.google.common.collect.Lists;
 
+import java.io.Serializable;
 import java.util.List;
 
 /**
  * Created by landon on 6/22/16.
  */
-public class Fare {
+public class Fare extends Model implements Cloneable, Serializable {
     public static final long serialVersionUID = 1;
 
     public String feedId;

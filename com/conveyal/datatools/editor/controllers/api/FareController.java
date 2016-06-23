@@ -3,6 +3,7 @@ package com.conveyal.datatools.editor.controllers.api;
 import com.conveyal.datatools.editor.controllers.Base;
 import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
+import com.conveyal.datatools.editor.models.transit.Fare;
 import com.conveyal.datatools.editor.models.transit.ScheduleException;
 import com.conveyal.datatools.editor.models.transit.Trip;
 import com.conveyal.datatools.manager.models.JsonViews;
@@ -44,53 +45,24 @@ public class FareController {
 
         try {
             if (id != null) {
-                if (!tx.calendars.containsKey(id)) {
+                if (!tx.fares.containsKey(id)) {
                     halt(404);
                     tx.rollback();
                 }
 
                 else {
-                    ServiceCalendar c = tx.calendars.get(id);
-                    c.addDerivedInfo(tx);
-                    return c;
+                    Fare fare = tx.fares.get(id);
+//                    fare.addDerivedInfo(tx);
+                    return fare;
                 }
-            }
-            else if (patternId != null) {
-                if (!tx.tripPatterns.containsKey(patternId)) {
-                    tx.rollback();
-                    halt(404);
-                }
-
-                Set<String> serviceCalendarIds = Sets.newHashSet();
-                for (Trip trip : tx.getTripsByPattern(patternId)) {
-                    serviceCalendarIds.add(trip.calendarId);
-                }
-
-                Collection<ServiceCalendar.ServiceCalendarForPattern> ret =
-                        Collections2.transform(serviceCalendarIds, new Function<String, ServiceCalendar.ServiceCalendarForPattern>() {
-
-                            @Override
-                            public ServiceCalendar.ServiceCalendarForPattern apply(String input) {
-                                ServiceCalendar cal = tx.calendars.get(input);
-
-                                Long count = tx.tripCountByPatternAndCalendar.get(new Fun.Tuple2(patternId, cal.id));
-
-                                if (count == null) count = 0L;
-
-                                return new ServiceCalendar.ServiceCalendarForPattern(cal, tx.tripPatterns.get(patternId), count);
-                            }
-
-                        });
-
-                return ret;
             }
             else {
-                Collection<ServiceCalendar> cals = tx.calendars.values();
-                System.out.println("# of cals: " + cals.size());
-                for (ServiceCalendar c : cals) {
-                    c.addDerivedInfo(tx);
+                Collection<Fare> fares = tx.fares.values();
+                System.out.println("# of fares: " + fares.size());
+                for (Fare fare : fares) {
+//                    fare.addDerivedInfo(tx);
                 }
-                return cals;
+                return fares;
             }
 
             tx.rollback();
@@ -103,37 +75,37 @@ public class FareController {
     }
 
     public static Object createFare(Request req, Response res) {
-        ServiceCalendar cal;
+        Fare fare;
         FeedTx tx = null;
 
         try {
-            cal = Base.mapper.readValue(req.body(), ServiceCalendar.class);
+            fare = Base.mapper.readValue(req.body(), Fare.class);
 
-            if (!VersionedDataStore.agencyExists(cal.feedId)) {
+            if (!VersionedDataStore.agencyExists(fare.feedId)) {
                 halt(400);
             }
 
-            if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(cal.feedId))
+            if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(fare.feedId))
                 halt(400);
 
-            tx = VersionedDataStore.getFeedTx(cal.feedId);
+            tx = VersionedDataStore.getFeedTx(fare.feedId);
 
-            if (tx.calendars.containsKey(cal.id)) {
+            if (tx.fares.containsKey(fare.id)) {
                 tx.rollback();
                 halt(400);
             }
 
-            // check if gtfsServiceId is specified, if not create from DB id
-            if(cal.gtfsServiceId == null) {
-                cal.gtfsServiceId = "CAL_" + cal.id.toString();
+            // check if gtfsFareId is specified, if not create from DB id
+            if(fare.gtfsFareId == null) {
+                fare.gtfsFareId = "CAL_" + fare.id.toString();
             }
 
-            cal.addDerivedInfo(tx);
+//            fare.addDerivedInfo(tx);
 
-            tx.calendars.put(cal.id, cal);
+            tx.fares.put(fare.id, fare);
             tx.commit();
 
-            return cal;
+            return fare;
         } catch (Exception e) {
             if (tx != null) tx.rollback();
             e.printStackTrace();
@@ -143,36 +115,36 @@ public class FareController {
     }
 
     public static Object updateFare(Request req, Response res) {
-        ServiceCalendar cal;
+        Fare fare;
         FeedTx tx = null;
 
         try {
-            cal = Base.mapper.readValue(req.body(), ServiceCalendar.class);
+            fare = Base.mapper.readValue(req.body(), Fare.class);
 
-            if (!VersionedDataStore.agencyExists(cal.feedId)) {
+            if (!VersionedDataStore.agencyExists(fare.feedId)) {
                 halt(400);
             }
 
-            if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(cal.feedId))
+            if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(fare.feedId))
                 halt(400);
 
-            tx = VersionedDataStore.getFeedTx(cal.feedId);
+            tx = VersionedDataStore.getFeedTx(fare.feedId);
 
-            if (!tx.calendars.containsKey(cal.id)) {
+            if (!tx.fares.containsKey(fare.id)) {
                 tx.rollback();
                 halt(400);
             }
 
-            // check if gtfsServiceId is specified, if not create from DB id
-            if(cal.gtfsServiceId == null) {
-                cal.gtfsServiceId = "CAL_" + cal.id.toString();
+            // check if gtfsFareId is specified, if not create from DB id
+            if(fare.gtfsFareId == null) {
+                fare.gtfsFareId = "CAL_" + fare.id.toString();
             }
 
-            cal.addDerivedInfo(tx);
+//            fare.addDerivedInfo(tx);
 
-            tx.calendars.put(cal.id, cal);
+            tx.fares.put(fare.id, fare);
 
-            Object json = Base.toJson(cal, false);
+            Object json = Base.toJson(fare, false);
 
             tx.commit();
 
@@ -191,7 +163,7 @@ public class FareController {
 
         FeedTx tx = VersionedDataStore.getFeedTx(feedId);
 
-        if (id == null || !tx.calendars.containsKey(id)) {
+        if (id == null || !tx.fares.containsKey(id)) {
             tx.rollback();
             halt(404);
         }

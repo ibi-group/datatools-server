@@ -8,6 +8,7 @@ import com.conveyal.gtfs.model.CalendarDate;
 import com.conveyal.gtfs.model.Entity;
 import com.conveyal.gtfs.model.Service;
 import com.conveyal.gtfs.model.Shape;
+import com.conveyal.gtfs.model.Fare;
 import com.google.common.base.Function;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.Maps;
@@ -78,6 +79,7 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
         long shapePointCount = 0;
         long serviceCalendarCount = 0;
         long shapeCount = 0;
+        long fareCount = 0;
 
         GlobalTx gtx = VersionedDataStore.getGlobalTx();
 
@@ -163,20 +165,11 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
                 }*/
             }
 
-            // set the agency default zoom locations and save the feeds
-            // TODO: below commented out to compile.  Needs to be fixed for agency -> feed conversion
-//            for (Agency a : agencyIdMap.values()) {
-//                Envelope stopEnvelope = stopEnvelopes.get(a.id    );
-//                a.defaultLat = stopEnvelope.centre().y;
-//                a.defaultLon = stopEnvelope.centre().x;
-//                gtx.feeds.put(a.id, a);
-//            }
-
             LOG.info("Stops loaded: " + stopCount);
 
             LOG.info("GtfsImporter: importing routes...");
 
-
+            // import routes
             for (com.conveyal.gtfs.model.Route gtfsRoute : input.routes.values()) {
                 Agency agency = agencyIdMap.get(gtfsRoute.agency.agency_id);
 
@@ -331,7 +324,7 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
                     cal.gtfsServiceId = svc.service_id;
                 }
 
-                feedTx.calendars.put(cal.gtfsServiceId, cal);
+//                feedTx.calendars.put(cal.gtfsServiceId, cal);
                 calendars.put(svc.service_id, cal);
 
                 serviceCalendarCount++;
@@ -368,6 +361,8 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
                     TripPattern pat = tripPatternsByRoute.get(gtfsTrip.route.route_id);
 
                     ServiceCalendar cal = calendars.get(gtfsTrip.service.service_id);
+                    System.out.println(gtfsTrip.service.service_id);
+                    System.out.println(cal.id);
                     // if the service calendar has not yet been imported, import it
                     if (!feedTx.calendars.containsKey(cal.id)) {
                         // no need to clone as they are going into completely separate mapdbs
@@ -395,6 +390,14 @@ public class ProcessGtfsSnapshotMerge implements Runnable {
 
             LOG.info("Trips loaded: " + tripCount);
 
+
+            LOG.info("GtfsImporter: importing fares...");
+            Map<String, Fare> fares = input.fares;
+            for (Fare f : fares.values()) {
+                com.conveyal.datatools.editor.models.transit.Fare fare = new com.conveyal.datatools.editor.models.transit.Fare(); //com.conveyal.datatools.editor.models.transit.Fare(f.fare_attribute, f.fare_rules);
+                feedTx.fares.put(fare.id, fare);
+            }
+            LOG.info("Fares loaded: " + fareCount);
             // commit the feed TXs first, so that we have orphaned data rather than inconsistent data on a commit failure
             feedTx.commit();
             gtx.commit();
