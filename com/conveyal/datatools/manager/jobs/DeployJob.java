@@ -22,15 +22,10 @@ import java.net.URL;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
-import java.time.LocalDate;
-import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
 
-import com.conveyal.datatools.manager.DataManager;
-import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.models.Deployment;
-import org.apache.http.auth.AUTH;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,7 +34,7 @@ import org.slf4j.LoggerFactory;
  * @author mattwigway
  *
  */
-public class DeployJob implements MonitorableJob {
+public class DeployJob extends MonitorableJob {
 
     private static final Logger LOG = LoggerFactory.getLogger(DeployJob.class);
 
@@ -62,12 +57,15 @@ public class DeployJob implements MonitorableJob {
     private Deployment deployment;
 
     public DeployJob(Deployment deployment, String owner, List<String> targets, String publicUrl, String s3Bucket, String s3CredentialsFilename) {
+        super(owner);
         this.deployment = deployment;
         this.targets = targets;
         this.publicUrl = publicUrl;
         this.s3Bucket = s3Bucket;
         this.s3CredentialsFilename = s3CredentialsFilename;
-        this.status = new DeployStatus(owner);
+        this.status = new DeployStatus();
+        this.name = "Deploying " + deployment.name;
+        status.message = "Initializing..";
         status.built = false;
         status.numServersCompleted = 0;
         status.totalServers = targets == null ? 0 : targets.size();
@@ -91,11 +89,14 @@ public class DeployJob implements MonitorableJob {
 //    }
 
     public void run() {
+
+        int totalTasks = 1 + targets.size();
+        int tasksCompleted = 0;
+
         // create a temporary file in which to save the deployment
         File temp;
         try {
             temp = File.createTempFile("deployment", ".zip");
-
         } catch (IOException e) {
             LOG.error("Could not create temp file");
             e.printStackTrace();
@@ -113,7 +114,11 @@ public class DeployJob implements MonitorableJob {
 
         // dump the deployment bundle
         try {
+            synchronized (status) {
+                status.message = "Creating OTP Bundle";
+            }
             this.deployment.dump(temp, true, true, true);
+            tasksCompleted++;
         } catch (Exception e) {
             LOG.error("Error dumping deployment");
             e.printStackTrace();
@@ -128,12 +133,15 @@ public class DeployJob implements MonitorableJob {
         }
 
         synchronized (status) {
+            status.percentComplete = 100.0 * (double) tasksCompleted / totalTasks;
+            System.out.println("pctComplete = " + status.percentComplete);
             status.built = true;
         }
 
         // upload to S3, if applicable
         if(this.s3Bucket != null) {
             synchronized (status) {
+                status.message = "Uploading to S3";
                 status.uploadingS3 = true;
             }
 
@@ -203,6 +211,7 @@ public class DeployJob implements MonitorableJob {
         // load it to OTP
         for (String rawUrl : this.targets) {
             synchronized (status) {
+                status.message = "Deploying to " + rawUrl;
                 status.uploading = true;
             }
 
@@ -355,6 +364,8 @@ public class DeployJob implements MonitorableJob {
 
             synchronized (status) {
                 status.numServersCompleted++;
+                tasksCompleted++;
+                status.percentComplete = 100.0 * (double) tasksCompleted / totalTasks;
             }
         }
 
@@ -362,6 +373,8 @@ public class DeployJob implements MonitorableJob {
             status.completed = true;
             status.baseUrl = this.publicUrl;
         }
+
+        jobFinished();
 
         temp.deleteOnExit();
     }
@@ -400,18 +413,15 @@ public class DeployJob implements MonitorableJob {
         /** Where can the user see the result? */
         public String baseUrl;
 
-        public DeployStatus(String owner) {
-            super(owner);
-        }
-
         public DeployStatus clone () {
-            DeployStatus ret = new DeployStatus(owner);
+            DeployStatus ret = new DeployStatus();
             ret.message = message;
             ret.completed = completed;
             ret.error = error;
             ret.built = built;
             ret.uploading = uploading;
             ret.uploadingS3 = uploadingS3;
+            ret.percentComplete = percentComplete;
             ret.percentUploaded = percentUploaded;
             ret.numServersCompleted = numServersCompleted;
             ret.totalServers = totalServers;
