@@ -182,6 +182,7 @@ public class FeedInfoController {
 
         }
     }
+    // TODO: deleting editor feed is handled in delete feed source?
     public static Object deleteFeedInfo(Request req, Response res) {
         String id = req.params("id");
         String feedId = req.queryParams("feedId");

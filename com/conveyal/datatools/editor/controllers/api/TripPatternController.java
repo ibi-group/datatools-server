@@ -52,7 +52,7 @@ public class TripPatternController {
             else if (routeId != null) {
 
                 if (!tx.routes.containsKey(routeId))
-                    halt(404);
+                    halt(404, "routeId '" + routeId + "' does not exist");
                 else {
                     Set<Tuple2<String, String>> tpKeys = tx.tripPatternsByRoute.subSet(new Tuple2(routeId, null), new Tuple2(routeId, Fun.HI));
 
@@ -68,7 +68,7 @@ public class TripPatternController {
                 }
             }
             else {
-                halt(400);
+                halt(400, "routeId parameter must be included");
             }
             
             tx.rollback();

@@ -106,18 +106,19 @@ public class AgencyController {
     }
 
     public static Object deleteAgency(Request req, Response res) {
-        GlobalTx tx = VersionedDataStore.getGlobalTx();
+//        GlobalTx tx = VersionedDataStore.getGlobalTx();
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
         if(id == null) {
             halt(400);
         }
-        
-        if (!tx.feeds.containsKey(id)) {
-            halt(404);
+        final FeedTx tx = VersionedDataStore.getFeedTx(feedId);
+        if(!tx.agencies.containsKey(id)) {
+            tx.rollback();
+            halt(400);
         }
 
-        tx.feeds.remove(id);
+        tx.agencies.remove(id);
         tx.commit();
         
         return true; // ok();

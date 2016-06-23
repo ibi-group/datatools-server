@@ -10,10 +10,14 @@ import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.*;
 import org.geotools.referencing.GeodeticCalculator;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.Set;
+import java.util.stream.Collector;
+import java.util.stream.Collectors;
 
 import org.mapdb.BTreeMap;
 import spark.Request;
@@ -158,38 +162,34 @@ public class StopController {
     }
 
 
-    public static Object updateStop(Request req, Response res) {
+    public static Object updateStop(Request req, Response res) throws IOException {
         FeedTx tx = null;
         Object json = null;
-        try {
-            Stop stop = Base.mapper.readValue(req.body(), Stop.class);
-            
-            if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(stop.feedId))
-                halt(400);
-            
-            if (!VersionedDataStore.agencyExists(stop.feedId)) {
-                halt(400);
-            }
-            
-            tx = VersionedDataStore.getFeedTx(stop.feedId);
-            
-            if (!tx.stops.containsKey(stop.id)) {
-                halt(400);
-            }
-            
-            tx.stops.put(stop.id, stop);
-            tx.commit();
-            json = Base.toJson(stop, false);
-        } catch (Exception e) {
-            e.printStackTrace();
-            halt(400);
-        } finally {
-            if (tx != null) tx.rollbackIfOpen();
+        Stop stop = Base.mapper.readValue(req.body(), Stop.class);
+        String feedId = req.queryParams("feedId");
+        if (feedId == null) {
+            halt(400, "Must provide feed ID");
         }
+
+        if (!VersionedDataStore.agencyExists(feedId)) {
+            halt(400, "Feed ID ("+feedId+") does not exist");
+        }
+
+        tx = VersionedDataStore.getFeedTx(feedId);
+
+        if (!tx.stops.containsKey(stop.id)) {
+            halt(400);
+            tx.rollback();
+        }
+
+        tx.stops.put(stop.id, stop);
+        tx.commit();
+        json = Base.toJson(stop, false);
+        tx.rollbackIfOpen();
         return json;
     }
 
-    public static Object deleteStop(Request req, Response res) {
+    public static Object deleteStop(Request req, Response res) throws IOException {
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
         Object json = null;
@@ -202,24 +202,24 @@ public class StopController {
         }
 
         FeedTx tx = VersionedDataStore.getFeedTx(feedId);
-        try {
-            if (!tx.stops.containsKey(id)) {
-                halt(404);
-            }
-
-            if (!tx.getTripPatternsByStop(id).isEmpty()) {
-                halt(400);
-            }
-
-            Stop s = tx.stops.remove(id);
-            tx.commit();
-            json = Base.toJson(s, false);
-        } catch (Exception e) {
-            halt(400);
-            e.printStackTrace();
-        } finally {
-            tx.rollbackIfOpen();
+        if (!tx.stops.containsKey(id)) {
+            halt(404);
+            tx.rollback();
         }
+
+        if (!tx.getTripPatternsByStop(id).isEmpty()) {
+            Set<String> patterns = tx.getTripPatternsByStop(id).stream().map(tripPattern -> tripPattern.name).collect(Collectors.toSet());
+            Set<String> routes = tx.getTripPatternsByStop(id).stream().map(tripPattern -> tripPattern.routeId).collect(Collectors.toSet());
+            halt(400, "Trip patterns ("+patterns.toString()+") for routes "+routes.toString()+" reference stop ID" + id);
+            tx.rollback();
+        }
+
+        Stop s = tx.stops.remove(id);
+        tx.commit();
+        json = Base.toJson(s, false);
+
+        tx.rollbackIfOpen();
+
         return json;
     }
     

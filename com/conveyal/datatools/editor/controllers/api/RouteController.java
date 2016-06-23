@@ -149,7 +149,7 @@ public class RouteController {
 
     public static Object deleteRoute(Request req, Response res) {
         String id = req.params("id");
-        String feedId = req.session().attribute("feedId");
+        String feedId = req.queryParams("feedId");
 
         if (feedId == null)
             feedId = req.session().attribute("feedId");
