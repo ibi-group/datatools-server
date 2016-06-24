@@ -92,6 +92,7 @@ public class DataManager {
             TripPatternController.register(apiPrefix);
             SnapshotController.register(apiPrefix);
             FeedInfoController.register(apiPrefix);
+            FareController.register(apiPrefix);
         }
 
         // module-specific controllers

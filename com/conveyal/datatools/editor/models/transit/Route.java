@@ -114,7 +114,7 @@ public class Route extends Model implements Cloneable, Serializable {
 
     public com.conveyal.gtfs.model.Route toGtfs(com.conveyal.gtfs.model.Agency a, GlobalTx tx) {
         com.conveyal.gtfs.model.Route ret = new com.conveyal.gtfs.model.Route();
-        ret.agency = a;
+        ret.agency_id = a.agency_id;
         ret.route_color = routeColor;
         ret.route_desc = routeDesc;
         ret.route_id = getGtfsId();

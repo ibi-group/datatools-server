@@ -31,7 +31,6 @@ public class FareController {
     public static Object getFare(Request req, Response res) {
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
-        String patternId = req.queryParams("patternId");
 
         if (feedId == null) {
             feedId = req.session().attribute("feedId");

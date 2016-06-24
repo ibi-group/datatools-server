@@ -3,13 +3,19 @@ package com.conveyal.datatools.editor.jobs;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.models.Snapshot;
+import com.conveyal.datatools.editor.models.transit.Agency;
+import com.conveyal.datatools.editor.models.transit.Fare;
+import com.conveyal.datatools.editor.models.transit.Route;
+import com.conveyal.datatools.editor.models.transit.Stop;
+import com.conveyal.datatools.editor.models.transit.StopTime;
+import com.conveyal.datatools.editor.models.transit.Trip;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.gtfs.GTFSFeed;
 import com.conveyal.gtfs.model.CalendarDate;
 import com.conveyal.gtfs.model.Entity;
 import com.conveyal.gtfs.model.Service;
 import com.conveyal.gtfs.model.Shape;
-import com.conveyal.gtfs.model.Fare;
+import com.conveyal.gtfs.model.ShapePoint;
 import com.google.common.base.Function;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.Maps;
@@ -110,7 +116,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 
             // load the GTFS agencies
             for (com.conveyal.gtfs.model.Agency gtfsAgency : input.agency.values()) {
-                Agency agency = new Agency(gtfsAgency);
+                Agency agency = new Agency(gtfsAgency, feed);
                 //agencyId = agency.id;
                 //agency.sourceId = sourceId;
                 // don't save the agency until we've come up with the stop centroid, below.
@@ -174,7 +180,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 
             // import routes
             for (com.conveyal.gtfs.model.Route gtfsRoute : input.routes.values()) {
-                Agency agency = agencyIdMap.get(gtfsRoute.agency.agency_id);
+                Agency agency = agencyIdMap.get(gtfsRoute.agency_id);
 
                 if (!routeTypeIdMap.containsKey(gtfsRoute.route_type)) {
                     RouteType rt = new RouteType();
@@ -201,33 +207,47 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
             // we put this map in mapdb because it can be big
 
             // import points
+            String shapeId = null;
+            List<ShapePoint> points = new ArrayList<>();
+            for (ShapePoint point : input.shape_points.values()) {
 
-            for (String shapeId : input.shapes.keySet()) {
-                Collection<Shape> points = input.shapePoints.subMap(new Tuple2(shapeId, 0), new Tuple2(shapeId, Fun.HI)).values();
+                // if new shape_id is encountered
+                if (point.shape_id  != shapeId ) {
 
-                if (points.size() < 2) {
-                    LOG.warn("Shape " + shapeId + " has fewer than two points. Using stop-to-stop geometries instead.");
-                    continue;
-                }
+                    // process full list of shapePoints
+                    if (shapeId != null) {
 
-                Coordinate[] coords = new Coordinate[points.size()];
+                        if (points.size() < 2) {
+                            LOG.warn("Shape " + shapeId + " has fewer than two points. Using stop-to-stop geometries instead.");
+                            continue;
+                        }
 
-                int lastSeq = Integer.MIN_VALUE;
+                        Coordinate[] coords = new Coordinate[points.size()];
 
-                int i = 0;
-                for (Shape shape : points) {
-                    if (shape.shape_pt_sequence <= lastSeq) {
-                        LOG.warn("Shape %s has out-of-sequence points. This implies a bug in the GTFS importer. Using stop-to-stop geometries.");
-                        continue;
+                        int lastSeq = Integer.MIN_VALUE;
+
+                        int i = 0;
+                        for (ShapePoint shape : points) {
+                            if (shape.shape_pt_sequence <= lastSeq) {
+                                LOG.warn("Shape %s has out-of-sequence points. This implies a bug in the GTFS importer. Using stop-to-stop geometries.");
+                                continue;
+                            }
+                            lastSeq = shape.shape_pt_sequence;
+
+                            coords[i++] = new Coordinate(shape.shape_pt_lon, shape.shape_pt_lat);
+                        }
+
+                        shapes.put(shapeId, geometryFactory.createLineString(coords));
+                        shapePointCount += points.size();
+                        shapeCount++;
+
                     }
-                    lastSeq = shape.shape_pt_sequence;
-
-                    coords[i++] = new Coordinate(shape.shape_pt_lon, shape.shape_pt_lat);
+                    // re-initalize shapeId and points
+                    shapeId = point.shape_id;
+                    points = new ArrayList<>();
                 }
+                points.add(point);
 
-                shapes.put(shapeId, geometryFactory.createLineString(coords));
-                shapePointCount += points.size();
-                shapeCount++;
             }
 
             LOG.info("Shape points loaded: " + shapePointCount);
@@ -350,10 +370,10 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                     //String agencyId = agencyIdMap.get(gtfsTrip.route.agency.agency_id).id;
                     //FeedTx tx = agencyTxs.get(agencyId);
 
-                    if (!tripPatternsByRoute.containsKey(gtfsTrip.route.route_id)) {
+                    if (!tripPatternsByRoute.containsKey(gtfsTrip.route_id)) {
                         TripPattern pat = createTripPatternFromTrip(gtfsTrip, feedTx);
                         feedTx.tripPatterns.put(pat.id, pat);
-                        tripPatternsByRoute.put(gtfsTrip.route.route_id, pat);
+                        tripPatternsByRoute.put(gtfsTrip.route_id, pat);
                     }
 
                     // there is more than one pattern per route, but this map is specific to only this pattern
@@ -361,18 +381,17 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                     // stopping patterns.
                     // (in DC, suppose there were trips on both the E2/weekday and E3/weekend from Friendship Heights
                     //  that short-turned at Missouri and 3rd).
-                    TripPattern pat = tripPatternsByRoute.get(gtfsTrip.route.route_id);
+                    TripPattern pat = tripPatternsByRoute.get(gtfsTrip.route_id);
 
-                    ServiceCalendar cal = calendars.get(gtfsTrip.service.service_id);
-                    System.out.println(gtfsTrip.service.service_id);
-                    System.out.println(cal.id);
+                    ServiceCalendar cal = calendars.get(gtfsTrip.service_id);
+
                     // if the service calendar has not yet been imported, import it
                     if (!feedTx.calendars.containsKey(cal.id)) {
                         // no need to clone as they are going into completely separate mapdbs
                         feedTx.calendars.put(cal.id, cal);
                     }
 
-                    Trip trip = new Trip(gtfsTrip, routeIdMap.get(gtfsTrip.route.route_id), pat, cal);
+                    Trip trip = new Trip(gtfsTrip, routeIdMap.get(gtfsTrip.route_id), pat, cal);
 
                     Collection<com.conveyal.gtfs.model.StopTime> stopTimes =
                             input.stop_times.subMap(new Tuple2(gtfsTrip.trip_id, null), new Tuple2(gtfsTrip.trip_id, Fun.HI)).values();
@@ -395,10 +414,11 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 
 
             LOG.info("GtfsImporter: importing fares...");
-            Map<String, Fare> fares = input.fares;
-            for (Fare f : fares.values()) {
-                com.conveyal.datatools.editor.models.transit.Fare fare = new com.conveyal.datatools.editor.models.transit.Fare(); //com.conveyal.datatools.editor.models.transit.Fare(f.fare_attribute, f.fare_rules);
+            Map<String, com.conveyal.gtfs.model.Fare> fares = input.fares;
+            for (com.conveyal.gtfs.model.Fare f : fares.values()) {
+                com.conveyal.datatools.editor.models.transit.Fare fare = new com.conveyal.datatools.editor.models.transit.Fare(f.fare_attribute, f.fare_rules);
                 feedTx.fares.put(fare.id, fare);
+                fareCount++;
             }
             LOG.info("Fares loaded: " + fareCount);
             // commit the feed TXs first, so that we have orphaned data rather than inconsistent data on a commit failure
@@ -428,7 +448,8 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 
         for (com.conveyal.gtfs.model.StopTime st : input.stop_times.values()) {
             String stopId = st.stop_id;
-            String agencyId = input.trips.get(st.trip_id).route.agency.agency_id;
+            String routeId = input.trips.get(st.trip_id).route_id;
+            String agencyId = input.routes.get(routeId).agency_id;
             Tuple2<String, String> key = new Tuple2(stopId, agencyId);
             ret.add(key);
         }
@@ -442,7 +463,8 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
      */
     public TripPattern createTripPatternFromTrip (com.conveyal.gtfs.model.Trip gtfsTrip, FeedTx tx) {
         TripPattern patt = new TripPattern();
-        patt.routeId = routeIdMap.get(gtfsTrip.route.route_id).id;
+        com.conveyal.gtfs.model.Route gtfsRoute = input.routes.get(gtfsTrip.route_id);
+        patt.routeId = routeIdMap.get(gtfsTrip.route_id).id;
         patt.feedId = feed.id; //agencyId = agencyIdMap.get(gtfsTrip.route.agency.agency_id).id;
         if (gtfsTrip.shape_id != null) {
             if (!shapes.containsKey(gtfsTrip.shape_id)) {
@@ -460,8 +482,8 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 
         if (gtfsTrip.trip_headsign != null && !gtfsTrip.trip_headsign.isEmpty())
             patt.name = gtfsTrip.trip_headsign;
-        else if (gtfsTrip.route.route_long_name != null)
-            patt.name = String.format("%s to %s (%s stops)", gtfsTrip.route.route_long_name, input.stops.get(stopTimes[stopTimes.length - 1].stop_id).stop_name, stopTimes.length); // Messages.get("gtfs.named-route-pattern", gtfsTrip.route.route_long_name, input.stops.get(stopTimes[stopTimes.length - 1].stop_id).stop_name, stopTimes.length);
+        else if (gtfsRoute.route_long_name != null)
+            patt.name = String.format("%s to %s (%s stops)", gtfsRoute.route_long_name, input.stops.get(stopTimes[stopTimes.length - 1].stop_id).stop_name, stopTimes.length); // Messages.get("gtfs.named-route-pattern", gtfsTrip.route.route_long_name, input.stops.get(stopTimes[stopTimes.length - 1].stop_id).stop_name, stopTimes.length);
         else
             patt.name = String.format("to %s ({%s stops)", input.stops.get(stopTimes[stopTimes.length - 1].stop_id).stop_name, stopTimes.length); // Messages.get("gtfs.unnamed-route-pattern", input.stops.get(stopTimes[stopTimes.length - 1].stop_id).stop_name, stopTimes.length);
 

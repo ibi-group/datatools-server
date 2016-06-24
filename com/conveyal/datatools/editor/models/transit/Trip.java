@@ -124,7 +124,7 @@ public class Trip extends Model implements Cloneable, Serializable {
         ret.start_time = startTime;
         ret.end_time = endTime;
         ret.headway_secs = headway;
-        ret.trip = trip;
+        ret.trip_id = trip.trip_id;
 
         return ret;
     }

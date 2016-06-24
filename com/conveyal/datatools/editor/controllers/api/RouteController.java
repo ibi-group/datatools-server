@@ -117,26 +117,28 @@ public class RouteController {
 
     public static Object updateRoute(Request req, Response res) {
         Route route;
+        String id = req.params("id");
+        String feedId = req.queryParams("feedId");
 
         try {
             route = Base.mapper.readValue(req.body(), Route.class);
-   
-            FeedTx tx = VersionedDataStore.getFeedTx(route.feedId);
+            if (feedId == null) {
+                halt(400);
+            }
+            FeedTx tx = VersionedDataStore.getFeedTx(feedId);
             
-            if (!tx.routes.containsKey(route.id)) {
+            if (!tx.routes.containsKey(id)) {
                 tx.rollback();
                 halt(404);
             }
-            
-            if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(route.feedId))
-                halt(400);
+
 
             // check if gtfsRouteId is specified, if not create from DB id
             if(route.gtfsRouteId == null) {
-                route.gtfsRouteId = "ROUTE_" + route.id;
+                route.gtfsRouteId = "ROUTE_" + id;
             }
             
-            tx.routes.put(route.id, route);
+            tx.routes.put(id, route);
             tx.commit();
 
             return route;

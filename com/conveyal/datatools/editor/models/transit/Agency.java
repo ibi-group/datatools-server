@@ -19,6 +19,7 @@ public class Agency extends Model implements Cloneable, Serializable, Comparable
     public String timezone;
     public String lang;
     public String phone;
+    public String feedId;
     
     /*public String color;
 
@@ -40,23 +41,24 @@ public class Agency extends Model implements Cloneable, Serializable, Comparable
     }
     */
     
-    public Agency(com.conveyal.gtfs.model.Agency agency) {
+    public Agency(com.conveyal.gtfs.model.Agency agency, EditorFeed feed) {
         this.gtfsAgencyId = agency.agency_id;
         this.name = agency.agency_name;
         this.url = agency.agency_url != null ? agency.agency_url.toString() : null;
         this.timezone = agency.agency_timezone;
         this.lang = agency.agency_lang;
         this.phone = agency.agency_phone;
-        generateId();
+        this.feedId = feed.id;
     }
     
-    public Agency(String gtfsAgencyId, String name, String url, String timezone, String lang, String phone) {
+    public Agency(EditorFeed feed, String gtfsAgencyId, String name, String url, String timezone, String lang, String phone) {
         this.gtfsAgencyId = gtfsAgencyId;
         this.name = name;
         this.url = url;
         this.timezone = timezone;
         this.lang = lang;
         this.phone = phone;
+        this.feedId = feed.id;
     }
     
     public Agency () {}

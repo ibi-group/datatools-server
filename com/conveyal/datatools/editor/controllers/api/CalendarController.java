@@ -85,7 +85,6 @@ public class CalendarController {
             }
             else {
                 Collection<ServiceCalendar> cals = tx.calendars.values();
-                System.out.println("# of cals: " + cals.size());
                 for (ServiceCalendar c : cals) {
                     c.addDerivedInfo(tx);
                 }

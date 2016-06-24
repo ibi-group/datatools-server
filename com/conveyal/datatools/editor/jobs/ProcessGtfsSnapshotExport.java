@@ -6,6 +6,7 @@ import com.conveyal.gtfs.model.CalendarDate;
 import com.conveyal.gtfs.model.Entity;
 import com.conveyal.gtfs.model.Frequency;
 import com.conveyal.gtfs.model.Shape;
+import com.conveyal.gtfs.model.ShapePoint;
 import com.google.common.collect.Maps;
 import com.vividsolutions.jts.geom.Coordinate;
 import com.conveyal.datatools.editor.datastore.FeedTx;
@@ -14,6 +15,8 @@ import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.Snapshot;
 import com.conveyal.datatools.editor.models.transit.*;
 import java.time.LocalDate;
+
+import org.mapdb.Fun;
 import org.mapdb.Fun.Tuple2;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -108,7 +111,7 @@ public class ProcessGtfsSnapshotExport implements Runnable {
 
                                         CalendarDate cd = new CalendarDate();
                                         cd.date = date;
-                                        cd.service = gtfsService;
+                                        cd.service_id = gtfsService.service_id;
                                         cd.exception_type = ex.serviceRunsOn(cal) ? 1 : 2;
 
                                         if (gtfsService.calendar_dates.containsKey(date))
@@ -154,25 +157,25 @@ public class ProcessGtfsSnapshotExport implements Runnable {
                             com.conveyal.gtfs.model.Trip gtfsTrip = new com.conveyal.gtfs.model.Trip();
 
                             gtfsTrip.block_id = trip.blockId;
-                            gtfsTrip.route = gtfsRoute;
+                            gtfsTrip.route_id = gtfsRoute.route_id;
                             gtfsTrip.trip_id = trip.getGtfsId();
                             // not using custom ids for calendars
-                            gtfsTrip.service = feed.services.get(trip.calendarId);
+                            gtfsTrip.service_id = feed.services.get(trip.calendarId).service_id;
                             gtfsTrip.trip_headsign = trip.tripHeadsign;
                             gtfsTrip.trip_short_name = trip.tripShortName;
                             gtfsTrip.direction_id = trip.tripDirection == TripDirection.A ? 0 : 1;
 
                             TripPattern pattern = atx.tripPatterns.get(trip.patternId);
 
-                            Tuple2<String, Integer> nextKey = feed.shapePoints.ceilingKey(new Tuple2(pattern.id, null));
+                            Tuple2<String, Integer> nextKey = feed.shape_points.ceilingKey(new Tuple2(pattern.id, null));
                             if ((nextKey == null || !pattern.id.equals(nextKey.a)) && pattern.shape != null && !pattern.useStraightLineDistances) {
                                 // this shape has not yet been saved
                                 double[] coordDistances = GeoUtils.getCoordDistances(pattern.shape);
 
                                 for (int i = 0; i < coordDistances.length; i++) {
                                     Coordinate coord = pattern.shape.getCoordinateN(i);
-                                    Shape shape = new Shape(pattern.id, coord.y, coord.x, i + 1, coordDistances[i]);
-                                    feed.shapePoints.put(new Tuple2(pattern.id, shape.shape_pt_sequence), shape);
+                                    ShapePoint shape = new ShapePoint(pattern.id, coord.y, coord.x, i + 1, coordDistances[i]);
+                                    feed.shape_points.put(new Tuple2(pattern.id, shape.shape_pt_sequence), shape);
                                 }
                             }
 
@@ -259,12 +262,12 @@ public class ProcessGtfsSnapshotExport implements Runnable {
                             // create frequencies as needed
                             if (trip.useFrequency != null && trip.useFrequency) {
                                 Frequency f = new Frequency();
-                                f.trip = gtfsTrip;
+                                f.trip_id = gtfsTrip.trip_id;
                                 f.start_time = trip.startTime;
                                 f.end_time = trip.endTime;
                                 f.exact_times = 0;
                                 f.headway_secs = trip.headway;
-                                feed.frequencies.put(gtfsTrip.trip_id, f);
+                                feed.frequencies.add(Fun.t2(gtfsTrip.trip_id, f));
                             }
                         }
                     }

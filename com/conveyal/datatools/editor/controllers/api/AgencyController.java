@@ -78,6 +78,7 @@ public class AgencyController {
 
     public static Object updateAgency(Request req, Response res) {
         Agency agency;
+        String id = req.params("id");
         String feedId = req.queryParams("feedId");
 
         try {
@@ -85,6 +86,8 @@ public class AgencyController {
             
 //            GlobalTx tx = VersionedDataStore.getGlobalTx();
             final FeedTx tx = VersionedDataStore.getFeedTx(feedId);
+            System.out.println(id);
+            System.out.println(agency.id);
             if(!tx.agencies.containsKey(agency.id)) {
                 tx.rollback();
                 halt(400);

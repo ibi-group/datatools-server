@@ -34,7 +34,7 @@ public class ServiceCalendar extends Model implements Cloneable, Serializable {
     public ServiceCalendar() {};
     
     public ServiceCalendar(Calendar calendar) {
-        this.gtfsServiceId = calendar.service.service_id;
+        this.gtfsServiceId = calendar.service_id;
         this.monday = calendar.monday == 1;
         this.tuesday = calendar.tuesday == 1;
         this.wednesday = calendar.wednesday == 1;
@@ -153,7 +153,7 @@ public class ServiceCalendar extends Model implements Cloneable, Serializable {
     public Service toGtfs(int startDate, int endDate) {
         Service ret = new Service(id);
         ret.calendar = new Calendar();
-        ret.calendar.service = ret;
+        ret.calendar.service_id = ret.service_id;
         ret.calendar.start_date = startDate;
         ret.calendar.end_date = endDate;
         ret.calendar.sunday     = sunday    ? 1 : 0;
