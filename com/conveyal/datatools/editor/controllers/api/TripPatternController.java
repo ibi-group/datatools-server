@@ -67,8 +67,8 @@ public class TripPatternController {
                     json = Base.toJson(patts, false);
                 }
             }
-            else {
-                halt(400, "routeId parameter must be included");
+            else { // get all patterns
+                json = Base.toJson(tx.tripPatterns, false);
             }
             
             tx.rollback();
