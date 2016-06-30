@@ -57,7 +57,6 @@ public class FareController {
             }
             else {
                 Collection<Fare> fares = tx.fares.values();
-                System.out.println("# of fares: " + fares.size());
                 for (Fare fare : fares) {
 //                    fare.addDerivedInfo(tx);
                 }

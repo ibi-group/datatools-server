@@ -48,6 +48,10 @@ public class GeoUtils {
         GeodeticCalculator gc = new GeodeticCalculator();
         for (int j = 1; j < coordDist.length; j++) {
             Coordinate current = line.getCoordinateN(j);
+            if (Double.isNaN(prev.x)) {
+                coordDist[j] = 0;
+                continue;
+            }
             gc.setStartingGeographicPoint(prev.x, prev.y);
             gc.setDestinationGeographicPoint(current.x, current.y);
             coordDist[j] = coordDist[j - 1] + gc.getOrthodromicDistance();

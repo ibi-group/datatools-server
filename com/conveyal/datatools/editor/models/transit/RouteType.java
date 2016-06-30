@@ -5,6 +5,7 @@ import com.conveyal.datatools.editor.models.Model;
 
 import java.io.Serializable;
 
+// TODO: destroy route type and replace with ENUM
 public class RouteType extends Model implements Serializable {
     public static final long serialVersionUID = 1;
 

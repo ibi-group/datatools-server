@@ -15,9 +15,11 @@ import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -32,6 +34,7 @@ import com.conveyal.datatools.manager.controllers.api.GtfsApiController;
 import com.conveyal.datatools.manager.persistence.DataStore;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.utils.HashUtils;
+import com.conveyal.gtfs.GTFSCache;
 import com.conveyal.gtfs.GTFSFeed;
 import com.conveyal.gtfs.api.ApiMain;
 import com.conveyal.gtfs.validator.json.LoadStatus;
@@ -199,15 +202,18 @@ public class FeedVersion extends Model implements Serializable {
         }
         
 //        FeedProcessor fp = new FeedProcessor(feed);
-        GTFSFeed f = null;
+//        GTFSFeed f = null;
         try {
-            f = GTFSFeed.fromFile(feed.getAbsolutePath());
+//            f = GTFSFeed.fromFile(feed.getAbsolutePath());
+            DataManager.gtfsCache.put(id, feed);
         } catch (Exception e) {
             e.printStackTrace();
             return;
         }
+        GTFSFeed f = DataManager.gtfsCache.get(id);
         Map<LocalDate, Integer> tripsPerDate;
         // load feed into GTFS api
+        // TODO: pass GTFSFeed to GTFSApi
         if (DataManager.config.get("modules").get("gtfsapi").get("load_on_fetch").asBoolean()) {
             LOG.info("Loading feed into GTFS api");
             String md5 = ApiMain.loadFeedFromFile(feed, this.feedSourceId);
@@ -347,7 +353,10 @@ public class FeedVersion extends Model implements Serializable {
         }
 
         // Create/save r5 network
-        TransportNetwork tn = TransportNetwork.fromFiles(osmExtract.getAbsolutePath(), gtfsDir + this.id, TNBuilderConfig.defaultConfig());
+//        TransportNetwork tn = TransportNetwork.fromFiles(osmExtract.getAbsolutePath(), gtfsDir + this.id, TNBuilderConfig.defaultConfig());
+        List<GTFSFeed> feedList = new ArrayList<>();
+        feedList.add(DataManager.gtfsCache.get(id));
+        TransportNetwork tn = TransportNetwork.fromFeeds(osmExtract.getAbsolutePath(), feedList, TNBuilderConfig.defaultConfig());
         this.transportNetwork = tn;
         File tnFile = new File(feedSourceDir + this.id + "_network.dat");
         OutputStream tnOut = null;

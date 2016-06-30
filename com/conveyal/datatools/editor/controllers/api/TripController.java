@@ -149,7 +149,7 @@ public class TripController {
                     continue;
 
                 if (!st.stopId.equals(ps.stopId)) {
-                    LOG.error("Mismatch between stop sequence in trip and pattern at position %s, pattern: %s, stop: %s", i, ps.stopId, st.stopId);
+                    LOG.error("Mismatch between stop sequence in trip and pattern at position {}, pattern: {}, stop: {}", i, ps.stopId, st.stopId);
                     tx.rollback();
                     halt(400);
                 }

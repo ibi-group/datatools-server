@@ -112,7 +112,7 @@ public class SnapshotController {
             Tuple2<String, Integer> sid = JacksonSerializers.Tuple2IntDeserializer.deserialize(id);
 
             if (s == null || s.id == null || !s.id.equals(sid)) {
-                LOG.warn("snapshot ID not matched, not updating: %s, %s", s.id, id);
+                LOG.warn("snapshot ID not matched, not updating: {}, {}", s.id, id);
                 halt(400);
             }
 

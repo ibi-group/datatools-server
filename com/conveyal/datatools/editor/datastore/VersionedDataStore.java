@@ -89,7 +89,7 @@ public class VersionedDataStore {
         try {
             version = tx.getNextSnapshotId();
 
-            LOG.info("Creating snapshot %s for feed %s", feedId, version);
+            LOG.info("Creating snapshot {} for feed {}", feedId, version);
             long startTime = System.currentTimeMillis();
 
             ret = new Snapshot(feedId, version);
@@ -146,7 +146,7 @@ public class VersionedDataStore {
     public static List<Stop> restore (Snapshot s) {
         SnapshotTx tx = new SnapshotTx(getSnapshotDb(s.feedId, s.version, true));
         try {
-            LOG.info("Restoring snapshot %s of agency %s", s.version, s.feedId);
+            LOG.info("Restoring snapshot {} of agency {}", s.version, s.feedId);
             long startTime = System.currentTimeMillis();
             List<Stop> ret = tx.restore(s.feedId);
             LOG.info("Restored snapshot in %.2f seconds", (System.currentTimeMillis() - startTime) / 1000D);

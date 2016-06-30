@@ -217,6 +217,7 @@ public class FeedVersionController  {
     public static Object getValidationResult(Request req, Response res) {
         String id = req.params("id");
         FeedVersion version = FeedVersion.get(id);
+        // TODO: separate this out if non s3 bucket
         String s3Bucket = DataManager.config.get("application").get("data").get("gtfs_s3_bucket").asText();
         String keyName = "validation/" + version.id + ".json";
         if (s3Bucket != null) {

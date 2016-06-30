@@ -9,6 +9,7 @@ import com.conveyal.datatools.editor.models.transit.Route;
 import com.conveyal.datatools.editor.models.transit.Stop;
 import com.conveyal.datatools.editor.models.transit.StopTime;
 import com.conveyal.datatools.editor.models.transit.Trip;
+import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.gtfs.GTFSFeed;
 import com.conveyal.gtfs.model.CalendarDate;
@@ -107,7 +108,8 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 
 
         try {
-            input = GTFSFeed.fromFile(gtfsFile.getAbsolutePath());
+//            input = GTFSFeed.fromFile(gtfsFile.getAbsolutePath());
+            input = DataManager.gtfsCache.get(feedVersion.id);
 
             LOG.info("GtfsImporter: importing feed...");
 
@@ -212,7 +214,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
             for (ShapePoint point : input.shape_points.values()) {
 
                 // if new shape_id is encountered
-                if (point.shape_id  != shapeId ) {
+                if (!point.shape_id.equals(shapeId)) {
 
                     // process full list of shapePoints
                     if (shapeId != null) {
@@ -229,7 +231,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                         int i = 0;
                         for (ShapePoint shape : points) {
                             if (shape.shape_pt_sequence <= lastSeq) {
-                                LOG.warn("Shape %s has out-of-sequence points. This implies a bug in the GTFS importer. Using stop-to-stop geometries.");
+                                LOG.warn("Shape {} has out-of-sequence points. This implies a bug in the GTFS importer. Using stop-to-stop geometries.");
                                 continue;
                             }
                             lastSeq = shape.shape_pt_sequence;
@@ -405,7 +407,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                     tripCount++;
 
                     if (tripCount % 1000 == 0) {
-                        LOG.info("Loaded %s / %s trips", tripCount, input.trips.size());
+                        LOG.info("Loaded {} / {} trips", tripCount, input.trips.size());
                     }
                 }
             }
@@ -468,7 +470,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
         patt.feedId = feed.id; //agencyId = agencyIdMap.get(gtfsTrip.route.agency.agency_id).id;
         if (gtfsTrip.shape_id != null) {
             if (!shapes.containsKey(gtfsTrip.shape_id)) {
-                LOG.warn("Missing shape for shape ID %s, referenced by trip %s", gtfsTrip.shape_id, gtfsTrip.trip_id);
+                LOG.warn("Missing shape for shape ID {}, referenced by trip {}", gtfsTrip.shape_id, gtfsTrip.trip_id);
             }
             else {
                 patt.shape = (LineString) shapes.get(gtfsTrip.shape_id).clone();
@@ -483,9 +485,9 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
         if (gtfsTrip.trip_headsign != null && !gtfsTrip.trip_headsign.isEmpty())
             patt.name = gtfsTrip.trip_headsign;
         else if (gtfsRoute.route_long_name != null)
-            patt.name = String.format("%s to %s (%s stops)", gtfsRoute.route_long_name, input.stops.get(stopTimes[stopTimes.length - 1].stop_id).stop_name, stopTimes.length); // Messages.get("gtfs.named-route-pattern", gtfsTrip.route.route_long_name, input.stops.get(stopTimes[stopTimes.length - 1].stop_id).stop_name, stopTimes.length);
+            patt.name = String.format("{} to {} ({} stops)", gtfsRoute.route_long_name, input.stops.get(stopTimes[stopTimes.length - 1].stop_id).stop_name, stopTimes.length); // Messages.get("gtfs.named-route-pattern", gtfsTrip.route.route_long_name, input.stops.get(stopTimes[stopTimes.length - 1].stop_id).stop_name, stopTimes.length);
         else
-            patt.name = String.format("to %s ({%s stops)", input.stops.get(stopTimes[stopTimes.length - 1].stop_id).stop_name, stopTimes.length); // Messages.get("gtfs.unnamed-route-pattern", input.stops.get(stopTimes[stopTimes.length - 1].stop_id).stop_name, stopTimes.length);
+            patt.name = String.format("to {} ({{} stops)", input.stops.get(stopTimes[stopTimes.length - 1].stop_id).stop_name, stopTimes.length); // Messages.get("gtfs.unnamed-route-pattern", input.stops.get(stopTimes[stopTimes.length - 1].stop_id).stop_name, stopTimes.length);
 
         for (com.conveyal.gtfs.model.StopTime st : stopTimes) {
             TripPatternStop tps = new TripPatternStop();

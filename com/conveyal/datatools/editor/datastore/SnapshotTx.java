@@ -31,17 +31,17 @@ public class SnapshotTx extends DatabaseTx {
             throw new IllegalStateException("Cannot snapshot into non-empty db");
 
         int rcount = pump("routes", (BTreeMap) master.routes);
-        LOG.info("Snapshotted %s routes", rcount);
+        LOG.info("Snapshotted {} routes", rcount);
         int ccount = pump("calendars", (BTreeMap) master.calendars);
-        LOG.info("Snapshotted %s calendars", ccount);
+        LOG.info("Snapshotted {} calendars", ccount);
         int ecount = pump("exceptions", (BTreeMap) master.exceptions);
-        LOG.info("Snapshotted %s schedule exceptions", ecount);
+        LOG.info("Snapshotted {} schedule exceptions", ecount);
         int tpcount = pump("tripPatterns", (BTreeMap) master.tripPatterns);
-        LOG.info("Snapshotted %s patterns", tpcount);
+        LOG.info("Snapshotted {} patterns", tpcount);
         int tcount = pump("trips", (BTreeMap) master.trips);
-        LOG.info("Snapshotted %s trips", tcount);
+        LOG.info("Snapshotted {} trips", tcount);
         int scount = pump("stops", (BTreeMap) master.stops);
-        LOG.info("Snapshotted %s stops", scount);
+        LOG.info("Snapshotted {} stops", scount);
 
         // while we don't snapshot indices, we do need to snapshot histograms as they aren't restored
         // (mapdb ticket 453)
@@ -75,31 +75,31 @@ public class SnapshotTx extends DatabaseTx {
             rcount = pump(targetTx, "routes", (BTreeMap) this.<String, Route>getMap("routes"));
         else
             rcount = 0;
-        LOG.info("Restored %s routes", rcount);
+        LOG.info("Restored {} routes", rcount);
 
         if (tx.exists("calendars"))
             ccount = pump(targetTx, "calendars", (BTreeMap) this.<String, Calendar>getMap("calendars"));
         else
             ccount = 0;
-        LOG.info("Restored %s calendars", ccount);
+        LOG.info("Restored {} calendars", ccount);
 
         if (tx.exists("exceptions"))
             ecount = pump(targetTx, "exceptions", (BTreeMap) this.<String, ScheduleException>getMap("exceptions"));
         else
             ecount = 0;
-        LOG.info("Restored %s schedule exceptions", ecount);
+        LOG.info("Restored {} schedule exceptions", ecount);
 
         if (tx.exists("tripPatterns"))
             pcount = pump(targetTx, "tripPatterns", (BTreeMap) this.<String, TripPattern>getMap("tripPatterns"));
         else
             pcount = 0;
-        LOG.info("Restored %s patterns", pcount);
+        LOG.info("Restored {} patterns", pcount);
 
         if (tx.exists("trips"))
             tcount = pump(targetTx, "trips", (BTreeMap) this.<String, Trip>getMap("trips"));
         else
             tcount = 0;
-        LOG.info("Restored %s trips", tcount);
+        LOG.info("Restored {} trips", tcount);
 
         // restore histograms, see jankotek/mapdb#453
         if (tx.exists("tripCountByCalendar"))
@@ -131,7 +131,7 @@ public class SnapshotTx extends DatabaseTx {
                 }
             }
         }
-        LOG.info("Restored %s deleted stops", restoredStops.size());
+        LOG.info("Restored {} deleted stops", restoredStops.size());
 
         atx.commit();
 

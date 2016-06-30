@@ -83,7 +83,7 @@ public class ProcessGtfsSnapshotExport implements Runnable {
                     String agencyId = agency.gtfsAgencyId;
 //                    Agency agency = gtx.feeds.get(agencyId);
                     com.conveyal.gtfs.model.Agency gtfsAgency = agency.toGtfs();
-                    LOG.info("Exporting agency %s", gtfsAgency);
+                    LOG.info("Exporting agency {}", gtfsAgency);
 
                     if (ssid.b == null) {
                         atx = VersionedDataStore.getFeedTx(agencyId);
