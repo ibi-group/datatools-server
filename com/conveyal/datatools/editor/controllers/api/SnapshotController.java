@@ -1,6 +1,7 @@
 package com.conveyal.datatools.editor.controllers.api;
 
 import com.conveyal.datatools.editor.controllers.Base;
+import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.jobs.ProcessGtfsSnapshotExport;
@@ -36,7 +37,7 @@ public class SnapshotController {
 
     public static Object getSnapshot(Request req, Response res) throws IOException {
         String id = req.params("id");
-        String feedId = req.queryParams("feedId");
+        String feedId= req.queryParams("feedId");
 
         GlobalTx gtx = VersionedDataStore.getGlobalTx();
         Object json = null;
@@ -83,14 +84,15 @@ public class SnapshotController {
 
             // the snapshot we have just taken is now current; make the others not current
             // TODO: add this loop back in... taken out in order to compile
-//            for (Snapshot o : gtx.snapshots.subMap(new Tuple2(s.feedId, null), new Tuple2(s.feedId, Fun.HI)).values()) {
-//                if (o.id.equals(s.id))
-//                    continue;
-//
-//                Snapshot cloned = o.clone();
-//                cloned.current = false;
-//                gtx.snapshots.put(o.id, cloned);
-//            }
+            Collection<Snapshot> snapshots = gtx.snapshots.subMap(new Tuple2(s.feedId, null), new Tuple2(s.feedId, Fun.HI)).values();
+            for (Snapshot o : snapshots) {
+                if (o.id.equals(s.id))
+                    continue;
+
+                Snapshot cloned = o.clone();
+                cloned.current = false;
+                gtx.snapshots.put(o.id, cloned);
+            }
 
             gtx.commit();
 
@@ -159,14 +161,15 @@ public class SnapshotController {
 
             // the snapshot we have just restored is now current; make the others not current
             // TODO: add this loop back in... taken out in order to compile
-//            for (Snapshot o : gtx.snapshots.subMap(new Tuple2(local.feedId, null), new Tuple2(local.feedId, Fun.HI)).values()) {
-//                if (o.id.equals(local.id))
-//                    continue;
-//
-//                Snapshot cloned = o.clone();
-//                cloned.current = false;
-//                gtx.snapshots.put(o.id, cloned);
-//            }
+            Collection<Snapshot> snapshots = gtx.snapshots.subMap(new Tuple2(local.feedId, null), new Tuple2(local.feedId, Fun.HI)).values();
+            for (Snapshot o : snapshots) {
+                if (o.id.equals(local.id))
+                    continue;
+
+                Snapshot cloned = o.clone();
+                cloned.current = false;
+                gtx.snapshots.put(o.id, cloned);
+            }
 
             Snapshot clone = local.clone();
             clone.current = true;
@@ -215,12 +218,31 @@ public class SnapshotController {
         return null;
     }
 
+    public static Object deleteSnapshot(Request req, Response res) {
+        String id = req.params("id");
+        Tuple2<String, Integer> decodedId;
+        try {
+            decodedId = JacksonSerializers.Tuple2IntDeserializer.deserialize(id);
+        } catch (IOException e1) {
+            halt(400);
+            return null;
+        }
+
+        GlobalTx gtx = VersionedDataStore.getGlobalTx();
+
+        gtx.snapshots.remove(decodedId);
+        gtx.commit();
+
+        return true;
+    }
+
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/snapshot/:id", SnapshotController::getSnapshot, json::write);
         options(apiPrefix + "secure/snapshot", (q, s) -> "");
         get(apiPrefix + "secure/snapshot", SnapshotController::getSnapshot, json::write);
         post(apiPrefix + "secure/snapshot", SnapshotController::createSnapshot, json::write);
         put(apiPrefix + "secure/snapshot/:id", SnapshotController::updateSnapshot, json::write);
-//        delete(apiPrefix + "secure/snapshot/:id", SnapshotController::deleteSnapshot, json::write);
+        post(apiPrefix + "secure/snapshot/:id/restore", SnapshotController::restoreSnapshot, json::write);
+        delete(apiPrefix + "secure/snapshot/:id", SnapshotController::deleteSnapshot, json::write);
     }
 }
