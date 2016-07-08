@@ -21,6 +21,9 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.text.ParseException;
 import java.text.SimpleDateFormat;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.Date;
 import java.text.DateFormat;
 import java.util.ArrayList;
@@ -89,25 +92,28 @@ public class FeedInfoController {
     public static Object updateFeedInfo(Request req, Response res) throws IOException {
         String id = req.params("id");
 
-        if (id == null) {
-            halt(400);
-        }
-        GlobalTx gtx = null;
-        EditorFeed fs = null;
-        try {
-            gtx = VersionedDataStore.getGlobalTx();
-            fs = gtx.feeds.get(id);
+        EditorFeed feed;
 
-            applyJsonToFeedInfo(fs, req.body());
+        try {
+            feed = Base.mapper.readValue(req.body(), EditorFeed.class);
+
+            GlobalTx gtx = VersionedDataStore.getGlobalTx();
+
+            if(!gtx.feeds.containsKey(feed.id)) {
+                gtx.rollback();
+                halt(400);
+                return null;
+            }
+
+            gtx.feeds.put(feed.id, feed);
             gtx.commit();
+
+            return Base.toJson(feed, false);
         } catch (Exception e) {
             e.printStackTrace();
             halt(400);
-        } finally {
-            if (gtx != null) gtx.rollbackIfOpen();
         }
-
-        return fs;
+        return null;
     }
 
     public static void applyJsonToFeedInfo(EditorFeed source, String json) throws IOException {
@@ -116,6 +122,10 @@ public class FeedInfoController {
         Iterator<Map.Entry<String, JsonNode>> fieldsIter = node.fields();
         while (fieldsIter.hasNext()) {
             Map.Entry<String, JsonNode> entry = fieldsIter.next();
+
+            if (entry.getValue().isNull()) {
+                continue;
+            }
 
             if(entry.getKey().equals("color")) {
                 source.color = entry.getValue().asText();
@@ -157,26 +167,30 @@ public class FeedInfoController {
             }
 
             if(entry.getKey().equals("feedStartDate")) {
-                String dateString = entry.getValue().asText();
-                DateFormat formatter = new SimpleDateFormat("d-MMM-yyyy,HH:mm:ss aaa");
+                System.out.println(entry.getValue());
+                Long seconds = entry.getValue().asLong();
+                Long days = seconds / 60 / 60 / 24;
+//                System.out.println(days);
                 try {
-                    Date date = formatter.parse(dateString);
+                    LocalDate date = LocalDate.ofEpochDay(days);
+//                    System.out.println(date.format(DateTimeFormatter.BASIC_ISO_DATE));
                     source.feedStartDate = date;
-                } catch (ParseException e) {
+                } catch (Exception e) {
                     e.printStackTrace();
-                    halt(400, dateString + " is not a valid date");
+                    halt(400, seconds + " is not a valid date");
                 }
             }
 
             if(entry.getKey().equals("feedEndDate")) {
-                String dateString = entry.getValue().asText();
-                DateFormat formatter = new SimpleDateFormat("d-MMM-yyyy,HH:mm:ss aaa");
+                Long seconds = entry.getValue().asLong();
+                Long days = seconds / 60 / 60 / 24;
+//                System.out.println(days);
                 try {
-                    Date date = formatter.parse(dateString);
+                    LocalDate date = LocalDate.ofEpochDay(days);
                     source.feedEndDate = date;
-                } catch (ParseException e) {
+                } catch (Exception e) {
                     e.printStackTrace();
-                    halt(400, dateString + " is not a valid date");
+                    halt(400, seconds + " is not a valid date");
                 }
             }
 

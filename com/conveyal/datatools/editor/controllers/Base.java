@@ -1,11 +1,14 @@
 package com.conveyal.datatools.editor.controllers;
 
+import com.conveyal.datatools.editor.models.transit.GtfsRouteType;
+import com.conveyal.geojson.GeoJsonModule;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonGenerationException;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.vividsolutions.jts.geom.LineString;
 import java.time.LocalDate;
 
@@ -20,11 +23,17 @@ public class Base {
     
     static {
         SimpleModule mod = new SimpleModule();
-        mod.addDeserializer(LineString.class, new JacksonSerializers.EncodedPolylineDeserializer());
-        mod.addSerializer(LineString.class, new JacksonSerializers.EncodedPolylineSerializer());
+//        mod.addDeserializer(LineString.class, new JacksonSerializers.EncodedPolylineDeserializer());
+//        mod.addSerializer(LineString.class, new JacksonSerializers.EncodedPolylineSerializer());
         mod.addDeserializer(LocalDate.class, new JacksonSerializers.LocalDateDeserializer());
         mod.addSerializer(LocalDate.class, new JacksonSerializers.LocalDateSerializer());
+        mod.addDeserializer(GtfsRouteType.class, new JacksonSerializers.GtfsRouteTypeDeserializer());
+        mod.addSerializer(GtfsRouteType.class, new JacksonSerializers.GtfsRouteTypeSerializer());
         mapper.registerModule(mod);
+//        JavaTimeModule jtm = new JavaTimeModule();
+//        jtm.setupModule();
+//        mapper.registerModule(new JavaTimeModule());
+        mapper.registerModule(new GeoJsonModule());
     }
 
     public static String toJson(Object pojo, boolean prettyPrint)

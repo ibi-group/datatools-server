@@ -79,11 +79,12 @@ public class ScheduleExceptionController {
                 tx.rollback();
                 halt(400);
             }
-
-            for (LocalDate date : ex.dates) {
-                if (tx.scheduleExceptionCountByDate.containsKey(date) && tx.scheduleExceptionCountByDate.get(date) > 0) {
-                    tx.rollback();
-                    halt(400);
+            if (ex.dates != null) {
+                for (LocalDate date : ex.dates) {
+                    if (tx.scheduleExceptionCountByDate.containsKey(date) && tx.scheduleExceptionCountByDate.get(date) > 0) {
+                        tx.rollback();
+                        halt(400);
+                    }
                 }
             }
 
