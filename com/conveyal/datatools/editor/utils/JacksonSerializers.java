@@ -1,10 +1,12 @@
 package com.conveyal.datatools.editor.utils;
 
+import com.conveyal.datatools.editor.models.transit.GtfsRouteType;
 import com.fasterxml.jackson.core.JsonGenerationException;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.deser.std.StdScalarDeserializer;
 import com.fasterxml.jackson.databind.ser.std.StdScalarSerializer;
@@ -30,7 +32,6 @@ import java.util.List;
 
 public class JacksonSerializers {
     private static final BaseEncoding encoder = BaseEncoding.base64Url();
-
     public static class Tuple2Serializer extends StdScalarSerializer<Tuple2<String, String>> {
         public Tuple2Serializer () {
             super(Tuple2.class, true);
@@ -117,37 +118,37 @@ public class JacksonSerializers {
         }
     }
 
-    /** serialize a JTS linestring as an encoded polyline */
-    public static class EncodedPolylineSerializer extends StdScalarSerializer<LineString> {
-        public EncodedPolylineSerializer() {
-            super(LineString.class, false);
-        }
-
-        @Override
-        public void serialize(LineString geom, JsonGenerator jgen,
-                              SerializerProvider arg2) throws IOException,
-                JsonGenerationException {
-            jgen.writeString(PolylineEncoder.createEncodings(geom).getPoints());
-        }
-    }
-
-    /** deserialize an encoded polyline to a JTS linestring */
-    public static class EncodedPolylineDeserializer extends StdScalarDeserializer<LineString> {
-        private GeometryFactory geometryFactory = new GeometryFactory();
-
-        public EncodedPolylineDeserializer () {
-            super(LineString.class);
-        }
-
-        @Override
-        public LineString deserialize(JsonParser jp,
-                                      DeserializationContext arg1) throws IOException,
-                JsonProcessingException {
-            //
-            List<Coordinate> coords = PolylineEncoder.decode(new EncodedPolylineBean(jp.getValueAsString(), null, 0));
-            return geometryFactory.createLineString(coords.toArray(new Coordinate[coords.size()]));
-        }
-    }
+//    /** serialize a JTS linestring as GeoJSON */
+//    public static class EncodedPolylineSerializer extends StdScalarSerializer<LineString> {
+//        public EncodedPolylineSerializer() {
+//            super(LineString.class, false);
+//        }
+//
+//        @Override
+//        public void serialize(LineString geom, JsonGenerator jgen,
+//                              SerializerProvider arg2) throws IOException,
+//                JsonGenerationException {
+//            jgen.writeString(PolylineEncoder.createEncodings(geom).getPoints());
+//        }
+//    }
+//
+//    /** deserialize GeoJSON to a JTS linestring */
+//    public static class EncodedPolylineDeserializer extends StdScalarDeserializer<LineString> {
+//        private GeometryFactory geometryFactory = new GeometryFactory();
+//
+//        public EncodedPolylineDeserializer () {
+//            super(LineString.class);
+//        }
+//
+//        @Override
+//        public LineString deserialize(JsonParser jp,
+//                                      DeserializationContext arg1) throws IOException,
+//                JsonProcessingException {
+//            //
+//            List<Coordinate> coords = PolylineEncoder.decode(new EncodedPolylineBean(jp.getValueAsString(), null, 0));
+//            return geometryFactory.createLineString(coords.toArray(new Coordinate[coords.size()]));
+//        }
+//    }
 
     /** serialize local dates as noon GMT epoch times */
     public static class LocalDateSerializer extends StdScalarSerializer<LocalDate> {
@@ -159,8 +160,8 @@ public class JacksonSerializers {
         public void serialize(LocalDate ld, JsonGenerator jgen,
                               SerializerProvider arg2) throws IOException,
                 JsonGenerationException {
-//            jgen.writeNumber(ld.toDateTime(LocalTime.of(12, 0, 0), ZoneOffset.UTC).getMillis());
-            jgen.writeNumber(LocalDateTime.of(LocalDate.now(), LocalTime.of(12, 0, 0)).toEpochSecond(ZoneOffset.UTC));
+            long millis = ld.atStartOfDay(ZoneOffset.UTC).toInstant().toEpochMilli();
+            jgen.writeNumber(millis);
         }
     }
 
@@ -174,7 +175,37 @@ public class JacksonSerializers {
         public LocalDate deserialize(JsonParser jp,
                                      DeserializationContext arg1) throws IOException,
                 JsonProcessingException {
-            return LocalDateTime.ofInstant(Instant.ofEpochMilli(jp.getLongValue()), ZoneOffset.UTC).toLocalDate();
+
+            LocalDate date = Instant.ofEpochMilli(jp.getValueAsLong()).atZone(ZoneOffset.UTC).toLocalDate();
+            return date;
+        }
+    }
+
+    /** serialize local dates as noon GMT epoch times */
+    public static class GtfsRouteTypeSerializer extends StdScalarSerializer<GtfsRouteType> {
+        public GtfsRouteTypeSerializer() {
+            super(GtfsRouteType.class, false);
+        }
+
+        @Override
+        public void serialize(GtfsRouteType gtfsRouteType, JsonGenerator jgen,
+                              SerializerProvider arg2) throws IOException,
+                JsonGenerationException {
+            jgen.writeNumber(gtfsRouteType.toGtfs());
+        }
+    }
+
+    /** deserialize local dates from GMT epochs */
+    public static class GtfsRouteTypeDeserializer extends StdScalarDeserializer<GtfsRouteType> {
+        public GtfsRouteTypeDeserializer () {
+            super(GtfsRouteType.class);
+        }
+
+        @Override
+        public GtfsRouteType deserialize(JsonParser jp,
+                                     DeserializationContext arg1) throws IOException,
+                JsonProcessingException {
+            return GtfsRouteType.fromGtfs(jp.getValueAsInt());
         }
     }
 

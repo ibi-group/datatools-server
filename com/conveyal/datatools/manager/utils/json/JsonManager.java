@@ -2,9 +2,13 @@ package com.conveyal.datatools.manager.utils.json;
 
 import java.awt.geom.Rectangle2D;
 import java.io.IOException;
+import java.time.LocalDate;
 import java.util.Collection;
 import java.util.Map;
 
+import com.conveyal.datatools.editor.models.transit.GtfsRouteType;
+import com.conveyal.datatools.editor.utils.JacksonSerializers;
+import com.conveyal.geojson.GeoJsonModule;
 import com.conveyal.gtfs.model.InvalidValue;
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonParser;
@@ -16,6 +20,7 @@ import com.fasterxml.jackson.databind.ObjectWriter;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.databind.ser.impl.SimpleBeanPropertyFilter;
 import com.fasterxml.jackson.databind.ser.impl.SimpleFilterProvider;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 /**
  * Helper methods for writing REST API routines
@@ -36,9 +41,18 @@ public class JsonManager<T> {
         this.om = new ObjectMapper();
         om.addMixInAnnotations(InvalidValue.class, InvalidValueMixIn.class);
         om.addMixInAnnotations(Rectangle2D.class, Rectangle2DMixIn.class);
+        om.registerModule(new GeoJsonModule());
         SimpleModule deser = new SimpleModule();
+
+        deser.addDeserializer(LocalDate.class, new JacksonSerializers.LocalDateDeserializer());
+        deser.addSerializer(LocalDate.class, new JacksonSerializers.LocalDateSerializer());
+
+        deser.addDeserializer(GtfsRouteType.class, new JacksonSerializers.GtfsRouteTypeDeserializer());
+        deser.addSerializer(GtfsRouteType.class, new JacksonSerializers.GtfsRouteTypeSerializer());
+
         deser.addDeserializer(Rectangle2D.class, new Rectangle2DDeserializer());
         om.registerModule(deser);
+//        om.registerModule(new JavaTimeModule());
         SimpleFilterProvider filters = new SimpleFilterProvider();
         filters.addFilter("bbox", SimpleBeanPropertyFilter.filterOutAllExcept("west", "east", "south", "north"));
         this.ow = om.writer(filters).withView(view);
