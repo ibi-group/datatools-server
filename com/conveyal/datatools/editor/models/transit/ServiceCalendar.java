@@ -33,7 +33,7 @@ public class ServiceCalendar extends Model implements Cloneable, Serializable {
     
     public ServiceCalendar() {};
     
-    public ServiceCalendar(Calendar calendar) {
+    public ServiceCalendar(Calendar calendar, EditorFeed feed) {
         this.gtfsServiceId = calendar.service_id;
         this.monday = calendar.monday == 1;
         this.tuesday = calendar.tuesday == 1;
@@ -45,6 +45,7 @@ public class ServiceCalendar extends Model implements Cloneable, Serializable {
         this.startDate = fromGtfs(calendar.start_date);
         this.endDate = fromGtfs(calendar.end_date);
         inferName();
+        this.feedId = feed.id;
     }
     
     public ServiceCalendar clone () throws CloneNotSupportedException {
@@ -213,13 +214,13 @@ public class ServiceCalendar extends Model implements Cloneable, Serializable {
             routeIds.add(trip.routeId);
         }
 
-        this.routes = Collections2.transform(routeIds, new Function<String, String>() {
-
-            @Override
-            public String apply(String routeId) {
-                return tx.routes.get(routeId).getName();
-            }
-
-        });
+//        this.routes = Collections2.transform(routeIds, new Function<String, String>() {
+//
+//            @Override
+//            public String apply(String routeId) {
+//                return tx.routes.get(routeId).getName();
+//            }
+//
+//        });
     }
 }

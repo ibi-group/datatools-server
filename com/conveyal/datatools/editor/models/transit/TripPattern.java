@@ -270,6 +270,11 @@ public class TripPattern extends Model implements Cloneable, Serializable {
         }
     }
 
+    // cast generic Geometry object to LineString because jackson2-geojson library only returns generic Geometry objects
+    public void setShape (Geometry g) {
+        this.shape = (LineString) g;
+    }
+
     public void calcShapeDistTraveled () {
         FeedTx tx = VersionedDataStore.getFeedTx(feedId);
         calcShapeDistTraveled(tx);

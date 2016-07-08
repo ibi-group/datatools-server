@@ -27,7 +27,7 @@ public class Fare extends Model implements Cloneable, Serializable {
 
     public Fare() {};
 
-    public Fare(com.conveyal.gtfs.model.FareAttribute fare, List<com.conveyal.gtfs.model.FareRule> rules) {
+    public Fare(com.conveyal.gtfs.model.FareAttribute fare, List<com.conveyal.gtfs.model.FareRule> rules, EditorFeed feed) {
         this.gtfsFareId = fare.fare_id;
         this.price = fare.price;
         this.currencyType = fare.currency_type;
@@ -35,6 +35,7 @@ public class Fare extends Model implements Cloneable, Serializable {
         this.transfers = fare.transfers;
         this.transferDuration = fare.transfer_duration;
         this.fareRules.addAll(rules);
+        this.feedId = feed.id;
         inferName();
     }
 
