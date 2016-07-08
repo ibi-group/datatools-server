@@ -193,7 +193,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                     routeTypeIdMap.put(gtfsRoute.route_type, rt.id);
                 }
 
-                Route route = new Route(gtfsRoute, feed, agency, routeTypeIdMap.get(gtfsRoute.route_type));
+                Route route = new Route(gtfsRoute, feed, agency);
 
                 feedTx.routes.put(route.id, route);
                 routeIdMap.put(gtfsRoute.route_id, route);
@@ -268,7 +268,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 
                 if (svc.calendar != null) {
                     // easy case: don't have to infer anything!
-                    cal = new ServiceCalendar(svc.calendar);
+                    cal = new ServiceCalendar(svc.calendar, feed);
                 } else {
                     // infer a calendar
                     // number of mondays, etc. that this calendar is active
@@ -320,6 +320,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                     int maxService = Ints.max(monday, tuesday, wednesday, thursday, friday, saturday, sunday);
 
                     cal = new ServiceCalendar();
+                    cal.feedId = feed.id;
 
                     if (startDate == null) {
                         // no service whatsoever
@@ -418,7 +419,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
             LOG.info("GtfsImporter: importing fares...");
             Map<String, com.conveyal.gtfs.model.Fare> fares = input.fares;
             for (com.conveyal.gtfs.model.Fare f : fares.values()) {
-                com.conveyal.datatools.editor.models.transit.Fare fare = new com.conveyal.datatools.editor.models.transit.Fare(f.fare_attribute, f.fare_rules);
+                com.conveyal.datatools.editor.models.transit.Fare fare = new com.conveyal.datatools.editor.models.transit.Fare(f.fare_attribute, f.fare_rules, feed);
                 feedTx.fares.put(fare.id, fare);
                 fareCount++;
             }
