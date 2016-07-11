@@ -171,8 +171,8 @@ public class MtcFeedResource implements ExternalFeedResource {
         carrier.RttEnabled = ExternalFeedSourceProperty.find(source, this.getResourceType(), "RttEnabled").value;
         carrier.AgencyShortName = ExternalFeedSourceProperty.find(source, this.getResourceType(), "AgencyShortName").value;
         carrier.AgencyPublicId = ExternalFeedSourceProperty.find(source, this.getResourceType(), "AgencyPublicId").value;
-        carrier.AddressLat = ExternalFeedSourceProperty.find(source, this.getResourceType(), "AddressLon").value;
-        carrier.AddressLon = ExternalFeedSourceProperty.find(source, this.getResourceType(), "AgencyPhone").value;
+        carrier.AddressLat = ExternalFeedSourceProperty.find(source, this.getResourceType(), "AddressLat").value;
+        carrier.AddressLon = ExternalFeedSourceProperty.find(source, this.getResourceType(), "AddressLon").value;
         carrier.DefaultRouteType = ExternalFeedSourceProperty.find(source, this.getResourceType(), "DefaultRouteType").value;
         carrier.CarrierStatus = ExternalFeedSourceProperty.find(source, this.getResourceType(), "CarrierStatus").value;
         carrier.AgencyAddress = ExternalFeedSourceProperty.find(source, this.getResourceType(), "AgencyAddress").value;
