@@ -156,7 +156,15 @@ public class DataManager {
             halt(404);
             return null;
         });
-
+        
+        // return assets as byte array
+        get("/assets/*", (request, response) -> {
+            try (InputStream stream = ApiMain.class.getResourceAsStream("/public" + request.pathInfo())) {
+                return IOUtils.toByteArray(stream);
+            } catch (IOException e) {
+                return null;
+            }
+        });
         // return index.html for any sub-directory
         get("/*", (request, response) -> {
             response.type("text/html");
