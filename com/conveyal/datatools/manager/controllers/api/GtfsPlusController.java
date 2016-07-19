@@ -300,6 +300,9 @@ public class GtfsPlusController {
         String line = in.readLine();
         String[] fields = line.split(",");
         List<String> fieldList = Arrays.asList(fields);
+        for (String field : fieldList) {
+            field = field.toLowerCase();
+        }
 
         JsonNode[] fieldNodes = new JsonNode[fields.length];
 
