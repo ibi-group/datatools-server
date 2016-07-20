@@ -44,6 +44,9 @@ public class NotifyUsersForSubscriptionJob implements Runnable {
             e.printStackTrace();
         }
         for (JsonNode user : subscribedUsers) {
+            if (!user.has("email")) {
+                continue;
+            }
             String email = user.get("email").asText();
             Boolean emailVerified = user.get("email_verified").asBoolean();
             System.out.println(email);
