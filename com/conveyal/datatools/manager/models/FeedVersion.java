@@ -176,11 +176,19 @@ public class FeedVersion extends Model implements Serializable {
     }
 
 
-    /** When this feed was uploaded to or fetched by GTFS Data Manager */
+    /** When this version was uploaded/fetched */
     public Date updated;
 
     /** The version of the feed, starting with 0 for the first and so on */
     public int version;
+
+    /** A name for this version. Defaults to creation date if not specified by user */
+    public String name;
+
+    public String getName() {
+        SimpleDateFormat format = new SimpleDateFormat("MM/dd/yyyy H:mm");
+        return name != null ? name : (format.format(this.updated) + " Version");
+    }
 
     public static FeedVersion get(String id) {
         // TODO Auto-generated method stub

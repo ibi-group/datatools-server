@@ -372,6 +372,27 @@ public class FeedVersionController  {
         return res.raw();
     }
 
+    public static Boolean renameFeedVersion (Request req, Response res) throws JsonProcessingException {
+        String id = req.params("id");
+        if (id == null) {
+            halt(404, "Must specify feed version ID");
+        }
+        FeedVersion v = FeedVersion.get(id);
+
+        if (v == null) {
+            halt(404, "Version ID does not exist");
+        }
+
+        String name = req.queryParams("name");
+        if (name == null) {
+            halt(400, "Name parameter not specified");
+        }
+
+        v.name = name;
+        v.save();
+        return true;
+    }
+
     private static Object downloadFeedVersionDirectly(Request req, Response res) {
         FeedVersion version = FeedVersion.get(req.params("id"));
         return downloadFeedVersion(version, res);
@@ -407,6 +428,7 @@ public class FeedVersionController  {
         get(apiPrefix + "secure/feedversion", FeedVersionController::getAllFeedVersions, json::write);
         post(apiPrefix + "secure/feedversion", FeedVersionController::createFeedVersion, json::write);
         post(apiPrefix + "secure/feedversion/fromsnapshot", FeedVersionController::createFeedVersionFromSnapshot, json::write);
+        put(apiPrefix + "secure/feedversion/:id/rename", FeedVersionController::renameFeedVersion, json::write);
         delete(apiPrefix + "secure/feedversion/:id", FeedVersionController::deleteFeedVersion, json::write);
 
         get(apiPrefix + "public/feedversion", FeedVersionController::getAllFeedVersions, json::write);
