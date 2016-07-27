@@ -18,9 +18,15 @@ public abstract class MonitorableJob implements Runnable {
 
     public String jobId = UUID.randomUUID().toString();
 
-    protected List<MonitorableJob> nextJobs = new ArrayList<>();
+    protected List<Runnable> nextJobs = new ArrayList<>();
 
-    public enum JobType { UNKNOWN_TYPE, BUILD_TRANSPORT_NETWORK, VALIDATE_FEED, PROCESS_SNAPSHOT }
+    public enum JobType {
+        UNKNOWN_TYPE,
+        BUILD_TRANSPORT_NETWORK,
+        CREATE_FEEDVERSION_FROM_SNAPSHOT,
+        PROCESS_SNAPSHOT,
+        VALIDATE_FEED
+    }
 
     public MonitorableJob(String owner, String name, JobType type) {
         this.owner = owner;
@@ -55,7 +61,7 @@ public abstract class MonitorableJob implements Runnable {
 
     protected void jobFinished() {
         // kick off any next jobs
-        for(MonitorableJob job : nextJobs) {
+        for(Runnable job : nextJobs) {
             new Thread(job).start();
         }
 
@@ -64,7 +70,7 @@ public abstract class MonitorableJob implements Runnable {
         if (userJobs != null) userJobs.remove(this);
     }
 
-    public void addNextJob(MonitorableJob job) {
+    public void addNextJob(Runnable job) {
         nextJobs.add(job);
     }
 

@@ -13,6 +13,7 @@ import com.conveyal.datatools.editor.controllers.api.SnapshotController;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.BuildTransportNetworkJob;
+import com.conveyal.datatools.manager.jobs.CreateFeedVersionFromSnapshotJob;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -202,29 +203,10 @@ public class FeedVersionController  {
         Auth0UserProfile userProfile = req.attribute("user");
         FeedSource s = FeedSource.get(req.queryParams("feedSourceId"));
 
-        FeedVersion v = new FeedVersion(s);
+        CreateFeedVersionFromSnapshotJob createFromSnapshotJob =
+                new CreateFeedVersionFromSnapshotJob(s, req.queryParams("snapshotId"), userProfile.getUser_id());
 
-        File file = File.createTempFile("snapshot", ".zip");
-        SnapshotController.writeSnapshotAsGtfs(req.queryParams("snapshotId"), file);
-
-        try {
-            v.newFeed(new FileInputStream(file));
-        } catch (Exception e) {
-            LOG.error("Unable to open input stream from upload");
-            halt(400, "Unable to read uploaded feed");
-        }
-
-        v.hash();
-
-        FeedVersion latest = s.getLatest();
-        if (latest != null && latest.hash.equals(v.hash)) {
-            v.getFeed().delete();
-            // Uploaded feed is same as latest version
-            halt(304);
-        }
-
-        v.save();
-        new ProcessSingleFeedJob(v, userProfile.getUser_id()).run();
+        new Thread(createFromSnapshotJob).start();
 
         return true;
     }

@@ -36,12 +36,9 @@ public class ProcessSingleFeedJob implements Runnable {
 
         // use this FeedVersion to seed Editor DB provided no snapshots for feed already exist
         if(DataManager.isModuleEnabled("editor")) {
-            // TODO: make this a monitorable job
-            Collection<Snapshot> snapshots = Snapshot.getSnapshots(feedVersion.feedSourceId);
-            ProcessGtfsSnapshotMerge processGtfsSnapshotMergeJob = new ProcessGtfsSnapshotMerge(feedVersion, owner);
-
-            // chain job
-            if (snapshots.size() == 0) {
+            // chain snapshot-creation job if no snapshots currently exist for feed
+            if (Snapshot.getSnapshots(feedVersion.feedSourceId).size() == 0) {
+                ProcessGtfsSnapshotMerge processGtfsSnapshotMergeJob = new ProcessGtfsSnapshotMerge(feedVersion, owner);
                 validateJob.addNextJob(processGtfsSnapshotMergeJob);
             }
         }
