@@ -83,7 +83,6 @@ public class SnapshotController {
             gtx = VersionedDataStore.getGlobalTx();
 
             // the snapshot we have just taken is now current; make the others not current
-            // TODO: add this loop back in... taken out in order to compile
             Collection<Snapshot> snapshots = gtx.snapshots.subMap(new Tuple2(s.feedId, null), new Tuple2(s.feedId, Fun.HI)).values();
             for (Snapshot o : snapshots) {
                 if (o.id.equals(s.id))
@@ -216,6 +215,32 @@ public class SnapshotController {
             gtx.rollbackIfOpen();
         }
         return null;
+    }
+
+    /** Write snapshot to disk as GTFS */
+    public static boolean writeSnapshotAsGtfs (String id, File outFile) {
+        Tuple2<String, Integer> decodedId;
+        try {
+            decodedId = JacksonSerializers.Tuple2IntDeserializer.deserialize(id);
+        } catch (IOException e1) {
+            return false;
+        }
+
+        GlobalTx gtx = VersionedDataStore.getGlobalTx();
+        Snapshot local;
+        try {
+            if (!gtx.snapshots.containsKey(decodedId)) {
+                return false;
+            }
+
+            local = gtx.snapshots.get(decodedId);
+
+            new ProcessGtfsSnapshotExport(local, outFile).run();
+        } finally {
+            gtx.rollbackIfOpen();
+        }
+
+        return true;
     }
 
     public static Object deleteSnapshot(Request req, Response res) {

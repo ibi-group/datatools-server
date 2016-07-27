@@ -20,7 +20,6 @@ public class AgencyController {
         String feedId = req.queryParams("feedId");
         Object json = null;
         try {
-//            GlobalTx tx = VersionedDataStore.getGlobalTx();
             final FeedTx tx = VersionedDataStore.getFeedTx(feedId);
             if(id != null) {
                 if (!tx.agencies.containsKey(id)) {
@@ -51,14 +50,7 @@ public class AgencyController {
         try {
             agency = Base.mapper.readValue(req.body(), Agency.class);
             
-            // check if gtfsAgencyId is specified, if not create from DB id
-            if(agency.gtfsAgencyId == null) {
-                agency.gtfsAgencyId = "AGENCY_" + agency.id;
-            }
-            
-//            GlobalTx tx = VersionedDataStore.getGlobalTx();
             final FeedTx tx = VersionedDataStore.getFeedTx(feedId);
-            // if agency id already exists
             if (tx.agencies.containsKey(agency.id)) {
                 tx.rollback();
                 halt(400, "Agency " + agency.id + " already exists");
@@ -84,19 +76,12 @@ public class AgencyController {
         try {
             agency = Base.mapper.readValue(req.body(), Agency.class);
             
-//            GlobalTx tx = VersionedDataStore.getGlobalTx();
             final FeedTx tx = VersionedDataStore.getFeedTx(feedId);
-            System.out.println(id);
-            System.out.println(agency.id);
             if(!tx.agencies.containsKey(agency.id)) {
                 tx.rollback();
                 halt(400);
             }
             
-            // check if gtfsAgencyId is specified, if not create from DB id
-            if(agency.gtfsAgencyId == null)
-                agency.gtfsAgencyId = "AGENCY_" + agency.id.toString();
-
             tx.agencies.put(agency.id, agency);
             tx.commit();
 

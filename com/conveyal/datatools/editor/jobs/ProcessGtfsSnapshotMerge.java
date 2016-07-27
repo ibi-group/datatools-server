@@ -77,7 +77,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
         this.gtfsFile = feedVersion.getFeed();
         this.feedVersion = feedVersion;
         status = new Status();
-        System.out.println(">> Merge w/ feedVersion = " + feedVersion.id);
+        LOG.info("GTFS Snapshot Merge for feedVersion {}", feedVersion.id);
     }
 
     public void run () {

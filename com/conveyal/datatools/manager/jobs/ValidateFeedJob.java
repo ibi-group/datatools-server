@@ -2,11 +2,14 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.models.FeedVersion;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Created by demory on 6/16/16.
  */
 public class ValidateFeedJob extends MonitorableJob {
+    public static final Logger LOG = LoggerFactory.getLogger(ValidateFeedJob.class);
 
     private FeedVersion feedVersion;
     private Status status;
@@ -30,7 +33,8 @@ public class ValidateFeedJob extends MonitorableJob {
 
     @Override
     public void run() {
-        System.out.println("running validate job!!");
+        LOG.info("Running ValidateFeedJob for {}", feedVersion.id);
+
         feedVersion.validate();
         feedVersion.save();
         jobFinished();

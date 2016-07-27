@@ -47,9 +47,9 @@ public class ProcessSingleFeedJob implements Runnable {
         }
 
         // chain on a network builder job, if applicable
-        if(DataManager.isModuleEnabled("validator")) {
+        /*if(DataManager.isModuleEnabled("validator")) {
             validateJob.addNextJob(new BuildTransportNetworkJob(feedVersion, owner));
-        }
+        }*/
 
         new Thread(validateJob).start();
 

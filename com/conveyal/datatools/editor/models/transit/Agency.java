@@ -13,7 +13,7 @@ import java.net.URL;
 public class Agency extends Model implements Cloneable, Serializable, Comparable {
     public static final long serialVersionUID = 1;
     public static final Logger LOG = LoggerFactory.getLogger(Agency.class);
-    public String gtfsAgencyId;
+    //public String gtfsAgencyId;
     public String name;
     public String url;
     public String timezone;
@@ -42,7 +42,7 @@ public class Agency extends Model implements Cloneable, Serializable, Comparable
     */
     
     public Agency(com.conveyal.gtfs.model.Agency agency, EditorFeed feed) {
-        this.gtfsAgencyId = agency.agency_id;
+        this.id = agency.agency_id;
         this.name = agency.agency_name;
         this.url = agency.agency_url != null ? agency.agency_url.toString() : null;
         this.timezone = agency.agency_timezone;
@@ -52,7 +52,6 @@ public class Agency extends Model implements Cloneable, Serializable, Comparable
     }
     
     public Agency(EditorFeed feed, String gtfsAgencyId, String name, String url, String timezone, String lang, String phone) {
-        this.gtfsAgencyId = gtfsAgencyId;
         this.name = name;
         this.url = url;
         this.timezone = timezone;
@@ -67,8 +66,6 @@ public class Agency extends Model implements Cloneable, Serializable, Comparable
         com.conveyal.gtfs.model.Agency ret = new com.conveyal.gtfs.model.Agency();
 
         String gtfsAgencyId = id.toString();
-        if(this.gtfsAgencyId != null && !this.gtfsAgencyId.isEmpty())
-            gtfsAgencyId = this.gtfsAgencyId;
 
         ret.agency_id = gtfsAgencyId;
         ret.agency_name = name;

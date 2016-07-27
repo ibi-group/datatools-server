@@ -131,8 +131,6 @@ public class Route extends Model implements Cloneable, Serializable {
             ret.route_url = null;
         }
 
-        ret.route_type = tx.routeTypes.get(this.routeTypeId).gtfsRouteType.toGtfs();
-
         return ret;
     }
 

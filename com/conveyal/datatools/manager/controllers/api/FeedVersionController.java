@@ -9,6 +9,7 @@ import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.amazonaws.services.s3.model.GetObjectRequest;
 import com.amazonaws.services.s3.model.S3Object;
+import com.conveyal.datatools.editor.controllers.api.SnapshotController;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.BuildTransportNetworkJob;
@@ -192,6 +193,38 @@ public class FeedVersionController  {
             Thread tnThread = new Thread(btnj);
             tnThread.start();
         }*/
+
+        return true;
+    }
+
+    public static Boolean createFeedVersionFromSnapshot (Request req, Response res) throws IOException, ServletException {
+
+        Auth0UserProfile userProfile = req.attribute("user");
+        FeedSource s = FeedSource.get(req.queryParams("feedSourceId"));
+
+        FeedVersion v = new FeedVersion(s);
+
+        File file = File.createTempFile("snapshot", ".zip");
+        SnapshotController.writeSnapshotAsGtfs(req.queryParams("snapshotId"), file);
+
+        try {
+            v.newFeed(new FileInputStream(file));
+        } catch (Exception e) {
+            LOG.error("Unable to open input stream from upload");
+            halt(400, "Unable to read uploaded feed");
+        }
+
+        v.hash();
+
+        FeedVersion latest = s.getLatest();
+        if (latest != null && latest.hash.equals(v.hash)) {
+            v.getFeed().delete();
+            // Uploaded feed is same as latest version
+            halt(304);
+        }
+
+        v.save();
+        new ProcessSingleFeedJob(v, userProfile.getUser_id()).run();
 
         return true;
     }
@@ -391,6 +424,7 @@ public class FeedVersionController  {
         get(apiPrefix + "secure/feedversion/:id/isochrones", FeedVersionController::getIsochrones, json::write);
         get(apiPrefix + "secure/feedversion", FeedVersionController::getAllFeedVersions, json::write);
         post(apiPrefix + "secure/feedversion", FeedVersionController::createFeedVersion, json::write);
+        post(apiPrefix + "secure/feedversion/fromsnapshot", FeedVersionController::createFeedVersionFromSnapshot, json::write);
         delete(apiPrefix + "secure/feedversion/:id", FeedVersionController::deleteFeedVersion, json::write);
 
         get(apiPrefix + "public/feedversion", FeedVersionController::getAllFeedVersions, json::write);

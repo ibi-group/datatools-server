@@ -30,6 +30,8 @@ public class SnapshotTx extends DatabaseTx {
         if (tx.getAll().size() != 0)
             throw new IllegalStateException("Cannot snapshot into non-empty db");
 
+        int acount = pump("agencies", (BTreeMap) master.agencies);
+        LOG.info("Snapshotted {} agencies", acount);
         int rcount = pump("routes", (BTreeMap) master.routes);
         LOG.info("Snapshotted {} routes", rcount);
         int ccount = pump("calendars", (BTreeMap) master.calendars);
@@ -69,7 +71,13 @@ public class SnapshotTx extends DatabaseTx {
                 targetTx.delete(obj);
         }
 
-        int rcount, ccount, ecount, pcount, tcount;
+        int acount, rcount, ccount, ecount, pcount, tcount;
+
+        if (tx.exists("agencies"))
+            acount = pump(targetTx, "agencies", (BTreeMap) this.<String, Route>getMap("agencies"));
+        else
+            acount = 0;
+        LOG.info("Restored {} agencies", acount);
 
         if (tx.exists("routes"))
             rcount = pump(targetTx, "routes", (BTreeMap) this.<String, Route>getMap("routes"));
