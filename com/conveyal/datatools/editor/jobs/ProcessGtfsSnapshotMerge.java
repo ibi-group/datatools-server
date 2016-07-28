@@ -133,6 +133,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 
             LOG.info("GtfsImporter: importing stops...");
 
+            // TODO: remove stop ownership inference entirely?
             // infer agency ownership of stops, if there are multiple feeds
             SortedSet<Tuple2<String, String>> stopsByAgency = inferAgencyStopOwnership();
 
@@ -451,10 +452,13 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 
         for (com.conveyal.gtfs.model.StopTime st : input.stop_times.values()) {
             String stopId = st.stop_id;
-            String routeId = input.trips.get(st.trip_id).route_id;
-            String agencyId = input.routes.get(routeId).agency_id;
-            Tuple2<String, String> key = new Tuple2(stopId, agencyId);
-            ret.add(key);
+            com.conveyal.gtfs.model.Trip trip = input.trips.get(st.trip_id);
+            if (trip != null) {
+                String routeId = trip.route_id;
+                String agencyId = input.routes.get(routeId).agency_id;
+                Tuple2<String, String> key = new Tuple2(stopId, agencyId);
+                ret.add(key);
+            }
         }
 
         return ret;

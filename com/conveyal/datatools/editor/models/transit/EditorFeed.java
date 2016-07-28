@@ -19,7 +19,7 @@ public class EditorFeed extends Model implements Cloneable, Serializable {
     public String color;
     public Double defaultLat;
     public Double defaultLon;
-    public String routeTypeId;
+    public GtfsRouteType defaultRouteType;
 
     // feed-info.txt fields
     public String feedPublisherName;
@@ -43,6 +43,9 @@ public class EditorFeed extends Model implements Cloneable, Serializable {
 
     // the associated FeedSource in the data manager DB
     //public String feedSourceId;
+
+
+    public EditorFeed() {}
 
     public EditorFeed clone () throws CloneNotSupportedException {
         return (EditorFeed) super.clone();

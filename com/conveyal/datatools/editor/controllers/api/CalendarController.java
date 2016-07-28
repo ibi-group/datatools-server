@@ -198,7 +198,7 @@ public class CalendarController {
         Long count = tx.tripCountByCalendar.get(id);
         if (count != null && count > 0) {
             tx.rollback();
-            halt(400);
+            halt(400, "Cannot delete calendar that is referenced by trips.");
         }
 
         // drop this calendar from any schedule exceptions
