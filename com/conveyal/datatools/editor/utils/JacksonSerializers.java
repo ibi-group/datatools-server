@@ -118,38 +118,6 @@ public class JacksonSerializers {
         }
     }
 
-//    /** serialize a JTS linestring as GeoJSON */
-//    public static class EncodedPolylineSerializer extends StdScalarSerializer<LineString> {
-//        public EncodedPolylineSerializer() {
-//            super(LineString.class, false);
-//        }
-//
-//        @Override
-//        public void serialize(LineString geom, JsonGenerator jgen,
-//                              SerializerProvider arg2) throws IOException,
-//                JsonGenerationException {
-//            jgen.writeString(PolylineEncoder.createEncodings(geom).getPoints());
-//        }
-//    }
-//
-//    /** deserialize GeoJSON to a JTS linestring */
-//    public static class EncodedPolylineDeserializer extends StdScalarDeserializer<LineString> {
-//        private GeometryFactory geometryFactory = new GeometryFactory();
-//
-//        public EncodedPolylineDeserializer () {
-//            super(LineString.class);
-//        }
-//
-//        @Override
-//        public LineString deserialize(JsonParser jp,
-//                                      DeserializationContext arg1) throws IOException,
-//                JsonProcessingException {
-//            //
-//            List<Coordinate> coords = PolylineEncoder.decode(new EncodedPolylineBean(jp.getValueAsString(), null, 0));
-//            return geometryFactory.createLineString(coords.toArray(new Coordinate[coords.size()]));
-//        }
-//    }
-
     /** serialize local dates as noon GMT epoch times */
     public static class LocalDateSerializer extends StdScalarSerializer<LocalDate> {
         public LocalDateSerializer() {

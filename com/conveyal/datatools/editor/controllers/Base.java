@@ -23,16 +23,11 @@ public class Base {
     
     static {
         SimpleModule mod = new SimpleModule();
-//        mod.addDeserializer(LineString.class, new JacksonSerializers.EncodedPolylineDeserializer());
-//        mod.addSerializer(LineString.class, new JacksonSerializers.EncodedPolylineSerializer());
         mod.addDeserializer(LocalDate.class, new JacksonSerializers.LocalDateDeserializer());
         mod.addSerializer(LocalDate.class, new JacksonSerializers.LocalDateSerializer());
         mod.addDeserializer(GtfsRouteType.class, new JacksonSerializers.GtfsRouteTypeDeserializer());
         mod.addSerializer(GtfsRouteType.class, new JacksonSerializers.GtfsRouteTypeSerializer());
         mapper.registerModule(mod);
-//        JavaTimeModule jtm = new JavaTimeModule();
-//        jtm.setupModule();
-//        mapper.registerModule(new JavaTimeModule());
         mapper.registerModule(new GeoJsonModule());
     }
 
