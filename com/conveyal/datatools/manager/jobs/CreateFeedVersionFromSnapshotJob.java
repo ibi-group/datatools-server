@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.editor.controllers.api.SnapshotController;
+import com.conveyal.datatools.editor.models.Snapshot;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import org.slf4j.Logger;
@@ -50,6 +51,7 @@ public class CreateFeedVersionFromSnapshotJob  extends MonitorableJob {
             halt(400, "Unable to read uploaded feed");
         }
 
+        v.name = Snapshot.get(snapshotId).name + " Snapshot Export";
         v.hash();
         v.save();
 

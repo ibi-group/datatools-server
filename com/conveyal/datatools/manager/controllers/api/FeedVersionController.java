@@ -186,6 +186,8 @@ public class FeedVersionController  {
             halt(304);
         }
 
+        v.name = v.getFormattedTimestamp() + " Upload";
+
         v.save();
         new ProcessSingleFeedJob(v, userProfile.getUser_id()).run();
 

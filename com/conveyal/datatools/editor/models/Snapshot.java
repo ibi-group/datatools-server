@@ -5,6 +5,8 @@ import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
+
+import java.io.IOException;
 import java.time.LocalDate;
 
 import org.mapdb.Fun;
@@ -82,5 +84,20 @@ public class Snapshot implements Cloneable, Serializable {
     public static Collection<Snapshot> getSnapshots(String feedId) {
         GlobalTx gtx = VersionedDataStore.getGlobalTx();
         return gtx.snapshots.subMap(new Tuple2(feedId, null), new Tuple2(feedId, Fun.HI)).values();
+    }
+
+    public static Snapshot get(String snapshotId) {
+        Tuple2<String, Integer> decodedId;
+        try {
+            decodedId = JacksonSerializers.Tuple2IntDeserializer.deserialize(snapshotId);
+        } catch (IOException e) {
+            return null;
+        }
+
+        GlobalTx gtx = VersionedDataStore.getGlobalTx();
+
+        if (!gtx.snapshots.containsKey(decodedId)) return null;
+
+        return gtx.snapshots.get(decodedId);
     }
 }

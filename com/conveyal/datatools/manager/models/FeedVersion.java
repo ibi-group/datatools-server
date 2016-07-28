@@ -186,8 +186,13 @@ public class FeedVersion extends Model implements Serializable {
     public String name;
 
     public String getName() {
+        return name != null ? name : (getFormattedTimestamp() + " Version");
+    }
+
+    @JsonIgnore
+    public String getFormattedTimestamp() {
         SimpleDateFormat format = new SimpleDateFormat("MM/dd/yyyy H:mm");
-        return name != null ? name : (format.format(this.updated) + " Version");
+        return format.format(this.updated);
     }
 
     public static FeedVersion get(String id) {
