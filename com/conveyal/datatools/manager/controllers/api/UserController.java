@@ -36,6 +36,7 @@ import static spark.Spark.*;
 public class UserController {
 
     private static String AUTH0_DOMAIN = DataManager.config.get("auth0").get("domain").asText();
+    private static String AUTH0_CLIENT_ID = DataManager.config.get("auth0").get("client_id").asText();
     private static String AUTH0_API_TOKEN = DataManager.serverConfig.get("auth0").get("api_token").asText();
     private static Logger LOG = LoggerFactory.getLogger(UserController.class);
     private static ObjectMapper mapper = new ObjectMapper();
@@ -82,13 +83,15 @@ public class UserController {
         request.setHeader("Accept-Charset", charset);
         request.setHeader("Content-Type", "application/json");
         JsonNode jsonNode = mapper.readTree(req.body());
-        String json = String.format("{ \"connection\": \"Username-Password-Authentication\", \"email\": %s, \"password\": %s, \"app_metadata\": {\"datatools\": {\"permissions\": [], \"projects\": [] } } }", jsonNode.get("email"), jsonNode.get("password"));
+        String json = String.format("{ \"connection\": \"Username-Password-Authentication\", \"email\": %s, \"password\": %s, \"app_metadata\": {\"datatools\": [{\"permissions\": [], \"projects\": [], \"subscriptions\": [], \"client_id\": \"%s\" }] } }", jsonNode.get("email"), jsonNode.get("password"), AUTH0_CLIENT_ID);
         HttpEntity entity = new ByteArrayEntity(json.getBytes(charset));
         request.setEntity(entity);
 
         HttpClient client = HttpClientBuilder.create().build();
         HttpResponse response = client.execute(request);
         String result = EntityUtils.toString(response.getEntity());
+        int statusCode = response.getStatusLine().getStatusCode();
+        if(statusCode >= 300) halt(statusCode, response.toString());
 
         return result;
     }
@@ -109,6 +112,9 @@ public class UserController {
         HttpClient client = HttpClientBuilder.create().build();
         HttpResponse response = client.execute(request);
         String result = EntityUtils.toString(response.getEntity());
+
+        int statusCode = response.getStatusLine().getStatusCode();
+        if(statusCode >= 300) halt(statusCode, response.toString());
 
         System.out.println(result);
 
@@ -166,7 +172,7 @@ public class UserController {
         HttpClient client = HttpClientBuilder.create().build();
         HttpResponse response = client.execute(request);
         int statusCode = response.getStatusLine().getStatusCode();
-        if(statusCode >= 300) halt(statusCode);
+        if(statusCode >= 300) halt(statusCode, response.getStatusLine().getReasonPhrase());
 
         return true;
     }
