@@ -9,7 +9,6 @@ import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.amazonaws.services.s3.model.GetObjectRequest;
 import com.amazonaws.services.s3.model.S3Object;
-import com.conveyal.datatools.editor.controllers.api.SnapshotController;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.BuildTransportNetworkJob;
@@ -20,7 +19,6 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
-import com.conveyal.gtfs.validator.json.FeedValidationResult;
 import com.conveyal.r5.analyst.PointSet;
 import com.conveyal.r5.analyst.cluster.AnalystClusterRequest;
 import com.conveyal.r5.analyst.cluster.ResultEnvelope;
@@ -44,7 +42,6 @@ import java.util.*;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
@@ -107,7 +104,7 @@ public class FeedVersionController  {
         FeedSource s = v.getFeedSource();
 
         if (userProfile.canAdministerProject(s.feedCollectionId) || userProfile.canViewFeed(s.feedCollectionId, s.id)) {
-            return ok(v.getFeed());
+            return ok(v.getGtfsFile());
         }
         else {
             return unauthorized();
@@ -171,7 +168,7 @@ public class FeedVersionController  {
         InputStream uploadStream;
         try {
             uploadStream = part.getInputStream();
-            v.newFeed(uploadStream);
+            v.newGtfsFile(uploadStream);
         } catch (Exception e) {
             LOG.error("Unable to open input stream from upload");
             halt(400, "Unable to read uploaded feed");
@@ -181,7 +178,7 @@ public class FeedVersionController  {
 
         FeedVersion latest = s.getLatest();
         if (latest != null && latest.hash.equals(v.hash)) {
-            v.getFeed().delete();
+            v.getGtfsFile().delete();
             // Uploaded feed is same as latest version
             halt(304);
         }
@@ -350,7 +347,7 @@ public class FeedVersionController  {
     private static Object downloadFeedVersion(FeedVersion version, Response res) {
         if(version == null) halt(500, "FeedVersion is null");
 
-        File file = version.getFeed();
+        File file = version.getGtfsFile();
 
         res.raw().setContentType("application/octet-stream");
         res.raw().setHeader("Content-Disposition", "attachment; filename=" + file.getName());

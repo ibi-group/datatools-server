@@ -45,7 +45,7 @@ public class CreateFeedVersionFromSnapshotJob  extends MonitorableJob {
         }
 
         try {
-            v.newFeed(new FileInputStream(file));
+            v.newGtfsFile(new FileInputStream(file));
         } catch (Exception e) {
             LOG.error("Unable to open input stream from upload");
             halt(400, "Unable to read uploaded feed");

@@ -3,14 +3,11 @@ package com.conveyal.datatools.manager.models;
 import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.manager.DataManager;
-import com.conveyal.datatools.manager.jobs.BuildTransportNetworkJob;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
-import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.persistence.DataStore;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonView;
-import org.mapdb.Atomic;
 import org.mapdb.Fun;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -217,7 +214,7 @@ public class FeedSource extends Model implements Cloneable {
             else if (conn.getResponseCode() == HttpURLConnection.HTTP_OK) {
                 LOG.info("Saving feed {}", this);
 
-                File out = newFeed.newFeed(conn.getInputStream());
+                File out = newFeed.newGtfsFile(conn.getInputStream());
 
             }
 
@@ -240,7 +237,7 @@ public class FeedSource extends Model implements Cloneable {
 
         if (latest != null && newFeed.hash.equals(latest.hash)) {
             LOG.warn("Feed %s was fetched but has not changed; server operators should add If-Modified-Since support to avoid wasting bandwidth", this);
-            newFeed.getFeed().delete();
+            newFeed.getGtfsFile().delete();
             halt(304);
             return null;
         }

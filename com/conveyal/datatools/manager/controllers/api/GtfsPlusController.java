@@ -1,14 +1,11 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.manager.DataManager;
-import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
-import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.conveyal.gtfs.GTFSFeed;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
@@ -19,7 +16,6 @@ import javax.servlet.ServletException;
 import javax.servlet.http.Part;
 import java.io.*;
 import java.util.*;
-import java.util.concurrent.Exchanger;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
@@ -56,7 +52,7 @@ public class GtfsPlusController {
         InputStream uploadStream;
         try {
             uploadStream = part.getInputStream();
-            //v.newFeed(uploadStream);
+            //v.newGtfsFile(uploadStream);
             gtfsPlusStore.newFeed(feedVersionId, uploadStream, null);
         } catch (Exception e) {
             LOG.error("Unable to open input stream from upload");
@@ -99,7 +95,7 @@ public class GtfsPlusController {
             ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(gtfsPlusFile));
 
             // iterate through the existing GTFS file, copying any GTFS+ tables
-            ZipFile gtfsFile = new ZipFile(version.getFeed());
+            ZipFile gtfsFile = new ZipFile(version.getGtfsFile());
             final Enumeration<? extends ZipEntry> entries = gtfsFile.entries();
             byte[] buffer = new byte[512];
             while (entries.hasMoreElements()) {
@@ -156,7 +152,7 @@ public class GtfsPlusController {
         File file = gtfsPlusStore.getFeed(feedVersionId);
         if(file == null) {
             FeedVersion feedVersion = FeedVersion.get(feedVersionId);
-            file = feedVersion.getFeed();
+            file = feedVersion.getGtfsFile();
         }
 
         return file.lastModified();
@@ -188,7 +184,7 @@ public class GtfsPlusController {
             ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(newFeed));
 
             // iterate through the existing GTFS file, copying all non-GTFS+ tables
-            ZipFile gtfsFile = new ZipFile(feedVersion.getFeed());
+            ZipFile gtfsFile = new ZipFile(feedVersion.getGtfsFile());
             final Enumeration<? extends ZipEntry> entries = gtfsFile.entries();
             byte[] buffer = new byte[512];
             while (entries.hasMoreElements()) {
@@ -234,7 +230,7 @@ public class GtfsPlusController {
         FeedVersion newFeedVersion = new FeedVersion(feedVersion.getFeedSource());
 
         try {
-            newFeedVersion.newFeed(new FileInputStream(newFeed));
+            newFeedVersion.newGtfsFile(new FileInputStream(newFeed));
         } catch (Exception e) {
             e.printStackTrace();
             halt(500, "Error creating new FeedVersion from combined GTFS/GTFS+");
@@ -263,12 +259,12 @@ public class GtfsPlusController {
 
 
         // load the main GTFS
-//        GTFSFeed gtfsFeed = GTFSFeed.fromFile(feedVersion.getFeed().getAbsolutePath());
+//        GTFSFeed gtfsFeed = GTFSFeed.fromFile(feedVersion.getGtfsFile().getAbsolutePath());
         GTFSFeed gtfsFeed = DataManager.gtfsCache.get(feedVersion.id);
         // check for saved GTFS+ data
         File file = gtfsPlusStore.getFeed(feedVersionId);
         if(file == null) {
-            file = feedVersion.getFeed();
+            file = feedVersion.getGtfsFile();
         }
 
         try {

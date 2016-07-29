@@ -3,7 +3,6 @@ package com.conveyal.datatools.manager.controllers.api;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.FetchProjectFeedsJob;
-import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
@@ -12,7 +11,6 @@ import com.conveyal.datatools.manager.models.OtpRouterConfig;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
-import com.conveyal.gtfs.GTFSFeed;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -389,7 +387,7 @@ public class ProjectController {
             // modify feed version to use prepended feed id
             LOG.info("Adding {} feed to merged zip", fs.name);
             try {
-                File file = version.getFeed();
+                File file = version.getGtfsFile();
                 ZipFile zipFile = new ZipFile(file);
                 feedSourceMap.put(fs, zipFile);
             } catch(Exception e) {

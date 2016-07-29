@@ -279,7 +279,7 @@ public class Deployment extends Model implements Serializable {
 
         // write each of the GTFS feeds
         for (FeedVersion v : this.getFullFeedVersions()) {
-            File feed = v.getFeed();
+            File feed = v.getGtfsFile();
 
             FileInputStream in;
 

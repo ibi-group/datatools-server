@@ -4,7 +4,6 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.models.Snapshot;
 import com.conveyal.datatools.editor.models.transit.Agency;
-import com.conveyal.datatools.editor.models.transit.Fare;
 import com.conveyal.datatools.editor.models.transit.Route;
 import com.conveyal.datatools.editor.models.transit.Stop;
 import com.conveyal.datatools.editor.models.transit.StopTime;
@@ -15,10 +14,7 @@ import com.conveyal.gtfs.GTFSFeed;
 import com.conveyal.gtfs.model.CalendarDate;
 import com.conveyal.gtfs.model.Entity;
 import com.conveyal.gtfs.model.Service;
-import com.conveyal.gtfs.model.Shape;
 import com.conveyal.gtfs.model.ShapePoint;
-import com.google.common.base.Function;
-import com.google.common.collect.Collections2;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
@@ -74,7 +70,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 
     public ProcessGtfsSnapshotMerge (FeedVersion feedVersion, String owner) {
         super(owner, "Processing snapshot for " + feedVersion.getFeedSource().name, JobType.PROCESS_SNAPSHOT);
-        this.gtfsFile = feedVersion.getFeed();
+        this.gtfsFile = feedVersion.getGtfsFile();
         this.feedVersion = feedVersion;
         status = new Status();
         LOG.info("GTFS Snapshot Merge for feedVersion {}", feedVersion.id);
@@ -108,13 +104,11 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 
 
         try {
-//            input = GTFSFeed.fromFile(gtfsFile.getAbsolutePath());
-            input = DataManager.gtfsCache.get(feedVersion.id);
+            input = feedVersion.getGtfsFeed();
 
             LOG.info("GtfsImporter: importing feed...");
 
             // load the basic feed info
-
 
             // load the GTFS agencies
             for (com.conveyal.gtfs.model.Agency gtfsAgency : input.agency.values()) {

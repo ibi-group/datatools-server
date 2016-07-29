@@ -18,7 +18,7 @@ public class LoadGtfsApiFeedJob implements Runnable{
 
     @Override
     public void run() {
-        File latest = feedSource.getLatest() != null ? feedSource.getLatest().getFeed() : null;
+        File latest = feedSource.getLatest() != null ? feedSource.getLatest().getGtfsFile() : null;
         if (latest != null)
             GtfsApiController.gtfsApi.loadFeedFromFile(latest, feedSource.id);
     }

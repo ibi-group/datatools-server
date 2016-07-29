@@ -5,9 +5,12 @@ import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.jobs.ProcessGtfsSnapshotExport;
+import com.conveyal.datatools.editor.jobs.ProcessGtfsSnapshotMerge;
 import com.conveyal.datatools.editor.models.Snapshot;
 import com.conveyal.datatools.editor.models.transit.Stop;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import org.mapdb.Fun;
@@ -102,6 +105,28 @@ public class SnapshotController {
             if (gtx != null) gtx.rollbackIfOpen();
         }
         return null;
+    }
+
+    public static Boolean importSnapshot (Request req, Response res) {
+
+        Auth0UserProfile userProfile = req.attribute("user");
+        String feedVersionId = req.queryParams("feedVersionId");
+
+        if(feedVersionId == null) {
+            halt(400, "No FeedVersion ID specified");
+        }
+
+        FeedVersion feedVersion = FeedVersion.get(feedVersionId);
+        if(feedVersion == null) {
+            halt(404, "Could not find FeedVersion with ID " + feedVersionId);
+        }
+
+        ProcessGtfsSnapshotMerge processGtfsSnapshotMergeJob =
+                new ProcessGtfsSnapshotMerge(feedVersion, userProfile.getUser_id());
+
+        new Thread(processGtfsSnapshotMergeJob).run();
+
+        return true;
     }
 
     public static Object updateSnapshot (Request req, Response res) {
@@ -266,6 +291,7 @@ public class SnapshotController {
         options(apiPrefix + "secure/snapshot", (q, s) -> "");
         get(apiPrefix + "secure/snapshot", SnapshotController::getSnapshot, json::write);
         post(apiPrefix + "secure/snapshot", SnapshotController::createSnapshot, json::write);
+        post(apiPrefix + "secure/snapshot/import", SnapshotController::importSnapshot, json::write);
         put(apiPrefix + "secure/snapshot/:id", SnapshotController::updateSnapshot, json::write);
         post(apiPrefix + "secure/snapshot/:id/restore", SnapshotController::restoreSnapshot, json::write);
         delete(apiPrefix + "secure/snapshot/:id", SnapshotController::deleteSnapshot, json::write);
