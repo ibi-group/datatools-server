@@ -94,7 +94,6 @@ public class AgencyController {
     }
 
     public static Object deleteAgency(Request req, Response res) {
-//        GlobalTx tx = VersionedDataStore.getGlobalTx();
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
         if(id == null) {
