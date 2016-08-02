@@ -43,6 +43,8 @@ import java.io.File;
 import java.util.*;
 import java.util.Map.Entry;
 
+import static spark.Spark.halt;
+
 
 public class ProcessGtfsSnapshotMerge extends MonitorableJob {
     public static final Logger LOG = LoggerFactory.getLogger(ProcessGtfsSnapshotMerge.class);
@@ -428,6 +430,10 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 
 
             LOG.info("Imported GTFS file: " + agencyCount + " agencies; " + routeCount + " routes;" + stopCount + " stops; " +  stopTimeCount + " stopTimes; " + tripCount + " trips;" + shapePointCount + " shapePoints");
+        }
+        catch (Exception e) {
+            e.printStackTrace();
+            halt(404, "Failed to process GTFS snapshot.");
         }
         finally {
             feedTx.rollbackIfOpen();
