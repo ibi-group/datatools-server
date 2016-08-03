@@ -130,7 +130,12 @@ public class Route extends Model implements Cloneable, Serializable {
             LOG.warn("Cannot coerce route URL {} to URL", routeUrl);
             ret.route_url = null;
         }
-
+        try {
+            ret.route_branding_url = new URL(routeBrandingUrl);
+        } catch (MalformedURLException e) {
+            LOG.warn("Unable to coerce route branding URL {} to URL", routeBrandingUrl);
+            ret.route_branding_url = null;
+        }
         return ret;
     }
 

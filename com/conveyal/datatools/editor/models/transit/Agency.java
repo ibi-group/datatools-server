@@ -19,8 +19,11 @@ public class Agency extends Model implements Cloneable, Serializable, Comparable
     public String timezone;
     public String lang;
     public String phone;
+    public String email;
     public String feedId;
-    
+    public String agencyBrandingUrl;
+    public String agencyFareUrl;
+
     /*public String color;
 
     public Double defaultLat;
@@ -72,12 +75,25 @@ public class Agency extends Model implements Cloneable, Serializable, Comparable
         try {
             ret.agency_url = new URL(url);
         } catch (MalformedURLException e) {
-            LOG.warn("Unable to coerce {} to URL", url);
+            LOG.warn("Unable to coerce agency URL {} to URL", url);
             ret.agency_url = null;
+        }
+        try {
+            ret.agency_branding_url = new URL(agencyBrandingUrl);
+        } catch (MalformedURLException e) {
+            LOG.warn("Unable to coerce agency branding URL {} to URL", agencyBrandingUrl);
+            ret.agency_branding_url = null;
+        }
+        try {
+            ret.agency_fare_url = new URL(agencyFareUrl);
+        } catch (MalformedURLException e) {
+            LOG.warn("Unable to coerce agency fare URL {} to URL", agencyFareUrl);
+            ret.agency_fare_url = null;
         }
         ret.agency_timezone = timezone;
         ret.agency_lang = lang;
         ret.agency_phone = phone;
+//        ret.agency_email = email;
 
         return ret;
     }
