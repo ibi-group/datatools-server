@@ -1,14 +1,7 @@
 package com.conveyal.datatools.editor.controllers.api;
 
-import com.amazonaws.auth.AWSCredentials;
-import com.amazonaws.AmazonServiceException;
-import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3Client;
-import com.amazonaws.services.s3.model.CannedAccessControlList;
-import com.amazonaws.services.s3.model.PutObjectRequest;
+import com.conveyal.datatools.editor.utils.S3Utils;
 import com.conveyal.datatools.editor.datastore.FeedTx;
-import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.google.common.base.Function;
@@ -19,17 +12,9 @@ import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.Route;
 import com.conveyal.datatools.editor.models.transit.Trip;
 import com.conveyal.datatools.editor.models.transit.TripPattern;
-import org.apache.commons.io.IOUtils;
 import org.mapdb.Fun;
 import org.mapdb.Fun.Tuple2;
 
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardCopyOption;
 import java.util.Collection;
 import java.util.Set;
 
@@ -37,9 +22,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
 import spark.Response;
-
-import javax.servlet.MultipartConfigElement;
-import javax.servlet.http.Part;
 
 import static spark.Spark.*;
 
@@ -178,11 +160,6 @@ public class RouteController {
         String feedId = req.queryParams("feedId");
 
         try {
-            String s3Bucket = DataManager.getConfigPropertyAsText("application.data.gtfs_s3_bucket");
-            if (s3Bucket == null) {
-                halt(400);
-            }
-
             if (feedId == null) {
                 halt(400);
             }
@@ -194,47 +171,8 @@ public class RouteController {
             }
 
             route = tx.routes.get(id);
-            String url = "";
-            // Get file from request
-//            if (req.raw().getAttribute("org.eclipse.jetty.multipartConfig") == null) {
-//                MultipartConfigElement multipartConfigElement = new MultipartConfigElement(System.getProperty("java.io.tmpdir"));
-//                req.raw().setAttribute("org.eclipse.jetty.multipartConfig", multipartConfigElement);
-//            }
 
-            req.attribute("org.eclipse.jetty.multipartConfig", new MultipartConfigElement("/temp"));
-
-            Part part = req.raw().getPart("file");
-            File tempFile = File.createTempFile(route.id, "." + part.getContentType().split("/", 0)[1]);
-            tempFile.deleteOnExit();
-            InputStream inputStream;
-            try {
-                inputStream = part.getInputStream();
-                FileOutputStream out = new FileOutputStream(tempFile);
-                IOUtils.copy(inputStream, out);
-            } catch (Exception e) {
-                LOG.error("Unable to open input stream from upload");
-                halt("Unable to read uploaded file");
-            }
-
-            try {
-                LOG.info("Uploading route branding to S3");
-                // Upload file to s3
-                AWSCredentials creds;
-
-                // default credentials providers, e.g. IAM role
-                creds = new DefaultAWSCredentialsProviderChain().getCredentials();
-
-                String keyName = "branding/" + tempFile.getName();
-                url = "https://s3.amazonaws.com/" + s3Bucket + "/" + keyName;
-                AmazonS3 s3client = new AmazonS3Client(creds);
-                s3client.putObject(new PutObjectRequest(
-                        s3Bucket, keyName, tempFile)
-                        // grant public read
-                        .withCannedAcl(CannedAccessControlList.PublicRead));
-            }
-            catch (AmazonServiceException ase) {
-                LOG.error("Error uploading feed to S3");
-            }
+            String url = S3Utils.uploadBranding(req, id);
 
             // set routeBrandingUrl to s3 location
             route.routeBrandingUrl = url;

@@ -5,6 +5,7 @@ import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.Agency;
+import com.conveyal.datatools.editor.utils.S3Utils;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import spark.Request;
@@ -93,6 +94,39 @@ public class AgencyController {
         return null;
     }
 
+    public static Object uploadAgencyBranding(Request req, Response res) {
+        Agency agency;
+        String id = req.params("id");
+        String feedId = req.queryParams("feedId");
+
+        try {
+            if (feedId == null) {
+                halt(400);
+            }
+            FeedTx tx = VersionedDataStore.getFeedTx(feedId);
+
+            if (!tx.agencies.containsKey(id)) {
+                tx.rollback();
+                halt(404);
+            }
+
+            agency = tx.agencies.get(id);
+
+            String url = S3Utils.uploadBranding(req, id);
+            System.out.println(url);
+            // set agencyBrandingUrl to s3 location
+            agency.agencyBrandingUrl = url;
+
+            tx.agencies.put(id, agency);
+            tx.commit();
+
+            return agency;
+        } catch (Exception e) {
+            e.printStackTrace();
+            halt(400);
+        }
+        return null;
+    }
     public static Object deleteAgency(Request req, Response res) {
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
@@ -137,6 +171,7 @@ public class AgencyController {
         post(apiPrefix + "secure/agency", AgencyController::createAgency, json::write);
         put(apiPrefix + "secure/agency/:id", AgencyController::updateAgency, json::write);
         post(apiPrefix + "secure/agency/:id/duplicate", AgencyController::duplicateAgency, json::write);
+        post(apiPrefix + "secure/agency/:id/uploadbranding", AgencyController::uploadAgencyBranding, json::write);
         delete(apiPrefix + "secure/agency/:id", AgencyController::deleteAgency, json::write);
 
         // Public routes
