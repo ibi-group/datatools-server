@@ -44,6 +44,8 @@ public class SnapshotTx extends DatabaseTx {
         LOG.info("Snapshotted {} trips", tcount);
         int scount = pump("stops", (BTreeMap) master.stops);
         LOG.info("Snapshotted {} stops", scount);
+        int fcount = pump("fares", (BTreeMap) master.fares);
+        LOG.info("Snapshotted {} fares", fcount);
 
         // while we don't snapshot indices, we do need to snapshot histograms as they aren't restored
         // (mapdb ticket 453)
@@ -71,7 +73,7 @@ public class SnapshotTx extends DatabaseTx {
                 targetTx.delete(obj);
         }
 
-        int acount, rcount, ccount, ecount, pcount, tcount;
+        int acount, rcount, ccount, ecount, pcount, tcount, fcount;
 
         if (tx.exists("agencies"))
             acount = pump(targetTx, "agencies", (BTreeMap) this.<String, Route>getMap("agencies"));
@@ -108,6 +110,12 @@ public class SnapshotTx extends DatabaseTx {
         else
             tcount = 0;
         LOG.info("Restored {} trips", tcount);
+
+        if (tx.exists("fares"))
+            fcount = pump(targetTx, "fares", (BTreeMap) this.<String, Trip>getMap("fares"));
+        else
+            fcount = 0;
+        LOG.info("Restored {} fares", fcount);
 
         // restore histograms, see jankotek/mapdb#453
         if (tx.exists("tripCountByCalendar"))

@@ -4,6 +4,7 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.models.Snapshot;
 import com.conveyal.datatools.editor.models.transit.Agency;
+import com.conveyal.datatools.editor.models.transit.Fare;
 import com.conveyal.datatools.editor.models.transit.Route;
 import com.conveyal.datatools.editor.models.transit.Stop;
 import com.conveyal.datatools.editor.models.transit.StopTime;
@@ -11,10 +12,7 @@ import com.conveyal.datatools.editor.models.transit.Trip;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.gtfs.GTFSFeed;
-import com.conveyal.gtfs.model.CalendarDate;
-import com.conveyal.gtfs.model.Entity;
-import com.conveyal.gtfs.model.Service;
-import com.conveyal.gtfs.model.ShapePoint;
+import com.conveyal.gtfs.model.*;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
@@ -103,7 +101,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
         Rectangle2D bounds = feedVersion.getValidationSummary().bounds;
         feed.defaultLat = bounds.getCenterY();
         feed.defaultLon = bounds.getCenterX();
-        gtx.feeds.put(feedVersion.feedSourceId, feed);
+
 
         try {
             // clear the existing data
@@ -124,7 +122,17 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 
             LOG.info("GtfsImporter: importing feed...");
 
-            // load the basic feed info
+            // load feed_info.txt
+            if(input.feedInfo.size() > 0) {
+                FeedInfo feedInfo = input.feedInfo.values().iterator().next();
+                feed.feedPublisherName = feedInfo.feed_publisher_name;
+                feed.feedPublisherUrl = feedInfo.feed_publisher_url;
+                feed.feedLang = feedInfo.feed_lang;
+                feed.feedEndDate = feedInfo.feed_end_date;
+                feed.feedStartDate = feedInfo.feed_start_date;
+                feed.feedVersion = feedInfo.feed_version;
+            }
+            gtx.feeds.put(feedVersion.feedSourceId, feed);
 
             // load the GTFS agencies
             for (com.conveyal.gtfs.model.Agency gtfsAgency : input.agency.values()) {
