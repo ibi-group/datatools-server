@@ -13,7 +13,8 @@ import java.net.URL;
 public class Agency extends Model implements Cloneable, Serializable, Comparable {
     public static final long serialVersionUID = 1;
     public static final Logger LOG = LoggerFactory.getLogger(Agency.class);
-    //public String gtfsAgencyId;
+
+    public String agencyId;
     public String name;
     public String url;
     public String timezone;
@@ -24,28 +25,8 @@ public class Agency extends Model implements Cloneable, Serializable, Comparable
     public String agencyBrandingUrl;
     public String agencyFareUrl;
 
-    /*public String color;
-
-    public Double defaultLat;
-    public Double defaultLon;
-    
-    public String routeTypeId;
-
-    public String sourceId;*/
-    /*
-    @JsonCreator
-    public static Agency factory(long id) {
-      return Agency.findById(id);
-    }
-
-    @JsonCreator
-    public static Agency factory(String id) {
-      return Agency.findById(Long.parseLong(id));
-    }
-    */
-    
     public Agency(com.conveyal.gtfs.model.Agency agency, EditorFeed feed) {
-        this.id = agency.agency_id;
+        this.agencyId = agency.agency_id;
         this.name = agency.agency_name;
         this.url = agency.agency_url != null ? agency.agency_url.toString() : null;
         this.timezone = agency.agency_timezone;
@@ -53,24 +34,13 @@ public class Agency extends Model implements Cloneable, Serializable, Comparable
         this.phone = agency.agency_phone;
         this.feedId = feed.id;
     }
-    
-    public Agency(EditorFeed feed, String gtfsAgencyId, String name, String url, String timezone, String lang, String phone) {
-        this.name = name;
-        this.url = url;
-        this.timezone = timezone;
-        this.lang = lang;
-        this.phone = phone;
-        this.feedId = feed.id;
-    }
-    
+
     public Agency () {}
 
     public com.conveyal.gtfs.model.Agency toGtfs() {
         com.conveyal.gtfs.model.Agency ret = new com.conveyal.gtfs.model.Agency();
 
-        String gtfsAgencyId = id.toString();
-
-        ret.agency_id = gtfsAgencyId;
+        ret.agency_id = agencyId;
         ret.agency_name = name;
         try {
             ret.agency_url = new URL(url);

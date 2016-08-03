@@ -59,9 +59,6 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
     private Status status;
     private EditorFeed feed;
 
-    /** once the merge runs this will have the ID of the created agency */
-    //public String agencyId;
-
     public FeedVersion feedVersion;
 
     /*public ProcessGtfsSnapshotMerge (File gtfsFile) {
@@ -88,10 +85,6 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
         long fareCount = 0;
 
         GlobalTx gtx = VersionedDataStore.getGlobalTx();
-
-        // map from (non-gtfs) agency IDs to transactions.
-        //Map<String, FeedTx> agencyTxs = Maps.newHashMap();
-
 
         // create a new feed based on this version
         FeedTx feedTx = VersionedDataStore.getFeedTx(feedVersion.feedSourceId);
@@ -137,10 +130,10 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
             // load the GTFS agencies
             for (com.conveyal.gtfs.model.Agency gtfsAgency : input.agency.values()) {
                 Agency agency = new Agency(gtfsAgency, feed);
-                //agencyId = agency.id;
-                //agency.sourceId = sourceId;
+
                 // don't save the agency until we've come up with the stop centroid, below.
                 agencyCount++;
+
                 // we do want to use the modified agency ID here, because everything that refers to it has a reference
                 // to the agency object we updated.
                 feedTx.agencies.put(agency.id, agency);
@@ -389,8 +382,6 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 
                 for (String tripId : pattern.getValue()) {
                     com.conveyal.gtfs.model.Trip gtfsTrip = input.trips.get(tripId);
-                    //String agencyId = agencyIdMap.get(gtfsTrip.route.agency.agency_id).id;
-                    //FeedTx tx = agencyTxs.get(agencyId);
 
                     if (!tripPatternsByRoute.containsKey(gtfsTrip.route_id)) {
                         TripPattern pat = createTripPatternFromTrip(gtfsTrip, feedTx);
@@ -494,7 +485,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
         TripPattern patt = new TripPattern();
         com.conveyal.gtfs.model.Route gtfsRoute = input.routes.get(gtfsTrip.route_id);
         patt.routeId = routeIdMap.get(gtfsTrip.route_id).id;
-        patt.feedId = feed.id; //agencyId = agencyIdMap.get(gtfsTrip.route.agency.agency_id).id;
+        patt.feedId = feed.id;
         if (gtfsTrip.shape_id != null) {
             if (!shapes.containsKey(gtfsTrip.shape_id)) {
                 LOG.warn("Missing shape for shape ID {}, referenced by trip {}", gtfsTrip.shape_id, gtfsTrip.trip_id);

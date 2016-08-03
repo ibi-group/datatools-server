@@ -82,12 +82,11 @@ public class ProcessGtfsSnapshotExport implements Runnable {
                 Collection<Agency> agencies = atx.agencies.values();
 
                 for (Agency agency : agencies) {
-                    String agencyId = agency.id; //gtfsAgencyId;
                     com.conveyal.gtfs.model.Agency gtfsAgency = agency.toGtfs();
                     LOG.info("Exporting agency {}", gtfsAgency);
 
                     // write the feeds.txt entry
-                    feed.agency.put(agencyId, agency.toGtfs());
+                    feed.agency.put(agency.agencyId, agency.toGtfs());
                 }
 
                 // write all of the calendars and calendar dates
