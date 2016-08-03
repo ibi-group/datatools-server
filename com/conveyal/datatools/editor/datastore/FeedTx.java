@@ -480,6 +480,41 @@ public class FeedTx extends DatabaseTx {
             });
             pump(newDb, "exceptions", exSource);
 
+            Iterator<Tuple2<String, Agency>> agencySource = Iterators.transform(
+                    FeedTx.pumpSourceForMap(feedTx.agencies),
+                    new Function<Tuple2<String, Agency>, Tuple2<String, Agency>>() {
+                        @Override
+                        public Tuple2<String, Agency> apply(Tuple2<String, Agency> input) {
+                            Agency agency;
+                            try {
+                                agency = input.b.clone();
+                            } catch (CloneNotSupportedException e) {
+                                e.printStackTrace();
+                                throw new RuntimeException(e);
+                            }
+                            agency.feedId = newFeedId;
+                            return new Tuple2(input.a, agency);
+                        }
+                    });
+            pump(newDb, "agencies", agencySource);
+
+            Iterator<Tuple2<String, Fare>> fareSource = Iterators.transform(
+                    FeedTx.pumpSourceForMap(feedTx.agencies),
+                    new Function<Tuple2<String, Fare>, Tuple2<String, Fare>>() {
+                        @Override
+                        public Tuple2<String, Fare> apply(Tuple2<String, Fare> input) {
+                            Fare fare;
+                            try {
+                                fare = input.b.clone();
+                            } catch (CloneNotSupportedException e) {
+                                e.printStackTrace();
+                                throw new RuntimeException(e);
+                            }
+                            fare.feedId = newFeedId;
+                            return new Tuple2(input.a, fare);
+                        }
+                    });
+            pump(newDb, "fares", fareSource);
 
             // copy histograms
             pump(newDb, "tripCountByCalendar", (BTreeMap) feedTx.tripCountByCalendar);
