@@ -71,7 +71,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
     }*/
 
     public ProcessGtfsSnapshotMerge (FeedVersion feedVersion, String owner) {
-        super(owner, "Processing snapshot for " + feedVersion.getFeedSource().name, JobType.PROCESS_SNAPSHOT);
+        super(owner, "Creating snapshot for " + feedVersion.getFeedSource().name, JobType.PROCESS_SNAPSHOT);
         this.gtfsFile = feedVersion.getGtfsFile();
         this.feedVersion = feedVersion;
         status = new Status();
@@ -97,6 +97,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 
         // create a new feed based on this version
         FeedTx feedTx = VersionedDataStore.getFeedTx(feedVersion.feedSourceId);
+
         feed = new EditorFeed();
         feed.setId(feedVersion.feedSourceId);
         Rectangle2D bounds = feedVersion.getValidationSummary().bounds;
@@ -104,9 +105,22 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
         feed.defaultLon = bounds.getCenterX();
         gtx.feeds.put(feedVersion.feedSourceId, feed);
 
-
         try {
-            input = feedVersion.getGtfsFeed();
+            // clear the existing data
+            for(String key : feedTx.agencies.keySet()) feedTx.agencies.remove(key);
+            for(String key : feedTx.routes.keySet()) feedTx.routes.remove(key);
+            for(String key : feedTx.stops.keySet()) feedTx.stops.remove(key);
+            for(String key : feedTx.calendars.keySet()) feedTx.calendars.remove(key);
+            for(String key : feedTx.exceptions.keySet()) feedTx.exceptions.remove(key);
+            for(String key : feedTx.fares.keySet()) feedTx.fares.remove(key);
+            for(String key : feedTx.tripPatterns.keySet()) feedTx.tripPatterns.remove(key);
+            for(String key : feedTx.trips.keySet()) feedTx.trips.remove(key);
+            LOG.info("Cleared old data");
+
+            // input = feedVersion.getGtfsFeed();
+            // TODO: use GtfsCache?
+            input = GTFSFeed.fromFile(feedVersion.getGtfsFile().getAbsolutePath());
+            if(input == null) return;
 
             LOG.info("GtfsImporter: importing feed...");
 
@@ -426,7 +440,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
             gtx.commit();
 
             // create an initial snapshot for this FeedVersion
-            Snapshot snapshot = VersionedDataStore.takeSnapshot(feed.id, "Initial state for " + feedVersion.id, "none");
+            Snapshot snapshot = VersionedDataStore.takeSnapshot(feed.id, "Snapshot of " + feedVersion.name, "none");
 
 
             LOG.info("Imported GTFS file: " + agencyCount + " agencies; " + routeCount + " routes;" + stopCount + " stops; " +  stopTimeCount + " stopTimes; " + tripCount + " trips;" + shapePointCount + " shapePoints");

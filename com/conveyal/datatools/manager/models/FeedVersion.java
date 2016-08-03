@@ -162,11 +162,15 @@ public class FeedVersion extends Model implements Serializable {
     @JsonIgnore
     public GTFSFeed getGtfsFeed() {
         try {
+            LOG.info("Checking for feed in cache..");
             if(!DataManager.gtfsCache.containsId(this.id)) {
-                DataManager.gtfsCache.put(id, getGtfsFile());
+                File f = getGtfsFile();
+                LOG.info("Did not find, putting file in cache: " + f);
+                DataManager.gtfsCache.put(id, f);
             }
             return DataManager.gtfsCache.get(id);
         } catch (Exception e) {
+            System.out.println("Exception in getGtfsFeed: " + e.getMessage());
             e.printStackTrace();
         }
         return null;
