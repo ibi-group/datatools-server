@@ -56,7 +56,7 @@ import static spark.Spark.*;
 public class FeedVersionController  {
 
     public static final Logger LOG = LoggerFactory.getLogger(FeedVersionController.class);
-
+    private static ObjectMapper mapper = new ObjectMapper();
     public static JsonManager<FeedVersion> json =
             new JsonManager<FeedVersion>(FeedVersion.class, JsonViews.UserInterface.class);
 
@@ -234,7 +234,9 @@ public class FeedVersionController  {
         // TODO: separate this out if non s3 bucket
         String s3Bucket = DataManager.config.get("application").get("data").get("gtfs_s3_bucket").asText();
         String keyName = "validation/" + version.id + ".json";
-        if (s3Bucket != null) {
+        JsonNode n = null;
+        InputStream objectData = null;
+        if (s3Bucket != null && DataManager.getConfigProperty("application.data.use_s3_storage").asBoolean() == true) {
             AWSCredentials creds;
             // default credentials providers, e.g. IAM role
             creds = new DefaultAWSCredentialsProviderChain().getCredentials();
@@ -243,18 +245,7 @@ public class FeedVersionController  {
                 AmazonS3 s3Client = new AmazonS3Client(new ProfileCredentialsProvider());
                 S3Object object = s3Client.getObject(
                         new GetObjectRequest(s3Bucket, keyName));
-                InputStream objectData = object.getObjectContent();
-
-                // Process the objectData stream.
-                ObjectMapper mapper = new ObjectMapper();
-                JsonNode n = mapper.readTree(objectData);
-                if (!n.has("errors") || !n.has("tripsPerDate")) {
-                    throw new Exception("Validation for feed version not up to date");
-                }
-
-                return n;
-            } catch (IOException e) {
-                e.printStackTrace();
+                objectData = object.getObjectContent();
             } catch (AmazonS3Exception e) {
                 // if json file does not exist, validate feed.
                 version.validate();
@@ -263,14 +254,44 @@ public class FeedVersionController  {
             } catch (AmazonServiceException ase) {
                 LOG.error("Error downloading from s3");
                 ase.printStackTrace();
+            }
+
+        }
+        // if s3 upload set to false
+        else {
+            File file = new File(DataManager.getConfigPropertyAsText("application.data.gtfs") + "/validation/" + version.id + ".json");
+            try {
+                objectData = new FileInputStream(file);
+//            } catch (IOException e) {
+//                e.printStackTrace();
             } catch (Exception e) {
-                e.printStackTrace();
+                LOG.warn("Validation does not exist.  Validating feed.");
                 version.validate();
                 version.save();
                 halt(503, "Try again later. Validating feed");
             }
-
         }
+
+        // Process the objectData stream.
+        try {
+            n = mapper.readTree(objectData);
+            if (!n.has("errors") || !n.has("tripsPerDate")) {
+                throw new Exception("Validation for feed version not up to date");
+            }
+
+            return n;
+        } catch (IOException e) {
+            // if json file does not exist, validate feed.
+            version.validate();
+            version.save();
+            halt(503, "Try again later. Validating feed");
+        } catch (Exception e) {
+            e.printStackTrace();
+            version.validate();
+            version.save();
+            halt(503, "Try again later. Validating feed");
+        }
+
         return null;
     }
 

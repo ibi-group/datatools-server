@@ -40,6 +40,7 @@ import com.conveyal.r5.transit.TransportNetwork;
 import com.fasterxml.jackson.core.JsonGenerationException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.geotools.data.shapefile.index.Data;
 import org.mapdb.Fun.Function2;
@@ -64,7 +65,7 @@ import static spark.Spark.halt;
 @JsonInclude(Include.ALWAYS)
 public class FeedVersion extends Model implements Serializable {
     private static final long serialVersionUID = 1L;
-
+    private static ObjectMapper mapper = new ObjectMapper();
     public static final Logger LOG = LoggerFactory.getLogger(FeedVersion.class);
 
     static DataStore<FeedVersion> versionStore = new DataStore<FeedVersion>("feedversions");
@@ -289,44 +290,54 @@ public class FeedVersion extends Model implements Serializable {
         }
 
         String s3Bucket = DataManager.config.get("application").get("data").get("gtfs_s3_bucket").asText();
-        // upload to S3, if we have bucket name
-        if(s3Bucket != null) {
+        File tempFile = null;
+        try {
+            // Use tempfile
+            tempFile = File.createTempFile(this.id, ".json");
+            tempFile.deleteOnExit();
+            Map<String, Object> validation = new HashMap<>();
+            validation.put("errors", gtfsFeed.errors);
+            validation.put("tripsPerDate", tripsPerDate
+//                        .entrySet()
+//                        .stream()
+//                        .map(entry -> entry.getKey().format(DateTimeFormatter.BASIC_ISO_DATE))
+//                        .collect(Collectors.toList())
+            );
+            mapper.writeValue(tempFile, validation);
+        } catch (JsonGenerationException e) {
+            e.printStackTrace();
+        } catch (JsonMappingException e) {
+            e.printStackTrace();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        // upload to S3, if we have bucket name and use s3 storage
+        if(s3Bucket != null && DataManager.getConfigProperty("application.data.use_s3_storage").asBoolean() == true) {
             AWSCredentials creds;
 
             // default credentials providers, e.g. IAM role
             creds = new DefaultAWSCredentialsProviderChain().getCredentials();
 
             String keyName = "validation/" + this.id + ".json";
-            ObjectMapper mapper = new ObjectMapper();
             try {
-                // Use tempfile
-                File tempFile = File.createTempFile(this.id, ".json");
-                tempFile.deleteOnExit();
-                Map<String, Object> validation = new HashMap<>();
-                validation.put("errors", gtfsFeed.errors);
-                validation.put("tripsPerDate", tripsPerDate
-//                        .entrySet()
-//                        .stream()
-//                        .map(entry -> entry.getKey().format(DateTimeFormatter.BASIC_ISO_DATE))
-//                        .collect(Collectors.toList())
-                );
-                mapper.writeValue(tempFile, validation);
-
                 LOG.info("Uploading validation json to S3");
                 AmazonS3 s3client = new AmazonS3Client(creds);
                 s3client.putObject(new PutObjectRequest(
                         s3Bucket, keyName, tempFile));
-            } catch (JsonGenerationException e) {
-                e.printStackTrace();
-            } catch (JsonMappingException e) {
-                e.printStackTrace();
-            } catch (IOException e) {
-                e.printStackTrace();
             } catch (AmazonServiceException ase) {
-                LOG.error("Error uploading feed to S3");
+                LOG.error("Error uploading validation json to S3");
             }
         }
-//        this.validationResult = fp.getOutput();
+        // save to validation directory in gtfs folder
+        else {
+            File validationDir = new File(DataManager.getConfigPropertyAsText("application.data.gtfs") + "/validation");
+            validationDir.mkdir();
+            try {
+                FileUtils.copyFile(tempFile, new File(validationDir.toPath() + "/" + this.id + ".json"));
+            } catch (IOException e) {
+                LOG.error("Error saving validation json to local disk");
+            }
+        }
     }
 
     public void save () {
