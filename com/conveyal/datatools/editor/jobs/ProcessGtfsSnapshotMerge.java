@@ -441,7 +441,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
             gtx.commit();
 
             // create an initial snapshot for this FeedVersion
-            Snapshot snapshot = VersionedDataStore.takeSnapshot(feed.id, "Snapshot of " + feedVersion.name, "none");
+            Snapshot snapshot = VersionedDataStore.takeSnapshot(feed.id, "Snapshot of " + feedVersion.getName(), "none");
 
 
             LOG.info("Imported GTFS file: " + agencyCount + " agencies; " + routeCount + " routes;" + stopCount + " stops; " +  stopTimeCount + " stopTimes; " + tripCount + " trips;" + shapePointCount + " shapePoints");
