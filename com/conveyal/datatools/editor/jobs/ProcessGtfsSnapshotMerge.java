@@ -92,8 +92,10 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
         feed = new EditorFeed();
         feed.setId(feedVersion.feedSourceId);
         Rectangle2D bounds = feedVersion.getValidationSummary().bounds;
-        feed.defaultLat = bounds.getCenterY();
-        feed.defaultLon = bounds.getCenterX();
+        if (bounds != null) {
+            feed.defaultLat = bounds.getCenterY();
+            feed.defaultLon = bounds.getCenterX();
+        }
 
 
         try {
