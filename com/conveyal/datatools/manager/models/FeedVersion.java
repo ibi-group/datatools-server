@@ -441,17 +441,19 @@ public class FeedVersion extends Model implements Serializable {
     @JsonInclude(Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
     public Long getFileTimestamp() {
-        File file = getGtfsFile();
+        /*File file = getGtfsFile();
         if(file == null) return null;
-        return file.lastModified();
+        return file.lastModified();*/
+        return null;
     }
 
     @JsonInclude(Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
     public Long getFileSize() {
-        File file = getGtfsFile();
+        /*File file = getGtfsFile();
         if(file == null) return null;
-        return file.length();
+        return file.length();*/
+        return null;
     }
 
     /**
