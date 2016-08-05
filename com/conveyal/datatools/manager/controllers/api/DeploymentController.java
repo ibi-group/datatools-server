@@ -183,11 +183,11 @@ public class DeploymentController {
         String id = req.params("id");
         Deployment d = Deployment.get(id);
 
-        if (!userProfile.canAdministerProject(d.projectId) && !userProfile.getUser_id().equals(d.getUser()))
-            halt(401);
-
         if (d == null)
             halt(404);
+        
+        if (!userProfile.canAdministerProject(d.projectId) && !userProfile.getUser_id().equals(d.getUser()))
+            halt(401);
 
         JsonNode params = mapper.readTree(req.body());
         applyJsonToDeployment(d, params);
