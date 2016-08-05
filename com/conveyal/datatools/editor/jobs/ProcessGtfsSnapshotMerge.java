@@ -70,9 +70,10 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
         this.gtfsFile = feedVersion.getGtfsFile();
         this.feedVersion = feedVersion;
         status = new Status();
+        status.message = "Initializing..";
+        status.percentComplete = 0;
         LOG.info("GTFS Snapshot Merge for feedVersion {}", feedVersion.id);
     }
-
     public void run () {
         long agencyCount = 0;
         long routeCount = 0;
@@ -99,6 +100,10 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 
 
         try {
+            synchronized (status) {
+                status.message = "Wiping old data...";
+                status.percentComplete = 2;
+            }
             // clear the existing data
             for(String key : feedTx.agencies.keySet()) feedTx.agencies.remove(key);
             for(String key : feedTx.routes.keySet()) feedTx.routes.remove(key);
@@ -112,11 +117,18 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 
             // input = feedVersion.getGtfsFeed();
             // TODO: use GtfsCache?
+            synchronized (status) {
+                status.message = "Loading GTFS file...";
+                status.percentComplete = 5;
+            }
             input = GTFSFeed.fromFile(feedVersion.getGtfsFile().getAbsolutePath());
             if(input == null) return;
 
             LOG.info("GtfsImporter: importing feed...");
-
+            synchronized (status) {
+                status.message = "Beginning feed import...";
+                status.percentComplete = 8;
+            }
             // load feed_info.txt
             if(input.feedInfo.size() > 0) {
                 FeedInfo feedInfo = input.feedInfo.values().iterator().next();
@@ -141,11 +153,17 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                 feedTx.agencies.put(agency.id, agency);
                 agencyIdMap.put(gtfsAgency.agency_id, agency);
             }
-
+            synchronized (status) {
+                status.message = "Agencies loaded: " + agencyCount;
+                status.percentComplete = 10;
+            }
             LOG.info("Agencies loaded: " + agencyCount);
 
             LOG.info("GtfsImporter: importing stops...");
-
+            synchronized (status) {
+                status.message = "Importing stops...";
+                status.percentComplete = 15;
+            }
             // TODO: remove stop ownership inference entirely?
             // infer agency ownership of stops, if there are multiple feeds
             SortedSet<Tuple2<String, String>> stopsByAgency = inferAgencyStopOwnership();
@@ -191,9 +209,15 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
             }
 
             LOG.info("Stops loaded: " + stopCount);
-
+            synchronized (status) {
+                status.message = "Stops loaded: " + stopCount;
+                status.percentComplete = 25;
+            }
             LOG.info("GtfsImporter: importing routes...");
-
+            synchronized (status) {
+                status.message = "Importing routes...";
+                status.percentComplete = 30;
+            }
             // import routes
             for (com.conveyal.gtfs.model.Route gtfsRoute : input.routes.values()) {
                 Agency agency = agencyIdMap.get(gtfsRoute.agency_id);
@@ -214,19 +238,30 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                 routeCount++;
             }
 
-            LOG.info("Routes loaded:" + routeCount);
-
+            LOG.info("Routes loaded: " + routeCount);
+            synchronized (status) {
+                status.message = "Routes loaded: " + routeCount;
+                status.percentComplete = 30;
+            }
             LOG.info("GtfsImporter: importing Shapes...");
-
+            synchronized (status) {
+                status.message = "Importing shapes...";
+                status.percentComplete = 35;
+            }
             // shapes are a part of trippatterns, so we don't actually import them into the model, we just make a map
             // shape id -> linestring which we use when building trip patterns
             // we put this map in mapdb because it can be big
 
             // import points
             String shapeId = null;
+            int shapeIndex = 0;
             List<ShapePoint> points = new ArrayList<>();
             for (ShapePoint point : input.shape_points.values()) {
-
+                shapeIndex++;
+                synchronized (status) {
+                    status.message = "Importing shapes... (id: " + point.shape_id + ") " + shapeIndex + "/" + input.shape_points.size();
+                    status.percentComplete = 35 + shapeIndex / input.shape_points.size() * 35;
+                }
                 // if new shape_id is encountered
                 if (!point.shape_id.equals(shapeId)) {
 
@@ -268,9 +303,15 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 
             LOG.info("Shape points loaded: " + shapePointCount);
             LOG.info("Shapes loaded: " + shapeCount);
-
+            synchronized (status) {
+                status.message = "Shapes loaded: " + shapeCount;
+                status.percentComplete = 70;
+            }
             LOG.info("GtfsImporter: importing Service Calendars...");
-
+            synchronized (status) {
+                status.message = "Importing service calendars...";
+                status.percentComplete = 73;
+            }
             // we don't put service calendars in the database just yet, because we don't know what agency they're associated with
             // we copy them into the agency database as needed
             // GTFS service ID -> ServiceCalendar
@@ -371,9 +412,15 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
             }
 
             LOG.info("Service calendars loaded: " + serviceCalendarCount);
-
+            synchronized (status) {
+                status.message = "Service calendars loaded: " + serviceCalendarCount;
+                status.percentComplete = 75;
+            }
             LOG.info("GtfsImporter: importing trips...");
-
+            synchronized (status) {
+                status.message = "Importing trips...";
+                status.percentComplete = 78;
+            }
             // import trips, stop times and patterns all at once
             Map<List<String>, List<String>> patterns = input.findPatterns();
 
@@ -383,6 +430,10 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                 Map<String, TripPattern> tripPatternsByRoute = Maps.newHashMap();
 
                 for (String tripId : pattern.getValue()) {
+                    synchronized (status) {
+                        status.message = "Importing trips... (id: " + tripId + ")";
+                        status.percentComplete = 78;
+                    }
                     com.conveyal.gtfs.model.Trip gtfsTrip = input.trips.get(tripId);
 
                     if (!tripPatternsByRoute.containsKey(gtfsTrip.route_id)) {
@@ -426,7 +477,10 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
             }
 
             LOG.info("Trips loaded: " + tripCount);
-
+            synchronized (status) {
+                status.message = "Trips loaded: " + tripCount;
+                status.percentComplete = 80;
+            }
 
             LOG.info("GtfsImporter: importing fares...");
             Map<String, com.conveyal.gtfs.model.Fare> fares = input.fares;
@@ -436,6 +490,10 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                 fareCount++;
             }
             LOG.info("Fares loaded: " + fareCount);
+            synchronized (status) {
+                status.message = "Fares loaded: " + fareCount;
+                status.percentComplete = 90;
+            }
             // commit the feed TXs first, so that we have orphaned data rather than inconsistent data on a commit failure
             feedTx.commit();
             gtx.commit();
@@ -445,9 +503,17 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 
 
             LOG.info("Imported GTFS file: " + agencyCount + " agencies; " + routeCount + " routes;" + stopCount + " stops; " +  stopTimeCount + " stopTimes; " + tripCount + " trips;" + shapePointCount + " shapePoints");
+            synchronized (status) {
+                status.message = "Import complete!";
+                status.percentComplete = 100;
+            }
         }
         catch (Exception e) {
             e.printStackTrace();
+            synchronized (status) {
+                status.message = "Failed to process GTFS snapshot.";
+                status.error = true;
+            }
             halt(404, "Failed to process GTFS snapshot.");
         }
         finally {
@@ -560,7 +626,9 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 
     @Override
     public Status getStatus() {
-        return null;
+        synchronized (status) {
+            return status.clone();
+        }
     }
 }
 

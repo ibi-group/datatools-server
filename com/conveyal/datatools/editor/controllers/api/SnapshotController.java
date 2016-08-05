@@ -124,9 +124,10 @@ public class SnapshotController {
         ProcessGtfsSnapshotMerge processGtfsSnapshotMergeJob =
                 new ProcessGtfsSnapshotMerge(feedVersion, userProfile.getUser_id());
 
-        new Thread(processGtfsSnapshotMergeJob).run();
+        new Thread(processGtfsSnapshotMergeJob).start();
 
-        return true;
+        halt(200, "{status: \"ok\"}");
+        return null;
     }
 
     public static Object updateSnapshot (Request req, Response res) {

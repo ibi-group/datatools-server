@@ -112,8 +112,8 @@ public class VersionedDataStore {
             gtx.snapshots.put(ret.id, ret);
             gtx.commit();
             tx.commit();
-
-            LOG.info("Saving snapshot took %.2f seconds", (System.currentTimeMillis() - startTime) / 1000D);
+            String snapshotMessage = String.format("Saving snapshot took %.2f seconds", (System.currentTimeMillis() - startTime) / 1000D);
+            LOG.info(snapshotMessage);
 
             return ret;
         } catch (Exception e) {

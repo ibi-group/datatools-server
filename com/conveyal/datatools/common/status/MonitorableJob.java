@@ -1,6 +1,7 @@
 package com.conveyal.datatools.common.status;
 
 import com.conveyal.datatools.manager.DataManager;
+import com.google.common.eventbus.EventBus;
 import jdk.nashorn.internal.scripts.JO;
 
 import java.time.LocalDateTime;
@@ -15,6 +16,7 @@ public abstract class MonitorableJob implements Runnable {
     protected String owner;
     protected String name;
     protected JobType type;
+    protected EventBus eventBus;
 
     public String jobId = UUID.randomUUID().toString();
 
@@ -29,6 +31,10 @@ public abstract class MonitorableJob implements Runnable {
     }
 
     public MonitorableJob(String owner, String name, JobType type) {
+        // register job with eventBus
+        this.eventBus = new EventBus();
+        eventBus.register(this);
+
         this.owner = owner;
         this.name = name;
         this.type = type;

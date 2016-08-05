@@ -26,6 +26,7 @@ import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.model.PutObjectRequest;
+import com.conveyal.datatools.common.status.StatusEvent;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.controllers.api.GtfsApiController;
 import com.conveyal.datatools.manager.persistence.DataStore;
@@ -40,6 +41,7 @@ import com.conveyal.r5.transit.TransportNetwork;
 import com.fasterxml.jackson.core.JsonGenerationException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.eventbus.EventBus;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.geotools.data.shapefile.index.Data;
@@ -220,18 +222,26 @@ public class FeedVersion extends Model implements Serializable {
         return versionStore.getAll();
     }
 
-    public void validate() {
+    public void validate(EventBus eventBus) {
+        if (eventBus == null) {
+            eventBus = new EventBus();
+        }
         File gtfsFile = null;
         try {
+            eventBus.post(new StatusEvent("Loading feed...", 5, false));
             gtfsFile = getGtfsFile();
         } catch (Exception e) {
-            LOG.warn("No GTFS feed exists for version: {}", this.id);
+            String errorString = String.format("No GTFS feed exists for version: %s", this.id);
+            LOG.warn(errorString);
+            eventBus.post(new StatusEvent(errorString, 0, true));
             return;
         }
 
         GTFSFeed gtfsFeed = getGtfsFeed();
         if(gtfsFeed == null) {
-            LOG.warn("Could not get GTFSFeed object for FeedVersion {}", id);
+            String errorString = String.format("Could not get GTFSFeed object for FeedVersion {}", id);
+            LOG.warn(errorString);
+            eventBus.post(new StatusEvent(errorString, 0, true));
             return;
         }
 
@@ -247,6 +257,7 @@ public class FeedVersion extends Model implements Serializable {
         }
 
         try {
+            eventBus.post(new StatusEvent("Validating feed...", 30, false));
             gtfsFeed.validate();
             FeedStats stats = gtfsFeed.calculateStats();
             validationResult = new FeedValidationResult();
@@ -286,6 +297,7 @@ public class FeedVersion extends Model implements Serializable {
             tripsPerDate = stats.getTripsPerDateOfService();
         } catch (Exception e) {
             LOG.error("Unable to validate feed {}", this);
+            eventBus.post(new StatusEvent("Unable to validate feed.", 0, true));
             e.printStackTrace();
             this.validationResult = null;
             return;
@@ -294,6 +306,7 @@ public class FeedVersion extends Model implements Serializable {
         String s3Bucket = DataManager.config.get("application").get("data").get("gtfs_s3_bucket").asText();
         File tempFile = null;
         try {
+            eventBus.post(new StatusEvent("Saving validation results...", 80, false));
             // Use tempfile
             tempFile = File.createTempFile(this.id, ".json");
             tempFile.deleteOnExit();
@@ -340,6 +353,9 @@ public class FeedVersion extends Model implements Serializable {
                 LOG.error("Error saving validation json to local disk");
             }
         }
+    }
+    public void validate() {
+        validate(null);
     }
 
     public void save () {
