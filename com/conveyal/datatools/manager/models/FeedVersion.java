@@ -162,7 +162,9 @@ public class FeedVersion extends Model implements Serializable {
 
     @JsonIgnore
     public GTFSFeed getGtfsFeed() {
-        try {
+        return GTFSFeed.fromFile(getGtfsFile().getAbsolutePath());
+        // TODO: fix broken GTFS cache
+        /*try {
             LOG.info("Checking for feed in cache..");
             if(!DataManager.gtfsCache.containsId(this.id)) {
                 File f = getGtfsFile();
@@ -174,7 +176,7 @@ public class FeedVersion extends Model implements Serializable {
             System.out.println("Exception in getGtfsFeed: " + e.getMessage());
             e.printStackTrace();
         }
-        return null;
+        return null;*/
     }
 
     /** The results of validating this feed */

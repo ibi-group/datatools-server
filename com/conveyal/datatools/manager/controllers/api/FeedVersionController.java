@@ -229,8 +229,23 @@ public class FeedVersionController  {
     }
 
     public static Object getValidationResult(Request req, Response res) {
+        return getValidationResult(req, res, false);
+    }
+
+    public static Object getPublicValidationResult(Request req, Response res) {
+        return getValidationResult(req, res, true);
+    }
+
+    public static Object getValidationResult(Request req, Response res, boolean checkPublic) {
         String id = req.params("id");
         FeedVersion version = FeedVersion.get(id);
+
+        if(checkPublic && !version.getFeedSource().isPublic) {
+            halt(401, "Not a public feed");
+            return null;
+        }
+
+
         // TODO: separate this out if non s3 bucket
         String s3Bucket = DataManager.config.get("application").get("data").get("gtfs_s3_bucket").asText();
         String keyName = "validation/" + version.id + ".json";
@@ -425,6 +440,18 @@ public class FeedVersionController  {
         return token;
     }
 
+    private static FeedDownloadToken getPublicDownloadToken (Request req, Response res) {
+        FeedVersion version = FeedVersion.get(req.params("id"));
+        if(!version.getFeedSource().isPublic) {
+            halt(401, "Not a public feed");
+            return null;
+        }
+        FeedDownloadToken token = new FeedDownloadToken(version);
+        token.save();
+        return token;
+    }
+
+
     private static Object downloadFeedVersionWithToken (Request req, Response res) {
         FeedDownloadToken token = FeedDownloadToken.get(req.params("token"));
 
@@ -452,6 +479,9 @@ public class FeedVersionController  {
         delete(apiPrefix + "secure/feedversion/:id", FeedVersionController::deleteFeedVersion, json::write);
 
         get(apiPrefix + "public/feedversion", FeedVersionController::getAllFeedVersions, json::write);
+        get(apiPrefix + "public/feedversion/:id/validation", FeedVersionController::getPublicValidationResult, json::write);
+        get(apiPrefix + "public/feedversion/:id/downloadtoken", FeedVersionController::getPublicDownloadToken, json::write);
+
         get(apiPrefix + "downloadfeed/:token", FeedVersionController::downloadFeedVersionWithToken);
 
     }
