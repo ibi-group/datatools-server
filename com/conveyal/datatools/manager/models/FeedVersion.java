@@ -236,7 +236,7 @@ public class FeedVersion extends Model implements Serializable {
         Map<LocalDate, Integer> tripsPerDate;
         // load feed into GTFS api
         // TODO: pass GTFSFeed to GTFSApi
-        if (DataManager.config.get("modules").get("gtfsapi").get("load_on_fetch").asBoolean()) {
+        if (DataManager.getConfigProperty("modules.gtfsapi.enabled").asBoolean() && DataManager.getConfigProperty("modules.gtfsapi.load_on_fetch").asBoolean()) {
             LOG.info("Loading feed into GTFS api");
             String md5 = ApiMain.loadFeedFromFile(gtfsFile, this.feedSourceId);
             if (GtfsApiController.feedUpdater != null) {
