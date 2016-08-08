@@ -14,6 +14,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.Map;
 
 import static com.conveyal.datatools.manager.models.Deployment.getOsmExtract;
 
@@ -31,12 +32,18 @@ public class BuildTransportNetworkJob extends MonitorableJob {
         this.feedVersion = feedVersion;
         this.result = null;
         this.status = new Status();
+        status.message = "Waiting to begin job...";
     }
 
     @Override
     public void run() {
         System.out.println("Building network");
-        feedVersion.buildTransportNetwork();
+        feedVersion.buildTransportNetwork(eventBus);
+        synchronized (status) {
+            status.message = "Transport network built successfully!";
+            status.percentComplete = 100;
+            status.completed = true;
+        }
         jobFinished();
     }
 
@@ -47,5 +54,26 @@ public class BuildTransportNetworkJob extends MonitorableJob {
         }
     }
 
+    @Override
+    public void handleStatusEvent(Map statusMap) {
+        try {
+            synchronized (status) {
+                status.message = (String) statusMap.get("message");
+                status.percentComplete = (double) statusMap.get("percentComplete");
+                status.error = (boolean) statusMap.get("error");
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+//    @Override
+//    public void handleStatusEvent(StatusEvent statusEvent) {
+//        synchronized (status) {
+//            status.message = statusEvent.message;
+//            status.percentComplete = statusEvent.percentComplete
+//            status.error = statusEvent.error;
+//        }
+//    }
 
 }

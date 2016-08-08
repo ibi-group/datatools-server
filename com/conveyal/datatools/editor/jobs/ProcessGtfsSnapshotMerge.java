@@ -70,7 +70,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
         this.gtfsFile = feedVersion.getGtfsFile();
         this.feedVersion = feedVersion;
         status = new Status();
-        status.message = "Initializing..";
+        status.message = "Waiting to begin job...";
         status.percentComplete = 0;
         LOG.info("GTFS Snapshot Merge for feedVersion {}", feedVersion.id);
     }
@@ -628,6 +628,15 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
     public Status getStatus() {
         synchronized (status) {
             return status.clone();
+        }
+    }
+
+    @Override
+    public void handleStatusEvent(Map statusMap) {
+        synchronized (status) {
+            status.message = (String) statusMap.get("message");
+            status.percentComplete = (double) statusMap.get("percentComplete");
+            status.error = (boolean) statusMap.get("error");
         }
     }
 }

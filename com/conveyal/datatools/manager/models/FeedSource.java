@@ -8,6 +8,7 @@ import com.conveyal.datatools.manager.persistence.DataStore;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonView;
+import com.google.common.eventbus.EventBus;
 import org.mapdb.Fun;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -118,11 +119,20 @@ public class FeedSource extends Model implements Cloneable {
     /**
      * Fetch the latest version of the feed.
      */
-    public FeedVersion fetch () {
+    public FeedVersion fetch (EventBus eventBus) {
+        Map<String, Object> statusMap = new HashMap<>();
+        statusMap.put("message", "Downloading file");
+        statusMap.put("percentComplete", 20.0);
+        statusMap.put("error", false);
+        eventBus.post(statusMap);
+
         if (this.retrievalMethod.equals(FeedRetrievalMethod.MANUALLY_UPLOADED)) {
-            String message = String.format("not fetching feed %s, not a fetchable feed", this.toString());
+            String message = String.format("not fetching feed %s, not a fetchable feed", this.name);
             LOG.info(message);
-            halt(400, message);
+            statusMap.put("message", message);
+            statusMap.put("percentComplete", 0.0);
+            statusMap.put("error", true);
+            eventBus.post(statusMap);
             return null;
         }
 
@@ -140,9 +150,12 @@ public class FeedSource extends Model implements Cloneable {
             url = this.url;
         else if (this.retrievalMethod.equals(FeedRetrievalMethod.PRODUCED_IN_HOUSE)) {
             if (this.snapshotVersion == null) {
-                String message = String.format("Feed %s has no editor id; cannot fetch", this);
+                String message = String.format("Feed %s has no editor id; cannot fetch", this.name);
                 LOG.error(message);
-                halt(400, message);
+                statusMap.put("message", message);
+                statusMap.put("percentComplete", 0.0);
+                statusMap.put("error", true);
+                eventBus.post(statusMap);
                 return null;
             }
 
@@ -157,14 +170,20 @@ public class FeedSource extends Model implements Cloneable {
             } catch (MalformedURLException e) {
                 String message = "Invalid URL for editor, check your config.";
                 LOG.error(message);
-                halt(400, message);
+                statusMap.put("message", message);
+                statusMap.put("percentComplete", 0.0);
+                statusMap.put("error", true);
+                eventBus.post(statusMap);
                 return null;
             }
         }
         else {
             String message = "Unknown retrieval method: " + this.retrievalMethod;
             LOG.error(message);
-            halt(400, message);
+            statusMap.put("message", message);
+            statusMap.put("percentComplete", 0.0);
+            statusMap.put("error", true);
+            eventBus.post(statusMap);
             return null;
         }
 
@@ -175,19 +194,28 @@ public class FeedSource extends Model implements Cloneable {
         try {
             conn = (HttpURLConnection) url.openConnection();
         } catch (IOException e) {
-            String message = String.format("Unable to open connection to %s; not fetching feed %s", url, this);
+            String message = String.format("Unable to open connection to %s; not fetching feed %s", url, this.name);
             LOG.error(message);
-            halt(400, message);
+            statusMap.put("message", message);
+            statusMap.put("percentComplete", 0.0);
+            statusMap.put("error", true);
+            eventBus.post(statusMap);
             return null;
         } catch (ClassCastException e) {
-            String message = String.format("Unable to open connection to %s; not fetching feed %s", url, this);
+            String message = String.format("Unable to open connection to %s; not fetching %s feed", url, this.name);
             LOG.error(message);
-            halt(400, message);
+            statusMap.put("message", message);
+            statusMap.put("percentComplete", 0.0);
+            statusMap.put("error", true);
+            eventBus.post(statusMap);
             return null;
         } catch (NullPointerException e) {
-            String message = String.format("Unable to open connection to %s; not fetching feed %s", url, this);
+            String message = String.format("Unable to open connection to %s; not fetching %s feed", url, this.name);
             LOG.error(message);
-            halt(400, message);
+            statusMap.put("message", message);
+            statusMap.put("percentComplete", 0.0);
+            statusMap.put("error", true);
+            eventBus.post(statusMap);
             return null;
         }
 
@@ -204,30 +232,42 @@ public class FeedSource extends Model implements Cloneable {
             conn.connect();
 
             if (conn.getResponseCode() == HttpURLConnection.HTTP_NOT_MODIFIED) {
-                String message = String.format("Feed %s has not been modified", this);
+                String message = String.format("Feed %s has not been modified", this.name);
                 LOG.info(message);
-                halt(304, message);
+                statusMap.put("message", message);
+                statusMap.put("percentComplete", 100.0);
+                statusMap.put("error", false);
+                eventBus.post(statusMap);
                 return null;
             }
 
             // TODO: redirects
             else if (conn.getResponseCode() == HttpURLConnection.HTTP_OK) {
-                LOG.info("Saving feed {}", this);
-
+                String message = String.format("Saving %s feed", this.name);
+                LOG.info(message);
+                statusMap.put("message", message);
+                statusMap.put("percentComplete", 100.0);
+                statusMap.put("error", false);
+                eventBus.post(statusMap);
                 File out = newFeed.newGtfsFile(conn.getInputStream());
-
             }
 
             else {
-                String message = String.format("HTTP status %s retrieving feed %s", conn.getResponseMessage(), this);
+                String message = String.format("HTTP status %s retrieving %s feed", conn.getResponseMessage(), this.name);
                 LOG.error(message);
-                halt(conn.getResponseCode(), message);
+                statusMap.put("message", message);
+                statusMap.put("percentComplete", 100.0);
+                statusMap.put("error", true);
+                eventBus.post(statusMap);
                 return null;
             }
         } catch (IOException e) {
-            String message = String.format("Unable to connect to %s; not fetching feed %s", url, this);
+            String message = String.format("Unable to connect to %s; not fetching %s feed", url, this.name);
             LOG.error(message);
-            halt(400, message);
+            statusMap.put("message", message);
+            statusMap.put("percentComplete", 100.0);
+            statusMap.put("error", true);
+            eventBus.post(statusMap);
             return null;
         }
 
@@ -236,9 +276,13 @@ public class FeedSource extends Model implements Cloneable {
         newFeed.hash();
 
         if (latest != null && newFeed.hash.equals(latest.hash)) {
-            LOG.warn("Feed %s was fetched but has not changed; server operators should add If-Modified-Since support to avoid wasting bandwidth", this);
+            String message = String.format("Feed %s was fetched but has not changed; server operators should add If-Modified-Since support to avoid wasting bandwidth", this.name);
+            LOG.warn(message);
             newFeed.getGtfsFile().delete();
-            halt(304);
+            statusMap.put("message", message);
+            statusMap.put("percentComplete", 100.0);
+            statusMap.put("error", false);
+            eventBus.post(statusMap);
             return null;
         }
         else {

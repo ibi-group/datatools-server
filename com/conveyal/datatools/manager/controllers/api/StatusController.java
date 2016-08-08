@@ -37,7 +37,7 @@ public class StatusController {
         Auth0UserProfile userProfile = req.attribute("user");
         String userId = userProfile.getUser_id();
         return DataManager.userJobsMap.containsKey(userId)
-            ? DataManager.userJobsMap.get(userId)
+            ? DataManager.userJobsMap.get(userId).toArray()
             : new HashSet<>();
     }
 

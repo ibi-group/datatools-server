@@ -123,8 +123,8 @@ public class ProjectController {
         String id = req.params("id");
         System.out.println("project fetch for " + id);
         Project proj = Project.get(id);
-        FetchProjectFeedsJob job = new FetchProjectFeedsJob(proj, userProfile.getUser_id());
-        job.run();
+        FetchProjectFeedsJob fetchProjectFeedsJob = new FetchProjectFeedsJob(proj, userProfile.getUser_id());
+        new Thread(fetchProjectFeedsJob).start();
         return true;
     }
 

@@ -23,6 +23,7 @@ import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
 import java.util.List;
+import java.util.Map;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.models.Deployment;
@@ -77,16 +78,14 @@ public class DeployJob extends MonitorableJob {
         }
     }
 
-//    @Override
-//    public void storeJob() {
-//        Set<MonitorableJob> userJobs = DataManager.userJobsMap.get(status.owner);
-//        if (userJobs == null) {
-//            userJobs = new HashSet<>();
-//        }
-//        userJobs.add(this);
-//
-//        DataManager.userJobsMap.put(status.owner, userJobs);
-//    }
+    @Override
+    public void handleStatusEvent(Map statusMap) {
+        synchronized (status) {
+            status.message = (String) statusMap.get("message");
+            status.percentComplete = (double) statusMap.get("percentComplete");
+            status.error = (boolean) statusMap.get("error");
+        }
+    }
 
     public void run() {
 

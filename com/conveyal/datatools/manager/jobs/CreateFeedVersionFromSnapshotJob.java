@@ -10,6 +10,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.util.Map;
 
 import static spark.Spark.halt;
 
@@ -28,6 +29,7 @@ public class CreateFeedVersionFromSnapshotJob  extends MonitorableJob {
         this.feedSource = feedSource;
         this.snapshotId = snapshotId;
         this.status = new Status();
+        status.message = "Initializing...";
     }
 
     @Override
@@ -67,5 +69,12 @@ public class CreateFeedVersionFromSnapshotJob  extends MonitorableJob {
         }
     }
 
-
+    @Override
+    public void handleStatusEvent(Map statusMap) {
+        synchronized (status) {
+            status.message = (String) statusMap.get("message");
+            status.percentComplete = (double) statusMap.get("percentComplete");
+            status.error = (boolean) statusMap.get("error");
+        }
+    }
 }

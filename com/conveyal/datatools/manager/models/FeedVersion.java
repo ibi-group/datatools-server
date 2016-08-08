@@ -226,6 +226,7 @@ public class FeedVersion extends Model implements Serializable {
         if (eventBus == null) {
             eventBus = new EventBus();
         }
+        Map<String, Object> statusMap = new HashMap<>();
         File gtfsFile = null;
         try {
             eventBus.post(new StatusEvent("Loading feed...", 5, false));
@@ -233,7 +234,10 @@ public class FeedVersion extends Model implements Serializable {
         } catch (Exception e) {
             String errorString = String.format("No GTFS feed exists for version: %s", this.id);
             LOG.warn(errorString);
-            eventBus.post(new StatusEvent(errorString, 0, true));
+            statusMap.put("message", errorString);
+            statusMap.put("percentComplete", 0.0);
+            statusMap.put("error", true);
+            eventBus.post(statusMap);
             return;
         }
 
@@ -241,7 +245,11 @@ public class FeedVersion extends Model implements Serializable {
         if(gtfsFeed == null) {
             String errorString = String.format("Could not get GTFSFeed object for FeedVersion {}", id);
             LOG.warn(errorString);
-            eventBus.post(new StatusEvent(errorString, 0, true));
+//            eventBus.post(new StatusEvent(errorString, 0, true));
+            statusMap.put("message", errorString);
+            statusMap.put("percentComplete", 0.0);
+            statusMap.put("error", true);
+            eventBus.post(statusMap);
             return;
         }
 
@@ -257,7 +265,13 @@ public class FeedVersion extends Model implements Serializable {
         }
 
         try {
-            eventBus.post(new StatusEvent("Validating feed...", 30, false));
+//            eventBus.post(new StatusEvent("Validating feed...", 30, false));
+
+            statusMap.put("message", "Validating feed...");
+            statusMap.put("percentComplete", 30.0);
+            statusMap.put("error", false);
+            eventBus.post(statusMap);
+
             gtfsFeed.validate();
             FeedStats stats = gtfsFeed.calculateStats();
             validationResult = new FeedValidationResult();
@@ -297,7 +311,11 @@ public class FeedVersion extends Model implements Serializable {
             tripsPerDate = stats.getTripsPerDateOfService();
         } catch (Exception e) {
             LOG.error("Unable to validate feed {}", this);
-            eventBus.post(new StatusEvent("Unable to validate feed.", 0, true));
+//            eventBus.post(new StatusEvent("Unable to validate feed.", 0, true));
+            statusMap.put("message", "Unable to validate feed.");
+            statusMap.put("percentComplete", 0);
+            statusMap.put("error", true);
+            eventBus.post(statusMap);
             e.printStackTrace();
             this.validationResult = null;
             return;
@@ -306,7 +324,11 @@ public class FeedVersion extends Model implements Serializable {
         String s3Bucket = DataManager.config.get("application").get("data").get("gtfs_s3_bucket").asText();
         File tempFile = null;
         try {
-            eventBus.post(new StatusEvent("Saving validation results...", 80, false));
+//            eventBus.post(new StatusEvent("Saving validation results...", 80, false));
+            statusMap.put("message", "Saving validation results...");
+            statusMap.put("percentComplete", 80);
+            statusMap.put("error", false);
+            eventBus.post(statusMap);
             // Use tempfile
             tempFile = File.createTempFile(this.id, ".json");
             tempFile.deleteOnExit();
@@ -376,8 +398,11 @@ public class FeedVersion extends Model implements Serializable {
     public static void commit() {
         versionStore.commit();
     }
+    public TransportNetwork buildTransportNetwork(EventBus eventBus) {
+        if (eventBus == null) {
+            eventBus = new EventBus();
+        }
 
-    public TransportNetwork buildTransportNetwork() {
         String gtfsDir = DataManager.config.get("application").get("data").get("gtfs").asText() + "/";
         String feedSourceDir = gtfsDir + feedSourceId + "/";
         File fsPath = new File(feedSourceDir);
@@ -385,6 +410,12 @@ public class FeedVersion extends Model implements Serializable {
             fsPath.mkdir();
         }
         // Fetch OSM extract
+        Map<String, Object> statusMap = new HashMap<>();
+        statusMap.put("message", "Fetching OSM extract...");
+        statusMap.put("percentComplete", 10.0);
+        statusMap.put("error", false);
+        eventBus.post(statusMap);
+
         Rectangle2D bounds = this.validationResult.bounds;
         String osmFileName = String.format("%s%.6f_%.6f_%.6f_%.6f.osm.pbf",feedSourceDir, bounds.getMaxX(), bounds.getMaxY(), bounds.getMinX(), bounds.getMinY());
         File osmExtract = new File(osmFileName);
@@ -403,10 +434,15 @@ public class FeedVersion extends Model implements Serializable {
         }
 
         // Create/save r5 network
-//        TransportNetwork tn = TransportNetwork.fromFiles(osmExtract.getAbsolutePath(), gtfsDir + this.id, TNBuilderConfig.defaultConfig());
-        List<GTFSFeed> feedList = new ArrayList<>();
-        feedList.add(DataManager.gtfsCache.get(id));
-        TransportNetwork tn = TransportNetwork.fromFeeds(osmExtract.getAbsolutePath(), feedList, TNBuilderConfig.defaultConfig());
+        statusMap.put("message", "Creating transport network...");
+        statusMap.put("percentComplete", 50.0);
+        statusMap.put("error", false);
+        eventBus.post(statusMap);
+
+        TransportNetwork tn = TransportNetwork.fromFiles(osmExtract.getAbsolutePath(), gtfsDir + this.id, TNBuilderConfig.defaultConfig());
+//        List<GTFSFeed> feedList = new ArrayList<>();
+//        feedList.add(DataManager.gtfsCache.get(id));
+//        TransportNetwork tn = TransportNetwork.fromFeeds(osmExtract.getAbsolutePath(), feedList, TNBuilderConfig.defaultConfig());
         this.transportNetwork = tn;
         File tnFile = new File(feedSourceDir + this.id + "_network.dat");
         OutputStream tnOut = null;
@@ -420,6 +456,9 @@ public class FeedVersion extends Model implements Serializable {
             e.printStackTrace();
         }
         return null;
+    }
+    public TransportNetwork buildTransportNetwork() {
+        return buildTransportNetwork(null);
     }
 
 

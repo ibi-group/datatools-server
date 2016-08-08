@@ -20,7 +20,7 @@ public class FetchProjectFeedsJob extends MonitorableJob {
     private Status status;
 
     public FetchProjectFeedsJob (Project proj, String owner) {
-        super(owner);
+        super(owner, "Fetching feeds for " + proj.name + " project.", JobType.FETCH_PROJECT_FEEDS);
         this.proj = proj;
         this.status = new Status();
     }
@@ -35,16 +35,26 @@ public class FetchProjectFeedsJob extends MonitorableJob {
             if (!FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.equals(feedSource.retrievalMethod))
                 continue;
 
-            FeedVersion feedVersion = feedSource.fetch();
-            LOG.info("Fetching feed for " + feedSource.id);
-            result.put(feedSource.id, feedVersion);
+            FetchSingleFeedJob fetchSingleFeedJob = new FetchSingleFeedJob(feedSource, owner);
+
+            new Thread(fetchSingleFeedJob).start();
         }
+        jobFinished();
     }
 
     @Override
     public Status getStatus() {
         synchronized (status) {
             return status.clone();
+        }
+    }
+
+    @Override
+    public void handleStatusEvent(Map statusMap) {
+        synchronized (status) {
+            status.message = (String) statusMap.get("message");
+            status.percentComplete = (double) statusMap.get("percentComplete");
+            status.error = (boolean) statusMap.get("error");
         }
     }
 }

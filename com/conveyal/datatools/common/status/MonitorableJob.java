@@ -2,6 +2,7 @@ package com.conveyal.datatools.common.status;
 
 import com.conveyal.datatools.manager.DataManager;
 import com.google.common.eventbus.EventBus;
+import com.google.common.eventbus.Subscribe;
 import jdk.nashorn.internal.scripts.JO;
 
 import java.time.LocalDateTime;
@@ -27,7 +28,9 @@ public abstract class MonitorableJob implements Runnable {
         BUILD_TRANSPORT_NETWORK,
         CREATE_FEEDVERSION_FROM_SNAPSHOT,
         PROCESS_SNAPSHOT,
-        VALIDATE_FEED
+        VALIDATE_FEED,
+        FETCH_PROJECT_FEEDS,
+        FETCH_SINGLE_FEED
     }
 
     public MonitorableJob(String owner, String name, JobType type) {
@@ -79,6 +82,9 @@ public abstract class MonitorableJob implements Runnable {
     public void addNextJob(Runnable job) {
         nextJobs.add(job);
     }
+
+    @Subscribe
+    public abstract void handleStatusEvent (Map statusMap);
 
     /**
      * Represents the current status of this job.

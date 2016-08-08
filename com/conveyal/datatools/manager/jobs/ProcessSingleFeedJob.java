@@ -1,6 +1,5 @@
 package com.conveyal.datatools.manager.jobs;
 
-import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.editor.jobs.ProcessGtfsSnapshotMerge;
 import com.conveyal.datatools.editor.models.Snapshot;
 import com.conveyal.datatools.manager.DataManager;
@@ -16,7 +15,6 @@ import java.util.Collection;
  */
 public class ProcessSingleFeedJob implements Runnable {
     FeedVersion feedVersion;
-    //private Status status;
     private String owner;
 
     /**
@@ -26,7 +24,6 @@ public class ProcessSingleFeedJob implements Runnable {
     public ProcessSingleFeedJob (FeedVersion feedVersion, String owner) {
         this.feedVersion = feedVersion;
         this.owner = owner;
-        //this.status = new Status(owner);
     }
 
     public void run() {
@@ -44,9 +41,9 @@ public class ProcessSingleFeedJob implements Runnable {
         }
 
         // chain on a network builder job, if applicable
-        /*if(DataManager.isModuleEnabled("validator")) {
+        if(DataManager.isModuleEnabled("validator")) {
             validateJob.addNextJob(new BuildTransportNetworkJob(feedVersion, owner));
-        }*/
+        }
 
         new Thread(validateJob).start();
 

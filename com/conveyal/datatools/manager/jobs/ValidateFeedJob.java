@@ -7,6 +7,8 @@ import com.google.common.eventbus.Subscribe;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Map;
+
 /**
  * Created by demory on 6/16/16.
  */
@@ -20,7 +22,7 @@ public class ValidateFeedJob extends MonitorableJob {
         super(owner, "Validating Feed for " + version.getFeedSource().name, JobType.VALIDATE_FEED);
         feedVersion = version;
         status = new Status();
-        status.message = "Initializing...";
+        status.message = "Waiting to begin validation...";
         status.percentComplete = 0;
     }
 
@@ -55,12 +57,16 @@ public class ValidateFeedJob extends MonitorableJob {
         jobFinished();
     }
 
-    @Subscribe
-    public void handleStatusEvent (StatusEvent statusEvent) {
+    @Override
+    public void handleStatusEvent(Map statusMap) {
         synchronized (status) {
-            status.message = statusEvent.message;
-            status.percentComplete = statusEvent.percentComplete;
-            status.error = statusEvent.error;
+            status.message = (String) statusMap.get("message");
+            status.percentComplete = (double) statusMap.get("percentComplete");
+            status.error = (boolean) statusMap.get("error");
         }
     }
+
+//    public void handleGTFSValidationEvent(GTFSValidationEvent gtfsValidationEvent) {
+//
+//    }
 }
