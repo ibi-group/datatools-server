@@ -439,10 +439,12 @@ public class FeedVersion extends Model implements Serializable {
         statusMap.put("error", false);
         eventBus.post(statusMap);
 
-        TransportNetwork tn = TransportNetwork.fromFiles(osmExtract.getAbsolutePath(), gtfsDir + this.id, TNBuilderConfig.defaultConfig());
-//        List<GTFSFeed> feedList = new ArrayList<>();
-//        feedList.add(DataManager.gtfsCache.get(id));
-//        TransportNetwork tn = TransportNetwork.fromFeeds(osmExtract.getAbsolutePath(), feedList, TNBuilderConfig.defaultConfig());
+        List<GTFSFeed> feedList = new ArrayList<>();
+        feedList.add(
+//                DataManager.gtfsCache.get(id)
+                getGtfsFeed()
+        );
+        TransportNetwork tn = TransportNetwork.fromFeeds(osmExtract.getAbsolutePath(), feedList, TNBuilderConfig.defaultConfig());
         this.transportNetwork = tn;
         File tnFile = new File(feedSourceDir + this.id + "_network.dat");
         OutputStream tnOut = null;
