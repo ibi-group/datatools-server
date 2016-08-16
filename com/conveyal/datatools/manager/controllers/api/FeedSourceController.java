@@ -49,7 +49,7 @@ public class FeedSourceController {
         Boolean publicFilter = req.pathInfo().contains("public");
         if(projectId != null) {
             for (FeedSource source: FeedSource.getAll()) {
-                if(source.projectId.equals(projectId)) {
+                if (source != null && source.projectId != null && source.projectId.equals(projectId)) {
                     // if requesting public sources and source is not public; skip source
                     if (publicFilter && !source.isPublic)
                         continue;
