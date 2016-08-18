@@ -46,6 +46,8 @@ public class Auth0UserProfile {
         this.app_metadata = app_metadata;
     }
 
+    public AppMetadata getApp_metadata() { return app_metadata; }
+
     @JsonIgnore
     public void setDatatoolsInfo(DatatoolsInfo datatoolsInfo) {
         this.app_metadata.getDatatoolsInfo().setClientId(datatoolsInfo.clientId);
@@ -114,6 +116,8 @@ public class Auth0UserProfile {
         public void setSubscriptions(Subscription[] subscriptions) {
             this.subscriptions = subscriptions;
         }
+
+        public Subscription[] getSubscriptions() { return subscriptions; }
 
     }
 
@@ -184,9 +188,13 @@ public class Auth0UserProfile {
             this.type = type;
         }
 
+        public String getType() { return type; }
+
         public void setTarget(String[] target) {
             this.target = target;
         }
+
+        public String[] getTarget() { return target; }
     }
 
     public int getProjectCount() {

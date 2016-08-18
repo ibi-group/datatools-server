@@ -1,7 +1,9 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.JsonViews;
+import com.conveyal.datatools.manager.models.Note;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.datatools.manager.DataManager;
@@ -22,10 +24,11 @@ import spark.Response;
 
 import java.io.*;
 import java.net.URLEncoder;
-import java.util.Iterator;
-import java.util.Map;
+import java.util.*;
 
 import com.conveyal.datatools.manager.auth.Auth0Users;
+
+import javax.persistence.Entity;
 
 import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
 import static spark.Spark.*;
@@ -177,8 +180,53 @@ public class UserController {
         return true;
     }
 
+    public static Object getRecentActivity(Request req, Response res) {
+        Auth0UserProfile userProfile = req.attribute("user");
+
+        List<Activity> activity = new ArrayList<>();
+
+        for (Auth0UserProfile.Subscription sub : userProfile.getApp_metadata().getDatatoolsInfo().getSubscriptions()) {
+            System.out.println("sub type = " + sub.getType());
+            switch (sub.getType()) {
+                case "feed-commented-on":
+                    for (String targetId : sub.getTarget()) {
+                        System.out.println("  target: " + targetId);
+                        FeedSource fs = FeedSource.get(targetId);
+                        if(fs == null) continue;
+                        System.out.println("  obj=" + fs);
+                        for (Note note : fs.getNotes()) {
+                            // TODO: Check if actually recent
+                            Activity act = new Activity();
+                            act.type = sub.getType();
+                            act.userId = note.userId;
+                            act.userName = note.userEmail;
+                            act.body = note.body;
+                            act.date = note.date;
+                            act.targetId = targetId;
+                            act.targetName = fs.name;
+                            activity.add(act);
+                        }
+                    }
+                    break;
+            }
+        }
+
+        return activity;
+    }
+
+    static class Activity implements Serializable {
+        public String type;
+        public String userId;
+        public String userName;
+        public String body;
+        public String targetId;
+        public String targetName;
+        public Date date;
+    }
+
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/user/:id", UserController::getUser, json::write);
+        get(apiPrefix + "secure/user/:id/recentactivity", UserController::getRecentActivity, json::write);
         get(apiPrefix + "secure/user", UserController::getAllUsers, json::write);
         get(apiPrefix + "secure/usercount", UserController::getUserCount, json::write);
         post(apiPrefix + "secure/user", UserController::createUser, json::write);
