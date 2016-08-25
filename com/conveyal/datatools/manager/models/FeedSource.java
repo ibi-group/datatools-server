@@ -126,15 +126,15 @@ public class FeedSource extends Model implements Cloneable {
         statusMap.put("error", false);
         eventBus.post(statusMap);
 
-        if (this.retrievalMethod.equals(FeedRetrievalMethod.MANUALLY_UPLOADED)) {
-            String message = String.format("not fetching feed %s, not a fetchable feed", this.name);
-            LOG.info(message);
-            statusMap.put("message", message);
-            statusMap.put("percentComplete", 0.0);
-            statusMap.put("error", true);
-            eventBus.post(statusMap);
-            return null;
-        }
+//        if (this.retrievalMethod.equals(FeedRetrievalMethod.MANUALLY_UPLOADED)) {
+//            String message = String.format("not fetching feed %s, not a fetchable feed", this.name);
+//            LOG.info(message);
+//            statusMap.put("message", message);
+//            statusMap.put("percentComplete", 0.0);
+//            statusMap.put("error", true);
+//            eventBus.post(statusMap);
+//            return null;
+//        }
 
         // fetchable feed, continue
         FeedVersion latest = getLatest();
@@ -146,46 +146,46 @@ public class FeedSource extends Model implements Cloneable {
 
         // build the URL from which to fetch
         URL url;
-        if (this.retrievalMethod.equals(FeedRetrievalMethod.FETCHED_AUTOMATICALLY))
+//        if (this.retrievalMethod.equals(FeedRetrievalMethod.FETCHED_AUTOMATICALLY))
             url = this.url;
-        else if (this.retrievalMethod.equals(FeedRetrievalMethod.PRODUCED_IN_HOUSE)) {
-            if (this.snapshotVersion == null) {
-                String message = String.format("Feed %s has no editor id; cannot fetch", this.name);
-                LOG.error(message);
-                statusMap.put("message", message);
-                statusMap.put("percentComplete", 0.0);
-                statusMap.put("error", true);
-                eventBus.post(statusMap);
-                return null;
-            }
-
-            String baseUrl = DataManager.getConfigPropertyAsText("modules.editor.url");
-
-            if (!baseUrl.endsWith("/"))
-                baseUrl += "/";
-
-            // build the URL
-            try {
-                url = new URL(baseUrl + "api/mgrsnapshot/" + this.snapshotVersion + ".zip");
-            } catch (MalformedURLException e) {
-                String message = "Invalid URL for editor, check your config.";
-                LOG.error(message);
-                statusMap.put("message", message);
-                statusMap.put("percentComplete", 0.0);
-                statusMap.put("error", true);
-                eventBus.post(statusMap);
-                return null;
-            }
-        }
-        else {
-            String message = "Unknown retrieval method: " + this.retrievalMethod;
-            LOG.error(message);
-            statusMap.put("message", message);
-            statusMap.put("percentComplete", 0.0);
-            statusMap.put("error", true);
-            eventBus.post(statusMap);
-            return null;
-        }
+//        else if (this.retrievalMethod.equals(FeedRetrievalMethod.PRODUCED_IN_HOUSE)) {
+//            if (this.snapshotVersion == null) {
+//                String message = String.format("Feed %s has no editor id; cannot fetch", this.name);
+//                LOG.error(message);
+//                statusMap.put("message", message);
+//                statusMap.put("percentComplete", 0.0);
+//                statusMap.put("error", true);
+//                eventBus.post(statusMap);
+//                return null;
+//            }
+//
+//            String baseUrl = DataManager.getConfigPropertyAsText("modules.editor.url");
+//
+//            if (!baseUrl.endsWith("/"))
+//                baseUrl += "/";
+//
+//            // build the URL
+//            try {
+//                url = new URL(baseUrl + "api/mgrsnapshot/" + this.snapshotVersion + ".zip");
+//            } catch (MalformedURLException e) {
+//                String message = "Invalid URL for editor, check your config.";
+//                LOG.error(message);
+//                statusMap.put("message", message);
+//                statusMap.put("percentComplete", 0.0);
+//                statusMap.put("error", true);
+//                eventBus.post(statusMap);
+//                return null;
+//            }
+//        }
+//        else {
+//            String message = "Unknown retrieval method: " + this.retrievalMethod;
+//            LOG.error(message);
+//            statusMap.put("message", message);
+//            statusMap.put("percentComplete", 0.0);
+//            statusMap.put("error", true);
+//            eventBus.post(statusMap);
+//            return null;
+//        }
 
         LOG.info(url.toString());
 
@@ -224,7 +224,7 @@ public class FeedSource extends Model implements Cloneable {
         /*if (oauthToken != null)
             conn.addRequestProperty("Authorization", "Bearer " + oauthToken);*/
 
-        // lastFetched is set to null when the URL changes
+        // lastFetched is set to null when the URL changes and when latest feed version is deleted
         if (latest != null && this.lastFetched != null)
             conn.setIfModifiedSince(Math.min(latest.updated.getTime(), this.lastFetched.getTime()));
 
