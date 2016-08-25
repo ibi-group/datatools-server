@@ -148,7 +148,7 @@ public class DataManager {
         });
 
         get("/main.js", (request, response) -> {
-            try (InputStream stream = ApiMain.class.getResourceAsStream("/public/main.js")) {
+            try (InputStream stream = DataManager.class.getResourceAsStream("/public/main.js")) {
                 return IOUtils.toString(stream);
             } catch (IOException e) {
                 return null;
@@ -164,7 +164,7 @@ public class DataManager {
         
         // return assets as byte array
         get("/assets/*", (request, response) -> {
-            try (InputStream stream = ApiMain.class.getResourceAsStream("/public" + request.pathInfo())) {
+            try (InputStream stream = DataManager.class.getResourceAsStream("/public" + request.pathInfo())) {
                 return IOUtils.toByteArray(stream);
             } catch (IOException e) {
                 return null;
@@ -173,7 +173,7 @@ public class DataManager {
         // return index.html for any sub-directory
         get("/*", (request, response) -> {
             response.type("text/html");
-            try (InputStream stream = ApiMain.class.getResourceAsStream("/public/index.html")) {
+            try (InputStream stream = DataManager.class.getResourceAsStream("/public/index.html")) {
                 return IOUtils.toString(stream);
             } catch (IOException e) {
                 return null;
