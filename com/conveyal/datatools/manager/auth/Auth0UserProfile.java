@@ -235,36 +235,46 @@ public class Auth0UserProfile {
     }
 
     public boolean canViewFeed(String projectID, String feedID) {
-        // datatools.stream().filter(datatoolsInfo -> datatoolsInfo.clientId === DataManager.config.get("auth0").get("clientId"))
+        if (canAdministerApplication() || canAdministerProject(projectID)) {
+            return true;
+        }
         for(Project project : app_metadata.getDatatoolsInfo().projects) {
             if (project.project_id.equals(projectID)) {
-                String feeds[] = project.defaultFeeds;
-
-                // check for permission-specific feeds
-                for(Permission permission : project.permissions) {
-                    if(permission.type.equals("view-feed")) {
-                        if(permission.feeds != null) feeds = permission.feeds;
-                    }
-                }
-
-                for(String thisFeedID : feeds) {
-                    if(thisFeedID.equals(feedID) || thisFeedID.equals("*")) return true;
-                }
+                return checkFeedPermission(project, feedID, "view-feed");
             }
         }
         return false;
     }
 
     public boolean canManageFeed(String projectID, String feedID) {
-        for(Project project : app_metadata.getDatatoolsInfo().projects) {
+        if (canAdministerApplication() || canAdministerProject(projectID)) {
+            return true;
+        }
+        Project[] projectList = app_metadata.getDatatoolsInfo().projects;
+        for(Project project : projectList) {
+            System.out.println("project_id: " + project.project_id);
             if (project.project_id.equals(projectID)) {
-                for(Permission permission : project.permissions) {
-                    if(permission.type.equals("manage-feed")) {
-                        for(String thisFeedID : permission.feeds) {
-                            if(thisFeedID.equals(feedID) || thisFeedID.equals("*")) return true;
-                        }
-                    }
+                return checkFeedPermission(project, feedID, "manage-feed");
+            }
+        }
+        return false;
+    }
+
+    public boolean checkFeedPermission(Project project, String feedID, String permissionType) {
+        String feeds[] = project.defaultFeeds;
+
+        // check for permission-specific feeds
+        for (Permission permission : project.permissions) {
+            if(permission.type.equals(permissionType)) {
+                if(permission.feeds != null) {
+                    feeds = permission.feeds;
                 }
+            }
+        }
+
+        for(String thisFeedID : feeds) {
+            if (thisFeedID.equals(feedID) || thisFeedID.equals("*")) {
+                return true;
             }
         }
         return false;

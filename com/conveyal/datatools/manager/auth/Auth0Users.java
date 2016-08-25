@@ -22,6 +22,7 @@ import java.net.URLEncoder;
 public class Auth0Users {
     private static String AUTH0_DOMAIN = DataManager.config.get("auth0").get("domain").asText();
     private static String AUTH0_API_TOKEN = DataManager.serverConfig.get("auth0").get("api_token").asText();
+    private static ObjectMapper mapper = new ObjectMapper();
 
     private static URI getUrl(String searchQuery, int page, int perPage, boolean includeTotals) {
         String clientId = DataManager.config.get("auth0").get("client_id").asText();
@@ -88,7 +89,7 @@ public class Auth0Users {
         return doRequest(uri);
     }
 
-    public static String getUserById(String id) {
+    public static Auth0UserProfile getUserById(String id) {
 
         URIBuilder builder = new URIBuilder();
         builder.setScheme("https").setHost(AUTH0_DOMAIN).setPath("/api/v2/users/" + id);
@@ -100,7 +101,14 @@ public class Auth0Users {
             e.printStackTrace();
             return null;
         }
-        return doRequest(uri);
+        String response = doRequest(uri);
+        Auth0UserProfile user = null;
+        try {
+            user = mapper.readValue(response, Auth0UserProfile.class);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return user;
     }
 
     public static String getUsersBySubscription(String subscriptionType, String target) {
