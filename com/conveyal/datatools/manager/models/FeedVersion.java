@@ -519,6 +519,11 @@ public class FeedVersion extends Model implements Serializable {
      * Delete this feed version.
      */
     public void delete() {
+        // reset lastModified if feed is latest version
+        FeedSource fs = getFeedSource();
+        if (fs.getLatest().id == this.id) {
+            fs.lastFetched = null;
+        }
         File feed = getGtfsFile();
         if (feed != null && feed.exists())
             feed.delete();
