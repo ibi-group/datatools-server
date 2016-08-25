@@ -313,7 +313,7 @@ public class FeedVersion extends Model implements Serializable {
             LOG.error("Unable to validate feed {}", this);
 //            eventBus.post(new StatusEvent("Unable to validate feed.", 0, true));
             statusMap.put("message", "Unable to validate feed.");
-            statusMap.put("percentComplete", 0);
+            statusMap.put("percentComplete", 0.0);
             statusMap.put("error", true);
             eventBus.post(statusMap);
             e.printStackTrace();
@@ -326,7 +326,7 @@ public class FeedVersion extends Model implements Serializable {
         try {
 //            eventBus.post(new StatusEvent("Saving validation results...", 80, false));
             statusMap.put("message", "Saving validation results...");
-            statusMap.put("percentComplete", 80);
+            statusMap.put("percentComplete", 80.0);
             statusMap.put("error", false);
             eventBus.post(statusMap);
             // Use tempfile
