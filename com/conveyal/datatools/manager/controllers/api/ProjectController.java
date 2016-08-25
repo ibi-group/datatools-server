@@ -77,7 +77,10 @@ public class ProjectController {
     public static Project getProject(Request req, Response res) {
         String id = req.params("id");
         Project proj = Project.get(id);
-        if (proj == null) return null;
+        if (proj == null) {
+//            return new MissingResourceException("No project found", Project.class.getSimpleName(), id);
+            halt(404, "No project with id: " + id);
+        }
         // Get feedSources if making a public call
         if (req.pathInfo().contains("public")) {
             Collection<FeedSource> feeds = proj.getProjectFeedSources().stream().filter(fs -> fs.isPublic).collect(Collectors.toList());

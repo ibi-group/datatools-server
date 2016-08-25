@@ -32,6 +32,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.MissingResourceException;
 import java.util.Set;
 
 import static spark.Spark.*;
@@ -138,7 +139,11 @@ public class DataManager {
         });
 
         after(apiPrefix + "*", (request, response) -> {
-            response.type("application/json");
+
+            // only set content type if successful response
+//            if (response.status() < 300) {
+                response.type("application/json");
+//            }
             response.header("Content-Encoding", "gzip");
         });
 
@@ -175,10 +180,10 @@ public class DataManager {
                 // if the resource doesn't exist we just carry on.
             }
         });
-        exception(IllegalArgumentException.class,(e,req,res) -> {
-            res.status(400);
-            res.body(new Gson().toJson(new ResponseError(e)));
-        });
+//        exception(IllegalArgumentException.class,(e,req,res) -> {
+//            res.status(400);
+//            res.body(new Gson().toJson(new ResponseError(e)));
+//        });
         registerExternalResources();
     }
 

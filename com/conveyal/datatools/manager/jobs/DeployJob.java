@@ -66,7 +66,7 @@ public class DeployJob extends MonitorableJob {
         this.s3CredentialsFilename = s3CredentialsFilename;
         this.status = new DeployStatus();
         this.name = "Deploying " + deployment.name;
-        status.message = "Initializing..";
+        status.message = "Initializing...";
         status.built = false;
         status.numServersCompleted = 0;
         status.totalServers = targets == null ? 0 : targets.size();
