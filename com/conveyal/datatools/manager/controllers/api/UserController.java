@@ -126,7 +126,7 @@ public class UserController {
 
     public static Object updateUser(Request req, Response res) throws IOException {
         String userId = req.params("id");
-        Auth0UserProfile user = mapper.readValue(getUserById(userId), Auth0UserProfile.class);
+        Auth0UserProfile user = getUserById(userId);
 
         LOG.info("Updating user {}", user.getEmail());
 

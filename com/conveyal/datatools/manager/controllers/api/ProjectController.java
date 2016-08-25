@@ -49,7 +49,7 @@ public class ProjectController {
             new JsonManager<>(Project.class, JsonViews.UserInterface.class);
 
     public static final Logger LOG = LoggerFactory.getLogger(ProjectController.class);
-
+    private static ObjectMapper mapper = new ObjectMapper();
     public static Collection<Project> getAllProjects(Request req, Response res) throws JsonProcessingException {
 
         Auth0UserProfile userProfile = req.attribute("user");
@@ -132,7 +132,6 @@ public class ProjectController {
     }
 
     public static void applyJsonToProject(Project proj, String json) throws IOException {
-        ObjectMapper mapper = new ObjectMapper();
         JsonNode node = mapper.readTree(json);
         Iterator<Map.Entry<String, JsonNode>> fieldsIter = node.fields();
         while (fieldsIter.hasNext()) {
@@ -532,17 +531,14 @@ public class ProjectController {
     }
 
     public static Project thirdPartySync(Request req, Response res) throws Exception {
-//        String token = getToken();
-//        if (token == null) return unauthorized("Could not find authorization token");
-//        Auth0UserProfile userProfile = verifyUser();
-//        if (userProfile == null) return unauthorized();
+        Auth0UserProfile userProfile = req.attribute("user");
         String id = req.params("id");
         Project proj = Project.get(id);
 
         String syncType = req.params("type");
 
-//        if (!userProfile.canAdministerProject(proj.id))
-//            return unauthorized();
+        if (!userProfile.canAdministerProject(proj.id))
+            halt(403);
 
         LOG.info("syncing with third party " + syncType);
 

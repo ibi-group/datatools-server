@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.auth.Auth0Users;
 import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.models.*;
@@ -18,6 +19,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.*;
 
+import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
 import static spark.Spark.*;
 
 /**
@@ -29,6 +31,7 @@ public class FeedSourceController {
     public static JsonManager<FeedSource> json =
             new JsonManager<>(FeedSource.class, JsonViews.UserInterface.class);
     private static HashMap<String, FetchSingleFeedJob> fetchJobsByFeed = new HashMap<String, FetchSingleFeedJob>();
+    private static ObjectMapper mapper = new ObjectMapper();
     public static FeedSource getFeedSource(Request req, Response res) {
         String id = req.params("id");
         Boolean publicFilter = req.pathInfo().contains("public");
@@ -42,14 +45,20 @@ public class FeedSourceController {
         return fs;
     }
 
-    public static Collection<FeedSource> getAllFeedSources(Request req, Response res) throws JsonProcessingException {
+    public static Collection<FeedSource> getAllFeedSources(Request req, Response res) {
         Collection<FeedSource> sources = new ArrayList<>();
-
+        Auth0UserProfile requestingUser = req.attribute("user");
+        System.out.println(requestingUser.getEmail());
         String projectId = req.queryParams("projectId");
         Boolean publicFilter = req.pathInfo().contains("public");
-        if(projectId != null) {
+        String userId = req.queryParams("userId");
+
+        if (projectId != null) {
             for (FeedSource source: FeedSource.getAll()) {
-                if (source != null && source.projectId != null && source.projectId.equals(projectId)) {
+                if (
+                    source != null && source.projectId != null && source.projectId.equals(projectId)
+                    && requestingUser != null && (requestingUser.canManageFeed(source.projectId, source.id) || requestingUser.canViewFeed(source.projectId, source.id))
+                ) {
                     // if requesting public sources and source is not public; skip source
                     if (publicFilter && !source.isPublic)
                         continue;
@@ -57,8 +66,28 @@ public class FeedSourceController {
                 }
             }
         }
+        // request feed sources a specified user has permissions for
+        else if (userId != null) {
+            Auth0UserProfile user = getUserById(userId);
+            if (user == null) return sources;
+
+            for (FeedSource source: FeedSource.getAll()) {
+                if (
+                    source != null && source.projectId != null &&
+                    (user.canManageFeed(source.projectId, source.id) || user.canViewFeed(source.projectId, source.id))
+                ) {
+
+                    sources.add(source);
+                }
+            }
+        }
+        // request feed sources that are public
         else {
             for (FeedSource source: FeedSource.getAll()) {
+                // if user is logged in and cannot view feed; skip source
+                if ((requestingUser != null && !requestingUser.canManageFeed(source.projectId, source.id) && !requestingUser.canViewFeed(source.projectId, source.id)))
+                    continue;
+
                 // if requesting public sources and source is not public; skip source
                 if (publicFilter && !source.isPublic)
                     continue;
