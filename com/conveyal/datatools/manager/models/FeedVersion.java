@@ -203,6 +203,10 @@ public class FeedVersion extends Model implements Serializable {
     /** A name for this version. Defaults to creation date if not specified by user */
     public String name;
 
+    public Long fileSize;
+
+    public Long fileTimestamp;
+
     public String getName() {
         return name != null ? name : (getFormattedTimestamp() + " Version");
     }
@@ -500,19 +504,27 @@ public class FeedVersion extends Model implements Serializable {
     @JsonInclude(Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
     public Long getFileTimestamp() {
-        /*File file = getGtfsFile();
+        if (fileTimestamp != null) {
+            return fileTimestamp;
+        }
+
+        File file = getGtfsFile();
         if(file == null) return null;
-        return file.lastModified();*/
-        return null;
+        this.fileTimestamp = file.lastModified();
+        return file.lastModified();
     }
 
     @JsonInclude(Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
     public Long getFileSize() {
-        /*File file = getGtfsFile();
+        if (fileSize != null) {
+            return fileSize;
+        }
+
+        File file = getGtfsFile();
         if(file == null) return null;
-        return file.length();*/
-        return null;
+        this.fileSize = file.length();
+        return file.length();
     }
 
     /**
