@@ -121,7 +121,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                 status.message = "Loading GTFS file...";
                 status.percentComplete = 5;
             }
-            input = GTFSFeed.fromFile(feedVersion.getGtfsFile().getAbsolutePath());
+            input = feedVersion.getGtfsFeed();
             if(input == null) return;
 
             LOG.info("GtfsImporter: importing feed...");
@@ -243,70 +243,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                 status.message = "Routes loaded: " + routeCount;
                 status.percentComplete = 30;
             }
-            LOG.info("GtfsImporter: importing Shapes...");
-            synchronized (status) {
-                status.message = "Importing shapes...";
-                status.percentComplete = 35;
-            }
-            // shapes are a part of trippatterns, so we don't actually import them into the model, we just make a map
-            // shape id -> linestring which we use when building trip patterns
-            // we put this map in mapdb because it can be big
 
-            // import points
-            String shapeId = null;
-            int shapeIndex = 0;
-            List<ShapePoint> points = new ArrayList<>();
-            for (ShapePoint point : input.shape_points.values()) {
-                shapeIndex++;
-                synchronized (status) {
-                    status.message = "Importing shapes... (id: " + point.shape_id + ") " + shapeIndex + "/" + input.shape_points.size();
-                    status.percentComplete = 35 + shapeIndex / input.shape_points.size() * 35;
-                }
-                // if new shape_id is encountered
-                if (!point.shape_id.equals(shapeId)) {
-
-                    // process full list of shapePoints
-                    if (shapeId != null) {
-
-                        if (points.size() < 2) {
-                            LOG.warn("Shape " + shapeId + " has fewer than two points. Using stop-to-stop geometries instead.");
-                            continue;
-                        }
-
-                        Coordinate[] coords = new Coordinate[points.size()];
-
-                        int lastSeq = Integer.MIN_VALUE;
-
-                        int i = 0;
-                        for (ShapePoint shape : points) {
-                            if (shape.shape_pt_sequence <= lastSeq) {
-                                LOG.warn("Shape {} has out-of-sequence points. This implies a bug in the GTFS importer. Using stop-to-stop geometries.");
-                                continue;
-                            }
-                            lastSeq = shape.shape_pt_sequence;
-
-                            coords[i++] = new Coordinate(shape.shape_pt_lon, shape.shape_pt_lat);
-                        }
-
-                        shapes.put(shapeId, geometryFactory.createLineString(coords));
-                        shapePointCount += points.size();
-                        shapeCount++;
-
-                    }
-                    // re-initalize shapeId and points
-                    shapeId = point.shape_id;
-                    points = new ArrayList<>();
-                }
-                points.add(point);
-
-            }
-
-            LOG.info("Shape points loaded: " + shapePointCount);
-            LOG.info("Shapes loaded: " + shapeCount);
-            synchronized (status) {
-                status.message = "Shapes loaded: " + shapeCount;
-                status.percentComplete = 70;
-            }
             LOG.info("GtfsImporter: importing Service Calendars...");
             synchronized (status) {
                 status.message = "Importing service calendars...";
@@ -428,10 +365,9 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                 // it is possible, though unlikely, for two routes to have the same stopping pattern
                 // we want to ensure they get different trip patterns
                 Map<String, TripPattern> tripPatternsByRoute = Maps.newHashMap();
-
                 for (String tripId : pattern.getValue()) {
                     synchronized (status) {
-                        status.message = "Importing trips... (id: " + tripId + ")";
+                        status.message = "Importing trips... (id: " + tripId + ") " + tripCount + "/" + input.trips.size();
                         status.percentComplete = 78;
                     }
                     com.conveyal.gtfs.model.Trip gtfsTrip = input.trips.get(tripId);
@@ -554,14 +490,10 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
         com.conveyal.gtfs.model.Route gtfsRoute = input.routes.get(gtfsTrip.route_id);
         patt.routeId = routeIdMap.get(gtfsTrip.route_id).id;
         patt.feedId = feed.id;
-        if (gtfsTrip.shape_id != null) {
-            if (!shapes.containsKey(gtfsTrip.shape_id)) {
-                LOG.warn("Missing shape for shape ID {}, referenced by trip {}", gtfsTrip.shape_id, gtfsTrip.trip_id);
-            }
-            else {
-                patt.shape = (LineString) shapes.get(gtfsTrip.shape_id).clone();
-            }
-        }
+
+        String patternId = input.tripPatternMap.get(gtfsTrip.trip_id);
+        Pattern gtfsPattern = input.patterns.get(patternId);
+        patt.shape = gtfsPattern.geometry;
 
         patt.patternStops = new ArrayList<TripPatternStop>();
 
@@ -577,6 +509,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 
         for (com.conveyal.gtfs.model.StopTime st : stopTimes) {
             TripPatternStop tps = new TripPatternStop();
+
             Stop stop = stopIdMap.get(new Tuple2(st.stop_id, patt.feedId));
             tps.stopId = stop.id;
 
