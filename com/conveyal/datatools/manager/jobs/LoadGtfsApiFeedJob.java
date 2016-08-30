@@ -8,7 +8,7 @@ import java.io.File;
 /**
  * Created by landon on 4/30/16.
  */
-public class LoadGtfsApiFeedJob implements Runnable{
+public class LoadGtfsApiFeedJob implements Runnable {
 
     public static FeedSource feedSource;
 
@@ -20,6 +20,11 @@ public class LoadGtfsApiFeedJob implements Runnable{
     public void run() {
         File latest = feedSource.getLatest() != null ? feedSource.getLatest().getGtfsFile() : null;
         if (latest != null)
-            GtfsApiController.gtfsApi.loadFeedFromFile(latest, feedSource.id);
+            try {
+                System.out.println(feedSource.id);
+                GtfsApiController.gtfsApi.registerFeedSource(feedSource.id, latest);
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
     }
 }

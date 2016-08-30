@@ -11,9 +11,11 @@ import com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource;
 import com.conveyal.datatools.manager.extensions.transitfeeds.TransitFeedsFeedResource;
 import com.conveyal.datatools.manager.extensions.transitland.TransitLandFeedResource;
 
+import com.conveyal.datatools.manager.jobs.FetchProjectFeedsJob;
 import com.conveyal.datatools.manager.jobs.LoadGtfsApiFeedJob;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.models.FeedSource;
+import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.utils.CorsFilter;
 import com.conveyal.datatools.manager.utils.ResponseError;
 import com.conveyal.gtfs.GTFSCache;
@@ -22,6 +24,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.google.gson.Gson;
+import org.apache.http.concurrent.Cancellable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.utils.IOUtils;
@@ -30,10 +33,17 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.MissingResourceException;
 import java.util.Set;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+
+import static java.util.concurrent.TimeUnit.*;
 
 import static spark.Spark.*;
 
@@ -51,9 +61,16 @@ public class DataManager {
 
     public static Map<String, Set<MonitorableJob>> userJobsMap = new HashMap<>();
 
+    public static Map<String, ScheduledFuture> autoFetchMap = new HashMap<>();
+    public final static ScheduledExecutorService scheduler =
+            Executors.newScheduledThreadPool(1);
+
     public static GTFSCache gtfsCache;
+    private static List<String> apiFeedSources = new ArrayList<>();
 
     public static void main(String[] args) throws IOException {
+
+        // load config
         FileInputStream in;
 
         if (args.length == 0)
@@ -67,9 +84,21 @@ public class DataManager {
         ObjectMapper serverMapper = new ObjectMapper(new YAMLFactory());
         serverConfig = serverMapper.readTree(new File("config_server.yml"));
 
+        // set port
         if(config.get("application").has("port")) {
             port(Integer.parseInt(config.get("application").get("port").asText()));
         }
+
+        // initialize map of auto fetched projects
+        for (Project p : Project.getAll()) {
+            if (p.autoFetchFeeds != null && autoFetchMap.get(p.id) == null){
+                if (p.autoFetchFeeds) {
+                    ScheduledFuture scheduledFuture = ProjectController.scheduleAutoFeedFetch(p.id, p.autoFetchHour, p.autoFetchMinute, 1, p.defaultTimeZone);
+                    autoFetchMap.put(p.id, scheduledFuture);
+                }
+            }
+        }
+
         gtfsCache = new GTFSCache(getConfigPropertyAsText("application.data.gtfs_s3_bucket"), new File(getConfigPropertyAsText("application.data.gtfs")));
         CorsFilter.apply();
 
@@ -123,20 +152,29 @@ public class DataManager {
         });
 
         // lazy load feeds if new one is requested
-        before(apiPrefix + "*", (request, response) -> {
-            String feeds = request.queryParams("feed");
-            if (feeds != null) {
-                String[] feedIds = feeds.split(",");
-                for (String feedId : feedIds) {
-                    FeedSource fs = FeedSource.get(feedId);
-                    if (fs != null && !GtfsApiController.gtfsApi.feedSources.keySet().contains(feedId)) {
-                        new LoadGtfsApiFeedJob(fs).run();
-//                        halt(503, "Loading feed, please try again later");
+        if ("true".equals(getConfigPropertyAsText("modules.gtfsapi.load_on_fetch"))) {
+            before(apiPrefix + "*", (request, response) -> {
+                String feeds = request.queryParams("feed");
+                if (feeds != null) {
+                    String[] feedIds = feeds.split(",");
+                    for (String feedId : feedIds) {
+                        FeedSource fs = FeedSource.get(feedId);
+                        if (fs == null) {
+                            continue;
+                        }
+                        else if (!GtfsApiController.gtfsApi.registeredFeedSources.contains(fs.id) && !apiFeedSources.contains(fs.id)) {
+                            apiFeedSources.add(fs.id);
+                            new LoadGtfsApiFeedJob(fs).run();
+                        halt(202, "Initializing feed load...");
+                        }
+                        else if (apiFeedSources.contains(fs.id) && !GtfsApiController.gtfsApi.registeredFeedSources.contains(fs.id)) {
+                            halt(202, "Loading feed, please try again later");
+                        }
                     }
-                }
 
-            }
-        });
+                }
+            });
+        }
 
         after(apiPrefix + "*", (request, response) -> {
 

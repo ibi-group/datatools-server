@@ -4,7 +4,7 @@ import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.conveyal.datatools.manager.controllers.api.GtfsApiController;
-import com.conveyal.gtfs.api.ApiMain;
+import com.conveyal.datatools.manager.models.FeedVersion;
 
 import java.util.List;
 import java.util.Timer;
@@ -54,19 +54,24 @@ public class FeedUpdater {
             LOG.info("Fetching feeds...");
             LOG.info("Current eTag list " + eTags.toString());
 
-            ObjectListing gtfsList = s3.listObjects(GtfsApiController.feedBucket, GtfsApiController.prefix);
+            ObjectListing gtfsList = s3.listObjects(GtfsApiController.feedBucket, GtfsApiController.directory);
             Boolean feedsUpdated = false;
-            for (S3ObjectSummary objSummary : gtfsList.getObjectSummaries()){
+            for (S3ObjectSummary objSummary : gtfsList.getObjectSummaries()) {
 
                 String eTag = objSummary.getETag();
                 if (!eTags.contains(eTag)) {
                     String keyName = objSummary.getKey();
-                    if (keyName.equals(GtfsApiController.prefix)){
+                    if (keyName.equals(GtfsApiController.directory)){
                         continue;
                     }
                     LOG.info("Updating feed " + keyName);
                     String feedId = keyName.split("/")[1];
-                    ApiMain.loadFeedFromBucket(GtfsApiController.feedBucket, feedId, GtfsApiController.prefix);
+//                    ApiMain.loadFeedFromBucket(GtfsApiController.feedBucket, feedId, GtfsApiController.directory);
+                    try {
+                        GtfsApiController.gtfsApi.registerFeedSource(feedId, FeedVersion.get(feedId).getGtfsFile());
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
                     addFeedETag(eTag);
                     feedsUpdated = true;
                 }

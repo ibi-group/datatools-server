@@ -33,7 +33,6 @@ import com.conveyal.datatools.manager.persistence.DataStore;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.utils.HashUtils;
 import com.conveyal.gtfs.GTFSFeed;
-import com.conveyal.gtfs.api.ApiMain;
 import com.conveyal.gtfs.validator.json.LoadStatus;
 import com.conveyal.gtfs.validator.service.impl.FeedStats;
 import com.conveyal.r5.point_to_point.builder.TNBuilderConfig;
@@ -44,7 +43,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.eventbus.EventBus;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
-import org.geotools.data.shapefile.index.Data;
 import org.mapdb.Fun.Function2;
 import org.mapdb.Fun.Tuple2;
 
@@ -164,9 +162,9 @@ public class FeedVersion extends Model implements Serializable {
 
     @JsonIgnore
     public GTFSFeed getGtfsFeed() {
-        return GTFSFeed.fromFile(getGtfsFile().getAbsolutePath());
+//        return GTFSFeed.fromFile(getGtfsFile().getAbsolutePath());
         // TODO: fix broken GTFS cache
-        /*try {
+        try {
             LOG.info("Checking for feed in cache..");
             if(!DataManager.gtfsCache.containsId(this.id)) {
                 File f = getGtfsFile();
@@ -178,7 +176,7 @@ public class FeedVersion extends Model implements Serializable {
             System.out.println("Exception in getGtfsFeed: " + e.getMessage());
             e.printStackTrace();
         }
-        return null;*/
+        return null;
     }
 
     /** The results of validating this feed */
@@ -259,13 +257,18 @@ public class FeedVersion extends Model implements Serializable {
 
         Map<LocalDate, Integer> tripsPerDate;
         // load feed into GTFS api
-        // TODO: pass GTFSFeed to GTFSApi
+        // TODO: pass GTFSFeed to GTFSApi?
         if (DataManager.getConfigProperty("modules.gtfsapi.enabled").asBoolean() && DataManager.getConfigProperty("modules.gtfsapi.load_on_fetch").asBoolean()) {
-            LOG.info("Loading feed into GTFS api");
-            String md5 = ApiMain.loadFeedFromFile(gtfsFile, this.feedSourceId);
-            if (GtfsApiController.feedUpdater != null) {
-                GtfsApiController.feedUpdater.addFeedETag(md5);
-            }
+//            LOG.info("Loading feed into GTFS api");
+//            String checksum = this.hash;
+//            try {
+//                GtfsApiController.gtfsApi.registerFeedSource(this.feedSourceId, gtfsFile);
+//            } catch (Exception e) {
+//                e.printStackTrace();
+//            }
+//            if (GtfsApiController.feedUpdater != null) {
+//                GtfsApiController.feedUpdater.addFeedETag(checksum);
+//            }
         }
 
         try {
