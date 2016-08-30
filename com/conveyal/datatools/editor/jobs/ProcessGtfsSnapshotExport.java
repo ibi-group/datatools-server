@@ -90,7 +90,7 @@ public class ProcessGtfsSnapshotExport implements Runnable {
                 }
 
                 // write all of the calendars and calendar dates
-                if(atx.calendars != null) {
+                if (atx.calendars != null) {
                     for (ServiceCalendar cal : atx.calendars.values()) {
 
                         com.conveyal.gtfs.model.Service gtfsService = cal.toGtfs(toGtfsDate(cal.startDate), toGtfsDate(cal.endDate));

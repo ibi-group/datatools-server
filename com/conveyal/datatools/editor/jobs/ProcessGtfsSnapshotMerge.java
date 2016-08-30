@@ -55,7 +55,6 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
     private Map<String, LineString> shapes = DBMaker.newTempHashMap();
 
     private GTFSFeed input;
-    private File gtfsFile;
     private Status status;
     private EditorFeed feed;
 
@@ -67,7 +66,6 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 
     public ProcessGtfsSnapshotMerge (FeedVersion feedVersion, String owner) {
         super(owner, "Creating snapshot for " + feedVersion.getFeedSource().name, JobType.PROCESS_SNAPSHOT);
-        this.gtfsFile = feedVersion.getGtfsFile();
         this.feedVersion = feedVersion;
         status = new Status();
         status.message = "Waiting to begin job...";
@@ -241,13 +239,13 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
             LOG.info("Routes loaded: " + routeCount);
             synchronized (status) {
                 status.message = "Routes loaded: " + routeCount;
-                status.percentComplete = 30;
+                status.percentComplete = 35;
             }
 
             LOG.info("GtfsImporter: importing Service Calendars...");
             synchronized (status) {
                 status.message = "Importing service calendars...";
-                status.percentComplete = 73;
+                status.percentComplete = 38;
             }
             // we don't put service calendars in the database just yet, because we don't know what agency they're associated with
             // we copy them into the agency database as needed
@@ -351,12 +349,12 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
             LOG.info("Service calendars loaded: " + serviceCalendarCount);
             synchronized (status) {
                 status.message = "Service calendars loaded: " + serviceCalendarCount;
-                status.percentComplete = 75;
+                status.percentComplete = 45;
             }
             LOG.info("GtfsImporter: importing trips...");
             synchronized (status) {
                 status.message = "Importing trips...";
-                status.percentComplete = 78;
+                status.percentComplete = 50;
             }
             // import trips, stop times and patterns all at once
             Map<List<String>, List<String>> patterns = input.findPatterns();
@@ -368,7 +366,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                 for (String tripId : pattern.getValue()) {
                     synchronized (status) {
                         status.message = "Importing trips... (id: " + tripId + ") " + tripCount + "/" + input.trips.size();
-                        status.percentComplete = 78;
+                        status.percentComplete = 50 + 45 * tripCount / input.trips.size();
                     }
                     com.conveyal.gtfs.model.Trip gtfsTrip = input.trips.get(tripId);
 
@@ -415,7 +413,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
             LOG.info("Trips loaded: " + tripCount);
             synchronized (status) {
                 status.message = "Trips loaded: " + tripCount;
-                status.percentComplete = 80;
+                status.percentComplete = 90;
             }
 
             LOG.info("GtfsImporter: importing fares...");
@@ -428,7 +426,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
             LOG.info("Fares loaded: " + fareCount);
             synchronized (status) {
                 status.message = "Fares loaded: " + fareCount;
-                status.percentComplete = 90;
+                status.percentComplete = 95;
             }
             // commit the feed TXs first, so that we have orphaned data rather than inconsistent data on a commit failure
             feedTx.commit();
@@ -502,10 +500,12 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 
         if (gtfsTrip.trip_headsign != null && !gtfsTrip.trip_headsign.isEmpty())
             patt.name = gtfsTrip.trip_headsign;
-        else if (gtfsRoute.route_long_name != null)
-            patt.name = String.format("{} to {} ({} stops)", gtfsRoute.route_long_name, input.stops.get(stopTimes[stopTimes.length - 1].stop_id).stop_name, stopTimes.length); // Messages.get("gtfs.named-route-pattern", gtfsTrip.route.route_long_name, input.stops.get(stopTimes[stopTimes.length - 1].stop_id).stop_name, stopTimes.length);
         else
-            patt.name = String.format("to {} ({{} stops)", input.stops.get(stopTimes[stopTimes.length - 1].stop_id).stop_name, stopTimes.length); // Messages.get("gtfs.unnamed-route-pattern", input.stops.get(stopTimes[stopTimes.length - 1].stop_id).stop_name, stopTimes.length);
+            patt.name = gtfsPattern.name;
+//        else if (gtfsRoute.route_long_name != null)
+//            patt.name = String.format("{} to {} ({} stops)", gtfsRoute.route_long_name, input.stops.get(stopTimes[stopTimes.length - 1].stop_id).stop_name, stopTimes.length); // Messages.get("gtfs.named-route-pattern", gtfsTrip.route.route_long_name, input.stops.get(stopTimes[stopTimes.length - 1].stop_id).stop_name, stopTimes.length);
+//        else
+//            patt.name = String.format("to {} ({{} stops)", input.stops.get(stopTimes[stopTimes.length - 1].stop_id).stop_name, stopTimes.length); // Messages.get("gtfs.unnamed-route-pattern", input.stops.get(stopTimes[stopTimes.length - 1].stop_id).stop_name, stopTimes.length);
 
         for (com.conveyal.gtfs.model.StopTime st : stopTimes) {
             TripPatternStop tps = new TripPatternStop();
