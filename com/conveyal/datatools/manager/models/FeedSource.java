@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.models;
 
+import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.manager.DataManager;
@@ -200,6 +201,7 @@ public class FeedSource extends Model implements Cloneable {
             statusMap.put("percentComplete", 0.0);
             statusMap.put("error", true);
             eventBus.post(statusMap);
+            halt(400, message);
             return null;
         } catch (ClassCastException e) {
             String message = String.format("Unable to open connection to %s; not fetching %s feed", url, this.name);
@@ -208,6 +210,7 @@ public class FeedSource extends Model implements Cloneable {
             statusMap.put("percentComplete", 0.0);
             statusMap.put("error", true);
             eventBus.post(statusMap);
+            halt(400, message);
             return null;
         } catch (NullPointerException e) {
             String message = String.format("Unable to open connection to %s; not fetching %s feed", url, this.name);
@@ -216,6 +219,7 @@ public class FeedSource extends Model implements Cloneable {
             statusMap.put("percentComplete", 0.0);
             statusMap.put("error", true);
             eventBus.post(statusMap);
+            halt(400, message);
             return null;
         }
 
@@ -236,8 +240,9 @@ public class FeedSource extends Model implements Cloneable {
                 LOG.info(message);
                 statusMap.put("message", message);
                 statusMap.put("percentComplete", 100.0);
-                statusMap.put("error", false);
+                statusMap.put("error", true);
                 eventBus.post(statusMap);
+                halt(304, message);
                 return null;
             }
 
@@ -366,6 +371,19 @@ public class FeedSource extends Model implements Cloneable {
     public FeedValidationResultSummary getLatestValidation () {
         FeedVersion latest = getLatest();
         return latest != null ? new FeedValidationResultSummary(latest.validationResult) : null;
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonView(JsonViews.UserInterface.class)
+    public boolean getEditedSinceSnapshot() {
+        FeedTx tx;
+        try {
+            tx = VersionedDataStore.getFeedTx(id);
+        } catch (Exception e) {
+
+        }
+//        return tx.editedSinceSnapshot.get();
+        return false;
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)

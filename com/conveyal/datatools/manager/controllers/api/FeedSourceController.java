@@ -2,7 +2,6 @@ package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
-import com.conveyal.datatools.manager.auth.Auth0Users;
 import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.models.*;
@@ -30,7 +29,6 @@ public class FeedSourceController {
 
     public static JsonManager<FeedSource> json =
             new JsonManager<>(FeedSource.class, JsonViews.UserInterface.class);
-    private static HashMap<String, FetchSingleFeedJob> fetchJobsByFeed = new HashMap<String, FetchSingleFeedJob>();
     private static ObjectMapper mapper = new ObjectMapper();
     public static FeedSource getFeedSource(Request req, Response res) {
         String id = req.params("id");
@@ -245,7 +243,7 @@ public class FeedSourceController {
      * Refetch this feed
      * @throws JsonProcessingException
      */
-    public static Boolean fetch (Request req, Response res) throws JsonProcessingException {
+    public static FeedVersion fetch (Request req, Response res) throws JsonProcessingException {
         Auth0UserProfile userProfile = req.attribute("user");
         FeedSource s = FeedSource.get(req.params("id"));
 
@@ -259,9 +257,12 @@ public class FeedSourceController {
             halt(401);
 
         FetchSingleFeedJob job = new FetchSingleFeedJob(s, userProfile.getUser_id());
-        fetchJobsByFeed.put(s.id, job);
         job.run();
-        return true;
+//        if (job.getStatus().error) {
+//            halt(304);
+//        }
+        return job.result;
+//        return true;
     }
 
 //    /**
