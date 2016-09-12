@@ -384,7 +384,7 @@ public class Deployment extends Model implements Serializable {
         URL vexUrl = null;
         try {
             vexUrl = new URL(String.format("%s/?n=%.6f&e=%.6f&s=%.6f&w=%.6f",
-                    DataManager.config.get("application").get("osm_vex").asText(),
+                    DataManager.getConfigPropertyAsText("application.osm_vex"),
                     bounds.getMaxY(), bounds.getMaxX(), bounds.getMinY(), bounds.getMinX()));
         } catch (MalformedURLException e1) {
             e1.printStackTrace();
