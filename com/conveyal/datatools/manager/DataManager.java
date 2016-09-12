@@ -66,6 +66,7 @@ public class DataManager {
             Executors.newScheduledThreadPool(1);
 
     public static GTFSCache gtfsCache;
+    public static String cacheDirectory;
     private static List<String> apiFeedSources = new ArrayList<>();
 
     public static void main(String[] args) throws IOException {
@@ -98,8 +99,12 @@ public class DataManager {
                 }
             }
         }
-
-        gtfsCache = new GTFSCache(getConfigPropertyAsText("application.data.gtfs_s3_bucket"), new File(getConfigPropertyAsText("application.data.gtfs")));
+        cacheDirectory = getConfigPropertyAsText("application.data.gtfs") + "/cache";
+        File cacheDir = new File(cacheDirectory);
+        if (!cacheDir.isDirectory()) {
+            cacheDir.mkdir();
+        }
+        gtfsCache = new GTFSCache(getConfigPropertyAsText("application.data.gtfs_s3_bucket"), cacheDir);
         CorsFilter.apply();
 
         String apiPrefix = "/api/manager/";
@@ -164,7 +169,9 @@ public class DataManager {
                         }
                         else if (!GtfsApiController.gtfsApi.registeredFeedSources.contains(fs.id) && !apiFeedSources.contains(fs.id)) {
                             apiFeedSources.add(fs.id);
-                            new LoadGtfsApiFeedJob(fs).run();
+
+                            LoadGtfsApiFeedJob loadJob = new LoadGtfsApiFeedJob(fs);
+                            new Thread(loadJob).start();
                         halt(202, "Initializing feed load...");
                         }
                         else if (apiFeedSources.contains(fs.id) && !GtfsApiController.gtfsApi.registeredFeedSources.contains(fs.id)) {
