@@ -223,8 +223,8 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                 if (!routeTypeIdMap.containsKey(gtfsRoute.route_type)) {
                     RouteType rt = new RouteType();
                     rt.gtfsRouteType = GtfsRouteType.fromGtfs(gtfsRoute.route_type);
-                    rt.hvtRouteType = rt.gtfsRouteType.toHvt();
-                    rt.description = agencyIdMap.values().iterator().next().name + " " + rt.gtfsRouteType.toString();
+//                    rt.hvtRouteType = rt.gtfsRouteType.toHvt();
+//                    rt.description = agencyIdMap.values().iterator().next().name + " " + rt.gtfsRouteType.toString();
                     gtx.routeTypes.put(rt.id, rt);
                     routeTypeIdMap.put(gtfsRoute.route_type, rt.id);
                 }
@@ -357,13 +357,13 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                 status.percentComplete = 50;
             }
             // import trips, stop times and patterns all at once
-            Map<List<String>, List<String>> patterns = input.findPatterns();
+            Map<String, Pattern> patterns = input.patterns;
 
-            for (Entry<List<String>, List<String>> pattern : patterns.entrySet()) {
+            for (Entry<String, Pattern> pattern : patterns.entrySet()) {
                 // it is possible, though unlikely, for two routes to have the same stopping pattern
                 // we want to ensure they get different trip patterns
                 Map<String, TripPattern> tripPatternsByRoute = Maps.newHashMap();
-                for (String tripId : pattern.getValue()) {
+                for (String tripId : pattern.getValue().associatedTrips) {
                     synchronized (status) {
                         status.message = "Importing trips... (id: " + tripId + ") " + tripCount + "/" + input.trips.size();
                         status.percentComplete = 50 + 45 * tripCount / input.trips.size();
@@ -386,7 +386,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                     ServiceCalendar cal = calendars.get(gtfsTrip.service_id);
 
                     // if the service calendar has not yet been imported, import it
-                    if (!feedTx.calendars.containsKey(cal.id)) {
+                    if (feedTx.calendars != null && !feedTx.calendars.containsKey(cal.id)) {
                         // no need to clone as they are going into completely separate mapdbs
                         feedTx.calendars.put(cal.id, cal);
                     }
@@ -492,6 +492,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
         String patternId = input.tripPatternMap.get(gtfsTrip.trip_id);
         Pattern gtfsPattern = input.patterns.get(patternId);
         patt.shape = gtfsPattern.geometry;
+        patt.id = gtfsPattern.pattern_id;
 
         patt.patternStops = new ArrayList<TripPatternStop>();
 
