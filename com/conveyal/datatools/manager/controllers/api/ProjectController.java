@@ -14,6 +14,7 @@ import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.http.concurrent.Cancellable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,7 +29,13 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -185,12 +192,48 @@ public class ProjectController {
             }
             else if(entry.getKey().equals("autoFetchMinute")) {
                 proj.autoFetchMinute = entry.getValue().asInt();
+
+                // If auto fetch flag is turned on
+                if (proj.autoFetchFeeds){
+                    cancelAutoFetch(proj.id);
+                    int interval = 1; // once per day interval
+                    DataManager.autoFetchMap.put(proj.id, scheduleAutoFeedFetch(proj.id, proj.autoFetchHour, proj.autoFetchMinute, interval, proj.defaultTimeZone));
+                }
+
+                // otherwise, cancel any existing task for this id
+                else{
+                    cancelAutoFetch(proj.id);
+                }
             }
             else if(entry.getKey().equals("autoFetchMinute")) {
                 proj.autoFetchMinute = entry.getValue().asInt();
+
+                // If auto fetch flag is turned on
+                if (proj.autoFetchFeeds){
+                    cancelAutoFetch(proj.id);
+                    int interval = 1; // once per day interval
+                    DataManager.autoFetchMap.put(proj.id, scheduleAutoFeedFetch(proj.id, proj.autoFetchHour, proj.autoFetchMinute, interval, proj.defaultTimeZone));
+                }
+
+                // otherwise, cancel any existing task for this id
+                else{
+                    cancelAutoFetch(proj.id);
+                }
             }
             else if(entry.getKey().equals("autoFetchFeeds")) {
                 proj.autoFetchFeeds = entry.getValue().asBoolean();
+
+                // If auto fetch flag is turned on
+                if (proj.autoFetchFeeds){
+                    cancelAutoFetch(proj.id);
+                    int interval = 1; // once per day interval
+                    DataManager.autoFetchMap.put(proj.id, scheduleAutoFeedFetch(proj.id, proj.autoFetchHour, proj.autoFetchMinute, interval, proj.defaultTimeZone));
+                }
+
+                // otherwise, cancel any existing task for this id
+                else{
+                    cancelAutoFetch(proj.id);
+                }
             }
             else if(entry.getKey().equals("otpServers")) {
                 JsonNode otpServers = entry.getValue();
@@ -550,7 +593,60 @@ public class ProjectController {
         halt(404);
         return null;
     }
+    public static ScheduledFuture scheduleAutoFeedFetch (String id, int hour, int minute, int interval, String timezoneId){
 
+        // First cancel any already scheduled auto fetch task for this project id.
+        cancelAutoFetch(id);
+        Project p = Project.get(id);
+        if (p == null)
+            return null;
+
+        Cancellable task = null;
+
+        ZoneId timezone;
+        try {
+            timezone = ZoneId.of(timezoneId);
+        }catch(Exception e){
+            timezone = ZoneId.of("America/New_York");
+        }
+//        ZoneId.systemDefault();
+        System.out.println("Using timezone: " + timezone.getId());
+
+        long initialDelay = 0;
+
+
+        // NOW in UTC
+        ZonedDateTime now = LocalDateTime.now().atZone(timezone);
+        System.out.println("Current time:" + now.toString());
+
+        // Format and parse datetime string
+        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
+        String dtString = String.valueOf(now.getDayOfMonth()) + "/" + String.valueOf(now.getMonth()) + "/" + String.valueOf(now.getYear()) + " " + String.valueOf(hour) + ":" + String.valueOf(minute);
+        ZonedDateTime startTime = ZonedDateTime.parse(dtString, formatter);
+        System.out.println("Start time:" + startTime.toString());
+
+        // Get diff between start time and current time
+        long diffInMinutes = (startTime.toEpochSecond() - now.toEpochSecond()) / 60;
+        if ( diffInMinutes >= 0 ){
+            initialDelay = diffInMinutes; // delay in minutes
+        }
+        else{
+            initialDelay = 24 * 60 + diffInMinutes; // wait for one day plus difference (which is negative)
+        }
+
+        System.out.println("Scheduling the feed auto fetch daemon to kick off in " + String.valueOf(initialDelay / 60) + " hours." );
+
+        FetchProjectFeedsJob fetchProjectFeedsJob = new FetchProjectFeedsJob(p, null);
+
+        return DataManager.scheduler.scheduleAtFixedRate(fetchProjectFeedsJob, initialDelay, interval, TimeUnit.MINUTES);
+    }
+    public static void cancelAutoFetch(String id){
+        Project p = Project.get(id);
+        if ( p != null && DataManager.autoFetchMap.get(p.id) != null) {
+            System.out.println("Cancelling the feed auto fetch daemon for projectID: " + p.id);
+            DataManager.autoFetchMap.get(p.id).cancel(true);
+        }
+    }
     public static void register (String apiPrefix) {
         options(apiPrefix + "secure/project", (q, s) -> "");
         options(apiPrefix + "secure/project/:id", (q, s) -> "");
