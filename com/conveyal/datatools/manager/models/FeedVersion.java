@@ -34,15 +34,17 @@ import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.utils.HashUtils;
 import com.conveyal.gtfs.GTFSFeed;
 import com.conveyal.gtfs.validator.json.LoadStatus;
-import com.conveyal.gtfs.validator.service.impl.FeedStats;
+import com.conveyal.gtfs.stats.FeedStats;
 import com.conveyal.r5.point_to_point.builder.TNBuilderConfig;
 import com.conveyal.r5.transit.TransportNetwork;
 import com.fasterxml.jackson.core.JsonGenerationException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.eventbus.EventBus;
+import com.vividsolutions.jts.geom.Geometry;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
+import org.geotools.geojson.geom.GeometryJSON;
 import org.mapdb.Fun.Function2;
 import org.mapdb.Fun.Tuple2;
 
@@ -175,6 +177,12 @@ public class FeedVersion extends Model implements Serializable {
         } catch (Exception e) {
             System.out.println("Exception in getGtfsFeed: " + e.getMessage());
             e.printStackTrace();
+            try {
+                FileUtils.cleanDirectory(new File(DataManager.cacheDirectory));
+//                getGtfsFeed();
+            } catch (IOException e1) {
+                e1.printStackTrace();
+            }
         }
         return null;
     }
@@ -315,7 +323,7 @@ public class FeedVersion extends Model implements Serializable {
             validationResult.tripCount = stats.getTripCount();
             validationResult.stopTimesCount = stats.getStopTimesCount();
             validationResult.errorCount = gtfsFeed.errors.size();
-            tripsPerDate = stats.getTripsPerDateOfService();
+            tripsPerDate = stats.getTripCountPerDateOfService();
         } catch (Exception e) {
             LOG.error("Unable to validate feed {}", this);
 //            eventBus.post(new StatusEvent("Unable to validate feed.", 0, true));
@@ -325,6 +333,8 @@ public class FeedVersion extends Model implements Serializable {
             eventBus.post(statusMap);
             e.printStackTrace();
             this.validationResult = null;
+//            validationResult.loadStatus = LoadStatus.OTHER_FAILURE;
+//            halt(400, "Error validating feed...");
             return;
         }
 
@@ -347,6 +357,9 @@ public class FeedVersion extends Model implements Serializable {
 //                        .map(entry -> entry.getKey().format(DateTimeFormatter.BASIC_ISO_DATE))
 //                        .collect(Collectors.toList())
             );
+            GeometryJSON g = new GeometryJSON();
+            Geometry buffers = gtfsFeed.getMergedBuffers();
+            validation.put("mergedBuffers", buffers != null ? g.toString(buffers) : null);
             mapper.writeValue(tempFile, validation);
         } catch (JsonGenerationException e) {
             e.printStackTrace();
@@ -406,6 +419,11 @@ public class FeedVersion extends Model implements Serializable {
         versionStore.commit();
     }
     public TransportNetwork buildTransportNetwork(EventBus eventBus) {
+        // return null if validation result is null (probably means something went wrong with validation, plus we won't have feed bounds).
+        if (this.validationResult == null) {
+            return null;
+        }
+
         if (eventBus == null) {
             eventBus = new EventBus();
         }
