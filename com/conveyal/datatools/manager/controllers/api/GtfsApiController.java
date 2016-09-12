@@ -24,7 +24,7 @@ public class GtfsApiController {
     public static final Logger LOG = LoggerFactory.getLogger(ProjectController.class);
     public static String feedBucket;
     public static FeedUpdater feedUpdater;
-    private static AmazonS3Client s3;
+    private static AmazonS3Client s3 = new AmazonS3Client();
     public static ApiMain gtfsApi;
     public static String directory;
     public static void register (String apiPrefix) throws IOException {
