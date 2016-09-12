@@ -1,9 +1,12 @@
 package com.conveyal.datatools.editor.models.transit;
 
 
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+
 import java.io.Serializable;
 
 /** A stop on a trip pattern. This is not a model, as it is stored in a list within trippattern */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class TripPatternStop implements Cloneable, Serializable {
     public static final long serialVersionUID = 1;
 
