@@ -22,6 +22,7 @@ import java.util.NavigableSet;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /** a transaction in an agency database */
 public class FeedTx extends DatabaseTx {
@@ -84,6 +85,7 @@ public class FeedTx extends DatabaseTx {
     /** snapshot versions. we use an atomic value so that they are (roughly) sequential, instead of using unordered UUIDs */
     private Atomic.Integer snapshotVersion;
 
+//    public Atomic.Boolean editedSinceSnapshot;
     /**
      * Create an agency tx.
      */
@@ -107,8 +109,18 @@ public class FeedTx extends DatabaseTx {
 
         if (buildSecondaryIndices)
             buildSecondaryIndices();
-    }
 
+//        editedSinceSnapshot = tx.getAtomicBoolean("editedSinceSnapshot") == null ? tx.createAtomicBoolean("editedSinceSnapshot", false) : tx.;
+    }
+    public void commit () {
+        try {
+//            editedSinceSnapshot.set(true);
+            tx.commit();
+        } catch (UnsupportedOperationException e) {
+            // probably read only, but warn
+            LOG.warn("Rollback failed; if this is a read-only database this is not unexpected");
+        }        closed = true;
+    }
     public void buildSecondaryIndices () {
         // build secondary indices
         // we store indices in the mapdb not because we care about persistence, but because then they
