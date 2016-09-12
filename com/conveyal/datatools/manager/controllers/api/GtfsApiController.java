@@ -56,10 +56,10 @@ public class GtfsApiController {
             }
             else {
                 feedBucket = null;
-                directory = DataManager.getConfigPropertyAsText("application.data.gtfs") + "/cache/";
+                directory = DataManager.getConfigPropertyAsText("application.data.gtfs") + "/cache/api/";
                 File dir = new File(directory);
                 if (!dir.isDirectory()) {
-                    dir.mkdir();
+                    dir.mkdirs();
                 }
             }
             gtfsApi.initialize(feedBucket, directory);
