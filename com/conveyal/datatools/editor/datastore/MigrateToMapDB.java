@@ -10,7 +10,7 @@ import com.vividsolutions.jts.geom.LineString;
 import com.vividsolutions.jts.io.WKTReader;
 import gnu.trove.map.TLongLongMap;
 import gnu.trove.map.hash.TLongLongHashMap;
-import com.conveyal.datatools.editor.models.Account;
+//import com.conveyal.datatools.editor.models.Account;
 import com.conveyal.datatools.editor.models.transit.*;
 import java.time.LocalDate;
 import org.mapdb.DBMaker;
