@@ -63,45 +63,43 @@ public class DumpController {
     // this is not authenticated, because it has to happen with a bare database (i.e. no users)
     // this method in particular is coded to allow up to 500MB of data to be posted
 //    @BodyParser.Of(value=BodyParser.Json.class, maxLength = 500 * 1024 * 1024)
-//    public static Result load () throws JsonParseException, JsonMappingException, IOException {
-//        // TODO: really ought to check all tables
-//        if (User.usersExist())
-//            return badRequest("database not empty");
-//
-//        DatabaseState db = json.read(request().body().asJson());
-//
-//        for (FeedCollection c : db.feedCollections) {
-//            c.save(false);
-//        }
-//        FeedCollection.commit();
-//
-//        for (FeedSource s : db.feedSources) {
-//            s.save(false);
-//        }
-//        FeedSource.commit();
-//
-//        for (FeedVersion v : db.feedVersions) {
-//            v.save(false);
-//        }
-//        FeedVersion.commit();
-//
-//        for (Note n : db.notes) {
-//            n.save(false);
-//        }
-//        Note.commit();
-//
+    public static boolean load (Request req, Response res) throws JsonParseException, JsonMappingException, IOException {
+        // TODO: really ought to check all tables
+
+        DatabaseState db = json.read(req.body());
+
+        for (Project c : db.projects) {
+            c.save(false);
+        }
+        Project.commit();
+
+        for (FeedSource s : db.feedSources) {
+            s.save(false);
+        }
+        FeedSource.commit();
+
+        for (FeedVersion v : db.feedVersions) {
+            v.save(false);
+        }
+        FeedVersion.commit();
+
+        for (Note n : db.notes) {
+            n.save(false);
+        }
+        Note.commit();
+
 //        for (User u : db.users) {
 //            u.save(false);
 //        }
 //        User.commit();
-//
-//        for (Deployment d : db.deployments) {
-//            d.save(false);
-//        }
-//        Deployment.commit();
-//
-//        return ok("done");
-//    }
+
+        for (Deployment d : db.deployments) {
+            d.save(false);
+        }
+        Deployment.commit();
+
+        return true;
+    }
 
     public static boolean loadLegacy (Request req, Response res) throws Exception {
         ObjectMapper mapper = new ObjectMapper();
@@ -197,6 +195,7 @@ public class DumpController {
 
     public static void register (String apiPrefix) {
         post(apiPrefix + "loadLegacy", DumpController::loadLegacy, json::write);
+        post(apiPrefix + "load", DumpController::load, json::write);
         post(apiPrefix + "validateAll", DumpController::validateAll, json::write);
         get(apiPrefix + "dump", DumpController::dump, json::write);
         System.out.println("registered dump w/ prefix " + apiPrefix);
