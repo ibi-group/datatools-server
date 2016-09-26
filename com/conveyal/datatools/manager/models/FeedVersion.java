@@ -288,8 +288,9 @@ public class FeedVersion extends Model implements Serializable {
             statusMap.put("percentComplete", 30.0);
             statusMap.put("error", false);
             eventBus.post(statusMap);
-
+            LOG.info("Beginning validation...");
             gtfsFeed.validate();
+            LOG.info("Calculating stats...");
             FeedStats stats = gtfsFeed.calculateStats();
             validationResult = new FeedValidationResult();
             validationResult.agencies = stats.getAllAgencies().stream().map(agency -> agency.agency_id).collect(Collectors.toList());

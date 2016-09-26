@@ -7,6 +7,7 @@ import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.persistence.DataStore;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.google.common.eventbus.EventBus;
@@ -27,6 +28,7 @@ import static spark.Spark.halt;
 /**
  * Created by demory on 3/22/16.
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class FeedSource extends Model implements Cloneable {
     private static final long serialVersionUID = 1L;
 
@@ -84,7 +86,7 @@ public class FeedSource extends Model implements Cloneable {
     /**
      * When was this feed last updated?
      */
-    //public transient Date lastUpdated;
+    public transient Date lastUpdated;
 
     /**
      * From whence is this feed fetched?
@@ -97,8 +99,6 @@ public class FeedSource extends Model implements Cloneable {
      * This is the String-formatted snapshot ID, which is the base64-encoded ID and the version number.
      */
     public String snapshotVersion;
-
-    //public Collection<AgencyBranding> branding;
 
     /**
      * Create a new feed.
@@ -432,6 +432,7 @@ public class FeedSource extends Model implements Cloneable {
         return ret;
     }
 
+    @JsonView(JsonViews.UserInterface.class)
     public int getFeedVersionCount() {
         return getFeedVersions().size();
     }
