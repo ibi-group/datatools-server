@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.manager.persistence.DataStore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 
@@ -14,6 +15,7 @@ import java.util.Date;
  *
  */
 @JsonInclude(Include.ALWAYS)
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class Note extends Model implements Serializable {
     private static final long serialVersionUID = 1L;
 

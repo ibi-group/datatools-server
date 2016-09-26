@@ -37,6 +37,7 @@ import com.conveyal.gtfs.validator.json.LoadStatus;
 import com.conveyal.gtfs.stats.FeedStats;
 import com.conveyal.r5.point_to_point.builder.TNBuilderConfig;
 import com.conveyal.r5.transit.TransportNetwork;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.core.JsonGenerationException;
 import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -65,6 +66,7 @@ import static spark.Spark.halt;
  *
  */
 @JsonInclude(Include.ALWAYS)
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class FeedVersion extends Model implements Serializable {
     private static final long serialVersionUID = 1L;
     private static ObjectMapper mapper = new ObjectMapper();

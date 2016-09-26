@@ -2,8 +2,10 @@ package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.manager.persistence.DataStore;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import com.sun.org.apache.bcel.internal.classfile.Unknown;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -18,6 +20,7 @@ import java.util.stream.Collectors;
  *
  */
 @JsonInclude(Include.ALWAYS)
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class Project extends Model {
     private static final long serialVersionUID = 1L;
 

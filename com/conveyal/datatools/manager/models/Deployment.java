@@ -5,6 +5,7 @@ import com.conveyal.datatools.manager.persistence.DataStore;
 import com.conveyal.datatools.manager.utils.StringUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -42,6 +43,7 @@ import org.slf4j.LoggerFactory;
  *
  */
 @JsonInclude(Include.ALWAYS)
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class Deployment extends Model implements Serializable {
     private static final long serialVersionUID = 1L;
     private static final Logger LOG = LoggerFactory.getLogger(Deployment.class);
