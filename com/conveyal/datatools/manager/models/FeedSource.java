@@ -376,12 +376,12 @@ public class FeedSource extends Model implements Cloneable {
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
     public boolean getEditedSinceSnapshot() {
-        FeedTx tx;
-        try {
-            tx = VersionedDataStore.getFeedTx(id);
-        } catch (Exception e) {
-
-        }
+//        FeedTx tx;
+//        try {
+//            tx = VersionedDataStore.getFeedTx(id);
+//        } catch (Exception e) {
+//
+//        }
 //        return tx.editedSinceSnapshot.get();
         return false;
     }
