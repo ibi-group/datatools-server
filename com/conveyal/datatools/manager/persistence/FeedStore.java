@@ -55,12 +55,12 @@ public class FeedStore {
 
     public FeedStore(String subdir) {
         // s3 storage
-        if (DataManager.config.get("application").get("data").get("use_s3_storage").asBoolean()){
-            this.s3Bucket = DataManager.config.get("application").get("data").get("gtfs_s3_bucket").asText();
+        if (DataManager.getConfigPropertyAsText("application.data.use_s3_storage").equals("true")){
+            this.s3Bucket = DataManager.getConfigPropertyAsText("application.data.gtfs_s3_bucket");
         }
         // local storage
         else {
-            String pathString = DataManager.config.get("application").get("data").get("gtfs").asText();
+            String pathString = DataManager.getConfigPropertyAsText("application.data.gtfs");
             if(subdir != null) pathString += File.separator + subdir;
             File path = new File(pathString);
             if (!path.exists() || !path.isDirectory()) {
@@ -93,6 +93,7 @@ public class FeedStore {
     public File getFeed (String id) {
         // local storage
         if (path != null) {
+            System.out.println(path + "/" + id);
             File feed = new File(path, id);
             if (!feed.exists()) return null;
             // don't let folks get feeds outside of the directory
@@ -102,7 +103,7 @@ public class FeedStore {
         // s3 storage
         else {
 
-            if(this.s3Bucket != null) {
+            if (this.s3Bucket != null) {
                 String keyName = s3Prefix + id;
                 AWSCredentials creds;
                 if (this.s3CredentialsFilename != null) {
