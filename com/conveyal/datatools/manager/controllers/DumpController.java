@@ -71,11 +71,12 @@ public class DumpController {
         DatabaseState db = null;
         try {
             db = json.read(req.body());
+            LOG.info("data loaded successfully");
         } catch (IOException e) {
             e.printStackTrace();
             LOG.error("data load error.  check json validity.");
+            return false;
         }
-        LOG.info("data loaded successfully");
         for (Project c : db.projects) {
             LOG.info("loading project {}", c.id);
             c.save(false);
