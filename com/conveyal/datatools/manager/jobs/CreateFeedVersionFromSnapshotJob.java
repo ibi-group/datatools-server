@@ -42,6 +42,7 @@ public class CreateFeedVersionFromSnapshotJob  extends MonitorableJob {
             file = File.createTempFile("snapshot", ".zip");
             SnapshotController.writeSnapshotAsGtfs(snapshotId, file);
         } catch (Exception e) {
+            e.printStackTrace();
             LOG.error("Unable to create temp file for snapshot");
             halt(400);
         }
