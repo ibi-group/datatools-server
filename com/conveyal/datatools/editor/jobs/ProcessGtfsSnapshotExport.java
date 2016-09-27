@@ -39,8 +39,8 @@ public class ProcessGtfsSnapshotExport implements Runnable {
     public ProcessGtfsSnapshotExport(Collection<Tuple2<String, Integer>> snapshots, File output, LocalDate startDate, LocalDate endDate) {
         this.snapshots = snapshots;
         this.output = output;
-        this.startDate = startDate;
-        this.endDate = endDate;
+//        this.startDate = startDate;
+//        this.endDate = endDate;
     }
 
     /**
@@ -56,8 +56,8 @@ public class ProcessGtfsSnapshotExport implements Runnable {
         }
 
         this.output = output;
-        this.startDate = startDate;
-        this.endDate = endDate;
+//        this.startDate = startDate;
+//        this.endDate = endDate;
     }
 
     /**
@@ -72,14 +72,14 @@ public class ProcessGtfsSnapshotExport implements Runnable {
         GTFSFeed feed = new GTFSFeed();
 
         GlobalTx gtx = VersionedDataStore.getGlobalTx();
-        FeedTx atx = null;
+        FeedTx feedTx = null;
 
         try {
             for (Tuple2<String, Integer> ssid : snapshots) {
                 String feedId = ssid.a;
 
-                atx = VersionedDataStore.getFeedTx(feedId);
-                Collection<Agency> agencies = atx.agencies.values();
+                feedTx = VersionedDataStore.getFeedTx(feedId);
+                Collection<Agency> agencies = feedTx.agencies.values();
 
                 for (Agency agency : agencies) {
                     com.conveyal.gtfs.model.Agency gtfsAgency = agency.toGtfs();
@@ -90,17 +90,22 @@ public class ProcessGtfsSnapshotExport implements Runnable {
                 }
 
                 // write all of the calendars and calendar dates
-                if (atx.calendars != null) {
-                    for (ServiceCalendar cal : atx.calendars.values()) {
+                if (feedTx.calendars != null) {
+                    for (ServiceCalendar cal : feedTx.calendars.values()) {
 
                         com.conveyal.gtfs.model.Service gtfsService = cal.toGtfs(toGtfsDate(cal.startDate), toGtfsDate(cal.endDate));
                         // note: not using user-specified IDs
 
                         // add calendar dates
-                        if (atx.exceptions != null) {
-                            for (ScheduleException ex : atx.exceptions.values()) {
+                        if (feedTx.exceptions != null) {
+                            for (ScheduleException ex : feedTx.exceptions.values()) {
+                                if (ex.equals(ScheduleException.ExemplarServiceDescriptor.SWAP) && !ex.addedService.contains(cal.id) && !ex.removedService.contains(cal.id))
+                                    // skip swap exception if cal is not referenced by added or removed service
+                                    // this is not technically necessary, but the output is cleaner/more intelligible
+                                    continue;
+
                                 for (LocalDate date : ex.dates) {
-                                    if (date.isBefore(startDate) || date.isAfter(endDate))
+                                    if (date.isBefore(cal.startDate) || date.isAfter(cal.endDate))
                                         // no need to write dates that do not apply
                                         continue;
 
@@ -124,13 +129,13 @@ public class ProcessGtfsSnapshotExport implements Runnable {
                 Map<String, com.conveyal.gtfs.model.Route> gtfsRoutes = Maps.newHashMap();
 
                 // write the routes
-                if(atx.routes != null) {
-                    for (Route route : atx.routes.values()) {
+                if(feedTx.routes != null) {
+                    for (Route route : feedTx.routes.values()) {
                         // only export approved routes
                         // TODO: restore route approval check?
                         //if (route.status == StatusType.APPROVED) {
 
-                        com.conveyal.gtfs.model.Route gtfsRoute = route.toGtfs(atx.agencies.get(route.agencyId).toGtfs(), gtx);
+                        com.conveyal.gtfs.model.Route gtfsRoute = route.toGtfs(feedTx.agencies.get(route.agencyId).toGtfs(), gtx);
 
                         feed.routes.put(route.getGtfsId(), gtfsRoute);
 
@@ -141,15 +146,15 @@ public class ProcessGtfsSnapshotExport implements Runnable {
 
                 // write the trips on those routes
                 // we can't use the trips-by-route index because we may be exporting a snapshot database without indices
-                if(atx.trips != null) {
-                    for (Trip trip : atx.trips.values()) {
+                if(feedTx.trips != null) {
+                    for (Trip trip : feedTx.trips.values()) {
                         if (!gtfsRoutes.containsKey(trip.routeId)) {
                             LOG.warn("Trip {} has not matching route", trip);
                             continue;
                         }
 
                         com.conveyal.gtfs.model.Route gtfsRoute = gtfsRoutes.get(trip.routeId);
-                        Route route = atx.routes.get(trip.routeId);
+                        Route route = feedTx.routes.get(trip.routeId);
 
                         com.conveyal.gtfs.model.Trip gtfsTrip = new com.conveyal.gtfs.model.Trip();
 
@@ -162,7 +167,7 @@ public class ProcessGtfsSnapshotExport implements Runnable {
                         gtfsTrip.trip_short_name = trip.tripShortName;
                         gtfsTrip.direction_id = trip.tripDirection == TripDirection.A ? 0 : 1;
 
-                        TripPattern pattern = atx.tripPatterns.get(trip.patternId);
+                        TripPattern pattern = feedTx.tripPatterns.get(trip.patternId);
 
                         Tuple2<String, Integer> nextKey = feed.shape_points.ceilingKey(new Tuple2(pattern.id, null));
                         if ((nextKey == null || !pattern.id.equals(nextKey.a)) && pattern.shape != null && !pattern.useStraightLineDistances) {
@@ -203,7 +208,7 @@ public class ProcessGtfsSnapshotExport implements Runnable {
 
                         feed.trips.put(gtfsTrip.trip_id, gtfsTrip);
 
-                        TripPattern patt = atx.tripPatterns.get(trip.patternId);
+                        TripPattern patt = feedTx.tripPatterns.get(trip.patternId);
 
                         Iterator<TripPatternStop> psi = patt.patternStops.iterator();
 
@@ -215,7 +220,7 @@ public class ProcessGtfsSnapshotExport implements Runnable {
                             if (st == null)
                                 continue;
 
-                            Stop stop = atx.stops.get(st.stopId);
+                            Stop stop = feedTx.stops.get(st.stopId);
 
                             if (!st.stopId.equals(ps.stopId)) {
                                 throw new IllegalStateException("Trip " + trip.id + " does not match its pattern!");
@@ -274,7 +279,7 @@ public class ProcessGtfsSnapshotExport implements Runnable {
             feed.toFile(output.getAbsolutePath());
         } finally {
             gtx.rollbackIfOpen();
-            if (atx != null) atx.rollbackIfOpen();
+            if (feedTx != null) feedTx.rollbackIfOpen();
         }
     }
 

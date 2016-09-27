@@ -74,6 +74,22 @@ public class ScheduleExceptionController {
                     }
                 }
             }
+            if (ex.addedService != null) {
+                for (String cal : ex.addedService) {
+                    if (!tx.calendars.containsKey(cal)) {
+                        tx.rollback();
+                        halt(400);
+                    }
+                }
+            }
+            if (ex.removedService != null) {
+                for (String cal : ex.removedService) {
+                    if (!tx.calendars.containsKey(cal)) {
+                        tx.rollback();
+                        halt(400);
+                    }
+                }
+            }
 
             if (tx.exceptions.containsKey(ex.id)) {
                 tx.rollback();
@@ -117,6 +133,22 @@ public class ScheduleExceptionController {
 
             if (ex.customSchedule != null) {
                 for (String cal : ex.customSchedule) {
+                    if (!tx.calendars.containsKey(cal)) {
+                        tx.rollback();
+                        halt(400);
+                    }
+                }
+            }
+            if (ex.addedService != null) {
+                for (String cal : ex.addedService) {
+                    if (!tx.calendars.containsKey(cal)) {
+                        tx.rollback();
+                        halt(400);
+                    }
+                }
+            }
+            if (ex.removedService != null) {
+                for (String cal : ex.removedService) {
                     if (!tx.calendars.containsKey(cal)) {
                         tx.rollback();
                         halt(400);

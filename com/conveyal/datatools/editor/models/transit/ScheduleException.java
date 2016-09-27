@@ -40,6 +40,10 @@ public class ScheduleException extends Model implements Cloneable, Serializable 
     /** A custom schedule. Only used if like == null */
     public List<String> customSchedule;
 
+    public List<String> addedService;
+
+    public List<String> removedService;
+
     public boolean serviceRunsOn(ServiceCalendar service) {
         switch (exemplar) {
         case MONDAY:
@@ -61,6 +65,14 @@ public class ScheduleException extends Model implements Cloneable, Serializable 
             return false;
         case CUSTOM:
             return customSchedule.contains(service.id);
+        case SWAP:
+            // new case to either swap one service id for another or add/remove a specific service
+            if (addedService.contains(service.id)) {
+                return true;
+            }
+            else if (removedService.contains(service.id)) {
+                return false;
+            }
         default:
             // can't actually happen, but java requires a default with a return here
             return false;
@@ -72,7 +84,7 @@ public class ScheduleException extends Model implements Cloneable, Serializable 
      * For example, run Sunday service on Presidents' Day, or no service on New Year's Day.
      */
     public static enum ExemplarServiceDescriptor {
-        MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY, NO_SERVICE, CUSTOM;
+        MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY, NO_SERVICE, CUSTOM, SWAP;
     }
 
     public ScheduleException clone () throws CloneNotSupportedException {
