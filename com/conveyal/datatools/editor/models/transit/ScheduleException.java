@@ -67,10 +67,10 @@ public class ScheduleException extends Model implements Cloneable, Serializable 
             return customSchedule.contains(service.id);
         case SWAP:
             // new case to either swap one service id for another or add/remove a specific service
-            if (addedService.contains(service.id)) {
+            if (addedService != null && addedService.contains(service.id)) {
                 return true;
             }
-            else if (removedService.contains(service.id)) {
+            else if (removedService  != null && removedService.contains(service.id)) {
                 return false;
             }
         default:
