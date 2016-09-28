@@ -188,6 +188,7 @@ public class UserController {
         for (Auth0UserProfile.Subscription sub : userProfile.getApp_metadata().getDatatoolsInfo().getSubscriptions()) {
             System.out.println("sub type = " + sub.getType());
             switch (sub.getType()) {
+                // TODO: add all activity types
                 case "feed-commented-on":
                     for (String targetId : sub.getTarget()) {
                         System.out.println("  target: " + targetId);

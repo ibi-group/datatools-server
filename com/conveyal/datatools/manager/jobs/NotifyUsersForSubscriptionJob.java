@@ -5,6 +5,8 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Project;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
@@ -16,6 +18,7 @@ import static com.conveyal.datatools.manager.utils.NotificationsUtils.sendNotifi
  */
 public class NotifyUsersForSubscriptionJob implements Runnable {
     private ObjectMapper mapper = new ObjectMapper();
+    public static final Logger LOG = LoggerFactory.getLogger(NotifyUsersForSubscriptionJob.class);
     private String subscriptionType;
     private String target;
     private String message;
@@ -49,30 +52,31 @@ public class NotifyUsersForSubscriptionJob implements Runnable {
             }
             String email = user.get("email").asText();
             Boolean emailVerified = user.get("email_verified").asBoolean();
-            System.out.println(email);
+            LOG.info("sending notification to {}", email);
 
             // only send email if address has been verified
             if (emailVerified) {
                 try {
-                    String subject = "subject";
-                    String url = null;
-                    String bodyAction = null;
+                    String subject;
+                    String url;
+                    String bodyAction;
                     String[] subType = this.subscriptionType.split("-");
-                    if (subType[0] == "feed"){
-                        FeedSource fs = FeedSource.get(this.target);
-                        subject = "Datatools Notification: " + this.subscriptionType.replace("-", " ") + " (" + fs.name + ")";
-                        url = DataManager.config.get("application").get("url").asText();
-                        bodyAction = "</p><p>View <a href='" + url + "/feed/" + fs.id + "'>this feed</a>.</p>";
-
+                    switch (subType[0]) {
+                        case "feed":
+                            FeedSource fs = FeedSource.get(this.target);
+                            subject = DataManager.getConfigPropertyAsText("application.title")+ " Notification: " + this.subscriptionType.replace("-", " ") + " (" + fs.name + ")";
+                            url = DataManager.getConfigPropertyAsText("application.public_url");
+                            bodyAction = "</p><p>View <a href='" + url + "/feed/" + fs.id + "'>this feed</a>.</p>";
+                            sendNotification(email, subject, "Body", "<p>" + this.message + bodyAction);
+                            break;
+                        case "project":
+                            Project p = Project.get(this.target);
+                            subject = "Datatools Notification: " + this.subscriptionType.replace("-", " ") + " (" + p.name + ")";
+                            url = DataManager.getConfigPropertyAsText("application.public_url");
+                            bodyAction = "</p><p>View <a href='" + url + "/project/" + p.id + "'>this project</a>.</p>";
+                            sendNotification(email, subject, "Body", "<p>" + this.message + bodyAction);
+                            break;
                     }
-                    else if (subType[0] == "project") {
-                        Project p = Project.get(this.target);
-                        subject = "Datatools Notification: " + this.subscriptionType.replace("-", " ") + " (" + p.name + ")";
-                        url = DataManager.config.get("application").get("url").asText();
-                        bodyAction = "</p><p>View <a href='" + url + "/project/" + p.id + "'>this project</a>.</p>";
-                    }
-
-                    sendNotification(email, subject, "Body", "<p>" + this.message + bodyAction);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
