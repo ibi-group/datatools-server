@@ -54,14 +54,14 @@ public class FeedUpdater {
             LOG.info("Fetching feeds...");
             LOG.info("Current eTag list " + eTags.toString());
 
-            ObjectListing gtfsList = s3.listObjects(GtfsApiController.feedBucket, GtfsApiController.directory);
+            ObjectListing gtfsList = s3.listObjects(GtfsApiController.feedBucket, GtfsApiController.cacheDirectory);
             Boolean feedsUpdated = false;
             for (S3ObjectSummary objSummary : gtfsList.getObjectSummaries()) {
 
                 String eTag = objSummary.getETag();
                 if (!eTags.contains(eTag)) {
                     String keyName = objSummary.getKey();
-                    if (keyName.equals(GtfsApiController.directory)){
+                    if (keyName.equals(GtfsApiController.cacheDirectory)){
                         continue;
                     }
                     LOG.info("Updating feed " + keyName);

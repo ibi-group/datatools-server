@@ -6,6 +6,7 @@ import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.utils.FeedUpdater;
 import com.conveyal.gtfs.api.ApiMain;
 import com.conveyal.gtfs.api.Routes;
@@ -26,11 +27,18 @@ public class GtfsApiController {
     public static FeedUpdater feedUpdater;
     private static AmazonS3Client s3 = new AmazonS3Client();
     public static ApiMain gtfsApi;
-    public static String directory;
+    public static String cacheDirectory;
+    public static String bucketFolder;
     public static void register (String apiPrefix) throws IOException {
 
         // store list of GTFS feed eTags here
         List<String> eTagList = new ArrayList<>();
+
+        cacheDirectory = DataManager.getConfigPropertyAsText("application.data.gtfs") + "/cache/api/";
+        File dir = new File(cacheDirectory);
+        if (!dir.isDirectory()) {
+            dir.mkdirs();
+        }
 
         // check for use extension...
         String extensionType = DataManager.getConfigPropertyAsText("modules.gtfsapi.use_extension");
@@ -38,11 +46,11 @@ public class GtfsApiController {
         if ("mtc".equals(extensionType)){
             LOG.info("Using extension " + extensionType + " for service alerts module");
             feedBucket = DataManager.getConfigPropertyAsText("extensions." + extensionType + ".s3_bucket");
-            directory = DataManager.getConfigPropertyAsText("extensions." + extensionType + ".s3_download_prefix");
+            bucketFolder = DataManager.getConfigPropertyAsText("extensions." + extensionType + ".s3_download_prefix");
 
-            gtfsApi.initialize(feedBucket, directory);
+            gtfsApi.initialize(feedBucket, bucketFolder, cacheDirectory);
 
-            eTagList.addAll(registerS3Feeds(feedBucket, directory));
+            eTagList.addAll(registerS3Feeds(feedBucket, cacheDirectory));
 
             // set feedUpdater to poll for new feeds at specified frequency (in seconds)
             feedUpdater = new FeedUpdater(eTagList, 0, DataManager.getConfigProperty("modules.gtfsapi.update_frequency").asInt());
@@ -52,17 +60,14 @@ public class GtfsApiController {
             LOG.warn("No extension provided for GTFS API");
             if ("true".equals(DataManager.getConfigPropertyAsText("application.data.use_s3_storage"))) {
                 feedBucket = DataManager.getConfigPropertyAsText("application.data.gtfs_s3_bucket");
-                directory = "gtfs/cache/";
+                bucketFolder = FeedStore.s3Prefix;
             }
             else {
                 feedBucket = null;
-                directory = DataManager.getConfigPropertyAsText("application.data.gtfs") + "/cache/api/";
-                File dir = new File(directory);
-                if (!dir.isDirectory()) {
-                    dir.mkdirs();
-                }
             }
-            gtfsApi.initialize(feedBucket, directory);
+            // TODO: update other gtfs api conditions to use
+            LOG.info("Initializing gtfs-api for bucket {}/{} and cache dir {}", feedBucket, bucketFolder, cacheDirectory);
+            gtfsApi.initialize(feedBucket, bucketFolder, cacheDirectory);
         }
 
         // check for load on startup
@@ -70,15 +75,14 @@ public class GtfsApiController {
             LOG.warn("Loading all feeds into gtfs api (this may take a while)...");
             // use s3
             if ("true".equals(DataManager.getConfigPropertyAsText("application.data.use_s3_storage"))) {
-                eTagList.addAll(registerS3Feeds(feedBucket, directory));
+                eTagList.addAll(registerS3Feeds(feedBucket, cacheDirectory));
 
                 // set feedUpdater to poll for new feeds at specified frequency (in seconds)
                 feedUpdater = new FeedUpdater(eTagList, 0, DataManager.config.get("modules").get("gtfsapi").get("update_frequency").asInt());
             }
 //         else, use local directory
             else {
-                String dir = DataManager.config.get("application").get("data").get("gtfs").asText();
-                gtfsApi.initialize(null, dir);
+                gtfsApi.initialize(null, cacheDirectory);
 
                 // iterate over latest feed versions
                 for (FeedSource fs : FeedSource.getAll()) {

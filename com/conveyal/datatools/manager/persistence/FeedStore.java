@@ -44,7 +44,7 @@ public class FeedStore {
     /** An optional AWS S3 bucket to store the feeds */
     private String s3Bucket;
 
-    private String s3Prefix = "gtfs/";
+    public static final String s3Prefix = "gtfs/";
 
     /** An AWS credentials file to use when uploading to S3 */
     private String s3CredentialsFilename;
@@ -93,7 +93,6 @@ public class FeedStore {
     public File getFeed (String id) {
         // local storage
         if (path != null) {
-            System.out.println(path + "/" + id);
             File feed = new File(path, id);
             if (!feed.exists()) return null;
             // don't let folks get feeds outside of the directory
