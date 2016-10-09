@@ -48,7 +48,7 @@ public class GtfsApiController {
             feedBucket = DataManager.getConfigPropertyAsText("extensions." + extensionType + ".s3_bucket");
             bucketFolder = DataManager.getConfigPropertyAsText("extensions." + extensionType + ".s3_download_prefix");
 
-            gtfsApi.initialize(feedBucket, bucketFolder, cacheDirectory);
+            gtfsApi.initialize(DataManager.gtfsCache);
 
             eTagList.addAll(registerS3Feeds(feedBucket, cacheDirectory));
 
@@ -67,7 +67,7 @@ public class GtfsApiController {
             }
             // TODO: update other gtfs api conditions to use
             LOG.info("Initializing gtfs-api for bucket {}/{} and cache dir {}", feedBucket, bucketFolder, cacheDirectory);
-            gtfsApi.initialize(feedBucket, bucketFolder, cacheDirectory);
+            gtfsApi.initialize(DataManager.gtfsCache);
         }
 
         // check for load on startup

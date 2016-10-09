@@ -16,6 +16,7 @@ import com.conveyal.datatools.manager.jobs.LoadGtfsApiFeedJob;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.utils.CorsFilter;
 import com.conveyal.datatools.manager.utils.ResponseError;
 import com.conveyal.gtfs.GTFSCache;
@@ -66,7 +67,11 @@ public class DataManager {
             Executors.newScheduledThreadPool(1);
 
     public static GTFSCache gtfsCache;
+
+    public static String feedBucket;
     public static String cacheDirectory;
+    public static String bucketFolder;
+
     private static List<String> apiFeedSources = new ArrayList<>();
 
     public static void main(String[] args) throws IOException {
@@ -104,7 +109,10 @@ public class DataManager {
         if (!cacheDir.isDirectory()) {
             cacheDir.mkdir();
         }
-        gtfsCache = new GTFSCache(getConfigPropertyAsText("application.data.gtfs_s3_bucket"), cacheDir);
+        feedBucket = getConfigPropertyAsText("application.data.gtfs_s3_bucket");
+        bucketFolder = FeedStore.s3Prefix;
+
+        gtfsCache = new GTFSCache(feedBucket, bucketFolder, cacheDir);
         CorsFilter.apply();
 
         String apiPrefix = "/api/manager/";
