@@ -114,6 +114,13 @@ public class TripPatternController {
         return null;
     }
 
+    /**
+     * Update existing trip pattern.  NOTE: function assumes only one stop has been
+     * changed (added, modified, removed)
+     * @param req
+     * @param res
+     * @return
+     */
     public static Object updateTripPattern(Request req, Response res) {
         TripPattern tripPattern;
         FeedTx tx = null;

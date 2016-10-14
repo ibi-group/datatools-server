@@ -140,7 +140,7 @@ public class StopController {
                 halt(400);
             
             if (!VersionedDataStore.agencyExists(stop.feedId)) {
-                halt(400);
+                halt(400, "Stop must reference feed source ID");
             }
             
             tx = VersionedDataStore.getFeedTx(stop.feedId);
