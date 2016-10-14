@@ -445,6 +445,9 @@ public class FeedVersion extends Model implements Serializable {
         eventBus.post(statusMap);
 
         Rectangle2D bounds = this.validationResult.bounds;
+
+        if (bounds == null) return null;
+
         String osmFileName = String.format("%s%.6f_%.6f_%.6f_%.6f.osm.pbf",feedSourceDir, bounds.getMaxX(), bounds.getMaxY(), bounds.getMinX(), bounds.getMinY());
         File osmExtract = new File(osmFileName);
         if (!osmExtract.exists()) {
