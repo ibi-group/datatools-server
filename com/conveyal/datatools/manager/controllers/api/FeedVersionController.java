@@ -14,6 +14,7 @@ import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.BuildTransportNetworkJob;
 import com.conveyal.datatools.manager.jobs.CreateFeedVersionFromSnapshotJob;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
+import com.conveyal.datatools.manager.jobs.ReadTransportNetworkJob;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -38,6 +39,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -59,6 +61,7 @@ public class FeedVersionController  {
     private static ObjectMapper mapper = new ObjectMapper();
     public static JsonManager<FeedVersion> json =
             new JsonManager<FeedVersion>(FeedVersion.class, JsonViews.UserInterface.class);
+    private static Set<String> readingNetworkVersionList = new HashSet<>();
 
     /**
      * Grab this feed version.
@@ -311,24 +314,44 @@ public class FeedVersionController  {
     }
 
     public static Object getIsochrones(Request req, Response res) {
-        LOG.info(req.uri());
         Auth0UserProfile userProfile = req.attribute("user");
 
         String id = req.params("id");
         FeedVersion version = FeedVersion.get(id);
+
+        // required
         Double fromLat = Double.valueOf(req.queryParams("fromLat"));
         Double fromLon = Double.valueOf(req.queryParams("fromLon"));
         Double toLat = Double.valueOf(req.queryParams("toLat"));
         Double toLon = Double.valueOf(req.queryParams("toLon"));
+        LocalDate date = req.queryParams("date") != null ? LocalDate.parse(req.queryParams("date"), DateTimeFormatter.ISO_LOCAL_DATE) : LocalDate.now(); // 2011-12-03
+
+        // optional with defaults
+        Integer fromTime = req.queryParams("fromTime") != null ? Integer.valueOf(req.queryParams("fromTime")) : 9 * 3600;
+        Integer toTime = req.queryParams("toTime") != null ? Integer.valueOf(req.queryParams("toTime")) : 10 * 3600;
 
         if (version.transportNetwork == null) {
             InputStream is = null;
             try {
-                is = new FileInputStream(DataManager.config.get("application").get("data").get("gtfs").asText() + "/"  + version.feedSourceId + "/" + version.id + "_network.dat");
-                version.transportNetwork = TransportNetwork.read(is);
+                if (readingNetworkVersionList.contains(version.id)) {
+                    halt(503, "Try again later. Reading transport network");
+                    return null;
+                }
+                else {
+                    //                ReadTransportNetworkJob rtnj = new ReadTransportNetworkJob(version, userProfile.getUser_id());
+//                Thread tnThread = new Thread(rtnj);
+//                tnThread.start();
+                    is = new FileInputStream(DataManager.config.get("application").get("data").get("gtfs").asText() + "/"  + version.feedSourceId + "/" + version.id + "_network.dat");
+                    readingNetworkVersionList.add(version.id);
+                    try {
+                        version.transportNetwork = TransportNetwork.read(is);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
             }
-            // Catch if transport network not built yet
-            catch (Exception e) {
+            // Catch FNFE exception transport network not built yet
+            catch (FileNotFoundException e) {
                 e.printStackTrace();
                 if (DataManager.config.get("modules").get("validator").get("enabled").asBoolean()) {
 //                    new BuildTransportNetworkJob(version).run();
@@ -341,17 +364,21 @@ public class FeedVersionController  {
         }
 
         if (version.transportNetwork != null) {
+            // remove version from list of reading network
+            if (readingNetworkVersionList.contains(version.id)) {
+                readingNetworkVersionList.remove(version.id);
+            }
             AnalystClusterRequest clusterRequest = new AnalystClusterRequest();
             clusterRequest.profileRequest = new ProfileRequest();
             clusterRequest.profileRequest.transitModes = EnumSet.of(TransitModes.TRANSIT);
             clusterRequest.profileRequest.accessModes = EnumSet.of(LegMode.WALK);
-            clusterRequest.profileRequest.date = LocalDate.now();
+            clusterRequest.profileRequest.date = date;
             clusterRequest.profileRequest.fromLat = fromLat;
             clusterRequest.profileRequest.fromLon = fromLon;
             clusterRequest.profileRequest.toLat = toLat;
             clusterRequest.profileRequest.toLon = toLon;
-            clusterRequest.profileRequest.fromTime = 9*3600;
-            clusterRequest.profileRequest.toTime = 10*3600;
+            clusterRequest.profileRequest.fromTime = fromTime;
+            clusterRequest.profileRequest.toTime = toTime;
             clusterRequest.profileRequest.egressModes = EnumSet.of(LegMode.WALK);
             clusterRequest.profileRequest.zoneId = ZoneId.of("America/New_York");
             PointSet targets = version.transportNetwork.getGridPointSet();

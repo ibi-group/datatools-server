@@ -24,6 +24,10 @@ import spark.Response;
 
 import java.io.*;
 import java.net.URLEncoder;
+import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.*;
 
 import com.conveyal.datatools.manager.auth.Auth0Users;
@@ -182,7 +186,11 @@ public class UserController {
 
     public static Object getRecentActivity(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
-
+        String from = req.queryParams("from");
+        String to = req.queryParams("to");
+//        if (from == null || to == null) {
+//            halt(400, "Please provide valid from/to dates");
+//        }
         List<Activity> activity = new ArrayList<>();
 
         for (Auth0UserProfile.Subscription sub : userProfile.getApp_metadata().getDatatoolsInfo().getSubscriptions()) {
@@ -197,15 +205,17 @@ public class UserController {
                         System.out.println("  obj=" + fs);
                         for (Note note : fs.getNotes()) {
                             // TODO: Check if actually recent
-                            Activity act = new Activity();
-                            act.type = sub.getType();
-                            act.userId = note.userId;
-                            act.userName = note.userEmail;
-                            act.body = note.body;
-                            act.date = note.date;
-                            act.targetId = targetId;
-                            act.targetName = fs.name;
-                            activity.add(act);
+//                            if (note.date.after(Date.from(Instant.ofEpochSecond(from))) && note.date.before(Date.from(Instant.ofEpochSecond(to)))) {
+                                Activity act = new Activity();
+                                act.type = sub.getType();
+                                act.userId = note.userId;
+                                act.userName = note.userEmail;
+                                act.body = note.body;
+                                act.date = note.date;
+                                act.targetId = targetId;
+                                act.targetName = fs.name;
+                                activity.add(act);
+//                            }
                         }
                     }
                     break;

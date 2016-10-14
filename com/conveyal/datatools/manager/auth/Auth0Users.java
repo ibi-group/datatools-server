@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.auth;
 
 import com.conveyal.datatools.manager.DataManager;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.http.HttpResponse;
@@ -15,6 +16,8 @@ import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URLEncoder;
+import java.util.Collection;
+import java.util.HashSet;
 
 /**
  * Created by landon on 4/26/16.
@@ -87,6 +90,20 @@ public class Auth0Users {
 
         URI uri = getUrl(searchQuery, page, 10, false);
         return doRequest(uri);
+    }
+
+    public static Collection<Auth0UserProfile> getAll () {
+        Collection<Auth0UserProfile> users = new HashSet<>();
+
+        // limited to the first 100
+        URI uri = getUrl(null, 0, 100, false);
+        String response = doRequest(uri);
+        try {
+            users = mapper.readValue(response, new TypeReference<Collection<Auth0UserProfile>>(){});
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return users;
     }
 
     public static Auth0UserProfile getUserById(String id) {
