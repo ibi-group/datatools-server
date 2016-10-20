@@ -53,13 +53,6 @@ public class FeedValidationResultSummary implements Serializable {
             this.agencies = result.agencies;
 
             if (loadStatus == LoadStatus.SUCCESS) {
-//                if (result.routes != null) {
-//                    this.errorCount =
-//                            result.routes.invalidValues.size() +
-//                                    result.stops.invalidValues.size() +
-//                                    result.trips.invalidValues.size() +
-//                                    result.shapes.invalidValues.size();
-//                }
                 this.errorCount = result.errorCount;
                 this.agencyCount = result.agencyCount;
                 this.routeCount = result.routeCount;

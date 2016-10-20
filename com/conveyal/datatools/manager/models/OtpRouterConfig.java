@@ -8,7 +8,7 @@ import java.util.Collection;
  */
 
 public class OtpRouterConfig implements Serializable {
-
+    private static final long serialVersionUID = 1L;
     public Integer numItineraries;
 
     public Double  walkSpeed;

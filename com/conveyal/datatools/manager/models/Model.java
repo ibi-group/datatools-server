@@ -74,6 +74,13 @@ public abstract class Model implements Serializable {
         userId = profile.getUser_id();
     }
 
+    /**
+     * Set the owner of this object by Id
+     */
+    public void setUserById (String id) {
+        userId = id;
+    }
+
     public void addNote(Note n) {
         if (noteIds == null) {
             noteIds = new ArrayList<String>();

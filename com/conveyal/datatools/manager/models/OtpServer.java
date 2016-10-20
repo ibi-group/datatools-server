@@ -7,6 +7,7 @@ import java.util.List;
  * Created by landon on 5/20/16.
  */
 public class OtpServer implements Serializable {
+    private static final long serialVersionUID = 1L;
     public String name;
     public List<String> internalUrl;
     public String publicUrl;

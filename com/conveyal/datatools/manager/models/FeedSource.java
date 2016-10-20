@@ -4,6 +4,7 @@ import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.persistence.DataStore;
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -17,6 +18,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
+import java.io.InvalidClassException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -120,75 +122,23 @@ public class FeedSource extends Model implements Cloneable {
     /**
      * Fetch the latest version of the feed.
      */
-    public FeedVersion fetch (EventBus eventBus) {
+    public FeedVersion fetch (EventBus eventBus, String fetchUser) {
         Map<String, Object> statusMap = new HashMap<>();
         statusMap.put("message", "Downloading file");
         statusMap.put("percentComplete", 20.0);
         statusMap.put("error", false);
         eventBus.post(statusMap);
 
-//        if (this.retrievalMethod.equals(FeedRetrievalMethod.MANUALLY_UPLOADED)) {
-//            String message = String.format("not fetching feed %s, not a fetchable feed", this.name);
-//            LOG.info(message);
-//            statusMap.put("message", message);
-//            statusMap.put("percentComplete", 0.0);
-//            statusMap.put("error", true);
-//            eventBus.post(statusMap);
-//            return null;
-//        }
-
-        // fetchable feed, continue
         FeedVersion latest = getLatest();
 
         // We create a new FeedVersion now, so that the fetched date is (milliseconds) before
         // fetch occurs. That way, in the highly unlikely event that a feed is updated while we're
         // fetching it, we will not miss a new feed.
-        FeedVersion newFeed = new FeedVersion(this);
+        FeedVersion version = new FeedVersion(this);
 
         // build the URL from which to fetch
-        URL url;
-//        if (this.retrievalMethod.equals(FeedRetrievalMethod.FETCHED_AUTOMATICALLY))
-            url = this.url;
-//        else if (this.retrievalMethod.equals(FeedRetrievalMethod.PRODUCED_IN_HOUSE)) {
-//            if (this.snapshotVersion == null) {
-//                String message = String.format("Feed %s has no editor id; cannot fetch", this.name);
-//                LOG.error(message);
-//                statusMap.put("message", message);
-//                statusMap.put("percentComplete", 0.0);
-//                statusMap.put("error", true);
-//                eventBus.post(statusMap);
-//                return null;
-//            }
-//
-//            String baseUrl = DataManager.getConfigPropertyAsText("modules.editor.url");
-//
-//            if (!baseUrl.endsWith("/"))
-//                baseUrl += "/";
-//
-//            // build the URL
-//            try {
-//                url = new URL(baseUrl + "api/mgrsnapshot/" + this.snapshotVersion + ".zip");
-//            } catch (MalformedURLException e) {
-//                String message = "Invalid URL for editor, check your config.";
-//                LOG.error(message);
-//                statusMap.put("message", message);
-//                statusMap.put("percentComplete", 0.0);
-//                statusMap.put("error", true);
-//                eventBus.post(statusMap);
-//                return null;
-//            }
-//        }
-//        else {
-//            String message = "Unknown retrieval method: " + this.retrievalMethod;
-//            LOG.error(message);
-//            statusMap.put("message", message);
-//            statusMap.put("percentComplete", 0.0);
-//            statusMap.put("error", true);
-//            eventBus.post(statusMap);
-//            return null;
-//        }
-
-        LOG.info(url.toString());
+        URL url = this.url;
+        LOG.info("Fetching from {}", url.toString());
 
         // make the request, using the proper HTTP caching headers to prevent refetch, if applicable
         HttpURLConnection conn;
@@ -225,9 +175,6 @@ public class FeedSource extends Model implements Cloneable {
 
         conn.setDefaultUseCaches(true);
 
-        /*if (oauthToken != null)
-            conn.addRequestProperty("Authorization", "Bearer " + oauthToken);*/
-
         // lastFetched is set to null when the URL changes and when latest feed version is deleted
         if (latest != null && this.lastFetched != null)
             conn.setIfModifiedSince(Math.min(latest.updated.getTime(), this.lastFetched.getTime()));
@@ -248,13 +195,13 @@ public class FeedSource extends Model implements Cloneable {
 
             // TODO: redirects
             else if (conn.getResponseCode() == HttpURLConnection.HTTP_OK) {
-                String message = String.format("Saving %s feed", this.name);
+                String message = String.format("Saving %s feed. (This may take a while with large feeds.)", this.name);
                 LOG.info(message);
                 statusMap.put("message", message);
-                statusMap.put("percentComplete", 100.0);
+                statusMap.put("percentComplete", 75.0);
                 statusMap.put("error", false);
                 eventBus.post(statusMap);
-                File out = newFeed.newGtfsFile(conn.getInputStream());
+                File out = version.newGtfsFile(conn.getInputStream());
             }
 
             else {
@@ -273,17 +220,19 @@ public class FeedSource extends Model implements Cloneable {
             statusMap.put("percentComplete", 100.0);
             statusMap.put("error", true);
             eventBus.post(statusMap);
+            e.printStackTrace();
             return null;
+        } catch (Exception e) {
+            throw e;
         }
 
-        // validate the fetched file
         // note that anything other than a new feed fetched successfully will have already returned from the function
-        newFeed.hash();
+        version.hash();
 
-        if (latest != null && newFeed.hash.equals(latest.hash)) {
+        if (latest != null && version.hash.equals(latest.hash)) {
             String message = String.format("Feed %s was fetched but has not changed; server operators should add If-Modified-Since support to avoid wasting bandwidth", this.name);
             LOG.warn(message);
-            newFeed.getGtfsFile().delete();
+            version.getGtfsFile().delete();
             statusMap.put("message", message);
             statusMap.put("percentComplete", 100.0);
             statusMap.put("error", false);
@@ -291,16 +240,22 @@ public class FeedSource extends Model implements Cloneable {
             return null;
         }
         else {
-            newFeed.userId = this.userId;
+            version.userId = this.userId;
 
-            this.lastFetched = newFeed.updated;
+            this.lastFetched = version.updated;
             this.save();
 
             NotifyUsersForSubscriptionJob notifyFeedJob = new NotifyUsersForSubscriptionJob("feed-updated", this.id, "New feed version created for " + this.name);
             Thread notifyThread = new Thread(notifyFeedJob);
             notifyThread.start();
-
-            return newFeed;
+            String message = String.format("Fetch complete for %s", this.name);
+            LOG.info(message);
+            statusMap.put("message", message);
+            statusMap.put("percentComplete", 100.0);
+            statusMap.put("error", false);
+            eventBus.post(statusMap);
+            version.setUserById(fetchUser);
+            return version;
         }
     }
 
@@ -336,7 +291,14 @@ public class FeedSource extends Model implements Cloneable {
 //        if (vs == null){
 //            return null;
 //        }
-        FeedVersion v = FeedVersion.versionStore.findFloor("version", new Fun.Tuple2(this.id, Fun.HI));
+        FeedVersion v = null;
+        try {
+            Class localClass = Class.forName(FeedVersion.class.getName());
+            v = FeedVersion.versionStore.findFloor("version", new Fun.Tuple2(this.id, Fun.HI));
+        } catch (ClassNotFoundException e) {
+            LOG.info("Error getting feed version", e);
+        }
+
 
         // the ID doesn't necessarily match, because it will fall back to the previous source in the store if there are no versions for this source
         if (v == null || !v.feedSourceId.equals(this.id))
