@@ -39,8 +39,8 @@ public class JsonManager<T> {
     public JsonManager (Class<T> theClass, Class view) {
         this.theClass = theClass;
         this.om = new ObjectMapper();
-        om.addMixInAnnotations(InvalidValue.class, InvalidValueMixIn.class);
-        om.addMixInAnnotations(Rectangle2D.class, Rectangle2DMixIn.class);
+        om.addMixIn(InvalidValue.class, InvalidValueMixIn.class);
+        om.addMixIn(Rectangle2D.class, Rectangle2DMixIn.class);
         om.registerModule(new GeoJsonModule());
         SimpleModule deser = new SimpleModule();
 
@@ -64,7 +64,7 @@ public class JsonManager<T> {
      * Add an additional mixin for serialization with this object mapper.
      */
     public void addMixin(Class target, Class mixin) {
-        om.addMixInAnnotations(target, mixin);
+        om.addMixIn(target, mixin);
     }
 
     public String write(Object o) throws JsonProcessingException{
