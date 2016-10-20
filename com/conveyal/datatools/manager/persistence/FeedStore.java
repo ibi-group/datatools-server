@@ -192,58 +192,30 @@ public class FeedStore {
         // store latest as feed-source-id.zip
         if (feedSource != null) {
             try {
-//                return copyFileUsingInputStream(id, inputStream, feedSource);
-                return copyFileUsingFilesCopy(id, inputStream, feedSource);
+                File version = writeFileUsingInputStream(id, inputStream, feedSource);
+                File latest = copyInputStreamToLatest(inputStream, feedSource);
+                return version;
             } catch (Exception e) {
                 e.printStackTrace();
             }
-//            return copyFileUsingFilesCopy(id, inputStream, feedSource);
-//            File copy = new File(path, feedSource.id + ".zip");
-//            FileOutputStream copyStream;
-//            try {
-//                copyStream = new FileOutputStream(copy);
-//            } catch (FileNotFoundException e) {
-//                LOG.error("Unable to save latest at {}", copy);
-//                return null;
-//            }
         }
-
-//        try {
-//            outStream = new FileOutputStream(out);
-//        } catch (FileNotFoundException e) {
-//            LOG.error("Unable to open {}", out);
-//            return null;
-//        }
-//
-//        // copy the file
-//        ReadableByteChannel rbc = Channels.newChannel(inputStream);
-//        try {
-//            outStream.getChannel().transferFrom(rbc, 0, Long.MAX_VALUE);
-//            outStream.close();
-//            return out;
-//        } catch (IOException e) {
-//            LOG.error("Unable to transfer from upload to saved file.");
-//            return null;
-//        }
         return null;
     }
 
-    private File copyFileUsingFilesCopy(String id, InputStream inputStream, FeedSource feedSource) {
+    private File copyInputStreamToLatest(InputStream inputStream, FeedSource feedSource) {
         final Path latest = Paths.get(String.valueOf(path), feedSource.id + ".zip");
-        final Path version = Paths.get(String.valueOf(path), id);
         try {
             Files.copy(inputStream, latest, StandardCopyOption.REPLACE_EXISTING);
-            LOG.info("Storing feed locally {}", id);
-            Files.copy(inputStream, version, StandardCopyOption.REPLACE_EXISTING);
-            return version.toFile();
+            LOG.info("Copying version to latest {}", feedSource);
+            return latest.toFile();
         } catch (IOException e) {
             e.printStackTrace();
-            LOG.error("Unable to save latest at {}", version);
+            LOG.error("Unable to save latest at {}", feedSource);
         }
         return null;
     }
 
-    private File copyFileUsingInputStream(String id, InputStream inputStream, FeedSource feedSource) throws IOException {
+    private File writeFileUsingInputStream(String id, InputStream inputStream, FeedSource feedSource) throws IOException {
         OutputStream output = null;
         File out = new File(path, id);
         try {
@@ -260,11 +232,6 @@ public class FeedStore {
         } finally {
             inputStream.close();
             output.close();
-            try {
-                System.out.println(out.length());
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
             return out;
         }
     }
