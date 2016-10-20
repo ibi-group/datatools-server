@@ -197,7 +197,7 @@ public class DumpController {
     public static boolean validateAll (Request req, Response res) throws Exception {
         LOG.info("validating all feeds...");
         for(FeedVersion version: FeedVersion.getAll()) {
-            if(!req.queryParams("force").equals("true") && version.validationResult != null && !version.validationResult.loadStatus.equals(LoadStatus.SUCCESS)) continue;
+            if(!req.queryParams("force").equals("true") && version.validationResult != null && version.validationResult.loadStatus.equals(LoadStatus.SUCCESS)) continue;
             LOG.info("Validating {}", version.id);
             version.validate();
             version.save();
