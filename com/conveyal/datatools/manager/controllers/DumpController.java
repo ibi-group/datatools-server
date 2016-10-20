@@ -117,6 +117,7 @@ public class DumpController {
         Iterator<Map.Entry<String, JsonNode>> fieldsIter = node.fields();
         while (fieldsIter.hasNext()) {
             Map.Entry<String, JsonNode> entry = fieldsIter.next();
+            LOG.info("Loading {} {}...", entry.getValue().size(), entry.getKey());
             switch(entry.getKey()) {
                 case "feedCollections":
                     for(int i=0; i< entry.getValue().size(); i++) {
