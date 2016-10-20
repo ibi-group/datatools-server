@@ -10,6 +10,7 @@ import com.conveyal.datatools.manager.models.Note;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
+import com.conveyal.gtfs.validator.json.LoadStatus;
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonMappingException;
@@ -194,13 +195,14 @@ public class DumpController {
     }
 
     public static boolean validateAll (Request req, Response res) throws Exception {
-        System.out.println("validating all feeds...");
+        LOG.info("validating all feeds...");
         for(FeedVersion version: FeedVersion.getAll()) {
-            if(!req.queryParams("force").equals("true") && version.validationResult != null) continue;
-            LOG.info("Validating " + version.id);
+            if(!req.queryParams("force").equals("true") && version.validationResult != null && !version.validationResult.loadStatus.equals(LoadStatus.SUCCESS)) continue;
+            LOG.info("Validating {}", version.id);
             version.validate();
             version.save();
         }
+        LOG.info("Finished validation...");
         return true;
     }
 
