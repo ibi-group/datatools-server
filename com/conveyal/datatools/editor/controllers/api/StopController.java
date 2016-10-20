@@ -3,6 +3,9 @@ package com.conveyal.datatools.editor.controllers.api;
 import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
+import com.fasterxml.jackson.core.JsonGenerationException;
+import com.fasterxml.jackson.core.JsonParseException;
+import com.fasterxml.jackson.databind.JsonMappingException;
 import com.google.common.base.Function;
 import com.google.common.collect.Collections2;
 import com.conveyal.datatools.editor.controllers.Base;
@@ -152,9 +155,12 @@ public class StopController {
             tx.stops.put(stop.id, stop);
             tx.commit();
             json = Base.toJson(stop, false);
-        } catch (Exception e) {
+        } catch (IOException e) {
             e.printStackTrace();
             halt(400);
+        } catch (Exception e) {
+            e.printStackTrace();
+            throw e;
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }

@@ -15,6 +15,8 @@ import org.mapdb.Fun.Tuple2;
 import java.util.Collection;
 import java.util.Set;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import spark.Request;
 import spark.Response;
 
@@ -22,7 +24,7 @@ import static spark.Spark.*;
 
 
 public class TripPatternController {
-
+    private static final Logger LOG = LoggerFactory.getLogger(TripPatternController.class);
     public static JsonManager<TripPattern> json =
             new JsonManager<>(TripPattern.class, JsonViews.UserInterface.class);
 
@@ -152,6 +154,7 @@ public class TripPatternController {
                 TripPattern.reconcilePatternStops(originalTripPattern, tripPattern, tx);
             } catch (IllegalStateException e) {
                 tx.rollback();
+                LOG.info("Could not save trip pattern", e);
                 halt(400);
             }
             

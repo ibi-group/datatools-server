@@ -17,6 +17,7 @@ import java.time.LocalDate;
  * Created by demory on 6/8/16.
  */
 public class EditorFeed extends Model implements Cloneable, Serializable {
+    private static final long serialVersionUID = 1L;
 
     // GTFS Editor defaults
     public String color;

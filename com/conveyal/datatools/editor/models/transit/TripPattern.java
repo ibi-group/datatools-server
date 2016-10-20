@@ -132,7 +132,7 @@ public class TripPattern extends Model implements Cloneable, Serializable {
         if (originalStops.size() == 0)
             return;
         
-        // ADDITIONS
+        // ADDITIONS (IF DIFF == 1)
         if (originalStops.size() == newStops.size() - 1) {
             // we have an addition; find it
 
@@ -262,8 +262,26 @@ public class TripPattern extends Model implements Cloneable, Serializable {
                 tx.trips.put(trip.id, trip);
             }
         }
+        // CHECK IF SET OF STOPS ADDED TO END OF LIST
+        else if (originalStops.size() < newStops.size()) {
+            // find the left bound of the changed region to check that no stops have changed in between
+            int firstDifferentIndex = 0;
+            while (firstDifferentIndex < originalStops.size() && originalStops.get(firstDifferentIndex).stopId.equals(newStops.get(firstDifferentIndex).stopId)) {
+                firstDifferentIndex++;
+            }
+            if (firstDifferentIndex != originalStops.size())
+                throw new IllegalStateException("When adding multiple stops to patterns, new stops must all be at the end");
 
-        
+            for (Trip trip : tx.getTripsByPattern(originalTripPattern.id)) {
+
+                // insert a skipped stop for each new element in newStops
+                for (int i = firstDifferentIndex; i < newStops.size(); i++) {
+                    trip.stopTimes.add(i, null);
+                }
+                // TODO: safe?
+                tx.trips.put(trip.id, trip);
+            }
+        }
         // OTHER STUFF IS NOT SUPPORTED
         else {
             throw new IllegalStateException("Changes to trip pattern stops must be made one at a time");

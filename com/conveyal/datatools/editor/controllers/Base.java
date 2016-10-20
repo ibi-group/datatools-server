@@ -32,9 +32,9 @@ public class Base {
     }
 
     public static String toJson(Object pojo, boolean prettyPrint)
-            throws JsonMappingException, JsonGenerationException, IOException {
+            throws IOException {
                 StringWriter sw = new StringWriter();
-                JsonGenerator jg = jf.createJsonGenerator(sw);
+                JsonGenerator jg = jf.createGenerator(sw);
                 if (prettyPrint) {
                     jg.useDefaultPrettyPrinter();
                 }
