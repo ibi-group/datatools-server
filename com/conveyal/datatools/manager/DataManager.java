@@ -70,7 +70,6 @@ public class DataManager {
     public static GTFSCache gtfsCache;
 
     public static String feedBucket;
-    public static String cacheDirectory;
     public static String bucketFolder;
 
 //    public final AmazonS3Client s3Client;
@@ -89,7 +88,6 @@ public class DataManager {
             port(Integer.parseInt(getConfigPropertyAsText("application.port")));
         }
         useS3 = getConfigPropertyAsText("application.data.use_s3_storage").equals("true");
-        cacheDirectory = getConfigPropertyAsText("application.data.gtfs") + "/cache";
 
         // initialize map of auto fetched projects
         for (Project p : Project.getAll()) {
@@ -105,7 +103,7 @@ public class DataManager {
         bucketFolder = FeedStore.s3Prefix;
 
         if (useS3) {
-            LOG.info("Initializing gtfs-api for bucket {}/{} and cache dir {}", feedBucket, bucketFolder, cacheDirectory);
+            LOG.info("Initializing gtfs-api for bucket {}/{} and cache dir {}", feedBucket, bucketFolder, FeedStore.basePath);
             gtfsCache = new GTFSCache(feedBucket, bucketFolder, FeedStore.basePath);
         }
         else {
