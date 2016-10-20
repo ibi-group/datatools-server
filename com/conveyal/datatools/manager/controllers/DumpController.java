@@ -4,6 +4,7 @@ import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.auth.Auth0Users;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.FeedSource;
+import com.conveyal.datatools.manager.models.FeedValidationResult;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Note;
@@ -196,11 +197,21 @@ public class DumpController {
 
     public static boolean validateAll (Request req, Response res) throws Exception {
         LOG.info("validating all feeds...");
-        for(FeedVersion version: FeedVersion.getAll()) {
-            if(!req.queryParams("force").equals("true") && version.validationResult != null && version.validationResult.loadStatus.equals(LoadStatus.SUCCESS)) continue;
+        Collection<FeedVersion> allVersions = FeedVersion.getAll();
+        for(FeedVersion version: allVersions) {
+            boolean force = req.queryParams("force") != null ? req.queryParams("force").equals("true") : false;
+            FeedValidationResult result = version.validationResult;
+            if(!force && result != null && result.loadStatus.equals(LoadStatus.SUCCESS)) {
+                continue;
+            }
             LOG.info("Validating {}", version.id);
-            version.validate();
-            version.save();
+            try {
+                version.validate();
+                version.save();
+            } catch (Exception e) {
+                LOG.error("Could not validate", e);
+                halt(400, "Error validating feed");
+            }
         }
         LOG.info("Finished validation...");
         return true;
