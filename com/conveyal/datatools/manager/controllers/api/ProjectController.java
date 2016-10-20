@@ -29,7 +29,9 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
@@ -109,8 +111,7 @@ public class ProjectController {
     }
 
     public static Project updateProject(Request req, Response res) throws IOException {
-        String id = req.params("id");
-        Project proj = Project.get(id);
+        Project proj = requestProjectById(req, "manage");
 
         applyJsonToProject(proj, req.body());
         proj.save();
@@ -119,9 +120,7 @@ public class ProjectController {
     }
 
     public static Project deleteProject(Request req, Response res) throws IOException {
-        String id = req.params("id");
-        Project proj = Project.get(id);
-
+        Project proj = requestProjectById(req, "manage");
         proj.delete();
 
         return proj;
@@ -130,9 +129,8 @@ public class ProjectController {
 
     public static Boolean fetch(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
-        String id = req.params("id");
-        System.out.println("project fetch for " + id);
-        Project proj = Project.get(id);
+        Project proj = requestProjectById(req, "manage");
+
         FetchProjectFeedsJob fetchProjectFeedsJob = new FetchProjectFeedsJob(proj, userProfile.getUser_id());
         new Thread(fetchProjectFeedsJob).start();
         return true;
@@ -140,6 +138,7 @@ public class ProjectController {
 
     public static void applyJsonToProject(Project proj, String json) throws IOException {
         JsonNode node = mapper.readTree(json);
+        boolean updateFetchSchedule = false;
         Iterator<Map.Entry<String, JsonNode>> fieldsIter = node.fields();
         while (fieldsIter.hasNext()) {
             Map.Entry<String, JsonNode> entry = fieldsIter.next();
@@ -189,178 +188,211 @@ public class ProjectController {
             }
             else if(entry.getKey().equals("autoFetchHour")) {
                 proj.autoFetchHour = entry.getValue().asInt();
+                updateFetchSchedule = true;
             }
             else if(entry.getKey().equals("autoFetchMinute")) {
                 proj.autoFetchMinute = entry.getValue().asInt();
-
-                // If auto fetch flag is turned on
-                if (proj.autoFetchFeeds){
-                    cancelAutoFetch(proj.id);
-                    int interval = 1; // once per day interval
-                    DataManager.autoFetchMap.put(proj.id, scheduleAutoFeedFetch(proj.id, proj.autoFetchHour, proj.autoFetchMinute, interval, proj.defaultTimeZone));
-                }
-
-                // otherwise, cancel any existing task for this id
-                else{
-                    cancelAutoFetch(proj.id);
-                }
-            }
-            else if(entry.getKey().equals("autoFetchMinute")) {
-                proj.autoFetchMinute = entry.getValue().asInt();
-
-                // If auto fetch flag is turned on
-                if (proj.autoFetchFeeds){
-                    cancelAutoFetch(proj.id);
-                    int interval = 1; // once per day interval
-                    DataManager.autoFetchMap.put(proj.id, scheduleAutoFeedFetch(proj.id, proj.autoFetchHour, proj.autoFetchMinute, interval, proj.defaultTimeZone));
-                }
-
-                // otherwise, cancel any existing task for this id
-                else{
-                    cancelAutoFetch(proj.id);
-                }
+                updateFetchSchedule = true;
             }
             else if(entry.getKey().equals("autoFetchFeeds")) {
                 proj.autoFetchFeeds = entry.getValue().asBoolean();
-
-                // If auto fetch flag is turned on
-                if (proj.autoFetchFeeds){
-                    cancelAutoFetch(proj.id);
-                    int interval = 1; // once per day interval
-                    DataManager.autoFetchMap.put(proj.id, scheduleAutoFeedFetch(proj.id, proj.autoFetchHour, proj.autoFetchMinute, interval, proj.defaultTimeZone));
-                }
-
-                // otherwise, cancel any existing task for this id
-                else{
-                    cancelAutoFetch(proj.id);
-                }
+                updateFetchSchedule = true;
             }
             else if(entry.getKey().equals("otpServers")) {
-                JsonNode otpServers = entry.getValue();
-                if (otpServers.isArray()) {
-                    proj.otpServers = new ArrayList<>();
-                    for (int i = 0; i < otpServers.size(); i++) {
-                        JsonNode otpServer = otpServers.get(i);
-
-                        OtpServer otpServerObj = new OtpServer();
-                        if (otpServer.has("name")) {
-                            JsonNode name = otpServer.get("name");
-                            otpServerObj.name = name.isNull() ? null : name.asText();
-                        }
-
-                        if (otpServer.has("admin")) {
-                            JsonNode admin = otpServer.get("admin");
-                            otpServerObj.admin = admin.isNull() ? false : admin.asBoolean();
-                        }
-
-                        if (otpServer.has("publicUrl")) {
-                            JsonNode publicUrl = otpServer.get("publicUrl");
-                            otpServerObj.publicUrl = publicUrl.isNull() ? null : publicUrl.asText();
-                        }
-                        if (otpServer.has("internalUrl") && otpServer.get("internalUrl").isArray()) {
-                            JsonNode internalUrl = otpServer.get("internalUrl");
-                            for (int j = 0; j < internalUrl.size(); j++) {
-                                if (internalUrl.get(j).isNull()) {
-                                    continue;
-                                }
-                                String url = internalUrl.get(j).asText();
-                                if (otpServerObj.internalUrl == null) {
-                                    otpServerObj.internalUrl = new ArrayList<>();
-                                }
-                                otpServerObj.internalUrl.add(url);
-                            }
-                        }
-
-                        proj.otpServers.add(otpServerObj);
-                    }
-                }
+                updateOtpServers(proj, entry.getValue());
             }
             else if (entry.getKey().equals("buildConfig")) {
-                JsonNode buildConfig = entry.getValue();
-                if(proj.buildConfig == null) proj.buildConfig = new OtpBuildConfig();
-
-                if(buildConfig.has("subwayAccessTime")) {
-                    JsonNode subwayAccessTime = buildConfig.get("subwayAccessTime");
-                    // allow client to un-set option via 'null' value
-                    proj.buildConfig.subwayAccessTime = subwayAccessTime.isNull() ? null : subwayAccessTime.asDouble();
-                }
-
-                if(buildConfig.has("fetchElevationUS")) {
-                    JsonNode fetchElevationUS = buildConfig.get("fetchElevationUS");
-                    proj.buildConfig.fetchElevationUS = fetchElevationUS.isNull() ? null : fetchElevationUS.asBoolean();
-                }
-
-                if(buildConfig.has("stationTransfers")) {
-                    JsonNode stationTransfers = buildConfig.get("stationTransfers");
-                    proj.buildConfig.stationTransfers = stationTransfers.isNull() ? null : stationTransfers.asBoolean();
-                }
-
-                if (buildConfig.has("fares")) {
-                    JsonNode fares = buildConfig.get("fares");
-                    proj.buildConfig.fares = fares.isNull() ? null : fares.asText();
-                }
+                updateBuildConfig(proj, entry.getValue());
             }
             else if (entry.getKey().equals("routerConfig")) {
-                JsonNode routerConfig = entry.getValue();
-                if (proj.routerConfig == null) proj.routerConfig = new OtpRouterConfig();
+                    updateRouterConfig(proj, entry.getValue());
+            }
+        }
+        if (updateFetchSchedule) {
+            // If auto fetch flag is turned on
+            if (proj.autoFetchFeeds){
+                int interval = 1; // once per day interval
+                DataManager.autoFetchMap.put(proj.id, scheduleAutoFeedFetch(proj.id, proj.autoFetchHour, proj.autoFetchMinute, interval, proj.defaultTimeZone));
+            }
+            // otherwise, cancel any existing task for this id
+            else{
+                cancelAutoFetch(proj.id);
+            }
+        }
+    }
 
-                if (routerConfig.has("numItineraries")) {
-                    JsonNode numItineraries = routerConfig.get("numItineraries");
-                    proj.routerConfig.numItineraries = numItineraries.isNull() ? null : numItineraries.asInt();
+    private static void updateOtpServers(Project proj, JsonNode otpServers) {
+        if (otpServers.isArray()) {
+            proj.otpServers = new ArrayList<>();
+            for (int i = 0; i < otpServers.size(); i++) {
+                JsonNode otpServer = otpServers.get(i);
+
+                OtpServer otpServerObj = new OtpServer();
+                if (otpServer.has("name")) {
+                    JsonNode name = otpServer.get("name");
+                    otpServerObj.name = name.isNull() ? null : name.asText();
                 }
-
-                if (routerConfig.has("walkSpeed")) {
-                    JsonNode walkSpeed = routerConfig.get("walkSpeed");
-                    proj.routerConfig.walkSpeed = walkSpeed.isNull() ? null : walkSpeed.asDouble();
+                if (otpServer.has("admin")) {
+                    JsonNode admin = otpServer.get("admin");
+                    otpServerObj.admin = admin.isNull() ? false : admin.asBoolean();
                 }
-
-                if (routerConfig.has("carDropoffTime")) {
-                    JsonNode carDropoffTime = routerConfig.get("carDropoffTime");
-                    proj.routerConfig.carDropoffTime = carDropoffTime.isNull() ? null : carDropoffTime.asDouble();
+                if (otpServer.has("publicUrl")) {
+                    JsonNode publicUrl = otpServer.get("publicUrl");
+                    otpServerObj.publicUrl = publicUrl.isNull() ? null : publicUrl.asText();
                 }
-
-                if (routerConfig.has("stairsReluctance")) {
-                    JsonNode stairsReluctance = routerConfig.get("stairsReluctance");
-                    proj.routerConfig.stairsReluctance = stairsReluctance.isNull() ? null : stairsReluctance.asDouble();
-                }
-
-                if (routerConfig.has("updaters")) {
-                    JsonNode updaters = routerConfig.get("updaters");
-                    if (updaters.isArray()) {
-                        proj.routerConfig.updaters = new ArrayList<>();
-                        for (int i = 0; i < updaters.size(); i++) {
-                            JsonNode updater = updaters.get(i);
-
-                            OtpRouterConfig.Updater updaterObj = new OtpRouterConfig.Updater();
-                            if(updater.has("type")) {
-                                JsonNode type = updater.get("type");
-                                updaterObj.type = type.isNull() ? null : type.asText();
-                            }
-
-                            if(updater.has("sourceType")) {
-                                JsonNode sourceType = updater.get("sourceType");
-                                updaterObj.sourceType = sourceType.isNull() ? null : sourceType.asText();
-                            }
-
-                            if(updater.has("defaultAgencyId")) {
-                                JsonNode defaultAgencyId = updater.get("defaultAgencyId");
-                                updaterObj.defaultAgencyId = defaultAgencyId.isNull() ? null : defaultAgencyId.asText();
-                            }
-
-                            if(updater.has("url")) {
-                                JsonNode url = updater.get("url");
-                                updaterObj.url = url.isNull() ? null : url.asText();
-                            }
-
-                            if(updater.has("frequencySec")) {
-                                JsonNode frequencySec = updater.get("frequencySec");
-                                updaterObj.frequencySec = frequencySec.isNull() ? null : frequencySec.asInt();
-                            }
-
-                            proj.routerConfig.updaters.add(updaterObj);
+                if (otpServer.has("internalUrl") && otpServer.get("internalUrl").isArray()) {
+                    JsonNode internalUrl = otpServer.get("internalUrl");
+                    for (int j = 0; j < internalUrl.size(); j++) {
+                        if (internalUrl.get(j).isNull()) {
+                            continue;
                         }
+                        String url = internalUrl.get(j).asText();
+                        if (otpServerObj.internalUrl == null) {
+                            otpServerObj.internalUrl = new ArrayList<>();
+                        }
+                        otpServerObj.internalUrl.add(url);
                     }
                 }
+                proj.otpServers.add(otpServerObj);
+            }
+        }
+    }
+
+    private static void updateBuildConfig(Project proj, JsonNode buildConfig) {
+        if(proj.buildConfig == null) proj.buildConfig = new OtpBuildConfig();
+        if(buildConfig.has("subwayAccessTime")) {
+            JsonNode subwayAccessTime = buildConfig.get("subwayAccessTime");
+            // allow client to un-set option via 'null' value
+            proj.buildConfig.subwayAccessTime = subwayAccessTime.isNull() ? null : subwayAccessTime.asDouble();
+        }
+        if(buildConfig.has("fetchElevationUS")) {
+            JsonNode fetchElevationUS = buildConfig.get("fetchElevationUS");
+            proj.buildConfig.fetchElevationUS = fetchElevationUS.isNull() ? null : fetchElevationUS.asBoolean();
+        }
+        if(buildConfig.has("stationTransfers")) {
+            JsonNode stationTransfers = buildConfig.get("stationTransfers");
+            proj.buildConfig.stationTransfers = stationTransfers.isNull() ? null : stationTransfers.asBoolean();
+        }
+        if (buildConfig.has("fares")) {
+            JsonNode fares = buildConfig.get("fares");
+            proj.buildConfig.fares = fares.isNull() ? null : fares.asText();
+        }
+    }
+
+    /**
+     * Helper function returns feed source if user has permission for specified action.
+     * @param req spark Request object from API request
+     * @param action action type (either "view" or "manage")
+     * @return
+     */
+    private static Project requestProjectById(Request req, String action) {
+        String id = req.params("id");
+        if (id == null) {
+            halt("Please specify id param");
+        }
+        return requestProject(req, Project.get(id), action);
+    }
+    public static Project requestProject(Request req, Project p, String action) {
+        Auth0UserProfile userProfile = req.attribute("user");
+        Boolean publicFilter = Boolean.valueOf(req.queryParams("public"));
+
+        // check for null feedsource
+        if (p == null)
+            halt(400, "Feed source ID does not exist");
+
+        boolean authorized;
+        switch (action) {
+            case "manage":
+                authorized = userProfile.canAdministerProject(p.id);
+                break;
+            case "view":
+                authorized = false; // userProfile.canViewProject(p.id, p.id);
+                break;
+            default:
+                authorized = false;
+                break;
+        }
+
+        // if requesting public sources
+//        if (publicFilter){
+//            // if feed not public and user not authorized, halt
+//            if (!p.isPublic && !authorized)
+//                halt(403, "User not authorized to perform action on feed source");
+//                // if feed is public, but action is managerial, halt (we shouldn't ever get here, but just in case)
+//            else if (p.isPublic && action.equals("manage"))
+//                halt(403, "User not authorized to perform action on feed source");
+//
+//        }
+//        else {
+//            if (!authorized)
+//                halt(403, "User not authorized to perform action on feed source");
+//        }
+
+        // if we make it here, user has permission and it's a valid feedsource
+        return p;
+    }
+
+    private static void updateRouterConfig(Project proj, JsonNode routerConfig) {
+        if (proj.routerConfig == null) proj.routerConfig = new OtpRouterConfig();
+
+        if (routerConfig.has("numItineraries")) {
+            JsonNode numItineraries = routerConfig.get("numItineraries");
+            proj.routerConfig.numItineraries = numItineraries.isNull() ? null : numItineraries.asInt();
+        }
+
+        if (routerConfig.has("walkSpeed")) {
+            JsonNode walkSpeed = routerConfig.get("walkSpeed");
+            proj.routerConfig.walkSpeed = walkSpeed.isNull() ? null : walkSpeed.asDouble();
+        }
+
+        if (routerConfig.has("carDropoffTime")) {
+            JsonNode carDropoffTime = routerConfig.get("carDropoffTime");
+            proj.routerConfig.carDropoffTime = carDropoffTime.isNull() ? null : carDropoffTime.asDouble();
+        }
+
+        if (routerConfig.has("stairsReluctance")) {
+            JsonNode stairsReluctance = routerConfig.get("stairsReluctance");
+            proj.routerConfig.stairsReluctance = stairsReluctance.isNull() ? null : stairsReluctance.asDouble();
+        }
+
+        if (routerConfig.has("updaters")) {
+            updateProjectUpdaters(proj, routerConfig.get("updaters"));
+        }
+    }
+
+    private static void updateProjectUpdaters(Project proj, JsonNode updaters) {
+        if (updaters.isArray()) {
+            proj.routerConfig.updaters = new ArrayList<>();
+            for (int i = 0; i < updaters.size(); i++) {
+                JsonNode updater = updaters.get(i);
+
+                OtpRouterConfig.Updater updaterObj = new OtpRouterConfig.Updater();
+                if(updater.has("type")) {
+                    JsonNode type = updater.get("type");
+                    updaterObj.type = type.isNull() ? null : type.asText();
+                }
+
+                if(updater.has("sourceType")) {
+                    JsonNode sourceType = updater.get("sourceType");
+                    updaterObj.sourceType = sourceType.isNull() ? null : sourceType.asText();
+                }
+
+                if(updater.has("defaultAgencyId")) {
+                    JsonNode defaultAgencyId = updater.get("defaultAgencyId");
+                    updaterObj.defaultAgencyId = defaultAgencyId.isNull() ? null : defaultAgencyId.asText();
+                }
+
+                if(updater.has("url")) {
+                    JsonNode url = updater.get("url");
+                    updaterObj.url = url.isNull() ? null : url.asText();
+                }
+
+                if(updater.has("frequencySec")) {
+                    JsonNode frequencySec = updater.get("frequencySec");
+                    updaterObj.frequencySec = frequencySec.isNull() ? null : frequencySec.asInt();
+                }
+
+                proj.routerConfig.updaters.add(updaterObj);
             }
         }
     }
@@ -594,56 +626,58 @@ public class ProjectController {
         return null;
     }
     public static ScheduledFuture scheduleAutoFeedFetch (String id, int hour, int minute, int interval, String timezoneId){
-
-        // First cancel any already scheduled auto fetch task for this project id.
-        cancelAutoFetch(id);
-        Project p = Project.get(id);
-        if (p == null)
-            return null;
-
-        Cancellable task = null;
-
-        ZoneId timezone;
+        TimeUnit unit = TimeUnit.DAYS;
         try {
-            timezone = ZoneId.of(timezoneId);
-        }catch(Exception e){
-            timezone = ZoneId.of("America/New_York");
+            // First cancel any already scheduled auto fetch task for this project id.
+            cancelAutoFetch(id);
+
+            Project p = Project.get(id);
+            if (p == null)
+                return null;
+
+            Cancellable task = null;
+
+            ZoneId timezone;
+            try {
+                timezone = ZoneId.of(timezoneId);
+            }catch(Exception e){
+                timezone = ZoneId.of("America/New_York");
+            }
+            LOG.info("Scheduling autofetch for projectID: {}", p.id);
+
+            long initialDelay = 0;
+
+
+            // NOW in default timezone
+            ZonedDateTime now = LocalDateTime.now().atZone(timezone);
+
+            // SCHEDULED START TIME
+            ZonedDateTime startTime = LocalDateTime.of(LocalDate.now(), LocalTime.of(hour, minute)).atZone(timezone);
+            LOG.info("Scheduled start time: {}", startTime.format(DateTimeFormatter.ISO_ZONED_DATE_TIME));
+
+            // Get diff between start time and current time
+            long diffInMinutes = (startTime.toEpochSecond() - now.toEpochSecond()) / 60;
+            if ( diffInMinutes >= 0 ){
+                initialDelay = diffInMinutes; // delay in minutes
+            }
+            else{
+                initialDelay = 24 * 60 + diffInMinutes; // wait for one day plus difference (which is negative)
+            }
+
+            LOG.info("Auto fetch begins in {} hours and runs every {} hours", String.valueOf(initialDelay / 60.0), unit.toHours(interval));
+
+            FetchProjectFeedsJob fetchProjectFeedsJob = new FetchProjectFeedsJob(p, null);
+
+            return DataManager.scheduler.scheduleAtFixedRate(fetchProjectFeedsJob, initialDelay, interval, unit);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
         }
-//        ZoneId.systemDefault();
-        System.out.println("Using timezone: " + timezone.getId());
-
-        long initialDelay = 0;
-
-
-        // NOW in UTC
-        ZonedDateTime now = LocalDateTime.now().atZone(timezone);
-        System.out.println("Current time:" + now.toString());
-
-        // Format and parse datetime string
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm");
-        String dtString = String.valueOf(now.getDayOfMonth()) + "/" + String.valueOf(now.getMonth()) + "/" + String.valueOf(now.getYear()) + " " + String.valueOf(hour) + ":" + String.valueOf(minute);
-        ZonedDateTime startTime = ZonedDateTime.parse(dtString, formatter);
-        System.out.println("Start time:" + startTime.toString());
-
-        // Get diff between start time and current time
-        long diffInMinutes = (startTime.toEpochSecond() - now.toEpochSecond()) / 60;
-        if ( diffInMinutes >= 0 ){
-            initialDelay = diffInMinutes; // delay in minutes
-        }
-        else{
-            initialDelay = 24 * 60 + diffInMinutes; // wait for one day plus difference (which is negative)
-        }
-
-        System.out.println("Scheduling the feed auto fetch daemon to kick off in " + String.valueOf(initialDelay / 60) + " hours." );
-
-        FetchProjectFeedsJob fetchProjectFeedsJob = new FetchProjectFeedsJob(p, null);
-
-        return DataManager.scheduler.scheduleAtFixedRate(fetchProjectFeedsJob, initialDelay, interval, TimeUnit.MINUTES);
     }
     public static void cancelAutoFetch(String id){
         Project p = Project.get(id);
         if ( p != null && DataManager.autoFetchMap.get(p.id) != null) {
-            System.out.println("Cancelling the feed auto fetch daemon for projectID: " + p.id);
+            LOG.info("Cancelling autofetch for projectID: {}", p.id);
             DataManager.autoFetchMap.get(p.id).cancel(true);
         }
     }

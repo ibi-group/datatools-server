@@ -34,11 +34,7 @@ public class GtfsApiController {
         // store list of GTFS feed eTags here
         List<String> eTagList = new ArrayList<>();
 
-        cacheDirectory = DataManager.getConfigPropertyAsText("application.data.gtfs") + "/cache/api/";
-        File dir = new File(cacheDirectory);
-        if (!dir.isDirectory()) {
-            dir.mkdirs();
-        }
+        gtfsApi.initialize(DataManager.gtfsCache);
 
         // check for use extension...
         String extensionType = DataManager.getConfigPropertyAsText("modules.gtfsapi.use_extension");
@@ -48,15 +44,13 @@ public class GtfsApiController {
             feedBucket = DataManager.getConfigPropertyAsText("extensions." + extensionType + ".s3_bucket");
             bucketFolder = DataManager.getConfigPropertyAsText("extensions." + extensionType + ".s3_download_prefix");
 
-            gtfsApi.initialize(DataManager.gtfsCache);
-
             eTagList.addAll(registerS3Feeds(feedBucket, cacheDirectory));
 
             // set feedUpdater to poll for new feeds at specified frequency (in seconds)
             feedUpdater = new FeedUpdater(eTagList, 0, DataManager.getConfigProperty("modules.gtfsapi.update_frequency").asInt());
         }
         // if not using MTC extension
-        else if ("true".equals(DataManager.getConfigPropertyAsText("modules.gtfsapi.enabled"))) {
+        else {
             LOG.warn("No extension provided for GTFS API");
             if ("true".equals(DataManager.getConfigPropertyAsText("application.data.use_s3_storage"))) {
                 feedBucket = DataManager.getConfigPropertyAsText("application.data.gtfs_s3_bucket");
@@ -65,9 +59,6 @@ public class GtfsApiController {
             else {
                 feedBucket = null;
             }
-            // TODO: update other gtfs api conditions to use
-            LOG.info("Initializing gtfs-api for bucket {}/{} and cache dir {}", feedBucket, bucketFolder, cacheDirectory);
-            gtfsApi.initialize(DataManager.gtfsCache);
         }
 
         // check for load on startup
@@ -82,8 +73,6 @@ public class GtfsApiController {
             }
 //         else, use local directory
             else {
-                gtfsApi.initialize(null, cacheDirectory);
-
                 // iterate over latest feed versions
                 for (FeedSource fs : FeedSource.getAll()) {
                     FeedVersion v = fs.getLatest();

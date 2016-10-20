@@ -1,20 +1,10 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.amazonaws.AmazonServiceException;
-import com.amazonaws.auth.AWSCredentials;
-import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
-import com.amazonaws.auth.profile.ProfileCredentialsProvider;
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3Client;
-import com.amazonaws.services.s3.model.AmazonS3Exception;
-import com.amazonaws.services.s3.model.GetObjectRequest;
-import com.amazonaws.services.s3.model.S3Object;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.BuildTransportNetworkJob;
 import com.conveyal.datatools.manager.jobs.CreateFeedVersionFromSnapshotJob;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
-import com.conveyal.datatools.manager.jobs.ReadTransportNetworkJob;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -41,6 +31,7 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -53,10 +44,13 @@ import javax.servlet.MultipartConfigElement;
 import javax.servlet.ServletException;
 import javax.servlet.http.Part;
 
+import static com.conveyal.datatools.manager.controllers.api.FeedSourceController.requestFeedSource;
 import static spark.Spark.*;
 
 public class FeedVersionController  {
-
+    enum Permission {
+        VIEW, MANAGE
+    }
     public static final Logger LOG = LoggerFactory.getLogger(FeedVersionController.class);
     private static ObjectMapper mapper = new ObjectMapper();
     public static JsonManager<FeedVersion> json =
@@ -68,76 +62,25 @@ public class FeedVersionController  {
      * If you pass in ?summarized=true, don't include the full tree of validation results, only the counts.
      */
     public static FeedVersion getFeedVersion (Request req, Response res) throws JsonProcessingException {
-        String id = req.params("id");
-        if (id == null) {
-            halt(404, "Must specify feed version ID");
-        }
-        FeedVersion v = FeedVersion.get(id);
-
-        if (v == null) {
-            halt(404, "Version ID does not exist");
-        }
-        FeedSource s = v.getFeedSource();
+        FeedVersion v = requestFeedVersion(req, "view");
 
         return v;
-        // ways to have permission to do this:
-        // 1) be an admin
-        // 2) have access to this feed through project permissions
-        /*if (userProfile.canAdministerProject(s.feedCollectionId) || userProfile.canViewFeed(s.feedCollectionId, s.id)) {
-            if ("true".equals(request().getQueryString("summarized"))) {
-                return ok(jsonSummarized.write(new SummarizedFeedVersion(v))).as("application/json");
-            }
-            else {
-                return ok(json.write(v)).as("application/json");
-            }
-        }
-        else {
-            return unauthorized();
-        }*/
     }
-
-    /**
-     * Grab this feed version's GTFS.
-     */
-    /*public static Result getGtfs (String id) throws JsonProcessingException {
-        Auth0UserProfile userProfile = getSessionProfile();
-        if(userProfile == null) return unauthorized();
-
-        FeedVersion v = FeedVersion.get(id);
-        FeedSource s = v.getFeedSource();
-
-        if (userProfile.canAdministerProject(s.feedCollectionId) || userProfile.canViewFeed(s.feedCollectionId, s.id)) {
-            return ok(v.getGtfsFile());
-        }
-        else {
-            return unauthorized();
-        }
-    }*/
-
 
     public static Collection<FeedVersion> getAllFeedVersions (Request req, Response res) throws JsonProcessingException {
+        Auth0UserProfile userProfile = req.attribute("user");
+        FeedSource s = requestFeedSourceById(req, "view");
 
-        // parse the query parameters
-        String sourceId = req.queryParams("feedSourceId");
-        if (sourceId == null) {
-            halt("Please specify a feedsource");
-        }
-        Boolean publicFilter = Boolean.valueOf(req.queryParams("public"));
-
-        FeedSource s = FeedSource.get(sourceId);
-
-        Collection<FeedVersion> versions = new ArrayList<>();
-
-        for (FeedVersion v : s.getFeedVersions()){
-            // if requesting public sources and source is not public; skip source
-            if (publicFilter && !s.isPublic)
-                continue;
-            versions.add(v);
-        }
-
-        return versions;
+        return s.getFeedVersions().stream()
+                .collect(Collectors.toCollection(ArrayList::new));
     }
-
+    private static FeedSource requestFeedSourceById(Request req, String action) {
+        String id = req.queryParams("feedSourceId");
+        if (id == null) {
+            halt("Please specify feedsourceId param");
+        }
+        return requestFeedSource(req, FeedSource.get(id), action);
+    }
 
     /**
      * Upload a feed version directly. This is done behind Backbone's back, and as such uses
@@ -150,13 +93,14 @@ public class FeedVersionController  {
     public static Boolean createFeedVersion (Request req, Response res) throws IOException, ServletException {
 
         Auth0UserProfile userProfile = req.attribute("user");
-        FeedSource s = FeedSource.get(req.queryParams("feedSourceId"));
+        FeedSource s = requestFeedSourceById(req, "manage");
 
-        if (FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.equals(s.retrievalMethod))
+        if (FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.equals(s.retrievalMethod)) {
             halt(400, "Feed is autofetched! Cannot upload.");
+        }
 
         FeedVersion v = new FeedVersion(s);
-        //v.setUser(req.attribute("auth0User"));
+        v.setUser(userProfile);
 
         if (req.raw().getAttribute("org.eclipse.jetty.multipartConfig") == null) {
             MultipartConfigElement multipartConfigElement = new MultipartConfigElement(System.getProperty("java.io.tmpdir"));
@@ -165,7 +109,7 @@ public class FeedVersionController  {
 
         Part part = req.raw().getPart("file");
 
-        LOG.info("Saving feed {} from upload", s);
+        LOG.info("Saving feed from upload {}", s);
 
 
         InputStream uploadStream;
@@ -173,6 +117,7 @@ public class FeedVersionController  {
             uploadStream = part.getInputStream();
             v.newGtfsFile(uploadStream);
         } catch (Exception e) {
+            e.printStackTrace();
             LOG.error("Unable to open input stream from upload");
             halt(400, "Unable to read uploaded feed");
         }
@@ -180,7 +125,9 @@ public class FeedVersionController  {
         v.hash();
 
         FeedVersion latest = s.getLatest();
-        if (latest != null && latest.hash.equals(v.hash)) {
+
+        // Check that hashes don't match (as long as v and latest are not the same entry)
+        if (latest != null && latest.hash.equals(v.hash) && latest.id != v.id) {
             v.getGtfsFile().delete();
             // Uploaded feed is same as latest version
             halt(304);
@@ -203,7 +150,8 @@ public class FeedVersionController  {
     public static Boolean createFeedVersionFromSnapshot (Request req, Response res) throws IOException, ServletException {
 
         Auth0UserProfile userProfile = req.attribute("user");
-        FeedSource s = FeedSource.get(req.queryParams("feedSourceId"));
+        // TODO: should this be edit privelege?
+        FeedSource s = requestFeedSourceById(req, "manage");
 
         CreateFeedVersionFromSnapshotJob createFromSnapshotJob =
                 new CreateFeedVersionFromSnapshotJob(s, req.queryParams("snapshotId"), userProfile.getUser_id());
@@ -214,8 +162,8 @@ public class FeedVersionController  {
     }
 
     public static FeedVersion deleteFeedVersion(Request req, Response res) {
-        String id = req.params("id");
-        FeedVersion version = FeedVersion.get(id);
+        FeedVersion version = requestFeedVersion(req, "manage");
+
         version.delete();
 
         // renumber the versions
@@ -231,6 +179,18 @@ public class FeedVersionController  {
         return version;
     }
 
+    private static FeedVersion requestFeedVersion(Request req, String action) {
+        String id = req.params("id");
+
+        FeedVersion version = FeedVersion.get(id);
+        if (version == null) {
+            halt(404, "Version ID does not exist");
+        }
+        // performs permissions checks for at feed source level and halts if any issues
+        FeedSource s = requestFeedSource(req, version.getFeedSource(), "manage");
+        return version;
+    }
+
     public static Object getValidationResult(Request req, Response res) {
         return getValidationResult(req, res, false);
     }
@@ -239,87 +199,84 @@ public class FeedVersionController  {
         return getValidationResult(req, res, true);
     }
 
-    public static Object getValidationResult(Request req, Response res, boolean checkPublic) {
-        String id = req.params("id");
-        FeedVersion version = FeedVersion.get(id);
+    public static JsonNode getValidationResult(Request req, Response res, boolean checkPublic) {
+        FeedVersion version = requestFeedVersion(req, "view");
 
-        if(checkPublic && !version.getFeedSource().isPublic) {
-            halt(401, "Not a public feed");
+        return version.getValidationResult();
+    }
+
+    public static JsonNode getIsochrones(Request req, Response res) {
+        FeedVersion version = requestFeedVersion(req, "view");
+
+        Auth0UserProfile userProfile = req.attribute("user");
+        // if tn is null, check first if it's being built, else try reading in tn
+        if (version.transportNetwork == null) {
+            buildOrReadTransportNetwork(version, userProfile);
             return null;
         }
-
-
-        // TODO: separate this out if non s3 bucket
-        String s3Bucket = DataManager.config.get("application").get("data").get("gtfs_s3_bucket").asText();
-        String keyName = "validation/" + version.id + ".json";
-        JsonNode n = null;
-        InputStream objectData = null;
-        if (s3Bucket != null && DataManager.getConfigProperty("application.data.use_s3_storage").asBoolean() == true) {
-            AWSCredentials creds;
-            // default credentials providers, e.g. IAM role
-            creds = new DefaultAWSCredentialsProviderChain().getCredentials();
-            try {
-                LOG.info("Getting validation results from s3");
-                AmazonS3 s3Client = new AmazonS3Client(new ProfileCredentialsProvider());
-                S3Object object = s3Client.getObject(
-                        new GetObjectRequest(s3Bucket, keyName));
-                objectData = object.getObjectContent();
-            } catch (AmazonS3Exception e) {
-                // if json file does not exist, validate feed.
-                version.validate();
-                version.save();
-                halt(503, "Try again later. Validating feed");
-            } catch (AmazonServiceException ase) {
-                LOG.error("Error downloading from s3");
-                ase.printStackTrace();
-            }
-
-        }
-        // if s3 upload set to false
         else {
-            File file = new File(DataManager.getConfigPropertyAsText("application.data.gtfs") + "/validation/" + version.id + ".json");
-            try {
-                objectData = new FileInputStream(file);
-//            } catch (IOException e) {
-//                e.printStackTrace();
-            } catch (Exception e) {
-                LOG.warn("Validation does not exist.  Validating feed.");
-                version.validate();
-                version.save();
-                halt(503, "Try again later. Validating feed");
+            // remove version from list of reading network
+            if (readingNetworkVersionList.contains(version.id)) {
+                readingNetworkVersionList.remove(version.id);
             }
+            AnalystClusterRequest clusterRequest = buildProfileRequest(req);
+            return getRouterResult(version.transportNetwork, clusterRequest);
         }
+    }
 
-        // Process the objectData stream.
+    private static void buildOrReadTransportNetwork(FeedVersion version, Auth0UserProfile userProfile) {
+        InputStream is = null;
         try {
-            n = mapper.readTree(objectData);
-            if (!n.has("errors") || !n.has("tripsPerDate")) {
-                throw new Exception("Validation for feed version not up to date");
+            if (readingNetworkVersionList.contains(version.id)) {
+                halt(503, "Try again later. Reading transport network");
             }
-
-            return n;
-        } catch (IOException e) {
-            // if json file does not exist, validate feed.
-            version.validate();
-            version.save();
-            halt(503, "Try again later. Validating feed");
-        } catch (Exception e) {
-            e.printStackTrace();
-            version.validate();
-            version.save();
-            halt(503, "Try again later. Validating feed");
+            else {
+                is = new FileInputStream(version.getTransportNetworkPath());
+                readingNetworkVersionList.add(version.id);
+                try {
+                    version.transportNetwork = TransportNetwork.read(is);
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
         }
+        // Catch exception if transport network not built yet
+        catch (Exception e) {
+            if (DataManager.isModuleEnabled("validator")) {
+                LOG.warn("Transport network not found. Beginning build.");
+                BuildTransportNetworkJob btnj = new BuildTransportNetworkJob(version, userProfile.getUser_id());
+                Thread tnThread = new Thread(btnj);
+                tnThread.start();
+            }
+            halt(503, "Try again later. Building transport network");
+        }
+    }
 
+    private static JsonNode getRouterResult(TransportNetwork transportNetwork, AnalystClusterRequest clusterRequest) {
+        PointSet targets = transportNetwork.getGridPointSet();
+        StreetMode mode = StreetMode.WALK;
+        final LinkedPointSet linkedTargets = targets.link(transportNetwork.streetLayer, mode);
+        RepeatedRaptorProfileRouter router = new RepeatedRaptorProfileRouter(transportNetwork, clusterRequest, linkedTargets, new TaskStatistics());
+        ResultEnvelope result = router.route();
+
+        ByteArrayOutputStream out = new ByteArrayOutputStream();
+        try {
+            JsonGenerator jgen = new JsonFactory().createGenerator(out);
+            jgen.writeStartObject();
+            result.avgCase.writeIsochrones(jgen);
+            jgen.writeEndObject();
+            jgen.close();
+            out.close();
+            String outString = new String( out.toByteArray(), StandardCharsets.UTF_8 );
+            return mapper.readTree(outString);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
         return null;
     }
 
-    public static Object getIsochrones(Request req, Response res) {
-        Auth0UserProfile userProfile = req.attribute("user");
-
-        String id = req.params("id");
-        FeedVersion version = FeedVersion.get(id);
-
-        // required
+    private static AnalystClusterRequest buildProfileRequest(Request req) {
+        // required fields?
         Double fromLat = Double.valueOf(req.queryParams("fromLat"));
         Double fromLon = Double.valueOf(req.queryParams("fromLon"));
         Double toLat = Double.valueOf(req.queryParams("toLat"));
@@ -330,81 +287,22 @@ public class FeedVersionController  {
         Integer fromTime = req.queryParams("fromTime") != null ? Integer.valueOf(req.queryParams("fromTime")) : 9 * 3600;
         Integer toTime = req.queryParams("toTime") != null ? Integer.valueOf(req.queryParams("toTime")) : 10 * 3600;
 
-        if (version.transportNetwork == null) {
-            InputStream is = null;
-            try {
-                if (readingNetworkVersionList.contains(version.id)) {
-                    halt(503, "Try again later. Reading transport network");
-                    return null;
-                }
-                else {
-                    //                ReadTransportNetworkJob rtnj = new ReadTransportNetworkJob(version, userProfile.getUser_id());
-//                Thread tnThread = new Thread(rtnj);
-//                tnThread.start();
-                    is = new FileInputStream(DataManager.config.get("application").get("data").get("gtfs").asText() + "/"  + version.feedSourceId + "/" + version.id + "_network.dat");
-                    readingNetworkVersionList.add(version.id);
-                    try {
-                        version.transportNetwork = TransportNetwork.read(is);
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-            }
-            // Catch FNFE exception transport network not built yet
-            catch (FileNotFoundException e) {
-                e.printStackTrace();
-                if (DataManager.config.get("modules").get("validator").get("enabled").asBoolean()) {
-//                    new BuildTransportNetworkJob(version).run();
-                    BuildTransportNetworkJob btnj = new BuildTransportNetworkJob(version, userProfile.getUser_id());
-                    Thread tnThread = new Thread(btnj);
-                    tnThread.start();
-                }
-                halt(503, "Try again later. Building transport network");
-            }
-        }
+        // build request with transit as default mode
+        AnalystClusterRequest clusterRequest = new AnalystClusterRequest();
+        clusterRequest.profileRequest = new ProfileRequest();
+        clusterRequest.profileRequest.transitModes = EnumSet.of(TransitModes.TRANSIT);
+        clusterRequest.profileRequest.accessModes = EnumSet.of(LegMode.WALK);
+        clusterRequest.profileRequest.date = date;
+        clusterRequest.profileRequest.fromLat = fromLat;
+        clusterRequest.profileRequest.fromLon = fromLon;
+        clusterRequest.profileRequest.toLat = toLat;
+        clusterRequest.profileRequest.toLon = toLon;
+        clusterRequest.profileRequest.fromTime = fromTime;
+        clusterRequest.profileRequest.toTime = toTime;
+        clusterRequest.profileRequest.egressModes = EnumSet.of(LegMode.WALK);
+        clusterRequest.profileRequest.zoneId = ZoneId.of("America/New_York");
 
-        if (version.transportNetwork != null) {
-            // remove version from list of reading network
-            if (readingNetworkVersionList.contains(version.id)) {
-                readingNetworkVersionList.remove(version.id);
-            }
-            AnalystClusterRequest clusterRequest = new AnalystClusterRequest();
-            clusterRequest.profileRequest = new ProfileRequest();
-            clusterRequest.profileRequest.transitModes = EnumSet.of(TransitModes.TRANSIT);
-            clusterRequest.profileRequest.accessModes = EnumSet.of(LegMode.WALK);
-            clusterRequest.profileRequest.date = date;
-            clusterRequest.profileRequest.fromLat = fromLat;
-            clusterRequest.profileRequest.fromLon = fromLon;
-            clusterRequest.profileRequest.toLat = toLat;
-            clusterRequest.profileRequest.toLon = toLon;
-            clusterRequest.profileRequest.fromTime = fromTime;
-            clusterRequest.profileRequest.toTime = toTime;
-            clusterRequest.profileRequest.egressModes = EnumSet.of(LegMode.WALK);
-            clusterRequest.profileRequest.zoneId = ZoneId.of("America/New_York");
-            PointSet targets = version.transportNetwork.getGridPointSet();
-            StreetMode mode = StreetMode.WALK;
-            final LinkedPointSet linkedTargets = targets.link(version.transportNetwork.streetLayer, mode);
-            RepeatedRaptorProfileRouter router = new RepeatedRaptorProfileRouter(version.transportNetwork, clusterRequest, linkedTargets, new TaskStatistics());
-            ResultEnvelope result = router.route();
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            try {
-                JsonGenerator jgen = new JsonFactory().createGenerator(out);
-                jgen.writeStartObject();
-                result.avgCase.writeIsochrones(jgen);
-                jgen.writeEndObject();
-                jgen.close();
-                out.close();
-                String outString = new String( out.toByteArray(), StandardCharsets.UTF_8 );
-                //System.out.println(outString);
-                ObjectMapper mapper = new ObjectMapper();
-                return mapper.readTree(outString);
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-
-
-        }
-        return null;
+        return clusterRequest;
     }
 
     private static Object downloadFeedVersion(FeedVersion version, Response res) {
@@ -435,15 +333,7 @@ public class FeedVersionController  {
     }
 
     public static Boolean renameFeedVersion (Request req, Response res) throws JsonProcessingException {
-        String id = req.params("id");
-        if (id == null) {
-            halt(404, "Must specify feed version ID");
-        }
-        FeedVersion v = FeedVersion.get(id);
-
-        if (v == null) {
-            halt(404, "Version ID does not exist");
-        }
+        FeedVersion v = requestFeedVersion(req, "manage");
 
         String name = req.queryParams("name");
         if (name == null) {
@@ -456,19 +346,19 @@ public class FeedVersionController  {
     }
 
     private static Object downloadFeedVersionDirectly(Request req, Response res) {
-        FeedVersion version = FeedVersion.get(req.params("id"));
+        FeedVersion version = requestFeedVersion(req, "view");
         return downloadFeedVersion(version, res);
     }
 
     private static FeedDownloadToken getDownloadToken (Request req, Response res) {
-        FeedVersion version = FeedVersion.get(req.params("id"));
+        FeedVersion version = requestFeedVersion(req, "view");
         FeedDownloadToken token = new FeedDownloadToken(version);
         token.save();
         return token;
     }
 
     private static FeedDownloadToken getPublicDownloadToken (Request req, Response res) {
-        FeedVersion version = FeedVersion.get(req.params("id"));
+        FeedVersion version = requestFeedVersion(req, "view");
         if(!version.getFeedSource().isPublic) {
             halt(401, "Not a public feed");
             return null;
@@ -512,5 +402,4 @@ public class FeedVersionController  {
         get(apiPrefix + "downloadfeed/:token", FeedVersionController::downloadFeedVersionWithToken);
 
     }
-
 }

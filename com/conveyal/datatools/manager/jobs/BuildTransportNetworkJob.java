@@ -38,7 +38,18 @@ public class BuildTransportNetworkJob extends MonitorableJob {
     @Override
     public void run() {
         System.out.println("Building network");
-        feedVersion.buildTransportNetwork(eventBus);
+        try {
+            feedVersion.buildTransportNetwork(eventBus);
+        } catch (Exception e) {
+            e.printStackTrace();
+            synchronized (status) {
+                status.message = "Transport network failed!";
+                status.percentComplete = 100;
+                status.error = true;
+                status.completed = true;
+            }
+
+        }
         synchronized (status) {
             status.message = "Transport network built successfully!";
             status.percentComplete = 100;

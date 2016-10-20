@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager;
 
+import com.amazonaws.services.s3.AmazonS3Client;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 
 import com.conveyal.datatools.manager.controllers.DumpController;
@@ -18,12 +19,12 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.utils.CorsFilter;
-import com.conveyal.datatools.manager.utils.ResponseError;
 import com.conveyal.gtfs.GTFSCache;
 import com.conveyal.gtfs.api.ApiMain;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.google.common.util.concurrent.UncheckedExecutionException;
 import com.google.gson.Gson;
 import org.apache.http.concurrent.Cancellable;
 import org.slf4j.Logger;
@@ -32,6 +33,7 @@ import spark.utils.IOUtils;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -63,37 +65,31 @@ public class DataManager {
     public static Map<String, Set<MonitorableJob>> userJobsMap = new HashMap<>();
 
     public static Map<String, ScheduledFuture> autoFetchMap = new HashMap<>();
-    public final static ScheduledExecutorService scheduler =
-            Executors.newScheduledThreadPool(1);
-
+    public final static ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+    private static final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
     public static GTFSCache gtfsCache;
 
     public static String feedBucket;
     public static String cacheDirectory;
     public static String bucketFolder;
 
+//    public final AmazonS3Client s3Client;
+    public static boolean useS3;
+    public static final String apiPrefix = "/api/manager/";
+
     private static List<String> apiFeedSources = new ArrayList<>();
 
     public static void main(String[] args) throws IOException {
 
         // load config
-        FileInputStream in;
-
-        if (args.length == 0)
-            in = new FileInputStream(new File("config.yml"));
-        else
-            in = new FileInputStream(new File(args[0]));
-
-        ObjectMapper mapper = new ObjectMapper(new YAMLFactory());
-        config = mapper.readTree(in);
-
-        ObjectMapper serverMapper = new ObjectMapper(new YAMLFactory());
-        serverConfig = serverMapper.readTree(new File("config_server.yml"));
+        loadConfig(args);
 
         // set port
-        if(config.get("application").has("port")) {
-            port(Integer.parseInt(config.get("application").get("port").asText()));
+        if (getConfigProperty("application.port") != null) {
+            port(Integer.parseInt(getConfigPropertyAsText("application.port")));
         }
+        useS3 = getConfigPropertyAsText("application.data.use_s3_storage").equals("true");
+        cacheDirectory = getConfigPropertyAsText("application.data.gtfs") + "/cache";
 
         // initialize map of auto fetched projects
         for (Project p : Project.getAll()) {
@@ -104,18 +100,19 @@ public class DataManager {
                 }
             }
         }
-        cacheDirectory = getConfigPropertyAsText("application.data.gtfs") + "/cache";
-        File cacheDir = new File(cacheDirectory);
-        if (!cacheDir.isDirectory()) {
-            cacheDir.mkdir();
-        }
+
         feedBucket = getConfigPropertyAsText("application.data.gtfs_s3_bucket");
         bucketFolder = FeedStore.s3Prefix;
 
-        gtfsCache = new GTFSCache(feedBucket, bucketFolder, cacheDir);
+        if (useS3) {
+            LOG.info("Initializing gtfs-api for bucket {}/{} and cache dir {}", feedBucket, bucketFolder, cacheDirectory);
+            gtfsCache = new GTFSCache(feedBucket, bucketFolder, FeedStore.basePath);
+        }
+        else {
+            LOG.info("Initializing gtfs cache locally (no s3 bucket) {}", FeedStore.basePath);
+            gtfsCache = new GTFSCache(null, FeedStore.basePath);
+        }
         CorsFilter.apply();
-
-        String apiPrefix = "/api/manager/";
 
         // core controllers
         ProjectController.register(apiPrefix);
@@ -127,7 +124,7 @@ public class DataManager {
 
         // Editor routes
         if ("true".equals(getConfigPropertyAsText("modules.editor.enabled"))) {
-            gtfsConfig = mapper.readTree(new File("gtfs.yml"));
+            gtfsConfig = yamlMapper.readTree(new File("gtfs.yml"));
             AgencyController.register(apiPrefix);
             CalendarController.register(apiPrefix);
             RouteController.register(apiPrefix);
@@ -150,7 +147,7 @@ public class DataManager {
         }
         if (isModuleEnabled("gtfsplus")) {
             GtfsPlusController.register(apiPrefix);
-            gtfsPlusConfig = mapper.readTree(new File("gtfsplus.yml"));
+            gtfsPlusConfig = yamlMapper.readTree(new File("gtfsplus.yml"));
         }
         if (isModuleEnabled("user_admin")) {
             UserController.register(apiPrefix);
@@ -164,42 +161,39 @@ public class DataManager {
             Auth0Connection.checkUser(request);
         });
 
-        // lazy load feeds if new one is requested
-        if ("true".equals(getConfigPropertyAsText("modules.gtfsapi.load_on_fetch"))) {
-            before(apiPrefix + "*", (request, response) -> {
-                String feeds = request.queryParams("feed");
-                if (feeds != null) {
-                    String[] feedIds = feeds.split(",");
-                    for (String feedId : feedIds) {
-                        FeedSource fs = FeedSource.get(feedId);
-                        if (fs == null) {
-                            continue;
-                        }
-                        else if (!GtfsApiController.gtfsApi.registeredFeedSources.contains(fs.id) && !apiFeedSources.contains(fs.id)) {
-                            apiFeedSources.add(fs.id);
-
-                            LoadGtfsApiFeedJob loadJob = new LoadGtfsApiFeedJob(fs);
-                            new Thread(loadJob).start();
-                        halt(202, "Initializing feed load...");
-                        }
-                        else if (apiFeedSources.contains(fs.id) && !GtfsApiController.gtfsApi.registeredFeedSources.contains(fs.id)) {
-                            halt(202, "Loading feed, please try again later");
-                        }
-                    }
-
-                }
-            });
-        }
-
+        // lazy load by feed source id if new one is requested
+//        if ("true".equals(getConfigPropertyAsText("modules.gtfsapi.load_on_fetch"))) {
+//            before(apiPrefix + "*", (request, response) -> {
+//                String feeds = request.queryParams("feed");
+//                if (feeds != null) {
+//                    String[] feedIds = feeds.split(",");
+//                    for (String feedId : feedIds) {
+//                        FeedSource fs = FeedSource.get(feedId);
+//                        if (fs == null) {
+//                            continue;
+//                        }
+//                        else if (!GtfsApiController.gtfsApi.registeredFeedSources.contains(fs.id) && !apiFeedSources.contains(fs.id)) {
+//                            apiFeedSources.add(fs.id);
+//
+//                            LoadGtfsApiFeedJob loadJob = new LoadGtfsApiFeedJob(fs);
+//                            new Thread(loadJob).start();
+//                        halt(202, "Initializing feed load...");
+//                        }
+//                        else if (apiFeedSources.contains(fs.id) && !GtfsApiController.gtfsApi.registeredFeedSources.contains(fs.id)) {
+//                            halt(202, "Loading feed, please try again later");
+//                        }
+//                    }
+//
+//                }
+//            });
+//        }
+        // return "application/json" for all API routes
         after(apiPrefix + "*", (request, response) -> {
-
-            // only set content type if successful response
-//            if (response.status() < 300) {
-                response.type("application/json");
-//            }
+            response.type("application/json");
             response.header("Content-Encoding", "gzip");
         });
 
+        // return js for any other request
         get("/main.js", (request, response) -> {
             try (InputStream stream = DataManager.class.getResourceAsStream("/public/main.js")) {
                 return IOUtils.toString(stream);
@@ -233,10 +227,6 @@ public class DataManager {
                 // if the resource doesn't exist we just carry on.
             }
         });
-//        exception(IllegalArgumentException.class,(e,req,res) -> {
-//            res.status(400);
-//            res.body(new Gson().toJson(new ResponseError(e)));
-//        });
         registerExternalResources();
     }
 
@@ -285,7 +275,17 @@ public class DataManager {
             registerExternalResource(new TransitFeedsFeedResource());
         }
     }
+    private static void loadConfig (String[] args) throws IOException {
+        FileInputStream in;
 
+        if (args.length == 0)
+            in = new FileInputStream(new File("config.yml"));
+        else
+            in = new FileInputStream(new File(args[0]));
+
+        config = yamlMapper.readTree(in);
+        serverConfig = yamlMapper.readTree(new File("config_server.yml"));
+    }
     private static void registerExternalResource(ExternalFeedResource resource) {
         feedResources.put(resource.getResourceType(), resource);
     }

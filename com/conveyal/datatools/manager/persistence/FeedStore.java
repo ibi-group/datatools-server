@@ -177,25 +177,9 @@ public class FeedStore {
      * Create a new feed with the given ID.
      */
     public File newFeed (String id, InputStream inputStream, FeedSource feedSource) {
-        // s3 storage
+        // s3 storage (store locally and let gtfsCache handle loading feed to s3)
         if (DataManager.useS3) {
-//            return uploadToS3(inputStream, id, feedSource);
-            try {
-                // create temp file
-//                File file = createTempFile(inputStream);
-
-                File file = storeFeedLocally(id, inputStream, feedSource);
-                // let gtfsCache handle loading feed to s3
-                if (file != null) {
-                    String apiId = id.replace(".zip", "");
-                    System.out.println(file.length());
-//                    GtfsApiController.gtfsApi.getFeedSource(apiId);
-
-                }
-                return file;
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+            return storeFeedLocally(id, inputStream, feedSource);
         }
         // local storage
         else if (path != null) {
@@ -205,14 +189,12 @@ public class FeedStore {
     }
 
     private File storeFeedLocally(String id, InputStream inputStream, FeedSource feedSource) {
-//        File out = new File(path, id);
-//        FileOutputStream outStream;
-
         // store latest as feed-source-id.zip
         if (feedSource != null) {
             try {
-                return copyFileUsingInputStream(id, inputStream, feedSource);
-            } catch (IOException e) {
+//                return copyFileUsingInputStream(id, inputStream, feedSource);
+                return copyFileUsingFilesCopy(id, inputStream, feedSource);
+            } catch (Exception e) {
                 e.printStackTrace();
             }
 //            return copyFileUsingFilesCopy(id, inputStream, feedSource);
@@ -280,8 +262,6 @@ public class FeedStore {
             output.close();
             try {
                 System.out.println(out.length());
-//                GtfsApiController.gtfsApi.getFeedSource(id.replace(".zip", ""));
-//                GTFSFeed feed = DataManager.gtfsCache.put(id.replace(".zip", ""), out);
             } catch (Exception e) {
                 e.printStackTrace();
             }

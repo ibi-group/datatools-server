@@ -10,6 +10,8 @@ import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import spark.Request;
 import spark.Response;
 
@@ -26,21 +28,13 @@ import static spark.Spark.*;
  */
 
 public class FeedSourceController {
-
+    public static final Logger LOG = LoggerFactory.getLogger(FeedSourceController.class);
     public static JsonManager<FeedSource> json =
             new JsonManager<>(FeedSource.class, JsonViews.UserInterface.class);
     private static ObjectMapper mapper = new ObjectMapper();
+
     public static FeedSource getFeedSource(Request req, Response res) {
-        String id = req.params("id");
-        Boolean publicFilter = req.pathInfo().contains("public");
-        FeedSource fs = FeedSource.get(id);
-        if (fs == null) {
-            halt(404, null);
-        }
-        if (publicFilter && !fs.isPublic) {
-            halt(503);
-        }
-        return fs;
+        return requestFeedSourceById(req, "view");
     }
 
     public static Collection<FeedSource> getAllFeedSources(Request req, Response res) {
@@ -124,17 +118,13 @@ public class FeedSourceController {
     }
 
     public static FeedSource updateFeedSource(Request req, Response res) throws IOException {
-        String id = req.params("id");
-        FeedSource source = FeedSource.get(id);
-        if (source == null) {
-            halt(404);
-        }
+        FeedSource source = requestFeedSourceById(req, "manage");
 
         applyJsonToFeedSource(source, req.body());
         source.save();
 
         // notify users after successful save
-        NotifyUsersForSubscriptionJob notifyFeedJob = new NotifyUsersForSubscriptionJob("feed-updated", id, "Feed property updated for " + source.name);
+        NotifyUsersForSubscriptionJob notifyFeedJob = new NotifyUsersForSubscriptionJob("feed-updated", source.id, "Feed property updated for " + source.name);
         Thread notifyThread = new Thread(notifyFeedJob);
         notifyThread.start();
 
@@ -146,7 +136,6 @@ public class FeedSourceController {
     }
 
     public static void applyJsonToFeedSource(FeedSource source, String json) throws IOException {
-        ObjectMapper mapper = new ObjectMapper();
         JsonNode node = mapper.readTree(json);
         Iterator<Map.Entry<String, JsonNode>> fieldsIter = node.fields();
         while (fieldsIter.hasNext()) {
@@ -195,10 +184,8 @@ public class FeedSourceController {
     }
 
     public static FeedSource updateExternalFeedResource(Request req, Response res) throws IOException {
-        String id = req.params("id");
-        FeedSource source = FeedSource.get(id);
+        FeedSource source = requestFeedSourceById(req, "manage");
         String resourceType = req.queryParams("resourceType");
-        ObjectMapper mapper = new ObjectMapper();
         JsonNode node = mapper.readTree(req.body());
         Iterator<Map.Entry<String, JsonNode>> fieldsIter = node.fields();
 
@@ -226,15 +213,14 @@ public class FeedSourceController {
     }
 
     public static FeedSource deleteFeedSource(Request req, Response res) {
-        String id = req.params("id");
-        FeedSource source = FeedSource.get(id);
+        FeedSource source = requestFeedSourceById(req, "manage");
 
-        if (source != null) {
+        try {
             source.delete();
             return source;
-        }
-        else {
-            halt(404);
+        } catch (Exception e) {
+            e.printStackTrace();
+            halt(400, "Unknown error deleting feed source.");
             return null;
         }
     }
@@ -244,47 +230,68 @@ public class FeedSourceController {
      * @throws JsonProcessingException
      */
     public static FeedVersion fetch (Request req, Response res) throws JsonProcessingException {
+        FeedSource s = requestFeedSourceById(req, "manage");
+
+        LOG.info("Fetching feed for source {}", s.name);
+
         Auth0UserProfile userProfile = req.attribute("user");
-        FeedSource s = FeedSource.get(req.params("id"));
-
-        System.out.println("fetching feed for source "+ s.name);
-        // ways to have permission to do this:
-        // 1) be an admin
-        // 2) have access to this feed through project permissions
-        // if all fail, the user cannot do this.
-
-        if (!userProfile.canAdministerProject(s.projectId) && !userProfile.canManageFeed(s.projectId, s.id))
-            halt(401);
-
         FetchSingleFeedJob job = new FetchSingleFeedJob(s, userProfile.getUser_id());
-        job.run();
-//        if (job.getStatus().error) {
-//            halt(304);
-//        }
+        new Thread(job).start();
         return job.result;
-//        return true;
     }
 
-//    /**
-//     * The current status of a deployment, polled to update the progress dialog.
-//     * @throws JsonProcessingException
-//     */
-//    public static Object fetchFeedStatus (Request req, Response res) throws JsonProcessingException {
-//        // this is not access-controlled beyond requiring auth, which is fine
-//        // there's no good way to know who should be able to see this.
-//        String id = req.params("id");
-//        fetchJobsByFeed.forEach((s, deployJob) -> System.out.println(s));
-//        if (!fetchJobsByFeed.containsKey(id))
-//            halt(404, "Feed source id '"+id+"' not found");
-//
-//        FetchSingleFeedJob j = fetchJobsByFeed.get(id);
-//
-//        if (j == null)
-//            halt(404, "No active job for " + id + " found");
-//
-//        return j.getStatus();
-//    }
+    /**
+     * Helper function returns feed source if user has permission for specified action.
+     * @param req spark Request object from API request
+     * @param action action type (either "view" or "manage")
+     * @return
+     */
+    private static FeedSource requestFeedSourceById(Request req, String action) {
+        String id = req.params("id");
+        if (id == null) {
+            halt("Please specify id param");
+        }
+        return requestFeedSource(req, FeedSource.get(id), action);
+    }
+    public static FeedSource requestFeedSource(Request req, FeedSource s, String action) {
+        Auth0UserProfile userProfile = req.attribute("user");
+        Boolean publicFilter = Boolean.valueOf(req.queryParams("public"));
 
+        // check for null feedsource
+        if (s == null)
+            halt(400, "Feed source ID does not exist");
+
+        boolean authorized;
+        switch (action) {
+            case "manage":
+                authorized = userProfile.canManageFeed(s.projectId, s.id);
+                break;
+            case "view":
+                authorized = userProfile.canViewFeed(s.projectId, s.id);
+                break;
+            default:
+                authorized = false;
+                break;
+        }
+
+        // if requesting public sources
+        if (publicFilter){
+            // if feed not public and user not authorized, halt
+            if (!s.isPublic && !authorized)
+                halt(403, "User not authorized to perform action on feed source");
+                // if feed is public, but action is managerial, halt (we shouldn't ever get here, but just in case)
+            else if (s.isPublic && action.equals("manage"))
+                halt(403, "User not authorized to perform action on feed source");
+
+        }
+        else {
+            if (!authorized)
+                halt(403, "User not authorized to perform action on feed source");
+        }
+
+        // if we make it here, user has permission and it's a valid feedsource
+        return s;
+    }
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/feedsource/:id", FeedSourceController::getFeedSource, json::write);
         options(apiPrefix + "secure/feedsource", (q, s) -> "");

@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.jobs;
 
+import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.editor.jobs.ProcessGtfsSnapshotMerge;
 import com.conveyal.datatools.editor.models.Snapshot;
 import com.conveyal.datatools.manager.DataManager;
@@ -24,6 +25,10 @@ public class ProcessSingleFeedJob implements Runnable {
     public ProcessSingleFeedJob (FeedVersion feedVersion, String owner) {
         this.feedVersion = feedVersion;
         this.owner = owner;
+//        this.status = new MonitorableJob.Status();
+//        status.message = "Fetching...";
+//        status.percentComplete = 0.0;
+//        status.uploading = true;
     }
 
     public void run() {

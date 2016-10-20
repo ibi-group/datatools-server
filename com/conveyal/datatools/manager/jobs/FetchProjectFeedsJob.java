@@ -7,6 +7,9 @@ import com.conveyal.datatools.manager.models.Project;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZonedDateTime;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -27,14 +30,14 @@ public class FetchProjectFeedsJob extends MonitorableJob {
 
     @Override
     public void run() {
-        LOG.info("fetch job running for proj: " + proj.name);
+        LOG.info("Fetch job running for {} project at {}", proj.name, ZonedDateTime.now(ZoneId.of("America/New_York")));
         result = new HashMap<>();
 
         for(FeedSource feedSource : proj.getProjectFeedSources()) {
 
             if (!FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.equals(feedSource.retrievalMethod))
                 continue;
-
+//            LOG.info();
             FetchSingleFeedJob fetchSingleFeedJob = new FetchSingleFeedJob(feedSource, owner);
 
             new Thread(fetchSingleFeedJob).start();
