@@ -137,7 +137,8 @@ public class DumpController {
                     }
                     FeedVersion.commit();
                     break;
-
+                default:
+                    break;
             }
         }
         return true;
