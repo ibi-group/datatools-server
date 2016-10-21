@@ -195,7 +195,7 @@ public class FeedSource extends Model implements Cloneable {
 
             // TODO: redirects
             else if (conn.getResponseCode() == HttpURLConnection.HTTP_OK) {
-                String message = String.format("Saving %s feed. (This may take a while with large feeds.)", this.name);
+                String message = String.format("Saving %s feed.", this.name);
                 LOG.info(message);
                 statusMap.put("message", message);
                 statusMap.put("percentComplete", 75.0);
@@ -211,6 +211,7 @@ public class FeedSource extends Model implements Cloneable {
                 statusMap.put("percentComplete", 100.0);
                 statusMap.put("error", true);
                 eventBus.post(statusMap);
+                halt(400, message);
                 return null;
             }
         } catch (IOException e) {
@@ -221,6 +222,7 @@ public class FeedSource extends Model implements Cloneable {
             statusMap.put("error", true);
             eventBus.post(statusMap);
             e.printStackTrace();
+            halt(400, message);
             return null;
         } catch (Exception e) {
             throw e;
@@ -229,14 +231,17 @@ public class FeedSource extends Model implements Cloneable {
         // note that anything other than a new feed fetched successfully will have already returned from the function
         version.hash();
 
+
         if (latest != null && version.hash.equals(latest.hash)) {
             String message = String.format("Feed %s was fetched but has not changed; server operators should add If-Modified-Since support to avoid wasting bandwidth", this.name);
             LOG.warn(message);
             version.getGtfsFile().delete();
+            version.delete();
             statusMap.put("message", message);
             statusMap.put("percentComplete", 100.0);
-            statusMap.put("error", false);
+            statusMap.put("error", true);
             eventBus.post(statusMap);
+            halt(304);
             return null;
         }
         else {
