@@ -236,7 +236,9 @@ public class FeedSourceController {
 
         Auth0UserProfile userProfile = req.attribute("user");
         FetchSingleFeedJob job = new FetchSingleFeedJob(s, userProfile.getUser_id());
-        new Thread(job).start();
+
+        // Don't run in thread because we want to return the HTTP status of the fetch operation
+        job.run();
         return job.result;
     }
 
