@@ -19,6 +19,7 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.gtfs.GTFSFeed;
 import gnu.trove.list.TLongList;
 import gnu.trove.list.array.TLongArrayList;
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 
 import com.amazonaws.auth.AWSCredentials;
@@ -186,7 +187,7 @@ public class FeedStore {
         if (feedSource != null) {
             try {
                 File version = writeFileUsingInputStream(id, inputStream, feedSource);
-                File latest = copyInputStreamToLatest(inputStream, feedSource);
+                copyVersionToLatest(version, feedSource);
                 return version;
             } catch (Exception e) {
                 e.printStackTrace();
@@ -195,17 +196,15 @@ public class FeedStore {
         return null;
     }
 
-    private File copyInputStreamToLatest(InputStream inputStream, FeedSource feedSource) {
-        final Path latest = Paths.get(String.valueOf(path), feedSource.id + ".zip");
+    private void copyVersionToLatest(File version, FeedSource feedSource) {
+        File latest = new File(String.valueOf(path), feedSource.id + ".zip");
         try {
-            Files.copy(inputStream, latest, StandardCopyOption.REPLACE_EXISTING);
+            FileUtils.copyFile(version, latest);
             LOG.info("Copying version to latest {}", feedSource);
-            return latest.toFile();
         } catch (IOException e) {
             e.printStackTrace();
             LOG.error("Unable to save latest at {}", feedSource);
         }
-        return null;
     }
 
     private File writeFileUsingInputStream(String id, InputStream inputStream, FeedSource feedSource) throws IOException {
