@@ -5,6 +5,7 @@ import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.BuildTransportNetworkJob;
 import com.conveyal.datatools.manager.jobs.CreateFeedVersionFromSnapshotJob;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
+import com.conveyal.datatools.manager.jobs.ReadTransportNetworkJob;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -127,9 +128,10 @@ public class FeedVersionController  {
         FeedVersion latest = s.getLatest();
 
         // Check that hashes don't match (as long as v and latest are not the same entry)
-        if (latest != null && latest.hash.equals(v.hash) && latest.id != v.id) {
+        if (latest != null && latest.hash.equals(v.hash)) {
             v.getGtfsFile().delete();
             // Uploaded feed is same as latest version
+            v.delete();
             halt(304);
         }
 
@@ -212,7 +214,6 @@ public class FeedVersionController  {
         // if tn is null, check first if it's being built, else try reading in tn
         if (version.transportNetwork == null) {
             buildOrReadTransportNetwork(version, userProfile);
-            return null;
         }
         else {
             // remove version from list of reading network
@@ -222,23 +223,25 @@ public class FeedVersionController  {
             AnalystClusterRequest clusterRequest = buildProfileRequest(req);
             return getRouterResult(version.transportNetwork, clusterRequest);
         }
+        return null;
     }
 
     private static void buildOrReadTransportNetwork(FeedVersion version, Auth0UserProfile userProfile) {
         InputStream is = null;
         try {
-            if (readingNetworkVersionList.contains(version.id)) {
-                halt(503, "Try again later. Reading transport network");
-            }
-            else {
+            if (!readingNetworkVersionList.contains(version.id)) {
                 is = new FileInputStream(version.getTransportNetworkPath());
                 readingNetworkVersionList.add(version.id);
                 try {
-                    version.transportNetwork = TransportNetwork.read(is);
+//                    version.transportNetwork = TransportNetwork.read(is);
+                    ReadTransportNetworkJob rtnj = new ReadTransportNetworkJob(version, userProfile.getUser_id());
+                    Thread readThread = new Thread(rtnj);
+                    readThread.start();
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
             }
+            halt(202, "Try again later. Reading transport network");
         }
         // Catch exception if transport network not built yet
         catch (Exception e) {
@@ -248,7 +251,7 @@ public class FeedVersionController  {
                 Thread tnThread = new Thread(btnj);
                 tnThread.start();
             }
-            halt(503, "Try again later. Building transport network");
+            halt(202, "Try again later. Building transport network");
         }
     }
 
