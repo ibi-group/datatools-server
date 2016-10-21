@@ -253,7 +253,7 @@ public class DeploymentController {
             if (currentJob != null && !currentJob.getStatus().completed) {
                 // send a 503 service unavailable as it is not possible to deploy to this target right now;
                 // someone else is deploying
-                halt(503, "Deployment currently in progress for target: " + target);
+                halt(202, "Deployment currently in progress for target: " + target);
                 LOG.warn("Deployment currently in progress for target: " + target);
             }
         }
