@@ -177,15 +177,8 @@ public class FeedStore {
      * Create a new feed with the given ID.
      */
     public File newFeed (String id, InputStream inputStream, FeedSource feedSource) {
-        // s3 storage (store locally and let gtfsCache handle loading feed to s3)
-        if (DataManager.useS3) {
-            return storeFeedLocally(id, inputStream, feedSource);
-        }
-        // local storage
-        else if (path != null) {
-            return storeFeedLocally(id, inputStream, feedSource);
-        }
-        return null;
+        // For s3 storage (store locally and let gtfsCache handle loading feed to s3)
+        return storeFeedLocally(id, inputStream, feedSource);
     }
 
     private File storeFeedLocally(String id, InputStream inputStream, FeedSource feedSource) {
