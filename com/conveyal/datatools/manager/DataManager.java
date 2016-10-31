@@ -136,6 +136,9 @@ public class DataManager {
             FareController.register(apiPrefix);
         }
 
+        // log all exceptions to system.out
+        exception(Exception.class, (e, req, res) -> LOG.error("error", e));
+
         // module-specific controllers
         if (isModuleEnabled("deployment")) {
             DeploymentController.register(apiPrefix);
@@ -256,19 +259,23 @@ public class DataManager {
         return "true".equals(getConfigPropertyAsText("modules." + moduleName + ".enabled"));
     }
 
+    public static boolean isExtensionEnabled(String extensionName) {
+        return "true".equals(getConfigPropertyAsText("extensions." + extensionName + ".enabled"));
+    }
+
     private static void registerExternalResources() {
 
-        if ("true".equals(getConfigPropertyAsText("extensions.mtc.enabled"))) {
+        if (isExtensionEnabled("mtc")) {
             LOG.info("Registering MTC Resource");
             registerExternalResource(new MtcFeedResource());
         }
 
-        if ("true".equals(getConfigPropertyAsText("extensions.transitland.enabled"))) {
+        if (isExtensionEnabled("transitland")) {
             LOG.info("Registering TransitLand Resource");
             registerExternalResource(new TransitLandFeedResource());
         }
 
-        if ("true".equals(getConfigPropertyAsText("extensions.transitfeeds.enabled"))) {
+        if (isExtensionEnabled("transitfeeds")) {
             LOG.info("Registering TransitFeeds Resource");
             registerExternalResource(new TransitFeedsFeedResource());
         }
