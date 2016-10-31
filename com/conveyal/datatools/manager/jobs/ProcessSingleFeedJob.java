@@ -51,12 +51,6 @@ public class ProcessSingleFeedJob implements Runnable {
         }
 
         new Thread(validateJob).start();
-
-        // notify any extensions of the change
-        for(String resourceType : DataManager.feedResources.keySet()) {
-            DataManager.feedResources.get(resourceType).feedVersionCreated(feedVersion, null);
-        }
-
     }
 
 }

@@ -20,13 +20,13 @@ import static spark.Spark.halt;
 public class CreateFeedVersionFromSnapshotJob  extends MonitorableJob {
     public static final Logger LOG = LoggerFactory.getLogger(CreateFeedVersionFromSnapshotJob.class);
 
-    private FeedSource feedSource;
+    private FeedVersion feedVersion;
     private String snapshotId;
     private Status status;
 
-    public CreateFeedVersionFromSnapshotJob (FeedSource feedSource, String snapshotId, String owner) {
-        super(owner, "Creating Feed Version from Snapshot for " + feedSource.name, JobType.CREATE_FEEDVERSION_FROM_SNAPSHOT);
-        this.feedSource = feedSource;
+    public CreateFeedVersionFromSnapshotJob (FeedVersion feedVersion, String snapshotId, String owner) {
+        super(owner, "Creating Feed Version from Snapshot for " + feedVersion.getFeedSource().name, JobType.CREATE_FEEDVERSION_FROM_SNAPSHOT);
+        this.feedVersion = feedVersion;
         this.snapshotId = snapshotId;
         this.status = new Status();
         status.message = "Initializing...";
@@ -34,8 +34,6 @@ public class CreateFeedVersionFromSnapshotJob  extends MonitorableJob {
 
     @Override
     public void run() {
-        FeedVersion v = new FeedVersion(feedSource);
-
         File file = null;
 
         try {
@@ -43,23 +41,35 @@ public class CreateFeedVersionFromSnapshotJob  extends MonitorableJob {
             SnapshotController.writeSnapshotAsGtfs(snapshotId, file);
         } catch (Exception e) {
             e.printStackTrace();
-            LOG.error("Unable to create temp file for snapshot");
-            halt(400);
+            String message = "Unable to create temp file for snapshot";
+            LOG.error(message);
+            synchronized (status) {
+                status.error = true;
+                status.message = message;
+                status.completed = true;
+            }
         }
 
         try {
-            v.newGtfsFile(new FileInputStream(file));
+            feedVersion.newGtfsFile(new FileInputStream(file));
         } catch (Exception e) {
             LOG.error("Unable to open input stream from upload");
-            halt(400, "Unable to read uploaded feed");
+            String message = "Unable to read uploaded feed";
+            synchronized (status) {
+                status.error = true;
+                status.message = message;
+                status.completed = true;
+            }
         }
 
-        v.name = Snapshot.get(snapshotId).name + " Snapshot Export";
-        v.hash();
-        v.save();
-
-        addNextJob(new ProcessSingleFeedJob(v, owner));
-
+        feedVersion.name = Snapshot.get(snapshotId).name + " Snapshot Export";
+        feedVersion.hash();
+        feedVersion.save();
+        synchronized (status) {
+            status.message = "Version created successfully.";
+            status.completed = true;
+            status.percentComplete = 100.0;
+        }
         jobFinished();
     }
 

@@ -26,8 +26,14 @@ public class FetchSingleFeedJob extends MonitorableJob {
     @Override
     public void run() {
         // TODO: fetch automatically vs. manually vs. in-house
-        result = feedSource.fetch(eventBus, owner);
-        jobFinished();
+        try {
+            result = feedSource.fetch(eventBus, owner);
+            jobFinished();
+        } catch (Exception e) {
+            jobFinished();
+            // throw any halts that may have prevented this job from finishing
+            throw e;
+        }
         if (result != null) {
             new ProcessSingleFeedJob(result, this.owner).run();
         }

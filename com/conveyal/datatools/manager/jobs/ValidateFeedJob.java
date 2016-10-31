@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.status.StatusEvent;
+import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.google.common.eventbus.Subscribe;
 import org.slf4j.Logger;
@@ -15,8 +16,8 @@ import java.util.Map;
 public class ValidateFeedJob extends MonitorableJob {
     public static final Logger LOG = LoggerFactory.getLogger(ValidateFeedJob.class);
 
-    private FeedVersion feedVersion;
-    private Status status;
+    public FeedVersion feedVersion;
+    public Status status;
 
     public ValidateFeedJob(FeedVersion version, String owner) {
         super(owner, "Validating Feed for " + version.getFeedSource().name, JobType.VALIDATE_FEED);
@@ -33,10 +34,6 @@ public class ValidateFeedJob extends MonitorableJob {
         }
     }
 
-    public String getFeedVersionId() {
-        return feedVersion.id;
-    }
-
     @Override
     public void run() {
         LOG.info("Running ValidateFeedJob for {}", feedVersion.id);
@@ -45,14 +42,14 @@ public class ValidateFeedJob extends MonitorableJob {
             status.percentComplete = 30;
         }
         feedVersion.validate(eventBus);
-        synchronized (status) {
-            status.message = "Saving validation...";
-            status.percentComplete = 90;
-        }
         feedVersion.save();
+        if (!status.error)
         synchronized (status) {
-            status.message = "Validation complete!";
-            status.percentComplete = 100;
+            if (!status.error) {
+                status.message = "Validation complete!";
+                status.percentComplete = 100;
+                status.completed = true;
+            }
         }
         jobFinished();
     }

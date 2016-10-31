@@ -5,6 +5,7 @@ import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.controllers.api.GtfsApiController;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.concurrent.TimeUnit;
@@ -16,31 +17,23 @@ import org.slf4j.LoggerFactory;
  * Created by landon on 3/24/16.
  */
 public class FeedUpdater {
-    public List<String> eTags;
+    public Map<String, String> eTags;
     private static Timer timer;
     private static AmazonS3Client s3;
 
     public static final Logger LOG = LoggerFactory.getLogger(FeedUpdater.class);
 
-    public FeedUpdater(List<String> eTagList, int delay, int seconds){
-        this.eTags = eTagList;
-//        this.timer = new Timer();
-
-        // TODO: check for credentials??
-//        this.s3 = new AmazonS3Client();
-
-        DataManager.scheduler.scheduleAtFixedRate(fetchProjectFeedsJob, delay, seconds, TimeUnit.SECONDS);
-        this.timer.schedule(new UpdateFeedsTask(), delay*1000, seconds*1000);
-
-
+    public FeedUpdater(Map<String, String> eTagMap, int delay, int seconds) {
+        this.eTags = eTagMap;
+        DataManager.scheduler.scheduleAtFixedRate(new UpdateFeedsTask(), delay, seconds, TimeUnit.SECONDS);
     }
 
-    public void addFeedETag(String eTag){
-        this.eTags.add(eTag);
+    public void addFeedETag(String id, String eTag){
+        this.eTags.put(id, eTag);
     }
 
-    public void addFeedETags(List<String> eTagList){
-        this.eTags.addAll(eTagList);
+    public void addFeedETags(Map<String, String> eTagList){
+        this.eTags.putAll(eTagList);
     }
 
     public void cancel(){
@@ -48,11 +41,11 @@ public class FeedUpdater {
     }
 
 
-    class UpdateFeedsTask extends TimerTask {
+    class UpdateFeedsTask implements Runnable {
         public void run() {
             LOG.info("Fetching feeds...");
             LOG.info("Current eTag list " + eTags.toString());
-            List<String> updatedTags = GtfsApiController.registerS3Feeds(eTags, GtfsApiController.feedBucket, GtfsApiController.bucketFolder);
+            Map<String, String> updatedTags = GtfsApiController.registerS3Feeds(eTags, GtfsApiController.feedBucket, GtfsApiController.bucketFolder);
             Boolean feedsUpdated = updatedTags.isEmpty() ? false : true;
             addFeedETags(updatedTags);
             if (!feedsUpdated) {
