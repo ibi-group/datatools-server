@@ -30,6 +30,13 @@ public class FeedValidationResult implements Serializable {
     public LocalDate endDate;
     public Rectangle2D bounds;
 
+    // legacy fields included for backwards compatibility (not currently used)
+    public String feedFileName;
+    public ValidationResult routes;
+    public ValidationResult stops;
+    public ValidationResult trips;
+    public ValidationResult shapes;
+
     public FeedValidationResult(GTFSFeed feed, FeedStats stats) {
         this.agencies = stats.getAllAgencies().stream().map(agency -> agency.agency_id).collect(Collectors.toList());
         this.agencyCount = stats.getAgencyCount();
