@@ -37,6 +37,9 @@ public class FeedValidationResult implements Serializable {
     public ValidationResult trips;
     public ValidationResult shapes;
 
+    // constructor for data dump load
+    public FeedValidationResult() {}
+
     public FeedValidationResult(GTFSFeed feed, FeedStats stats) {
         this.agencies = stats.getAllAgencies().stream().map(agency -> agency.agency_id).collect(Collectors.toList());
         this.agencyCount = stats.getAgencyCount();
