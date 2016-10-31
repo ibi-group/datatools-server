@@ -1,14 +1,13 @@
-package com.conveyal.datatools.manager.utils;
+package com.conveyal.datatools.manager.jobs;
 
 import com.amazonaws.services.s3.AmazonS3Client;
-import com.amazonaws.services.s3.model.ObjectListing;
-import com.amazonaws.services.s3.model.S3ObjectSummary;
+import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.controllers.api.GtfsApiController;
-import com.conveyal.datatools.manager.models.FeedVersion;
 
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,19 +17,19 @@ import org.slf4j.LoggerFactory;
  */
 public class FeedUpdater {
     public List<String> eTags;
-    private Timer timer;
+    private static Timer timer;
     private static AmazonS3Client s3;
 
     public static final Logger LOG = LoggerFactory.getLogger(FeedUpdater.class);
 
     public FeedUpdater(List<String> eTagList, int delay, int seconds){
         this.eTags = eTagList;
-        this.timer = new Timer();
+//        this.timer = new Timer();
 
         // TODO: check for credentials??
-        this.s3 = new AmazonS3Client();
+//        this.s3 = new AmazonS3Client();
 
-
+        DataManager.scheduler.scheduleAtFixedRate(fetchProjectFeedsJob, delay, seconds, TimeUnit.SECONDS);
         this.timer.schedule(new UpdateFeedsTask(), delay*1000, seconds*1000);
 
 
@@ -53,29 +52,9 @@ public class FeedUpdater {
         public void run() {
             LOG.info("Fetching feeds...");
             LOG.info("Current eTag list " + eTags.toString());
-
-            ObjectListing gtfsList = s3.listObjects(GtfsApiController.feedBucket, GtfsApiController.cacheDirectory);
-            Boolean feedsUpdated = false;
-            for (S3ObjectSummary objSummary : gtfsList.getObjectSummaries()) {
-
-                String eTag = objSummary.getETag();
-                if (!eTags.contains(eTag)) {
-                    String keyName = objSummary.getKey();
-                    if (keyName.equals(GtfsApiController.cacheDirectory)){
-                        continue;
-                    }
-                    LOG.info("Updating feed " + keyName);
-                    String feedId = keyName.split("/")[1];
-//                    ApiMain.loadFeedFromBucket(GtfsApiController.feedBucket, feedId, GtfsApiController.directory);
-                    try {
-                        GtfsApiController.gtfsApi.registerFeedSource(feedId, FeedVersion.get(feedId).getGtfsFile());
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                    addFeedETag(eTag);
-                    feedsUpdated = true;
-                }
-            }
+            List<String> updatedTags = GtfsApiController.registerS3Feeds(eTags, GtfsApiController.feedBucket, GtfsApiController.bucketFolder);
+            Boolean feedsUpdated = updatedTags.isEmpty() ? false : true;
+            addFeedETags(updatedTags);
             if (!feedsUpdated) {
                 LOG.info("No feeds updated...");
             }
