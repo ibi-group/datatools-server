@@ -41,6 +41,7 @@ import java.io.File;
 import java.util.*;
 import java.util.Map.Entry;
 
+import static com.conveyal.datatools.editor.models.Snapshot.deactivateSnapshots;
 import static spark.Spark.halt;
 
 
@@ -113,14 +114,12 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
             for(String key : feedTx.trips.keySet()) feedTx.trips.remove(key);
             LOG.info("Cleared old data");
 
-            // input = feedVersion.getGtfsFeed();
-            // TODO: use GtfsCache?
             synchronized (status) {
                 status.message = "Loading GTFS file...";
                 status.percentComplete = 5;
             }
             input = feedVersion.getGtfsFeed();
-            if(input == null) return;
+            if (input == null) return;
 
             LOG.info("GtfsImporter: importing feed...");
             synchronized (status) {
@@ -430,10 +429,12 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
             }
             // commit the feed TXs first, so that we have orphaned data rather than inconsistent data on a commit failure
             feedTx.commit();
-            gtx.commit();
+
+            deactivateSnapshots(feedVersion.feedSourceId, null);
 
             // create an initial snapshot for this FeedVersion
             Snapshot snapshot = VersionedDataStore.takeSnapshot(feed.id, "Snapshot of " + feedVersion.getName(), "none");
+
 
 
             LOG.info("Imported GTFS file: " + agencyCount + " agencies; " + routeCount + " routes;" + stopCount + " stops; " +  stopTimeCount + " stopTimes; " + tripCount + " trips;" + shapePointCount + " shapePoints");
@@ -453,7 +454,6 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
         finally {
             feedTx.rollbackIfOpen();
             gtx.rollbackIfOpen();
-
             // set job as complete
             jobFinished();
         }

@@ -186,7 +186,7 @@ public class SnapshotController {
 
             // the snapshot we have just restored is now current; make the others not current
             // TODO: add this loop back in... taken out in order to compile
-            Collection<Snapshot> snapshots = gtx.snapshots.subMap(new Tuple2(local.feedId, null), new Tuple2(local.feedId, Fun.HI)).values();
+            Collection<Snapshot> snapshots = Snapshot.getSnapshots(local.feedId);
             for (Snapshot o : snapshots) {
                 if (o.id.equals(local.id))
                     continue;

@@ -149,7 +149,7 @@ public class VersionedDataStore {
             LOG.info("Restoring snapshot {} of agency {}", s.version, s.feedId);
             long startTime = System.currentTimeMillis();
             List<Stop> ret = tx.restore(s.feedId);
-            LOG.info("Restored snapshot in %.2f seconds", (System.currentTimeMillis() - startTime) / 1000D);
+            LOG.info(String.format("Restored snapshot in %.2f seconds", (System.currentTimeMillis() - startTime) / 1000D));
             return ret;
         } finally {
             tx.close();

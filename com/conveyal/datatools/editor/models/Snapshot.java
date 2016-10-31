@@ -81,9 +81,29 @@ public class Snapshot implements Cloneable, Serializable {
     }
 
     @JsonIgnore
-    public static Collection<Snapshot> getSnapshots(String feedId) {
+    public static Collection<Snapshot> getSnapshots (String feedId) {
         GlobalTx gtx = VersionedDataStore.getGlobalTx();
         return gtx.snapshots.subMap(new Tuple2(feedId, null), new Tuple2(feedId, Fun.HI)).values();
+    }
+
+    public static void deactivateSnapshots (String feedId, Snapshot ignore) {
+        GlobalTx gtx = VersionedDataStore.getGlobalTx();
+        Collection<Snapshot> snapshots = Snapshot.getSnapshots(feedId);
+        try {
+            for (Snapshot o : snapshots) {
+                if (ignore != null && o.id.equals(ignore.id))
+                    continue;
+
+                Snapshot cloned = o.clone();
+                cloned.current = false;
+                gtx.snapshots.put(o.id, cloned);
+            }
+            gtx.commit();
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        } finally {
+            gtx.rollbackIfOpen();
+        }
     }
 
     public static Snapshot get(String snapshotId) {
