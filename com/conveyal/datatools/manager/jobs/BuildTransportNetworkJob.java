@@ -24,7 +24,7 @@ import static com.conveyal.datatools.manager.models.Deployment.getOsmExtract;
 public class BuildTransportNetworkJob extends MonitorableJob {
 
     public FeedVersion feedVersion;
-    public TransportNetwork result;
+    private TransportNetwork result;
     public Status status;
 
     public BuildTransportNetworkJob (FeedVersion feedVersion, String owner) {
@@ -39,7 +39,17 @@ public class BuildTransportNetworkJob extends MonitorableJob {
     public void run() {
         System.out.println("Building network");
         try {
-            feedVersion.buildTransportNetwork(eventBus);
+            if (feedVersion.validationResult != null) {
+                feedVersion.buildTransportNetwork(eventBus);
+            }
+            else {
+                synchronized (status) {
+                    status.message = "Transport network skipped because of bad validation.";
+                    status.percentComplete = 100;
+                    status.error = true;
+                    status.completed = true;
+                }
+            }
         } catch (Exception e) {
             e.printStackTrace();
             synchronized (status) {
@@ -48,12 +58,13 @@ public class BuildTransportNetworkJob extends MonitorableJob {
                 status.error = true;
                 status.completed = true;
             }
-
         }
-        synchronized (status) {
-            status.message = "Transport network built successfully!";
-            status.percentComplete = 100;
-            status.completed = true;
+        if (!status.error) {
+            synchronized (status) {
+                status.message = "Transport network built successfully!";
+                status.percentComplete = 100;
+                status.completed = true;
+            }
         }
         jobFinished();
     }
