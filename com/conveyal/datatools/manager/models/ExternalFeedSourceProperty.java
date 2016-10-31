@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.manager.persistence.DataStore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
 
@@ -9,6 +10,7 @@ import java.util.Collection;
 /**
  * Created by demory on 3/30/16.
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class ExternalFeedSourceProperty extends Model {
     private static final long serialVersionUID = 1L;
 
