@@ -23,7 +23,7 @@ public class ExternalFeedSourceProperty extends Model {
 
     public ExternalFeedSourceProperty(FeedSource feedSource, String resourceType, String name, String value) {
         this.id = feedSource.id + "_" + resourceType + "_" + name;
-        this.feedSource = feedSource;
+        this.feedSourceId = feedSource.id;
         this.resourceType = resourceType;
         this.name = name;
         this.value = value;
@@ -31,10 +31,12 @@ public class ExternalFeedSourceProperty extends Model {
 
     @JsonProperty
     public String getFeedSourceId() {
-        return feedSource.id;
+        return feedSource != null ? feedSource.id : feedSourceId;
     }
 
     public String resourceType;
+
+    private String feedSourceId;
 
     public String name;
 
