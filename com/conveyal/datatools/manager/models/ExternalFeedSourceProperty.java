@@ -14,6 +14,9 @@ public class ExternalFeedSourceProperty extends Model {
 
     private FeedSource feedSource;
 
+    // constructor for data dump load
+    public ExternalFeedSourceProperty() {}
+
     public ExternalFeedSourceProperty(FeedSource feedSource, String resourceType, String name, String value) {
         this.id = feedSource.id + "_" + resourceType + "_" + name;
         this.feedSource = feedSource;
