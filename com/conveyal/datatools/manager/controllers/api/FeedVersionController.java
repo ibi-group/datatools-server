@@ -99,7 +99,7 @@ public class FeedVersionController  {
         if (FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.equals(s.retrievalMethod)) {
             halt(400, "Feed is autofetched! Cannot upload.");
         }
-
+        FeedVersion latest = s.getLatest();
         FeedVersion v = new FeedVersion(s);
         v.setUser(userProfile);
 
@@ -125,10 +125,9 @@ public class FeedVersionController  {
 
         v.hash();
 
-        FeedVersion latest = s.getLatest();
-
         // Check that hashes don't match (as long as v and latest are not the same entry)
         if (latest != null && latest.hash.equals(v.hash)) {
+            LOG.error("Upload matches latest version.");
             v.getGtfsFile().delete();
             // Uploaded feed is same as latest version
             v.delete();
@@ -154,10 +153,10 @@ public class FeedVersionController  {
         Auth0UserProfile userProfile = req.attribute("user");
         // TODO: should this be edit privelege?
         FeedSource s = requestFeedSourceById(req, "manage");
-
+        FeedVersion v = new FeedVersion(s);
         CreateFeedVersionFromSnapshotJob createFromSnapshotJob =
-                new CreateFeedVersionFromSnapshotJob(s, req.queryParams("snapshotId"), userProfile.getUser_id());
-
+                new CreateFeedVersionFromSnapshotJob(v, req.queryParams("snapshotId"), userProfile.getUser_id());
+        createFromSnapshotJob.addNextJob(new ProcessSingleFeedJob(v, userProfile.getUser_id()));
         new Thread(createFromSnapshotJob).start();
 
         return true;
@@ -370,8 +369,18 @@ public class FeedVersionController  {
         token.save();
         return token;
     }
+    private static FeedVersion publishToExternalResource (Request req, Response res) {
+        FeedVersion version = requestFeedVersion(req, "manage");
 
-
+        // notify any extensions of the change
+        for(String resourceType : DataManager.feedResources.keySet()) {
+            DataManager.feedResources.get(resourceType).feedVersionCreated(version, null);
+        }
+        FeedSource fs = version.getFeedSource();
+        fs.publishedVersionId = version.id;
+        fs.save();
+        return version;
+    }
     private static Object downloadFeedVersionWithToken (Request req, Response res) {
         FeedDownloadToken token = FeedDownloadToken.get(req.params("token"));
 
@@ -396,6 +405,7 @@ public class FeedVersionController  {
         post(apiPrefix + "secure/feedversion", FeedVersionController::createFeedVersion, json::write);
         post(apiPrefix + "secure/feedversion/fromsnapshot", FeedVersionController::createFeedVersionFromSnapshot, json::write);
         put(apiPrefix + "secure/feedversion/:id/rename", FeedVersionController::renameFeedVersion, json::write);
+        post(apiPrefix + "secure/feedversion/:id/publish", FeedVersionController::publishToExternalResource, json::write);
         delete(apiPrefix + "secure/feedversion/:id", FeedVersionController::deleteFeedVersion, json::write);
 
         get(apiPrefix + "public/feedversion", FeedVersionController::getAllFeedVersions, json::write);
