@@ -288,18 +288,26 @@ public class FeedVersion extends Model implements Serializable {
                 tripsPerDate = stats.getTripCountPerDateOfService();
             }catch (Exception e) {
                 e.printStackTrace();
+                statusMap.put("message", "Unable to validate feed.");
+                statusMap.put("percentComplete", 0.0);
+                statusMap.put("error", true);
+                eventBus.post(statusMap);
+                e.printStackTrace();
+//                this.validationResult = null;
+                validationResult.loadStatus = LoadStatus.OTHER_FAILURE;
+                return;
             }
         } catch (Exception e) {
-            LOG.error("Unable to validate feed {}", this);
+            LOG.error("Unable to validate feed {}", this.id);
 //            eventBus.post(new StatusEvent("Unable to validate feed.", 0, true));
             statusMap.put("message", "Unable to validate feed.");
             statusMap.put("percentComplete", 0.0);
             statusMap.put("error", true);
             eventBus.post(statusMap);
             e.printStackTrace();
-            this.validationResult = null;
+//            this.validationResult = null;
             validationResult.loadStatus = LoadStatus.OTHER_FAILURE;
-            halt(400, "Error validating feed...");
+//            halt(400, "Error validating feed...");
             return;
         }
 

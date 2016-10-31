@@ -102,6 +102,8 @@ public class FeedSource extends Model implements Cloneable {
      */
     public String snapshotVersion;
 
+    public String publishedVersionId;
+
     /**
      * Create a new feed.
      */
@@ -292,18 +294,7 @@ public class FeedSource extends Model implements Cloneable {
      */
     @JsonIgnore
     public FeedVersion getLatest () {
-//        DataStore<FeedVersion> vs = new FeedVersion(this);
-//        if (vs == null){
-//            return null;
-//        }
-        FeedVersion v = null;
-        try {
-            Class localClass = Class.forName(FeedVersion.class.getName());
-            v = FeedVersion.versionStore.findFloor("version", new Fun.Tuple2(this.id, Fun.HI));
-        } catch (ClassNotFoundException e) {
-            LOG.info("Error getting feed version", e);
-        }
-
+        FeedVersion v = FeedVersion.versionStore.findFloor("version", new Fun.Tuple2(this.id, Fun.HI));
 
         // the ID doesn't necessarily match, because it will fall back to the previous source in the store if there are no versions for this source
         if (v == null || !v.feedSourceId.equals(this.id))
@@ -337,7 +328,8 @@ public class FeedSource extends Model implements Cloneable {
     @JsonView(JsonViews.UserInterface.class)
     public FeedValidationResultSummary getLatestValidation () {
         FeedVersion latest = getLatest();
-        return latest != null ? new FeedValidationResultSummary(latest.validationResult) : null;
+        FeedValidationResult result = latest != null ? latest.validationResult : null;
+        return result != null ?new FeedValidationResultSummary(result) : null;
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
