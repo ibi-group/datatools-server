@@ -43,6 +43,13 @@ public class ExternalFeedSourceProperty extends Model {
             propertyStore.saveWithoutCommit(id, this);
     }
 
+    /**
+     * Commit changes to the datastore
+     */
+    public static void commit () {
+        propertyStore.commit();
+    }
+
     public static ExternalFeedSourceProperty find(FeedSource source, String resourceType, String name) {
         return propertyStore.getById(source.id + "_" +resourceType + "_" + name);
     }
