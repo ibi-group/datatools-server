@@ -29,6 +29,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -625,8 +626,8 @@ public class ProjectController {
         halt(404);
         return null;
     }
-    public static ScheduledFuture scheduleAutoFeedFetch (String id, int hour, int minute, int interval, String timezoneId){
-        TimeUnit unit = TimeUnit.DAYS;
+    public static ScheduledFuture scheduleAutoFeedFetch (String id, int hour, int minute, int intervalInDays, String timezoneId){
+        TimeUnit minutes = TimeUnit.MINUTES;
         try {
             // First cancel any already scheduled auto fetch task for this project id.
             cancelAutoFetch(id);
@@ -645,30 +646,31 @@ public class ProjectController {
             }
             LOG.info("Scheduling autofetch for projectID: {}", p.id);
 
-            long initialDelay = 0;
+            long delayInMinutes = 0;
 
 
             // NOW in default timezone
-            ZonedDateTime now = LocalDateTime.now().atZone(timezone);
+            ZonedDateTime now = ZonedDateTime.ofInstant(Instant.now(), timezone);
 
             // SCHEDULED START TIME
             ZonedDateTime startTime = LocalDateTime.of(LocalDate.now(), LocalTime.of(hour, minute)).atZone(timezone);
+            LOG.info("Now: {}", now.format(DateTimeFormatter.ISO_ZONED_DATE_TIME));
             LOG.info("Scheduled start time: {}", startTime.format(DateTimeFormatter.ISO_ZONED_DATE_TIME));
 
             // Get diff between start time and current time
             long diffInMinutes = (startTime.toEpochSecond() - now.toEpochSecond()) / 60;
             if ( diffInMinutes >= 0 ){
-                initialDelay = diffInMinutes; // delay in minutes
+                delayInMinutes = diffInMinutes; // delay in minutes
             }
             else{
-                initialDelay = 24 * 60 + diffInMinutes; // wait for one day plus difference (which is negative)
+                delayInMinutes = 24 * 60 + diffInMinutes; // wait for one day plus difference (which is negative)
             }
 
-            LOG.info("Auto fetch begins in {} hours and runs every {} hours", String.valueOf(initialDelay / 60.0), unit.toHours(interval));
+            LOG.info("Auto fetch begins in {} hours and runs every {} hours", String.valueOf(delayInMinutes / 60.0), TimeUnit.DAYS.toHours(intervalInDays));
 
             FetchProjectFeedsJob fetchProjectFeedsJob = new FetchProjectFeedsJob(p, null);
 
-            return DataManager.scheduler.scheduleAtFixedRate(fetchProjectFeedsJob, initialDelay, interval, unit);
+            return DataManager.scheduler.scheduleAtFixedRate(fetchProjectFeedsJob, delayInMinutes, TimeUnit.DAYS.toMinutes(intervalInDays), minutes);
         } catch (Exception e) {
             e.printStackTrace();
             return null;
