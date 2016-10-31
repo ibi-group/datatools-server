@@ -218,7 +218,6 @@ public class MtcFeedResource implements ExternalFeedResource {
         AmazonS3 s3client = new AmazonS3Client(creds);
         s3client.putObject(new PutObjectRequest(
                 s3Bucket, keyName, feedVersion.getGtfsFile()));
-
     }
 
     private void writeCarrierToRtd(RtdCarrier carrier, boolean createNew, String authHeader) {
