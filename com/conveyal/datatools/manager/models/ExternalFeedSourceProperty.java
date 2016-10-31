@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.manager.persistence.DataStore;
+import com.fasterxml.jackson.annotation.JsonView;
 
 import java.util.Collection;
 
@@ -25,6 +26,7 @@ public class ExternalFeedSourceProperty extends Model {
         this.value = value;
     }
 
+    @JsonView(JsonViews.UserInterface.class)
     public String getFeedSourceId() {
         return feedSource.id;
     }
