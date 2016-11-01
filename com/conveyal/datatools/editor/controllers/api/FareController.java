@@ -4,20 +4,13 @@ import com.conveyal.datatools.editor.controllers.Base;
 import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.Fare;
-import com.conveyal.datatools.editor.models.transit.ScheduleException;
-import com.conveyal.datatools.editor.models.transit.Trip;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
-import com.google.common.base.Function;
-import com.google.common.collect.Collections2;
-import com.google.common.collect.Sets;
-import org.mapdb.Fun;
 import spark.Request;
 import spark.Response;
 
 import java.util.Calendar;
 import java.util.Collection;
-import java.util.Set;
 
 import static spark.Spark.*;
 import static spark.Spark.delete;
@@ -79,7 +72,7 @@ public class FareController {
         try {
             fare = Base.mapper.readValue(req.body(), Fare.class);
 
-            if (!VersionedDataStore.agencyExists(fare.feedId)) {
+            if (!VersionedDataStore.feedExists(fare.feedId)) {
                 halt(400);
             }
 
@@ -119,7 +112,7 @@ public class FareController {
         try {
             fare = Base.mapper.readValue(req.body(), Fare.class);
 
-            if (!VersionedDataStore.agencyExists(fare.feedId)) {
+            if (!VersionedDataStore.feedExists(fare.feedId)) {
                 halt(400);
             }
 

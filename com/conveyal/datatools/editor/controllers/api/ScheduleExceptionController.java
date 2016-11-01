@@ -57,7 +57,7 @@ public class ScheduleExceptionController {
         try {
             ScheduleException ex = Base.mapper.readValue(req.body(), ScheduleException.class);
 
-            if (!VersionedDataStore.agencyExists(ex.feedId)) {
+            if (!VersionedDataStore.feedExists(ex.feedId)) {
                 halt(400);
             }
 
@@ -125,7 +125,7 @@ public class ScheduleExceptionController {
             if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(ex.feedId))
                 halt(400);
 
-            if (!VersionedDataStore.agencyExists(ex.feedId)) {
+            if (!VersionedDataStore.feedExists(ex.feedId)) {
                 halt(400);
             }
 

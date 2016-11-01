@@ -83,7 +83,7 @@ public class TripController {
             if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(trip.feedId))
                 halt(400);
 
-            if (!VersionedDataStore.agencyExists(trip.feedId)) {
+            if (!VersionedDataStore.feedExists(trip.feedId)) {
                 halt(400);
             }
 
@@ -120,7 +120,7 @@ public class TripController {
             if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(trip.feedId))
                 halt(400);
 
-            if (!VersionedDataStore.agencyExists(trip.feedId)) {
+            if (!VersionedDataStore.feedExists(trip.feedId)) {
                 halt(400);
             }
 

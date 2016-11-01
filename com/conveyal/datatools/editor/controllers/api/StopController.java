@@ -3,9 +3,6 @@ package com.conveyal.datatools.editor.controllers.api;
 import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
-import com.fasterxml.jackson.core.JsonGenerationException;
-import com.fasterxml.jackson.core.JsonParseException;
-import com.fasterxml.jackson.databind.JsonMappingException;
 import com.google.common.base.Function;
 import com.google.common.collect.Collections2;
 import com.conveyal.datatools.editor.controllers.Base;
@@ -19,7 +16,6 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
 import org.mapdb.BTreeMap;
@@ -142,7 +138,7 @@ public class StopController {
             if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(stop.feedId))
                 halt(400);
             
-            if (!VersionedDataStore.agencyExists(stop.feedId)) {
+            if (!VersionedDataStore.feedExists(stop.feedId)) {
                 halt(400, "Stop must reference feed source ID");
             }
             
@@ -177,7 +173,7 @@ public class StopController {
             halt(400, "Must provide feed ID");
         }
 
-        if (!VersionedDataStore.agencyExists(feedId)) {
+        if (!VersionedDataStore.feedExists(feedId)) {
             halt(400, "Feed ID ("+feedId+") does not exist");
         }
 

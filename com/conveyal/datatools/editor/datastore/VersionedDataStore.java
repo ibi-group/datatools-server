@@ -26,7 +26,7 @@ import java.util.NavigableSet;
  */
 public class VersionedDataStore {
     public static final Logger LOG = LoggerFactory.getLogger(VersionedDataStore.class);
-    private static File dataDirectory = new File((String) DataManager.config.get("application").get("data").get("editor_mapdb").asText());
+    private static File dataDirectory = new File(DataManager.getConfigPropertyAsText("application.data.editor_mapdb"));
     private static TxMaker globalTxMaker;
 
     private static Map<String, TxMaker> feedTxMakers = Maps.newConcurrentMap();
@@ -183,8 +183,8 @@ public class VersionedDataStore {
         return new File(snapshotsDir, "" + version);
     }
 
-    /** Convenience function to check if an agency exists */
-    public static boolean agencyExists (String feedId) {
+    /** Convenience function to check if a feed exists */
+    public static boolean feedExists(String feedId) {
         GlobalTx tx = getGlobalTx();
         boolean exists = tx.feeds.containsKey(feedId);
         tx.rollback();

@@ -92,7 +92,7 @@ public class TripPatternController {
             if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(tripPattern.feedId))
                 halt(400);
             
-            if (!VersionedDataStore.agencyExists(tripPattern.feedId)) {
+            if (!VersionedDataStore.feedExists(tripPattern.feedId)) {
                 halt(400);
             }
             
@@ -132,7 +132,7 @@ public class TripPatternController {
             if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(tripPattern.feedId))
                 halt(400);
             
-            if (!VersionedDataStore.agencyExists(tripPattern.feedId)) {
+            if (!VersionedDataStore.feedExists(tripPattern.feedId)) {
                 halt(400);
             }
             
