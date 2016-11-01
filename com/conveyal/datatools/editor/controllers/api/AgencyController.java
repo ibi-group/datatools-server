@@ -8,6 +8,8 @@ import com.conveyal.datatools.editor.models.transit.Agency;
 import com.conveyal.datatools.editor.utils.S3Utils;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import spark.HaltException;
 import spark.Request;
 import spark.Response;
@@ -17,6 +19,7 @@ import static spark.Spark.*;
 public class AgencyController {
     public static JsonManager<Agency> json =
             new JsonManager<>(Agency.class, JsonViews.UserInterface.class);
+    private static Logger LOG = LoggerFactory.getLogger(AgencyController.class);
     public static Object getAgency(Request req, Response res) {
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
@@ -37,6 +40,7 @@ public class AgencyController {
             
             tx.rollback();
         } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
@@ -65,6 +69,7 @@ public class AgencyController {
 
             return agency;
         } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
@@ -93,6 +98,7 @@ public class AgencyController {
 
             return Base.toJson(agency, false);
         } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
@@ -129,6 +135,7 @@ public class AgencyController {
 
             return agency;
         } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             e.printStackTrace();

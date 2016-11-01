@@ -6,6 +6,8 @@ import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.Fare;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import spark.HaltException;
 import spark.Request;
 import spark.Response;
@@ -22,6 +24,7 @@ import static spark.Spark.delete;
 public class FareController {
     public static JsonManager<Calendar> json =
             new JsonManager<>(Calendar.class, JsonViews.UserInterface.class);
+    private static final Logger LOG = LoggerFactory.getLogger(FareController.class);
     public static Object getFare(Request req, Response res) {
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
@@ -59,6 +62,7 @@ public class FareController {
 
             tx.rollback();
         } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             tx.rollback();
@@ -101,6 +105,7 @@ public class FareController {
 
             return fare;
         } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             if (tx != null) tx.rollback();
@@ -145,6 +150,7 @@ public class FareController {
 
             return json;
         } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             if (tx != null) tx.rollback();
@@ -164,14 +170,6 @@ public class FareController {
             tx.rollback();
             halt(404);
         }
-
-//        // we just don't let you delete calendars unless there are no trips on them
-//        Long count = tx.tripCountByCalendar.get(id);
-//        if (count != null && count > 0) {
-//            tx.rollback();
-//            halt(400);
-//        }
-
 
         tx.fares.remove(id);
 

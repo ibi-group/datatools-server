@@ -8,6 +8,8 @@ import java.time.LocalDate;
 
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import spark.HaltException;
 import spark.Request;
 import spark.Response;
@@ -18,6 +20,8 @@ import static spark.Spark.*;
 public class ScheduleExceptionController {
     public static JsonManager<ScheduleException> json =
             new JsonManager<>(ScheduleException.class, JsonViews.UserInterface.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ScheduleExceptionController.class);
+
     /** Get all of the schedule exceptions for an agency */
     public static Object getScheduleException (Request req, Response res) {
         String exceptionId = req.params("exceptionId");
@@ -46,6 +50,7 @@ public class ScheduleExceptionController {
             }
             tx.rollback();
         } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             if (tx != null) tx.rollback();
@@ -113,6 +118,7 @@ public class ScheduleExceptionController {
 
             return Base.toJson(ex, false);
         } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             if (tx != null) tx.rollback();
@@ -172,6 +178,7 @@ public class ScheduleExceptionController {
 
             return ex;
         } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             if (tx != null) tx.rollback();

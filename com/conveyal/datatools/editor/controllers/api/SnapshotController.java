@@ -36,8 +36,6 @@ public class SnapshotController {
     public static JsonManager<Snapshot> json =
             new JsonManager<>(Snapshot.class, JsonViews.UserInterface.class);
 
-
-
     public static Object getSnapshot(Request req, Response res) throws IOException {
         String id = req.params("id");
         String feedId= req.queryParams("feedId");

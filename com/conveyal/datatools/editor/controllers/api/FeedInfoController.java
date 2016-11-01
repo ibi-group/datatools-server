@@ -11,6 +11,8 @@ import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.gtfs.model.FeedInfo;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import spark.HaltException;
 import spark.Request;
 import spark.Response;
@@ -32,7 +34,7 @@ import static spark.Spark.put;
 public class FeedInfoController {
     public static JsonManager<EditorFeed> json =
             new JsonManager<>(EditorFeed.class, JsonViews.UserInterface.class);
-
+    private static final Logger LOG = LoggerFactory.getLogger(FeedInfoController.class);
     public static Object getFeedInfo(Request req, Response res) {
         String id = req.params("id");
 
@@ -69,6 +71,7 @@ public class FeedInfoController {
 
             return Base.toJson(fs, false);
         } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             gtx.rollbackIfOpen();
@@ -99,6 +102,7 @@ public class FeedInfoController {
 
             return Base.toJson(feed, false);
         } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             e.printStackTrace();

@@ -27,9 +27,7 @@ public class TripController {
     public static JsonManager<Trip> json =
             new JsonManager<>(Trip.class, JsonViews.UserInterface.class);
 
-    public static Object getTrip(Request req, Response res
-//            String id, String patternId, String calendarId, String feedId
-    ) {
+    public static Object getTrip(Request req, Response res) {
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
         String patternId = req.queryParams("patternId");
@@ -68,6 +66,7 @@ public class TripController {
             }
                 
         } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             tx.rollback();
@@ -107,6 +106,7 @@ public class TripController {
 
             return Base.toJson(trip, false);
         } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
@@ -165,6 +165,7 @@ public class TripController {
 
             return Base.toJson(trip, false);
         } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             if (tx != null) tx.rollbackIfOpen();

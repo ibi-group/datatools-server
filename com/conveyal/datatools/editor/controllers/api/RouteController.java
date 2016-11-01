@@ -30,7 +30,7 @@ import static spark.Spark.*;
 public class RouteController {
     public static JsonManager<Route> json =
             new JsonManager<>(Route.class, JsonViews.UserInterface.class);
-    private static Logger LOG = LoggerFactory.getLogger(Route.class);
+    private static final Logger LOG = LoggerFactory.getLogger(RouteController.class);
     public static Object getRoute(Request req, Response res) {
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
@@ -71,6 +71,7 @@ public class RouteController {
 //                return json;
             }
         } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             tx.rollbackIfOpen();
@@ -116,6 +117,7 @@ public class RouteController {
 
             return route;
         } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
@@ -153,6 +155,7 @@ public class RouteController {
 
             return route;
         } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
@@ -189,6 +192,7 @@ public class RouteController {
 
             return route;
         } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
@@ -236,6 +240,7 @@ public class RouteController {
             tx.commit();
             return true; // ok();
         } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             tx.rollback();
@@ -314,6 +319,7 @@ public class RouteController {
              tx.commit();
              return true; // ok();
         } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             e.printStackTrace();

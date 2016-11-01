@@ -77,6 +77,7 @@ public class TripPatternController {
             tx.rollback();
             
         } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             tx.rollback();
@@ -113,6 +114,7 @@ public class TripPatternController {
 
             return Base.toJson(tripPattern, false);
         } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
@@ -170,6 +172,7 @@ public class TripPatternController {
 
             return Base.toJson(tripPattern, false);
         } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             if (tx != null) tx.rollback();

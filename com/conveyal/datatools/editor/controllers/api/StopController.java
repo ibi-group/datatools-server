@@ -19,6 +19,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.mapdb.BTreeMap;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import spark.HaltException;
 import spark.Request;
 import spark.Response;
@@ -30,7 +32,7 @@ public class StopController {
 
     public static JsonManager<Stop> json =
             new JsonManager<>(Stop.class, JsonViews.UserInterface.class);
-
+    private static final Logger LOG = LoggerFactory.getLogger(StopController.class);
     public static Object getStop(Request req, Response res) {
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
@@ -123,6 +125,7 @@ public class StopController {
             }
 
         } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
@@ -158,10 +161,10 @@ public class StopController {
             e.printStackTrace();
             halt(400);
         } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            throw e;
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }
@@ -282,6 +285,7 @@ public class StopController {
 
             json = Base.toJson(ret, false);
          } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
              e.printStackTrace();

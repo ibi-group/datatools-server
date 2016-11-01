@@ -13,6 +13,8 @@ import com.conveyal.datatools.editor.models.transit.ServiceCalendar;
 import com.conveyal.datatools.editor.models.transit.ServiceCalendar.ServiceCalendarForPattern;
 import com.conveyal.datatools.editor.models.transit.Trip;
 import org.mapdb.Fun;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import spark.HaltException;
 import spark.Request;
 import spark.Response;
@@ -27,6 +29,7 @@ import java.util.Set;
 public class CalendarController {
     public static JsonManager<Calendar> json =
             new JsonManager<>(Calendar.class, JsonViews.UserInterface.class);
+    private static final Logger LOG = LoggerFactory.getLogger(CalendarController.class);
     public static Object getCalendar(Request req, Response res) {
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
@@ -94,6 +97,7 @@ public class CalendarController {
 
             tx.rollback();
         } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             tx.rollback();
@@ -136,6 +140,7 @@ public class CalendarController {
 
             return cal;
         } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             if (tx != null) tx.rollback();
@@ -181,6 +186,7 @@ public class CalendarController {
 
             return json;
         } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             if (tx != null) tx.rollback();
