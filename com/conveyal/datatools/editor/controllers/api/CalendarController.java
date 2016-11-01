@@ -13,6 +13,7 @@ import com.conveyal.datatools.editor.models.transit.ServiceCalendar;
 import com.conveyal.datatools.editor.models.transit.ServiceCalendar.ServiceCalendarForPattern;
 import com.conveyal.datatools.editor.models.transit.Trip;
 import org.mapdb.Fun;
+import spark.HaltException;
 import spark.Request;
 import spark.Response;
 
@@ -92,6 +93,8 @@ public class CalendarController {
             }
 
             tx.rollback();
+        } catch (HaltException e) {
+            throw e;
         } catch (Exception e) {
             tx.rollback();
             e.printStackTrace();
@@ -132,6 +135,8 @@ public class CalendarController {
             tx.commit();
 
             return cal;
+        } catch (HaltException e) {
+            throw e;
         } catch (Exception e) {
             if (tx != null) tx.rollback();
             e.printStackTrace();
@@ -175,6 +180,8 @@ public class CalendarController {
             tx.commit();
 
             return json;
+        } catch (HaltException e) {
+            throw e;
         } catch (Exception e) {
             if (tx != null) tx.rollback();
             e.printStackTrace();

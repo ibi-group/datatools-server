@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
+import spark.HaltException;
 import spark.Request;
 import spark.Response;
 
@@ -66,6 +67,8 @@ public class TripController {
                 return Base.toJson(tx.trips.values(), false);
             }
                 
+        } catch (HaltException e) {
+            throw e;
         } catch (Exception e) {
             tx.rollback();
             e.printStackTrace();
@@ -103,6 +106,8 @@ public class TripController {
             tx.commit();
 
             return Base.toJson(trip, false);
+        } catch (HaltException e) {
+            throw e;
         } catch (Exception e) {
             e.printStackTrace();
             if (tx != null) tx.rollbackIfOpen();
@@ -159,6 +164,8 @@ public class TripController {
             tx.commit();
 
             return Base.toJson(trip, false);
+        } catch (HaltException e) {
+            throw e;
         } catch (Exception e) {
             if (tx != null) tx.rollbackIfOpen();
             e.printStackTrace();

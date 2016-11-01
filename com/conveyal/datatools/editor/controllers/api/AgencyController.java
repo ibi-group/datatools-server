@@ -8,6 +8,7 @@ import com.conveyal.datatools.editor.models.transit.Agency;
 import com.conveyal.datatools.editor.utils.S3Utils;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
+import spark.HaltException;
 import spark.Request;
 import spark.Response;
 
@@ -35,6 +36,8 @@ public class AgencyController {
             }
             
             tx.rollback();
+        } catch (HaltException e) {
+            throw e;
         } catch (Exception e) {
             e.printStackTrace();
             halt(400);
@@ -61,6 +64,8 @@ public class AgencyController {
             tx.commit();
 
             return agency;
+        } catch (HaltException e) {
+            throw e;
         } catch (Exception e) {
             e.printStackTrace();
             halt(400);
@@ -87,6 +92,8 @@ public class AgencyController {
             tx.commit();
 
             return Base.toJson(agency, false);
+        } catch (HaltException e) {
+            throw e;
         } catch (Exception e) {
             e.printStackTrace();
             halt(400);
@@ -121,6 +128,8 @@ public class AgencyController {
             tx.commit();
 
             return agency;
+        } catch (HaltException e) {
+            throw e;
         } catch (Exception e) {
             e.printStackTrace();
             halt(400);

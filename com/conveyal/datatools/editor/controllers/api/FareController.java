@@ -6,6 +6,7 @@ import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.Fare;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
+import spark.HaltException;
 import spark.Request;
 import spark.Response;
 
@@ -57,6 +58,8 @@ public class FareController {
             }
 
             tx.rollback();
+        } catch (HaltException e) {
+            throw e;
         } catch (Exception e) {
             tx.rollback();
             e.printStackTrace();
@@ -97,10 +100,11 @@ public class FareController {
             tx.commit();
 
             return fare;
+        } catch (HaltException e) {
+            throw e;
         } catch (Exception e) {
             if (tx != null) tx.rollback();
             e.printStackTrace();
-            halt(400);
         }
         return null;
     }
@@ -140,6 +144,8 @@ public class FareController {
             tx.commit();
 
             return json;
+        } catch (HaltException e) {
+            throw e;
         } catch (Exception e) {
             if (tx != null) tx.rollback();
             e.printStackTrace();

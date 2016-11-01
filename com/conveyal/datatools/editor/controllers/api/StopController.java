@@ -19,6 +19,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.mapdb.BTreeMap;
+import spark.HaltException;
 import spark.Request;
 import spark.Response;
 
@@ -121,6 +122,8 @@ public class StopController {
 
             }
 
+        } catch (HaltException e) {
+            throw e;
         } catch (Exception e) {
             e.printStackTrace();
             halt(400);
@@ -154,6 +157,8 @@ public class StopController {
         } catch (IOException e) {
             e.printStackTrace();
             halt(400);
+        } catch (HaltException e) {
+            throw e;
         } catch (Exception e) {
             e.printStackTrace();
             throw e;
@@ -276,7 +281,9 @@ public class StopController {
             }
 
             json = Base.toJson(ret, false);
-         } catch (Exception e) {
+         } catch (HaltException e) {
+            throw e;
+        } catch (Exception e) {
              e.printStackTrace();
              halt(400);
          }

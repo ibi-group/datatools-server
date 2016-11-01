@@ -8,6 +8,7 @@ import java.time.LocalDate;
 
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
+import spark.HaltException;
 import spark.Request;
 import spark.Response;
 
@@ -44,6 +45,8 @@ public class ScheduleExceptionController {
                 json = Base.toJson(tx.exceptions.values(), false);
             }
             tx.rollback();
+        } catch (HaltException e) {
+            throw e;
         } catch (Exception e) {
             if (tx != null) tx.rollback();
             e.printStackTrace();
@@ -109,6 +112,8 @@ public class ScheduleExceptionController {
             tx.commit();
 
             return Base.toJson(ex, false);
+        } catch (HaltException e) {
+            throw e;
         } catch (Exception e) {
             if (tx != null) tx.rollback();
             e.printStackTrace();
@@ -166,6 +171,8 @@ public class ScheduleExceptionController {
             tx.commit();
 
             return ex;
+        } catch (HaltException e) {
+            throw e;
         } catch (Exception e) {
             if (tx != null) tx.rollback();
             e.printStackTrace();

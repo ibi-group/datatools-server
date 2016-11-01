@@ -11,6 +11,7 @@ import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.gtfs.model.FeedInfo;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import spark.HaltException;
 import spark.Request;
 import spark.Response;
 
@@ -67,6 +68,8 @@ public class FeedInfoController {
             gtx.commit();
 
             return Base.toJson(fs, false);
+        } catch (HaltException e) {
+            throw e;
         } catch (Exception e) {
             gtx.rollbackIfOpen();
             e.printStackTrace();
@@ -95,6 +98,8 @@ public class FeedInfoController {
             gtx.commit();
 
             return Base.toJson(feed, false);
+        } catch (HaltException e) {
+            throw e;
         } catch (Exception e) {
             e.printStackTrace();
             halt(400);

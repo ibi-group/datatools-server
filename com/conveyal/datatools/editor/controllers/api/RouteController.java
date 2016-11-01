@@ -20,6 +20,7 @@ import java.util.Set;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import spark.HaltException;
 import spark.Request;
 import spark.Response;
 
@@ -69,6 +70,8 @@ public class RouteController {
                 tx.rollback();
 //                return json;
             }
+        } catch (HaltException e) {
+            throw e;
         } catch (Exception e) {
             tx.rollbackIfOpen();
             e.printStackTrace();
@@ -112,6 +115,8 @@ public class RouteController {
             tx.commit();
 
             return route;
+        } catch (HaltException e) {
+            throw e;
         } catch (Exception e) {
             e.printStackTrace();
             halt(400);
@@ -147,6 +152,8 @@ public class RouteController {
             tx.commit();
 
             return route;
+        } catch (HaltException e) {
+            throw e;
         } catch (Exception e) {
             e.printStackTrace();
             halt(400);
@@ -181,6 +188,8 @@ public class RouteController {
             tx.commit();
 
             return route;
+        } catch (HaltException e) {
+            throw e;
         } catch (Exception e) {
             e.printStackTrace();
             halt(400);
@@ -226,6 +235,8 @@ public class RouteController {
             tx.routes.remove(id);
             tx.commit();
             return true; // ok();
+        } catch (HaltException e) {
+            throw e;
         } catch (Exception e) {
             tx.rollback();
             e.printStackTrace();
@@ -302,8 +313,9 @@ public class RouteController {
 
              tx.commit();
              return true; // ok();
-        }
-        catch (Exception e) {
+        } catch (HaltException e) {
+            throw e;
+        } catch (Exception e) {
             e.printStackTrace();
             tx.rollback();
             throw e;
