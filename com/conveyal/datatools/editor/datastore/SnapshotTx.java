@@ -132,26 +132,27 @@ public class SnapshotTx extends DatabaseTx {
 
         LOG.info("Restoring deleted stops");
 
-        // restore any stops that have been deleted
-        List<Stop> restoredStops = new ArrayList<Stop>();
-        if (tx.exists("stops")) {
-            BTreeMap<String, Stop> oldStops = this.<String, Stop>getMap("stops");
-
-            for (TripPattern tp : atx.tripPatterns.values()) {
-                for (TripPatternStop ps : tp.patternStops) {
-                    if (!atx.stops.containsKey(ps.stopId)) {
-                        Stop stop = oldStops.get(ps.stopId);
-                        atx.stops.put(ps.stopId, stop);
-                        restoredStops.add(stop);
-                    }
-                }
-            }
-        }
-        LOG.info("Restored {} deleted stops", restoredStops.size());
-
-        atx.commit();
-
-        return restoredStops;
+//        // restore any stops that have been deleted
+//        List<Stop> restoredStops = new ArrayList<Stop>();
+//        if (tx.exists("stops")) {
+//            BTreeMap<String, Stop> oldStops = this.<String, Stop>getMap("stops");
+//
+//            for (TripPattern tp : atx.tripPatterns.values()) {
+//                for (TripPatternStop ps : tp.patternStops) {
+//                    if (!atx.stops.containsKey(ps.stopId)) {
+//                        Stop stop = oldStops.get(ps.stopId);
+//                        atx.stops.put(ps.stopId, stop);
+//                        restoredStops.add(stop);
+//                    }
+//                }
+//            }
+//        }
+//        LOG.info("Restored {} deleted stops", restoredStops.size());
+//
+//        atx.commit();
+//
+//        return restoredStops;
+        return new ArrayList<>();
     }
 
     /** close the underlying data store */

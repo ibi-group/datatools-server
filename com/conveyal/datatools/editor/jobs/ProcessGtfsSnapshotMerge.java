@@ -41,7 +41,6 @@ import java.io.File;
 import java.util.*;
 import java.util.Map.Entry;
 
-import static com.conveyal.datatools.editor.models.Snapshot.deactivateSnapshots;
 import static spark.Spark.halt;
 
 
@@ -114,12 +113,14 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
             for(String key : feedTx.trips.keySet()) feedTx.trips.remove(key);
             LOG.info("Cleared old data");
 
+            // input = feedVersion.getGtfsFeed();
+            // TODO: use GtfsCache?
             synchronized (status) {
                 status.message = "Loading GTFS file...";
                 status.percentComplete = 5;
             }
             input = feedVersion.getGtfsFeed();
-            if (input == null) return;
+            if(input == null) return;
 
             LOG.info("GtfsImporter: importing feed...");
             synchronized (status) {
@@ -357,12 +358,17 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
             }
             // import trips, stop times and patterns all at once
             Map<String, Pattern> patterns = input.patterns;
-
+            Set<String> processedTrips = new HashSet<>();
             for (Entry<String, Pattern> pattern : patterns.entrySet()) {
                 // it is possible, though unlikely, for two routes to have the same stopping pattern
                 // we want to ensure they get different trip patterns
                 Map<String, TripPattern> tripPatternsByRoute = Maps.newHashMap();
                 for (String tripId : pattern.getValue().associatedTrips) {
+
+                    // TODO: figure out why trips are being added twice. This check prevents that.
+                    if (processedTrips.contains(tripId)) {
+                        continue;
+                    }
                     synchronized (status) {
                         status.message = "Importing trips... (id: " + tripId + ") " + tripCount + "/" + input.trips.size();
                         status.percentComplete = 50 + 45 * tripCount / input.trips.size();
@@ -396,11 +402,11 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                             input.stop_times.subMap(new Tuple2(gtfsTrip.trip_id, null), new Tuple2(gtfsTrip.trip_id, Fun.HI)).values();
 
                     for (com.conveyal.gtfs.model.StopTime st : stopTimes) {
-                        trip.stopTimes.add(new StopTime(st, stopIdMap.get(new Tuple2<String, String>(st.stop_id, feed.id)).id));
+                        trip.stopTimes.add(new StopTime(st, stopIdMap.get(new Tuple2<>(st.stop_id, feed.id)).id));
                     }
 
                     feedTx.trips.put(trip.id, trip);
-
+                    processedTrips.add(tripId);
                     tripCount++;
 
                     if (tripCount % 1000 == 0) {
@@ -425,16 +431,19 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
             LOG.info("Fares loaded: " + fareCount);
             synchronized (status) {
                 status.message = "Fares loaded: " + fareCount;
+                status.percentComplete = 92;
+            }
+            LOG.info("Saving snapshot...");
+            synchronized (status) {
+                status.message = "Saving snapshot...";
                 status.percentComplete = 95;
             }
             // commit the feed TXs first, so that we have orphaned data rather than inconsistent data on a commit failure
             feedTx.commit();
-
-            deactivateSnapshots(feedVersion.feedSourceId, null);
-
+            gtx.commit();
+            Snapshot.deactivateSnapshots(feedVersion.feedSourceId, null);
             // create an initial snapshot for this FeedVersion
             Snapshot snapshot = VersionedDataStore.takeSnapshot(feed.id, "Snapshot of " + feedVersion.getName(), "none");
-
 
 
             LOG.info("Imported GTFS file: " + agencyCount + " agencies; " + routeCount + " routes;" + stopCount + " stops; " +  stopTimeCount + " stopTimes; " + tripCount + " trips;" + shapePointCount + " shapePoints");
@@ -454,6 +463,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
         finally {
             feedTx.rollbackIfOpen();
             gtx.rollbackIfOpen();
+
             // set job as complete
             jobFinished();
         }
