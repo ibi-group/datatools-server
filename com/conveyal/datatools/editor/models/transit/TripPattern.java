@@ -19,7 +19,11 @@ import com.conveyal.datatools.editor.utils.GeoUtils;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.editor.utils.GeoUtils.getCoordDistances;
 
@@ -42,7 +46,21 @@ public class TripPattern extends Model implements Cloneable, Serializable {
     public String feedId;
 
     public List<TripPatternStop> patternStops = new ArrayList<TripPatternStop>();
-    
+
+    public int getNumberOfTrips () {
+        FeedTx tx = VersionedDataStore.getFeedTx(this.feedId);
+        Collection<Trip> trips = tx.getTripsByPattern(this.id);
+        return trips == null ? 0 : trips.size();
+    }
+
+    public Map<String, Long> getTripCountByCalendar () {
+        FeedTx tx = VersionedDataStore.getFeedTx(this.feedId);
+        Collection<Trip> trips = tx.getTripsByPattern(this.id);
+        return trips.stream()
+                .filter(t -> t.calendarId != null)
+                .collect(Collectors.groupingBy(t -> t.calendarId, Collectors.counting()));
+    }
+
     /**
      * Lines showing how stops are being snapped to the shape.
      * @return

@@ -13,6 +13,8 @@ import java.time.LocalDate;
 
 import java.io.Serializable;
 import java.util.Collection;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Set;
 
 public class ServiceCalendar extends Model implements Cloneable, Serializable {
@@ -71,10 +73,10 @@ public class ServiceCalendar extends Model implements Cloneable, Serializable {
         return numberOfTrips;
     }
 
-    public transient Collection<String> routes;
+    public transient Map<String, Long> routes;
 
     @JsonProperty("routes")
-    public Collection<String> jsonGetRoutes () {
+    public Map<String, Long> jsonGetRoutes () {
         return routes;
     }
 
@@ -209,11 +211,16 @@ public class ServiceCalendar extends Model implements Cloneable, Serializable {
         // note that this is not ideal as we are fetching all of the trips. however, it's not really very possible
         // with MapDB to have an index involving three tables.
         Set<String> routeIds = Sets.newHashSet();
-
+        Map<String, Long> tripsForRoutes = new HashMap<>();
         for (Trip trip : tx.getTripsByCalendar(this.id)) {
-            routeIds.add(trip.routeId);
+            Long count = 0L;
+            if (tripsForRoutes.containsKey(trip.routeId)) {
+                count = tripsForRoutes.get(trip.routeId);
+            }
+            tripsForRoutes.put(trip.routeId, count + 1);
+//            routeIds.add(trip.routeId);
         }
-
+        this.routes = tripsForRoutes;
 //        this.routes = Collections2.transform(routeIds, new Function<String, String>() {
 //
 //            @Override

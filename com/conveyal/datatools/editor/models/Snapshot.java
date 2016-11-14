@@ -44,6 +44,9 @@ public class Snapshot implements Cloneable, Serializable {
     /** The feed associated with this */
     public String feedId;
 
+    /** The feed version this snapshot was generated from or published to, if any */
+    public String feedVersionId;
+
     /** the date/time this snapshot was taken (millis since epoch) */
     public long snapshotTime;
 

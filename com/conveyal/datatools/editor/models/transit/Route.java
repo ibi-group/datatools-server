@@ -1,5 +1,6 @@
 package com.conveyal.datatools.editor.models.transit;
 
+import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.conveyal.datatools.editor.datastore.FeedTx;
@@ -11,6 +12,7 @@ import org.slf4j.LoggerFactory;
 import java.io.Serializable;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.Collection;
 
 public class Route extends Model implements Cloneable, Serializable {
     public static final long serialVersionUID = 1;
@@ -43,7 +45,13 @@ public class Route extends Model implements Cloneable, Serializable {
     //public GisUpload gisUpload;
     
     public AttributeAvailabilityType wheelchairBoarding;
-    
+
+    public int getNumberOfTrips () {
+        FeedTx tx = VersionedDataStore.getFeedTx(this.feedId);
+        Collection<Trip> trips = tx.getTripsByRoute(this.id);
+        return trips == null ? 0 : trips.size();
+    }
+
     /** on which days does this route have service? Derived from calendars on render */
     public transient Boolean monday, tuesday, wednesday, thursday, friday, saturday, sunday;
 
