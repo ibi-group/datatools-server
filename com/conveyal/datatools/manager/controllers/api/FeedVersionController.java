@@ -192,18 +192,18 @@ public class FeedVersionController  {
         return version;
     }
 
-    public static Object getValidationResult(Request req, Response res) {
+    public static JsonNode getValidationResult(Request req, Response res) {
         return getValidationResult(req, res, false);
     }
 
-    public static Object getPublicValidationResult(Request req, Response res) {
+    public static JsonNode getPublicValidationResult(Request req, Response res) {
         return getValidationResult(req, res, true);
     }
 
     public static JsonNode getValidationResult(Request req, Response res, boolean checkPublic) {
         FeedVersion version = requestFeedVersion(req, "view");
 
-        return version.getValidationResult();
+        return version.getValidationResult(false);
     }
 
     public static JsonNode getIsochrones(Request req, Response res) {
@@ -369,6 +369,12 @@ public class FeedVersionController  {
         token.save();
         return token;
     }
+
+    private static JsonNode validate (Request req, Response res) {
+        FeedVersion version = requestFeedVersion(req, "manage");
+        return version.getValidationResult(true);
+    }
+
     private static FeedVersion publishToExternalResource (Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "manage");
 
@@ -400,6 +406,7 @@ public class FeedVersionController  {
         get(apiPrefix + "secure/feedversion/:id/download", FeedVersionController::downloadFeedVersionDirectly);
         get(apiPrefix + "secure/feedversion/:id/downloadtoken", FeedVersionController::getDownloadToken, json::write);
         get(apiPrefix + "secure/feedversion/:id/validation", FeedVersionController::getValidationResult, json::write);
+        post(apiPrefix + "secure/feedversion/:id/validate", FeedVersionController::validate, json::write);
         get(apiPrefix + "secure/feedversion/:id/isochrones", FeedVersionController::getIsochrones, json::write);
         get(apiPrefix + "secure/feedversion", FeedVersionController::getAllFeedVersions, json::write);
         post(apiPrefix + "secure/feedversion", FeedVersionController::createFeedVersion, json::write);
