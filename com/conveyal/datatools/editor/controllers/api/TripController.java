@@ -9,10 +9,13 @@ import com.conveyal.datatools.editor.models.transit.TripPattern;
 import com.conveyal.datatools.editor.models.transit.TripPatternStop;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
+import com.fasterxml.jackson.core.type.TypeReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.ArrayList;
+import java.util.List;
 
 import spark.HaltException;
 import spark.Request;
@@ -40,9 +43,10 @@ public class TripController {
             halt(400);
         }
 
-        FeedTx tx = VersionedDataStore.getFeedTx(feedId);
+        FeedTx tx = null;
 
         try {
+            tx = VersionedDataStore.getFeedTx(feedId);
             if (id != null) {
                 if (tx.trips.containsKey(id))
                     return Base.toJson(tx.trips.get(id), false);
@@ -65,53 +69,70 @@ public class TripController {
                 return Base.toJson(tx.trips.values(), false);
             }
                 
+        } catch (IOException e) {
+            e.printStackTrace();
+            halt(400);
         } catch (HaltException e) {
             LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
-            tx.rollback();
+            if (tx != null) tx.rollbackIfOpen();
             e.printStackTrace();
             halt(400);
+        } finally {
+            if (tx != null) tx.rollbackIfOpen();
         }
         return null;
     }
-    
+
     public static Object createTrip(Request req, Response res) {
         FeedTx tx = null;
-
+        String createMultiple = req.queryParams("multiple");
         try {
-            Trip trip = Base.mapper.readValue(req.body(), Trip.class);
-
-            if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(trip.feedId))
-                halt(400);
-
-            if (!VersionedDataStore.feedExists(trip.feedId)) {
-                halt(400);
+            List<Trip> trips = new ArrayList<>();
+            if (createMultiple != null && createMultiple.equals("true")) {
+                trips = Base.mapper.readValue(req.body(), new TypeReference<List<Trip>>(){});
+            } else {
+                Trip trip = Base.mapper.readValue(req.body(), Trip.class);
+                trips.add(trip);
             }
+            for (Trip trip : trips) {
+                if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(trip.feedId))
+                    halt(400);
 
-            tx = VersionedDataStore.getFeedTx(trip.feedId);
+                if (!VersionedDataStore.feedExists(trip.feedId)) {
+                    halt(400);
+                }
 
-            if (tx.trips.containsKey(trip.id)) {
-                tx.rollback();
-                halt(400);
+                tx = VersionedDataStore.getFeedTx(trip.feedId);
+
+                if (tx.trips.containsKey(trip.id)) {
+                    tx.rollback();
+                    halt(400);
+                }
+
+                if (!tx.tripPatterns.containsKey(trip.patternId) || trip.stopTimes.size() != tx.tripPatterns.get(trip.patternId).patternStops.size()) {
+                    tx.rollback();
+                    halt(400);
+                }
+
+                tx.trips.put(trip.id, trip);
             }
-
-            if (!tx.tripPatterns.containsKey(trip.patternId) || trip.stopTimes.size() != tx.tripPatterns.get(trip.patternId).patternStops.size()) {
-                tx.rollback();
-                halt(400);
-            }
-
-            tx.trips.put(trip.id, trip);
             tx.commit();
 
-            return Base.toJson(trip, false);
+            return Base.toJson(trips, false);
+        } catch (IOException e) {
+            e.printStackTrace();
+            halt(400);
         } catch (HaltException e) {
             LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
-            e.printStackTrace();
             if (tx != null) tx.rollbackIfOpen();
+            e.printStackTrace();
             halt(400);
+        } finally {
+            if (tx != null) tx.rollbackIfOpen();
         }
         return null;
     }
@@ -164,6 +185,9 @@ public class TripController {
             tx.commit();
 
             return Base.toJson(trip, false);
+        } catch (IOException e) {
+            e.printStackTrace();
+            halt(400);
         } catch (HaltException e) {
             LOG.error("Halt encountered", e);
             throw e;
@@ -171,6 +195,8 @@ public class TripController {
             if (tx != null) tx.rollbackIfOpen();
             e.printStackTrace();
             halt(400);
+        } finally {
+            if (tx != null) tx.rollbackIfOpen();
         }
         return null;
     }
@@ -187,16 +213,26 @@ public class TripController {
             halt(400);
         }
 
-        FeedTx tx = VersionedDataStore.getFeedTx(feedId);
-        Trip trip = tx.trips.remove(id);
+        FeedTx tx = null;
         try {
-            json = Base.toJson(trip, false);
+            tx = VersionedDataStore.getFeedTx(feedId);
+            Trip trip = tx.trips.remove(id);
+            tx.commit();
+            return Base.toJson(trip, false);
         } catch (IOException e) {
+            e.printStackTrace();
             halt(400);
+        } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
+            throw e;
+        } catch (Exception e) {
+            if (tx != null) tx.rollbackIfOpen();
+            e.printStackTrace();
+            halt(400);
+        } finally {
+            if (tx != null) tx.rollbackIfOpen();
         }
-        tx.commit();
-        
-        return json;
+        return null;
     }
 
     public static void register (String apiPrefix) {

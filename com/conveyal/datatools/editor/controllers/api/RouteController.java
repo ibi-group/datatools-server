@@ -126,7 +126,6 @@ public class RouteController {
         return null;
     }
 
-
     public static Object updateRoute(Request req, Response res) {
         Route route;
         String id = req.params("id");
