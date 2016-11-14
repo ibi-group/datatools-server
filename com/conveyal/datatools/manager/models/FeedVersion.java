@@ -286,6 +286,9 @@ public class FeedVersion extends Model implements Serializable {
                 // This may take a while for very large feeds.
                 LOG.info("Calculating # of trips per date of service");
                 tripsPerDate = stats.getTripCountPerDateOfService();
+
+                // get revenue time in seconds for Tuesdays in feed
+                stats.getAverageDailyRevenueTime(2);
             }catch (Exception e) {
                 e.printStackTrace();
                 statusMap.put("message", "Unable to validate feed.");
@@ -339,7 +342,13 @@ public class FeedVersion extends Model implements Serializable {
     }
 
     @JsonIgnore
-    public JsonNode getValidationResult() {
+    public JsonNode getValidationResult(boolean revalidate) {
+        if (revalidate) {
+            LOG.warn("Revalidation requested.  Validating feed.");
+            this.validate();
+            this.save();
+            halt(503, "Try again later. Validating feed");
+        }
         String keyName = validationSubdir + this.id + ".json";
         InputStream objectData = null;
         if (DataManager.feedBucket != null && DataManager.useS3) {

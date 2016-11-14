@@ -29,6 +29,7 @@ public class FeedValidationResult implements Serializable {
     public LocalDate startDate;
     public LocalDate endDate;
     public Rectangle2D bounds;
+    public long avgDailyRevenueTime;
 
     // legacy fields included for backwards compatibility (not currently used)
     public String feedFileName;
@@ -70,6 +71,11 @@ public class FeedValidationResult implements Serializable {
             this.endDate = calDateEnd;
         else
             this.endDate = calDateEnd.isAfter(calSvcEnd) ? calDateEnd : calSvcEnd;
+
+
+        // get revenue time in seconds for Tuesdays in feed
+        this.avgDailyRevenueTime = stats.getAverageDailyRevenueTime(2);
+
         this.loadStatus = LoadStatus.SUCCESS;
         this.tripCount = stats.getTripCount();
         this.stopTimesCount = stats.getStopTimesCount();

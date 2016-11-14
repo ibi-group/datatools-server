@@ -30,6 +30,7 @@ public class FeedValidationResultSummary implements Serializable {
     public int routeCount;
     public int tripCount;
     public int stopTimesCount;
+    public long avgDailyRevenueTime;
 
     /** The first date the feed has service, either in calendar.txt or calendar_dates.txt */
     @JsonInclude(Include.ALWAYS)
@@ -61,6 +62,7 @@ public class FeedValidationResultSummary implements Serializable {
                 this.startDate = result.startDate != null ? Date.from(result.startDate.atStartOfDay(ZoneId.systemDefault()).toInstant()) : null;
                 this.endDate = result.endDate != null ? Date.from(result.endDate.atStartOfDay(ZoneId.systemDefault()).toInstant()) : null;
                 this.bounds = result.bounds;
+                this.avgDailyRevenueTime = result.avgDailyRevenueTime;
             }
         }
 
