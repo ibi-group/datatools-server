@@ -207,7 +207,7 @@ public class MtcFeedResource implements ExternalFeedResource {
         ExternalFeedSourceProperty agencyIdProp =
                 ExternalFeedSourceProperty.find(feedVersion.getFeedSource(), this.getResourceType(), "AgencyId");
 
-        if(agencyIdProp == null) {
+        if(agencyIdProp == null || agencyIdProp.equals("null")) {
             LOG.error("Could not read AgencyId for FeedSource " + feedVersion.feedSourceId);
             return;
         }
