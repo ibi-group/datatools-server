@@ -15,6 +15,7 @@ import com.google.common.eventbus.EventBus;
 import org.mapdb.Fun;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import spark.HaltException;
 
 import java.io.File;
 import java.io.IOException;
@@ -203,7 +204,7 @@ public class FeedSource extends Model implements Cloneable {
                 statusMap.put("percentComplete", 75.0);
                 statusMap.put("error", false);
                 eventBus.post(statusMap);
-                File out = version.newGtfsFile(conn.getInputStream());
+                version.newGtfsFile(conn.getInputStream());
             }
 
             else {
@@ -226,7 +227,8 @@ public class FeedSource extends Model implements Cloneable {
             e.printStackTrace();
             halt(400, message);
             return null;
-        } catch (Exception e) {
+        } catch (HaltException e) {
+            LOG.warn("Halt thrown", e);
             throw e;
         }
 
@@ -262,6 +264,7 @@ public class FeedSource extends Model implements Cloneable {
             statusMap.put("error", false);
             eventBus.post(statusMap);
             version.setUserById(fetchUser);
+            version.fileTimestamp = conn.getLastModified();
             return version;
         }
     }
@@ -354,11 +357,9 @@ public class FeedSource extends Model implements Cloneable {
         for(String resourceType : DataManager.feedResources.keySet()) {
             Map<String, String> propTable = new HashMap<>();
 
-            for (ExternalFeedSourceProperty prop : ExternalFeedSourceProperty.getAll()) {
-                if (prop.getFeedSourceId().equals(this.id)) {
-                    propTable.put(prop.name, prop.value);
-                }
-            }
+            ExternalFeedSourceProperty.getAll().stream()
+                    .filter(prop -> prop.getFeedSourceId().equals(this.id))
+                    .forEach(prop -> propTable.put(prop.name, prop.value));
 
             resourceTable.put(resourceType, propTable);
         }
@@ -375,20 +376,14 @@ public class FeedSource extends Model implements Cloneable {
 
     /**
      * Get all of the feed versions for this source
-     * @return
+     * @return collection of feed versions
      */
     @JsonIgnore
     public Collection<FeedVersion> getFeedVersions() {
         // TODO Indices
-        ArrayList<FeedVersion> ret = new ArrayList<FeedVersion>();
-
-        for (FeedVersion v : FeedVersion.getAll()) {
-            if (this.id.equals(v.feedSourceId)) {
-                ret.add(v);
-            }
-        }
-
-        return ret;
+        return FeedVersion.getAll().stream()
+                .filter(v -> this.id.equals(v.feedSourceId))
+                .collect(Collectors.toCollection(ArrayList::new));
     }
 
     @JsonView(JsonViews.UserInterface.class)
@@ -404,7 +399,7 @@ public class FeedSource extends Model implements Cloneable {
     /**
      * Represents ways feeds can be retrieved
      */
-    public static enum FeedRetrievalMethod {
+    public enum FeedRetrievalMethod {
         FETCHED_AUTOMATICALLY, // automatically retrieved over HTTP on some regular basis
         MANUALLY_UPLOADED, // manually uploaded by someone, perhaps the agency, or perhaps an internal user
         PRODUCED_IN_HOUSE // produced in-house in a GTFS Editor instance
@@ -418,9 +413,7 @@ public class FeedSource extends Model implements Cloneable {
      * Delete this feed source and everything that it contains.
      */
     public void delete() {
-        for (FeedVersion v : getFeedVersions()) {
-            v.delete();
-        }
+        getFeedVersions().forEach(FeedVersion::delete);
 
         // Delete editor feed mapdb
         // TODO: does the mapdb folder need to be deleted separately?
@@ -433,11 +426,9 @@ public class FeedSource extends Model implements Cloneable {
             gtx.commit();
         }
 
-        for (ExternalFeedSourceProperty prop : ExternalFeedSourceProperty.getAll()) {
-            if(prop.getFeedSourceId().equals(this.id)) {
-                prop.delete();
-            }
-        }
+        ExternalFeedSourceProperty.getAll().stream()
+                .filter(prop -> prop.getFeedSourceId().equals(this.id))
+                .forEach(ExternalFeedSourceProperty::delete);
 
         // TODO: add delete for osm extract and r5 network (maybe that goes with version)
 

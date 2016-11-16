@@ -97,26 +97,30 @@ public class FeedVersionController  {
         FeedSource s = requestFeedSourceById(req, "manage");
 
         if (FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.equals(s.retrievalMethod)) {
-            halt(400, "Feed is autofetched! Cannot upload.");
+            halt(400, "Feed is auto-fetched! Cannot upload.");
         }
         FeedVersion latest = s.getLatest();
         FeedVersion v = new FeedVersion(s);
         v.setUser(userProfile);
-
+//        String lastModified = req.raw().getPart("lastModified").toString();
+//        System.out.println("last modified: " + lastModified);
         if (req.raw().getAttribute("org.eclipse.jetty.multipartConfig") == null) {
             MultipartConfigElement multipartConfigElement = new MultipartConfigElement(System.getProperty("java.io.tmpdir"));
             req.raw().setAttribute("org.eclipse.jetty.multipartConfig", multipartConfigElement);
         }
 
         Part part = req.raw().getPart("file");
-
+//        System.out.println(lastModified);
         LOG.info("Saving feed from upload {}", s);
 
 
         InputStream uploadStream;
         try {
             uploadStream = part.getInputStream();
-            v.newGtfsFile(uploadStream);
+
+            // set last modified based on value of query param
+            File file = v.newGtfsFile(uploadStream, Long.valueOf(req.queryParams("lastModified")));
+            System.out.println(file.lastModified());
         } catch (Exception e) {
             e.printStackTrace();
             LOG.error("Unable to open input stream from upload");
@@ -135,7 +139,8 @@ public class FeedVersionController  {
         }
 
         v.name = v.getFormattedTimestamp() + " Upload";
-
+//        v.fileTimestamp
+        v.userId = userProfile.getUser_id();
         v.save();
         new ProcessSingleFeedJob(v, userProfile.getUser_id()).run();
 
@@ -151,7 +156,7 @@ public class FeedVersionController  {
     public static Boolean createFeedVersionFromSnapshot (Request req, Response res) throws IOException, ServletException {
 
         Auth0UserProfile userProfile = req.attribute("user");
-        // TODO: should this be edit privelege?
+        // TODO: should this be edit privilege?
         FeedSource s = requestFeedSourceById(req, "manage");
         FeedVersion v = new FeedVersion(s);
         CreateFeedVersionFromSnapshotJob createFromSnapshotJob =
@@ -188,7 +193,7 @@ public class FeedVersionController  {
             halt(404, "Version ID does not exist");
         }
         // performs permissions checks for at feed source level and halts if any issues
-        FeedSource s = requestFeedSource(req, version.getFeedSource(), "manage");
+        requestFeedSource(req, version.getFeedSource(), action);
         return version;
     }
 

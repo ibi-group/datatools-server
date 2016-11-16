@@ -246,7 +246,7 @@ public class FeedSourceController {
      * Helper function returns feed source if user has permission for specified action.
      * @param req spark Request object from API request
      * @param action action type (either "view" or "manage")
-     * @return
+     * @return feedsource object for ID
      */
     private static FeedSource requestFeedSourceById(Request req, String action) {
         String id = req.params("id");

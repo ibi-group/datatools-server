@@ -3,9 +3,7 @@ package com.conveyal.datatools.manager.models;
 
 import java.awt.geom.Rectangle2D;
 import java.io.File;
-import java.io.FileFilter;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -20,42 +18,30 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import com.amazonaws.AmazonServiceException;
-import com.amazonaws.auth.AWSCredentials;
-import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.amazonaws.services.s3.model.GetObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.model.S3Object;
-import com.conveyal.datatools.common.status.StatusEvent;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.controllers.api.GtfsApiController;
 import com.conveyal.datatools.manager.persistence.DataStore;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.utils.HashUtils;
-import com.conveyal.gtfs.GTFSCache;
 import com.conveyal.gtfs.GTFSFeed;
-import com.conveyal.gtfs.api.ApiMain;
 import com.conveyal.gtfs.validator.json.LoadStatus;
 import com.conveyal.gtfs.stats.FeedStats;
 import com.conveyal.r5.point_to_point.builder.TNBuilderConfig;
 import com.conveyal.r5.transit.TransportNetwork;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.core.JsonGenerationException;
-import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.eventbus.EventBus;
 import com.vividsolutions.jts.geom.Geometry;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
-import org.apache.commons.io.filefilter.WildcardFileFilter;
 import org.geotools.geojson.geom.GeometryJSON;
-import org.mapdb.Fun.Function2;
 import org.mapdb.Fun.Tuple2;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -81,17 +67,12 @@ public class FeedVersion extends Model implements Serializable {
     private static ObjectMapper mapper = new ObjectMapper();
     public static final Logger LOG = LoggerFactory.getLogger(FeedVersion.class);
     public static final String validationSubdir = "validation/";
-    static DataStore<FeedVersion> versionStore = new DataStore<FeedVersion>("feedversions");
+    static DataStore<FeedVersion> versionStore = new DataStore<>("feedversions");
     private static FeedStore feedStore = new FeedStore();
 
     static {
         // set up indexing on feed versions by feed source, indexed by <FeedSource ID, version>
-        versionStore.secondaryKey("version", new Function2<Tuple2<String, Integer>, String, FeedVersion>() {
-            @Override
-            public Tuple2<String, Integer> run(String key, FeedVersion fv) {
-                return new Tuple2(fv.feedSourceId, fv.version);
-            }
-        });
+        versionStore.secondaryKey("version", (key, fv) -> new Tuple2(fv.feedSourceId, fv.version));
     }
 
     /**
@@ -174,15 +155,23 @@ public class FeedVersion extends Model implements Serializable {
     }
 
     public File newGtfsFile(InputStream inputStream) {
-
         File file = feedStore.newFeed(id, inputStream, getFeedSource());
         this.fileSize = file.length();
-        this.fileTimestamp = file.lastModified();
-        this.save();
         LOG.info("New GTFS file saved: {}", id);
         return file;
     }
-
+    public File newGtfsFile(InputStream inputStream, Long lastModified) {
+        File file = newGtfsFile(inputStream);
+        if (lastModified != null) {
+            this.fileTimestamp = lastModified;
+            file.setLastModified(lastModified);
+        }
+        else {
+            this.fileTimestamp = file.lastModified();
+        }
+        this.save();
+        return file;
+    }
     @JsonIgnore
     public GTFSFeed getGtfsFeed() {
         String apiId = id.replace(".zip", "");
@@ -224,7 +213,6 @@ public class FeedVersion extends Model implements Serializable {
     }
 
     public static FeedVersion get(String id) {
-        // TODO Auto-generated method stub
         return versionStore.getById(id);
     }
 
@@ -268,7 +256,7 @@ public class FeedVersion extends Model implements Serializable {
             return;
         }
 
-        Map<LocalDate, Integer> tripsPerDate = null;
+        Map<LocalDate, Integer> tripsPerDate;
 
         try {
 //            eventBus.post(new StatusEvent("Validating feed...", 30, false));
@@ -331,10 +319,6 @@ public class FeedVersion extends Model implements Serializable {
             Geometry buffers = gtfsFeed.getMergedBuffers();
             validation.put("mergedBuffers", buffers != null ? g.toString(buffers) : null);
             mapper.writeValue(tempFile, validation);
-        } catch (JsonGenerationException e) {
-            e.printStackTrace();
-        } catch (JsonMappingException e) {
-            e.printStackTrace();
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -410,7 +394,6 @@ public class FeedVersion extends Model implements Serializable {
 
         // upload to S3, if we have bucket name and use s3 storage
         if(DataManager.feedBucket != null && DataManager.useS3) {
-            AWSCredentials creds;
             try {
                 LOG.info("Uploading validation json to S3");
                 FeedStore.s3Client.putObject(new PutObjectRequest(
@@ -486,13 +469,11 @@ public class FeedVersion extends Model implements Serializable {
         File osmExtract = getOSMFile(bounds);
         if (!osmExtract.exists()) {
             InputStream is = getOsmExtract(this.validationResult.bounds);
-            OutputStream out = null;
+            OutputStream out;
             try {
                 out = new FileOutputStream(osmExtract);
                 IOUtils.copy(is, out);
                 is.close();
-            } catch (FileNotFoundException e) {
-                e.printStackTrace();
             } catch (IOException e) {
                 e.printStackTrace();
             }
@@ -506,7 +487,7 @@ public class FeedVersion extends Model implements Serializable {
 
         List<GTFSFeed> feedList = new ArrayList<>();
         feedList.add(getGtfsFeed());
-        TransportNetwork tn = null;
+        TransportNetwork tn;
         try {
             tn = TransportNetwork.fromFeeds(osmExtract.getAbsolutePath(), feedList, TNBuilderConfig.defaultConfig());
         } catch (Exception e) {
@@ -521,13 +502,11 @@ public class FeedVersion extends Model implements Serializable {
         }
         this.transportNetwork = tn;
         File tnFile = getTransportNetworkPath();
-        OutputStream tnOut = null;
+        OutputStream tnOut;
         try {
             tnOut = new FileOutputStream(tnFile);
             tn.write(tnOut);
             return transportNetwork;
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -607,17 +586,18 @@ public class FeedVersion extends Model implements Serializable {
      */
     public void delete() {
         // reset lastModified if feed is latest version
+        System.out.println("deleting version");
         FeedSource fs = getFeedSource();
         FeedVersion latest = fs.getLatest();
-        if (latest != null && latest.id == this.id) {
+        if (latest != null && latest.id.equals(this.id)) {
             fs.lastFetched = null;
             fs.save();
         }
         feedStore.deleteFeed(id);
 
-        /*for (Deployment d : Deployment.getAll()) {
+        for (Deployment d : Deployment.getAll()) {
             d.feedVersionIds.remove(this.id);
-        }*/
+        }
 
         versionStore.delete(this.id);
     }

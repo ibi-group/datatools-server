@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.models;
 
+import com.conveyal.datatools.manager.auth.Auth0Users;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonView;
 
@@ -36,6 +37,8 @@ public abstract class Model implements Serializable {
     @JsonView(JsonViews.DataDump.class)
     public String userId;
 
+    private String userEmail;
+
     /**
      * Notes on this object
      */
@@ -65,13 +68,14 @@ public abstract class Model implements Serializable {
      */
     @JsonView(JsonViews.UserInterface.class)
     public String getUser () {
-        return this.userId;
+        return this.userEmail;
     }
     /**
      * Set the owner of this object
      */
     public void setUser (Auth0UserProfile profile) {
         userId = profile.getUser_id();
+        userEmail = profile.getEmail();
     }
 
     /**
@@ -79,6 +83,8 @@ public abstract class Model implements Serializable {
      */
     public void setUserById (String id) {
         userId = id;
+        Auth0UserProfile profile = Auth0Users.getUserById(userId);
+        userEmail = profile != null ? profile.getEmail() : null;
     }
 
     public void addNote(Note n) {
