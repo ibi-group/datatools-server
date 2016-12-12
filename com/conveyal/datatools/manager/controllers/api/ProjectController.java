@@ -470,7 +470,8 @@ public class ProjectController {
                 feedSourceMap.put(fs, zipFile);
             } catch(Exception e) {
                 e.printStackTrace();
-                halt(500);
+//                halt(500);
+                LOG.error("Zipfile for version {} not found", version.id);
             }
         }
 
@@ -490,7 +491,6 @@ public class ProjectController {
                 out.write(tableOut);
                 out.closeEntry();
             }
-
         }
         out.close();
 
