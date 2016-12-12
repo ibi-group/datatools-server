@@ -1,6 +1,5 @@
 package com.conveyal.datatools.manager;
 
-import com.amazonaws.services.s3.AmazonS3Client;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 
 import com.conveyal.datatools.manager.controllers.DumpController;
@@ -12,41 +11,30 @@ import com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource;
 import com.conveyal.datatools.manager.extensions.transitfeeds.TransitFeedsFeedResource;
 import com.conveyal.datatools.manager.extensions.transitland.TransitLandFeedResource;
 
-import com.conveyal.datatools.manager.jobs.FetchProjectFeedsJob;
-import com.conveyal.datatools.manager.jobs.LoadGtfsApiFeedJob;
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.utils.CorsFilter;
 import com.conveyal.gtfs.GTFSCache;
-import com.conveyal.gtfs.api.ApiMain;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import com.google.common.util.concurrent.UncheckedExecutionException;
-import com.google.gson.Gson;
-import org.apache.http.concurrent.Cancellable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.utils.IOUtils;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.MissingResourceException;
 import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
-
-import static java.util.concurrent.TimeUnit.*;
 
 import static spark.Spark.*;
 
@@ -193,16 +181,10 @@ public class DataManager {
             response.type("application/json");
             response.header("Content-Encoding", "gzip");
         });
-
-        // return js for any other request
-        get("/main.js", (request, response) -> {
-            try (InputStream stream = DataManager.class.getResourceAsStream("/public/main.js")) {
-                return IOUtils.toString(stream);
-            } catch (IOException e) {
-                return null;
-                // if the resource doesn't exist we just carry on.
-            }
-        });
+        // load index.html
+        InputStream stream = DataManager.class.getResourceAsStream("/public/index.html");
+        String index = IOUtils.toString(stream).replace("${S3BUCKET}", getConfigPropertyAsText("application.assets_bucket"));
+        stream.close();
 
         // return 404 for any api response that's not found
         get(apiPrefix + "*", (request, response) -> {
@@ -210,23 +192,18 @@ public class DataManager {
             return null;
         });
         
-        // return assets as byte array
-        get("/assets/*", (request, response) -> {
-            try (InputStream stream = DataManager.class.getResourceAsStream("/public" + request.pathInfo())) {
-                return IOUtils.toByteArray(stream);
-            } catch (IOException e) {
-                return null;
-            }
-        });
+//        // return assets as byte array
+//        get("/assets/*", (request, response) -> {
+//            try (InputStream stream = DataManager.class.getResourceAsStream("/public" + request.pathInfo())) {
+//                return IOUtils.toByteArray(stream);
+//            } catch (IOException e) {
+//                return null;
+//            }
+//        });
         // return index.html for any sub-directory
         get("/*", (request, response) -> {
             response.type("text/html");
-            try (InputStream stream = DataManager.class.getResourceAsStream("/public/index.html")) {
-                return IOUtils.toString(stream);
-            } catch (IOException e) {
-                return null;
-                // if the resource doesn't exist we just carry on.
-            }
+            return index;
         });
         registerExternalResources();
     }
