@@ -39,7 +39,7 @@ public class DataStore<T> {
             directory.mkdirs();
 
         try {
-            LOG.info(directory.getCanonicalPath());
+            LOG.info(String.join("/", directory.getCanonicalPath(), dataFile));
         } catch (IOException e) {
             // TODO Auto-generated catch block
             e.printStackTrace();
@@ -60,7 +60,7 @@ public class DataStore<T> {
             directory.mkdirs();
 
         try {
-            LOG.info(directory.getCanonicalPath());
+            LOG.info(String.join("/", directory.getCanonicalPath(), dataFile));
         } catch (IOException e) {
             // TODO Auto-generated catch block
             e.printStackTrace();
@@ -71,14 +71,7 @@ public class DataStore<T> {
                 .closeOnJvmShutdown()
                 .make();
 
-        Comparator<Tuple2<String, T>> comparator = new Comparator<Fun.Tuple2<String,T>>(){
-
-            @Override
-            public int compare(Tuple2<String, T> o1,
-                               Tuple2<String, T> o2) {
-                return o1.a.compareTo(o2.a);
-            }
-        };
+        Comparator<Tuple2<String, T>> comparator = (o1, o2) -> o1.a.compareTo(o2.a);
 
         // need to reverse sort list
         Iterator<Fun.Tuple2<String,T>> iter = Pump.sort(inputData.iterator(),

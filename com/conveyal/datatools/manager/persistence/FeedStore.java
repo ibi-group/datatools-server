@@ -147,13 +147,13 @@ public class FeedStore {
      */
     public File getFeed (String id) {
         // local storage
-        if (path != null) {
+        if (!DataManager.useS3) {
             File feed = new File(path, id);
             // don't let folks get feeds outside of the directory
             if (feed.getParentFile().equals(path) && feed.exists()) return feed;
         }
         // s3 storage
-        else if (s3Bucket != null) {
+        else {
             AWSCredentials creds = getAWSCreds();
             try {
                 LOG.info("Downloading feed from s3");
@@ -184,7 +184,7 @@ public class FeedStore {
         // store latest as feed-source-id.zip
         if (feedSource != null) {
             try {
-                File version = writeFileUsingInputStream(id, inputStream, feedSource);
+                File version = writeFileUsingInputStream(id, inputStream);
                 copyVersionToLatest(version, feedSource);
                 return version;
             } catch (Exception e) {
@@ -197,7 +197,7 @@ public class FeedStore {
     private void copyVersionToLatest(File version, FeedSource feedSource) {
         File latest = new File(String.valueOf(path), feedSource.id + ".zip");
         try {
-            FileUtils.copyFile(version, latest);
+            FileUtils.copyFile(version, latest, true);
             LOG.info("Copying version to latest {}", feedSource);
         } catch (IOException e) {
             e.printStackTrace();
@@ -205,9 +205,9 @@ public class FeedStore {
         }
     }
 
-    private File writeFileUsingInputStream(String id, InputStream inputStream, FeedSource feedSource) throws IOException {
+    private File writeFileUsingInputStream(String filename, InputStream inputStream) throws IOException {
         OutputStream output = null;
-        File out = new File(path, id);
+        File out = new File(path, filename);
         try {
             output = new FileOutputStream(out);
             byte[] buf = new byte[1024];
