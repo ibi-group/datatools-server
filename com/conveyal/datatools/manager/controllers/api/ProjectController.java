@@ -14,6 +14,8 @@ import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.google.gson.JsonObject;
 import org.apache.http.concurrent.Cancellable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -538,13 +540,17 @@ public class ProjectController {
 
         int feedIndex = 0;
 
-        JsonNode fieldsNode = tableNode.get("fields");
-        String[] headers = new String[fieldsNode.size()];
+        ArrayNode fieldsNode = (ArrayNode) tableNode.get("fields");
+//        fieldsNode.
+        List<String> headers = new ArrayList<>();
         for (int i = 0; i < fieldsNode.size(); i++) {
             JsonNode fieldNode = fieldsNode.get(i);
             String fieldName = fieldNode.get("name").asText();
-
-            headers[i] = fieldName;
+            Boolean notInSpec = fieldNode.has("datatools") && fieldNode.get("datatools").asBoolean();
+            if (notInSpec) {
+                fieldsNode.remove(i);
+            }
+            headers.add(fieldName);
         }
 
         // write headers to table
@@ -572,15 +578,25 @@ public class ProjectController {
                     while((line = in.readLine()) != null) {
                         String[] newValues = new String[fieldsNode.size()];
                         String[] values = line.split(",", -1);
-                        for(int v=0; v < fieldsNode.size(); v++) {
+                        if (values.length == 1) {
+                            LOG.warn("Found blank line. Skipping...");
+                            continue;
+                        }
+                        for(int v = 0; v < fieldsNode.size(); v++) {
                             JsonNode fieldNode = fieldsNode.get(v);
                             String fieldName = fieldNode.get("name").asText();
 
                             // get index of field from GTFS spec as it appears in feed
                             int index = fieldList.indexOf(fieldName);
                             String val = "";
-                            if(index != -1) {
-                                val = values[index];
+                            try {
+                                index = fieldList.indexOf(fieldName);
+                                if(index != -1) {
+                                    val = values[index];
+                                }
+                            } catch (ArrayIndexOutOfBoundsException e) {
+                                LOG.warn("Index {} out of bounds for file {} and feed {}", index, entry.getName(), fs.name);
+                                continue;
                             }
 
                             String fieldType = fieldNode.get("inputType").asText();
