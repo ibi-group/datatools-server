@@ -25,7 +25,7 @@ import java.util.Map;
  * Created by landon on 4/12/16.
  */
 public class GtfsApiController {
-    public static final Logger LOG = LoggerFactory.getLogger(ProjectController.class);
+    public static final Logger LOG = LoggerFactory.getLogger(GtfsApiController.class);
     public static String feedBucket;
     public static FeedUpdater feedUpdater;
     private static AmazonS3Client s3 = new AmazonS3Client();
