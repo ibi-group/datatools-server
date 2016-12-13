@@ -211,7 +211,12 @@ public class FeedTx extends DatabaseTx {
         Set<Tuple2<Tuple2<String, String>, String>> matchedKeys =
                 tripsByPatternAndCalendar.subSet(new Tuple2(new Tuple2(patternId, calendarId), null), new Tuple2(new Tuple2(patternId, calendarId), Fun.HI));
 
-        return Collections2.transform(matchedKeys, input -> trips.get(input.b));
+//        return Collections2.transform(matchedKeys, input -> trips.get(input.b));
+        return Collections2.transform(matchedKeys, new Function<Tuple2<Tuple2<String, String>, String>, Trip>() {
+            public Trip apply(Tuple2<Tuple2<String, String>, String> input) {
+                    return trips.get(input.b);
+                }
+        });
     }
 
     public Collection<Stop> getStopsWithinBoundingBox (double north, double east, double south, double west) {
