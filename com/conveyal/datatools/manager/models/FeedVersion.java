@@ -599,6 +599,9 @@ public class FeedVersion extends Model implements Serializable {
             d.feedVersionIds.remove(this.id);
         }
 
+        getTransportNetworkPath().delete();
+
+
         versionStore.delete(this.id);
     }
     @JsonIgnore
