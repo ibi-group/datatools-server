@@ -57,6 +57,10 @@ public class EditorFeed extends Model implements Cloneable, Serializable {
 
     public EditorFeed() {}
 
+    public EditorFeed(String id) {
+        this.id = id;
+    }
+
     public EditorFeed clone () throws CloneNotSupportedException {
         return (EditorFeed) super.clone();
     }
