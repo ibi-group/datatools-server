@@ -58,6 +58,7 @@ public class TripController {
                     halt(404);
                 }
                 else {
+                    LOG.info("requesting trips for pattern/cal");
                     return Base.toJson(tx.getTripsByPatternAndCalendar(patternId, calendarId), false);
                 }
             }

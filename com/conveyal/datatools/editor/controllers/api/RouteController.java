@@ -2,6 +2,8 @@ package com.conveyal.datatools.editor.controllers.api;
 
 import com.conveyal.datatools.editor.utils.S3Utils;
 import com.conveyal.datatools.editor.datastore.FeedTx;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.google.common.base.Function;
@@ -92,7 +94,7 @@ public class RouteController {
             GlobalTx gtx = VersionedDataStore.getGlobalTx();
             if (!gtx.feeds.containsKey(route.feedId)) {
                 gtx.rollback();
-                halt(400);
+                halt(400, String.join("Feed %s does not exist in editor", route.feedId));
             }
             
             if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(route.feedId))
@@ -104,7 +106,7 @@ public class RouteController {
             
             if (tx.routes.containsKey(route.id)) {
                 tx.rollback();
-                halt(400);
+                halt(400, "Failed to create route with duplicate id");
             }
 
             // check if gtfsRouteId is specified, if not create from DB id
@@ -326,7 +328,45 @@ public class RouteController {
             throw e;
         }
     }
-
+//    public static FeedTx requestFeedTx(Request req, FeedSource s, String action) {
+//        Auth0UserProfile userProfile = req.attribute("user");
+//        Boolean publicFilter = Boolean.valueOf(req.queryParams("public"));
+//
+//        // check for null feedsource
+//        if (s == null)
+//            halt(400, "Feed source ID does not exist");
+//
+//        boolean authorized;
+//        switch (action) {
+//            case "manage":
+//                authorized = userProfile.canManageFeed(s.projectId, s.id);
+//                break;
+//            case "view":
+//                authorized = userProfile.canViewFeed(s.projectId, s.id);
+//                break;
+//            default:
+//                authorized = false;
+//                break;
+//        }
+//
+//        // if requesting public sources
+//        if (publicFilter){
+//            // if feed not public and user not authorized, halt
+//            if (!s.isPublic && !authorized)
+//                halt(403, "User not authorized to perform action on feed source");
+//                // if feed is public, but action is managerial, halt (we shouldn't ever get here, but just in case)
+//            else if (s.isPublic && action.equals("manage"))
+//                halt(403, "User not authorized to perform action on feed source");
+//
+//        }
+//        else {
+//            if (!authorized)
+//                halt(403, "User not authorized to perform action on feed source");
+//        }
+//
+//        // if we make it here, user has permission and it's a valid feedsource
+//        return s;
+//    }
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/route/:id", RouteController::getRoute, json::write);
         options(apiPrefix + "secure/route", (q, s) -> "");
