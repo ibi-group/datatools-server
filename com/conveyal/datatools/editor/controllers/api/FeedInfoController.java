@@ -6,6 +6,7 @@ import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.EditorFeed;
 import com.conveyal.datatools.editor.models.transit.GtfsRouteType;
+import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.gtfs.model.FeedInfo;
@@ -43,7 +44,24 @@ public class FeedInfoController {
             // TODO: return all feedInfos for project?
         }
         GlobalTx gtx = VersionedDataStore.getGlobalTx();
-
+        if (!gtx.feeds.containsKey(id)) {
+            // create new EditorFeed if id exists in manager
+            if (FeedSource.get(id) != null) {
+                EditorFeed fs = new EditorFeed(id);
+                gtx.feeds.put(fs.id, fs);
+                gtx.commit();
+                try {
+                    return Base.toJson(fs, false);
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+            else {
+                gtx.rollback();
+                halt(404, "Feed id does not exist");
+                return null;
+            }
+        }
         EditorFeed fs = gtx.feeds.get(id);
         return fs;
     }
@@ -62,7 +80,7 @@ public class FeedInfoController {
 
             if (gtx.feeds.containsKey(fs.id)) {
                 gtx.rollback();
-                halt(404);
+                halt(404, "Feed id already exists in editor database");
                 return null;
             }
 
