@@ -1,6 +1,7 @@
 package com.conveyal.datatools.editor.controllers;
 
 import com.conveyal.datatools.editor.models.transit.GtfsRouteType;
+import com.conveyal.datatools.editor.models.transit.TripDirection;
 import com.conveyal.geojson.GeoJsonModule;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonGenerationException;
@@ -27,6 +28,8 @@ public class Base {
         mod.addSerializer(LocalDate.class, new JacksonSerializers.LocalDateSerializer());
         mod.addDeserializer(GtfsRouteType.class, new JacksonSerializers.GtfsRouteTypeDeserializer());
         mod.addSerializer(GtfsRouteType.class, new JacksonSerializers.GtfsRouteTypeSerializer());
+        mod.addDeserializer(TripDirection.class, new JacksonSerializers.TripDirectionDeserializer());
+        mod.addSerializer(TripDirection.class, new JacksonSerializers.TripDirectionSerializer());
         mapper.registerModule(mod);
         mapper.registerModule(new GeoJsonModule());
     }

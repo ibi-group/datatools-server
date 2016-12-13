@@ -505,6 +505,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
         patt.id = gtfsPattern.pattern_id;
 
         patt.patternStops = new ArrayList<TripPatternStop>();
+        patt.patternDirection = TripDirection.fromGtfs(gtfsTrip.direction_id);
 
         com.conveyal.gtfs.model.StopTime[] stopTimes =
                 input.stop_times.subMap(new Tuple2(gtfsTrip.trip_id, 0), new Tuple2(gtfsTrip.trip_id, Fun.HI)).values().toArray(new com.conveyal.gtfs.model.StopTime[0]);
@@ -524,8 +525,14 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
             Stop stop = stopIdMap.get(new Tuple2(st.stop_id, patt.feedId));
             tps.stopId = stop.id;
 
+            // set timepoint according to first gtfs value and then whether arrival and departure times are present
             if (st.timepoint != Entity.INT_MISSING)
                 tps.timepoint = st.timepoint == 1;
+            else if (st.arrival_time != Entity.INT_MISSING && st.departure_time != Entity.INT_MISSING) {
+                tps.timepoint = true;
+            }
+            else
+                tps.timepoint = false;
 
             if (st.departure_time != Entity.INT_MISSING && st.arrival_time != Entity.INT_MISSING)
                 tps.defaultDwellTime = st.departure_time - st.arrival_time;

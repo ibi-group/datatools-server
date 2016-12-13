@@ -165,10 +165,16 @@ public class ProcessGtfsSnapshotExport implements Runnable {
                         gtfsTrip.service_id = feed.services.get(trip.calendarId).service_id;
                         gtfsTrip.trip_headsign = trip.tripHeadsign;
                         gtfsTrip.trip_short_name = trip.tripShortName;
-                        gtfsTrip.direction_id = trip.tripDirection == TripDirection.A ? 0 : 1;
 
                         TripPattern pattern = feedTx.tripPatterns.get(trip.patternId);
 
+                        // assign pattern direction if not null
+                        if (pattern.patternDirection != null) {
+                            gtfsTrip.direction_id = pattern.patternDirection.toGtfs();
+                        }
+                        else {
+                            gtfsTrip.direction_id = trip.tripDirection.toGtfs();
+                        }
                         Tuple2<String, Integer> nextKey = feed.shape_points.ceilingKey(new Tuple2(pattern.id, null));
                         if ((nextKey == null || !pattern.id.equals(nextKey.a)) && pattern.shape != null && !pattern.useStraightLineDistances) {
                             // this shape has not yet been saved

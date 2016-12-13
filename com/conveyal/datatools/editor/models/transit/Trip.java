@@ -50,7 +50,7 @@ public class Trip extends Model implements Cloneable, Serializable {
         gtfsTripId = trip.trip_id;
         tripHeadsign = trip.trip_headsign;
         tripShortName = trip.trip_short_name;
-        tripDirection = trip.direction_id == 0 ? TripDirection.A : TripDirection.B;
+        tripDirection = TripDirection.fromGtfs(trip.direction_id);
         blockId = trip.block_id;
         this.routeId = route.id;
         this.patternId = pattern.id;

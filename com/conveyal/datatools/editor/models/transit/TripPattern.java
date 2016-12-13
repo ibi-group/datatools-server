@@ -20,7 +20,6 @@ import com.conveyal.datatools.editor.utils.GeoUtils;
 import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -44,6 +43,8 @@ public class TripPattern extends Model implements Cloneable, Serializable {
     public String routeId;
 
     public String feedId;
+
+    public TripDirection patternDirection;
 
     public List<TripPatternStop> patternStops = new ArrayList<TripPatternStop>();
 
