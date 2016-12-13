@@ -260,6 +260,34 @@ public class Auth0UserProfile {
         return false;
     }
 
+    public boolean canEditGTFS(String projectID, String feedID) {
+        if (canAdministerApplication() || canAdministerProject(projectID)) {
+            return true;
+        }
+        Project[] projectList = app_metadata.getDatatoolsInfo().projects;
+        for(Project project : projectList) {
+            System.out.println("project_id: " + project.project_id);
+            if (project.project_id.equals(projectID)) {
+                return checkFeedPermission(project, feedID, "edit-gtfs");
+            }
+        }
+        return false;
+    }
+
+    public boolean canApproveGTFS(String projectID, String feedID) {
+        if (canAdministerApplication() || canAdministerProject(projectID)) {
+            return true;
+        }
+        Project[] projectList = app_metadata.getDatatoolsInfo().projects;
+        for(Project project : projectList) {
+            System.out.println("project_id: " + project.project_id);
+            if (project.project_id.equals(projectID)) {
+                return checkFeedPermission(project, feedID, "approve-gtfs");
+            }
+        }
+        return false;
+    }
+
     public boolean checkFeedPermission(Project project, String feedID, String permissionType) {
         String feeds[] = project.defaultFeeds;
 
