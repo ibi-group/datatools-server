@@ -154,7 +154,6 @@ public class FeedStore {
         }
         // s3 storage
         else {
-            AWSCredentials creds = getAWSCreds();
             try {
                 LOG.info("Downloading feed from s3");
                 S3Object object = s3Client.getObject(
