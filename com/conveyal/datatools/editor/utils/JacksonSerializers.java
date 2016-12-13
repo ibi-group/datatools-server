@@ -1,6 +1,7 @@
 package com.conveyal.datatools.editor.utils;
 
 import com.conveyal.datatools.editor.models.transit.GtfsRouteType;
+import com.conveyal.datatools.editor.models.transit.TripDirection;
 import com.fasterxml.jackson.core.JsonGenerationException;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonParser;
@@ -149,7 +150,7 @@ public class JacksonSerializers {
         }
     }
 
-    /** serialize local dates as noon GMT epoch times */
+    /** serialize GtfsRouteType as GTFS integer value */
     public static class GtfsRouteTypeSerializer extends StdScalarSerializer<GtfsRouteType> {
         public GtfsRouteTypeSerializer() {
             super(GtfsRouteType.class, false);
@@ -157,13 +158,12 @@ public class JacksonSerializers {
 
         @Override
         public void serialize(GtfsRouteType gtfsRouteType, JsonGenerator jgen,
-                              SerializerProvider arg2) throws IOException,
-                JsonGenerationException {
+                              SerializerProvider arg2) throws IOException {
             jgen.writeNumber(gtfsRouteType.toGtfs());
         }
     }
 
-    /** deserialize local dates from GMT epochs */
+    /** serialize GTFS integer value  to GtfsRouteType */
     public static class GtfsRouteTypeDeserializer extends StdScalarDeserializer<GtfsRouteType> {
         public GtfsRouteTypeDeserializer () {
             super(GtfsRouteType.class);
@@ -171,9 +171,32 @@ public class JacksonSerializers {
 
         @Override
         public GtfsRouteType deserialize(JsonParser jp,
-                                     DeserializationContext arg1) throws IOException,
-                JsonProcessingException {
+                                     DeserializationContext arg1) throws IOException {
             return GtfsRouteType.fromGtfs(jp.getValueAsInt());
+        }
+    }
+
+    /** serialize GtfsRouteType as GTFS integer value */
+    public static class TripDirectionSerializer extends StdScalarSerializer<TripDirection> {
+        public TripDirectionSerializer() {
+            super(TripDirection.class, false);
+        }
+
+        @Override
+        public void serialize(TripDirection gtfsRouteType, JsonGenerator jgen,
+                              SerializerProvider arg2) throws IOException {
+            jgen.writeNumber(gtfsRouteType.toGtfs());
+        }
+    }
+
+    /** serialize GTFS integer value  to TripDirection */
+    public static class TripDirectionDeserializer extends StdScalarDeserializer<TripDirection> {
+        public TripDirectionDeserializer () { super(TripDirection.class); }
+
+        @Override
+        public TripDirection deserialize(JsonParser jp,
+                                         DeserializationContext arg1) throws IOException {
+            return TripDirection.fromGtfs(jp.getValueAsInt());
         }
     }
 
