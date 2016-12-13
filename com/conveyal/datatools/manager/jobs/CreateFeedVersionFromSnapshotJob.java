@@ -20,7 +20,7 @@ import static spark.Spark.halt;
 public class CreateFeedVersionFromSnapshotJob  extends MonitorableJob {
     public static final Logger LOG = LoggerFactory.getLogger(CreateFeedVersionFromSnapshotJob.class);
 
-    private FeedVersion feedVersion;
+    public FeedVersion feedVersion;
     private String snapshotId;
     private Status status;
 
