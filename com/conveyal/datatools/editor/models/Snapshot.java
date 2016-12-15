@@ -118,9 +118,13 @@ public class Snapshot implements Cloneable, Serializable {
         }
 
         GlobalTx gtx = VersionedDataStore.getGlobalTx();
-
         if (!gtx.snapshots.containsKey(decodedId)) return null;
+        return gtx.snapshots.get(decodedId);
+    }
 
+    public static Snapshot get(Tuple2<String, Integer> decodedId) {
+        GlobalTx gtx = VersionedDataStore.getGlobalTx();
+        if (!gtx.snapshots.containsKey(decodedId)) return null;
         return gtx.snapshots.get(decodedId);
     }
 }

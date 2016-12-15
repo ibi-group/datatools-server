@@ -43,19 +43,19 @@ public class Agency extends Model implements Cloneable, Serializable, Comparable
         ret.agency_id = agencyId;
         ret.agency_name = name;
         try {
-            ret.agency_url = new URL(url);
+            ret.agency_url = ret.agency_url == null ? null : new URL(url);
         } catch (MalformedURLException e) {
             LOG.warn("Unable to coerce agency URL {} to URL", url);
             ret.agency_url = null;
         }
         try {
-            ret.agency_branding_url = new URL(agencyBrandingUrl);
+            ret.agency_branding_url = ret.agency_branding_url == null ? null : new URL(agencyBrandingUrl);
         } catch (MalformedURLException e) {
             LOG.warn("Unable to coerce agency branding URL {} to URL", agencyBrandingUrl);
             ret.agency_branding_url = null;
         }
         try {
-            ret.agency_fare_url = new URL(agencyFareUrl);
+            ret.agency_fare_url = ret.agency_fare_url == null ? null : new URL(agencyFareUrl);
         } catch (MalformedURLException e) {
             LOG.warn("Unable to coerce agency fare URL {} to URL", agencyFareUrl);
             ret.agency_fare_url = null;

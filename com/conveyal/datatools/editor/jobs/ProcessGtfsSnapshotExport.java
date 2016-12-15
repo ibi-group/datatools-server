@@ -89,6 +89,16 @@ public class ProcessGtfsSnapshotExport implements Runnable {
                     feed.agency.put(agency.agencyId, agency.toGtfs());
                 }
 
+                Collection<Fare> fares = feedTx.fares.values();
+
+                for (Fare fare : fares) {
+                    com.conveyal.gtfs.model.Fare gtfsFare = fare.toGtfs();
+                    LOG.info("Exporting fare {}", gtfsFare);
+
+                    // write the feeds.txt entry
+                    feed.fares.put(fare.gtfsFareId, gtfsFare);
+                }
+
                 // write all of the calendars and calendar dates
                 if (feedTx.calendars != null) {
                     for (ServiceCalendar cal : feedTx.calendars.values()) {

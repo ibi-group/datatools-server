@@ -133,13 +133,13 @@ public class Route extends Model implements Cloneable, Serializable {
         // TODO also handle HVT types here
         //ret.route_type = mapGtfsRouteType(routeTypeId);
         try {
-            ret.route_url = new URL(routeUrl);
+            ret.route_url = ret.route_url == null ? null : new URL(routeUrl);
         } catch (MalformedURLException e) {
             LOG.warn("Cannot coerce route URL {} to URL", routeUrl);
             ret.route_url = null;
         }
         try {
-            ret.route_branding_url = new URL(routeBrandingUrl);
+            ret.route_branding_url = ret.route_branding_url == null ? null : new URL(routeBrandingUrl);
         } catch (MalformedURLException e) {
             LOG.warn("Unable to coerce route branding URL {} to URL", routeBrandingUrl);
             ret.route_branding_url = null;

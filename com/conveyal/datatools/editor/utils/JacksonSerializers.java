@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.deser.std.StdScalarDeserializer;
 import com.fasterxml.jackson.databind.ser.std.StdScalarSerializer;
+import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import com.google.common.io.BaseEncoding;
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.GeometryFactory;
@@ -173,6 +174,22 @@ public class JacksonSerializers {
         public GtfsRouteType deserialize(JsonParser jp,
                                      DeserializationContext arg1) throws IOException {
             return GtfsRouteType.fromGtfs(jp.getValueAsInt());
+        }
+    }
+
+    public static class MyDtoNullKeySerializer extends StdSerializer<Object> {
+        public MyDtoNullKeySerializer() {
+            this(null);
+        }
+
+        public MyDtoNullKeySerializer(Class<Object> t) {
+            super(t);
+        }
+
+        @Override
+        public void serialize(Object nullKey, JsonGenerator jsonGenerator, SerializerProvider unused)
+                throws IOException, JsonProcessingException {
+            jsonGenerator.writeFieldName("");
         }
     }
 

@@ -9,14 +9,12 @@ import com.conveyal.datatools.editor.models.transit.Route;
 import com.conveyal.datatools.editor.models.transit.Stop;
 import com.conveyal.datatools.editor.models.transit.StopTime;
 import com.conveyal.datatools.editor.models.transit.Trip;
-import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.gtfs.GTFSFeed;
 import com.conveyal.gtfs.model.*;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
-import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.Envelope;
 import com.vividsolutions.jts.geom.GeometryFactory;
 import com.vividsolutions.jts.geom.LineString;
@@ -424,7 +422,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
             LOG.info("GtfsImporter: importing fares...");
             Map<String, com.conveyal.gtfs.model.Fare> fares = input.fares;
             for (com.conveyal.gtfs.model.Fare f : fares.values()) {
-                com.conveyal.datatools.editor.models.transit.Fare fare = new com.conveyal.datatools.editor.models.transit.Fare(f.fare_attribute, f.fare_rules, feed);
+                Fare fare = new Fare(f.fare_attribute, f.fare_rules, feed);
                 feedTx.fares.put(fare.id, fare);
                 fareCount++;
             }

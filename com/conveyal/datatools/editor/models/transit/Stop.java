@@ -123,7 +123,7 @@ public class Stop extends Model implements Cloneable, Serializable {
             ret.stop_name = id.toString();
 
         try {
-            ret.stop_url = new URL(stopUrl);
+            ret.stop_url = ret.stop_url == null ? null : new URL(stopUrl);
         } catch (MalformedURLException e) {
             LOG.warn("Unable to coerce stop URL {} to URL", stopUrl);
             ret.stop_url = null;
