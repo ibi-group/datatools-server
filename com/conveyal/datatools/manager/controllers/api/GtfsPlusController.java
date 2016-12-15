@@ -259,8 +259,7 @@ public class GtfsPlusController {
 
 
         // load the main GTFS
-//        GTFSFeed gtfsFeed = GTFSFeed.fromFile(feedVersion.getGtfsFile().getAbsolutePath());
-        GTFSFeed gtfsFeed = DataManager.gtfsCache.get(feedVersion.id);
+        GTFSFeed gtfsFeed = feedVersion.getGtfsFeed();
         // check for saved GTFS+ data
         File file = gtfsPlusStore.getFeed(feedVersionId);
         if(file == null) {

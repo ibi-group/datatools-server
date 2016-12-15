@@ -33,11 +33,11 @@ public class StatusController {
         return DataManager.userJobsMap.get(userId);
     }*/
 
-    public static Object getUserJobs(Request req, Response res) {
+    public static Set getUserJobs(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         String userId = userProfile.getUser_id();
         return DataManager.userJobsMap.containsKey(userId)
-            ? DataManager.userJobsMap.get(userId).toArray()
+            ? DataManager.userJobsMap.get(userId)
             : new HashSet<>();
     }
 

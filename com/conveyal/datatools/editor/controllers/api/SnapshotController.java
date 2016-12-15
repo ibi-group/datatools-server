@@ -29,6 +29,7 @@ import java.util.List;
 import spark.Request;
 import spark.Response;
 
+import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static spark.Spark.*;
 
 
@@ -307,7 +308,7 @@ public class SnapshotController {
             String message = "Unable to create temp file for snapshot";
             LOG.error(message);
         }
-        return FeedVersionController.downloadFile(file, res);
+        return downloadFile(file, res);
     }
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/snapshot/:id", SnapshotController::getSnapshot, json::write);

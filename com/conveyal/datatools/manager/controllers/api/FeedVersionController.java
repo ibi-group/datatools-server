@@ -45,6 +45,7 @@ import javax.servlet.MultipartConfigElement;
 import javax.servlet.ServletException;
 import javax.servlet.http.Part;
 
+import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.manager.controllers.api.FeedSourceController.requestFeedSource;
 import static spark.Spark.*;
 
@@ -313,33 +314,6 @@ public class FeedVersionController  {
         return clusterRequest;
     }
 
-    private static Object downloadFeedVersion(FeedVersion version, Response res) {
-        if(version == null) halt(500, "FeedVersion is null");
-
-        File file = version.getGtfsFile();
-
-        res.raw().setContentType("application/octet-stream");
-        res.raw().setHeader("Content-Disposition", "attachment; filename=" + file.getName());
-
-        try {
-            BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(res.raw().getOutputStream());
-            BufferedInputStream bufferedInputStream = new BufferedInputStream(new FileInputStream(file));
-
-            byte[] buffer = new byte[1024];
-            int len;
-            while ((len = bufferedInputStream.read(buffer)) > 0) {
-                bufferedOutputStream.write(buffer, 0, len);
-            }
-
-            bufferedOutputStream.flush();
-            bufferedOutputStream.close();
-        } catch (Exception e) {
-            halt(500, "Error serving GTFS file");
-        }
-
-        return res.raw();
-    }
-
     public static Boolean renameFeedVersion (Request req, Response res) throws JsonProcessingException {
         FeedVersion v = requestFeedVersion(req, "manage");
 
@@ -355,10 +329,10 @@ public class FeedVersionController  {
 
     private static Object downloadFeedVersionDirectly(Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "view");
-        return downloadFeedVersion(version, res);
+        return downloadFile(version.getGtfsFile(), res);
     }
 
-    private static FeedDownloadToken getDownloadToken (Request req, Response res) {
+    public static FeedDownloadToken getDownloadToken (Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "view");
         FeedDownloadToken token = new FeedDownloadToken(version);
         token.save();
@@ -404,7 +378,7 @@ public class FeedVersionController  {
 
         token.delete();
 
-        return downloadFeedVersion(version, res);
+        return downloadFile(version.getGtfsFile(), res);
     }
 
     public static void register (String apiPrefix) {
