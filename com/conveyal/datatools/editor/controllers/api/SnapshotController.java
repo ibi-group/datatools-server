@@ -10,6 +10,8 @@ import com.conveyal.datatools.editor.models.Snapshot;
 import com.conveyal.datatools.editor.models.transit.Stop;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.controllers.api.FeedVersionController;
+import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
@@ -213,6 +215,7 @@ public class SnapshotController {
     public static Object exportSnapshot (Request req, Response res) {
         String id = req.params("id");
         Tuple2<String, Integer> decodedId;
+        FeedDownloadToken token;
         try {
             decodedId = JacksonSerializers.Tuple2IntDeserializer.deserialize(id);
         } catch (IOException e1) {
@@ -229,27 +232,16 @@ public class SnapshotController {
             }
 
             local = gtx.snapshots.get(decodedId);
-
-            File out = new File(DataManager.config.get("application.publicDataDirectory").asText(), "gtfs_" + ".zip");
-
-            new ProcessGtfsSnapshotExport(local, out).run();
-
-//            redirect(Play.configuration.getProperty("application.appBase") + "/public/data/"  + out.getName());
+            token = new FeedDownloadToken(local);
+            token.save();
         } finally {
             gtx.rollbackIfOpen();
         }
-        return null;
+        return token;
     }
 
     /** Write snapshot to disk as GTFS */
-    public static boolean writeSnapshotAsGtfs (String id, File outFile) {
-        Tuple2<String, Integer> decodedId;
-        try {
-            decodedId = JacksonSerializers.Tuple2IntDeserializer.deserialize(id);
-        } catch (IOException e1) {
-            return false;
-        }
-
+    public static boolean writeSnapshotAsGtfs (Tuple2<String, Integer> decodedId, File outFile) {
         GlobalTx gtx = VersionedDataStore.getGlobalTx();
         Snapshot local;
         try {
@@ -265,6 +257,15 @@ public class SnapshotController {
         }
 
         return true;
+    }
+    public static boolean writeSnapshotAsGtfs (String id, File outFile) {
+        Tuple2<String, Integer> decodedId;
+        try {
+            decodedId = JacksonSerializers.Tuple2IntDeserializer.deserialize(id);
+        } catch (IOException e1) {
+            return false;
+        }
+        return writeSnapshotAsGtfs(decodedId, outFile);
     }
 
     public static Object deleteSnapshot(Request req, Response res) {
@@ -285,6 +286,29 @@ public class SnapshotController {
         return true;
     }
 
+    private static Object downloadSnapshotWithToken (Request req, Response res) {
+        String id = req.params("token");
+        FeedDownloadToken token = FeedDownloadToken.get(id);
+
+        if(token == null || !token.isValid()) {
+            halt(400, "Feed download token not valid");
+        }
+
+        Snapshot snapshot = token.getSnapshot();
+
+        token.delete();
+        File file = null;
+
+        try {
+            file = File.createTempFile("snapshot", ".zip");
+            writeSnapshotAsGtfs(snapshot.id, file);
+        } catch (Exception e) {
+            e.printStackTrace();
+            String message = "Unable to create temp file for snapshot";
+            LOG.error(message);
+        }
+        return FeedVersionController.downloadFile(file, res);
+    }
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/snapshot/:id", SnapshotController::getSnapshot, json::write);
         options(apiPrefix + "secure/snapshot", (q, s) -> "");
@@ -293,6 +317,9 @@ public class SnapshotController {
         post(apiPrefix + "secure/snapshot/import", SnapshotController::importSnapshot, json::write);
         put(apiPrefix + "secure/snapshot/:id", SnapshotController::updateSnapshot, json::write);
         post(apiPrefix + "secure/snapshot/:id/restore", SnapshotController::restoreSnapshot, json::write);
+        get(apiPrefix + "secure/snapshot/:id/downloadtoken", SnapshotController::exportSnapshot, json::write);
         delete(apiPrefix + "secure/snapshot/:id", SnapshotController::deleteSnapshot, json::write);
+
+        get(apiPrefix + "downloadsnapshot/:token", SnapshotController::downloadSnapshotWithToken);
     }
 }

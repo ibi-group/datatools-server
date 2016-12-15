@@ -20,7 +20,6 @@ import com.fasterxml.jackson.databind.ObjectWriter;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.fasterxml.jackson.databind.ser.impl.SimpleBeanPropertyFilter;
 import com.fasterxml.jackson.databind.ser.impl.SimpleFilterProvider;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 /**
  * Helper methods for writing REST API routines
@@ -52,6 +51,7 @@ public class JsonManager<T> {
 
         deser.addDeserializer(Rectangle2D.class, new Rectangle2DDeserializer());
         om.registerModule(deser);
+        om.getSerializerProvider().setNullKeySerializer(new JacksonSerializers.MyDtoNullKeySerializer());
 //        om.registerModule(new JavaTimeModule());
         SimpleFilterProvider filters = new SimpleFilterProvider();
         filters.addFilter("bbox", SimpleBeanPropertyFilter.filterOutAllExcept("west", "east", "south", "north"));
