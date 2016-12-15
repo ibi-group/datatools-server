@@ -1,6 +1,7 @@
 package com.conveyal.datatools.editor.models.transit;
 
 import com.conveyal.datatools.editor.models.Model;
+import com.conveyal.gtfs.model.FareAttribute;
 import com.conveyal.gtfs.model.FareRule;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.google.common.collect.Lists;
@@ -24,7 +25,7 @@ public class Fare extends Model implements Cloneable, Serializable {
     public Integer paymentMethod;
     public Integer transfers;
     public Integer transferDuration;
-    public List fareRules  = Lists.newArrayList();
+    public List<FareRule> fareRules  = Lists.newArrayList();
 
     public Fare() {};
 
@@ -61,5 +62,20 @@ public class Fare extends Model implements Cloneable, Serializable {
         Fare f = (Fare) super.clone();
         f.fareRules.addAll(fareRules);
         return f;
+    }
+
+    public com.conveyal.gtfs.model.Fare toGtfs() {
+        com.conveyal.gtfs.model.Fare fare = new com.conveyal.gtfs.model.Fare(this.gtfsFareId);
+        fare.fare_attribute = new com.conveyal.gtfs.model.FareAttribute();
+        fare.fare_attribute.fare_id = this.gtfsFareId;
+        fare.fare_attribute.price = this.price == null ? Double.NaN : this.price;
+        fare.fare_attribute.currency_type = this.currencyType;
+        fare.fare_attribute.payment_method = this.paymentMethod == null ? Integer.MIN_VALUE : this.paymentMethod;
+        fare.fare_attribute.transfers = this.transfers == null ? Integer.MIN_VALUE : this.transfers;
+        fare.fare_attribute.transfer_duration = this.transferDuration == null ? Integer.MIN_VALUE : this.transferDuration;
+        fare.fare_attribute.feed_id = this.feedId;
+
+        fare.fare_rules.addAll(this.fareRules);
+        return fare;
     }
 }
