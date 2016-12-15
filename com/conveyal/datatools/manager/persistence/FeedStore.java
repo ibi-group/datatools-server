@@ -98,7 +98,7 @@ public class FeedStore {
     public Long getFeedLastModified (String id) {
         // s3 storage
         if (DataManager.useS3){
-            return s3Client.getObjectMetadata(s3Bucket, getS3Key(id)).getLastModified().getTime();
+            return s3Client.doesObjectExist(s3Bucket, getS3Key(id)) ? s3Client.getObjectMetadata(s3Bucket, getS3Key(id)).getLastModified().getTime() : null;
         }
         else {
             File feed = getFeed(id);
@@ -121,7 +121,7 @@ public class FeedStore {
     public Long getFeedSize (String id) {
         // s3 storage
         if (DataManager.useS3) {
-            return s3Client.getObjectMetadata(s3Bucket, getS3Key(id)).getContentLength();
+            return s3Client.doesObjectExist(s3Bucket, getS3Key(id)) ? s3Client.getObjectMetadata(s3Bucket, getS3Key(id)).getContentLength() : null;
         }
         else {
             File feed = getFeed(id);
@@ -160,7 +160,7 @@ public class FeedStore {
                         new GetObjectRequest(s3Bucket, getS3Key(id)));
                 InputStream objectData = object.getObjectContent();
 
-                return createTempFile(objectData);
+                return createTempFile(id, objectData);
             } catch (AmazonServiceException ase) {
                 LOG.error("Error downloading from s3");
                 ase.printStackTrace();
@@ -225,8 +225,8 @@ public class FeedStore {
         }
     }
 
-    private File createTempFile (InputStream in) throws IOException {
-        final File tempFile = File.createTempFile("test", ".zip");
+    private File createTempFile (String name, InputStream in) throws IOException {
+        final File tempFile = new File(new File(System.getProperty("java.io.tmpdir")), name);
         tempFile.deleteOnExit();
         try (FileOutputStream out = new FileOutputStream(tempFile)) {
             IOUtils.copy(in, out);
@@ -241,7 +241,7 @@ public class FeedStore {
             try {
                 // Use tempfile
                 LOG.info("Creating temp file for {}", id);
-                File tempFile = createTempFile(inputStream);
+                File tempFile = createTempFile(id, inputStream);
 
                 LOG.info("Uploading feed {} to S3 from tempfile", id);
                 TransferManager tm = new TransferManager(getAWSCreds());
