@@ -258,15 +258,20 @@ public class DataManager {
         }
     }
     private static void loadConfig (String[] args) throws IOException {
-        FileInputStream in;
+        FileInputStream configStream;
+        FileInputStream serverConfigStream;
 
-        if (args.length == 0)
-            in = new FileInputStream(new File("config.yml"));
-        else
-            in = new FileInputStream(new File(args[0]));
+        if (args.length == 0) {
+            configStream = new FileInputStream(new File("config.yml"));
+            serverConfigStream = new FileInputStream(new File("config_server.yml"));
+        }
+        else {
+            configStream = new FileInputStream(new File(args[0]));
+            serverConfigStream = new FileInputStream(new File(args[1]));
+        }
 
-        config = yamlMapper.readTree(in);
-        serverConfig = yamlMapper.readTree(new File("config_server.yml"));
+        config = yamlMapper.readTree(configStream);
+        serverConfig = yamlMapper.readTree(serverConfigStream);
     }
     private static void registerExternalResource(ExternalFeedResource resource) {
         feedResources.put(resource.getResourceType(), resource);
