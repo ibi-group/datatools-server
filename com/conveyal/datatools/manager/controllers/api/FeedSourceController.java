@@ -240,7 +240,7 @@ public class FeedSourceController {
      * Refetch this feed
      * @throws JsonProcessingException
      */
-    public static FeedVersion fetch (Request req, Response res) throws JsonProcessingException {
+    public static boolean fetch (Request req, Response res) throws JsonProcessingException {
         FeedSource s = requestFeedSourceById(req, "manage");
 
         LOG.info("Fetching feed for source {}", s.name);
@@ -250,7 +250,12 @@ public class FeedSourceController {
 
         // Don't run in thread because we want to return the HTTP status of the fetch operation
         job.run();
-        return job.result;
+
+        // WARNING: infinite 2D bounds Jackson error when returning job.result, so this method now returns true
+        // because we don't return the feed immediately anyways.
+        // job.result;
+
+        return true;
     }
 
     /**
