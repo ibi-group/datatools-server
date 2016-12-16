@@ -7,6 +7,7 @@ import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.persistence.DataStore;
+import com.conveyal.datatools.manager.utils.HashUtils;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -182,6 +183,8 @@ public class FeedSource extends Model implements Cloneable {
         if (latest != null && this.lastFetched != null)
             conn.setIfModifiedSince(Math.min(latest.updated.getTime(), this.lastFetched.getTime()));
 
+        File newGtfsFile;
+
         try {
             conn.connect();
 
@@ -204,7 +207,7 @@ public class FeedSource extends Model implements Cloneable {
                 statusMap.put("percentComplete", 75.0);
                 statusMap.put("error", false);
                 eventBus.post(statusMap);
-                version.newGtfsFile(conn.getInputStream());
+                newGtfsFile = version.newGtfsFile(conn.getInputStream());
             }
 
             else {
@@ -233,13 +236,14 @@ public class FeedSource extends Model implements Cloneable {
         }
 
         // note that anything other than a new feed fetched successfully will have already returned from the function
-        version.hash();
+//        version.hash();
+        version.hash = HashUtils.hashFile(newGtfsFile);
 
 
         if (latest != null && version.hash.equals(latest.hash)) {
             String message = String.format("Feed %s was fetched but has not changed; server operators should add If-Modified-Since support to avoid wasting bandwidth", this.name);
             LOG.warn(message);
-            version.getGtfsFile().delete();
+            newGtfsFile.delete();
             version.delete();
             statusMap.put("message", message);
             statusMap.put("percentComplete", 100.0);
