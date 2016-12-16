@@ -296,8 +296,6 @@ public class SnapshotController {
         }
 
         Snapshot snapshot = token.getSnapshot();
-
-        token.delete();
         File file = null;
 
         try {
@@ -308,6 +306,7 @@ public class SnapshotController {
             String message = "Unable to create temp file for snapshot";
             LOG.error(message);
         }
+        token.delete();
         return downloadFile(file, res);
     }
     public static void register (String apiPrefix) {
