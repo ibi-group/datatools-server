@@ -252,8 +252,8 @@ public class FeedSourceController {
         job.run();
 
         // WARNING: infinite 2D bounds Jackson error when returning job.result, so this method now returns true
-        // because we don't return the feed immediately anyways.
-        // job.result;
+        // because we don't need to return the feed immediately anyways.
+        // return job.result;
 
         return true;
     }
