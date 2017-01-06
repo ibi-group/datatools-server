@@ -399,7 +399,7 @@ public class FeedVersion extends Model implements Serializable {
                 FeedStore.s3Client.putObject(new PutObjectRequest(
                         DataManager.feedBucket, keyName, file));
             } catch (AmazonServiceException ase) {
-                LOG.error("Error uploading validation json to S3");
+                LOG.error("Error uploading validation json to S3", ase);
             }
         }
         // save to validation directory in gtfs folder
@@ -410,7 +410,7 @@ public class FeedVersion extends Model implements Serializable {
             try {
                 FileUtils.copyFile(file, new File(FeedStore.basePath + "/" + keyName));
             } catch (IOException e) {
-                LOG.error("Error saving validation json to local disk");
+                LOG.error("Error saving validation json to local disk", e);
             }
         }
     }
@@ -513,8 +513,14 @@ public class FeedVersion extends Model implements Serializable {
         return null;
     }
 
+    @JsonIgnore
     public static File getOSMFile(Rectangle2D bounds) {
-        return new File(String.format("%s%.6f_%.6f_%.6f_%.6f.osm.pbf", getOSMPath(), bounds.getMaxX(), bounds.getMaxY(), bounds.getMinX(), bounds.getMinY()));
+        if (bounds != null) {
+            return new File(String.format("%s%.6f_%.6f_%.6f_%.6f.osm.pbf", getOSMPath(), bounds.getMaxX(), bounds.getMaxY(), bounds.getMinX(), bounds.getMinY()));
+        }
+        else {
+            return null;
+        }
     }
 
     public TransportNetwork buildTransportNetwork() {
