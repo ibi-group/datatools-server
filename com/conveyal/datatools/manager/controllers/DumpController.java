@@ -163,52 +163,73 @@ public class DumpController {
     }
 
     private static void loadLegacyProject (JsonNode node) {
-        System.out.println("load legacy project " + node.findValue("name"));
-        Project project = new Project();
-        project.id = node.findValue("id").asText();
-        project.name = node.findValue("name").asText();
-        project.save(false);
+        String name = node.findValue("name").asText();
+        String id = node.findValue("id").asText();
+        if (Project.get(id) == null) {
+            LOG.info("load legacy project " + name);
+            Project project = new Project();
+            project.id = id;
+            project.name = name;
+            project.save(false);
+        }
+        else {
+            LOG.warn("legacy project {} already exists... skipping", name);
+        }
     }
 
     private static void loadLegacyFeedSource (JsonNode node) throws Exception {
-        System.out.println("load legacy FeedSource " + node.findValue("name"));
-        FeedSource fs = new FeedSource();
-        fs.id = node.findValue("id").asText();
-        fs.projectId = node.findValue("feedCollectionId").asText();
-        fs.name = node.findValue("name").asText();
-        switch(node.findValue("retrievalMethod").asText()) {
-            case "FETCHED_AUTOMATICALLY":
-                fs.retrievalMethod = FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
-                break;
-            case "MANUALLY_UPLOADED":
-                fs.retrievalMethod = FeedSource.FeedRetrievalMethod.MANUALLY_UPLOADED;
-                break;
-            case "PRODUCED_IN_HOUSE":
-                fs.retrievalMethod = FeedSource.FeedRetrievalMethod.PRODUCED_IN_HOUSE;
-                break;
+        String name = node.findValue("name").asText();
+        String id = node.findValue("id").asText();
+        if (FeedSource.get(id) == null) {
+            LOG.info("load legacy FeedSource " + name);
+            FeedSource fs = new FeedSource();
+            fs.id = id;
+            fs.projectId = node.findValue("feedCollectionId").asText();
+            fs.name = name;
+            switch(node.findValue("retrievalMethod").asText()) {
+                case "FETCHED_AUTOMATICALLY":
+                    fs.retrievalMethod = FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
+                    break;
+                case "MANUALLY_UPLOADED":
+                    fs.retrievalMethod = FeedSource.FeedRetrievalMethod.MANUALLY_UPLOADED;
+                    break;
+                case "PRODUCED_IN_HOUSE":
+                    fs.retrievalMethod = FeedSource.FeedRetrievalMethod.PRODUCED_IN_HOUSE;
+                    break;
+            }
+            fs.snapshotVersion = node.findValue("snapshotVersion").asText();
+            Object url = node.findValue("url").asText();
+            fs.url = url != null && !url.equals("null") ? new URL(url.toString()) : null;
+
+            //fs.lastFetched = new Date(node.findValue("lastFetched").asText());
+            //System.out.println("wrote lastFetched");
+
+            fs.deployable = node.findValue("deployable").asBoolean();
+            fs.isPublic = node.findValue("isPublic").asBoolean();
+            fs.save(false);
         }
-        fs.snapshotVersion = node.findValue("snapshotVersion").asText();
-        Object url = node.findValue("url").asText();
-        fs.url = url != null && !url.equals("null") ? new URL(url.toString()) : null;
+        else {
+            LOG.warn("legacy FeedSource {} already exists... skipping", name);
+        }
 
-        //fs.lastFetched = new Date(node.findValue("lastFetched").asText());
-        //System.out.println("wrote lastFetched");
-
-        fs.deployable = node.findValue("deployable").asBoolean();
-        fs.isPublic = node.findValue("isPublic").asBoolean();
-        fs.save(false);
     }
 
     private static void loadLegacyFeedVersion (JsonNode node) throws Exception {
-        System.out.println("load legacy FeedVersion " + node.findValue("id"));
-        FeedVersion version = new FeedVersion();
-        version.id = node.findValue("id").asText();
-        version.version = node.findValue("version").asInt();
-        version.feedSourceId = node.findValue("feedSourceId").asText();
-        version.hash = node.findValue("hash").asText();
-        version.updated = new Date(node.findValue("updated").asLong());
-        System.out.println("updated= " + node.findValue("updated").asText());
-        version.save(false);
+        String id = node.findValue("id").asText();
+        if (FeedVersion.get(id) == null) {
+            LOG.info("load legacy FeedVersion " + node.findValue("id"));
+            FeedVersion version = new FeedVersion();
+            version.id = node.findValue("id").asText();
+            version.version = node.findValue("version").asInt();
+            version.feedSourceId = node.findValue("feedSourceId").asText();
+            version.hash = node.findValue("hash").asText();
+            version.updated = new Date(node.findValue("updated").asLong());
+            LOG.info("updated= " + node.findValue("updated").asText());
+            version.save(false);
+        }
+        else {
+            LOG.warn("legacy FeedVersion {} already exists... skipping", id);
+        }
     }
 
     public static boolean validateAll (Request req, Response res) throws Exception {
