@@ -247,7 +247,7 @@ public class DumpController {
                 version.save();
             } catch (Exception e) {
                 LOG.error("Could not validate", e);
-                halt(400, "Error validating feed");
+//                halt(400, "Error validating feed");
             }
         }
         LOG.info("Finished validation...");
