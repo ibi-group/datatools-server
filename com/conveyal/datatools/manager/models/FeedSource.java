@@ -190,7 +190,7 @@ public class FeedSource extends Model implements Cloneable {
 
             if (conn.getResponseCode() == HttpURLConnection.HTTP_NOT_MODIFIED) {
                 String message = String.format("Feed %s has not been modified", this.name);
-                LOG.info(message);
+                LOG.warn(message);
                 statusMap.put("message", message);
                 statusMap.put("percentComplete", 100.0);
                 statusMap.put("error", true);
