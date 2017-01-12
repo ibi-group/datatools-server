@@ -266,19 +266,19 @@ public class ProjectController {
         if(buildConfig.has("subwayAccessTime")) {
             JsonNode subwayAccessTime = buildConfig.get("subwayAccessTime");
             // allow client to un-set option via 'null' value
-            proj.buildConfig.subwayAccessTime = subwayAccessTime.isNull() ? null : subwayAccessTime.asDouble();
+            proj.buildConfig.subwayAccessTime = subwayAccessTime.isNull() || subwayAccessTime.asText().equals("") ? null : subwayAccessTime.asDouble();
         }
         if(buildConfig.has("fetchElevationUS")) {
             JsonNode fetchElevationUS = buildConfig.get("fetchElevationUS");
-            proj.buildConfig.fetchElevationUS = fetchElevationUS.isNull() ? null : fetchElevationUS.asBoolean();
+            proj.buildConfig.fetchElevationUS = fetchElevationUS.isNull() || fetchElevationUS.asText().equals("") ? null : fetchElevationUS.asBoolean();
         }
         if(buildConfig.has("stationTransfers")) {
             JsonNode stationTransfers = buildConfig.get("stationTransfers");
-            proj.buildConfig.stationTransfers = stationTransfers.isNull() ? null : stationTransfers.asBoolean();
+            proj.buildConfig.stationTransfers = stationTransfers.isNull() || stationTransfers.asText().equals("") ? null : stationTransfers.asBoolean();
         }
         if (buildConfig.has("fares")) {
             JsonNode fares = buildConfig.get("fares");
-            proj.buildConfig.fares = fares.isNull() ? null : fares.asText();
+            proj.buildConfig.fares = fares.isNull() || fares.asText().equals("") ? null : fares.asText();
         }
     }
 
