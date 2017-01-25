@@ -5,8 +5,10 @@ import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.r5.transit.TransportNetwork;
 
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.IOException;
 import java.io.InputStream;
 import java.util.Map;
 
@@ -29,12 +31,8 @@ public class ReadTransportNetworkJob extends MonitorableJob {
     @Override
     public void run() {
         System.out.println("Reading network");
-        InputStream is = null;
-        try {
-            is = new FileInputStream(DataManager.config.get("application").get("data").get("gtfs").asText() + "/"  + feedVersion.feedSourceId + "/" + feedVersion.id + "_network.dat");
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        }
+        File is = null;
+        is = new File(DataManager.config.get("application").get("data").get("gtfs").asText() + "/"  + feedVersion.feedSourceId + "/" + feedVersion.id + "_network.dat");
         try {
             feedVersion.transportNetwork = TransportNetwork.read(is);
         } catch (Exception e) {

@@ -502,10 +502,8 @@ public class FeedVersion extends Model implements Serializable {
         }
         this.transportNetwork = tn;
         File tnFile = getTransportNetworkPath();
-        OutputStream tnOut;
         try {
-            tnOut = new FileOutputStream(tnFile);
-            tn.write(tnOut);
+            tn.write(tnFile);
             return transportNetwork;
         } catch (IOException e) {
             e.printStackTrace();

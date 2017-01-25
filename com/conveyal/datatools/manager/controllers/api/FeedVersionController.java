@@ -262,7 +262,11 @@ public class FeedVersionController  {
     }
 
     private static JsonNode getRouterResult(TransportNetwork transportNetwork, AnalystClusterRequest clusterRequest) {
-        PointSet targets = transportNetwork.getGridPointSet();
+        PointSet targets;
+        if (transportNetwork.gridPointSet == null) {
+            transportNetwork.rebuildLinkedGridPointSet();
+        }
+        targets = transportNetwork.gridPointSet;
         StreetMode mode = StreetMode.WALK;
         final LinkedPointSet linkedTargets = targets.link(transportNetwork.streetLayer, mode);
         RepeatedRaptorProfileRouter router = new RepeatedRaptorProfileRouter(transportNetwork, clusterRequest, linkedTargets, new TaskStatistics());
