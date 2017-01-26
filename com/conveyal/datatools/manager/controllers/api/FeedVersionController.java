@@ -97,9 +97,10 @@ public class FeedVersionController  {
         Auth0UserProfile userProfile = req.attribute("user");
         FeedSource s = requestFeedSourceById(req, "manage");
 
-        if (FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.equals(s.retrievalMethod)) {
-            halt(400, "Feed is auto-fetched! Cannot upload.");
-        }
+        // Autofetched feeds are no longer restricted from directly-uploaded versions
+//        if (FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.equals(s.retrievalMethod)) {
+//            halt(400, "Feed is auto-fetched! Cannot upload.");
+//        }
         FeedVersion latest = s.getLatest();
         FeedVersion v = new FeedVersion(s);
         v.setUser(userProfile);
