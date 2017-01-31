@@ -155,7 +155,18 @@ public class TripPatternController {
                 tx.rollback();
                 halt(400);
             }
-                        
+
+            // check if frequency value has changed for pattern and nuke trips created for old value
+            // double check that we're working with the same trip pattern here
+            if (originalTripPattern.useFrequency != tripPattern.useFrequency) {
+                for (Trip trip : tx.getTripsByPattern(originalTripPattern.id)) {
+                    if (originalTripPattern.useFrequency == trip.useFrequency) {
+                        LOG.info("Removing frequency={} trip {}", trip.useFrequency, trip.id);
+                        tx.trips.remove(trip.id);
+                    }
+                }
+            }
+
             // update stop times
             try {
                 TripPattern.reconcilePatternStops(originalTripPattern, tripPattern, tx);
