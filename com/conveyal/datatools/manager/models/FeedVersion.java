@@ -259,6 +259,11 @@ public class FeedVersion extends Model implements Serializable {
         Map<LocalDate, Integer> tripsPerDate;
 
         try {
+            // make feed public... this shouldn't take very long
+            FeedSource fs = this.getFeedSource();
+            if (fs.isPublic) {
+                fs.makePublic();
+            }
 //            eventBus.post(new StatusEvent("Validating feed...", 30, false));
             statusMap.put("message", "Validating feed...");
             statusMap.put("percentComplete", 30.0);
@@ -589,24 +594,30 @@ public class FeedVersion extends Model implements Serializable {
      * Delete this feed version.
      */
     public void delete() {
-        // reset lastModified if feed is latest version
-        System.out.println("deleting version");
-        FeedSource fs = getFeedSource();
-        FeedVersion latest = fs.getLatest();
-        if (latest != null && latest.id.equals(this.id)) {
-            fs.lastFetched = null;
-            fs.save();
+        try {
+            // reset lastModified if feed is latest version
+            System.out.println("deleting version");
+            String id = this.id;
+            FeedSource fs = getFeedSource();
+            FeedVersion latest = fs.getLatest();
+            if (latest != null && latest.id.equals(this.id)) {
+                fs.lastFetched = null;
+                fs.save();
+            }
+            feedStore.deleteFeed(id);
+
+            for (Deployment d : Deployment.getAll()) {
+                d.feedVersionIds.remove(this.id);
+            }
+
+            getTransportNetworkPath().delete();
+
+
+            versionStore.delete(this.id);
+            LOG.info("Version {} deleted", id);
+        } catch (Exception e) {
+            LOG.warn("Error deleting version", e);
         }
-        feedStore.deleteFeed(id);
-
-        for (Deployment d : Deployment.getAll()) {
-            d.feedVersionIds.remove(this.id);
-        }
-
-        getTransportNetworkPath().delete();
-
-
-        versionStore.delete(this.id);
     }
     @JsonIgnore
     public String getR5Path () {

@@ -1,13 +1,9 @@
 package com.conveyal.datatools.manager.jobs;
 
-import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.editor.jobs.ProcessGtfsSnapshotMerge;
 import com.conveyal.datatools.editor.models.Snapshot;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedVersion;
-
-import java.util.Collection;
-
 
 /**
  * Process/validate a single GTFS feed

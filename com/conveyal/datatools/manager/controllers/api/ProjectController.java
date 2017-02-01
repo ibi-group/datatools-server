@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.controllers.api;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.FetchProjectFeedsJob;
+import com.conveyal.datatools.manager.jobs.MakePublicJob;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
@@ -15,7 +16,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.google.gson.JsonObject;
 import org.apache.http.concurrent.Cancellable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -622,6 +622,22 @@ public class ProjectController {
         return tableOut.toByteArray();
     }
 
+    public static boolean deployPublic (Request req, Response res) {
+        Auth0UserProfile userProfile = req.attribute("user");
+        String id = req.params("id");
+        if (id == null) {
+            halt(400, "must provide project id!");
+        }
+        Project proj = Project.get(id);
+
+        if (proj == null)
+            halt(400, "no such project!");
+
+        // run as sync job; if it gets too slow change to async
+        new MakePublicJob(proj, userProfile.getUser_id()).run();
+        return true;
+    }
+
     public static Project thirdPartySync(Request req, Response res) throws Exception {
         Auth0UserProfile userProfile = req.attribute("user");
         String id = req.params("id");
@@ -709,6 +725,7 @@ public class ProjectController {
         delete(apiPrefix + "secure/project/:id", ProjectController::deleteProject, json::write);
         get(apiPrefix + "secure/project/:id/thirdPartySync/:type", ProjectController::thirdPartySync, json::write);
         post(apiPrefix + "secure/project/:id/fetch", ProjectController::fetch, json::write);
+        post(apiPrefix + "secure/project/:id/deployPublic", ProjectController::deployPublic, json::write);
 
         get(apiPrefix + "public/project/:id/download", ProjectController::downloadMergedFeed);
 
