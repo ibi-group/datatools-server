@@ -39,6 +39,8 @@ public class Project extends Model {
 
     public Collection<OtpServer> otpServers;
 
+    public String organizationId;
+
     @JsonIgnore
     public OtpServer getServer (String name) {
         for (OtpServer otpServer : otpServers) {
