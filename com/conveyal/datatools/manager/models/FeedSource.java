@@ -1,5 +1,8 @@
 package com.conveyal.datatools.manager.models;
 
+import com.amazonaws.services.s3.model.CannedAccessControlList;
+import com.amazonaws.services.s3.model.DeleteObjectRequest;
+import com.amazonaws.services.s3.model.DeleteObjectsRequest;
 import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
@@ -7,6 +10,7 @@ import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.persistence.DataStore;
+import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.utils.HashUtils;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -96,6 +100,11 @@ public class FeedSource extends Model implements Cloneable {
      * From whence is this feed fetched?
      */
     public URL url;
+
+    /**
+     * Where the feed exists on s3
+     */
+    public URL s3Url;
 
     /**
      * What is the GTFS Editor snapshot for this feed?
@@ -400,6 +409,27 @@ public class FeedSource extends Model implements Cloneable {
         return this.noteIds != null ? this.noteIds.size() : 0;
     }
 
+    public void makePublic() {
+        String sourceKey = FeedStore.s3Prefix + this.id + ".zip";
+        String publicKey = "public/" + this.name + ".zip";
+        if (FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, sourceKey)) {
+            LOG.info("copying feed {} to s3 public folder", this);
+            FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, sourceKey, CannedAccessControlList.PublicRead);
+            FeedStore.s3Client.copyObject(DataManager.feedBucket, sourceKey, DataManager.feedBucket, publicKey);
+            FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, publicKey, CannedAccessControlList.PublicRead);
+        }
+    }
+
+    public void makePrivate() {
+        String sourceKey = FeedStore.s3Prefix + this.id + ".zip";
+        String publicKey = "public/" + this.name + ".zip";
+        if (FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, sourceKey)) {
+            LOG.info("removing feed {} from s3 public folder", this);
+            FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, sourceKey, CannedAccessControlList.AuthenticatedRead);
+            FeedStore.s3Client.deleteObject(DataManager.feedBucket, publicKey);
+        }
+    }
+
     /**
      * Represents ways feeds can be retrieved
      */
@@ -418,6 +448,13 @@ public class FeedSource extends Model implements Cloneable {
      */
     public void delete() {
         getFeedVersions().forEach(FeedVersion::delete);
+
+        // delete latest copy of feed source
+        if (DataManager.useS3) {
+            DeleteObjectsRequest delete = new DeleteObjectsRequest(DataManager.feedBucket);
+            delete.withKeys("public/" + this.name + ".zip", FeedStore.s3Prefix + this.id + ".zip");
+            FeedStore.s3Client.deleteObjects(delete);
+        }
 
         // Delete editor feed mapdb
         // TODO: does the mapdb folder need to be deleted separately?
