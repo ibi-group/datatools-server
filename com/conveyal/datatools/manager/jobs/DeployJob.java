@@ -38,6 +38,7 @@ import org.slf4j.LoggerFactory;
 public class DeployJob extends MonitorableJob {
 
     private static final Logger LOG = LoggerFactory.getLogger(DeployJob.class);
+    private static final String bundlePrefix = "bundles/";
 
     /** The URLs to deploy to */
     private List<String> targets;
@@ -88,8 +89,8 @@ public class DeployJob extends MonitorableJob {
     }
 
     public void run() {
-
-        int totalTasks = 1 + targets.size();
+        int targetCount = targets != null ? targets.size() : 0;
+        int totalTasks = 1 + targetCount;
         int tasksCompleted = 0;
 
         // create a temporary file in which to save the deployment
@@ -143,7 +144,7 @@ public class DeployJob extends MonitorableJob {
                 status.message = "Uploading to S3";
                 status.uploadingS3 = true;
             }
-
+            LOG.info("Uploading deployment {} to s3", deployment.name);
 
             try {
                 AWSCredentials creds;
@@ -156,7 +157,7 @@ public class DeployJob extends MonitorableJob {
                 }
 
                 TransferManager tx = new TransferManager(creds);
-                String key = deployment.name + ".zip";
+                String key = bundlePrefix + deployment.name + ".zip";
                 final Upload upload = tx.upload(this.s3Bucket, key, temp);
 
                 upload.addProgressListener(new ProgressListener() {
@@ -171,7 +172,7 @@ public class DeployJob extends MonitorableJob {
                 tx.shutdownNow();
 
                 // copy to [name]-latest.zip
-                String copyKey = deployment.getProject().name.toLowerCase() + "-latest.zip";
+                String copyKey = bundlePrefix + deployment.getProject().name.toLowerCase() + "-latest.zip";
                 AmazonS3 s3client = new AmazonS3Client(creds);
                 CopyObjectRequest copyObjRequest = new CopyObjectRequest(
                         this.s3Bucket, key, this.s3Bucket, copyKey);
