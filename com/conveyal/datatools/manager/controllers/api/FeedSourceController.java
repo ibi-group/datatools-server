@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.amazonaws.services.s3.model.CannedAccessControlList;
+import com.amazonaws.services.s3.model.CopyObjectRequest;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
@@ -176,14 +177,14 @@ public class FeedSourceController {
 
             if(entry.getKey().equals("isPublic")) {
                 source.isPublic = entry.getValue().asBoolean();
-                // TODO: set AWS GTFS zips to publix/private after "isPublic" change
+                // TODO: set AWS GTFS zips to public/private after "isPublic" change
                 if (DataManager.useS3) {
-//                    if (source.isPublic) {
-//                        FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, keyName, CannedAccessControlList.PublicRead);
-//                    }
-//                    else {
-//                        FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, keyName, CannedAccessControlList.AuthenticatedRead);
-//                    }
+                    if (source.isPublic) {
+                        source.makePublic();
+                    }
+                    else {
+                        source.makePrivate();
+                    }
                 }
             }
 
@@ -273,7 +274,8 @@ public class FeedSourceController {
     }
     public static FeedSource requestFeedSource(Request req, FeedSource s, String action) {
         Auth0UserProfile userProfile = req.attribute("user");
-        Boolean publicFilter = Boolean.valueOf(req.queryParams("public"));
+        Boolean publicFilter = Boolean.valueOf(req.queryParams("public")) || req.url().split("/api/manager/")[1].startsWith("public");
+//        System.out.println(req.url().split("/api/manager/")[1].startsWith("public"));
 
         // check for null feedsource
         if (s == null)
@@ -285,7 +287,11 @@ public class FeedSourceController {
                 authorized = userProfile.canManageFeed(s.projectId, s.id);
                 break;
             case "view":
-                authorized = userProfile.canViewFeed(s.projectId, s.id);
+                if (!publicFilter) {
+                    authorized = userProfile.canViewFeed(s.projectId, s.id);
+                } else {
+                    authorized = false;
+                }
                 break;
             default:
                 authorized = false;
