@@ -107,6 +107,7 @@ public class DeployJob extends MonitorableJob {
                 status.message = "app.deployment.error.dump";
             }
 
+            jobFinished();
             return;
         }
 
@@ -129,6 +130,7 @@ public class DeployJob extends MonitorableJob {
                 status.message = "app.deployment.error.dump";
             }
 
+            jobFinished();
             return;
         }
 
@@ -202,6 +204,7 @@ public class DeployJob extends MonitorableJob {
                 status.completed = true;
             }
 
+            jobFinished();
             return;
         }
 
@@ -264,6 +267,7 @@ public class DeployJob extends MonitorableJob {
                     status.completed = true;
                 }
 
+                jobFinished();
                 return;
             }
 
@@ -280,6 +284,7 @@ public class DeployJob extends MonitorableJob {
                     status.completed = true;
                 }
 
+                jobFinished();
                 return;
             }
 
@@ -294,6 +299,7 @@ public class DeployJob extends MonitorableJob {
                     status.completed = true;
                 }
 
+                jobFinished();
                 return;
             }
 
@@ -310,6 +316,7 @@ public class DeployJob extends MonitorableJob {
                     status.completed = true;
                 }
 
+                jobFinished();
                 return;
             }
 
@@ -324,7 +331,7 @@ public class DeployJob extends MonitorableJob {
                     status.message = "app.deployment.error.net";
                     status.completed = true;
                 }
-
+                jobFinished();
                 return;
             }
 
@@ -350,6 +357,7 @@ public class DeployJob extends MonitorableJob {
                     }
 
                     // no reason to take out more servers, it's going to have the same result
+                    jobFinished();
                     return;
                 }
             } catch (IOException e) {
