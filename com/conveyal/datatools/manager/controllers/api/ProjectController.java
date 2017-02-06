@@ -243,6 +243,14 @@ public class ProjectController {
                     JsonNode publicUrl = otpServer.get("publicUrl");
                     otpServerObj.publicUrl = publicUrl.isNull() ? null : publicUrl.asText();
                 }
+                if (otpServer.has("s3Bucket")) {
+                    JsonNode s3Bucket = otpServer.get("s3Bucket");
+                    otpServerObj.s3Bucket = s3Bucket.isNull() ? null : s3Bucket.asText();
+                }
+                if (otpServer.has("s3Credentials")) {
+                    JsonNode s3Credentials = otpServer.get("s3Credentials");
+                    otpServerObj.s3Credentials = s3Credentials.isNull() ? null : s3Credentials.asText();
+                }
                 if (otpServer.has("internalUrl") && otpServer.get("internalUrl").isArray()) {
                     JsonNode internalUrl = otpServer.get("internalUrl");
                     for (int j = 0; j < internalUrl.size(); j++) {
