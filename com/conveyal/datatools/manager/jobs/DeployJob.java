@@ -157,7 +157,7 @@ public class DeployJob extends MonitorableJob {
                 }
 
                 TransferManager tx = new TransferManager(creds);
-                String key = bundlePrefix + deployment.name + ".zip";
+                String key = bundlePrefix + deployment.getProject().id + "/" + deployment.name + ".zip";
                 final Upload upload = tx.upload(this.s3Bucket, key, temp);
 
                 upload.addProgressListener(new ProgressListener() {
@@ -172,7 +172,7 @@ public class DeployJob extends MonitorableJob {
                 tx.shutdownNow();
 
                 // copy to [name]-latest.zip
-                String copyKey = bundlePrefix + deployment.getProject().name.toLowerCase() + "-latest.zip";
+                String copyKey = bundlePrefix + deployment.getProject().id + "/" + deployment.getProject().name.toLowerCase() + "-latest.zip";
                 AmazonS3 s3client = new AmazonS3Client(creds);
                 CopyObjectRequest copyObjRequest = new CopyObjectRequest(
                         this.s3Bucket, key, this.s3Bucket, copyKey);
