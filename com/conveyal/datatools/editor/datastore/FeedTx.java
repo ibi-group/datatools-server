@@ -113,14 +113,34 @@ public class FeedTx extends DatabaseTx {
 
 //        editedSinceSnapshot = tx.getAtomicBoolean("editedSinceSnapshot") == null ? tx.createAtomicBoolean("editedSinceSnapshot", false) : tx.;
     }
-    public void commit () {
+    public void commit (int counter) {
         try {
 //            editedSinceSnapshot.set(true);
             tx.commit();
-        } catch (UnsupportedOperationException e) {
+        } catch (TxRollbackException e) {
+            /** NOTE: Due to an issue with concurrent modifications when saving multiple trips,
+             *  a counter has been added to retry commits if they fail due to TxRollbackException
+             *  per the suggestion here: https://groups.google.com/forum/#!topic/mapdb/2ukEDHL6Kq8
+             */
+            if (counter < 5) {
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e1) {
+                    e1.printStackTrace();
+                }
+                LOG.warn("Commit failed (count = {}), trying again.", counter);
+                commit(counter + 1);
+            } else {
+                throw e;
+            }
+        }
+        catch (UnsupportedOperationException e) {
             // probably read only, but warn
             LOG.warn("Rollback failed; if this is a read-only database this is not unexpected");
         }        closed = true;
+    }
+    public void commit () {
+        commit(0);
     }
     public void buildSecondaryIndices () {
         // build secondary indices
