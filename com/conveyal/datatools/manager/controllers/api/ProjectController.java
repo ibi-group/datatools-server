@@ -366,6 +366,11 @@ public class ProjectController {
             proj.routerConfig.stairsReluctance = stairsReluctance.isNull() ? null : stairsReluctance.asDouble();
         }
 
+        if (routerConfig.has("requestLogFile")) {
+            JsonNode requestLogFile = routerConfig.get("requestLogFile");
+            proj.routerConfig.requestLogFile = requestLogFile.isNull() || requestLogFile.asText().equals("") ? null : requestLogFile.asText();
+        }
+
         if (routerConfig.has("updaters")) {
             updateProjectUpdaters(proj, routerConfig.get("updaters"));
         }
