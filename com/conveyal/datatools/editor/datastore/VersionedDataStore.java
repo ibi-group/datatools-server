@@ -38,6 +38,7 @@ public class VersionedDataStore {
         // initialize the global database
         globalTxMaker = DBMaker.newFileDB(new File(globalDataDirectory, "global.db"))
                     .mmapFileEnable()
+                    .asyncWriteEnable()
                     .compressionEnable()
                     .makeTxMaker();
     }
