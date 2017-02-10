@@ -10,6 +10,7 @@ import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
+import com.conveyal.datatools.manager.utils.HashUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.r5.analyst.PointSet;
 import com.conveyal.r5.analyst.cluster.AnalystClusterRequest;
@@ -89,6 +90,9 @@ public class FeedVersionController  {
      * x-multipart-formdata rather than a json blob. This is done because uploading files in a JSON
      * blob is not pretty, and we don't really need to get the Backbone object directly; page re-render isn't
      * a problem.
+     *
+     * Auto-fetched feeds are no longer restricted from having directly-uploaded versions, so we're not picky about
+     * that anymore.
      * @return
      * @throws JsonProcessingException
      */
@@ -97,32 +101,30 @@ public class FeedVersionController  {
         Auth0UserProfile userProfile = req.attribute("user");
         FeedSource s = requestFeedSourceById(req, "manage");
 
-        // Autofetched feeds are no longer restricted from directly-uploaded versions
-//        if (FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.equals(s.retrievalMethod)) {
-//            halt(400, "Feed is auto-fetched! Cannot upload.");
-//        }
         FeedVersion latest = s.getLatest();
         FeedVersion v = new FeedVersion(s);
         v.setUser(userProfile);
-//        String lastModified = req.raw().getPart("lastModified").toString();
-//        System.out.println("last modified: " + lastModified);
+
         if (req.raw().getAttribute("org.eclipse.jetty.multipartConfig") == null) {
             MultipartConfigElement multipartConfigElement = new MultipartConfigElement(System.getProperty("java.io.tmpdir"));
             req.raw().setAttribute("org.eclipse.jetty.multipartConfig", multipartConfigElement);
         }
 
         Part part = req.raw().getPart("file");
-//        System.out.println(lastModified);
         LOG.info("Saving feed from upload {}", s);
 
 
         InputStream uploadStream;
+        File file = null;
         try {
             uploadStream = part.getInputStream();
 
-            // set last modified based on value of query param
-            File file = v.newGtfsFile(uploadStream, Long.valueOf(req.queryParams("lastModified")));
-            System.out.println(file.lastModified());
+            /**
+             * Set last modified based on value of query param. This is determined/supplied by the client
+             * request because this data gets lost in the uploadStream otherwise.
+             */
+            file = v.newGtfsFile(uploadStream, Long.valueOf(req.queryParams("lastModified")));
+            LOG.info("Last modified: {}", new Date(file.lastModified()));
         } catch (Exception e) {
             e.printStackTrace();
             LOG.error("Unable to open input stream from upload");
@@ -130,11 +132,19 @@ public class FeedVersionController  {
         }
 
         v.hash();
+        // TODO: fix hash() call when called in this context.  Nothing gets hashed because the file has not been saved yet.
+        v.hash = HashUtils.hashFile(file);
 
         // Check that hashes don't match (as long as v and latest are not the same entry)
         if (latest != null && latest.hash.equals(v.hash)) {
-            LOG.error("Upload matches latest version.");
-            v.getGtfsFile().delete();
+            LOG.error("Upload version {} matches latest version {}.", v.id, latest.id);
+            File gtfs = v.getGtfsFile();
+            if (gtfs != null) {
+                gtfs.delete();
+            } else {
+                file.delete();
+                LOG.warn("File deleted");
+            }
             // Uploaded feed is same as latest version
             v.delete();
             halt(304);
