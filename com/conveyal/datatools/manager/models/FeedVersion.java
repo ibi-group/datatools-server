@@ -32,6 +32,7 @@ import com.conveyal.datatools.manager.utils.HashUtils;
 import com.conveyal.gtfs.GTFSFeed;
 import com.conveyal.gtfs.validator.json.LoadStatus;
 import com.conveyal.gtfs.stats.FeedStats;
+import com.conveyal.r5.common.R5Version;
 import com.conveyal.r5.point_to_point.builder.TNBuilderConfig;
 import com.conveyal.r5.transit.TransportNetwork;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -501,6 +502,7 @@ public class FeedVersion extends Model implements Serializable {
             return null;
         }
         this.transportNetwork = tn;
+        this.transportNetwork.transitLayer.buildDistanceTables(null);
         File tnFile = getTransportNetworkPath();
         try {
             tn.write(tnFile);
@@ -620,7 +622,7 @@ public class FeedVersion extends Model implements Serializable {
     }
     @JsonIgnore
     public File getTransportNetworkPath () {
-        return new File(String.join(File.separator, getR5Path(), id + "_network.dat"));
+        return new File(String.join(File.separator, getR5Path(), id + "_" + R5Version.describe + "_network.dat"));
     }
 
     @JsonIgnore

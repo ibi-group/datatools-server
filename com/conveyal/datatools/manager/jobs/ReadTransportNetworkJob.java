@@ -35,6 +35,10 @@ public class ReadTransportNetworkJob extends MonitorableJob {
         is = new File(DataManager.config.get("application").get("data").get("gtfs").asText() + "/"  + feedVersion.feedSourceId + "/" + feedVersion.id + "_network.dat");
         try {
             feedVersion.transportNetwork = TransportNetwork.read(is);
+            // check to see if distance tables are built yet... should be removed once better caching strategy is implemeneted.
+            if (feedVersion.transportNetwork.transitLayer.stopToVertexDistanceTables == null) {
+                feedVersion.transportNetwork.transitLayer.buildDistanceTables(null);
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }
