@@ -214,10 +214,20 @@ public class ServiceCalendar extends Model implements Cloneable, Serializable {
         Map<String, Long> tripsForRoutes = new HashMap<>();
         for (Trip trip : tx.getTripsByCalendar(this.id)) {
             Long count = 0L;
+
+            /**
+             * if for some reason, routeId ever was set to null (or never properly initialized),
+             * take care of that here so we don't run into null map errors.
+             */
+            if (trip.routeId == null) {
+                trip.routeId = tx.tripPatterns.get(trip.patternId).routeId;
+            }
             if (tripsForRoutes.containsKey(trip.routeId)) {
                 count = tripsForRoutes.get(trip.routeId);
             }
-            tripsForRoutes.put(trip.routeId, count + 1);
+            if (trip.routeId != null) {
+                tripsForRoutes.put(trip.routeId, count + 1);
+            }
 //            routeIds.add(trip.routeId);
         }
         this.routes = tripsForRoutes;
