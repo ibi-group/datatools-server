@@ -194,15 +194,12 @@ public class UserController {
         List<Activity> activity = new ArrayList<>();
 
         for (Auth0UserProfile.Subscription sub : userProfile.getApp_metadata().getDatatoolsInfo().getSubscriptions()) {
-            System.out.println("sub type = " + sub.getType());
             switch (sub.getType()) {
                 // TODO: add all activity types
                 case "feed-commented-on":
                     for (String targetId : sub.getTarget()) {
-                        System.out.println("  target: " + targetId);
                         FeedSource fs = FeedSource.get(targetId);
                         if(fs == null) continue;
-                        System.out.println("  obj=" + fs);
                         for (Note note : fs.getNotes()) {
                             // TODO: Check if actually recent
 //                            if (note.date.after(Date.from(Instant.ofEpochSecond(from))) && note.date.before(Date.from(Instant.ofEpochSecond(to)))) {
