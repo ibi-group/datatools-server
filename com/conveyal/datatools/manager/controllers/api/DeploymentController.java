@@ -40,7 +40,7 @@ public class DeploymentController {
     private static JsonManager<DeployJob.DeployStatus> statusJson =
             new JsonManager<DeployJob.DeployStatus>(DeployJob.DeployStatus.class, JsonViews.UserInterface.class);
 
-    public static final Logger LOG = LoggerFactory.getLogger(DeploymentController.class);
+    private static final Logger LOG = LoggerFactory.getLogger(DeploymentController.class);
 
     private static HashMap<String, DeployJob> deploymentJobsByServer = new HashMap<String, DeployJob>();
 
@@ -112,7 +112,6 @@ public class DeploymentController {
     public static Object getAllDeployments (Request req, Response res) throws JsonProcessingException {
         Auth0UserProfile userProfile = req.attribute("user");
         String projectId = req.queryParams("projectId");
-        System.out.println("getting deployments...");
         if (!userProfile.canAdministerProject(projectId))
             halt(401);
 
