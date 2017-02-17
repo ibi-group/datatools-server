@@ -1,8 +1,10 @@
 package com.conveyal.datatools.manager.controllers.api;
 
+import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Organization;
+import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -12,10 +14,13 @@ import spark.Request;
 import spark.Response;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Date;
 import java.util.Iterator;
 import java.util.Map;
 
+import static com.conveyal.datatools.common.utils.SparkUtils.formatJSON;
 import static spark.Spark.*;
 import static spark.Spark.get;
 
@@ -85,16 +90,48 @@ public class OrganizationController {
                 org.usageTier = Organization.UsageTier.valueOf(entry.getValue().asText());
             } else if(entry.getKey().equals("active")) {
                 org.active = entry.getValue().asBoolean();
-//            } else if(entry.getKey().equals("extensions")) {
-//                org.extensions = entry.getValue().asBoolean();
-//            } else if(entry.getKey().equals("subscriptionBeginDate")) {
-//                org.subscriptionBeginDate = Date.from;
+            } else if(entry.getKey().equals("projects")) {
+                JsonNode projects = entry.getValue();
+                Collection<Project> projectsToInsert = new ArrayList<>(projects.size());
+                Collection<Project> existingProjects = org.getProjects();
+
+                // set projects orgId for all valid projects in list
+                for (JsonNode project : projects) {
+                    if (!project.has("id")) {
+                        halt(400, "Project not supplied");
+                    }
+                    Project p = Project.get(project.get("id").asText());
+                    if (p == null) {
+                        halt(404, "Project not found");
+                    }
+                    Organization previousOrg = p.getOrganization();
+                    if (previousOrg != null && !previousOrg.id.equals(org.id)) {
+                        halt(400, SparkUtils.formatJSON(String.format("Project %s cannot be reassigned while belonging to org %s", p.id, previousOrg.id), 400));
+                    }
+                    projectsToInsert.add(p);
+                    p.organizationId = org.id;
+                    p.save();
+                }
+                // assign remaining previously assigned projects to null
+                existingProjects.removeAll(projectsToInsert);
+                for (Project p : existingProjects) {
+                    p.organizationId = null;
+                    p.save();
+                }
+            } else if(entry.getKey().equals("subscriptionBeginDate")) {
+                org.subscriptionBeginDate = new Date(entry.getValue().asLong());
+            }  else if(entry.getKey().equals("subscriptionEndDate")) {
+                org.subscriptionEndDate = new Date(entry.getValue().asLong());
             }
         }
     }
 
     public static Organization deleteOrganization (Request req, Response res) {
         Organization org = requestOrganizationById(req);
+
+        if (org.getProjects().size() > 0) {
+            halt(400, formatJSON("Cannot delete organization that is referenced by projects.", 400));
+        }
         org.delete();
         return org;
     }

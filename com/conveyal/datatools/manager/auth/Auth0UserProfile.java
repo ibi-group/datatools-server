@@ -7,8 +7,10 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.ObjectMapper;
 
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.List;
 import java.util.Map;
 
@@ -84,9 +86,11 @@ public class Auth0UserProfile {
             return null;
         }
     }
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class DatatoolsInfo {
         @JsonProperty("client_id")
         String clientId;
+        Organization[] organizations;
         Project[] projects;
         Permission[] permissions;
         Subscription[] subscriptions;
@@ -117,7 +121,7 @@ public class Auth0UserProfile {
             this.subscriptions = subscriptions;
         }
 
-        public Subscription[] getSubscriptions() { return subscriptions; }
+        public Subscription[] getSubscriptions() { return subscriptions == null ? new Subscription[0] : subscriptions; }
 
     }
 
@@ -170,7 +174,16 @@ public class Auth0UserProfile {
             this.feeds = feeds;
         }
     }
-
+    public static class Organization {
+        @JsonProperty("organization_id")
+        String organizationId;
+        Permission[] permissions;
+//        String name;
+//        UsageTier usageTier;
+//        Extension[] extensions;
+//        Date subscriptionDate;
+//        String logoUrl;
+    }
     public static class Subscription {
 
         String type;
@@ -306,5 +319,14 @@ public class Auth0UserProfile {
             }
         }
         return false;
+    }
+
+    @JsonIgnore
+    public com.conveyal.datatools.manager.models.Organization getOrganization () {
+        Organization[] orgs = getApp_metadata().getDatatoolsInfo().organizations;
+        if (orgs != null) {
+            return orgs[0] != null ? com.conveyal.datatools.manager.models.Organization.get(orgs[0].organizationId) : null;
+        }
+        return null;
     }
 }

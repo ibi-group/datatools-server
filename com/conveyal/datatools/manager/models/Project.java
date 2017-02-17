@@ -129,14 +129,19 @@ public class Project extends Model {
 
     @JsonIgnore
     public Collection<Deployment> getProjectDeployments() {
-        ArrayList<Deployment> ret = new ArrayList<Deployment>();
-
-        for (Deployment d : Deployment.getAll()) {
-            if (this.id.equals(d.projectId)) {
-                ret.add(d);
-            }
-        }
+        ArrayList<Deployment> ret = Deployment.getAll().stream()
+                .filter(d -> this.id.equals(d.projectId))
+                .collect(Collectors.toCollection(ArrayList::new));
 
         return ret;
+    }
+
+    @JsonIgnore
+    public Organization getOrganization() {
+        if (organizationId != null) {
+            return Organization.get(organizationId);
+        } else {
+            return null;
+        }
     }
 }

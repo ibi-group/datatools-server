@@ -107,6 +107,7 @@ public class DataManager {
         RegionController.register(apiPrefix);
         NoteController.register(apiPrefix);
         StatusController.register(apiPrefix);
+        OrganizationController.register(apiPrefix);
 
         // Editor routes
         if ("true".equals(getConfigPropertyAsText("modules.editor.enabled"))) {
