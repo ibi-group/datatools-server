@@ -40,7 +40,7 @@ public class DeploymentController {
     private static JsonManager<DeployJob.DeployStatus> statusJson =
             new JsonManager<DeployJob.DeployStatus>(DeployJob.DeployStatus.class, JsonViews.UserInterface.class);
 
-    public static final Logger LOG = LoggerFactory.getLogger(DeploymentController.class);
+    private static final Logger LOG = LoggerFactory.getLogger(DeploymentController.class);
 
     private static HashMap<String, DeployJob> deploymentJobsByServer = new HashMap<String, DeployJob>();
 
@@ -112,7 +112,6 @@ public class DeploymentController {
     public static Object getAllDeployments (Request req, Response res) throws JsonProcessingException {
         Auth0UserProfile userProfile = req.attribute("user");
         String projectId = req.queryParams("projectId");
-        System.out.println("getting deployments...");
         if (!userProfile.canAdministerProject(projectId))
             halt(401);
 
@@ -208,7 +207,7 @@ public class DeploymentController {
             Map.Entry<String, JsonNode> entry = fieldsIter.next();
             if (entry.getKey() == "feedVersions") {
                 JsonNode versions = entry.getValue();
-                ArrayList<FeedVersion> versionsToInsert = new ArrayList<FeedVersion>(versions.size());
+                ArrayList<FeedVersion> versionsToInsert = new ArrayList<>(versions.size());
                 for (JsonNode version : versions) {
                     if (!version.has("id")) {
                         halt(400, "Version not supplied");
@@ -269,7 +268,7 @@ public class DeploymentController {
         d.deployedTo = target;
         d.save();
 
-        DeployJob job = new DeployJob(d, userProfile.getUser_id(), targetUrls, p.getServer(target).publicUrl, p.getServer(target).s3Bucket, p.getServer(target).s3Credentials);
+        DeployJob job = new DeployJob(d, userProfile.getUser_id(), targetUrls, otpServer.publicUrl, otpServer.s3Bucket, otpServer.s3Credentials);
         deploymentJobsByServer.put(target, job);
 
         Thread tnThread = new Thread(job);

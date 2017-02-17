@@ -1,5 +1,6 @@
 package com.conveyal.datatools.editor.controllers.api;
 
+import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
@@ -19,6 +20,7 @@ import spark.HaltException;
 import spark.Request;
 import spark.Response;
 
+import static com.conveyal.datatools.common.utils.SparkUtils.formatJSON;
 import static spark.Spark.*;
 
 import java.util.Calendar;
@@ -211,7 +213,7 @@ public class CalendarController {
         Long count = tx.tripCountByCalendar.get(id);
         if (count != null && count > 0) {
             tx.rollback();
-            halt(400, "Cannot delete calendar that is referenced by trips.");
+            halt(400, formatJSON("Cannot delete calendar that is referenced by trips.", 400));
         }
 
         // drop this calendar from any schedule exceptions
