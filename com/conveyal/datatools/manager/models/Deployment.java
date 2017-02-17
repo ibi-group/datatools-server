@@ -357,7 +357,7 @@ public class Deployment extends Model implements Serializable {
 
                 out.closeEntry();
             }
-
+            // TODO: remove branding url root here and from config.yml
             String brandingUrlRoot = DataManager.config
                     .get("application").get("data").get("branding_public").asText();
             OtpRouterConfig routerConfig = proj.routerConfig;
