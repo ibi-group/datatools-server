@@ -120,7 +120,8 @@ public class FeedTx extends DatabaseTx {
         } catch (UnsupportedOperationException e) {
             // probably read only, but warn
             LOG.warn("Rollback failed; if this is a read-only database this is not unexpected");
-        }        closed = true;
+        }
+        closed = true;
     }
     public void buildSecondaryIndices () {
         // build secondary indices

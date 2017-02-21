@@ -4,13 +4,9 @@ import com.conveyal.datatools.editor.models.transit.GtfsRouteType;
 import com.conveyal.datatools.editor.models.transit.TripDirection;
 import com.conveyal.geojson.GeoJsonModule;
 import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.core.JsonGenerationException;
 import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
-import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
-import com.vividsolutions.jts.geom.LineString;
 import java.time.LocalDate;
 
 import com.conveyal.datatools.editor.utils.JacksonSerializers;

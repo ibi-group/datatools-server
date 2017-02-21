@@ -2,6 +2,8 @@ package com.conveyal.datatools.manager.auth;
 
 import com.conveyal.datatools.manager.DataManager;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import spark.Request;
 
 import javax.net.ssl.HttpsURLConnection;
@@ -17,7 +19,7 @@ import static spark.Spark.halt;
  */
 
 public class Auth0Connection {
-
+    private static final Logger LOG = LoggerFactory.getLogger(Auth0Connection.class);
     public static void checkUser(Request req) {
         String token = getToken(req);
 
@@ -31,6 +33,7 @@ public class Auth0Connection {
         }
         catch(Exception e) {
 //            e.printStackTrace();
+            LOG.warn("Could not verify user", e);
             halt(401, "Could not verify user");
         }
     }
