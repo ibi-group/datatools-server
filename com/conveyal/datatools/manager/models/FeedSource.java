@@ -59,6 +59,11 @@ public class FeedSource extends Model implements Cloneable {
         return Project.get(projectId);
     }
 
+    public String getOrganizationId () {
+        Project project = getProject();
+        return project == null ? null : project.organizationId;
+    }
+
     @JsonIgnore
     public List<Region> getRegionList () {
         return Region.getAll().stream().filter(r -> Arrays.asList(regions).contains(r.id)).collect(Collectors.toList());

@@ -66,9 +66,9 @@ public class NoteController {
         else {
             s = ((FeedVersion) model).getFeedSource();
         }
-
+        String orgId = s.getOrganizationId();
         // check if the user has permission
-        if (userProfile.canAdministerProject(s.projectId) || userProfile.canViewFeed(s.projectId, s.id)) {
+        if (userProfile.canAdministerProject(s.projectId, orgId) || userProfile.canViewFeed(orgId, s.projectId, s.id)) {
             return model.getNotes();
         }
         else {
@@ -114,9 +114,9 @@ public class NoteController {
         else {
             s = ((FeedVersion) model).getFeedSource();
         }
-
+        String orgId = s.getOrganizationId();
         // check if the user has permission
-        if (userProfile.canAdministerProject(s.projectId) || userProfile.canViewFeed(s.projectId, s.id)) {
+        if (userProfile.canAdministerProject(s.projectId, orgId) || userProfile.canViewFeed(orgId, s.projectId, s.id)) {
             Note n = new Note();
             n.setUser(userProfile);
 

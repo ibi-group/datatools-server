@@ -512,6 +512,11 @@ public class Deployment extends Model implements Serializable {
         return null;
     }
 
+    public String getOrganizationId () {
+        Project project = getProject();
+        return project == null ? null : project.organizationId;
+    }
+
     /**
      * A summary of a FeedVersion, leaving out all of the individual validation errors.
      */

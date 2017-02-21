@@ -174,6 +174,9 @@ public class ProjectController {
             else if(entry.getKey().equals("west")) {
                 proj.west = entry.getValue().asDouble();
             }
+            else if(entry.getKey().equals("organizationId")) {
+                proj.organizationId = entry.getValue().asText();
+            }
             else if(entry.getKey().equals("osmNorth")) {
                 proj.osmNorth = entry.getValue().asDouble();
             }
@@ -320,7 +323,7 @@ public class ProjectController {
         boolean authorized;
         switch (action) {
             case "manage":
-                authorized = userProfile.canAdministerProject(p.id);
+                authorized = userProfile.canAdministerProject(p.id, p.organizationId);
                 break;
             case "view":
                 authorized = false; // userProfile.canViewProject(p.id, p.id);
@@ -664,7 +667,7 @@ public class ProjectController {
 
         String syncType = req.params("type");
 
-        if (!userProfile.canAdministerProject(proj.id))
+        if (!userProfile.canAdministerProject(proj.id, proj.organizationId))
             halt(403);
 
         LOG.info("syncing with third party " + syncType);

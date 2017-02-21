@@ -98,10 +98,11 @@ public class Auth0UserProfile {
         public DatatoolsInfo() {
         }
 
-        public DatatoolsInfo(String clientId, Project[] projects, Permission[] permissions, Subscription[] subscriptions) {
+        public DatatoolsInfo(String clientId, Project[] projects, Permission[] permissions, Organization[] organizations, Subscription[] subscriptions) {
             this.clientId = clientId;
             this.projects = projects;
             this.permissions = permissions;
+            this.organizations = organizations;
             this.subscriptions = subscriptions;
         }
 
@@ -265,31 +266,37 @@ public class Auth0UserProfile {
         return false;
     }
 
+    public Organization getAuth0Organization() {
+        if(app_metadata.getDatatoolsInfo() != null && app_metadata.getDatatoolsInfo().organizations != null && app_metadata.getDatatoolsInfo().organizations.length != 0) {
+            return app_metadata.getDatatoolsInfo().organizations[0];
+        }
+        return null;
+    }
+
     public String getOrganizationId() {
-        if(app_metadata.getDatatoolsInfo() != null && app_metadata.getDatatoolsInfo().organizations != null) {
-            Organization org = app_metadata.getDatatoolsInfo().organizations[0];
+        Organization org = getAuth0Organization();
+        if (org != null) {
             return org.organizationId;
         }
         return null;
     }
 
     public boolean canAdministerOrganization(String organizationId) {
-//        TODO: adapt for specific org
-        if(app_metadata.getDatatoolsInfo() != null && app_metadata.getDatatoolsInfo().organizations != null) {
-            Organization org = app_metadata.getDatatoolsInfo().organizations[0];
-            if (org.organizationId.equals(organizationId)) {
-                for(Permission permission : org.permissions) {
-                    if(permission.type.equals("administer-organization")) {
-                        return true;
-                    }
+//      TODO: adapt for specific org
+        Organization org = getAuth0Organization();
+        if (org != null && org.organizationId.equals(organizationId)) {
+            for(Permission permission : org.permissions) {
+                if(permission.type.equals("administer-organization")) {
+                    return true;
                 }
             }
         }
         return false;
     }
 
-    public boolean canAdministerProject(String projectID) {
+    public boolean canAdministerProject(String projectID, String organizationId) {
         if(canAdministerApplication()) return true;
+        if(canAdministerOrganization(organizationId)) return true;
         for(Project project : app_metadata.getDatatoolsInfo().projects) {
             if (project.project_id.equals(projectID)) {
                 for(Permission permission : project.permissions) {
@@ -302,8 +309,8 @@ public class Auth0UserProfile {
         return false;
     }
 
-    public boolean canViewFeed(String projectID, String feedID) {
-        if (canAdministerApplication() || canAdministerProject(projectID)) {
+    public boolean canViewFeed(String organizationId, String projectID, String feedID) {
+        if (canAdministerApplication() || canAdministerProject(projectID, organizationId)) {
             return true;
         }
         for(Project project : app_metadata.getDatatoolsInfo().projects) {
@@ -314,8 +321,8 @@ public class Auth0UserProfile {
         return false;
     }
 
-    public boolean canManageFeed(String projectID, String feedID) {
-        if (canAdministerApplication() || canAdministerProject(projectID)) {
+    public boolean canManageFeed(String organizationId, String projectID, String feedID) {
+        if (canAdministerApplication() || canAdministerProject(projectID, organizationId)) {
             return true;
         }
         Project[] projectList = app_metadata.getDatatoolsInfo().projects;
@@ -328,8 +335,8 @@ public class Auth0UserProfile {
         return false;
     }
 
-    public boolean canEditGTFS(String projectID, String feedID) {
-        if (canAdministerApplication() || canAdministerProject(projectID)) {
+    public boolean canEditGTFS(String organizationId, String projectID, String feedID) {
+        if (canAdministerApplication() || canAdministerProject(projectID, organizationId)) {
             return true;
         }
         Project[] projectList = app_metadata.getDatatoolsInfo().projects;
@@ -342,8 +349,8 @@ public class Auth0UserProfile {
         return false;
     }
 
-    public boolean canApproveGTFS(String projectID, String feedID) {
-        if (canAdministerApplication() || canAdministerProject(projectID)) {
+    public boolean canApproveGTFS(String organizationId, String projectID, String feedID) {
+        if (canAdministerApplication() || canAdministerProject(projectID, organizationId)) {
             return true;
         }
         Project[] projectList = app_metadata.getDatatoolsInfo().projects;
@@ -379,7 +386,7 @@ public class Auth0UserProfile {
     @JsonIgnore
     public com.conveyal.datatools.manager.models.Organization getOrganization () {
         Organization[] orgs = getApp_metadata().getDatatoolsInfo().organizations;
-        if (orgs != null) {
+        if (orgs != null && orgs.length != 0) {
             return orgs[0] != null ? com.conveyal.datatools.manager.models.Organization.get(orgs[0].organizationId) : null;
         }
         return null;

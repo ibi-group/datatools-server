@@ -50,9 +50,10 @@ public class FeedSourceController {
 
         if (projectId != null) {
             for (FeedSource source: FeedSource.getAll()) {
+                String orgId = source.getOrganizationId();
                 if (
                     source != null && source.projectId != null && source.projectId.equals(projectId)
-                    && requestingUser != null && (requestingUser.canManageFeed(source.projectId, source.id) || requestingUser.canViewFeed(source.projectId, source.id))
+                    && requestingUser != null && (requestingUser.canManageFeed(orgId, source.projectId, source.id) || requestingUser.canViewFeed(orgId, source.projectId, source.id))
                 ) {
                     // if requesting public sources and source is not public; skip source
                     if (publicFilter && !source.isPublic)
@@ -67,9 +68,10 @@ public class FeedSourceController {
             if (user == null) return sources;
 
             for (FeedSource source: FeedSource.getAll()) {
+                String orgId = source.getOrganizationId();
                 if (
                     source != null && source.projectId != null &&
-                    (user.canManageFeed(source.projectId, source.id) || user.canViewFeed(source.projectId, source.id))
+                    (user.canManageFeed(orgId, source.projectId, source.id) || user.canViewFeed(orgId, source.projectId, source.id))
                 ) {
 
                     sources.add(source);
@@ -79,8 +81,9 @@ public class FeedSourceController {
         // request feed sources that are public
         else {
             for (FeedSource source: FeedSource.getAll()) {
+                String orgId = source.getOrganizationId();
                 // if user is logged in and cannot view feed; skip source
-                if ((requestingUser != null && !requestingUser.canManageFeed(source.projectId, source.id) && !requestingUser.canViewFeed(source.projectId, source.id)))
+                if ((requestingUser != null && !requestingUser.canManageFeed(orgId, source.projectId, source.id) && !requestingUser.canViewFeed(orgId, source.projectId, source.id)))
                     continue;
 
                 // if requesting public sources and source is not public; skip source
@@ -111,6 +114,9 @@ public class FeedSourceController {
         source = new FeedSource();
 
         applyJsonToFeedSource(source, req.body());
+
+        // check permissions before saving
+        requestFeedSource(req, source, "create");
         source.save();
 
         for(String resourceType : DataManager.feedResources.keySet()) {
@@ -280,15 +286,18 @@ public class FeedSourceController {
         // check for null feedsource
         if (s == null)
             halt(400, "Feed source ID does not exist");
-
+        String orgId = s.getOrganizationId();
         boolean authorized;
         switch (action) {
+            case "create":
+                authorized = userProfile.canAdministerProject(s.projectId, orgId);
+                break;
             case "manage":
-                authorized = userProfile.canManageFeed(s.projectId, s.id);
+                authorized = userProfile.canManageFeed(orgId, s.projectId, s.id);
                 break;
             case "view":
                 if (!publicFilter) {
-                    authorized = userProfile.canViewFeed(s.projectId, s.id);
+                    authorized = userProfile.canViewFeed(orgId, s.projectId, s.id);
                 } else {
                     authorized = false;
                 }

@@ -52,7 +52,7 @@ public class DeploymentController {
             halt(400, "Deployment does not exist.");
             return null;
         }
-        if (!userProfile.canAdministerProject(d.projectId) && !userProfile.getUser_id().equals(d.getUser()))
+        if (!userProfile.canAdministerProject(d.projectId, d.getOrganizationId()) && !userProfile.getUser_id().equals(d.getUser()))
             halt(401);
         else
             return d;
@@ -68,7 +68,7 @@ public class DeploymentController {
             halt(400, "Deployment does not exist.");
             return null;
         }
-        if (!userProfile.canAdministerProject(d.projectId) && !userProfile.getUser_id().equals(d.getUser()))
+        if (!userProfile.canAdministerProject(d.projectId, d.getOrganizationId()) && !userProfile.getUser_id().equals(d.getUser()))
             halt(401);
         else {
             d.delete();
@@ -90,7 +90,7 @@ public class DeploymentController {
             return null;
         }
 
-        if (!userProfile.canAdministerProject(d.projectId) && !userProfile.getUser_id().equals(d.getUser()))
+        if (!userProfile.canAdministerProject(d.projectId, d.getOrganizationId()) && !userProfile.getUser_id().equals(d.getUser()))
             halt(401);
 
         File temp = File.createTempFile("deployment", ".zip");
@@ -112,7 +112,8 @@ public class DeploymentController {
     public static Object getAllDeployments (Request req, Response res) throws JsonProcessingException {
         Auth0UserProfile userProfile = req.attribute("user");
         String projectId = req.queryParams("projectId");
-        if (!userProfile.canAdministerProject(projectId))
+        Project project = Project.get(projectId);
+        if (!userProfile.canAdministerProject(projectId, project.organizationId))
             halt(401);
 
         if (projectId != null) {
@@ -131,7 +132,7 @@ public class DeploymentController {
         // find the project
         Project p = Project.get(params.get("projectId").asText());
 
-        if (!userProfile.canAdministerProject(p.id))
+        if (!userProfile.canAdministerProject(p.id, p.organizationId))
             halt(401);
 
         Deployment d = new Deployment(p);
@@ -159,7 +160,7 @@ public class DeploymentController {
         // 3) have access to this feed through project permissions
         // if all fail, the user cannot do this.
         if (
-                !userProfile.canAdministerProject(s.projectId)
+                !userProfile.canAdministerProject(s.projectId, s.getOrganizationId())
                         && !userProfile.getUser_id().equals(s.getUser())
 //                        && !userProfile.hasWriteAccess(s.id)
                 )
@@ -185,7 +186,7 @@ public class DeploymentController {
         if (d == null)
             halt(404);
         
-        if (!userProfile.canAdministerProject(d.projectId) && !userProfile.getUser_id().equals(d.getUser()))
+        if (!userProfile.canAdministerProject(d.projectId, d.getOrganizationId()) && !userProfile.getUser_id().equals(d.getUser()))
             halt(401);
 
         JsonNode params = mapper.readTree(req.body());
@@ -240,10 +241,10 @@ public class DeploymentController {
         Deployment d = Deployment.get(id);
         Project p = Project.get(d.projectId);
 
-        if (!userProfile.canAdministerProject(d.projectId) && !userProfile.getUser_id().equals(d.getUser()))
+        if (!userProfile.canAdministerProject(d.projectId, d.getOrganizationId()) && !userProfile.getUser_id().equals(d.getUser()))
             halt(401);
 
-        if (!userProfile.canAdministerProject(d.projectId) && p.getServer(target).admin)
+        if (!userProfile.canAdministerProject(d.projectId, d.getOrganizationId()) && p.getServer(target).admin)
             halt(401);
 
         // check if we can deploy
