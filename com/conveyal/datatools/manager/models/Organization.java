@@ -8,6 +8,8 @@ import java.io.Serializable;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 /**
@@ -21,7 +23,7 @@ public class Organization extends Model implements Serializable {
     public String logoUrl;
     public boolean active;
     public UsageTier usageTier;
-    public Extension[] extensions;
+    public Set<Extension> extensions = new HashSet<>();
     public Date subscriptionBeginDate;
     public Date subscriptionEndDate;
 
@@ -59,9 +61,10 @@ public class Organization extends Model implements Serializable {
     }
 
     public long getTotalServiceSeconds () {
-        return Project.getAll().stream()
+        return getProjects().stream()
                 .map(p -> p.getProjectFeedSources())
                 .flatMap(p -> p.stream())
+                .filter(fs -> fs.getLatestValidation() != null)
                 .map(fs -> fs.getLatestValidation().avgDailyRevenueTime)
                 .mapToLong(Long::longValue)
                 .sum();

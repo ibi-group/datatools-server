@@ -10,6 +10,8 @@ import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.utils.URIBuilder;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.util.EntityUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
@@ -26,9 +28,12 @@ public class Auth0Users {
     private static String AUTH0_DOMAIN = DataManager.config.get("auth0").get("domain").asText();
     private static String AUTH0_API_TOKEN = DataManager.serverConfig.get("auth0").get("api_token").asText();
     private static ObjectMapper mapper = new ObjectMapper();
+    private static final Logger LOG = LoggerFactory.getLogger(Auth0Users.class);
 
     private static URI getUrl(String searchQuery, int page, int perPage, boolean includeTotals) {
         String clientId = DataManager.config.get("auth0").get("client_id").asText();
+
+        // always filter users by datatools client_id
         String defaultQuery = "app_metadata.datatools.client_id:" + clientId;
         URIBuilder builder = new URIBuilder();
         builder.setScheme("https").setHost(AUTH0_DOMAIN).setPath("/api/v2/users");
@@ -59,7 +64,7 @@ public class Auth0Users {
     }
 
     private static String doRequest(URI uri) {
-        System.out.println("Auth0 getUsers URL=" + uri);
+        LOG.info("Auth0 getUsers URL=" + uri);
         String charset = "UTF-8";
 
         HttpClient client = HttpClientBuilder.create().build();
@@ -130,6 +135,10 @@ public class Auth0Users {
 
     public static String getUsersBySubscription(String subscriptionType, String target) {
         return getAuth0Users("app_metadata.datatools.subscriptions.type:" + subscriptionType + " AND app_metadata.datatools.subscriptions.target:" + target);
+    }
+
+    public static String getUsersForOrganization(String organizationId) {
+        return getAuth0Users("app_metadata.datatools.organizations.organization_id:" + organizationId);
     }
 
     public static String getAuth0Users(String queryString) {

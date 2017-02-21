@@ -68,16 +68,35 @@ public class UserController {
     public static Object getAllUsers(Request req, Response res) throws IOException {
         res.type("application/json");
         int page = Integer.parseInt(req.queryParams("page"));
+        String queryString = getUserQuery(req);
+        Object users = mapper.readTree(Auth0Users.getAuth0Users(queryString, page));
+        return users;
+    }
+
+    private static String getUserQuery(Request req) {
+        Auth0UserProfile userProfile = req.attribute("user");
         String queryString = req.queryParams("queryString");
         if(queryString != null) queryString = "email:" + queryString + "*";
 
-        return mapper.readTree(Auth0Users.getAuth0Users(queryString, page));
+        if (userProfile.canAdministerApplication()) {
+            // do nothing, proceed with search
+        }
+        else if (userProfile.canAdministerOrganization()) {
+            // filter by organization_id
+            if (queryString == null) {
+                queryString = "app_metadata.datatools.organizations.organization_id:" + userProfile.getOrganizationId();
+            } else {
+                queryString += " AND app_metadata.datatools.organizations.organization_id:" + userProfile.getOrganizationId();
+            }
+        } else {
+            halt(401, "Must be application or organization admin to view users");
+        }
+        return queryString;
     }
 
     public static Object getUserCount(Request req, Response res) throws IOException {
         res.type("application/json");
-        String queryString = req.queryParams("queryString");
-        if(queryString != null) queryString = "email:" + queryString + "*";
+        String queryString = getUserQuery(req);
         return Auth0Users.getAuth0UserCount(queryString);
     }
 

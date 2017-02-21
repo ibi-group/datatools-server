@@ -17,8 +17,11 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJSON;
 import static spark.Spark.*;
@@ -43,8 +46,14 @@ public class OrganizationController {
 
     public static Collection<Organization> getAllOrganizations (Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
+        boolean isOrgAdmin = userProfile.canAdministerOrganization();
         if (userProfile.canAdministerApplication()) {
             return Organization.getAll();
+        } else if (isOrgAdmin) {
+            List<Organization> orgs = new ArrayList<>();
+            orgs.add(userProfile.getOrganization());
+            LOG.info("returning org {}", orgs);
+            return orgs;
         } else {
             halt(401, "Must be application admin to view organizations");
         }
@@ -90,6 +99,13 @@ public class OrganizationController {
                 org.usageTier = Organization.UsageTier.valueOf(entry.getValue().asText());
             } else if(entry.getKey().equals("active")) {
                 org.active = entry.getValue().asBoolean();
+            } else if(entry.getKey().equals("extensions")) {
+                JsonNode extensions = entry.getValue();
+                Set<Organization.Extension> newExtensions = new HashSet<>();
+                for (JsonNode extension : extensions) {
+                    newExtensions.add(Organization.Extension.valueOf(extension.asText()));
+                }
+                org.extensions = newExtensions;
             } else if(entry.getKey().equals("projects")) {
                 JsonNode projects = entry.getValue();
                 Collection<Project> projectsToInsert = new ArrayList<>(projects.size());

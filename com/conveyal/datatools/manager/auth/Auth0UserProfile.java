@@ -112,7 +112,9 @@ public class Auth0UserProfile {
         public void setProjects(Project[] projects) {
             this.projects = projects;
         }
-
+        public void setOrganizations(Organization[] organizations) {
+            this.organizations = organizations;
+        }
         public void setPermissions(Permission[] permissions) {
             this.permissions = permissions;
         }
@@ -183,6 +185,22 @@ public class Auth0UserProfile {
 //        Extension[] extensions;
 //        Date subscriptionDate;
 //        String logoUrl;
+
+        public Organization() {
+        }
+
+        public Organization(String organizationId, Permission[] permissions) {
+            this.organizationId = organizationId;
+            this.permissions = permissions;
+        }
+
+        public void setOrganizationId(String organizationId) {
+            this.organizationId = organizationId;
+        }
+
+        public void setPermissions(Permission[] permissions) {
+            this.permissions = permissions;
+        }
     }
     public static class Subscription {
 
@@ -214,7 +232,9 @@ public class Auth0UserProfile {
         return app_metadata.getDatatoolsInfo().projects.length;
     }
 
-    public boolean hasProject(String projectID) {
+    public boolean hasProject(String projectID, String organizationId) {
+        if (canAdministerApplication()) return true;
+        if (canAdministerOrganization(organizationId)) return true;
         if(app_metadata.getDatatoolsInfo() == null || app_metadata.getDatatoolsInfo().projects == null) return false;
         for(Project project : app_metadata.getDatatoolsInfo().projects) {
             if (project.project_id.equals(projectID)) return true;
@@ -227,6 +247,41 @@ public class Auth0UserProfile {
             for(Permission permission : app_metadata.getDatatoolsInfo().permissions) {
                 if(permission.type.equals("administer-application")) {
                     return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public boolean canAdministerOrganization() {
+        if(app_metadata.getDatatoolsInfo() != null && app_metadata.getDatatoolsInfo().organizations != null) {
+            Organization org = app_metadata.getDatatoolsInfo().organizations[0];
+            for(Permission permission : org.permissions) {
+                if(permission.type.equals("administer-organization")) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    public String getOrganizationId() {
+        if(app_metadata.getDatatoolsInfo() != null && app_metadata.getDatatoolsInfo().organizations != null) {
+            Organization org = app_metadata.getDatatoolsInfo().organizations[0];
+            return org.organizationId;
+        }
+        return null;
+    }
+
+    public boolean canAdministerOrganization(String organizationId) {
+//        TODO: adapt for specific org
+        if(app_metadata.getDatatoolsInfo() != null && app_metadata.getDatatoolsInfo().organizations != null) {
+            Organization org = app_metadata.getDatatoolsInfo().organizations[0];
+            if (org.organizationId.equals(organizationId)) {
+                for(Permission permission : org.permissions) {
+                    if(permission.type.equals("administer-organization")) {
+                        return true;
+                    }
                 }
             }
         }

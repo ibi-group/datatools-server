@@ -7,6 +7,7 @@ import com.conveyal.datatools.manager.jobs.MakePublicJob;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
+import com.conveyal.datatools.manager.models.Organization;
 import com.conveyal.datatools.manager.models.OtpBuildConfig;
 import com.conveyal.datatools.manager.models.OtpRouterConfig;
 import com.conveyal.datatools.manager.models.OtpServer;
@@ -65,10 +66,15 @@ public class ProjectController {
     public static Collection<Project> getAllProjects(Request req, Response res) throws JsonProcessingException {
 
         Auth0UserProfile userProfile = req.attribute("user");
-
+//        Organization org = userProfile.getOrganization();
+//        if (!userProfile.canAdministerOrganization()) {
+//
+//        }
+//        org.getProjects();
         Collection<Project> filteredProjects = new ArrayList<Project>();
-
-        System.out.println("found projects: " + Project.getAll().size());
+//        Collection<Project> projects = Project.getAll();
+//        orgProjects =
+        LOG.info("found projects: " + Project.getAll().size());
         for (Project proj : Project.getAll()) {
             // Get feedSources if making a public call
 //            Supplier<Collection<FeedSource>> supplier = () -> new LinkedList<FeedSource>();
@@ -78,7 +84,7 @@ public class ProjectController {
             else {
                 proj.feedSources = null;
             }
-            if (req.pathInfo().contains("public") || userProfile.canAdministerApplication() || userProfile.hasProject(proj.id)) {
+            if (req.pathInfo().contains("public") || userProfile.canAdministerApplication() || userProfile.hasProject(proj.id, proj.organizationId)) {
                 filteredProjects.add(proj);
             }
         }
@@ -208,7 +214,7 @@ public class ProjectController {
                 updateBuildConfig(proj, entry.getValue());
             }
             else if (entry.getKey().equals("routerConfig")) {
-                    updateRouterConfig(proj, entry.getValue());
+                updateRouterConfig(proj, entry.getValue());
             }
         }
         if (updateFetchSchedule) {
