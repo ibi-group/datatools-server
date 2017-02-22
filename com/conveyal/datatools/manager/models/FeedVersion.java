@@ -521,7 +521,13 @@ public class FeedVersion extends Model implements Serializable {
     @JsonIgnore
     public static File getOSMFile(Rectangle2D bounds) {
         if (bounds != null) {
-            return new File(String.format("%s%.6f_%.6f_%.6f_%.6f.osm.pbf", getOSMPath(), bounds.getMaxX(), bounds.getMaxY(), bounds.getMinX(), bounds.getMinY()));
+            String baseDir = FeedStore.basePath.getAbsolutePath() + File.separator + "osm";
+            File osmPath = new File(String.format("%s/%.6f_%.6f_%.6f_%.6f", baseDir, bounds.getMaxX(), bounds.getMaxY(), bounds.getMinX(), bounds.getMinY()));
+            if (!osmPath.exists()) {
+                osmPath.mkdirs();
+            }
+            File osmFile = new File(osmPath.getAbsolutePath() + "/data.osm.pbf");
+            return osmFile;
         }
         else {
             return null;
@@ -634,14 +640,5 @@ public class FeedVersion extends Model implements Serializable {
     @JsonIgnore
     public File getTransportNetworkPath () {
         return new File(String.join(File.separator, getR5Path(), id + "_" + R5Version.describe + "_network.dat"));
-    }
-
-    @JsonIgnore
-    public static String getOSMPath () {
-        File osm = new File(FeedStore.basePath.getAbsolutePath() + File.separator + "osm");
-        if (!osm.exists()) {
-            osm.mkdirs();
-        }
-        return osm.getAbsolutePath();
     }
 }
