@@ -36,7 +36,7 @@ public class NotifyUsersForSubscriptionJob implements Runnable {
 
     // TODO: modify method so that it receives both a feed param and a updateFor param?
     public void notifyUsersForSubscription() {
-        if (!DataManager.config.get("application").get("notifications_enabled").asBoolean()) {
+        if (!DataManager.getConfigProperty("application.notifications_enabled").asBoolean()) {
             return;
         }
         String userString = getUsersBySubscription(this.subscriptionType, this.target);

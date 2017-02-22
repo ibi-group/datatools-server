@@ -70,7 +70,7 @@ public class Auth0UserProfile {
         @JsonIgnore
         public void setDatatoolsInfo(DatatoolsInfo datatools) {
             for(int i = 0; i < this.datatools.size(); i++) {
-                if (this.datatools.get(i).clientId.equals(DataManager.config.get("auth0").get("clientId").asText())) {
+                if (this.datatools.get(i).clientId.equals(DataManager.getConfigPropertyAsText("auth0.client_id"))) {
                     this.datatools.set(i, datatools);
                 }
             }
@@ -79,7 +79,7 @@ public class Auth0UserProfile {
         public DatatoolsInfo getDatatoolsInfo() {
             for(int i = 0; i < this.datatools.size(); i++) {
                 DatatoolsInfo dt = this.datatools.get(i);
-                if (dt.clientId.equals(DataManager.config.get("auth0").get("client_id").asText())) {
+                if (dt.clientId.equals(DataManager.getConfigPropertyAsText("auth0.client_id"))) {
                     return dt;
                 }
             }

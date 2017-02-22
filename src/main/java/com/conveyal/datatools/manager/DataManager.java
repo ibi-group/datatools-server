@@ -209,6 +209,23 @@ public class DataManager {
         registerExternalResources();
     }
 
+    public static boolean hasConfigProperty(String name) {
+        // try the server config first, then the main config
+        boolean fromServerConfig = hasConfigProperty(serverConfig, name);
+        if(fromServerConfig) return fromServerConfig;
+
+        return hasConfigProperty(config, name);
+    }
+
+    public static boolean hasConfigProperty(JsonNode config, String name) {
+        String parts[] = name.split("\\.");
+        JsonNode node = config;
+        for(int i = 0; i < parts.length; i++) {
+            if(node == null) return false;
+            node = node.get(parts[i]);
+        }
+        return node != null;
+    }
 
     public static JsonNode getConfigProperty(String name) {
         // try the server config first, then the main config

@@ -30,7 +30,7 @@ public class TransitLandFeedResource implements ExternalFeedResource {
     private String api;
 
     public TransitLandFeedResource() {
-        api = DataManager.config.get("extensions").get("transitland").get("api").asText();
+        api = DataManager.getConfigPropertyAsText("extensions.transitland.api");
     }
 
     @Override

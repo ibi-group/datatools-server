@@ -42,9 +42,9 @@ import static spark.Spark.*;
  */
 public class UserController {
 
-    private static String AUTH0_DOMAIN = DataManager.config.get("auth0").get("domain").asText();
-    private static String AUTH0_CLIENT_ID = DataManager.config.get("auth0").get("client_id").asText();
-    private static String AUTH0_API_TOKEN = DataManager.serverConfig.get("auth0").get("api_token").asText();
+    private static String AUTH0_DOMAIN = DataManager.getConfigPropertyAsText("auth0.domain");
+    private static String AUTH0_CLIENT_ID = DataManager.getConfigPropertyAsText("auth0.client_id");
+    private static String AUTH0_API_TOKEN = DataManager.getConfigPropertyAsText("auth0.api_token");
     private static Logger LOG = LoggerFactory.getLogger(UserController.class);
     private static ObjectMapper mapper = new ObjectMapper();
     public static JsonManager<Project> json =

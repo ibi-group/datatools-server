@@ -8,7 +8,7 @@ import com.conveyal.datatools.manager.DataManager;
 public class ServiceAlertsController {
 
     public static void register(String apiPrefix) {
-        String extensionType = DataManager.config.get("modules").get("alerts").get("use_extension").asText();
+        String extensionType = DataManager.getConfigPropertyAsText("modules.alerts.use_extension");
 
         // set up as extension
         if (extensionType != null) {

@@ -34,9 +34,9 @@ public class MtcFeedResource implements ExternalFeedResource {
     private String rtdApi, s3Bucket, s3Prefix, s3CredentialsFilename;
 
     public MtcFeedResource() {
-        rtdApi = DataManager.config.get("extensions").get("mtc").get("rtd_api").asText();
-        s3Bucket = DataManager.config.get("extensions").get("mtc").get("s3_bucket").asText();
-        s3Prefix = DataManager.config.get("extensions").get("mtc").get("s3_prefix").asText();
+        rtdApi = DataManager.getConfigPropertyAsText("extensions.mtc.rtd_api");
+        s3Bucket = DataManager.getConfigPropertyAsText("extensions.mtc.s3_bucket");
+        s3Prefix = DataManager.getConfigPropertyAsText("extensions.mtc.s3_prefix");
         //s3CredentialsFilename = DataManager.config.get("extensions").get("mtc").get("s3_credentials_file").asText();
     }
 

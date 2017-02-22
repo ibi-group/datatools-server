@@ -358,8 +358,7 @@ public class Deployment extends Model implements Serializable {
                 out.closeEntry();
             }
             // TODO: remove branding url root here and from config.yml
-            String brandingUrlRoot = DataManager.config
-                    .get("application").get("data").get("branding_public").asText();
+            String brandingUrlRoot = DataManager.getConfigPropertyAsText("application.data.branding_public");
             OtpRouterConfig routerConfig = proj.routerConfig;
             if (routerConfig == null && brandingUrlRoot != null) {
                 routerConfig = new OtpRouterConfig();
@@ -462,8 +461,8 @@ public class Deployment extends Model implements Serializable {
 
 
         double bufferKm = 10;
-        if(DataManager.config.get("modules").get("deployment").has("osm_buffer_km")) {
-            bufferKm = DataManager.config.get("modules").get("deployment").get("osm_buffer_km").asDouble();
+        if(DataManager.hasConfigProperty("modules.deployment.osm_buffer_km")) {
+            bufferKm = DataManager.getConfigProperty("modules.deployment.osm_buffer_km").asDouble();
         }
 
         // south-west

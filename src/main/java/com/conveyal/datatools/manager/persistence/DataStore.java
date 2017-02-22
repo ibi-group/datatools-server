@@ -30,7 +30,7 @@ public class DataStore<T> {
     BTreeMap<String,T> map;
 
     public DataStore(String dataFile) {
-        this(new File(DataManager.config.get("application").get("data").get("mapdb").asText()), dataFile);
+        this(new File(DataManager.getConfigPropertyAsText("application.data.mapdb")), dataFile);
     }
 
     public DataStore(File directory, String dataFile) {

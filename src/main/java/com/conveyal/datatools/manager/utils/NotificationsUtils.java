@@ -22,12 +22,12 @@ import static com.conveyal.datatools.manager.auth.Auth0Users.getUsersBySubscript
 public class NotificationsUtils {
 
     public static void sendNotification(String to_email, String subject, String text, String html) {
-        String API_KEY = DataManager.serverConfig.get("sparkpost").get("key").asText();
+        String API_KEY = DataManager.getConfigPropertyAsText("sparkpost.key");
         Client client = new Client(API_KEY);
 
         try {
             Response response = client.sendMessage(
-                    DataManager.serverConfig.get("sparkpost").get("from_email").asText(), // from
+                    DataManager.getConfigPropertyAsText("sparkpost.from_email"), // from
                     to_email, // to
                     subject,
                     text,

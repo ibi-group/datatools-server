@@ -126,7 +126,7 @@ public class RegionController {
     public static Collection<Region> seedRegions(Request req, Response res) throws IOException {
         Region.deleteAll();
         Collection<Region> regions = new ArrayList<>();
-        String regionsDir = DataManager.config.get("application").get("data").get("regions").asText();
+        String regionsDir = DataManager.getConfigPropertyAsText("application.data.regions");
         LOG.info(regionsDir);
         GeometryJSON gjson = new GeometryJSON();
         Files.walk(Paths.get(regionsDir)).forEach(filePath -> {
