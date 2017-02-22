@@ -9,9 +9,15 @@ jdk:
 install: true
 # Replace Travis's default build step.
 # Run all Maven phases at once up through verify, install, and deploy.
-script:
-  - mvn clean verify
-  - codecov
+script: |
+  # only (attempt to) deploy non-pull request commits to the master branch or on tags
+  if [[ "$TRAVIS_PULL_REQUEST" = false ]] && [[ "$TRAVIS_BRANCH" = master || ! -z "$TRAVIS_TAG" ]]; then
+    mvn clean deploy
+  else
+    # otherwise, just run test suite
+    mvn clean verify
+  fi
+
 
 # If sudo is disabled, CI runs on container based infrastructure (allows caching &c.)
 sudo: false
