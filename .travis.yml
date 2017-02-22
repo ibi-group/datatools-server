@@ -3,29 +3,19 @@ language: java
 # Travis doesn't (yet) support OpenJDK 8
 jdk:
   - oraclejdk8
+#before_install:
+#  - nvm install $NODE_VERSION
+#  - npm i -g codecov
+#  - npm i -g yarn
 
-# Must use java image and switch node versions with nvm: https://github.com/travis-ci/travis-ci/issues/3827#issuecomment-98114873
-env:
-  - NODE_VERSION=6
-before_install:
-  - nvm install $NODE_VERSION
-  - npm i -g codecov
-  - npm i -g yarn
 # Replace Travis's default Maven installation step with a no-op.
 # This avoids redundantly pre-running 'mvn install -DskipTests' every time.
 install: true
-cache:
-  yarn: true
 # Replace Travis's default build step.
 # Run all Maven phases at once up through verify, install, and deploy.
 script:
-  - nvm use $NODE_VERSION
   - mvn clean verify
-  - yarn
-  - yarn run lint
-  - yarn run cover-client
   - codecov
-  - yarn run build
 
 # If sudo is disabled, CI runs on container based infrastructure (allows caching &c.)
 sudo: false
