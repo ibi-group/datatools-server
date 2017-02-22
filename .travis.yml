@@ -3,10 +3,6 @@ language: java
 # Travis doesn't (yet) support OpenJDK 8
 jdk:
   - oraclejdk8
-#before_install:
-#  - nvm install $NODE_VERSION
-#  - npm i -g codecov
-#  - npm i -g yarn
 
 # Replace Travis's default Maven installation step with a no-op.
 # This avoids redundantly pre-running 'mvn install -DskipTests' every time.
