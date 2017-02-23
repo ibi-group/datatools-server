@@ -1,44 +1,20 @@
 language: java
-
-# Travis doesn't (yet) support OpenJDK 8
 jdk:
   - oraclejdk8
-
-# Replace Travis's default Maven installation step with a no-op.
-# This avoids redundantly pre-running 'mvn install -DskipTests' every time.
 install: true
-# If sudo is disabled, CI runs on container based infrastructure (allows caching &c.).
 sudo: false
-# Retain the local Maven repository to speed up builds.
 cache:
   directories:
     - "$HOME/.m2/repository"
-# Replace Travis's default build step.
-# Run all Maven phases at once up through verify, install, and deploy.
 script:
   - mvn package
-
-env:
-  global:
-    # encrypted AWS access/secret keys to allow automated deployment to the Conveyal Maven repo on S3
-    - secure: "OaVKUTUs8pW0RO0E3KxLLJX+lf7Z/L1LqDShIidCpfHmyyA/h2kIaqW3riDT7+pMiPR8iUcdeRZ0NeMIF8Jy2z9BKdnh18S1t0vTcdSkozVNlmYLd+X1a+OHajk/Jm24wWV2XpRtYk+5633tF8VnQCMEHUIPuAi14fOJOZq2VYg="
-    - secure: "flPyKs8OTAn25VS25aQz4zzZ/GksAzwzIz1chue3wThVteTHyJWtOKOqlsFiesjIRukTG43Ek2TUrotVt8dVMk7SGJEPBU7+UT0cWzdT2M9uOuKiBD+373xVxrpRk04Gl2uQ9JJ4YT1QD1UtiUKvknd7y0vBf4GpAJb6G+r0ZgI="
-
-# Retain the local Maven repository to speed up builds.
-cache:
-  directories:
-    - "$HOME/.m2/repository"
-
-# Notify us of the build status on the Slack channel
 notifications:
   slack: conveyal:WQxmWiu8PdmujwLw4ziW72Gc
-
-# Push results to codecov.io
-after_success:
-  # Upload shaded JAR to S3. The un-shaded jar was deployed to our Maven repo during the main build.
-  # Ideally we'd use the Travis S3 deployer here instead of installing the AWS CLI software every time.
-  # See the analyst-server travis.yml for how to copy specific files to a subdirectory and deploy those.
-  - pip install --user awscli && export PATH=$PATH:~/.local/bin/
-  # Upload the shaded jar. It's named with "dt-" + git describe, which begins with the last tag name, so begins with the letter v.
-  # On the other hand, the main un-shaded artifact will begin with the project name 'datatools-server'.
-  - aws s3 cp --recursive --exclude "*" --include "dt-*.jar" /home/travis/build/conveyal/datatools-server/target s3://datatools-builds
+addons:
+  artifacts:
+    path: $(ls target/dt-*.jar)
+    key:
+      secure: 0jfJjYgNrIXZylc3kSpUtdt3EFcVdElzc769gGlAKwZ4WcaXlezjQQmdwZRGQj5nYjg4xKGyCLSfJC4UHSFS2c2O8gssLAZ9oySmGP0GKieq8rWXoXuWSVtP4U5jOrBgGuPuLzJu9yeAdPUQAvCJtFfw5bPj2CnliznYPMdUIkyTYW/ehWUNnKirL0cabjMMxGzq33FMTzJ0eHWM/XPXPp0Nnh1YLXkavXSyR7AsyPPXWx2r2rmERbWxu4C4JGB5eYEdXmJ2OyHV14AJuOdIyGHCb56ttUU85vxSwbZooPqM7w4MNbKr7hgaURAK4nhsQbd9LgRrWz9RmWpekTdLTvB3h+8ZivcoG83kQZD2jWDu4elTp/zg0V6Z2SDoS3mvQ/N9E/arzS4aMgeQFopvj1QRAv+xR3dMh9rD9agFesG2N2hpZ31iWbb9AlpNAldKzV2fz/yirSF+j374k3RKlkLMFvzVriBcaK4ehYLtfs0gi89xlo8/+V0vLSHDxSIKjg1kFiO2H1f7I+G21vXNYz2L5bSSgb4R0Tc3of5f/TTyTc9nkSNEg3VklwJEE38gutkJf/Ue7Uy9DxHUGMmpNTkBh/yymqX0EoxCtXeZi+Z9FcECP4BBLqIfmBIXs56PSCegxmmgX+Sbdsl2nLJwT4L0sciLEfvqJp+I4xUIu+g=
+    secret:
+      secure: iubobdkbB0sJGFheo5vWGYwuKt/nlCvgKo4eb+sp0j2J70KvcOsk+uUidxbi7p7XG6AhmX2G0h5Sw5IXTmYfs32ZEYsxgNqxuht7vNvw7lrlFAhIq+P5uho/1VWTx5ObbUnNVkuesqaVFKWcfN83f8f5YYD8Q3C0YXLufIhRATkjTPhaJwmzpyQZC4G0Y2zz+o1cAP5InC2HoiuVIoGI5iUy4KU7XHkZTmiQelm5eQgsxnu7Cj/h77sLUicy7Q3VpriL7Xrwr8CWVvi0KjHOWgBwlF1CqIFnIlt7wpWqHLKh8cKSrMgb07NtZpvjy/giTZxBM4lfm3Pixh+Wqwnjm3WT8dgWMEju/PEmVzoRb37BHGj7RPOf0OOcTOZGEmyfwpQQ4dN2fJPwuSLAaEnOxjrZ//uNJ3QsSj7LrPNGUK4NcQBGMSGzzY2yj6vzllZtQkReAtizUbx7MrriCYPg3slMD/JRtVugNfbH6ceS9EhHczjbRTXa28yOk2TO7H7whUfn5JT1N+NM/Oo0abzEsU0CDUT+37JhPtoZql+dc2cj3YyVigSZFHA/5ICbnZdjqvjrNjO3DyVI1TcIYIArgfyd+oUWbGUZyCFMT3+wa7kAP4k81D8tmCiWJy4gcK3RsXxooL+f8EZSqFxpih77Kw4cAOJbpZ5+xImeBMRMbe8=
+    bucket: datatools-builds
