@@ -7,6 +7,12 @@ jdk:
 # Replace Travis's default Maven installation step with a no-op.
 # This avoids redundantly pre-running 'mvn install -DskipTests' every time.
 install: true
+# If sudo is disabled, CI runs on container based infrastructure (allows caching &c.).
+sudo: false
+# Retain the local Maven repository to speed up builds.
+cache:
+  directories:
+    - "$HOME/.m2/repository"
 # Replace Travis's default build step.
 # Run all Maven phases at once up through verify, install, and deploy.
 script:
@@ -17,9 +23,6 @@ env:
     # encrypted AWS access/secret keys to allow automated deployment to the Conveyal Maven repo on S3
     - secure: "OaVKUTUs8pW0RO0E3KxLLJX+lf7Z/L1LqDShIidCpfHmyyA/h2kIaqW3riDT7+pMiPR8iUcdeRZ0NeMIF8Jy2z9BKdnh18S1t0vTcdSkozVNlmYLd+X1a+OHajk/Jm24wWV2XpRtYk+5633tF8VnQCMEHUIPuAi14fOJOZq2VYg="
     - secure: "flPyKs8OTAn25VS25aQz4zzZ/GksAzwzIz1chue3wThVteTHyJWtOKOqlsFiesjIRukTG43Ek2TUrotVt8dVMk7SGJEPBU7+UT0cWzdT2M9uOuKiBD+373xVxrpRk04Gl2uQ9JJ4YT1QD1UtiUKvknd7y0vBf4GpAJb6G+r0ZgI="
-
-# If sudo is disabled, CI runs on container based infrastructure (allows caching &c.)
-sudo: false
 
 # Retain the local Maven repository to speed up builds.
 cache:
@@ -38,4 +41,4 @@ after_success:
   - pip install --user awscli && export PATH=$PATH:~/.local/bin/
   # Upload the shaded jar. It's named with "dt-" + git describe, which begins with the last tag name, so begins with the letter v.
   # On the other hand, the main un-shaded artifact will begin with the project name 'datatools-server'.
-  - aws s3 cp --recursive --exclude "*" --include "dt-*.jar" /home/travis/build/conveyal/datatools/target s3://datatools-builds
+  - aws s3 cp --recursive --exclude "*" --include "dt-*.jar" /home/travis/build/conveyal/datatools-server/target s3://datatools-builds
