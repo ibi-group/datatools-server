@@ -38,4 +38,10 @@ notifications:
 
 # Push results to codecov.io
 after_success:
-  - bash <(curl -s https://codecov.io/bash)
+  # Upload shaded JAR to S3. The un-shaded jar was deployed to our Maven repo during the main build.
+  # Ideally we'd use the Travis S3 deployer here instead of installing the AWS CLI software every time.
+  # See the analyst-server travis.yml for how to copy specific files to a subdirectory and deploy those.
+  - pip install --user awscli && export PATH=$PATH:~/.local/bin/
+  # Upload the shaded jar. It's named with "dt-" + git describe, which begins with the last tag name, so begins with the letter v.
+  # On the other hand, the main un-shaded artifact will begin with the project name 'datatools-server'.
+  - aws s3 cp --recursive --exclude "*" --include "dt-*.jar" /home/travis/build/conveyal/datatools/target s3://datatools-builds
