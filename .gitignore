@@ -17,4 +17,4 @@ config_server.yml
 configurations/*
 !configurations/default
 tmp/
-shade/
+deploy/

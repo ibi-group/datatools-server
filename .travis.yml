@@ -14,16 +14,18 @@ script:
 notifications:
   slack: conveyal:WQxmWiu8PdmujwLw4ziW72Gc
 before_deploy:
-- mkdir shade
+- mkdir deploy
 - ls
-- cp target/dt-*.jar shade/
+- cp target/dt-*.jar deploy/
+- ls deploy
 deploy:
+  skip_cleanup: true
   provider: s3
   access_key_id: AKIAJISY76KTZBNHS4SA
   secret_access_key:
     secure: txyT+nwgYM+JKM9m+yj+VmOzu3B8PZle12bucZN7lD/uy25y7qVSAO+hqdj5mHR2j3EZ57BYzPbrma0DnFe7pKJKYPss3C7LeU/NEsVRsJp0cpsMwZnnJGdxHYLa5Q8/RsW0LPhO6LWk2XRswJfv4/oCjPBKJOGip/IYr03rFu7+QWNmQ8CAlAdIHrgoGayfX99x/6GZ6fZ37IweUY9/YGdjT8D7IWF0XQ5kkkyaWBw/nDZAKbqZrpfPxykwJhnKzLa1SpAuFjzAU6QkGilptod/ZmF1NdT9XZMqy1Dgwvs84lGoI2T5KtZ12UCKKZa3e5masyrfQjgmnr14nDmWNq1dZswhTw8nacq9f5FSu56fuw5dA0CggZAn+BrHuEkbL+0Kp5Bdj7eOIkB3RDERO6jW8SHSGB/XiAG27j4MSsjA1FvipMYYSo8LTsik3YfFjNHapkLHcbqwzpMqW8E6pe2towcNR1Hnn+EbdIUJabxUrYAF71+TxlewbTqOF3ZcAvW6Qwn8A06aCyNvZO0+Yk6xQItuf/PWXAYp1RI5B4w6X+ylXvoDeFtB+KJK3CiJYp7UKT32Kj6YP+r1m3KJ8PJ4Spqzfll21jTLa9CYS+7ZtXHxwJunNRzTQ3h90c810KhWlgcreIT/OX5NhyafcwlnPQ1ijKa/i7o+4JjCRKI=
   bucket: datatools-builds
-  local-dir: shade
+  local-dir: deploy
   acl: public_read
   on:
     repo: conveyal/datatools-server
