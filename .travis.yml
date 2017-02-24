@@ -15,9 +15,7 @@ notifications:
   slack: conveyal:WQxmWiu8PdmujwLw4ziW72Gc
 before_deploy:
 - mkdir deploy
-- ls
 - cp target/dt-*.jar deploy/
-- ls deploy
 deploy:
   skip_cleanup: true
   provider: s3
