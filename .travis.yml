@@ -15,6 +15,7 @@ notifications:
   slack: conveyal:WQxmWiu8PdmujwLw4ziW72Gc
 before_deploy:
 - mkdir shade
+- ls
 - cp target/dt-*.jar shade/
 deploy:
   provider: s3
