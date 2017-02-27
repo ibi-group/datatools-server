@@ -158,6 +158,7 @@ public class FeedVersion extends Model implements Serializable {
     public File newGtfsFile(InputStream inputStream) {
         File file = feedStore.newFeed(id, inputStream, getFeedSource());
         this.fileSize = file.length();
+        this.save();
         LOG.info("New GTFS file saved: {}", id);
         return file;
     }
