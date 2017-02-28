@@ -56,7 +56,7 @@ public class FeedSource extends Model implements Cloneable {
      */
     @JsonIgnore
     public Project getProject () {
-        return Project.get(projectId);
+        return projectId != null ? Project.get(projectId) : null;
     }
 
     public String getOrganizationId () {

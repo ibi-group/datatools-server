@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.controllers.api;
 
 import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.CopyObjectRequest;
+import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
@@ -117,6 +118,9 @@ public class FeedSourceController {
 
         // check permissions before saving
         requestFeedSource(req, source, "create");
+        if (source.projectId == null) {
+            halt(400, SparkUtils.formatJSON("Must provide project ID for feed source", 400));
+        }
         source.save();
 
         for(String resourceType : DataManager.feedResources.keySet()) {
