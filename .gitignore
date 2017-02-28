@@ -4,17 +4,17 @@ dist
 *.log
 coverage
 .idea
-server_config.js
-src/main/client/config.js
-application.conf
 target/
 .java-version
 datatools.iml
-src/main/client/config.js
 datatools-manager.iml
-config.yml
-config_server.yml
-configurations/*
-!configurations/default
 tmp/
 deploy/
+
+# Configurations
+configurations/*
+!configurations/default
+
+# Secret config files
+env.yml
+env.yml-original
