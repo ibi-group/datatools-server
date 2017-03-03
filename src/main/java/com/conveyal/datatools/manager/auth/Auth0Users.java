@@ -25,13 +25,13 @@ import java.util.HashSet;
  * Created by landon on 4/26/16.
  */
 public class Auth0Users {
-    private static String AUTH0_DOMAIN = DataManager.getConfigPropertyAsText("auth0.domain");
-    private static String AUTH0_API_TOKEN = DataManager.getConfigPropertyAsText("auth0.api_token");
+    private static String AUTH0_DOMAIN = DataManager.getConfigPropertyAsText("AUTH0_DOMAIN");
+    private static String AUTH0_API_TOKEN = DataManager.getConfigPropertyAsText("AUTH0_TOKEN");
     private static ObjectMapper mapper = new ObjectMapper();
     private static final Logger LOG = LoggerFactory.getLogger(Auth0Users.class);
 
     private static URI getUrl(String searchQuery, int page, int perPage, boolean includeTotals) {
-        String clientId = DataManager.getConfigPropertyAsText("auth0.client_id");
+        String clientId = DataManager.getConfigPropertyAsText("AUTH0_CLIENT_ID");
 
         // always filter users by datatools client_id
         String defaultQuery = "app_metadata.datatools.client_id:" + clientId;

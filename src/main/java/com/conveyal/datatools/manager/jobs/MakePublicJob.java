@@ -42,6 +42,7 @@ public class MakePublicJob extends MonitorableJob {
 
     @Override
     public void run() {
+        LOG.info("Generating new html for public feeds");
         String output;
         String title = "Public Feeds";
         StringBuilder r = new StringBuilder();
@@ -95,5 +96,6 @@ public class MakePublicJob extends MonitorableJob {
         FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, folder + fileName, CannedAccessControlList.PublicRead);
 
         jobFinished();
+        LOG.info("Public page updated on s3");
     }
 }

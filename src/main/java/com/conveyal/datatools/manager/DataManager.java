@@ -280,8 +280,8 @@ public class DataManager {
         FileInputStream serverConfigStream;
 
         if (args.length == 0) {
-            configStream = new FileInputStream(new File("config.yml"));
-            serverConfigStream = new FileInputStream(new File("config_server.yml"));
+            configStream = new FileInputStream(new File("configurations/default/env.yml"));
+            serverConfigStream = new FileInputStream(new File("configurations/default/server.yml"));
         }
         else {
             configStream = new FileInputStream(new File(args[0]));
