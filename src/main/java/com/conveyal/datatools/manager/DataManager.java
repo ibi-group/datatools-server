@@ -239,7 +239,10 @@ public class DataManager {
         String parts[] = name.split("\\.");
         JsonNode node = config;
         for(int i = 0; i < parts.length; i++) {
-            if(node == null) return null;
+            if(node == null) {
+                LOG.warn("Config property {} not found", name);
+                return null;
+            }
             node = node.get(parts[i]);
         }
         return node;
@@ -247,7 +250,12 @@ public class DataManager {
 
     public static String getConfigPropertyAsText(String name) {
         JsonNode node = getConfigProperty(name);
-        return (node != null) ? node.asText() : null;
+        if (node != null) {
+            return node.asText();
+        } else {
+            LOG.warn("Config property {} not found", name);
+            return null;
+        }
     }
 
     public static boolean isModuleEnabled(String moduleName) {
