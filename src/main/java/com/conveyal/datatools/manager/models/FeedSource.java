@@ -31,6 +31,7 @@ import java.net.URL;
 import java.util.*;
 import java.util.stream.Collectors;
 
+import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static spark.Spark.halt;
 
 /**
@@ -414,9 +415,13 @@ public class FeedSource extends Model implements Cloneable {
         return this.noteIds != null ? this.noteIds.size() : 0;
     }
 
+    public String getPublicKey () {
+        return "public/" + getCleanName(this.name) + ".zip";
+    }
+
     public void makePublic() {
         String sourceKey = FeedStore.s3Prefix + this.id + ".zip";
-        String publicKey = "public/" + this.name + ".zip";
+        String publicKey = getPublicKey();
         if (FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, sourceKey)) {
             LOG.info("copying feed {} to s3 public folder", this);
             FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, sourceKey, CannedAccessControlList.PublicRead);
@@ -427,7 +432,7 @@ public class FeedSource extends Model implements Cloneable {
 
     public void makePrivate() {
         String sourceKey = FeedStore.s3Prefix + this.id + ".zip";
-        String publicKey = "public/" + this.name + ".zip";
+        String publicKey = getPublicKey();
         if (FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, sourceKey)) {
             LOG.info("removing feed {} from s3 public folder", this);
             FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, sourceKey, CannedAccessControlList.AuthenticatedRead);
