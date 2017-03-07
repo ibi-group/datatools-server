@@ -98,7 +98,7 @@ public class MtcFeedResource implements ExternalFeedResource {
                 for (FeedSource existingSource : project.getProjectFeedSources()) {
                     ExternalFeedSourceProperty agencyIdProp =
                             ExternalFeedSourceProperty.find(existingSource, this.getResourceType(), "AgencyId");
-                    if (agencyIdProp != null && agencyIdProp.value.equals(car.AgencyId)) {
+                    if (agencyIdProp != null && agencyIdProp.value != null && agencyIdProp.value.equals(car.AgencyId)) {
                         //System.out.println("already exists: " + car.AgencyId);
                         source = existingSource;
                     }
