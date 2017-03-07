@@ -19,6 +19,8 @@ import com.conveyal.gtfs.GTFSCache;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.google.common.io.Resources;
+import org.apache.commons.io.Charsets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.utils.IOUtils;
@@ -27,6 +29,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -111,7 +114,8 @@ public class DataManager {
 
         // Editor routes
         if ("true".equals(getConfigPropertyAsText("modules.editor.enabled"))) {
-            gtfsConfig = yamlMapper.readTree(new File("gtfs.yml"));
+            String gtfs = IOUtils.toString(DataManager.class.getResourceAsStream("/gtfs/gtfs.yml"));
+            gtfsConfig = yamlMapper.readTree(gtfs);
             AgencyController.register(apiPrefix);
             CalendarController.register(apiPrefix);
             RouteController.register(apiPrefix);
@@ -137,7 +141,8 @@ public class DataManager {
         }
         if (isModuleEnabled("gtfsplus")) {
             GtfsPlusController.register(apiPrefix);
-            gtfsPlusConfig = yamlMapper.readTree(new File("gtfsplus.yml"));
+            URL gtfsplus = DataManager.class.getResource("/gtfs/gtfsplus.yml");
+            gtfsPlusConfig = yamlMapper.readTree(Resources.toString(gtfsplus, Charsets.UTF_8));
         }
         if (isModuleEnabled("user_admin")) {
             UserController.register(apiPrefix);
