@@ -28,4 +28,4 @@ deploy:
   acl: public_read
   on:
     repo: conveyal/datatools-server
-    branch: dev
+    all_branches: true
