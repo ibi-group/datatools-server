@@ -16,6 +16,7 @@ notifications:
 before_deploy:
 - mkdir deploy
 - cp target/dt-*.jar deploy/
+- cp target/dt-*.jar deploy/dt-latest.jar
 deploy:
   skip_cleanup: true
   provider: s3
