@@ -63,7 +63,7 @@ public class MakePublicJob extends MonitorableJob {
         project.getProjectFeedSources().stream()
                 .filter(fs -> fs.isPublic && fs.getLatest() != null)
                 .forEach(fs -> {
-                    String url = fs.url != null ? fs.url.toString() : "https://s3.amazonaws.com/" + DataManager.feedBucket + fs.getPublicKey();
+                    String url = fs.url != null ? fs.url.toString() : String.join("/", "https://s3.amazonaws.com", DataManager.feedBucket, fs.getPublicKey());
                     FeedVersion latest = fs.getLatest();
                     r.append("<li>");
                     r.append("<a href=\"" + url + "\">");
