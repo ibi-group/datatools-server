@@ -427,6 +427,8 @@ public class FeedSource extends Model implements Cloneable {
             FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, sourceKey, CannedAccessControlList.PublicRead);
             FeedStore.s3Client.copyObject(DataManager.feedBucket, sourceKey, DataManager.feedBucket, publicKey);
             FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, publicKey, CannedAccessControlList.PublicRead);
+        } else {
+            LOG.warn("Could not locate source feed {} on s3 at {}", this, sourceKey);
         }
     }
 
