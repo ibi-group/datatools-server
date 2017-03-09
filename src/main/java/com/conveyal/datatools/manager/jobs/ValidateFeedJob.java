@@ -41,6 +41,7 @@ public class ValidateFeedJob extends MonitorableJob {
             status.message = "Running validation...";
             status.percentComplete = 30;
         }
+        feedVersion.setUserById(owner);
         feedVersion.validate(eventBus);
         feedVersion.save();
         if (!status.error)
