@@ -310,9 +310,14 @@ public class GtfsPlusController {
 
         int rowIndex = 0;
         while((line = in.readLine()) != null) {
-            String[] values = line.split(",", -1);
+            String[] values = line.split(",(?=([^\"]*\"[^\"]*\")*[^\"]*$)", -1);
             for(int v=0; v < values.length; v++) {
-                validateTableValue(issues, tableId, rowIndex, values[v], fieldNodes[v], gtfsFeed);
+                String value = values[v];
+
+                if (value.length() > 0 && value.charAt(0) == '"' && value.charAt(value.length() - 1) == '"') {
+                    value = value.substring(1, value.length() - 2);
+                }
+                validateTableValue(issues, tableId, rowIndex, value, fieldNodes[v], gtfsFeed);
             }
             rowIndex++;
         }
