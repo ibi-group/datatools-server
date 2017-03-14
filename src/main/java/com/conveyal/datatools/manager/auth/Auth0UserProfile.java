@@ -283,6 +283,9 @@ public class Auth0UserProfile {
 
     public boolean canAdministerOrganization(String organizationId) {
 //      TODO: adapt for specific org
+        if (organizationId == null) {
+            return false;
+        }
         Organization org = getAuth0Organization();
         if (org != null && org.organizationId.equals(organizationId)) {
             for(Permission permission : org.permissions) {
@@ -327,7 +330,6 @@ public class Auth0UserProfile {
         }
         Project[] projectList = app_metadata.getDatatoolsInfo().projects;
         for(Project project : projectList) {
-            System.out.println("project_id: " + project.project_id);
             if (project.project_id.equals(projectID)) {
                 return checkFeedPermission(project, feedID, "manage-feed");
             }
@@ -341,7 +343,6 @@ public class Auth0UserProfile {
         }
         Project[] projectList = app_metadata.getDatatoolsInfo().projects;
         for(Project project : projectList) {
-            System.out.println("project_id: " + project.project_id);
             if (project.project_id.equals(projectID)) {
                 return checkFeedPermission(project, feedID, "edit-gtfs");
             }
@@ -355,7 +356,6 @@ public class Auth0UserProfile {
         }
         Project[] projectList = app_metadata.getDatatoolsInfo().projects;
         for(Project project : projectList) {
-            System.out.println("project_id: " + project.project_id);
             if (project.project_id.equals(projectID)) {
                 return checkFeedPermission(project, feedID, "approve-gtfs");
             }
