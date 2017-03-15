@@ -16,7 +16,7 @@ notifications:
 before_deploy:
 - mkdir deploy
 - cp target/dt-*.jar deploy/
-- cp "target/dt-*.jar" "deploy/dt-latest-$(git rev-parse --abbrev-ref HEAD).jar"
+- cp "target/dt-$(git describe --always).jar" "deploy/dt-latest-$(git rev-parse --abbrev-ref HEAD).jar"
 deploy:
   skip_cleanup: true
   provider: s3
