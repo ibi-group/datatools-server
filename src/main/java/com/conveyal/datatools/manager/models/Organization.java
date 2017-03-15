@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.manager.persistence.DataStore;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonView;
 
 import java.io.Serializable;
@@ -15,6 +16,7 @@ import java.util.stream.Collectors;
 /**
  * Created by landon on 1/30/17.
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class Organization extends Model implements Serializable {
     private static final long serialVersionUID = 1L;
     private static DataStore<Organization> organizationStore = new DataStore<>("organizations");

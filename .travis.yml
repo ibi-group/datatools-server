@@ -16,7 +16,7 @@ notifications:
 before_deploy:
 - mkdir deploy
 - cp target/dt-*.jar deploy/
-- cp target/dt-*.jar deploy/dt-latest.jar
+- cp "target/dt-*.jar" "deploy/dt-latest-$(git rev-parse --abbrev-ref HEAD).jar"
 deploy:
   skip_cleanup: true
   provider: s3
@@ -28,4 +28,4 @@ deploy:
   acl: public_read
   on:
     repo: conveyal/datatools-server
-    branch: dev
+    all_branches: true

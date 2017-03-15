@@ -1,11 +1,13 @@
 package com.conveyal.datatools.manager.controllers.api;
 
+import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.conveyal.gtfs.GTFSFeed;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
@@ -52,7 +54,6 @@ public class GtfsPlusController {
         InputStream uploadStream;
         try {
             uploadStream = part.getInputStream();
-            //v.newGtfsFile(uploadStream);
             gtfsPlusStore.newFeed(feedVersionId, uploadStream, null);
         } catch (Exception e) {
             LOG.error("Unable to open input stream from upload");
@@ -152,6 +153,9 @@ public class GtfsPlusController {
         File file = gtfsPlusStore.getFeed(feedVersionId);
         if(file == null) {
             FeedVersion feedVersion = FeedVersion.get(feedVersionId);
+            if (feedVersion == null) {
+                halt(400, SparkUtils.formatJSON("Feed version ID is not valid", 400));
+            }
             file = feedVersion.getGtfsFile();
         }
 
@@ -262,10 +266,11 @@ public class GtfsPlusController {
         GTFSFeed gtfsFeed = feedVersion.getGtfsFeed();
         // check for saved GTFS+ data
         File file = gtfsPlusStore.getFeed(feedVersionId);
-        if(file == null) {
+        if (file == null) {
+            LOG.warn("GTFS+ file not found, loading from main version GTFS.");
             file = feedVersion.getGtfsFile();
         }
-
+        int gtfsPlusTableCount = 0;
         try {
             ZipFile zipFile = new ZipFile(file);
             final Enumeration<? extends ZipEntry> entries = zipFile.entries();
@@ -275,6 +280,7 @@ public class GtfsPlusController {
                     JsonNode tableNode = DataManager.gtfsPlusConfig.get(i);
                     if(tableNode.get("name").asText().equals(entry.getName())) {
                         LOG.info("Validating GTFS+ table: " + entry.getName());
+                        gtfsPlusTableCount++;
                         validateTable(issues, tableNode, zipFile.getInputStream(entry), gtfsFeed);
                     }
                 }
@@ -284,7 +290,7 @@ public class GtfsPlusController {
             e.printStackTrace();
             halt(500);
         }
-
+        LOG.info("GTFS+ tables found: {}/{}", gtfsPlusTableCount, DataManager.gtfsPlusConfig.size());
         return issues;
     }
 
@@ -310,7 +316,7 @@ public class GtfsPlusController {
 
         int rowIndex = 0;
         while((line = in.readLine()) != null) {
-            String[] values = line.split(",", -1);
+            String[] values = line.split(",(?=([^\"]*\"[^\"]*\")*[^\"]*$)", -1);
             for(int v=0; v < values.length; v++) {
                 validateTableValue(issues, tableId, rowIndex, values[v], fieldNodes[v], gtfsFeed);
             }
@@ -329,6 +335,23 @@ public class GtfsPlusController {
         }
 
         switch(fieldNode.get("inputType").asText()) {
+            case "DROPDOWN":
+                boolean invalid = true;
+                ArrayNode options = (ArrayNode) fieldNode.get("options");
+                for (JsonNode option : options) {
+                    String optionValue = option.get("value").asText();
+
+                    // if value is found in list of options, break out of loop
+                    if (optionValue.equals(value) || !fieldNode.get("required").asBoolean() && value.equals("")) {
+                        invalid = false;
+                        break;
+                    }
+                }
+                if (invalid) {
+                    System.out.println("invalid: " + " " + value);
+                    issues.add(new ValidationIssue(tableId, fieldName, rowIndex, "Value: " + value + " is not a valid option."));
+                }
+                break;
             case "TEXT":
                 if(fieldNode.get("maxLength") != null) {
                     int maxLength = fieldNode.get("maxLength").asInt();
@@ -367,6 +390,7 @@ public class GtfsPlusController {
     }
 
     public static class ValidationIssue implements Serializable {
+        private static final long serialVersionUID = 1L;
         public String tableId;
         public String fieldName;
         public int rowIndex;

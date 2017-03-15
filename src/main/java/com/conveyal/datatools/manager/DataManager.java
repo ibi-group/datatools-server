@@ -67,6 +67,9 @@ public class DataManager {
     public static boolean useS3;
     public static final String apiPrefix = "/api/manager/";
 
+    public static final String DEFAULT_ENV = "configurations/default/env.yml";
+    public static final String DEFAULT_CONFIG = "configurations/default/server.yml";
+
     private static List<String> apiFeedSources = new ArrayList<>();
 
     public static void main(String[] args) throws IOException {
@@ -293,10 +296,14 @@ public class DataManager {
         FileInputStream serverConfigStream;
 
         if (args.length == 0) {
-            configStream = new FileInputStream(new File("configurations/default/env.yml"));
-            serverConfigStream = new FileInputStream(new File("configurations/default/server.yml"));
+            LOG.warn("Using default env.yml: {}", DEFAULT_ENV);
+            LOG.warn("Using default server.yml: {}", DEFAULT_CONFIG);
+            configStream = new FileInputStream(new File(DEFAULT_ENV));
+            serverConfigStream = new FileInputStream(new File(DEFAULT_CONFIG));
         }
         else {
+            LOG.info("Loading env.yml: {}", args[0]);
+            LOG.info("Loading server.yml: {}", args[1]);
             configStream = new FileInputStream(new File(args[0]));
             serverConfigStream = new FileInputStream(new File(args[1]));
         }

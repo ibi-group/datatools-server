@@ -178,19 +178,24 @@ public class FeedStore {
         // For s3 storage (store locally and let gtfsCache handle loading feed to s3)
         return storeFeedLocally(id, inputStream, feedSource);
     }
-
     private File storeFeedLocally(String id, InputStream inputStream, FeedSource feedSource) {
-        // store latest as feed-source-id.zip
+        File feed = null;
+        try {
+            // write feed to specified ID.
+            // NOTE: depending on the feed store, there may not be a feedSource provided (e.g., gtfsplus)
+            feed = writeFileUsingInputStream(id, inputStream);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
         if (feedSource != null) {
             try {
-                File version = writeFileUsingInputStream(id, inputStream);
-                copyVersionToLatest(version, feedSource);
-                return version;
+                // store latest as feed-source-id.zip if feedSource provided
+                copyVersionToLatest(feed, feedSource);
             } catch (Exception e) {
                 e.printStackTrace();
             }
         }
-        return null;
+        return feed;
     }
 
     private void copyVersionToLatest(File version, FeedSource feedSource) {
@@ -208,6 +213,7 @@ public class FeedStore {
         OutputStream output = null;
         File out = new File(path, filename);
         try {
+            LOG.info("Writing file to {}/{}", path, filename);
             output = new FileOutputStream(out);
             byte[] buf = new byte[1024];
             int bytesRead;
