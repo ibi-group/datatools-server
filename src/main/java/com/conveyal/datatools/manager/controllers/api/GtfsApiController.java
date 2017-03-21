@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.amazonaws.services.s3.AmazonS3Client;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
@@ -28,7 +29,7 @@ public class GtfsApiController {
     public static final Logger LOG = LoggerFactory.getLogger(GtfsApiController.class);
     public static String feedBucket;
     public static FeedUpdater feedUpdater;
-    private static AmazonS3Client s3 = new AmazonS3Client();
+    private static AmazonS3 s3 = AmazonS3ClientBuilder.defaultClient();
     public static String bucketFolder;
     public static void register (String apiPrefix) throws IOException {
 

@@ -5,6 +5,7 @@ import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
+import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.conveyal.datatools.manager.DataManager;
@@ -58,16 +59,9 @@ public class S3Utils {
         }
 
         try {
-//            LOG.info("Uploading route branding to S3");
-            // Upload file to s3
-            AWSCredentials creds;
-
-            // default credentials providers, e.g. IAM role
-            creds = new DefaultAWSCredentialsProviderChain().getCredentials();
-
             String keyName = "branding/" + id + extension;
             url = "https://s3.amazonaws.com/" + s3Bucket + "/" + keyName;
-            AmazonS3 s3client = new AmazonS3Client(creds);
+            AmazonS3 s3client = AmazonS3ClientBuilder.defaultClient();
             s3client.putObject(new PutObjectRequest(
                     s3Bucket, keyName, tempFile)
                     // grant public read

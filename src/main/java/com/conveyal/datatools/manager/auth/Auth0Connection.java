@@ -26,9 +26,9 @@ public class Auth0Connection {
         if(token == null) {
             halt(401, "Could not find authorization token");
         }
-
+        Auth0UserProfile profile = null;
         try {
-            Auth0UserProfile profile = getUserProfile(token);
+            profile = getUserProfile(token);
             req.attribute("user", profile);
         }
         catch(Exception e) {
@@ -82,6 +82,17 @@ public class Auth0Connection {
         in.close();
 
         ObjectMapper m = new ObjectMapper();
-        return m.readValue(response.toString(), Auth0UserProfile.class);
+        Auth0UserProfile profile = null;
+        String userString = response.toString();
+        try {
+            profile = m.readValue(userString, Auth0UserProfile.class);
+        }
+        catch(Exception e) {
+            Object json = m.readValue(userString, Object.class);
+            System.out.println(m.writerWithDefaultPrettyPrinter().writeValueAsString(json));
+            LOG.warn("Could not verify user", e);
+            halt(401, "Could not verify user");
+        }
+        return profile;
     }
 }
