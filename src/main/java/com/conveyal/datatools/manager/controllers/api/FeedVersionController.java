@@ -1,5 +1,21 @@
 package com.conveyal.datatools.manager.controllers.api;
 
+import com.amazonaws.auth.AWSCredentialsProviderChain;
+import com.amazonaws.auth.policy.Action;
+import com.amazonaws.auth.policy.Condition;
+import com.amazonaws.auth.policy.Policy;
+import com.amazonaws.auth.policy.Principal;
+import com.amazonaws.auth.policy.Resource;
+import com.amazonaws.auth.policy.Statement;
+import com.amazonaws.auth.policy.actions.S3Actions;
+import com.amazonaws.services.securitytoken.AWSSecurityTokenService;
+import com.amazonaws.services.securitytoken.AWSSecurityTokenServiceClient;
+import com.amazonaws.services.securitytoken.AWSSecurityTokenServiceClientBuilder;
+import com.amazonaws.services.securitytoken.model.AssumeRoleRequest;
+import com.amazonaws.services.securitytoken.model.AssumeRoleResult;
+import com.amazonaws.services.securitytoken.model.Credentials;
+import com.amazonaws.services.securitytoken.model.GetSessionTokenRequest;
+import com.amazonaws.services.securitytoken.model.GetSessionTokenResult;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.BuildTransportNetworkJob;
@@ -347,11 +363,37 @@ public class FeedVersionController  {
         return downloadFile(version.getGtfsFile(), res);
     }
 
-    public static FeedDownloadToken getDownloadToken (Request req, Response res) {
+    public static Credentials getDownloadToken (Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "view");
-        FeedDownloadToken token = new FeedDownloadToken(version);
-        token.save();
-        return token;
+//        FeedDownloadToken token = new FeedDownloadToken(version);
+//        token.save();
+        String ROLE_ARN = "arn:aws:iam::264458780038:role/datatools-staging";
+        AWSSecurityTokenService stsClient = AWSSecurityTokenServiceClientBuilder.defaultClient();
+        Policy policy = new Policy();
+        policy.setId("datatools-feed-access");
+        Statement statement = new Statement(Statement.Effect.Allow);
+        Set<Action> actions = new HashSet<>();
+        actions.add(S3Actions.GetObject);
+        statement.setActions(actions);
+        Resource resource = new Resource("arn:aws:s3:::datatools-staging/gtfs/" + version.id);
+        Set<Resource> resources = new HashSet<>();
+        resources.add(resource);
+        statement.setResources(resources);
+//        Set<Condition> conditions = new HashSet<>();
+//        Condition condition = new Condition();
+//        condition.setConditionKey();
+//        conditions.add();
+        Set<Statement> statements = new HashSet<>();
+        statements.add(statement);
+        policy.setStatements(statements);
+        AssumeRoleRequest assumeRequest = new AssumeRoleRequest()
+                .withRoleArn(ROLE_ARN)
+                .withPolicy(policy.toJson()) // some scheme that limits access to certain feeds
+                .withDurationSeconds(900) // 900 is minimum duration (seconds)
+                .withRoleSessionName("demo");
+        AssumeRoleResult assumeResult =
+                stsClient.assumeRole(assumeRequest);
+        return assumeResult.getCredentials();
     }
 
     private static FeedDownloadToken getPublicDownloadToken (Request req, Response res) {
