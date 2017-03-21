@@ -271,11 +271,11 @@ public class DataManager {
     }
 
     public static boolean isModuleEnabled(String moduleName) {
-        return "true".equals(getConfigPropertyAsText("modules." + moduleName + ".enabled"));
+        return hasConfigProperty("modules." + moduleName) && "true".equals(getConfigPropertyAsText("modules." + moduleName + ".enabled"));
     }
 
     public static boolean isExtensionEnabled(String extensionName) {
-        return "true".equals(getConfigPropertyAsText("extensions." + extensionName + ".enabled"));
+        return hasConfigProperty("extensions." + extensionName) && "true".equals(getConfigPropertyAsText("extensions." + extensionName + ".enabled"));
     }
 
     private static void registerExternalResources() {
