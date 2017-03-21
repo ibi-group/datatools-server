@@ -18,11 +18,10 @@ before_deploy:
 - cp target/dt-*.jar deploy/
 - cp "target/dt-$(git describe --always).jar" "deploy/dt-latest-$(git rev-parse --abbrev-ref HEAD).jar"
 deploy:
-  skip_cleanup: true
   provider: s3
   access_key_id: AKIAJISY76KTZBNHS4SA
   secret_access_key:
-    secure: txyT+nwgYM+JKM9m+yj+VmOzu3B8PZle12bucZN7lD/uy25y7qVSAO+hqdj5mHR2j3EZ57BYzPbrma0DnFe7pKJKYPss3C7LeU/NEsVRsJp0cpsMwZnnJGdxHYLa5Q8/RsW0LPhO6LWk2XRswJfv4/oCjPBKJOGip/IYr03rFu7+QWNmQ8CAlAdIHrgoGayfX99x/6GZ6fZ37IweUY9/YGdjT8D7IWF0XQ5kkkyaWBw/nDZAKbqZrpfPxykwJhnKzLa1SpAuFjzAU6QkGilptod/ZmF1NdT9XZMqy1Dgwvs84lGoI2T5KtZ12UCKKZa3e5masyrfQjgmnr14nDmWNq1dZswhTw8nacq9f5FSu56fuw5dA0CggZAn+BrHuEkbL+0Kp5Bdj7eOIkB3RDERO6jW8SHSGB/XiAG27j4MSsjA1FvipMYYSo8LTsik3YfFjNHapkLHcbqwzpMqW8E6pe2towcNR1Hnn+EbdIUJabxUrYAF71+TxlewbTqOF3ZcAvW6Qwn8A06aCyNvZO0+Yk6xQItuf/PWXAYp1RI5B4w6X+ylXvoDeFtB+KJK3CiJYp7UKT32Kj6YP+r1m3KJ8PJ4Spqzfll21jTLa9CYS+7ZtXHxwJunNRzTQ3h90c810KhWlgcreIT/OX5NhyafcwlnPQ1ijKa/i7o+4JjCRKI=
+    secure: q7dAuyyo+RRjG+fFR5uI+4Zojox853SdPPngbFjPvXs6Q6+umiErhIcb/vbfrrACQzDFond/8EsywfUfxv4FFSMoaWtAeTbs0MRZj5iBah7AzjrCRjAeWjke1Lq2K7IoGjHsCMKd/WBhfR6Jx6TpGDnq/7Bj0y2AgeKy6n7HG9lCJ+45BC0jDysl7nVdFpLKajBK+nUlLYhBvIIy1jxkoNThAbzu8HIKYTuTGvXKk4fT6KrtQW8yE/8A/aKPVTjlBL+HNINyEBuVyWuKjXHI88hEX7S2HxnIYfG3QSbzLDfYow3JLFUXpyp97fE6pQnA5V9HahuO3S8BJ46dWj+K2s4axV3qQGMeJCML71345ZbEak+rRx7ehZZuN8FXXWOrs7MOS0ZEMRzBhj/JHNgmidMGr+iVKyI/cAW+nM3suHz8IsPbWuqcenmco7u1M3DMGygP0c93Nb4cETPl+O6gSX4AzDRJUXRQklKLzfIQnScwiRJCKcT3TkmFDk3340RbSd1Dhs+0x3WCa+LrboVohAyfxJdSjgyiDIupckKdqBoMwkohhNvKVpd5XmSD3xaf0YFY+AzEViomNtd5QQbi37BRATI0Z3lnZb0603AllU8jep20ZsVMjPBi73VamYiZmESnXvlJCmpV+j4tXrnE1ZZ1cliifvGHHpwlnQtTYOg=
   bucket: datatools-builds
   local-dir: deploy
   acl: public_read
