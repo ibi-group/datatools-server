@@ -19,6 +19,7 @@ before_deploy:
 - cp "target/dt-$(git describe --always).jar" "deploy/dt-latest-$(git rev-parse --abbrev-ref HEAD).jar"
 deploy:
   provider: s3
+  skip_cleanup: true
   access_key_id: AKIAJISY76KTZBNHS4SA
   secret_access_key:
     secure: q7dAuyyo+RRjG+fFR5uI+4Zojox853SdPPngbFjPvXs6Q6+umiErhIcb/vbfrrACQzDFond/8EsywfUfxv4FFSMoaWtAeTbs0MRZj5iBah7AzjrCRjAeWjke1Lq2K7IoGjHsCMKd/WBhfR6Jx6TpGDnq/7Bj0y2AgeKy6n7HG9lCJ+45BC0jDysl7nVdFpLKajBK+nUlLYhBvIIy1jxkoNThAbzu8HIKYTuTGvXKk4fT6KrtQW8yE/8A/aKPVTjlBL+HNINyEBuVyWuKjXHI88hEX7S2HxnIYfG3QSbzLDfYow3JLFUXpyp97fE6pQnA5V9HahuO3S8BJ46dWj+K2s4axV3qQGMeJCML71345ZbEak+rRx7ehZZuN8FXXWOrs7MOS0ZEMRzBhj/JHNgmidMGr+iVKyI/cAW+nM3suHz8IsPbWuqcenmco7u1M3DMGygP0c93Nb4cETPl+O6gSX4AzDRJUXRQklKLzfIQnScwiRJCKcT3TkmFDk3340RbSd1Dhs+0x3WCa+LrboVohAyfxJdSjgyiDIupckKdqBoMwkohhNvKVpd5XmSD3xaf0YFY+AzEViomNtd5QQbi37BRATI0Z3lnZb0603AllU8jep20ZsVMjPBi73VamYiZmESnXvlJCmpV+j4tXrnE1ZZ1cliifvGHHpwlnQtTYOg=
