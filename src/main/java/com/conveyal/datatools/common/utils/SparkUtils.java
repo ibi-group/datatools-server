@@ -14,11 +14,11 @@ import static spark.Spark.halt;
  */
 public class SparkUtils {
 
-    public static Object downloadFile(File file, Response res) {
+    public static Object downloadFile(File file, String filename, Response res) {
         if(file == null) halt(404, "File is null");
 
         res.raw().setContentType("application/octet-stream");
-        res.raw().setHeader("Content-Disposition", "attachment; filename=" + file.getName());
+        res.raw().setHeader("Content-Disposition", "attachment; filename=" + filename);
 
         try {
             BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(res.raw().getOutputStream());
