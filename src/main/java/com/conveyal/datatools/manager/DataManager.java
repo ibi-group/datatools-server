@@ -63,6 +63,7 @@ public class DataManager {
     public static GTFSCache gtfsCache;
 
     public static String feedBucket;
+    public static String awsRole;
     public static String bucketFolder;
 
 //    public final AmazonS3Client s3Client;
@@ -96,6 +97,7 @@ public class DataManager {
         }
 
         feedBucket = getConfigPropertyAsText("application.data.gtfs_s3_bucket");
+        awsRole = getConfigPropertyAsText("application.data.aws_role");
         bucketFolder = FeedStore.s3Prefix;
 
         if (useS3) {

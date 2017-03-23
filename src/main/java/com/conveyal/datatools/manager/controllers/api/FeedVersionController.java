@@ -1,21 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.amazonaws.auth.AWSCredentialsProviderChain;
-import com.amazonaws.auth.policy.Action;
-import com.amazonaws.auth.policy.Condition;
-import com.amazonaws.auth.policy.Policy;
-import com.amazonaws.auth.policy.Principal;
-import com.amazonaws.auth.policy.Resource;
 import com.amazonaws.auth.policy.Statement;
 import com.amazonaws.auth.policy.actions.S3Actions;
-import com.amazonaws.services.securitytoken.AWSSecurityTokenService;
-import com.amazonaws.services.securitytoken.AWSSecurityTokenServiceClient;
-import com.amazonaws.services.securitytoken.AWSSecurityTokenServiceClientBuilder;
-import com.amazonaws.services.securitytoken.model.AssumeRoleRequest;
-import com.amazonaws.services.securitytoken.model.AssumeRoleResult;
-import com.amazonaws.services.securitytoken.model.Credentials;
-import com.amazonaws.services.securitytoken.model.GetSessionTokenRequest;
-import com.amazonaws.services.securitytoken.model.GetSessionTokenResult;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.BuildTransportNetworkJob;
@@ -26,6 +12,7 @@ import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
+import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.utils.HashUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.r5.analyst.PointSet;
@@ -62,6 +49,7 @@ import javax.servlet.MultipartConfigElement;
 import javax.servlet.ServletException;
 import javax.servlet.http.Part;
 
+import static com.conveyal.datatools.common.utils.S3Utils.getS3Credentials;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.manager.controllers.api.FeedSourceController.requestFeedSource;
 import static spark.Spark.*;
@@ -360,51 +348,18 @@ public class FeedVersionController  {
 
     private static Object downloadFeedVersionDirectly(Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "view");
-        return downloadFile(version.getGtfsFile(), res);
+        return downloadFile(version.getGtfsFile(), version.id, res);
     }
 
-    public static Credentials getDownloadToken (Request req, Response res) {
+    public static Object getDownloadToken (Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "view");
-//        FeedDownloadToken token = new FeedDownloadToken(version);
-//        token.save();
-        String ROLE_ARN = "arn:aws:iam::264458780038:role/datatools-staging";
-        AWSSecurityTokenService stsClient = AWSSecurityTokenServiceClientBuilder.defaultClient();
-        Policy policy = new Policy();
-        policy.setId("datatools-feed-access");
-        Statement statement = new Statement(Statement.Effect.Allow);
-        Set<Action> actions = new HashSet<>();
-        actions.add(S3Actions.GetObject);
-        statement.setActions(actions);
-        Resource resource = new Resource("arn:aws:s3:::datatools-staging/gtfs/" + version.id);
-        Set<Resource> resources = new HashSet<>();
-        resources.add(resource);
-        statement.setResources(resources);
-//        Set<Condition> conditions = new HashSet<>();
-//        Condition condition = new Condition();
-//        condition.setConditionKey();
-//        conditions.add();
-        Set<Statement> statements = new HashSet<>();
-        statements.add(statement);
-        policy.setStatements(statements);
-        AssumeRoleRequest assumeRequest = new AssumeRoleRequest()
-                .withRoleArn(ROLE_ARN)
-                .withPolicy(policy.toJson()) // some scheme that limits access to certain feeds
-                .withDurationSeconds(900) // 900 is minimum duration (seconds)
-                .withRoleSessionName("demo");
-        AssumeRoleResult assumeResult =
-                stsClient.assumeRole(assumeRequest);
-        return assumeResult.getCredentials();
-    }
-
-    private static FeedDownloadToken getPublicDownloadToken (Request req, Response res) {
-        FeedVersion version = requestFeedVersion(req, "view");
-        if(!version.getFeedSource().isPublic) {
-            halt(401, "Not a public feed");
-            return null;
+        if (DataManager.getConfigPropertyAsText("application.data.use_s3_storage").equals("true")) {
+            return getS3Credentials(DataManager.awsRole, DataManager.feedBucket, FeedStore.s3Prefix + version.id, Statement.Effect.Allow, S3Actions.GetObject, 900);
+        } else {
+            FeedDownloadToken token = new FeedDownloadToken(version);
+            token.save();
+            return token;
         }
-        FeedDownloadToken token = new FeedDownloadToken(version);
-        token.save();
-        return token;
     }
 
     private static JsonNode validate (Request req, Response res) {
@@ -435,7 +390,7 @@ public class FeedVersionController  {
 
         token.delete();
 
-        return downloadFile(version.getGtfsFile(), res);
+        return downloadFile(version.getGtfsFile(), version.id, res);
     }
 
     public static void register (String apiPrefix) {
@@ -454,7 +409,7 @@ public class FeedVersionController  {
 
         get(apiPrefix + "public/feedversion", FeedVersionController::getAllFeedVersions, json::write);
         get(apiPrefix + "public/feedversion/:id/validation", FeedVersionController::getPublicValidationResult, json::write);
-        get(apiPrefix + "public/feedversion/:id/downloadtoken", FeedVersionController::getPublicDownloadToken, json::write);
+        get(apiPrefix + "public/feedversion/:id/downloadtoken", FeedVersionController::getDownloadToken, json::write);
 
         get(apiPrefix + "downloadfeed/:token", FeedVersionController::downloadFeedVersionWithToken);
 

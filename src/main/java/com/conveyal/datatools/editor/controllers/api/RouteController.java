@@ -1,9 +1,7 @@
 package com.conveyal.datatools.editor.controllers.api;
 
-import com.conveyal.datatools.editor.utils.S3Utils;
+import com.conveyal.datatools.common.utils.S3Utils;
 import com.conveyal.datatools.editor.datastore.FeedTx;
-import com.conveyal.datatools.manager.auth.Auth0UserProfile;
-import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.google.common.base.Function;

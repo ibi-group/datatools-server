@@ -1,13 +1,23 @@
-package com.conveyal.datatools.editor.utils;
+package com.conveyal.datatools.common.utils;
 
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
+import com.amazonaws.auth.policy.Action;
+import com.amazonaws.auth.policy.Policy;
+import com.amazonaws.auth.policy.Resource;
+import com.amazonaws.auth.policy.Statement;
+import com.amazonaws.auth.policy.actions.S3Actions;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.PutObjectRequest;
+import com.amazonaws.services.securitytoken.AWSSecurityTokenService;
+import com.amazonaws.services.securitytoken.AWSSecurityTokenServiceClientBuilder;
+import com.amazonaws.services.securitytoken.model.AssumeRoleRequest;
+import com.amazonaws.services.securitytoken.model.AssumeRoleResult;
+import com.amazonaws.services.securitytoken.model.Credentials;
 import com.conveyal.datatools.manager.DataManager;
 import org.apache.commons.io.IOUtils;
 import spark.Request;
@@ -19,6 +29,8 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.util.HashSet;
+import java.util.Set;
 
 import static spark.Spark.halt;
 
@@ -72,5 +84,31 @@ public class S3Utils {
             halt("Error uploading feed to S3");
             return null;
         }
+    }
+
+    public static Credentials getS3Credentials(String role, String bucket, String key, Statement.Effect effect, S3Actions action, int durationSeconds) {
+        String ROLE_ARN = role;
+        AWSSecurityTokenService stsClient = AWSSecurityTokenServiceClientBuilder.defaultClient();
+        Policy policy = new Policy();
+        policy.setId("datatools-feed-access");
+        Statement statement = new Statement(effect);
+        Set<Action> actions = new HashSet<>();
+        actions.add(action);
+        statement.setActions(actions);
+        Set<Resource> resources = new HashSet<>();
+        resources.add(new Resource("arn:aws:s3:::" + bucket + "/" + key));
+        statement.setResources(resources);
+        Set<Statement> statements = new HashSet<>();
+        statements.add(statement);
+        policy.setStatements(statements);
+        System.out.println(policy.toJson());
+        AssumeRoleRequest assumeRequest = new AssumeRoleRequest()
+                .withRoleArn(ROLE_ARN)
+                .withPolicy(policy.toJson()) // some policy that limits access to certain objects (intersects with ROLE_ARN policies
+                .withDurationSeconds(durationSeconds) // 900 is minimum duration (seconds)
+                .withRoleSessionName("feed-access");
+        AssumeRoleResult assumeResult =
+                stsClient.assumeRole(assumeRequest);
+        return assumeResult.getCredentials();
     }
 }
