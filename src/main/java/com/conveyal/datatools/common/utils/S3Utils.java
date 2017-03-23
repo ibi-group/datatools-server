@@ -101,7 +101,6 @@ public class S3Utils {
         Set<Statement> statements = new HashSet<>();
         statements.add(statement);
         policy.setStatements(statements);
-        System.out.println(policy.toJson());
         AssumeRoleRequest assumeRequest = new AssumeRoleRequest()
                 .withRoleArn(ROLE_ARN)
                 .withPolicy(policy.toJson()) // some policy that limits access to certain objects (intersects with ROLE_ARN policies
