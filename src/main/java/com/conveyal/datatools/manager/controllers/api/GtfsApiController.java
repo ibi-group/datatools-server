@@ -30,19 +30,19 @@ public class GtfsApiController {
     public static String feedBucket;
     public static FeedUpdater feedUpdater;
     private static AmazonS3 s3 = AmazonS3ClientBuilder.defaultClient();
-    public static String bucketFolder;
+    public static final String extensionType = DataManager.getConfigPropertyAsText("modules.gtfsapi.use_extension");
+    public static String bucketFolder = DataManager.getConfigPropertyAsText("extensions." + extensionType + ".s3_download_prefix");
+
     public static void register (String apiPrefix) throws IOException {
 
         // store list of GTFS feed eTags here
         Map<String, String> eTagMap = new HashMap<>();
 
         // check for use of extension...
-        String extensionType = DataManager.getConfigPropertyAsText("modules.gtfsapi.use_extension");
         switch (extensionType) {
             case "mtc":
                 LOG.info("Using extension " + extensionType + " for service alerts module");
                 feedBucket = DataManager.getConfigPropertyAsText("extensions." + extensionType + ".s3_bucket");
-                bucketFolder = DataManager.getConfigPropertyAsText("extensions." + extensionType + ".s3_download_prefix");
 
                 // Adds feeds on startup
                 eTagMap.putAll(registerS3Feeds(null, feedBucket, bucketFolder));
@@ -63,7 +63,11 @@ public class GtfsApiController {
         // check for update interval (in seconds) and initialize feedUpdater
         JsonNode updateFrequency = DataManager.getConfigProperty("modules.gtfsapi.update_frequency");
         if (updateFrequency != null) {
-            feedUpdater = new FeedUpdater(eTagMap, 0, updateFrequency.asInt());
+            if (feedBucket != null) {
+                feedUpdater = new FeedUpdater(eTagMap, 0, updateFrequency.asInt());
+            } else {
+                LOG.warn("FeedUpdater not initialized. No s3 bucket provided (or use_s3_storage set to false).");
+            }
         }
 
         // set gtfs-api routes with apiPrefix
