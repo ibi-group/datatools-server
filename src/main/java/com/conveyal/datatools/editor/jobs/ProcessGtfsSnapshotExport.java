@@ -5,7 +5,6 @@ import com.conveyal.gtfs.GTFSFeed;
 import com.conveyal.gtfs.model.CalendarDate;
 import com.conveyal.gtfs.model.Entity;
 import com.conveyal.gtfs.model.Frequency;
-import com.conveyal.gtfs.model.Shape;
 import com.conveyal.gtfs.model.ShapePoint;
 import com.google.common.collect.Maps;
 import com.vividsolutions.jts.geom.Coordinate;
@@ -143,14 +142,11 @@ public class ProcessGtfsSnapshotExport implements Runnable {
                     for (Route route : feedTx.routes.values()) {
                         // only export approved routes
                         // TODO: restore route approval check?
-                        //if (route.status == StatusType.APPROVED) {
-
-                        com.conveyal.gtfs.model.Route gtfsRoute = route.toGtfs(feedTx.agencies.get(route.agencyId).toGtfs(), gtx);
-
-                        feed.routes.put(route.getGtfsId(), gtfsRoute);
-
-                        gtfsRoutes.put(route.id, gtfsRoute);
-                        //}
+                        if (route.status == StatusType.APPROVED) {
+                            com.conveyal.gtfs.model.Route gtfsRoute = route.toGtfs(feedTx.agencies.get(route.agencyId).toGtfs(), gtx);
+                            feed.routes.put(route.getGtfsId(), gtfsRoute);
+                            gtfsRoutes.put(route.id, gtfsRoute);
+                        }
                     }
                 }
 
@@ -232,7 +228,7 @@ public class ProcessGtfsSnapshotExport implements Runnable {
 
                         // write the stop times
                         for (StopTime st : trip.stopTimes) {
-                            TripPatternStop ps = psi.next();
+                            TripPatternStop ps = psi.hasNext() ? psi.next() : null;
                             if (st == null)
                                 continue;
 
