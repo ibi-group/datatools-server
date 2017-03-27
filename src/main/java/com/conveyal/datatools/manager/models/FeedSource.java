@@ -422,12 +422,12 @@ public class FeedSource extends Model implements Cloneable {
     public void makePublic() {
         String sourceKey = FeedStore.s3Prefix + this.id + ".zip";
         String publicKey = getPublicKey();
-        if (FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, sourceKey)) {
+        if (DataManager.useS3 && FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, sourceKey)) {
             LOG.info("copying feed {} to s3 public folder", this);
             FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, sourceKey, CannedAccessControlList.PublicRead);
             FeedStore.s3Client.copyObject(DataManager.feedBucket, sourceKey, DataManager.feedBucket, publicKey);
             FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, publicKey, CannedAccessControlList.PublicRead);
-        } else {
+        } else if (DataManager.useS3) {
             LOG.warn("Could not locate latest feed source {} on s3 at {}. Using latest version instead.", this, sourceKey);
             String versionId = this.getLatestVersionId();
             String latestVersionKey = FeedStore.s3Prefix + versionId;
