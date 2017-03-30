@@ -87,11 +87,11 @@ public class SnapshotTx extends DatabaseTx {
             rcount = 0;
         LOG.info("Restored {} routes", rcount);
 
-        if (tx.exists("stops"))
-            scount = pump(targetTx, "stops", (BTreeMap) this.<String, Route>getMap("stops"));
-        else
-            scount = 0;
-        LOG.info("Restored {} stops", scount);
+//        if (tx.exists("stops"))
+//            scount = pump(targetTx, "stops", (BTreeMap) this.<String, Route>getMap("stops"));
+//        else
+//            scount = 0;
+//        LOG.info("Restored {} stops", scount);
 
         if (tx.exists("calendars"))
             ccount = pump(targetTx, "calendars", (BTreeMap) this.<String, Calendar>getMap("calendars"));
