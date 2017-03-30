@@ -73,7 +73,7 @@ public class SnapshotTx extends DatabaseTx {
                 targetTx.delete(obj);
         }
 
-        int acount, rcount, ccount, ecount, pcount, tcount, fcount;
+        int acount, rcount, ccount, ecount, pcount, tcount, fcount, scount;
 
         if (tx.exists("agencies"))
             acount = pump(targetTx, "agencies", (BTreeMap) this.<String, Route>getMap("agencies"));
@@ -86,6 +86,12 @@ public class SnapshotTx extends DatabaseTx {
         else
             rcount = 0;
         LOG.info("Restored {} routes", rcount);
+
+        if (tx.exists("stops"))
+            scount = pump(targetTx, "stops", (BTreeMap) this.<String, Route>getMap("stops"));
+        else
+            scount = 0;
+        LOG.info("Restored {} stops", scount);
 
         if (tx.exists("calendars"))
             ccount = pump(targetTx, "calendars", (BTreeMap) this.<String, Calendar>getMap("calendars"));
@@ -149,7 +155,7 @@ public class SnapshotTx extends DatabaseTx {
 //        }
 //        LOG.info("Restored {} deleted stops", restoredStops.size());
 //
-//        atx.commit();
+        atx.commit();
 //
 //        return restoredStops;
         return new ArrayList<>();
