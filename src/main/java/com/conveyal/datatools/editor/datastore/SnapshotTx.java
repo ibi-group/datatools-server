@@ -65,9 +65,12 @@ public class SnapshotTx extends DatabaseTx {
         DB targetTx = VersionedDataStore.getRawFeedTx(agencyId);
 
         for (String obj : targetTx.getAll().keySet()) {
-            if (obj.equals("snapshotVersion") || obj.equals("stops"))
+            if (obj.equals("snapshotVersion")
+//                    || obj.equals("stops")
+                    )
                 // except don't overwrite the counter that keeps track of snapshot versions
                 // we also don't overwrite the stops completely, as we need to merge them
+                // NOTE: we are now overwriting the stops completely...
                 continue;
             else
                 targetTx.delete(obj);
@@ -87,11 +90,11 @@ public class SnapshotTx extends DatabaseTx {
             rcount = 0;
         LOG.info("Restored {} routes", rcount);
 
-//        if (tx.exists("stops"))
-//            scount = pump(targetTx, "stops", (BTreeMap) this.<String, Route>getMap("stops"));
-//        else
-//            scount = 0;
-//        LOG.info("Restored {} stops", scount);
+        if (tx.exists("stops"))
+            scount = pump(targetTx, "stops", (BTreeMap) this.<String, Route>getMap("stops"));
+        else
+            scount = 0;
+        LOG.info("Restored {} stops", scount);
 
         if (tx.exists("calendars"))
             ccount = pump(targetTx, "calendars", (BTreeMap) this.<String, Calendar>getMap("calendars"));
