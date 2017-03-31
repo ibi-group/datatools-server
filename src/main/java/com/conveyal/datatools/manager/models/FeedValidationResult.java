@@ -72,9 +72,13 @@ public class FeedValidationResult implements Serializable {
         else
             this.endDate = calDateEnd.isAfter(calSvcEnd) ? calDateEnd : calSvcEnd;
 
-
-        // get revenue time in seconds for Tuesdays in feed
-        this.avgDailyRevenueTime = stats.getAverageDailyRevenueTime(2);
+        try {
+            // get revenue time in seconds for Tuesdays in feed
+            this.avgDailyRevenueTime = stats.getAverageDailyRevenueTime(2);
+        } catch (Exception e) {
+            // temporarily catch errors in calculating this stat
+            this.avgDailyRevenueTime = -1L;
+        }
 
         this.loadStatus = LoadStatus.SUCCESS;
         this.tripCount = stats.getTripCount();
