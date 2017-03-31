@@ -275,15 +275,12 @@ public class FeedVersion extends Model implements Serializable {
             gtfsFeed.validate();
             LOG.info("Calculating stats...");
             FeedStats stats = gtfsFeed.calculateStats();
-            validationResult = new FeedValidationResult(gtfsFeed, stats);
-            LOG.info("Total errors after validation: {}", validationResult.errorCount);
             try {
+                // getAverageRevenueTime occurs in FeedValidationResult, so we surround it with a try/catch just in case it fails
+                validationResult = new FeedValidationResult(gtfsFeed, stats);
                 // This may take a while for very large feeds.
                 LOG.info("Calculating # of trips per date of service");
                 tripsPerDate = stats.getTripCountPerDateOfService();
-
-                // get revenue time in seconds for Tuesdays in feed
-                stats.getAverageDailyRevenueTime(2);
             }catch (Exception e) {
                 e.printStackTrace();
                 statusMap.put("message", "Unable to validate feed.");
@@ -291,8 +288,7 @@ public class FeedVersion extends Model implements Serializable {
                 statusMap.put("error", true);
                 eventBus.post(statusMap);
                 e.printStackTrace();
-//                this.validationResult = null;
-                validationResult.loadStatus = LoadStatus.OTHER_FAILURE;
+                this.validationResult = new FeedValidationResult(LoadStatus.OTHER_FAILURE, "Could not calculate validation properties.");
                 return;
             }
         } catch (Exception e) {
@@ -329,6 +325,7 @@ public class FeedVersion extends Model implements Serializable {
         } catch (IOException e) {
             e.printStackTrace();
         }
+        LOG.info("Total errors after validation: {}", validationResult.errorCount);
         saveValidationResult(tempFile);
     }
 

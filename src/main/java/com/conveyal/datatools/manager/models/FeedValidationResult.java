@@ -41,6 +41,12 @@ public class FeedValidationResult implements Serializable {
     // constructor for data dump load
     public FeedValidationResult() {}
 
+    // constructor for bad feed load
+    public FeedValidationResult(LoadStatus loadStatus, String loadFailureReason) {
+        this.loadStatus = loadStatus;
+        this.loadFailureReason = loadFailureReason;
+    }
+
     public FeedValidationResult(GTFSFeed feed, FeedStats stats) {
         this.agencies = stats.getAllAgencies().stream().map(agency -> agency.agency_id).collect(Collectors.toList());
         this.agencyCount = stats.getAgencyCount();
