@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.controllers.DumpController;
 import com.conveyal.datatools.manager.controllers.api.*;
 import com.conveyal.datatools.editor.controllers.api.*;
@@ -13,6 +14,7 @@ import com.conveyal.datatools.manager.extensions.transitfeeds.TransitFeedsFeedRe
 import com.conveyal.datatools.manager.extensions.transitland.TransitLandFeedResource;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.utils.CorsFilter;
@@ -68,7 +70,8 @@ public class DataManager {
 
 //    public final AmazonS3Client s3Client;
     public static boolean useS3;
-    public static final String apiPrefix = "/api/manager/";
+    public static final String API_PREFIX = "/api/manager/";
+    public static final String EDITOR_API_PREFIX = "/api/editor/";
 
     public static final String DEFAULT_ENV = "configurations/default/env.yml";
     public static final String DEFAULT_CONFIG = "configurations/default/server.yml";
@@ -113,29 +116,29 @@ public class DataManager {
         CorsFilter.apply();
 
         // core controllers
-        ProjectController.register(apiPrefix);
-        FeedSourceController.register(apiPrefix);
-        FeedVersionController.register(apiPrefix);
-        RegionController.register(apiPrefix);
-        NoteController.register(apiPrefix);
-        StatusController.register(apiPrefix);
-        OrganizationController.register(apiPrefix);
+        ProjectController.register(API_PREFIX);
+        FeedSourceController.register(API_PREFIX);
+        FeedVersionController.register(API_PREFIX);
+        RegionController.register(API_PREFIX);
+        NoteController.register(API_PREFIX);
+        StatusController.register(API_PREFIX);
+        OrganizationController.register(API_PREFIX);
 
         // Editor routes
         if ("true".equals(getConfigPropertyAsText("modules.editor.enabled"))) {
             String gtfs = IOUtils.toString(DataManager.class.getResourceAsStream("/gtfs/gtfs.yml"));
             gtfsConfig = yamlMapper.readTree(gtfs);
-            AgencyController.register(apiPrefix);
-            CalendarController.register(apiPrefix);
-            RouteController.register(apiPrefix);
-            RouteTypeController.register(apiPrefix);
-            ScheduleExceptionController.register(apiPrefix);
-            StopController.register(apiPrefix);
-            TripController.register(apiPrefix);
-            TripPatternController.register(apiPrefix);
-            SnapshotController.register(apiPrefix);
-            FeedInfoController.register(apiPrefix);
-            FareController.register(apiPrefix);
+            AgencyController.register(EDITOR_API_PREFIX);
+            CalendarController.register(EDITOR_API_PREFIX);
+            RouteController.register(EDITOR_API_PREFIX);
+            RouteTypeController.register(EDITOR_API_PREFIX);
+            ScheduleExceptionController.register(EDITOR_API_PREFIX);
+            StopController.register(EDITOR_API_PREFIX);
+            TripController.register(EDITOR_API_PREFIX);
+            TripPatternController.register(EDITOR_API_PREFIX);
+            SnapshotController.register(EDITOR_API_PREFIX);
+            FeedInfoController.register(EDITOR_API_PREFIX);
+            FareController.register(EDITOR_API_PREFIX);
         }
 
         // log all exceptions to system.out
@@ -143,31 +146,36 @@ public class DataManager {
 
         // module-specific controllers
         if (isModuleEnabled("deployment")) {
-            DeploymentController.register(apiPrefix);
+            DeploymentController.register(API_PREFIX);
         }
         if (isModuleEnabled("gtfsapi")) {
-            GtfsApiController.register(apiPrefix);
+            GtfsApiController.register(API_PREFIX);
         }
         if (isModuleEnabled("gtfsplus")) {
-            GtfsPlusController.register(apiPrefix);
+            GtfsPlusController.register(API_PREFIX);
             URL gtfsplus = DataManager.class.getResource("/gtfs/gtfsplus.yml");
             gtfsPlusConfig = yamlMapper.readTree(Resources.toString(gtfsplus, Charsets.UTF_8));
         }
         if (isModuleEnabled("user_admin")) {
-            UserController.register(apiPrefix);
+            UserController.register(API_PREFIX);
         }
         if (isModuleEnabled("dump")) {
             DumpController.register("/");
         }
 
-        before(apiPrefix + "secure/*", (request, response) -> {
+        before(EDITOR_API_PREFIX + "secure/*", ((request, response) -> {
+            Auth0Connection.checkUser(request);
+            Auth0Connection.checkEditPrivileges(request);
+        }));
+
+        before(API_PREFIX + "secure/*", (request, response) -> {
             if(request.requestMethod().equals("OPTIONS")) return;
             Auth0Connection.checkUser(request);
         });
 
         // lazy load by feed source id if new one is requested
 //        if ("true".equals(getConfigPropertyAsText("modules.gtfsapi.load_on_fetch"))) {
-//            before(apiPrefix + "*", (request, response) -> {
+//            before(API_PREFIX + "*", (request, response) -> {
 //                String feeds = request.queryParams("feed");
 //                if (feeds != null) {
 //                    String[] feedIds = feeds.split(",");
@@ -192,7 +200,7 @@ public class DataManager {
 //            });
 //        }
         // return "application/json" for all API routes
-        after(apiPrefix + "*", (request, response) -> {
+        after(API_PREFIX + "*", (request, response) -> {
             response.type("application/json");
             response.header("Content-Encoding", "gzip");
         });
@@ -202,7 +210,7 @@ public class DataManager {
         stream.close();
 
         // return 404 for any api response that's not found
-        get(apiPrefix + "*", (request, response) -> {
+        get(API_PREFIX + "*", (request, response) -> {
             halt(404, SparkUtils.formatJSON("Unknown error occurred.", 404));
             return null;
         });
