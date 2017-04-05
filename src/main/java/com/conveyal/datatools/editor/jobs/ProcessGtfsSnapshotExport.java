@@ -77,7 +77,15 @@ public class ProcessGtfsSnapshotExport implements Runnable {
             for (Tuple2<String, Integer> ssid : snapshots) {
                 String feedId = ssid.a;
 
-                feedTx = VersionedDataStore.getFeedTx(feedId);
+                // get present feed database if no snapshot version provided
+                if (ssid.b == null) {
+                    feedTx = VersionedDataStore.getFeedTx(feedId);
+                }
+                // else get snapshot version data
+                else {
+                    feedTx = VersionedDataStore.getFeedTx(feedId, ssid.b);
+                }
+
                 Collection<Agency> agencies = feedTx.agencies.values();
 
                 for (Agency agency : agencies) {
@@ -88,14 +96,15 @@ public class ProcessGtfsSnapshotExport implements Runnable {
                     feed.agency.put(agency.agencyId, agency.toGtfs());
                 }
 
-                Collection<Fare> fares = feedTx.fares.values();
+                if (feedTx.fares != null) {
+                    Collection<Fare> fares = feedTx.fares.values();
+                    for (Fare fare : fares) {
+                        com.conveyal.gtfs.model.Fare gtfsFare = fare.toGtfs();
+                        LOG.info("Exporting fare {}", gtfsFare);
 
-                for (Fare fare : fares) {
-                    com.conveyal.gtfs.model.Fare gtfsFare = fare.toGtfs();
-                    LOG.info("Exporting fare {}", gtfsFare);
-
-                    // write the feeds.txt entry
-                    feed.fares.put(fare.gtfsFareId, gtfsFare);
+                        // write the feeds.txt entry
+                        feed.fares.put(fare.gtfsFareId, gtfsFare);
+                    }
                 }
 
                 // write all of the calendars and calendar dates
@@ -146,6 +155,9 @@ public class ProcessGtfsSnapshotExport implements Runnable {
                             com.conveyal.gtfs.model.Route gtfsRoute = route.toGtfs(feedTx.agencies.get(route.agencyId).toGtfs(), gtx);
                             feed.routes.put(route.getGtfsId(), gtfsRoute);
                             gtfsRoutes.put(route.id, gtfsRoute);
+                            LOG.info("Exporting route {}", gtfsRoute);
+                        } else {
+                            LOG.warn("Route {} not approved", route.gtfsRouteId);
                         }
                     }
                 }
@@ -155,7 +167,7 @@ public class ProcessGtfsSnapshotExport implements Runnable {
                 if(feedTx.trips != null) {
                     for (Trip trip : feedTx.trips.values()) {
                         if (!gtfsRoutes.containsKey(trip.routeId)) {
-                            LOG.warn("Trip {} has not matching route", trip);
+                            LOG.warn("Trip {} has no matching route. This may be because route {} was not approved", trip, trip.routeId);
                             continue;
                         }
 
