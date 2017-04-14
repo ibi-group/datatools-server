@@ -73,8 +73,7 @@ public class FeedStore {
     private static File getPath (String pathString) {
         File path = new File(pathString);
         if (!path.exists() || !path.isDirectory()) {
-            path = null;
-            throw new IllegalArgumentException("Not a directory or not found: " + path.getAbsolutePath());
+            throw new IllegalArgumentException("Not a directory or not found: " + pathString);
         }
         return path;
     }
