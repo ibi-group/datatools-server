@@ -16,6 +16,7 @@ import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.utils.CorsFilter;
 import com.conveyal.gtfs.GTFSCache;
+import com.conveyal.gtfs.api.ApiMain;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -98,11 +99,11 @@ public class DataManager {
 
         if (useS3) {
             LOG.info("Initializing gtfs-api for bucket {}/{} and cache dir {}", feedBucket, bucketFolder, FeedStore.basePath);
-            gtfsCache = new GTFSCache(feedBucket, bucketFolder, FeedStore.basePath);
+            ApiMain.initialize(feedBucket, bucketFolder, FeedStore.basePath.getAbsolutePath());
         }
         else {
-            LOG.info("Initializing gtfs cache locally (no s3 bucket) {}", FeedStore.basePath);
-            gtfsCache = new GTFSCache(null, FeedStore.basePath);
+            LOG.info("Initializing gtfs-api cache locally (no s3 bucket) {}", FeedStore.basePath);
+            ApiMain.initialize(feedBucket, FeedStore.basePath.getAbsolutePath());
         }
         CorsFilter.apply();
 

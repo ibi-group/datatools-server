@@ -7,7 +7,6 @@ import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.jobs.FeedUpdater;
-import com.conveyal.gtfs.api.ApiMain;
 import com.conveyal.gtfs.api.Routes;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
@@ -29,15 +28,11 @@ public class GtfsApiController {
     public static String feedBucket;
     public static FeedUpdater feedUpdater;
     private static AmazonS3Client s3 = new AmazonS3Client();
-    public static ApiMain gtfsApi;
     public static String bucketFolder;
     public static void register (String apiPrefix) throws IOException {
 
         // store list of GTFS feed eTags here
         Map<String, String> eTagMap = new HashMap<>();
-
-        // uses bucket, folder, and local cache according to main app config
-        gtfsApi.initialize(DataManager.gtfsCache);
 
         // check for use of extension...
         String extensionType = DataManager.getConfigPropertyAsText("modules.gtfsapi.use_extension");
@@ -120,7 +115,7 @@ public class GtfsApiController {
                     newTags.put(feedId, eTag);
 
                     // initiate load of feed source into API with get call
-                    gtfsApi.getFeedSource(feedId);
+//                    ApiMain.getFeedSource(feedId);
                 } catch (Exception e) {
                     LOG.warn("Could not load feed " + keyName, e);
                 }
