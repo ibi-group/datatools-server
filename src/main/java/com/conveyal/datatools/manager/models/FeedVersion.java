@@ -30,6 +30,7 @@ import com.conveyal.datatools.manager.persistence.DataStore;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.utils.HashUtils;
 import com.conveyal.gtfs.GTFSFeed;
+import com.conveyal.gtfs.api.ApiMain;
 import com.conveyal.gtfs.validator.json.LoadStatus;
 import com.conveyal.gtfs.stats.FeedStats;
 import com.conveyal.r5.common.R5Version;
@@ -178,7 +179,7 @@ public class FeedVersion extends Model implements Serializable {
     public GTFSFeed getGtfsFeed() {
         String apiId = id.replace(".zip", "");
 //        return DataManager.gtfsCache.get(apiId);
-        return GtfsApiController.gtfsApi.getFeedSource(apiId).feed;
+        return ApiMain.getFeedSource(apiId).feed;
     }
 
     /** The results of validating this feed */
@@ -524,8 +525,7 @@ public class FeedVersion extends Model implements Serializable {
             if (!osmPath.exists()) {
                 osmPath.mkdirs();
             }
-            File osmFile = new File(osmPath.getAbsolutePath() + "/data.osm.pbf");
-            return osmFile;
+            return new File(osmPath.getAbsolutePath() + "/data.osm.pbf");
         }
         else {
             return null;
@@ -539,30 +539,25 @@ public class FeedVersion extends Model implements Serializable {
 
     /**
      * Does this feed version have any critical errors that would prevent it being loaded to OTP?
-     * @return
+     * @return whether feed version has critical errors
      */
     public boolean hasCriticalErrors() {
-        if (hasCriticalErrorsExceptingDate() || (LocalDate.now()).isAfter(validationResult.endDate))
-            return true;
-
-        else
-            return false;
+        return hasCriticalErrorsExceptingDate() || (LocalDate.now()).isAfter(validationResult.endDate);
     }
 
     /**
      * Does this feed have any critical errors other than possibly being expired?
+     * @return whether feed version has critical errors (outside of expiration)
      */
     public boolean hasCriticalErrorsExceptingDate () {
         if (validationResult == null)
             return true;
 
-        if (validationResult.loadStatus != LoadStatus.SUCCESS)
-            return true;
+        return validationResult.loadStatus != LoadStatus.SUCCESS ||
+            validationResult.stopTimesCount == 0 ||
+            validationResult.tripCount == 0 ||
+            validationResult.agencyCount == 0;
 
-        if (validationResult.stopTimesCount == 0 || validationResult.tripCount == 0 || validationResult.agencyCount == 0)
-            return true;
-
-        return false;
     }
 
     @JsonView(JsonViews.UserInterface.class)
