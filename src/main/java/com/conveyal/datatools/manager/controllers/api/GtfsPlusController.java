@@ -4,6 +4,7 @@ import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.FeedStore;
+import com.conveyal.datatools.manager.utils.HashUtils;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.conveyal.gtfs.GTFSFeed;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -15,6 +16,7 @@ import spark.Response;
 
 import javax.servlet.MultipartConfigElement;
 import javax.servlet.ServletException;
+import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.Part;
 import java.io.*;
 import java.util.*;
@@ -63,7 +65,7 @@ public class GtfsPlusController {
         return true;
     }
 
-    private static Object getGtfsPlusFile(Request req, Response res) {
+    private static HttpServletResponse getGtfsPlusFile(Request req, Response res) {
         String feedVersionId = req.params("versionid");
         LOG.info("Downloading GTFS+ file for FeedVersion " + feedVersionId);
 
@@ -76,7 +78,7 @@ public class GtfsPlusController {
         return downloadGtfsPlusFile(file, res);
     }
 
-    private static Object getGtfsPlusFromGtfs(String feedVersionId, Response res) {
+    private static HttpServletResponse getGtfsPlusFromGtfs(String feedVersionId, Response res) {
         LOG.info("Extracting GTFS+ data from main GTFS feed");
         FeedVersion version = FeedVersion.get(feedVersionId);
 
@@ -123,7 +125,7 @@ public class GtfsPlusController {
         return downloadGtfsPlusFile(gtfsPlusFile, res);
     }
 
-    private static Object downloadGtfsPlusFile(File file, Response res) {
+    private static HttpServletResponse downloadGtfsPlusFile(File file, Response res) {
         res.raw().setContentType("application/octet-stream");
         res.raw().setHeader("Content-Disposition", "attachment; filename=" + file.getName() + ".zip");
 
