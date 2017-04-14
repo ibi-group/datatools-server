@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.controllers.api;
 
+import com.conveyal.datatools.common.utils.Consts;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -318,7 +319,7 @@ public class GtfsPlusController {
 
         int rowIndex = 0;
         while((line = in.readLine()) != null) {
-            String[] values = line.split(",(?=([^\"]*\"[^\"]*\")*[^\"]*$)", -1);
+            String[] values = line.split(Consts.COLUMN_SPLIT, -1);
             for(int v=0; v < values.length; v++) {
                 validateTableValue(issues, tableId, rowIndex, values[v], fieldNodes[v], gtfsFeed);
             }
@@ -344,13 +345,12 @@ public class GtfsPlusController {
                     String optionValue = option.get("value").asText();
 
                     // if value is found in list of options, break out of loop
-                    if (optionValue.equals(value) || !fieldNode.get("required").asBoolean() && value.equals("")) {
+                    if (optionValue.equals(value) || (!fieldNode.get("required").asBoolean() && value.equals(""))) {
                         invalid = false;
                         break;
                     }
                 }
                 if (invalid) {
-                    System.out.println("invalid: " + " " + value);
                     issues.add(new ValidationIssue(tableId, fieldName, rowIndex, "Value: " + value + " is not a valid option."));
                 }
                 break;

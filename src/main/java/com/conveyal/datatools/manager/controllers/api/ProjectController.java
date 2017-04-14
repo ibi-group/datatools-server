@@ -1,5 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
+import com.conveyal.datatools.common.utils.Consts;
+import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.FetchProjectFeedsJob;
@@ -50,6 +52,8 @@ import java.util.zip.ZipOutputStream;
 import spark.Request;
 import spark.Response;
 
+import javax.servlet.http.HttpServletResponse;
+
 import static spark.Spark.*;
 
 /**
@@ -66,18 +70,11 @@ public class ProjectController {
     public static Collection<Project> getAllProjects(Request req, Response res) throws JsonProcessingException {
 
         Auth0UserProfile userProfile = req.attribute("user");
-//        Organization org = userProfile.getOrganization();
-//        if (!userProfile.canAdministerOrganization()) {
-//
-//        }
-//        org.getProjects();
         Collection<Project> filteredProjects = new ArrayList<Project>();
-//        Collection<Project> projects = Project.getAll();
-//        orgProjects =
+
         LOG.info("found projects: " + Project.getAll().size());
         for (Project proj : Project.getAll()) {
             // Get feedSources if making a public call
-//            Supplier<Collection<FeedSource>> supplier = () -> new LinkedList<FeedSource>();
             if (req.pathInfo().contains("public")) {
                 proj.feedSources = proj.getProjectFeedSources().stream().filter(fs -> fs != null && fs.isPublic).collect(Collectors.toList());
             }
@@ -96,7 +93,6 @@ public class ProjectController {
         String id = req.params("id");
         Project proj = Project.get(id);
         if (proj == null) {
-//            return new MissingResourceException("No project found", Project.class.getSimpleName(), id);
             halt(404, "No project with id: " + id);
         }
         // Get feedSources if making a public call
@@ -422,21 +418,7 @@ public class ProjectController {
         }
     }
 
-//    private static Object downloadFeedVersionWithToken (Request req, Response res) {
-//        FeedDownloadToken token = FeedDownloadToken.get(req.params("token"));
-//
-//        if(token == null || !token.isValid()) {
-//            halt(400, "Feed download token not valid");
-//        }
-//
-//        FeedVersion version = token.getFeedVersion();
-//
-//        token.delete();
-//
-//        return downloadMergedFeed(project, res);
-//    }
-
-    private static Object downloadMergedFeed(Request req, Response res) throws IOException {
+    private static HttpServletResponse downloadMergedFeed(Request req, Response res) throws IOException {
         String id = req.params("id");
         Project p = Project.get(id);
 
@@ -446,23 +428,16 @@ public class ProjectController {
         Collection<FeedSource> feeds = p.getProjectFeedSources();
 
         // create temp merged zip file to add feed content to
-        File mergedFile;
+        File mergedFile = null;
         try {
             mergedFile = File.createTempFile(p.id + "-merged", ".zip");
-//            mergedFile.deleteOnExit();
+            mergedFile.deleteOnExit();
 
         } catch (IOException e) {
             LOG.error("Could not create temp file");
             e.printStackTrace();
 
-            // // TODO: 5/29/16 add status of download job, move downloadMergedFeed to job...
-//            synchronized (status) {
-//                status.error = true;
-//                status.completed = true;
-//                status.message = "app.deployment.error.dump";
-//            }
-
-            return null;
+            halt(400, SparkUtils.formatJSON("Unknown error while merging feeds.", 400));
         }
 
         // create the zipfile
@@ -478,8 +453,8 @@ public class ProjectController {
         // map of feed versions to table entries contained within version's GTFS
         Map<FeedSource, ZipFile> feedSourceMap = new HashMap<>();
 
+        // collect zipFiles for each feedSource before merging tables
         for (FeedSource fs : feeds) {
-
             // check if feed source has version (use latest)
             FeedVersion version = fs.getLatest();
             if (version == null) {
@@ -494,7 +469,6 @@ public class ProjectController {
                 feedSourceMap.put(fs, zipFile);
             } catch(Exception e) {
                 e.printStackTrace();
-//                halt(500);
                 LOG.error("Zipfile for version {} not found", version.id);
             }
         }
@@ -518,20 +492,7 @@ public class ProjectController {
         }
         out.close();
 
-
-
-//        FileInputStream fis = new FileInputStream(mergedFile);
-
-//        res.type("application/zip");
-//        res.header("Content-Disposition", "attachment;filename=" + p.name.replaceAll("[^a-zA-Z0-9]", "") + "-gtfs.zip");
-
-        // will not actually be deleted until download has completed
-        // http://stackoverflow.com/questions/24372279
-//        mergedFile.delete();
-
-//        return fis;
-
-//        // Deliver zipfile
+        // Deliver zipfile
         res.raw().setContentType("application/octet-stream");
         res.raw().setHeader("Content-Disposition", "attachment; filename=" + mergedFile.getName());
 
@@ -555,6 +516,13 @@ public class ProjectController {
         return res.raw();
     }
 
+    /**
+     * Merge the specified table for multiple GTFS feeds.
+     * @param tableNode tableNode to merge
+     * @param feedSourceMap map of feedSources to zipFiles from which to extract the .txt tables
+     * @return
+     * @throws IOException
+     */
     private static byte[] mergeTables(JsonNode tableNode, Map<FeedSource, ZipFile> feedSourceMap) throws IOException {
 
         String tableName = tableNode.get("name").asText();
@@ -563,7 +531,6 @@ public class ProjectController {
         int feedIndex = 0;
 
         ArrayNode fieldsNode = (ArrayNode) tableNode.get("fields");
-//        fieldsNode.
         List<String> headers = new ArrayList<>();
         for (int i = 0; i < fieldsNode.size(); i++) {
             JsonNode fieldNode = fieldsNode.get(i);
@@ -599,7 +566,7 @@ public class ProjectController {
                     int rowIndex = 0;
                     while((line = in.readLine()) != null) {
                         String[] newValues = new String[fieldsNode.size()];
-                        String[] values = line.split(",", -1);
+                        String[] values = line.split(Consts.COLUMN_SPLIT, -1);
                         if (values.length == 1) {
                             LOG.warn("Found blank line. Skipping...");
                             continue;
@@ -625,7 +592,6 @@ public class ProjectController {
 
                             // if field is a gtfs identifier, prepend with feed id/name
                             if (fieldType.contains("GTFS") && !val.isEmpty()) {
-//                                LOG.info("Adding feed id {} to entity {}: {}", fs.name, fieldName, val);
                                 newValues[v] = fs.name + ":" + val;
                             }
                             else {
@@ -680,6 +646,7 @@ public class ProjectController {
         halt(404);
         return null;
     }
+
     public static ScheduledFuture scheduleAutoFeedFetch (String id, int hour, int minute, int intervalInDays, String timezoneId){
         TimeUnit minutes = TimeUnit.MINUTES;
         try {
@@ -730,6 +697,7 @@ public class ProjectController {
             return null;
         }
     }
+
     public static void cancelAutoFetch(String id){
         Project p = Project.get(id);
         if ( p != null && DataManager.autoFetchMap.get(p.id) != null) {
@@ -737,9 +705,8 @@ public class ProjectController {
             DataManager.autoFetchMap.get(p.id).cancel(true);
         }
     }
+
     public static void register (String apiPrefix) {
-        options(apiPrefix + "secure/project", (q, s) -> "");
-        options(apiPrefix + "secure/project/:id", (q, s) -> "");
         get(apiPrefix + "secure/project/:id", ProjectController::getProject, json::write);
         get(apiPrefix + "secure/project", ProjectController::getAllProjects, json::write);
         post(apiPrefix + "secure/project", ProjectController::createProject, json::write);
