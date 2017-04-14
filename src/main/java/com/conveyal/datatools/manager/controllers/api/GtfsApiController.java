@@ -7,6 +7,7 @@ import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.jobs.FeedUpdater;
+import com.conveyal.gtfs.api.ApiMain;
 import com.conveyal.gtfs.api.Routes;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
@@ -115,7 +116,7 @@ public class GtfsApiController {
                     newTags.put(feedId, eTag);
 
                     // initiate load of feed source into API with get call
-//                    ApiMain.getFeedSource(feedId);
+                    ApiMain.getFeedSource(feedId);
                 } catch (Exception e) {
                     LOG.warn("Could not load feed " + keyName, e);
                 }
