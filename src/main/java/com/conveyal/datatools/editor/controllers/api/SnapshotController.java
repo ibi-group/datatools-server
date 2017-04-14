@@ -1,5 +1,6 @@
 package com.conveyal.datatools.editor.controllers.api;
 
+import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.editor.controllers.Base;
 import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.datastore.GlobalTx;
@@ -10,8 +11,10 @@ import com.conveyal.datatools.editor.models.Snapshot;
 import com.conveyal.datatools.editor.models.transit.Stop;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.controllers.api.FeedSourceController;
 import com.conveyal.datatools.manager.controllers.api.FeedVersionController;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
+import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
@@ -108,19 +111,29 @@ public class SnapshotController {
         return null;
     }
 
+    /**
+     * Create snapshot from feedVersion and load/import into editor database.
+     * @param req
+     * @param res
+     * @return
+     */
     public static Boolean importSnapshot (Request req, Response res) {
 
         Auth0UserProfile userProfile = req.attribute("user");
         String feedVersionId = req.queryParams("feedVersionId");
 
         if(feedVersionId == null) {
-            halt(400, "No FeedVersion ID specified");
+            halt(400, SparkUtils.formatJSON("No FeedVersion ID specified", 400));
         }
 
         FeedVersion feedVersion = FeedVersion.get(feedVersionId);
         if(feedVersion == null) {
-            halt(404, "Could not find FeedVersion with ID " + feedVersionId);
+            halt(404, SparkUtils.formatJSON("Could not find FeedVersion with ID " + feedVersionId, 404));
         }
+
+        FeedSource feedSource = feedVersion.getFeedSource();
+        // check user's permission to import snapshot
+        FeedSourceController.requestFeedSource(req, feedSource, "edit");
 
         ProcessGtfsSnapshotMerge processGtfsSnapshotMergeJob =
                 new ProcessGtfsSnapshotMerge(feedVersion, userProfile.getUser_id());
