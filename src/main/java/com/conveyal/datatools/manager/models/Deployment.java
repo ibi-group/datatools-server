@@ -288,6 +288,7 @@ public class Deployment extends Model implements Serializable {
             try {
                 in = new FileInputStream(feed);
             } catch (FileNotFoundException e1) {
+                LOG.error("Could not retrieve file for {}", v.name);
                 throw new RuntimeException(e1);
             }
 
