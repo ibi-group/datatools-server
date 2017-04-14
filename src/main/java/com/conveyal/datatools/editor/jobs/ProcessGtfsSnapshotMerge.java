@@ -4,14 +4,25 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.models.Snapshot;
 import com.conveyal.datatools.editor.models.transit.Agency;
+import com.conveyal.datatools.editor.models.transit.EditorFeed;
 import com.conveyal.datatools.editor.models.transit.Fare;
+import com.conveyal.datatools.editor.models.transit.GtfsRouteType;
 import com.conveyal.datatools.editor.models.transit.Route;
+import com.conveyal.datatools.editor.models.transit.RouteType;
+import com.conveyal.datatools.editor.models.transit.ServiceCalendar;
 import com.conveyal.datatools.editor.models.transit.Stop;
 import com.conveyal.datatools.editor.models.transit.StopTime;
 import com.conveyal.datatools.editor.models.transit.Trip;
+import com.conveyal.datatools.editor.models.transit.TripDirection;
+import com.conveyal.datatools.editor.models.transit.TripPattern;
+import com.conveyal.datatools.editor.models.transit.TripPatternStop;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.gtfs.GTFSFeed;
-import com.conveyal.gtfs.model.*;
+import com.conveyal.gtfs.model.CalendarDate;
+import com.conveyal.gtfs.model.Entity;
+import com.conveyal.gtfs.model.FeedInfo;
+import com.conveyal.gtfs.model.Pattern;
+import com.conveyal.gtfs.model.Service;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
@@ -23,7 +34,6 @@ import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import gnu.trove.map.TIntObjectMap;
 import gnu.trove.map.hash.TIntObjectHashMap;
-import com.conveyal.datatools.editor.models.transit.*;
 import org.joda.time.DateTimeConstants;
 
 import java.awt.geom.Rectangle2D;
@@ -111,12 +121,12 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
             for(String key : feedTx.trips.keySet()) feedTx.trips.remove(key);
             LOG.info("Cleared old data");
 
-            // input = feedVersion.getGtfsFeed();
-            // TODO: use GtfsCache?
             synchronized (status) {
                 status.message = "Loading GTFS file...";
                 status.percentComplete = 5;
             }
+
+            // get GTFSFeed for the feed version
             input = feedVersion.getGtfsFeed();
             if(input == null) return;
 
@@ -401,6 +411,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 
                     for (com.conveyal.gtfs.model.StopTime st : stopTimes) {
                         trip.stopTimes.add(new StopTime(st, stopIdMap.get(new Tuple2<>(st.stop_id, feed.id)).id));
+                        stopTimeCount++;
                     }
 
                     feedTx.trips.put(trip.id, trip);
@@ -456,7 +467,6 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                 status.message = "Failed to process GTFS snapshot.";
                 status.error = true;
             }
-            halt(404, "Failed to process GTFS snapshot.");
         }
         finally {
             feedTx.rollbackIfOpen();
