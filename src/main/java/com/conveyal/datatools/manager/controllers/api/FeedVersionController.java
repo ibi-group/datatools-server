@@ -197,7 +197,7 @@ public class FeedVersionController  {
         return version;
     }
 
-    private static FeedVersion requestFeedVersion(Request req, String action) {
+    public static FeedVersion requestFeedVersion(Request req, String action) {
         String id = req.params("id");
 
         FeedVersion version = FeedVersion.get(id);

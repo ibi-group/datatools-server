@@ -195,7 +195,6 @@ public class RegionController {
 
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/region/:id", RegionController::getRegion, json::write);
-        options(apiPrefix + "secure/region", (q, s) -> "");
         get(apiPrefix + "secure/region", RegionController::getAllRegions, json::write);
         post(apiPrefix + "secure/region", RegionController::createRegion, json::write);
         put(apiPrefix + "secure/region/:id", RegionController::updateRegion, json::write);
