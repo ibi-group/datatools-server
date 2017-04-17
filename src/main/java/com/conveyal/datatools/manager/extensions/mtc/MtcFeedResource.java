@@ -17,6 +17,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.lang.reflect.Field;
@@ -215,9 +216,11 @@ public class MtcFeedResource implements ExternalFeedResource {
         String keyName = this.s3Prefix + agencyIdProp.value + ".zip";
         LOG.info("Pushing to MTC S3 Bucket: " + keyName);
 
+        File file = feedVersion.getGtfsFile();
+
         AmazonS3 s3client = new AmazonS3Client(creds);
         s3client.putObject(new PutObjectRequest(
-                s3Bucket, keyName, feedVersion.getGtfsFile()));
+                s3Bucket, keyName, file));
     }
 
     private void writeCarrierToRtd(RtdCarrier carrier, boolean createNew, String authHeader) {

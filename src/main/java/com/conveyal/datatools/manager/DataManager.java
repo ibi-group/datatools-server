@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager;
 
+import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 
 import com.conveyal.datatools.manager.controllers.DumpController;
@@ -103,7 +104,9 @@ public class DataManager {
         }
         else {
             LOG.info("Initializing gtfs-api cache locally (no s3 bucket) {}", FeedStore.basePath);
-            ApiMain.initialize(feedBucket, FeedStore.basePath.getAbsolutePath());
+            // NOTE: null value must be passed here (even if feedBucket is not null)
+            // because otherwise zip files will be DELETED!!! on removal from GTFSCache.
+            ApiMain.initialize(null, FeedStore.basePath.getAbsolutePath());
         }
         CorsFilter.apply();
 
@@ -198,7 +201,7 @@ public class DataManager {
 
         // return 404 for any api response that's not found
         get(apiPrefix + "*", (request, response) -> {
-            halt(404);
+            halt(404, SparkUtils.formatJSON("Unknown error occurred.", 404));
             return null;
         });
         
