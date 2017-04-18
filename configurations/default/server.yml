@@ -30,7 +30,7 @@ modules:
     load_on_fetch: false
     load_on_startup: false
     use_extension: xyz
-    update_frequency: 3600 # in seconds
+#    update_frequency: 3600 # in seconds
 extensions:
   transitland:
     enabled: true
