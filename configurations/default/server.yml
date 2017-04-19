@@ -1,7 +1,6 @@
 application:
-  assets_bucket: bucket-name
-  gtfs_s3_bucket: bucket-name
-  public_url: http://localhost:9000
+  assets_bucket: datatools-staging # dist directory
+  public_url: http://localhost:9966
   port: 4000
   data:
     mapdb: /tmp
@@ -9,22 +8,18 @@ application:
     editor_mapdb: /tmp
     regions: /tmp
     use_s3_storage: false
+    s3_region: us-east-1
+    aws_role: arn:aws:iam::${AWS_ACCOUNT_NUMBER}:role/${AWS_ROLE_NAME}
+    gtfs_s3_bucket: bucket-name
 modules:
   enterprise:
     enabled: false
   editor:
     enabled: true
-  alerts:
-    enabled: false
-    use_extension: xyz
-  sign_config:
-    enabled: false
   user_admin:
     enabled: true
   validator:
     enabled: true
-  deployment:
-    enabled: false
   gtfsapi:
     enabled: true
     load_on_fetch: false
