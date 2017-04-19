@@ -86,6 +86,17 @@ public class S3Utils {
         }
     }
 
+    /**
+     * Create temporary S3 credentials in order to grant access to some set of objects (s3://bucket/key)
+     * using a predefined role.  More info here: http://docs.aws.amazon.com/sdk-for-java/v1/developer-guide/prog-services-sts.html#retrieving-an-sts-token
+     * @param role predefined AWS role that must be used as the baseline for allowable actions, effects, and resources
+     * @param bucket S3 bucket name
+     * @param key S3 key to grant access to
+     * @param effect policy statement effect (for example, GetObject)
+     * @param action action allowed by temporary credentials (must intersect with the policies already defined by role)
+     * @param durationSeconds duration in seconds that the credentials are valid for (900 is minumum)
+     * @return
+     */
     public static Credentials getS3Credentials(String role, String bucket, String key, Statement.Effect effect, S3Actions action, int durationSeconds) {
         String ROLE_ARN = role;
         AWSSecurityTokenService stsClient = AWSSecurityTokenServiceClientBuilder.defaultClient();

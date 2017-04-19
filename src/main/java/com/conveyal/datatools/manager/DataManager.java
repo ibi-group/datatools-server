@@ -84,7 +84,7 @@ public class DataManager {
         if (getConfigProperty("application.port") != null) {
             port(Integer.parseInt(getConfigPropertyAsText("application.port")));
         }
-        useS3 = getConfigPropertyAsText("application.data.use_s3_storage").equals("true");
+        useS3 = "true".equals(getConfigPropertyAsText("application.data.use_s3_storage"));
 
         // initialize map of auto fetched projects
         for (Project p : Project.getAll()) {

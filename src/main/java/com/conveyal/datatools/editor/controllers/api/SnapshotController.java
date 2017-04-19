@@ -236,6 +236,8 @@ public class SnapshotController {
         String id = req.params("id");
         Tuple2<String, Integer> decodedId;
         FeedDownloadToken token;
+
+        // attempt to deserialize id
         try {
             decodedId = JacksonSerializers.Tuple2IntDeserializer.deserialize(id);
         } catch (IOException e1) {
@@ -245,26 +247,33 @@ public class SnapshotController {
 
         GlobalTx gtx = VersionedDataStore.getGlobalTx();
         Snapshot snapshot;
-        String filename;
+        String filePrefix;
         String key;
+
+        // check that snapshot exists for the id
         try {
             if (!gtx.snapshots.containsKey(decodedId)) {
                 halt(404);
                 return null;
             }
             snapshot = gtx.snapshots.get(decodedId);
-            filename = snapshot.feedId + "_" + snapshot.snapshotTime + ".zip";
-            key = "snapshots/" + filename;
-            FeedSource feedSource = FeedSourceController.requestFeedSource(req, FeedSource.get(snapshot.feedId), "view");
+            filePrefix = snapshot.feedId + "_" + snapshot.snapshotTime;
+            key = "snapshots/" + filePrefix + ".zip";
+
+            // ensure user has permission to download snapshot, otherwise halt them
+            FeedSourceController.requestFeedSource(req, FeedSource.get(snapshot.feedId), "view");
         } finally {
             gtx.rollbackIfOpen();
         }
-        if (DataManager.getConfigPropertyAsText("application.data.use_s3_storage").equals("true")) {
+        // if storing feeds on S3, first write the snapshot to GTFS file and upload to S3
+        // this needs to be completed before the credentials are delivered, so that the client has
+        // an actual object to download.
+        if (DataManager.useS3) {
             if (!FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, key)) {
                 File file;
                 try {
                     File tDir = new File(System.getProperty("java.io.tmpdir"));
-                    file = File.createTempFile(snapshot.feedId + "_" + snapshot.snapshotTime, ".zip");
+                    file = File.createTempFile(filePrefix, ".zip");
                     file.deleteOnExit();
                     writeSnapshotAsGtfs(snapshot.id, file);
                     try {
@@ -281,6 +290,7 @@ public class SnapshotController {
             }
             return getS3Credentials(DataManager.awsRole, DataManager.feedBucket, key, Statement.Effect.Allow, S3Actions.GetObject, 900);
         } else {
+            // if not storing on s3, just use the token download method
             token = new FeedDownloadToken(snapshot);
             token.save();
             return token;
@@ -333,6 +343,13 @@ public class SnapshotController {
         return true;
     }
 
+    /**
+     * This method is used only when NOT storing feeds on S3. It will deliver a
+     * snapshot file from the local storage if a valid token is provided.
+     * @param req
+     * @param res
+     * @return
+     */
     private static Object downloadSnapshotWithToken (Request req, Response res) {
         String id = req.params("token");
         FeedDownloadToken token = FeedDownloadToken.get(id);
@@ -356,6 +373,7 @@ public class SnapshotController {
         token.delete();
         return downloadFile(file, snapshot.feedId + "_" + snapshot.snapshotTime + ".zip", res);
     }
+
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/snapshot/:id", SnapshotController::getSnapshot, json::write);
         options(apiPrefix + "secure/snapshot", (q, s) -> "");
