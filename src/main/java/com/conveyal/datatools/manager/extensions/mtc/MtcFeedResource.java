@@ -12,6 +12,7 @@ import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -195,16 +196,6 @@ public class MtcFeedResource implements ExternalFeedResource {
 
         if(s3Bucket == null) return;
 
-        AWSCredentials creds;
-        if (this.s3CredentialsFilename != null) {
-            creds = new ProfileCredentialsProvider(this.s3CredentialsFilename, "default").getCredentials();
-            LOG.info("Writing to S3 using supplied credentials file");
-        }
-        else {
-            // default credentials providers, e.g. IAM role
-            creds = new DefaultAWSCredentialsProviderChain().getCredentials();
-        }
-
         ExternalFeedSourceProperty agencyIdProp =
                 ExternalFeedSourceProperty.find(feedVersion.getFeedSource(), this.getResourceType(), "AgencyId");
 
@@ -218,8 +209,7 @@ public class MtcFeedResource implements ExternalFeedResource {
 
         File file = feedVersion.getGtfsFile();
 
-        AmazonS3 s3client = new AmazonS3Client(creds);
-        s3client.putObject(new PutObjectRequest(
+        FeedStore.s3Client.putObject(new PutObjectRequest(
                 s3Bucket, keyName, file));
     }
 

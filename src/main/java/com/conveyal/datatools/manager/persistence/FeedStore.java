@@ -1,17 +1,17 @@
 package com.conveyal.datatools.manager.persistence;
 
 import java.io.*;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.AmazonServiceException;
+import com.amazonaws.auth.AWSCredentialsProvider;
+import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.*;
 import com.amazonaws.services.s3.transfer.TransferManager;
+import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
 import com.amazonaws.services.s3.transfer.Upload;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -20,10 +20,8 @@ import gnu.trove.list.array.TLongArrayList;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 
-import com.amazonaws.auth.AWSCredentials;
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
 import com.amazonaws.auth.profile.ProfileCredentialsProvider;
-import com.amazonaws.services.s3.AmazonS3Client;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,7 +42,7 @@ public class FeedStore {
 
     public static final String s3Prefix = "gtfs/";
 
-    public static AmazonS3Client s3Client;
+    public static AmazonS3 s3Client;
     /** An AWS credentials file to use when uploading to S3 */
     private static final String s3CredentialsFilename = DataManager.getConfigPropertyAsText("application.data.s3_credentials_file");
 
@@ -66,7 +64,7 @@ public class FeedStore {
         // s3 storage
         if (DataManager.useS3){
             this.s3Bucket = DataManager.getConfigPropertyAsText("application.data.gtfs_s3_bucket");
-            s3Client = new AmazonS3Client(getAWSCreds());
+            s3Client = AmazonS3ClientBuilder.standard().withCredentials(getAWSCreds()).build();
         }
     }
 
@@ -128,12 +126,12 @@ public class FeedStore {
         }
     }
 
-    private AWSCredentials getAWSCreds () {
+    private AWSCredentialsProvider getAWSCreds () {
         if (this.s3CredentialsFilename != null) {
-            return new ProfileCredentialsProvider(this.s3CredentialsFilename, "default").getCredentials();
+            return new ProfileCredentialsProvider(this.s3CredentialsFilename, "default");
         } else {
             // default credentials providers, e.g. IAM role
-            return new DefaultAWSCredentialsProviderChain().getCredentials();
+            return new DefaultAWSCredentialsProviderChain();
         }
     }
 
@@ -249,7 +247,7 @@ public class FeedStore {
                 File tempFile = createTempFile(id, inputStream);
 
                 LOG.info("Uploading feed {} to S3 from tempfile", id);
-                TransferManager tm = new TransferManager(getAWSCreds());
+                TransferManager tm = TransferManagerBuilder.standard().withS3Client(s3Client).build();
                 PutObjectRequest request = new PutObjectRequest(s3Bucket, getS3Key(id), tempFile);
                 // Subscribe to the event and provide event handler.
                 TLongList transferredBytes = new TLongArrayList();

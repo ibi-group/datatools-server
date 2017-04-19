@@ -1,8 +1,12 @@
 package com.conveyal.datatools.editor.controllers.api;
 
+
 import com.conveyal.datatools.common.utils.SparkUtils;
+import com.amazonaws.AmazonServiceException;
+import com.amazonaws.auth.policy.Statement;
+import com.amazonaws.auth.policy.actions.S3Actions;
+import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.conveyal.datatools.editor.controllers.Base;
-import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.jobs.ProcessGtfsSnapshotExport;
@@ -12,11 +16,11 @@ import com.conveyal.datatools.editor.models.transit.Stop;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.controllers.api.FeedSourceController;
-import com.conveyal.datatools.manager.controllers.api.FeedVersionController;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
+import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import org.mapdb.Fun;
 import org.mapdb.Fun.Tuple2;
@@ -32,6 +36,7 @@ import java.util.List;
 import spark.Request;
 import spark.Response;
 
+import static com.conveyal.datatools.common.utils.S3Utils.getS3Credentials;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static spark.Spark.*;
 
@@ -68,6 +73,7 @@ public class SnapshotController {
                     snapshots = gtx.snapshots.values();
                 }
                 else {
+                    FeedSource feedSource = FeedSourceController.requestFeedSource(req, FeedSource.get(feedId), "view");
                     snapshots = gtx.snapshots.subMap(new Tuple2(feedId, null), new Tuple2(feedId, Fun.HI)).values();
                 }
 
@@ -226,10 +232,12 @@ public class SnapshotController {
     }
 
     /** Export a snapshot as GTFS */
-    public static Object exportSnapshot (Request req, Response res) {
+    public static Object getSnapshotToken(Request req, Response res) {
         String id = req.params("id");
         Tuple2<String, Integer> decodedId;
         FeedDownloadToken token;
+
+        // attempt to deserialize id
         try {
             decodedId = JacksonSerializers.Tuple2IntDeserializer.deserialize(id);
         } catch (IOException e1) {
@@ -238,20 +246,55 @@ public class SnapshotController {
         }
 
         GlobalTx gtx = VersionedDataStore.getGlobalTx();
-        Snapshot local;
+        Snapshot snapshot;
+        String filePrefix;
+        String key;
+
+        // check that snapshot exists for the id
         try {
             if (!gtx.snapshots.containsKey(decodedId)) {
                 halt(404);
                 return null;
             }
+            snapshot = gtx.snapshots.get(decodedId);
+            filePrefix = snapshot.feedId + "_" + snapshot.snapshotTime;
+            key = "snapshots/" + filePrefix + ".zip";
 
-            local = gtx.snapshots.get(decodedId);
-            token = new FeedDownloadToken(local);
-            token.save();
+            // ensure user has permission to download snapshot, otherwise halt them
+            FeedSourceController.requestFeedSource(req, FeedSource.get(snapshot.feedId), "view");
         } finally {
             gtx.rollbackIfOpen();
         }
-        return token;
+        // if storing feeds on S3, first write the snapshot to GTFS file and upload to S3
+        // this needs to be completed before the credentials are delivered, so that the client has
+        // an actual object to download.
+        if (DataManager.useS3) {
+            if (!FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, key)) {
+                File file;
+                try {
+                    File tDir = new File(System.getProperty("java.io.tmpdir"));
+                    file = File.createTempFile(filePrefix, ".zip");
+                    file.deleteOnExit();
+                    writeSnapshotAsGtfs(snapshot.id, file);
+                    try {
+                        LOG.info("Uploading snapshot to S3 {}", key);
+                        FeedStore.s3Client.putObject(new PutObjectRequest(
+                                DataManager.feedBucket, key, file));
+                        file.delete();
+                    } catch (AmazonServiceException ase) {
+                        LOG.error("Error uploading snapshot to S3", ase);
+                    }
+                } catch (Exception e) {
+                    LOG.error("Unable to create temp file for snapshot", e);
+                }
+            }
+            return getS3Credentials(DataManager.awsRole, DataManager.feedBucket, key, Statement.Effect.Allow, S3Actions.GetObject, 900);
+        } else {
+            // if not storing on s3, just use the token download method
+            token = new FeedDownloadToken(snapshot);
+            token.save();
+            return token;
+        }
     }
 
     /** Write snapshot to disk as GTFS */
@@ -300,6 +343,13 @@ public class SnapshotController {
         return true;
     }
 
+    /**
+     * This method is used only when NOT storing feeds on S3. It will deliver a
+     * snapshot file from the local storage if a valid token is provided.
+     * @param req
+     * @param res
+     * @return
+     */
     private static Object downloadSnapshotWithToken (Request req, Response res) {
         String id = req.params("token");
         FeedDownloadToken token = FeedDownloadToken.get(id);
@@ -314,14 +364,16 @@ public class SnapshotController {
         try {
             file = File.createTempFile("snapshot", ".zip");
             writeSnapshotAsGtfs(snapshot.id, file);
+            file.deleteOnExit();
         } catch (Exception e) {
             e.printStackTrace();
             String message = "Unable to create temp file for snapshot";
             LOG.error(message);
         }
         token.delete();
-        return downloadFile(file, res);
+        return downloadFile(file, snapshot.feedId + "_" + snapshot.snapshotTime + ".zip", res);
     }
+
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/snapshot/:id", SnapshotController::getSnapshot, json::write);
         options(apiPrefix + "secure/snapshot", (q, s) -> "");
@@ -330,7 +382,7 @@ public class SnapshotController {
         post(apiPrefix + "secure/snapshot/import", SnapshotController::importSnapshot, json::write);
         put(apiPrefix + "secure/snapshot/:id", SnapshotController::updateSnapshot, json::write);
         post(apiPrefix + "secure/snapshot/:id/restore", SnapshotController::restoreSnapshot, json::write);
-        get(apiPrefix + "secure/snapshot/:id/downloadtoken", SnapshotController::exportSnapshot, json::write);
+        get(apiPrefix + "secure/snapshot/:id/downloadtoken", SnapshotController::getSnapshotToken, json::write);
         delete(apiPrefix + "secure/snapshot/:id", SnapshotController::deleteSnapshot, json::write);
 
         get(apiPrefix + "downloadsnapshot/:token", SnapshotController::downloadSnapshotWithToken);

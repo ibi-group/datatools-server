@@ -63,6 +63,7 @@ public class DataManager {
     public static GTFSCache gtfsCache;
 
     public static String feedBucket;
+    public static String awsRole;
     public static String bucketFolder;
 
 //    public final AmazonS3Client s3Client;
@@ -83,7 +84,7 @@ public class DataManager {
         if (getConfigProperty("application.port") != null) {
             port(Integer.parseInt(getConfigPropertyAsText("application.port")));
         }
-        useS3 = getConfigPropertyAsText("application.data.use_s3_storage").equals("true");
+        useS3 = "true".equals(getConfigPropertyAsText("application.data.use_s3_storage"));
 
         // initialize map of auto fetched projects
         for (Project p : Project.getAll()) {
@@ -96,6 +97,7 @@ public class DataManager {
         }
 
         feedBucket = getConfigPropertyAsText("application.data.gtfs_s3_bucket");
+        awsRole = getConfigPropertyAsText("application.data.aws_role");
         bucketFolder = FeedStore.s3Prefix;
 
         if (useS3) {
@@ -271,11 +273,11 @@ public class DataManager {
     }
 
     public static boolean isModuleEnabled(String moduleName) {
-        return "true".equals(getConfigPropertyAsText("modules." + moduleName + ".enabled"));
+        return hasConfigProperty("modules." + moduleName) && "true".equals(getConfigPropertyAsText("modules." + moduleName + ".enabled"));
     }
 
     public static boolean isExtensionEnabled(String extensionName) {
-        return "true".equals(getConfigPropertyAsText("extensions." + extensionName + ".enabled"));
+        return hasConfigProperty("extensions." + extensionName) && "true".equals(getConfigPropertyAsText("extensions." + extensionName + ".enabled"));
     }
 
     private static void registerExternalResources() {
