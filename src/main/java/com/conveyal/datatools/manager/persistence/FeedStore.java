@@ -6,6 +6,8 @@ import java.util.List;
 
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.AmazonServiceException;
+import com.amazonaws.ClientConfiguration;
+import com.amazonaws.SdkClientException;
 import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
@@ -44,7 +46,8 @@ public class FeedStore {
 
     public static AmazonS3 s3Client;
     /** An AWS credentials file to use when uploading to S3 */
-    private static final String s3CredentialsFilename = DataManager.getConfigPropertyAsText("application.data.s3_credentials_file");
+    private static final String S3_CREDENTIALS_FILENAME = DataManager.getConfigPropertyAsText("application.data.s3_credentials_file");
+    private static final String S3_CONFIG_FILENAME = DataManager.getConfigPropertyAsText("application.data.s3_credentials_file");
 
     public FeedStore() {
         this(null);
@@ -64,7 +67,22 @@ public class FeedStore {
         // s3 storage
         if (DataManager.useS3){
             this.s3Bucket = DataManager.getConfigPropertyAsText("application.data.gtfs_s3_bucket");
-            s3Client = AmazonS3ClientBuilder.standard().withCredentials(getAWSCreds()).build();
+            AmazonS3ClientBuilder builder = AmazonS3ClientBuilder.standard()
+                    .withCredentials(getAWSCreds());
+
+            // if region configuration string is provided, use that
+            // otherwise default to ~/.aws/config
+            // NOTE: if this is missing
+            String s3Region = DataManager.getConfigPropertyAsText("application.data.s3_region");
+            if (s3Region != null) {
+                LOG.info("Using S3 region {}", s3Region);
+                builder.withRegion(s3Region);
+            }
+            try {
+                s3Client = builder.build();
+            } catch (SdkClientException e) {
+                LOG.error("S3 client not initialized correctly.  Must provide config property application.data.s3_region or specify region in ~/.aws/config", e);
+            }
         }
     }
 
@@ -127,8 +145,8 @@ public class FeedStore {
     }
 
     private AWSCredentialsProvider getAWSCreds () {
-        if (this.s3CredentialsFilename != null) {
-            return new ProfileCredentialsProvider(this.s3CredentialsFilename, "default");
+        if (this.S3_CREDENTIALS_FILENAME != null) {
+            return new ProfileCredentialsProvider(this.S3_CREDENTIALS_FILENAME, "default");
         } else {
             // default credentials providers, e.g. IAM role
             return new DefaultAWSCredentialsProviderChain();

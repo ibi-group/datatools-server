@@ -1,7 +1,5 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
@@ -29,7 +27,6 @@ public class GtfsApiController {
     public static final Logger LOG = LoggerFactory.getLogger(GtfsApiController.class);
     public static String feedBucket;
     public static FeedUpdater feedUpdater;
-    private static AmazonS3 s3 = AmazonS3ClientBuilder.defaultClient();
     public static final String extensionType = DataManager.getConfigPropertyAsText("modules.gtfsapi.use_extension");
     public static String bucketFolder = DataManager.getConfigPropertyAsText("extensions." + extensionType + ".s3_download_prefix");
 
@@ -80,7 +77,7 @@ public class GtfsApiController {
         }
         Map<String, String> newTags = new HashMap<>();
         // iterate over feeds in download_prefix folder and register to gtfsApi (MTC project)
-        ObjectListing gtfsList = s3.listObjects(bucket, dir);
+        ObjectListing gtfsList = FeedStore.s3Client.listObjects(bucket, dir);
         for (S3ObjectSummary objSummary : gtfsList.getObjectSummaries()) {
 
             String eTag = objSummary.getETag();
@@ -95,7 +92,7 @@ public class GtfsApiController {
                 String feedId = filename.replace(".zip", "");
                 try {
                     LOG.warn("New version found for " + keyName + " is null. Downloading from s3...");
-                    S3Object object = s3.getObject(bucket, keyName);
+                    S3Object object = FeedStore.s3Client.getObject(bucket, keyName);
                     InputStream in = object.getObjectContent();
                     byte[] buf = new byte[1024];
                     File file = new File(FeedStore.basePath, filename);
