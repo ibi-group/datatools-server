@@ -29,6 +29,7 @@ import com.conveyal.datatools.manager.controllers.api.GtfsApiController;
 import com.conveyal.datatools.manager.persistence.DataStore;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.utils.HashUtils;
+import com.conveyal.gtfs.BaseGTFSCache;
 import com.conveyal.gtfs.GTFSFeed;
 import com.conveyal.gtfs.api.ApiMain;
 import com.conveyal.gtfs.validator.json.LoadStatus;
@@ -84,11 +85,7 @@ public class FeedVersion extends Model implements Serializable {
         this.updated = new Date();
         this.feedSourceId = source.id;
 
-        // ISO time
-        DateFormat df = new SimpleDateFormat("yyyyMMdd'T'HHmmssX");
-
-        // since we store directly on the file system, this lets users look at the DB directly
-        this.id = getCleanName(source.name) + "-" + df.format(this.updated) + "-" + source.id + ".zip";
+       this.id = generateFeedVersionId(source);
 
         // infer the version
 //        FeedVersion prev = source.getLatest();
@@ -100,6 +97,15 @@ public class FeedVersion extends Model implements Serializable {
 //        }
         int count = source.getFeedVersionCount();
         this.version = count + 1;
+    }
+
+    private String generateFeedVersionId(FeedSource source) {
+        // ISO time
+        DateFormat df = new SimpleDateFormat("yyyyMMdd'T'HHmmssX");
+
+        // since we store directly on the file system, this lets users look at the DB directly
+        // TODO: no need to BaseGTFSCache.cleanId once we rely on GTFSCache to store the feed.
+        return BaseGTFSCache.cleanId(getCleanName(source.name) + "-" + df.format(this.updated) + "-" + source.id) + ".zip";
     }
 
     /**
@@ -177,8 +183,8 @@ public class FeedVersion extends Model implements Serializable {
     }
     @JsonIgnore
     public GTFSFeed getGtfsFeed() {
+        // clean feed version ID for use with GTFSCache/GTFS API ID system (appends ".zip" to IDs passed in)
         String apiId = id.replace(".zip", "");
-//        return DataManager.gtfsCache.get(apiId);
         return ApiMain.getFeedSource(apiId).feed;
     }
 
