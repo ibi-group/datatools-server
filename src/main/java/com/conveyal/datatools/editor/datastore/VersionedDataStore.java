@@ -71,6 +71,8 @@ public class VersionedDataStore {
                     TxMaker agencyTxm = DBMaker.newFileDB(new File(path, "master.db"))
                             .mmapFileEnable()
                             .compressionEnable()
+                            .asyncWriteEnable()
+                            .closeOnJvmShutdown()
                             .makeTxMaker();
 
                     feedTxMakers.put(feedId, agencyTxm);
