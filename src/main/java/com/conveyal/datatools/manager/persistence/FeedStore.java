@@ -16,6 +16,7 @@ import com.amazonaws.services.s3.transfer.TransferManager;
 import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
 import com.amazonaws.services.s3.transfer.Upload;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.controllers.api.GtfsApiController;
 import com.conveyal.datatools.manager.models.FeedSource;
 import gnu.trove.list.TLongList;
 import gnu.trove.list.array.TLongArrayList;
@@ -40,7 +41,7 @@ public class FeedStore {
     public static final File basePath = new File(DataManager.getConfigPropertyAsText("application.data.gtfs"));
     private final File path;
     /** An optional AWS S3 bucket to store the feeds */
-    private String s3Bucket;
+    private static String s3Bucket;
 
     public static final String s3Prefix = "gtfs/";
 
@@ -63,10 +64,12 @@ public class FeedStore {
         String pathString = basePath.getAbsolutePath();
         if (subdir != null) pathString += File.separator + subdir;
         path = getPath(pathString);
+    }
 
+    public static void initializeS3 () {
         // s3 storage
-        if (DataManager.useS3){
-            this.s3Bucket = DataManager.getConfigPropertyAsText("application.data.gtfs_s3_bucket");
+        if (DataManager.useS3 || GtfsApiController.extensionType.equals("mtc")){
+            FeedStore.s3Bucket = DataManager.getConfigPropertyAsText("application.data.gtfs_s3_bucket");
             AmazonS3ClientBuilder builder = AmazonS3ClientBuilder.standard()
                     .withCredentials(getAWSCreds());
 
@@ -144,9 +147,9 @@ public class FeedStore {
         }
     }
 
-    private AWSCredentialsProvider getAWSCreds () {
-        if (this.S3_CREDENTIALS_FILENAME != null) {
-            return new ProfileCredentialsProvider(this.S3_CREDENTIALS_FILENAME, "default");
+    private static AWSCredentialsProvider getAWSCreds () {
+        if (FeedStore.S3_CREDENTIALS_FILENAME != null) {
+            return new ProfileCredentialsProvider(FeedStore.S3_CREDENTIALS_FILENAME, "default");
         } else {
             // default credentials providers, e.g. IAM role
             return new DefaultAWSCredentialsProviderChain();
