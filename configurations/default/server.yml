@@ -1,6 +1,7 @@
 application:
   assets_bucket: datatools-staging # dist directory
   public_url: http://localhost:9966
+  notifications_enabled: false
   port: 4000
   data:
     mapdb: /tmp
