@@ -13,6 +13,8 @@ import java.io.Serializable;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Collection;
+import java.util.HashSet;
+import java.util.Set;
 
 public class Route extends Model implements Cloneable, Serializable {
     public static final long serialVersionUID = 1;
@@ -130,6 +132,7 @@ public class Route extends Model implements Cloneable, Serializable {
         ret.route_long_name = routeLongName;
         ret.route_short_name = routeShortName;
         ret.route_text_color = routeTextColor;
+        ret.route_type = gtfsRouteType.toGtfs();
         // TODO also handle HVT types here
         //ret.route_type = mapGtfsRouteType(routeTypeId);
         try {
@@ -158,7 +161,7 @@ public class Route extends Model implements Cloneable, Serializable {
 
     /**
      * Get a name for this combining the short name and long name as available.
-     * @return
+     * @return combined route short and long names
      */
     @JsonIgnore
     public String getName() {
@@ -174,36 +177,51 @@ public class Route extends Model implements Cloneable, Serializable {
     }
 
     // Add information about the days of week this route is active
-    public void addDerivedInfo(FeedTx tx) {
-        monday = tuesday = wednesday = thursday = friday = saturday = sunday = false;
-
+    public void addDerivedInfo(final FeedTx tx) {
+        monday = false;
+        tuesday = false;
+        wednesday = false;
+        thursday = false;
+        friday = false;
+        saturday = false;
+        sunday = false;
+        Set<String> calendars = new HashSet<>();
         for (Trip trip : tx.getTripsByRoute(this.id)) {
-            ServiceCalendar cal = tx.calendars.get(trip.calendarId);
+            ServiceCalendar cal = null;
+            try {
+                if (calendars.contains(trip.calendarId)) continue;
+                cal = tx.calendars.get(trip.calendarId);
+                if (cal.monday)
+                    monday = true;
 
-            if (cal.monday)
-                monday = true;
+                if (cal.tuesday)
+                    tuesday = true;
 
-            if (cal.tuesday)
-                tuesday = true;
+                if (cal.wednesday)
+                    wednesday = true;
 
-            if (cal.wednesday)
-                wednesday = true;
+                if (cal.thursday)
+                    thursday = true;
 
-            if (cal.thursday)
-                thursday = true;
+                if (cal.friday)
+                    friday = true;
 
-            if (cal.friday)
-                friday = true;
+                if (cal.saturday)
+                    saturday = true;
 
-            if (cal.saturday)
-                saturday = true;
+                if (cal.sunday)
+                    sunday = true;
 
-            if (cal.sunday)
-                sunday = true;
+                if (monday && tuesday && wednesday && thursday && friday && saturday && sunday) {
+                    // optimization: no point in continuing
+                    break;
+                }
+            } catch (Exception e) {
+                LOG.error("Could not process trip {} or cal {} for route {}", trip, cal, this);
+            }
 
-            if (monday && tuesday && wednesday && thursday && friday && saturday && sunday)
-                // optimization: no point in continuing
-                break;
+            calendars.add(trip.calendarId);
+
         }
     }
 
