@@ -1,9 +1,7 @@
 package com.conveyal.datatools.editor.datastore;
 
 import com.conveyal.datatools.editor.models.transit.*;
-import com.conveyal.datatools.manager.models.FeedSource;
 import com.google.common.base.Function;
-import com.google.common.collect.Collections2;
 import com.google.common.collect.Iterators;
 import java.time.LocalDate;
 import org.mapdb.Atomic;
@@ -11,11 +9,8 @@ import org.mapdb.BTreeMap;
 import org.mapdb.Bind;
 import org.mapdb.DB;
 import org.mapdb.Fun;
-import org.mapdb.Fun.Function2;
 import org.mapdb.Fun.Tuple2;
-//import play.i18n.Messages;
 import com.conveyal.datatools.editor.utils.BindUtils;
-import org.mapdb.TxRollbackException;
 
 import java.util.Collection;
 import java.util.Iterator;
@@ -23,7 +18,7 @@ import java.util.NavigableSet;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.stream.Collectors;
 
 /** a transaction in an agency database */
 public class FeedTx extends DatabaseTx {
@@ -113,6 +108,7 @@ public class FeedTx extends DatabaseTx {
 
 //        editedSinceSnapshot = tx.getAtomicBoolean("editedSinceSnapshot") == null ? tx.createAtomicBoolean("editedSinceSnapshot", false) : tx.;
     }
+
     public void commit () {
         try {
 //            editedSinceSnapshot.set(true);
@@ -123,6 +119,7 @@ public class FeedTx extends DatabaseTx {
         }
         closed = true;
     }
+
     public void buildSecondaryIndices () {
         // build secondary indices
         // we store indices in the mapdb not because we care about persistence, but because then they
@@ -187,37 +184,34 @@ public class FeedTx extends DatabaseTx {
     public Collection<Trip> getTripsByPattern(String patternId) {
         Set<Tuple2<String, String>> matchedKeys = tripsByTripPattern.subSet(new Tuple2(patternId, null), new Tuple2(patternId, Fun.HI));
 
-        return Collections2.transform(matchedKeys, input -> trips.get(input.b));
+        return matchedKeys.stream()
+                .map(input -> trips.get(input.b))
+                .collect(Collectors.toList());
     }
 
     public Collection<Trip> getTripsByRoute(String routeId) {
         Set<Tuple2<String, String>> matchedKeys = tripsByRoute.subSet(new Tuple2(routeId, null), new Tuple2(routeId, Fun.HI));
 
-        return Collections2.transform(matchedKeys, input -> trips.get(input.b));
+        return matchedKeys.stream().map(input -> trips.get(input.b)).collect(Collectors.toList());
     }
 
     public Collection<Trip> getTripsByCalendar(String calendarId) {
         Set<Tuple2<String, String>> matchedKeys = tripsByCalendar.subSet(new Tuple2(calendarId, null), new Tuple2(calendarId, Fun.HI));
 
-        return Collections2.transform(matchedKeys, input -> trips.get(input.b));
+        return matchedKeys.stream().map(input -> trips.get(input.b)).collect(Collectors.toList());
     }
 
     public Collection<ScheduleException> getExceptionsByCalendar(String calendarId) {
         Set<Tuple2<String, String>> matchedKeys = exceptionsByCalendar.subSet(new Tuple2(calendarId, null), new Tuple2(calendarId, Fun.HI));
 
-        return Collections2.transform(matchedKeys, input -> exceptions.get(input.b));
+        return matchedKeys.stream().map(input -> exceptions.get(input.b)).collect(Collectors.toList());
     }
 
     public Collection<Trip> getTripsByPatternAndCalendar(String patternId, String calendarId) {
         Set<Tuple2<Tuple2<String, String>, String>> matchedKeys =
                 tripsByPatternAndCalendar.subSet(new Tuple2(new Tuple2(patternId, calendarId), null), new Tuple2(new Tuple2(patternId, calendarId), Fun.HI));
 
-//        return Collections2.transform(matchedKeys, input -> trips.get(input.b));
-        return Collections2.transform(matchedKeys, new Function<Tuple2<Tuple2<String, String>, String>, Trip>() {
-            public Trip apply(Tuple2<Tuple2<String, String>, String> input) {
-                    return trips.get(input.b);
-                }
-        });
+        return matchedKeys.stream().map(input -> trips.get(input.b)).collect(Collectors.toList());
     }
 
     public Collection<Stop> getStopsWithinBoundingBox (double north, double east, double south, double west) {
@@ -229,15 +223,16 @@ public class FeedTx extends DatabaseTx {
         Set<Tuple2<Tuple2<Double, Double>, String>> matchedKeys =
                 stopsGix.subSet(new Tuple2(min, null), new Tuple2(max, Fun.HI));
 
-        Collection<Stop> matchedStops =
-                Collections2.transform(matchedKeys, input -> stops.get(input.b));
+        Collection<Stop> matchedStops = matchedKeys.stream().map(input -> stops.get(input.b)).collect(Collectors.toList());
 
         return matchedStops;
     }
 
     public Collection<TripPattern> getTripPatternsByStop (String id) {
         Collection<Tuple2<String, String>> matchedPatterns = tripPatternsByStop.subSet(new Tuple2(id, null), new Tuple2(id, Fun.HI));
-        return Collections2.transform(matchedPatterns, input -> tripPatterns.get(input.b));
+        return matchedPatterns.stream()
+                .map(input -> tripPatterns.get(input.b))
+                .collect(Collectors.toList());
     }
 
     /** return the version number of the next snapshot */
