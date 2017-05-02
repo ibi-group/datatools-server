@@ -13,6 +13,7 @@ import com.vividsolutions.jts.linearref.LocationIndexedLine;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.Model;
 import org.geotools.referencing.GeodeticCalculator;
+import org.mapdb.Fun;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.conveyal.datatools.editor.utils.GeoUtils;
@@ -48,17 +49,32 @@ public class TripPattern extends Model implements Cloneable, Serializable {
 
     public List<TripPatternStop> patternStops = new ArrayList<TripPatternStop>();
 
-    public int getNumberOfTrips () {
-        FeedTx tx = VersionedDataStore.getFeedTx(this.feedId);
-        Collection<Trip> trips = tx.getTripsByPattern(this.id);
-        return trips == null ? 0 : trips.size();
+    // give the UI a little information about the content of this trip pattern
+    public transient Long numberOfTrips;
+    public transient Map<String, Long> tripCountByCalendar;
+
+
+    @JsonProperty("numberOfTrips")
+    public Long jsonGetNumberOfTrips () {
+        return numberOfTrips;
     }
 
-    public Map<String, Long> getTripCountByCalendar () {
-        FeedTx tx = VersionedDataStore.getFeedTx(this.feedId);
+    @JsonProperty("tripCountByCalendar")
+    Map<String, Long> jsonGetTripCountByCalendar () { return tripCountByCalendar; }
+
+    // do-nothing setters
+    @JsonProperty("numberOfTrips")
+    public void jsonSetNumberOfTrips(Long numberOfTrips) { }
+
+    @JsonProperty("tripCountByCalendar")
+    public void jsonSetTripCountByCalendar(Map<String, Long> tripCountByCalendar) { }
+
+    /** add transient info for UI with number of routes, number of trips */
+    public void addDerivedInfo(final FeedTx tx) {
         Collection<Trip> trips = tx.getTripsByPattern(this.id);
-        return trips.stream()
-                .filter(t -> t.calendarId != null)
+        numberOfTrips = Long.valueOf(trips.size());
+        tripCountByCalendar = trips.stream()
+                .filter(t -> t != null && t.calendarId != null)
                 .collect(Collectors.groupingBy(t -> t.calendarId, Collectors.counting()));
     }
 
@@ -66,39 +82,40 @@ public class TripPattern extends Model implements Cloneable, Serializable {
      * Lines showing how stops are being snapped to the shape.
      * @return
      */
-    @JsonProperty("stopConnections")
-    public LineString[] jsonGetStopConnections () {
-        if (useStraightLineDistances || shape == null)
-            return null;
-
-        FeedTx tx = VersionedDataStore.getFeedTx(this.feedId);
-
-        try {
-            LineString[] ret = new LineString[patternStops.size()];
-
-            double[] coordDistances = getCoordDistances(shape);
-            LocationIndexedLine shapeIdx = new LocationIndexedLine(shape);
-
-            for (int i = 0; i < ret.length; i++) {
-                TripPatternStop ps = patternStops.get(i);
-
-                if (ps.shapeDistTraveled == null) {
-                    return null;
-                }
-
-                Coordinate snapped = shapeIdx.extractPoint(getLoc(coordDistances, ps.shapeDistTraveled));
-                // offset it slightly so that line creation does not fail if the stop is coincident
-                snapped.x = snapped.x - 0.00000001;
-                Coordinate stop = tx.stops.get(patternStops.get(i).stopId).location.getCoordinate();
-                ret[i] = GeoUtils.geometyFactory.createLineString(new Coordinate[] {stop, snapped});
-            }
-
-            return ret;
-        } finally {
-            tx.rollback();
-        }
-
-    }
+//    @JsonProperty("stopConnections")
+//    public LineString[] jsonGetStopConnections () {
+//        if (useStraightLineDistances || shape == null)
+//            return null;
+//
+//        final FeedTx tx = VersionedDataStore.getFeedTx(this.feedId);
+//
+//        try {
+//            LineString[] ret = new LineString[patternStops.size()];
+//
+//            double[] coordDistances = getCoordDistances(shape);
+//            LocationIndexedLine shapeIdx = new LocationIndexedLine(shape);
+//
+//            for (int i = 0; i < ret.length; i++) {
+//                TripPatternStop ps = patternStops.get(i);
+//
+//                if (ps.shapeDistTraveled == null) {
+//                    return null;
+//                }
+//
+//                Coordinate snapped = shapeIdx.extractPoint(getLoc(coordDistances, ps.shapeDistTraveled));
+//                // offset it slightly so that line creation does not fail if the stop is coincident
+//                snapped.x = snapped.x - 0.00000001;
+//                Stop st = tx.stops.get(ps.stopId);
+//                Coordinate stop = st.location.getCoordinate();
+//                ret[i] = GeoUtils.geometyFactory.createLineString(new Coordinate[] {stop, snapped});
+//            }
+//
+//            return ret;
+//        } finally {
+//            tx.rollback();
+//        }
+//
+//    }
 
     public TripPattern()
     {
@@ -312,11 +329,11 @@ public class TripPattern extends Model implements Cloneable, Serializable {
         this.shape = (LineString) g;
     }
 
-    public void calcShapeDistTraveled () {
-        FeedTx tx = VersionedDataStore.getFeedTx(feedId);
-        calcShapeDistTraveled(tx);
-        tx.rollback();
-    }
+//    public void calcShapeDistTraveled () {
+//        FeedTx tx = VersionedDataStore.getFeedTx(feedId);
+//        calcShapeDistTraveled(tx);
+//        tx.rollback();
+//    }
     
     /**
      * Calculate the shape dist traveled along the current shape. Do this by snapping points but constraining order.
@@ -331,7 +348,7 @@ public class TripPattern extends Model implements Cloneable, Serializable {
      * 5. otherwise, mark it to be returned to on the second pass
      * 6. on the second pass, just snap to the closest point on the subsection of the shape defined by the previous and next stop positions.
      */
-    public void calcShapeDistTraveled(FeedTx tx) {
+    public void calcShapeDistTraveled(final FeedTx tx) {
         if (patternStops.size() == 0)
             return;
 

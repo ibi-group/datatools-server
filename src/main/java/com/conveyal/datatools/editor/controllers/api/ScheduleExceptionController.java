@@ -5,6 +5,7 @@ import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.ScheduleException;
 import java.time.LocalDate;
+import java.util.ArrayList;
 
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
@@ -18,7 +19,7 @@ import static spark.Spark.*;
 
 
 public class ScheduleExceptionController {
-    public static JsonManager<ScheduleException> json =
+    public static final JsonManager<ScheduleException> json =
             new JsonManager<>(ScheduleException.class, JsonViews.UserInterface.class);
     private static final Logger LOG = LoggerFactory.getLogger(ScheduleExceptionController.class);
 
@@ -26,7 +27,6 @@ public class ScheduleExceptionController {
     public static Object getScheduleException (Request req, Response res) {
         String exceptionId = req.params("exceptionId");
         String feedId = req.queryParams("feedId");
-        Object json = null;
         if (feedId == null)
             feedId = req.session().attribute("feedId");
 
@@ -43,19 +43,19 @@ public class ScheduleExceptionController {
                 if (!tx.exceptions.containsKey(exceptionId))
                     halt(400);
                 else
-                    json = Base.toJson(tx.exceptions.get(exceptionId), false);
+                    return tx.exceptions.get(exceptionId);
             }
             else {
-                json = Base.toJson(tx.exceptions.values(), false);
+                return new ArrayList<>(tx.exceptions.values());
             }
-            tx.rollback();
         } catch (HaltException e) {
             LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
-            if (tx != null) tx.rollback();
             e.printStackTrace();
             halt(400);
+        } finally {
+            if (tx != null) tx.rollbackIfOpen();
         }
         return json;
     }
@@ -77,7 +77,6 @@ public class ScheduleExceptionController {
             if (ex.customSchedule != null) {
                 for (String cal : ex.customSchedule) {
                     if (!tx.calendars.containsKey(cal)) {
-                        tx.rollback();
                         halt(400);
                     }
                 }
@@ -85,7 +84,6 @@ public class ScheduleExceptionController {
             if (ex.addedService != null) {
                 for (String cal : ex.addedService) {
                     if (!tx.calendars.containsKey(cal)) {
-                        tx.rollback();
                         halt(400);
                     }
                 }
@@ -93,20 +91,17 @@ public class ScheduleExceptionController {
             if (ex.removedService != null) {
                 for (String cal : ex.removedService) {
                     if (!tx.calendars.containsKey(cal)) {
-                        tx.rollback();
                         halt(400);
                     }
                 }
             }
 
             if (tx.exceptions.containsKey(ex.id)) {
-                tx.rollback();
                 halt(400);
             }
             if (ex.dates != null) {
                 for (LocalDate date : ex.dates) {
                     if (tx.scheduleExceptionCountByDate.containsKey(date) && tx.scheduleExceptionCountByDate.get(date) > 0) {
-                        tx.rollback();
                         halt(400);
                     }
                 }
@@ -116,14 +111,15 @@ public class ScheduleExceptionController {
 
             tx.commit();
 
-            return Base.toJson(ex, false);
+            return ex;
         } catch (HaltException e) {
             LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
-            if (tx != null) tx.rollback();
             e.printStackTrace();
             halt(400);
+        } finally {
+            if (tx != null) tx.rollbackIfOpen();
         }
         return null;
     }
@@ -145,7 +141,6 @@ public class ScheduleExceptionController {
             if (ex.customSchedule != null) {
                 for (String cal : ex.customSchedule) {
                     if (!tx.calendars.containsKey(cal)) {
-                        tx.rollback();
                         halt(400);
                     }
                 }
@@ -153,7 +148,6 @@ public class ScheduleExceptionController {
             if (ex.addedService != null) {
                 for (String cal : ex.addedService) {
                     if (!tx.calendars.containsKey(cal)) {
-                        tx.rollback();
                         halt(400);
                     }
                 }
@@ -161,14 +155,12 @@ public class ScheduleExceptionController {
             if (ex.removedService != null) {
                 for (String cal : ex.removedService) {
                     if (!tx.calendars.containsKey(cal)) {
-                        tx.rollback();
                         halt(400);
                     }
                 }
             }
 
             if (!tx.exceptions.containsKey(ex.id)) {
-                tx.rollback();
                 halt(400);
             }
 
@@ -181,9 +173,10 @@ public class ScheduleExceptionController {
             LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
-            if (tx != null) tx.rollback();
             e.printStackTrace();
             halt(400);
+        } finally {
+            if (tx != null) tx.rollbackIfOpen();
         }
         return null;
     }
@@ -198,12 +191,12 @@ public class ScheduleExceptionController {
         if (feedId == null) {
             halt(400);
         }
-
         FeedTx tx = VersionedDataStore.getFeedTx(feedId);
+        ScheduleException ex = tx.exceptions.get(id);
         tx.exceptions.remove(id);
         tx.commit();
 
-        return true; // ok();
+        return ex; // ok();
     }
 
     public static void register (String apiPrefix) {

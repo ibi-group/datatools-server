@@ -30,9 +30,12 @@ import com.conveyal.datatools.editor.utils.JacksonSerializers;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
+import java.util.stream.Collectors;
 
+import spark.HaltException;
 import spark.Request;
 import spark.Response;
 
@@ -51,13 +54,13 @@ public class SnapshotController {
         String id = req.params("id");
         String feedId= req.queryParams("feedId");
 
-        GlobalTx gtx = VersionedDataStore.getGlobalTx();
-        Object json = null;
+        GlobalTx gtx = null;
         try {
+            gtx = VersionedDataStore.getGlobalTx();
             if (id != null) {
                 Tuple2<String, Integer> sid = JacksonSerializers.Tuple2IntDeserializer.deserialize(id);
                 if (gtx.snapshots.containsKey(sid))
-                    json = Base.toJson(gtx.snapshots.get(sid), false);
+                    return gtx.snapshots.get(sid);
                 else
                     halt(404);
             }
@@ -70,19 +73,23 @@ public class SnapshotController {
                     // if it's still null just give them everything
                     // this is used in GTFS Data Manager to get snapshots in bulk
                     // TODO this allows any authenticated user to fetch GTFS data for any agency
-                    snapshots = gtx.snapshots.values();
+                    return new ArrayList<>(gtx.snapshots.values());
                 }
                 else {
-                    FeedSource feedSource = FeedSourceController.requestFeedSource(req, FeedSource.get(feedId), "view");
-                    snapshots = gtx.snapshots.subMap(new Tuple2(feedId, null), new Tuple2(feedId, Fun.HI)).values();
+                    // check view permissions
+                    FeedSourceController.requestFeedSource(req, FeedSource.get(feedId), "view");
+                    return gtx.snapshots.subMap(new Tuple2(feedId, null), new Tuple2(feedId, Fun.HI)).values()
+                            .stream()
+                            .collect(Collectors.toList());
                 }
-
-                json = Base.toJson(snapshots, false);
             }
+        } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
+            throw e;
         } finally {
-            gtx.rollback();
+            if (gtx != null) gtx.rollback();
         }
-        return json;
+        return null;
     }
 
     public static Object createSnapshot (Request req, Response res) {
@@ -108,10 +115,14 @@ public class SnapshotController {
 
             gtx.commit();
 
-            return Base.toJson(s, false);
+            return s;
+        } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
+            throw e;
         } catch (IOException e) {
             e.printStackTrace();
             halt(400);
+        } finally {
             if (gtx != null) gtx.rollbackIfOpen();
         }
         return null;
@@ -166,26 +177,26 @@ public class SnapshotController {
             gtx = VersionedDataStore.getGlobalTx();
 
             if (!gtx.snapshots.containsKey(s.id)) {
-                gtx.rollback();
                 halt(404);
             }
 
             gtx.snapshots.put(s.id, s);
-
             gtx.commit();
-
-            return Base.toJson(s, false);
+            return s;
+        } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
+            throw e;
         } catch (IOException e) {
             e.printStackTrace();
-            if (gtx != null) gtx.rollbackIfOpen();
             halt(400);
+        } finally {
+            if (gtx != null) gtx.rollbackIfOpen();
         }
         return null;
     }
 
     public static Object restoreSnapshot (Request req, Response res) {
         String id = req.params("id");
-        Object json = null;
         Tuple2<String, Integer> decodedId = null;
         try {
             decodedId = JacksonSerializers.Tuple2IntDeserializer.deserialize(id);
@@ -221,8 +232,11 @@ public class SnapshotController {
             gtx.snapshots.put(local.id, clone);
             gtx.commit();
 
-            json = Base.toJson(stops, false);
-        } catch (IOException e) {
+            return stops;
+        } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
+            throw e;
+        } catch (Exception e) {
             e.printStackTrace();
             halt(400);
         } finally {

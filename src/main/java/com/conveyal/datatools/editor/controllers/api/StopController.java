@@ -3,8 +3,6 @@ package com.conveyal.datatools.editor.controllers.api;
 import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
-import com.google.common.base.Function;
-import com.google.common.collect.Collections2;
 import com.conveyal.datatools.editor.controllers.Base;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.*;
@@ -19,7 +17,6 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.json.simple.JSONObject;
-import org.mapdb.BTreeMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.HaltException;
@@ -31,9 +28,10 @@ import static spark.Spark.*;
 
 public class StopController {
 
-    public static JsonManager<Stop> json =
+    public static final JsonManager<Stop> json =
             new JsonManager<>(Stop.class, JsonViews.UserInterface.class);
     private static final Logger LOG = LoggerFactory.getLogger(StopController.class);
+
     public static Object getStop(Request req, Response res) {
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
@@ -52,9 +50,6 @@ public class StopController {
         if (req.queryParams("south") != null)
             south = Double.valueOf(req.queryParams("south"));
 
-        if (feedId == null)
-            feedId = req.session().attribute("feedId");
-
         if (feedId == null) {
             halt(400);
         }
@@ -64,33 +59,22 @@ public class StopController {
         try {
               if (id != null) {
                 if (!tx.stops.containsKey(id)) {
-                    tx.rollback();
                     halt(404);
                 }
 
-                Object json = Base.toJson(tx.stops.get(id), false);
-                tx.rollback();
-                return json;
+                return tx.stops.get(id);
             }
               else if (Boolean.TRUE.equals(majorStops)) {
                   // get the major stops for the agency
-                  Collection<Stop> stops = Collections2.transform(tx.majorStops, new Function<String, Stop>() {
-                    @Override
-                    public Stop apply(String input) {
-                        // TODO Auto-generated method stub
-                        return tx.stops.get(input);
-                    }
-                  });
+                  Collection<Stop> stops = tx.majorStops.stream()
+                          .map(tx.stops::get)
+                          .collect(Collectors.toList());
 
-                  Object stopsJson = Base.toJson(stops, false);
-                  tx.rollback();
-                  return stopsJson;
+                  return stops;
               }
             else if (west != null && east != null && south != null && north != null) {
                 Collection<Stop> matchedStops = tx.getStopsWithinBoundingBox(north, east, south, west);
-                Object json = Base.toJson(matchedStops, false);
-                tx.rollback();
-                return json;
+                return matchedStops;
             }
             else if (patternId != null) {
                 if (!tx.tripPatterns.containsKey(patternId)) {
@@ -99,30 +83,16 @@ public class StopController {
 
                 TripPattern p = tx.tripPatterns.get(patternId);
 
-                Collection<Stop> ret = Collections2.transform(p.patternStops, new Function<TripPatternStop, Stop>() {
-                    @Override
-                    public Stop apply(TripPatternStop input) {
-                        return tx.stops.get(input.stopId);
-                    }
-                });
+                Collection<Stop> ret = p.patternStops.stream()
+                        .map(tx.stops::get)
+                        .collect(Collectors.toList());
 
-                Object json = Base.toJson(ret, false);
-                tx.rollback();
-                return json;
+                return ret;
             }
-              // return all
+            // return all
             else {
-                  BTreeMap<String, Stop> stops;
-                  try {
-                      stops = tx.stops;
-                      Collection<Stop> matchedStops = stops.values();
-                      Object json = Base.toJson(matchedStops, false);
-                      tx.rollback();
-                      return json;
-                  } catch (IllegalAccessError e) {
-                      return new ArrayList<>();
-                  }
-
+                  Collection<Stop> matchedStops = new ArrayList<>(tx.stops.values());
+                  return matchedStops;
             }
 
         } catch (HaltException e) {
@@ -131,14 +101,14 @@ public class StopController {
         } catch (Exception e) {
             e.printStackTrace();
             halt(400);
-            tx.rollback();
+        } finally {
+            if (tx != null) tx.rollback();
         }
         return null;
     }
 
     public static Object createStop(Request req, Response res) {
         FeedTx tx = null;
-        Object json = null;
         try {
             Stop stop = Base.mapper.readValue(req.body(), Stop.class);
             
@@ -157,47 +127,7 @@ public class StopController {
             
             tx.stops.put(stop.id, stop);
             tx.commit();
-            json = Base.toJson(stop, false);
-        } catch (IOException e) {
-            e.printStackTrace();
-            halt(400);
-        } catch (HaltException e) {
-            LOG.error("Halt encountered", e);
-            throw e;
-        } catch (Exception e) {
-            e.printStackTrace();
-        } finally {
-            if (tx != null) tx.rollbackIfOpen();
-        }
-        return json;
-    }
-
-
-    public static Object updateStop(Request req, Response res) throws IOException {
-        FeedTx tx = null;
-        Object json;
-        Stop stop = Base.mapper.readValue(req.body(), Stop.class);
-        String feedId = req.queryParams("feedId");
-        if (feedId == null) {
-            halt(400, "Must provide feed ID");
-        }
-
-        if (!VersionedDataStore.feedExists(feedId)) {
-            halt(400, "Feed ID ("+feedId+") does not exist");
-        }
-        try {
-            tx = VersionedDataStore.getFeedTx(feedId);
-
-            if (!tx.stops.containsKey(stop.id)) {
-                halt(400);
-                tx.rollback();
-            }
-
-            tx.stops.put(stop.id, stop);
-            tx.commit();
-            json = Base.toJson(stop, false);
-            tx.rollbackIfOpen();
-            return json;
+            return stop;
         } catch (IOException e) {
             e.printStackTrace();
             halt(400);
@@ -212,10 +142,9 @@ public class StopController {
         return null;
     }
 
-    public static Object deleteStop(Request req, Response res) throws IOException {
+    public static Object getPatternsForStop(Request req, Response res) throws IOException {
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
-        Object json;
 
         if (feedId == null)
             feedId = req.session().attribute("feedId");
@@ -229,26 +158,80 @@ public class StopController {
             tx = VersionedDataStore.getFeedTx(feedId);
             if (!tx.stops.containsKey(id)) {
                 halt(404);
-                tx.rollback();
+            }
+            return tx.getTripPatternsByStop(id);
+        } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
+            throw e;
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            if (tx != null) tx.rollbackIfOpen();
+        }
+        return null;
+    }
+
+
+    public static Object updateStop(Request req, Response res) throws IOException {
+        FeedTx tx = null;
+        Stop stop = Base.mapper.readValue(req.body(), Stop.class);
+        String feedId = req.queryParams("feedId");
+        if (feedId == null) {
+            halt(400, "Must provide feed ID");
+        }
+
+        if (!VersionedDataStore.feedExists(feedId)) {
+            halt(400, "Feed ID ("+feedId+") does not exist");
+        }
+        try {
+            tx = VersionedDataStore.getFeedTx(feedId);
+
+            if (!tx.stops.containsKey(stop.id)) {
+                halt(400);
+            }
+
+            tx.stops.put(stop.id, stop);
+            tx.commit();
+            return stop;
+        } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
+            throw e;
+        } catch (Exception e) {
+            e.printStackTrace();
+        } finally {
+            if (tx != null) tx.rollbackIfOpen();
+        }
+        return null;
+    }
+
+    public static Object deleteStop(Request req, Response res) throws IOException {
+        String id = req.params("id");
+        String feedId = req.queryParams("feedId");
+
+        if (feedId == null) {
+            halt(400);
+        }
+
+        FeedTx tx = null;
+        try {
+            tx = VersionedDataStore.getFeedTx(feedId);
+            if (!tx.stops.containsKey(id)) {
+                halt(404);
             }
 
             if (!tx.getTripPatternsByStop(id).isEmpty()) {
-                Set<String> patterns = tx.getTripPatternsByStop(id).stream().map(tripPattern -> tripPattern.name).collect(Collectors.toSet());
-                Set<String> routes = tx.getTripPatternsByStop(id).stream().map(tripPattern -> tripPattern.routeId).collect(Collectors.toSet());
+                Set<String> patterns = tx.getTripPatternsByStop(id).stream()
+                        .map(tripPattern -> tripPattern.name)
+                        .collect(Collectors.toSet());
+                Set<String> routes = tx.getTripPatternsByStop(id).stream()
+                        .map(tripPattern -> tripPattern.routeId)
+                        .collect(Collectors.toSet());
                 halt(400, errorMessage("Trip patterns ("+patterns.toString()+") for routes "+routes.toString()+" reference stop ID" + id));
-                tx.rollback();
             }
 
             Stop s = tx.stops.remove(id);
             tx.commit();
-            json = Base.toJson(s, false);
-
-            tx.rollbackIfOpen();
-
-            return json;
-        } catch (IOException e) {
-            e.printStackTrace();
-            halt(400);
+            return s;
         } catch (HaltException e) {
             LOG.error("Halt encountered", e);
             throw e;
@@ -270,27 +253,25 @@ public class StopController {
 
     public static Object findDuplicateStops(Request req, Response res) {
         String feedId = req.queryParams("feedId");
-        Object json = null;
-
-        if (feedId == null)
-            feedId = req.session().attribute("feedId");
 
         if (feedId == null) {
             halt(400);
         }
 
-        FeedTx atx = VersionedDataStore.getFeedTx(feedId);
+        FeedTx tx = null;
 
         try {
+            tx = VersionedDataStore.getFeedTx(feedId);
+
             List<List<Stop>> ret = new ArrayList<List<Stop>>();
 
-            for (Stop stop : atx.stops.values()) {
+            for (Stop stop : tx.stops.values()) {
                 // find nearby stops, within 5m
                 // at the equator, 1 degree is 111 km
                 // everywhere else this will overestimate, which is why we have a distance check as well (below)
                 double thresholdDegrees = 5 / 111000d;
 
-                Collection<Stop> candidateStops = atx.getStopsWithinBoundingBox(
+                Collection<Stop> candidateStops = tx.getStopsWithinBoundingBox(
                         stop.getLat() + thresholdDegrees,
                         stop.getLon() + thresholdDegrees,
                         stop.getLat() - thresholdDegrees,
@@ -316,8 +297,7 @@ public class StopController {
                     ret.add(duplicatesOfThis);
                 }
             }
-
-            json = Base.toJson(ret, false);
+            return ret;
          } catch (HaltException e) {
             LOG.error("Halt encountered", e);
             throw e;
@@ -326,9 +306,9 @@ public class StopController {
              halt(400);
          }
         finally {
-            atx.rollback();
+            if (tx != null) tx.rollback();
         }
-        return json;
+        return null;
     }
 
     public static Object mergeStops(Request req, Response res) {
@@ -339,26 +319,25 @@ public class StopController {
             halt(400);
         }
 
-        if (feedId == null)
-            feedId = req.session().attribute("feedId");
-
         if (feedId == null) {
             halt(400);
         }
 
-        FeedTx tx = VersionedDataStore.getFeedTx(feedId);
+        FeedTx tx = null;
 
         try {
+            tx = VersionedDataStore.getFeedTx(feedId);
             Stop.merge(mergedStopIds, tx);
             tx.commit();
+            return true;
         } finally {
-            tx.rollbackIfOpen();
+            if (tx != null) tx.rollbackIfOpen();
         }
-        return true;
     }
 
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/stop/:id", StopController::getStop, json::write);
+        get(apiPrefix + "secure/stop/:id/patterns", StopController::getPatternsForStop, json::write);
         options(apiPrefix + "secure/stop", (q, s) -> "");
         get(apiPrefix + "secure/stop", StopController::getStop, json::write);
         get(apiPrefix + "secure/stop/mergeStops", StopController::mergeStops, json::write);

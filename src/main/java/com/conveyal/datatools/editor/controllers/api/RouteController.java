@@ -1,13 +1,16 @@
 package com.conveyal.datatools.editor.controllers.api;
 
+import com.conveyal.datatools.common.utils.SparkUtils;
+import com.conveyal.datatools.editor.models.transit.StatusType;
 import com.conveyal.datatools.common.utils.S3Utils;
 import com.conveyal.datatools.editor.datastore.FeedTx;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.google.common.base.Function;
 import com.google.common.collect.Collections2;
 import com.conveyal.datatools.editor.controllers.Base;
-import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.Route;
 import com.conveyal.datatools.editor.models.transit.Trip;
@@ -16,6 +19,7 @@ import org.mapdb.Fun;
 import org.mapdb.Fun.Tuple2;
 
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.Set;
 
 import org.slf4j.Logger;
@@ -28,82 +32,70 @@ import static spark.Spark.*;
 
 
 public class RouteController {
-    public static JsonManager<Route> json =
+    public static final JsonManager<Route> json =
             new JsonManager<>(Route.class, JsonViews.UserInterface.class);
     private static final Logger LOG = LoggerFactory.getLogger(RouteController.class);
+
     public static Object getRoute(Request req, Response res) {
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
-        Object json = null;
-
-        if (feedId == null)
-            feedId = req.session().attribute("feedId");
 
         if (feedId == null) {
             halt(400);
         }
 
-        final FeedTx tx = VersionedDataStore.getFeedTx(feedId);
+        FeedTx tx = null;
 
         try {
+            tx = VersionedDataStore.getFeedTx(feedId);
             if (id != null) {
                 if (!tx.routes.containsKey(id)) {
-                    tx.rollback();
                     halt(400);
                 }
 
                 Route route = tx.routes.get(id);
                 route.addDerivedInfo(tx);
 
-                json = Base.toJson(route, false);
-
-//                return route;
+                return route;
             }
             else {
-                Route[] ret = tx.routes.values().toArray(new Route[tx.routes.size()]);
+                Set<Route> ret = new HashSet<>(tx.routes.values());
 
                 for (Route r : ret) {
                     r.addDerivedInfo(tx);
                 }
-
-                json = Base.toJson(ret, false);
-                tx.rollback();
-//                return json;
+                return ret;
             }
         } catch (HaltException e) {
             LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
-            tx.rollbackIfOpen();
             e.printStackTrace();
             halt(400);
         } finally {
-            tx.rollbackIfOpen();
+            if (tx != null) tx.rollback();
         }
-        return json;
+        return null;
     }
 
-    public static Object createRoute(Request req, Response res) {
+    public static Route createRoute(Request req, Response res) {
         Route route;
+        FeedTx tx = null;
+        String feedId = req.queryParams("feedId");
+
+        if (feedId == null) {
+            halt(400);
+        }
 
         try {
             route = Base.mapper.readValue(req.body(), Route.class);
             
-            GlobalTx gtx = VersionedDataStore.getGlobalTx();
-            if (!gtx.feeds.containsKey(route.feedId)) {
-                gtx.rollback();
-                halt(400, String.join("Feed %s does not exist in editor", route.feedId));
-            }
-            
             if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(route.feedId))
                 halt(400);
-            
-            gtx.rollback();
    
-            FeedTx tx = VersionedDataStore.getFeedTx(route.feedId);
+            tx = VersionedDataStore.getFeedTx(feedId);
             
             if (tx.routes.containsKey(route.id)) {
-                tx.rollback();
                 halt(400, "Failed to create route with duplicate id");
             }
 
@@ -122,27 +114,45 @@ public class RouteController {
         } catch (Exception e) {
             e.printStackTrace();
             halt(400);
+        } finally {
+            if (tx != null) tx.rollbackIfOpen();
         }
         return null;
     }
 
-    public static Object updateRoute(Request req, Response res) {
+    public static Route updateRoute(Request req, Response res) {
         Route route;
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
 
+        FeedTx tx = null;
         try {
             route = Base.mapper.readValue(req.body(), Route.class);
             if (feedId == null) {
                 halt(400);
             }
-            FeedTx tx = VersionedDataStore.getFeedTx(feedId);
+            tx = VersionedDataStore.getFeedTx(feedId);
             
             if (!tx.routes.containsKey(id)) {
-                tx.rollback();
                 halt(404);
             }
 
+            Route oldRoute = tx.routes.get(id);
+
+            // if admin-only fields have changed, double check (client should limit this too)
+            // that the user has permission to do so
+            // TODO: notify subscribers if status has changed to PENDING_APPROVAL?
+            if (route.publiclyVisible != oldRoute.publiclyVisible ||
+                    (route.status != oldRoute.status &&
+                            (route.status.equals(StatusType.APPROVED) ||
+                                    oldRoute.status.equals(StatusType.APPROVED)))) {
+                FeedSource feedSource = FeedSource.get(feedId);
+                Auth0UserProfile userProfile = req.attribute("user");
+
+                if (!userProfile.canApproveGTFS(feedSource.getOrganizationId(), feedSource.projectId, feedId)) {
+                    halt(403, SparkUtils.formatJSON("User does not have permission to change status of route", 403));
+                }
+            }
 
             // check if gtfsRouteId is specified, if not create from DB id
             if(route.gtfsRouteId == null) {
@@ -159,23 +169,27 @@ public class RouteController {
         } catch (Exception e) {
             e.printStackTrace();
             halt(400);
+        } finally {
+            if (tx != null) tx.rollbackIfOpen();
         }
         return null;
     }
 
-    public static Object uploadRouteBranding(Request req, Response res) {
+    public static Route uploadRouteBranding(Request req, Response res) {
         Route route;
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
+
+        FeedTx tx = null;
 
         try {
             if (feedId == null) {
                 halt(400);
             }
-            FeedTx tx = VersionedDataStore.getFeedTx(feedId);
+
+            tx = VersionedDataStore.getFeedTx(feedId);
 
             if (!tx.routes.containsKey(id)) {
-                tx.rollback();
                 halt(404);
             }
 
@@ -196,11 +210,13 @@ public class RouteController {
         } catch (Exception e) {
             e.printStackTrace();
             halt(400);
+        } finally {
+            if (tx != null) tx.rollbackIfOpen();
         }
         return null;
     }
 
-    public static Object deleteRoute(Request req, Response res) {
+    public static Route deleteRoute(Request req, Response res) {
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
 
@@ -210,13 +226,12 @@ public class RouteController {
         if(id == null || feedId == null)
             halt(400);
 
-        FeedTx tx = VersionedDataStore.getFeedTx(feedId);
-        
-
+        FeedTx tx = null;
         
         try {
+            tx = VersionedDataStore.getFeedTx(feedId);
+
             if (!tx.routes.containsKey(id)) {
-                tx.rollback();
                 halt(404);
             }
             
@@ -237,14 +252,15 @@ public class RouteController {
             
             tx.routes.remove(id);
             tx.commit();
-            return true; // ok();
+            return r; // ok();
         } catch (HaltException e) {
             LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
-            tx.rollback();
             e.printStackTrace();
             halt(404, e.getMessage());
+        } finally {
+            if (tx != null) tx.rollbackIfOpen();
         }
         return null;
     }
@@ -267,7 +283,6 @@ public class RouteController {
         try {
             // ensure the routes exist
             if (!tx.routes.containsKey(from) || !tx.routes.containsKey(into)) {
-                tx.rollback();
                 halt(400);
             }
 
@@ -275,6 +290,7 @@ public class RouteController {
             // note that we clone them here so we can later modify them
             Collection<TripPattern> tps = Collections2.transform(
                     tx.tripPatternsByRoute.subSet(new Tuple2(from, null), new Tuple2(from, Fun.HI)),
+                    // NOTE: this function cannot be replace with lambda due to type issues
                     new Function<Tuple2<String, String>, TripPattern>() {
                         @Override
                         public TripPattern apply(Tuple2<String, String> input) {
@@ -296,6 +312,7 @@ public class RouteController {
              // now move all the trips
              Collection<Trip> ts = Collections2.transform(
                      tx.tripsByRoute.subSet(new Tuple2(from, null), new Tuple2(from, Fun.HI)),
+                     // NOTE: this function cannot be replace with lambda due to type issues
                      new Function<Tuple2<String, String>, Trip>() {
                          @Override
                          public Trip apply(Tuple2<String, String> input) {
@@ -322,49 +339,12 @@ public class RouteController {
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            tx.rollback();
             throw e;
+        } finally {
+            if (tx != null) tx.rollbackIfOpen();
         }
     }
-//    public static FeedTx requestFeedTx(Request req, FeedSource s, String action) {
-//        Auth0UserProfile userProfile = req.attribute("user");
-//        Boolean publicFilter = Boolean.valueOf(req.queryParams("public"));
-//
-//        // check for null feedsource
-//        if (s == null)
-//            halt(400, "Feed source ID does not exist");
-//
-//        boolean authorized;
-//        switch (action) {
-//            case "manage":
-//                authorized = userProfile.canManageFeed(s.projectId, s.id);
-//                break;
-//            case "view":
-//                authorized = userProfile.canViewFeed(s.projectId, s.id);
-//                break;
-//            default:
-//                authorized = false;
-//                break;
-//        }
-//
-//        // if requesting public sources
-//        if (publicFilter){
-//            // if feed not public and user not authorized, halt
-//            if (!s.isPublic && !authorized)
-//                halt(403, "User not authorized to perform action on feed source");
-//                // if feed is public, but action is managerial, halt (we shouldn't ever get here, but just in case)
-//            else if (s.isPublic && action.equals("manage"))
-//                halt(403, "User not authorized to perform action on feed source");
-//
-//        }
-//        else {
-//            if (!authorized)
-//                halt(403, "User not authorized to perform action on feed source");
-//        }
-//
-//        // if we make it here, user has permission and it's a valid feedsource
-//        return s;
-//    }
+
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/route/:id", RouteController::getRoute, json::write);
         options(apiPrefix + "secure/route", (q, s) -> "");

@@ -5,8 +5,6 @@ import com.beust.jcommander.internal.Sets;
 import com.conveyal.gtfs.model.Calendar;
 import com.conveyal.gtfs.model.Service;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.google.common.base.Function;
-import com.google.common.collect.Collections2;
 import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.models.Model;
 import java.time.LocalDate;
@@ -213,6 +211,7 @@ public class ServiceCalendar extends Model implements Cloneable, Serializable {
         Set<String> routeIds = Sets.newHashSet();
         Map<String, Long> tripsForRoutes = new HashMap<>();
         for (Trip trip : tx.getTripsByCalendar(this.id)) {
+            if (trip == null) continue;
             Long count = 0L;
 
             /**
@@ -228,16 +227,7 @@ public class ServiceCalendar extends Model implements Cloneable, Serializable {
             if (trip.routeId != null) {
                 tripsForRoutes.put(trip.routeId, count + 1);
             }
-//            routeIds.add(trip.routeId);
         }
         this.routes = tripsForRoutes;
-//        this.routes = Collections2.transform(routeIds, new Function<String, String>() {
-//
-//            @Override
-//            public String apply(String routeId) {
-//                return tx.routes.get(routeId).getName();
-//            }
-//
-//        });
     }
 }
