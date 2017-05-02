@@ -100,8 +100,6 @@ public class DataManager {
         awsRole = getConfigPropertyAsText("application.data.aws_role");
         bucketFolder = FeedStore.s3Prefix;
 
-        FeedStore.initializeS3();
-
         if (useS3) {
             LOG.info("Initializing gtfs-api for bucket {}/{} and cache dir {}", feedBucket, bucketFolder, FeedStore.basePath);
             ApiMain.initialize(feedBucket, bucketFolder, FeedStore.basePath.getAbsolutePath());

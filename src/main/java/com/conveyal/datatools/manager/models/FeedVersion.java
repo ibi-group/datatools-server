@@ -245,7 +245,8 @@ public class FeedVersion extends Model implements Serializable {
             This may take a while for large feeds */
             gtfsFeed = getGtfsFeed();
         } catch (Exception e) {
-            String errorString = String.format("No GTFS feed exists for version: %s", this.id);
+            String errorString = String.format("Error getting GTFS feed for version: %s", this.id);
+            e.printStackTrace();
             LOG.warn(errorString);
             statusMap.put("message", errorString);
             statusMap.put("percentComplete", 0.0);
