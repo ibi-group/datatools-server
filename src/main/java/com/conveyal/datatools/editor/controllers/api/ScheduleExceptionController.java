@@ -191,12 +191,24 @@ public class ScheduleExceptionController {
         if (feedId == null) {
             halt(400);
         }
-        FeedTx tx = VersionedDataStore.getFeedTx(feedId);
-        ScheduleException ex = tx.exceptions.get(id);
-        tx.exceptions.remove(id);
-        tx.commit();
+        FeedTx tx = null;
+        try {
+            tx = VersionedDataStore.getFeedTx(feedId);
+            ScheduleException ex = tx.exceptions.get(id);
+            tx.exceptions.remove(id);
+            tx.commit();
 
-        return ex; // ok();
+            return ex; // ok();
+        } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
+            throw e;
+        } catch (Exception e) {
+            e.printStackTrace();
+            halt(400);
+        } finally {
+            if (tx != null) tx.rollbackIfOpen();
+        }
+        return null;
     }
 
     public static void register (String apiPrefix) {

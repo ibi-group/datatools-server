@@ -87,7 +87,7 @@ public class SnapshotController {
             LOG.error("Halt encountered", e);
             throw e;
         } finally {
-            if (gtx != null) gtx.rollback();
+            if (gtx != null) gtx.rollbackIfOpen();
         }
         return null;
     }

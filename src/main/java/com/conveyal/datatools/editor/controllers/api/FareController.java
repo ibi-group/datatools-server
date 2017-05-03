@@ -165,7 +165,7 @@ public class FareController {
             LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
-            if (tx != null) tx.rollback();
+            if (tx != null) tx.rollbackIfOpen();
             e.printStackTrace();
             halt(400);
         } finally {

@@ -77,7 +77,7 @@ public class TripPatternController {
             e.printStackTrace();
             halt(400);
         } finally {
-            if (tx != null) tx.rollback();
+            if (tx != null) tx.rollbackIfOpen();
         }
         return null;
     }

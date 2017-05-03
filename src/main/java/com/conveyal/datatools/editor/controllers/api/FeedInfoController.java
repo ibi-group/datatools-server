@@ -54,7 +54,7 @@ public class FeedInfoController {
             EditorFeed fs = gtx.feeds.get(id);
             return fs;
         } finally {
-            gtx.rollback();
+            gtx.rollbackIfOpen();
         }
     }
 
