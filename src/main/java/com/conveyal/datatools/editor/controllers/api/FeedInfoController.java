@@ -121,7 +121,7 @@ public class FeedInfoController {
      * @param res
      * @return
      */
-    public static Object deleteFeedInfo(Request req, Response res) {
+    public static Object deleteFeedInfoAndEntireFeedEntryInEditor(Request req, Response res) {
         String id = req.params("id");
 
         EditorFeed feed;
@@ -154,6 +154,6 @@ public class FeedInfoController {
         get(apiPrefix + "secure/feedinfo", FeedInfoController::getFeedInfo, json::write);
         post(apiPrefix + "secure/feedinfo/:id", FeedInfoController::createFeedInfo, json::write);
         put(apiPrefix + "secure/feedinfo/:id", FeedInfoController::updateFeedInfo, json::write);
-        delete(apiPrefix + "secure/feedinfo/:id", FeedInfoController::deleteFeedInfo, json::write);
+        delete(apiPrefix + "secure/feedinfo/:id", FeedInfoController::deleteFeedInfoAndEntireFeedEntryInEditor, json::write);
     }
 }
