@@ -116,11 +116,13 @@ public class Stop extends Model implements Cloneable, Serializable {
         ret.stop_desc = stopDesc;
         ret.stop_lat = location.getY();
         ret.stop_lon = location.getX();
+        // TODO gtfs-lib value needs to be int
+//        ret.wheelchair_boarding = wheelchairBoarding.toGtfs();
 
         if (stopName != null && !stopName.isEmpty())
             ret.stop_name = stopName;
         else
-            ret.stop_name = id.toString();
+            ret.stop_name = id;
 
         try {
             ret.stop_url = stopUrl == null ? null : new URL(stopUrl);
@@ -141,46 +143,43 @@ public class Stop extends Model implements Cloneable, Serializable {
             // find all the patterns that stop at this stop
             Collection<TripPattern> tps = tx.getTripPatternsByStop(source.id);
 
-            List<TripPattern> tpToSave = new ArrayList<TripPattern>();
+            List<TripPattern> tpToSave = new ArrayList<>();
 
             // update them
             for (TripPattern tp : tps) {
                 try {
                     tp = tp.clone();
                 } catch (CloneNotSupportedException e) {
-                    // TODO Auto-generated catch block
                     e.printStackTrace();
                     tx.rollback();
                     throw new RuntimeException(e);
                 }
-                for (TripPatternStop ps : tp.patternStops) {
-                    if (source.id.equals(ps.stopId)) {
-                        ps.stopId = target.id;
-                    }
-                }
+                tp.patternStops.stream()
+                        .filter(ps -> source.id.equals(ps.stopId))
+                        .forEach(ps -> ps.stopId = target.id);
 
                 // batch them for save at the end, as all of the sets we are working with still refer to the db,
                 // so changing it midstream is a bad idea
                 tpToSave.add(tp);
 
                 // update the trips
-                List<Trip> tripsToSave = new ArrayList<Trip>();
+                List<Trip> tripsToSave = new ArrayList<>();
                 for (Trip trip : tx.getTripsByPattern(tp.id)) {
                     try {
                         trip = trip.clone();
                     } catch (CloneNotSupportedException e) {
-                        // TODO Auto-generated catch block
                         e.printStackTrace();
                         tx.rollback();
                         throw new RuntimeException(e);
                     }
 
-                    for (StopTime st : trip.stopTimes) {
-                        if (source.id.equals(st.stopId)) {
-                            // stop times have been cloned, so this is safe
-                            st.stopId = target.id;
-                        }
-                    }
+                    // stop times have been cloned, so this is safe
+                    trip.stopTimes.stream()
+                            .filter(st -> source.id.equals(st.stopId))
+                            .forEach(st -> {
+                                // stop times have been cloned, so this is safe
+                                st.stopId = target.id;
+                            });
 
                     tripsToSave.add(trip);
                 }

@@ -54,6 +54,10 @@ public class FareController {
                 }
             }
             else {
+                /**
+                 * put values into a new ArrayList to avoid returning MapDB BTreeMap
+                 * (and possible access error once transaction is closed)
+                  */
                 Collection<Fare> fares = new ArrayList<>(tx.fares.values());
                 return fares;
             }

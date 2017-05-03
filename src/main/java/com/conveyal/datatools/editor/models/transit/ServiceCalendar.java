@@ -31,7 +31,7 @@ public class ServiceCalendar extends Model implements Cloneable, Serializable {
     public LocalDate startDate;
     public LocalDate endDate;
     
-    public ServiceCalendar() {};
+    public ServiceCalendar() {}
     
     public ServiceCalendar(Calendar calendar, EditorFeed feed) {
         this.gtfsServiceId = calendar.service_id;
@@ -208,7 +208,6 @@ public class ServiceCalendar extends Model implements Cloneable, Serializable {
 
         // note that this is not ideal as we are fetching all of the trips. however, it's not really very possible
         // with MapDB to have an index involving three tables.
-        Set<String> routeIds = Sets.newHashSet();
         Map<String, Long> tripsForRoutes = new HashMap<>();
         for (Trip trip : tx.getTripsByCalendar(this.id)) {
             if (trip == null) continue;

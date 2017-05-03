@@ -10,10 +10,8 @@ import com.vividsolutions.jts.geom.LineString;
 import com.vividsolutions.jts.geom.Polygon;
 import com.vividsolutions.jts.linearref.LinearLocation;
 import com.vividsolutions.jts.linearref.LocationIndexedLine;
-import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.Model;
 import org.geotools.referencing.GeodeticCalculator;
-import org.mapdb.Fun;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.conveyal.datatools.editor.utils.GeoUtils;
@@ -47,7 +45,7 @@ public class TripPattern extends Model implements Cloneable, Serializable {
 
     public TripDirection patternDirection;
 
-    public List<TripPatternStop> patternStops = new ArrayList<TripPatternStop>();
+    public List<TripPatternStop> patternStops = new ArrayList<>();
 
     // give the UI a little information about the content of this trip pattern
     public transient Long numberOfTrips;
@@ -72,16 +70,16 @@ public class TripPattern extends Model implements Cloneable, Serializable {
     /** add transient info for UI with number of routes, number of trips */
     public void addDerivedInfo(final FeedTx tx) {
         Collection<Trip> trips = tx.getTripsByPattern(this.id);
-        numberOfTrips = Long.valueOf(trips.size());
+        numberOfTrips = (long) trips.size();
         tripCountByCalendar = trips.stream()
                 .filter(t -> t != null && t.calendarId != null)
                 .collect(Collectors.groupingBy(t -> t.calendarId, Collectors.counting()));
     }
 
-    /**
-     * Lines showing how stops are being snapped to the shape.
-     * @return
-     */
+//    /**
+//     * Lines showing how stops are being snapped to the shape.
+//     * @return array of LineStrings showing how stops connect to shape
+//     */
 //    @JsonProperty("stopConnections")
 //    public LineString[] jsonGetStopConnections () {
 //        if (useStraightLineDistances || shape == null)
@@ -117,13 +115,9 @@ public class TripPattern extends Model implements Cloneable, Serializable {
 //
 //    }
 
-    public TripPattern()
-    {
+    public TripPattern() {}
 
-    }
-
-    public TripPattern(String name, String headsign, LineString shape, Route route)
-    {
+    public TripPattern(String name, String headsign, LineString shape, Route route) {
         this.name = name;
         this.headsign = headsign;
         this.shape = shape;
@@ -138,7 +132,7 @@ public class TripPattern extends Model implements Cloneable, Serializable {
         else
             ret.shape = null;
 
-        ret.patternStops = new ArrayList<TripPatternStop>();
+        ret.patternStops = new ArrayList<>();
 
         for (TripPatternStop ps : this.patternStops) {
             ret.patternStops.add(ps.clone());
@@ -325,6 +319,7 @@ public class TripPattern extends Model implements Cloneable, Serializable {
     }
 
     // cast generic Geometry object to LineString because jackson2-geojson library only returns generic Geometry objects
+    @JsonProperty
     public void setShape (Geometry g) {
         this.shape = (LineString) g;
     }
@@ -377,7 +372,7 @@ public class TripPattern extends Model implements Cloneable, Serializable {
         // location along the subline currently being considered
         LocationIndexedLine subIdx = shapeIdx;
 
-        LineString subShape = shape;
+        LineString subShape;
 
         double lastShapeDistTraveled = 0;
 
