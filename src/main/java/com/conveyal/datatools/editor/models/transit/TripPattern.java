@@ -48,7 +48,7 @@ public class TripPattern extends Model implements Cloneable, Serializable {
     public List<TripPatternStop> patternStops = new ArrayList<>();
 
     // give the UI a little information about the content of this trip pattern
-    public transient Long numberOfTrips;
+    public transient int numberOfTrips;
     public transient Map<String, Long> tripCountByCalendar;
 
 
@@ -70,7 +70,7 @@ public class TripPattern extends Model implements Cloneable, Serializable {
     /** add transient info for UI with number of routes, number of trips */
     public void addDerivedInfo(final FeedTx tx) {
         Collection<Trip> trips = tx.getTripsByPattern(this.id);
-        numberOfTrips = (long) trips.size();
+        numberOfTrips = trips.size();
         tripCountByCalendar = trips.stream()
                 .filter(t -> t != null && t.calendarId != null)
                 .collect(Collectors.groupingBy(t -> t.calendarId, Collectors.counting()));
