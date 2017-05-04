@@ -117,7 +117,9 @@ public class Stop extends Model implements Cloneable, Serializable {
         ret.stop_lat = location.getY();
         ret.stop_lon = location.getX();
         // TODO: gtfs-lib value needs to be int
-        ret.wheelchair_boarding = String.valueOf(wheelchairBoarding.toGtfs());
+        if (wheelchairBoarding != null) {
+            ret.wheelchair_boarding = String.valueOf(wheelchairBoarding.toGtfs());
+        }
 
         if (stopName != null && !stopName.isEmpty())
             ret.stop_name = stopName;
