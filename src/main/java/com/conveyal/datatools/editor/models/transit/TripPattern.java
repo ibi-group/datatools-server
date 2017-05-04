@@ -53,7 +53,7 @@ public class TripPattern extends Model implements Cloneable, Serializable {
 
 
     @JsonProperty("numberOfTrips")
-    public Long jsonGetNumberOfTrips () {
+    public int jsonGetNumberOfTrips () {
         return numberOfTrips;
     }
 
@@ -62,7 +62,7 @@ public class TripPattern extends Model implements Cloneable, Serializable {
 
     // do-nothing setters
     @JsonProperty("numberOfTrips")
-    public void jsonSetNumberOfTrips(Long numberOfTrips) { }
+    public void jsonSetNumberOfTrips(int numberOfTrips) { }
 
     @JsonProperty("tripCountByCalendar")
     public void jsonSetTripCountByCalendar(Map<String, Long> tripCountByCalendar) { }
