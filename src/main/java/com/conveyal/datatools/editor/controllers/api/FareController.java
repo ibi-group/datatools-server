@@ -12,6 +12,7 @@ import spark.HaltException;
 import spark.Request;
 import spark.Response;
 
+import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collection;
 
@@ -22,9 +23,10 @@ import static spark.Spark.delete;
  * Created by landon on 6/22/16.
  */
 public class FareController {
-    public static JsonManager<Calendar> json =
+    public static final JsonManager<Calendar> json =
             new JsonManager<>(Calendar.class, JsonViews.UserInterface.class);
     private static final Logger LOG = LoggerFactory.getLogger(FareController.class);
+
     public static Object getFare(Request req, Response res) {
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
@@ -37,37 +39,36 @@ public class FareController {
             halt(400);
         }
 
-        final FeedTx tx = VersionedDataStore.getFeedTx(feedId);
+        FeedTx tx = null;
 
         try {
+            tx = VersionedDataStore.getFeedTx(feedId);
             if (id != null) {
                 if (!tx.fares.containsKey(id)) {
                     halt(404);
-                    tx.rollback();
                 }
 
                 else {
                     Fare fare = tx.fares.get(id);
-//                    fare.addDerivedInfo(tx);
                     return fare;
                 }
             }
             else {
-                Collection<Fare> fares = tx.fares.values();
-                for (Fare fare : fares) {
-//                    fare.addDerivedInfo(tx);
-                }
+                /**
+                 * put values into a new ArrayList to avoid returning MapDB BTreeMap
+                 * (and possible access error once transaction is closed)
+                  */
+                Collection<Fare> fares = new ArrayList<>(tx.fares.values());
                 return fares;
             }
-
-            tx.rollback();
         } catch (HaltException e) {
             LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
-            tx.rollback();
             e.printStackTrace();
             halt(400);
+        } finally {
+            if (tx != null) tx.rollbackIfOpen();
         }
         return null;
     }
@@ -83,13 +84,9 @@ public class FareController {
                 halt(400);
             }
 
-            if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(fare.feedId))
-                halt(400);
-
             tx = VersionedDataStore.getFeedTx(fare.feedId);
 
             if (tx.fares.containsKey(fare.id)) {
-                tx.rollback();
                 halt(400);
             }
 
@@ -97,8 +94,6 @@ public class FareController {
             if(fare.gtfsFareId == null) {
                 fare.gtfsFareId = "CAL_" + fare.id.toString();
             }
-
-//            fare.addDerivedInfo(tx);
 
             tx.fares.put(fare.id, fare);
             tx.commit();
@@ -108,13 +103,14 @@ public class FareController {
             LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
-            if (tx != null) tx.rollback();
             e.printStackTrace();
+        } finally {
+            if (tx != null) tx.rollbackIfOpen();
         }
         return null;
     }
 
-    public static Object updateFare(Request req, Response res) {
+    public static Fare updateFare(Request req, Response res) {
         Fare fare;
         FeedTx tx = null;
 
@@ -125,13 +121,8 @@ public class FareController {
                 halt(400);
             }
 
-            if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(fare.feedId))
-                halt(400);
-
             tx = VersionedDataStore.getFeedTx(fare.feedId);
-
             if (!tx.fares.containsKey(fare.id)) {
-                tx.rollback();
                 halt(400);
             }
 
@@ -140,42 +131,51 @@ public class FareController {
                 fare.gtfsFareId = "CAL_" + fare.id.toString();
             }
 
-//            fare.addDerivedInfo(tx);
-
             tx.fares.put(fare.id, fare);
-
-            Object json = Base.toJson(fare, false);
-
             tx.commit();
-
-            return json;
+            return fare;
         } catch (HaltException e) {
             LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
-            if (tx != null) tx.rollback();
             e.printStackTrace();
             halt(400);
+        } finally {
+            if (tx != null) tx.rollbackIfOpen();
         }
         return null;
     }
 
     public static Object deleteFare(Request req, Response res) {
+        Fare fare;
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
 
-        FeedTx tx = VersionedDataStore.getFeedTx(feedId);
+        FeedTx tx = null;
 
-        if (id == null || !tx.fares.containsKey(id)) {
-            tx.rollback();
-            halt(404);
+        try {
+            tx = VersionedDataStore.getFeedTx(feedId);
+
+            if (id == null || !tx.fares.containsKey(id)) {
+                tx.rollback();
+                halt(404);
+            }
+            fare = tx.fares.get(id);
+            tx.fares.remove(id);
+            tx.commit();
+
+            return fare;
+        } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
+            throw e;
+        } catch (Exception e) {
+            if (tx != null) tx.rollbackIfOpen();
+            e.printStackTrace();
+            halt(400);
+        } finally {
+            if (tx != null) tx.rollbackIfOpen();
         }
-
-        tx.fares.remove(id);
-
-        tx.commit();
-
-        return true; // ok();
+        return null;
     }
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/fare/:id", FareController::getFare, json::write);

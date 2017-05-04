@@ -139,7 +139,6 @@ public class ProcessGtfsSnapshotExport implements Runnable {
                                 }
                             }
                         }
-
                         feed.services.put(gtfsService.service_id, gtfsService);
                     }
                 }
@@ -208,26 +207,11 @@ public class ProcessGtfsSnapshotExport implements Runnable {
                         if (pattern.shape != null && !pattern.useStraightLineDistances)
                             gtfsTrip.shape_id = pattern.id;
 
+                        // prefer trip wheelchair boarding value if available
                         if (trip.wheelchairBoarding != null) {
-                            if (trip.wheelchairBoarding.equals(AttributeAvailabilityType.AVAILABLE))
-                                gtfsTrip.wheelchair_accessible = 1;
-
-                            else if (trip.wheelchairBoarding.equals(AttributeAvailabilityType.UNAVAILABLE))
-                                gtfsTrip.wheelchair_accessible = 2;
-
-                            else
-                                gtfsTrip.wheelchair_accessible = 0;
-
+                            gtfsTrip.wheelchair_accessible = trip.wheelchairBoarding.toGtfs();
                         } else if (route.wheelchairBoarding != null) {
-                            if (route.wheelchairBoarding.equals(AttributeAvailabilityType.AVAILABLE))
-                                gtfsTrip.wheelchair_accessible = 1;
-
-                            else if (route.wheelchairBoarding.equals(AttributeAvailabilityType.UNAVAILABLE))
-                                gtfsTrip.wheelchair_accessible = 2;
-
-                            else
-                                gtfsTrip.wheelchair_accessible = 0;
-
+                            gtfsTrip.wheelchair_accessible = route.wheelchairBoarding.toGtfs();
                         }
 
                         feed.trips.put(gtfsTrip.trip_id, gtfsTrip);

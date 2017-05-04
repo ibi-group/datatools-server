@@ -2,8 +2,6 @@ package com.conveyal.datatools.editor.controllers.api;
 
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
-import com.google.common.base.Function;
-import com.google.common.collect.Collections2;
 import com.conveyal.datatools.editor.controllers.Base;
 import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
@@ -12,7 +10,9 @@ import com.conveyal.datatools.editor.models.transit.TripPattern;
 import org.mapdb.Fun;
 import org.mapdb.Fun.Tuple2;
 
+import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.Set;
 
 import org.slf4j.Logger;
@@ -26,31 +26,30 @@ import static spark.Spark.*;
 
 public class TripPatternController {
     private static final Logger LOG = LoggerFactory.getLogger(TripPatternController.class);
-    public static JsonManager<TripPattern> json =
+    public static final JsonManager<TripPattern> json =
             new JsonManager<>(TripPattern.class, JsonViews.UserInterface.class);
 
     public static Object getTripPattern(Request req, Response res) {
         String id = req.params("id");
         String routeId = req.queryParams("routeId");
         String feedId = req.queryParams("feedId");
-        Object json = null;
-
-        if (feedId == null)
-            feedId = req.session().attribute("feedId");
 
         if (feedId == null) {
             halt(400);
         }
 
-        final FeedTx tx = VersionedDataStore.getFeedTx(feedId);
+        FeedTx tx = null;
 
         try {
-
+            tx = VersionedDataStore.getFeedTx(feedId);
             if(id != null) {
                if (!tx.tripPatterns.containsKey(id))
                    halt(404);
-               else
-                   json = Base.toJson(tx.tripPatterns.get(id), false);
+               else {
+                   TripPattern tp = tx.tripPatterns.get(id);
+                   tp.addDerivedInfo(tx);
+                   return Base.toJson(tp, false);
+               }
             }
             else if (routeId != null) {
 
@@ -58,67 +57,70 @@ public class TripPatternController {
                     halt(404, "routeId '" + routeId + "' does not exist");
                 else {
                     Set<Tuple2<String, String>> tpKeys = tx.tripPatternsByRoute.subSet(new Tuple2(routeId, null), new Tuple2(routeId, Fun.HI));
-
-                    Collection<TripPattern> patts = Collections2.transform(tpKeys, new Function<Tuple2<String, String>, TripPattern>() {
-
-                        @Override
-                        public TripPattern apply(Tuple2<String, String> input) {
-                            return tx.tripPatterns.get(input.b);
-                        }
-                    });
-
-                    json = Base.toJson(patts, false);
+                    Set<TripPattern> patts = new HashSet<>();
+                    for (Tuple2<String, String> key : tpKeys) {
+                        TripPattern tp = tx.tripPatterns.get(key.b);
+                        tp.addDerivedInfo(tx);
+                        patts.add(tp);
+                    }
+                    return patts;
                 }
             }
             else { // get all patterns
-                json = Base.toJson(tx.tripPatterns, false);
+
+                /**
+                 * put values into a new ArrayList to avoid returning MapDB BTreeMap
+                 * (and possible access error once transaction is closed)
+                 */
+                Collection<TripPattern> patts = new ArrayList<>(tx.tripPatterns.values());
+                return patts;
             }
-            
-            tx.rollback();
-            
         } catch (HaltException e) {
             LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
-            tx.rollback();
             e.printStackTrace();
             halt(400);
+        } finally {
+            if (tx != null) tx.rollbackIfOpen();
         }
-        return json;
+        return null;
     }
 
-    public static Object createTripPattern(Request req, Response res) {
+    public static TripPattern createTripPattern(Request req, Response res) {
         TripPattern tripPattern;
-        
+        FeedTx tx = null;
+        String feedId = req.queryParams("feedId");
         try {
             tripPattern = Base.mapper.readValue(req.body(), TripPattern.class);
             
-            if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(tripPattern.feedId))
+            if (feedId == null)
                 halt(400);
             
             if (!VersionedDataStore.feedExists(tripPattern.feedId)) {
                 halt(400);
             }
             
-            FeedTx tx = VersionedDataStore.getFeedTx(tripPattern.feedId);
+            tx = VersionedDataStore.getFeedTx(tripPattern.feedId);
             
             if (tx.tripPatterns.containsKey(tripPattern.id)) {
-                tx.rollback();
                 halt(400);
             }
             
-            tripPattern.calcShapeDistTraveled();
+            tripPattern.calcShapeDistTraveled(tx);
             
             tx.tripPatterns.put(tripPattern.id, tripPattern);
             tx.commit();
 
-            return Base.toJson(tripPattern, false);
+            return tripPattern;
         } catch (HaltException e) {
             LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
             halt(400);
+        } finally {
+            if (tx != null) tx.rollbackIfOpen();
         }
         return null;
     }
@@ -130,7 +132,7 @@ public class TripPatternController {
      * @param res
      * @return
      */
-    public static Object updateTripPattern(Request req, Response res) {
+    public static TripPattern updateTripPattern(Request req, Response res) {
         TripPattern tripPattern;
         FeedTx tx = null;
         try {
@@ -152,7 +154,6 @@ public class TripPatternController {
             TripPattern originalTripPattern = tx.tripPatterns.get(tripPattern.id);
             
             if(originalTripPattern == null) {
-                tx.rollback();
                 halt(400);
             }
 
@@ -171,29 +172,33 @@ public class TripPatternController {
             try {
                 TripPattern.reconcilePatternStops(originalTripPattern, tripPattern, tx);
             } catch (IllegalStateException e) {
-                tx.rollback();
                 LOG.info("Could not save trip pattern", e);
                 halt(400);
             }
             
-            tripPattern.calcShapeDistTraveled();
+            tripPattern.calcShapeDistTraveled(tx);
             
             tx.tripPatterns.put(tripPattern.id, tripPattern);
+
+            // return trip pattern with derived info
+            tripPattern.addDerivedInfo(tx);
+
             tx.commit();
 
-            return Base.toJson(tripPattern, false);
+            return tripPattern;
         } catch (HaltException e) {
             LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
-            if (tx != null) tx.rollback();
             e.printStackTrace();
             halt(400);
+        } finally {
+            if (tx != null) tx.rollbackIfOpen();
         }
         return null;
     }
 
-    public static Object deleteTripPattern(Request req, Response res) {
+    public static TripPattern deleteTripPattern(Request req, Response res) {
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
 
@@ -204,26 +209,39 @@ public class TripPatternController {
             halt(400);
         }
 
-        FeedTx tx = VersionedDataStore.getFeedTx(feedId);
+        FeedTx tx = null;
 
         try {
+            tx = VersionedDataStore.getFeedTx(feedId);
+
+            if (!tx.tripPatterns.containsKey(id)) {
+                halt(404);
+            }
+
             // first zap all trips on this trip pattern
             for (Trip trip : tx.getTripsByPattern(id)) {
                 tx.trips.remove(trip.id);
             }
-
+            TripPattern tp = tx.tripPatterns.get(id);
             tx.tripPatterns.remove(id);
             tx.commit();
+            return tp;
+        } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
+            throw e;
+        } catch (Exception e) {
+            e.printStackTrace();
+            halt(400);
         } finally {
-            tx.rollbackIfOpen();
+            if (tx != null) tx.rollbackIfOpen();
         }
         return null;
     }
 
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/trippattern/:id", TripPatternController::getTripPattern, json::write);
-        options(apiPrefix + "secure/trippattern", (q, s) -> "");
         get(apiPrefix + "secure/trippattern", TripPatternController::getTripPattern, json::write);
+
         post(apiPrefix + "secure/trippattern", TripPatternController::createTripPattern, json::write);
         put(apiPrefix + "secure/trippattern/:id", TripPatternController::updateTripPattern, json::write);
         delete(apiPrefix + "secure/trippattern/:id", TripPatternController::deleteTripPattern, json::write);

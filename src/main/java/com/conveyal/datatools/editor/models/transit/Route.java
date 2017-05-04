@@ -1,6 +1,5 @@
 package com.conveyal.datatools.editor.models.transit;
 
-import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.conveyal.datatools.editor.datastore.FeedTx;
@@ -48,14 +47,9 @@ public class Route extends Model implements Cloneable, Serializable {
     
     public AttributeAvailabilityType wheelchairBoarding;
 
-    public int getNumberOfTrips () {
-        FeedTx tx = VersionedDataStore.getFeedTx(this.feedId);
-        Collection<Trip> trips = tx.getTripsByRoute(this.id);
-        return trips == null ? 0 : trips.size();
-    }
-
     /** on which days does this route have service? Derived from calendars on render */
     public transient Boolean monday, tuesday, wednesday, thursday, friday, saturday, sunday;
+    public transient int numberOfTrips = 0;
 
     // add getters so Jackson will serialize
     
@@ -133,8 +127,6 @@ public class Route extends Model implements Cloneable, Serializable {
         ret.route_short_name = routeShortName;
         ret.route_text_color = routeTextColor;
         ret.route_type = gtfsRouteType.toGtfs();
-        // TODO also handle HVT types here
-        //ret.route_type = mapGtfsRouteType(routeTypeId);
         try {
             ret.route_url = routeUrl == null ? null : new URL(routeUrl);
         } catch (MalformedURLException e) {
@@ -178,6 +170,7 @@ public class Route extends Model implements Cloneable, Serializable {
 
     // Add information about the days of week this route is active
     public void addDerivedInfo(final FeedTx tx) {
+
         monday = false;
         tuesday = false;
         wednesday = false;
@@ -186,7 +179,11 @@ public class Route extends Model implements Cloneable, Serializable {
         saturday = false;
         sunday = false;
         Set<String> calendars = new HashSet<>();
-        for (Trip trip : tx.getTripsByRoute(this.id)) {
+
+        Collection<Trip> tripsForRoute = tx.getTripsByRoute(this.id);
+        numberOfTrips = tripsForRoute == null ? 0 : tripsForRoute.size();
+
+        for (Trip trip : tripsForRoute) {
             ServiceCalendar cal = null;
             try {
                 if (calendars.contains(trip.calendarId)) continue;
@@ -220,8 +217,8 @@ public class Route extends Model implements Cloneable, Serializable {
                 LOG.error("Could not process trip {} or cal {} for route {}", trip, cal, this);
             }
 
+            // track which calendars we've processed to avoid redundancy
             calendars.add(trip.calendarId);
-
         }
     }
 
