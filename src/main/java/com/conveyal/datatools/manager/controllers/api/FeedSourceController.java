@@ -283,7 +283,8 @@ public class FeedSourceController {
     }
     public static FeedSource requestFeedSource(Request req, FeedSource s, String action) {
         Auth0UserProfile userProfile = req.attribute("user");
-        Boolean publicFilter = Boolean.valueOf(req.queryParams("public")) || req.url().split("/api/manager/")[1].startsWith("public");
+        Boolean publicFilter = Boolean.valueOf(req.queryParams("public")) ||
+                req.url().split("/api/*/")[1].startsWith("public");
 //        System.out.println(req.url().split("/api/manager/")[1].startsWith("public"));
 
         // check for null feedSource
