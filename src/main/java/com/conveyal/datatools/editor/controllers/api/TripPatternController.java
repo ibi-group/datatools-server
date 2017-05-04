@@ -68,10 +68,8 @@ public class TripPatternController {
             }
             else { // get all patterns
 
-                /**
-                 * put values into a new ArrayList to avoid returning MapDB BTreeMap
-                 * (and possible access error once transaction is closed)
-                 */
+                // put values into a new ArrayList to avoid returning MapDB BTreeMap
+                // (and possible access error once transaction is closed)
                 Collection<TripPattern> patts = new ArrayList<>(tx.tripPatterns.values());
                 return patts;
             }

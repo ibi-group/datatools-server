@@ -77,10 +77,8 @@ public class CalendarController {
                 return ret;
             }
             else {
-                /**
-                 * put values into a new ArrayList to avoid returning MapDB BTreeMap
-                 * (and possible access error once transaction is closed)
-                 */
+                 // put values into a new ArrayList to avoid returning MapDB BTreeMap
+                 // (and possible access error once transaction is closed)
                 Collection<ServiceCalendar> cals = new ArrayList<>(tx.calendars.values());
                 for (ServiceCalendar c : cals) {
                     c.addDerivedInfo(tx);

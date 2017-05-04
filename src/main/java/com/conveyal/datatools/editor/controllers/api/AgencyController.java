@@ -1,5 +1,6 @@
 package com.conveyal.datatools.editor.controllers.api;
 
+import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.editor.controllers.Base;
 import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
@@ -169,6 +170,14 @@ public class AgencyController {
             if(!tx.agencies.containsKey(id)) {
                 halt(400);
             }
+
+            // ensure that no routes reference agency
+            tx.routes.values().stream().forEach(route -> {
+                if (route.agencyId.equals(id)) {
+                    halt(400, SparkUtils.formatJSON("Cannot delete agency referenced by routes.", 400));
+                }
+            });
+
             Agency agency = tx.agencies.get(id);
 
             tx.agencies.remove(id);

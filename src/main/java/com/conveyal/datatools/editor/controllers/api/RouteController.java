@@ -59,10 +59,8 @@ public class RouteController {
                 return route;
             }
             else {
-                /**
-                 * put values into a new HashSet to avoid returning MapDB BTreeMap
-                 * (and possible access error once transaction is closed)
-                 */
+                // put values into a new ArrayList to avoid returning MapDB BTreeMap
+                // (and possible access error once transaction is closed)
                 Set<Route> ret = new HashSet<>(tx.routes.values());
 
                 for (Route r : ret) {
