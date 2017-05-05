@@ -88,6 +88,11 @@ public class Route extends Model implements Cloneable, Serializable {
         return sunday;
     }
 
+    @JsonProperty("numberOfTrips")
+    public int jsonGetNumberOfTrips() {
+        return numberOfTrips;
+    }
+
     public Route () {}
 
     public Route(com.conveyal.gtfs.model.Route route, EditorFeed feed, Agency agency) {
@@ -114,12 +119,12 @@ public class Route extends Model implements Cloneable, Serializable {
         this.routeDesc = routeDescription;
 
         this.feedId = feed.id;
-        this.agencyId = agency.id;
+        this.agencyId = agency != null ? agency.id : null;
     }
 
     public com.conveyal.gtfs.model.Route toGtfs(com.conveyal.gtfs.model.Agency a, GlobalTx tx) {
         com.conveyal.gtfs.model.Route ret = new com.conveyal.gtfs.model.Route();
-        ret.agency_id = a.agency_id;
+        ret.agency_id = a != null ? a.agency_id : "";
         ret.route_color = routeColor;
         ret.route_desc = routeDesc;
         ret.route_id = getGtfsId();
