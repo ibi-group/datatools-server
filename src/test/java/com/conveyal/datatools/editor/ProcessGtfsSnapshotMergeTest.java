@@ -1,21 +1,13 @@
 package com.conveyal.datatools.editor;
 
-import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.LoadFeedTest;
 import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.jobs.ProcessGtfsSnapshotMerge;
-import com.conveyal.datatools.manager.models.FeedSource;
-import com.conveyal.datatools.manager.models.FeedVersion;
 import org.junit.Before;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.InputStream;
 
 import static org.junit.Assert.assertEquals;
 
