@@ -154,15 +154,21 @@ public class GtfsPlusController {
 
         // check for saved GTFS+ data
         File file = gtfsPlusStore.getFeed(feedVersionId);
-        if(file == null) {
+        if (file == null) {
             FeedVersion feedVersion = FeedVersion.get(feedVersionId);
-            if (feedVersion == null) {
+            if (feedVersion != null) {
+                file = feedVersion.getGtfsFile();
+            } else {
                 halt(400, SparkUtils.formatJSON("Feed version ID is not valid", 400));
             }
-            file = feedVersion.getGtfsFile();
         }
 
-        return file.lastModified();
+        if (file != null) {
+            return file.lastModified();
+        } else {
+            halt(400, SparkUtils.formatJSON("Feed version file not found", 400));
+            return null;
+        }
     }
 
     private static Boolean publishGtfsPlusFile(Request req, Response res) {
