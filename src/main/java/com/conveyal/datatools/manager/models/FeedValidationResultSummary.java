@@ -3,9 +3,7 @@ package com.conveyal.datatools.manager.models;
 import java.awt.geom.Rectangle2D;
 import java.io.Serializable;
 import java.time.LocalDate;
-import java.time.ZoneId;
 import java.util.Collection;
-import java.util.Date;
 
 import com.conveyal.gtfs.validator.json.LoadStatus;
 import com.fasterxml.jackson.annotation.JsonInclude;

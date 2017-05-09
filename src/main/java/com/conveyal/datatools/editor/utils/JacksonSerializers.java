@@ -11,8 +11,6 @@ import com.fasterxml.jackson.databind.ser.std.StdScalarSerializer;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import com.google.common.io.BaseEncoding;
 
-import java.time.Instant;
-import java.time.ZoneOffset;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import org.mapdb.Fun.Tuple2;

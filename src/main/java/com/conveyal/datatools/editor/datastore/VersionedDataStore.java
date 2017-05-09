@@ -73,6 +73,7 @@ public class VersionedDataStore {
                             .compressionEnable()
                             .asyncWriteEnable()
                             .closeOnJvmShutdown()
+                            .asyncWriteFlushDelay(5)
                             .makeTxMaker();
 
                     feedTxMakers.put(feedId, agencyTxm);
@@ -83,8 +84,12 @@ public class VersionedDataStore {
         return feedTxMakers.get(feedId).makeTx();
     }
 
-    /** Take a snapshot of an agency database. The snapshot will be saved in the global database. */
     public static Snapshot takeSnapshot (String feedId, String name, String comment) {
+        return takeSnapshot(feedId, null, name, comment);
+    }
+
+    /** Take a snapshot of an agency database. The snapshot will be saved in the global database. */
+    public static Snapshot takeSnapshot (String feedId, String feedVersionId, String name, String comment) {
         FeedTx tx = getFeedTx(feedId);
         GlobalTx gtx = getGlobalTx();
         int version = -1;
@@ -102,6 +107,7 @@ public class VersionedDataStore {
                 throw new IllegalStateException("Duplicate snapshot IDs");
 
             ret.snapshotTime = System.currentTimeMillis();
+            ret.feedVersionId = feedVersionId;
             ret.name = name;
             ret.comment = comment;
             ret.current = true;
@@ -118,6 +124,7 @@ public class VersionedDataStore {
             tx.commit();
             String snapshotMessage = String.format("Saving snapshot took %.2f seconds", (System.currentTimeMillis() - startTime) / 1000D);
             LOG.info(snapshotMessage);
+
 
             return ret;
         } catch (Exception e) {
