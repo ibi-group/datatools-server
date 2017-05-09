@@ -1,6 +1,12 @@
 package com.conveyal.datatools.editor.jobs;
 
 import com.beust.jcommander.internal.Lists;
+import com.conveyal.datatools.editor.models.transit.Agency;
+import com.conveyal.datatools.editor.models.transit.Fare;
+import com.conveyal.datatools.editor.models.transit.Route;
+import com.conveyal.datatools.editor.models.transit.Stop;
+import com.conveyal.datatools.editor.models.transit.StopTime;
+import com.conveyal.datatools.editor.models.transit.Trip;
 import com.conveyal.gtfs.GTFSFeed;
 import com.conveyal.gtfs.model.CalendarDate;
 import com.conveyal.gtfs.model.Entity;
@@ -31,8 +37,8 @@ public class ProcessGtfsSnapshotExport implements Runnable {
     public static final Logger LOG = LoggerFactory.getLogger(ProcessGtfsSnapshotExport.class);
     private Collection<Tuple2<String, Integer>> snapshots;
     private File output;
-    private LocalDate startDate;
-    private LocalDate endDate;
+//    private LocalDate startDate;
+//    private LocalDate endDate;
 
     /** Export the named snapshots to GTFS */
     public ProcessGtfsSnapshotExport(Collection<Tuple2<String, Integer>> snapshots, File output, LocalDate startDate, LocalDate endDate) {
@@ -86,14 +92,28 @@ public class ProcessGtfsSnapshotExport implements Runnable {
                     feedTx = VersionedDataStore.getFeedTx(feedId, ssid.b);
                 }
 
-                Collection<Agency> agencies = feedTx.agencies.values();
+                if (feedTx.agencies != null) {
+                    Collection<Agency> agencies = feedTx.agencies.values();
 
-                for (Agency agency : agencies) {
-                    com.conveyal.gtfs.model.Agency gtfsAgency = agency.toGtfs();
-                    LOG.info("Exporting agency {}", gtfsAgency);
+                    for (Agency agency : agencies) {
+                        com.conveyal.gtfs.model.Agency gtfsAgency = agency.toGtfs();
+                        LOG.info("Exporting agency {}", gtfsAgency);
 
-                    // write the feeds.txt entry
-                    feed.agency.put(agency.agencyId, agency.toGtfs());
+                        // if agencyId is null (allowed if there is only a single agency), set to empty string
+                        if (agency.agencyId == null) {
+                            if (feed.agency.containsKey("")) {
+                                LOG.error("Agency with empty id field already exists. Skipping agency {}", agency);
+                                continue;
+                            } else {
+                                agency.agencyId = "";
+                            }
+                        }
+
+                        // write the agency.txt entry
+                        feed.agency.put(agency.agencyId, agency.toGtfs());
+                    }
+                } else {
+                    LOG.error("Agency table should not be empty!");
                 }
 
                 if (feedTx.fares != null) {
@@ -111,7 +131,9 @@ public class ProcessGtfsSnapshotExport implements Runnable {
                 if (feedTx.calendars != null) {
                     for (ServiceCalendar cal : feedTx.calendars.values()) {
 
-                        com.conveyal.gtfs.model.Service gtfsService = cal.toGtfs(toGtfsDate(cal.startDate), toGtfsDate(cal.endDate));
+                        int start = toGtfsDate(cal.startDate);
+                        int end = toGtfsDate(cal.endDate);
+                        com.conveyal.gtfs.model.Service gtfsService = cal.toGtfs(start, end);
                         // note: not using user-specified IDs
 
                         // add calendar dates
@@ -151,7 +173,8 @@ public class ProcessGtfsSnapshotExport implements Runnable {
                         // only export approved routes
                         // TODO: restore route approval check?
                         if (route.status == StatusType.APPROVED) {
-                            com.conveyal.gtfs.model.Route gtfsRoute = route.toGtfs(feedTx.agencies.get(route.agencyId).toGtfs(), gtx);
+                            com.conveyal.gtfs.model.Agency agency = route.agencyId != null ? feedTx.agencies.get(route.agencyId).toGtfs() : null;
+                            com.conveyal.gtfs.model.Route gtfsRoute = route.toGtfs(agency, gtx);
                             feed.routes.put(route.getGtfsId(), gtfsRoute);
                             gtfsRoutes.put(route.id, gtfsRoute);
                             LOG.info("Exporting route {}", gtfsRoute);
@@ -189,7 +212,7 @@ public class ProcessGtfsSnapshotExport implements Runnable {
                         if (pattern.patternDirection != null) {
                             gtfsTrip.direction_id = pattern.patternDirection.toGtfs();
                         }
-                        else {
+                        else if (trip.tripDirection != null) {
                             gtfsTrip.direction_id = trip.tripDirection.toGtfs();
                         }
                         Tuple2<String, Integer> nextKey = feed.shape_points.ceilingKey(new Tuple2(pattern.id, null));
