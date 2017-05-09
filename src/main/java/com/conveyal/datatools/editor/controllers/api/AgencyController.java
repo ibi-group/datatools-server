@@ -49,10 +49,10 @@ public class AgencyController {
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }
-        return json;
+        return null;
     }
 
-    public static Object createAgency(Request req, Response res) {
+    public static Agency createAgency(Request req, Response res) {
         Agency agency;
         String feedId = req.queryParams("feedId");
         if (feedId == null)
@@ -84,7 +84,7 @@ public class AgencyController {
     }
 
 
-    public static Object updateAgency(Request req, Response res) {
+    public static Agency updateAgency(Request req, Response res) {
         Agency agency;
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
@@ -114,7 +114,7 @@ public class AgencyController {
         return null;
     }
 
-    public static Object uploadAgencyBranding(Request req, Response res) {
+    public static Agency uploadAgencyBranding(Request req, Response res) {
         Agency agency;
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
@@ -184,6 +184,9 @@ public class AgencyController {
             tx.commit();
 
             return agency;
+        } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
+            throw e;
         } catch (Exception e) {
             e.printStackTrace();
             halt(400);
