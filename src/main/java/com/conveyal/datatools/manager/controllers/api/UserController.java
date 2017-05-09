@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.controllers.api;
 
+import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.JsonViews;
@@ -211,37 +212,45 @@ public class UserController {
 //            halt(400, "Please provide valid from/to dates");
 //        }
         List<Activity> activity = new ArrayList<>();
-
-        for (Auth0UserProfile.Subscription sub : userProfile.getApp_metadata().getDatatoolsInfo().getSubscriptions()) {
-            switch (sub.getType()) {
-                // TODO: add all activity types
-                case "feed-commented-on":
-                    for (String targetId : sub.getTarget()) {
-                        FeedSource fs = FeedSource.get(targetId);
-                        if(fs == null) continue;
-                        for (Note note : fs.getNotes()) {
-                            // TODO: Check if actually recent
+        Auth0UserProfile.DatatoolsInfo datatools = userProfile.getApp_metadata().getDatatoolsInfo();
+        if (datatools != null) {
+            Auth0UserProfile.Subscription[] subscriptions = datatools.getSubscriptions();
+            if (subscriptions != null) {
+                for (Auth0UserProfile.Subscription sub : subscriptions) {
+                    switch (sub.getType()) {
+                        // TODO: add all activity types
+                        case "feed-commented-on":
+                            for (String targetId : sub.getTarget()) {
+                                FeedSource fs = FeedSource.get(targetId);
+                                if(fs == null) continue;
+                                for (Note note : fs.getNotes()) {
+                                    // TODO: Check if actually recent
 //                            if (note.date.after(Date.from(Instant.ofEpochSecond(from))) && note.date.before(Date.from(Instant.ofEpochSecond(to)))) {
-                                Activity act = new Activity();
-                                act.type = sub.getType();
-                                act.userId = note.userId;
-                                act.userName = note.userEmail;
-                                act.body = note.body;
-                                act.date = note.date;
-                                act.targetId = targetId;
-                                act.targetName = fs.name;
-                                activity.add(act);
+                                    Activity act = new Activity();
+                                    act.type = sub.getType();
+                                    act.userId = note.userId;
+                                    act.userName = note.userEmail;
+                                    act.body = note.body;
+                                    act.date = note.date;
+                                    act.targetId = targetId;
+                                    act.targetName = fs.name;
+                                    activity.add(act);
 //                            }
-                        }
+                                }
+                            }
+                            break;
                     }
-                    break;
+                }
             }
+        } else {
+            halt(403, SparkUtils.formatJSON("User does not have permission to access to this application", 403));
         }
 
         return activity;
     }
 
     static class Activity implements Serializable {
+        private static final long serialVersionUID = 1L;
         public String type;
         public String userId;
         public String userName;
