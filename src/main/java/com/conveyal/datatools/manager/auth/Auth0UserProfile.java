@@ -369,17 +369,19 @@ public class Auth0UserProfile {
         // check for permission-specific feeds
         for (Permission permission : project.permissions) {
             if(permission.type.equals(permissionType)) {
+                // if specific feeds apply to permission (rather than default set), reassign feeds list
                 if(permission.feeds != null) {
                     feeds = permission.feeds;
                 }
+                // if permission is found in project, check that it applies to the feed requested
+                for(String thisFeedID : feeds) {
+                    if (thisFeedID.equals(feedID) || thisFeedID.equals("*")) {
+                        return true;
+                    }
+                }
             }
         }
-
-        for(String thisFeedID : feeds) {
-            if (thisFeedID.equals(feedID) || thisFeedID.equals("*")) {
-                return true;
-            }
-        }
+        // if no permissionType + feedID combo was found
         return false;
     }
 
