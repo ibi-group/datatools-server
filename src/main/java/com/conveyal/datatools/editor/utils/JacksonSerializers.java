@@ -5,13 +5,16 @@ import com.conveyal.datatools.editor.models.transit.TripDirection;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationContext;
+import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.deser.std.StdScalarDeserializer;
 import com.fasterxml.jackson.databind.ser.std.StdScalarSerializer;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import com.google.common.io.BaseEncoding;
 
+import java.time.Instant;
 import java.time.LocalDate;
+import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import org.mapdb.Fun.Tuple2;
 
@@ -135,11 +138,25 @@ public class JacksonSerializers {
 
         @Override
         public LocalDate deserialize(JsonParser jp, DeserializationContext arg1) throws IOException {
-            LocalDate date = LocalDate.parse(jp.getText(), DateTimeFormatter.BASIC_ISO_DATE);
-//            LocalDate date = Instant.ofEpochMilli(jp.getValueAsLong()).atZone(ZoneOffset.UTC).toLocalDate();
+            LocalDate date;
+            try {
+                date = LocalDate.parse(jp.getText(), DateTimeFormatter.BASIC_ISO_DATE);
+                return date;
+            } catch (Exception jsonException) {
+                // This is here to catch any loads of database dumps that happen to have the old java.util.Date
+                // field type in validationResult.  God help us.
+                System.out.println("Error parsing date value, trying legacy java.util.Date date format");
+                try {
+                    date = Instant.ofEpochMilli(jp.getValueAsLong()).atZone(ZoneOffset.UTC).toLocalDate();
+                    return date;
+                } catch (Exception e) {
+                    e.printStackTrace();
+                }
+            }
+
 //            System.out.println(jp.getValueAsLong());
 //            System.out.println(date.format(DateTimeFormatter.BASIC_ISO_DATE));
-            return date;
+            return null;
         }
     }
 
