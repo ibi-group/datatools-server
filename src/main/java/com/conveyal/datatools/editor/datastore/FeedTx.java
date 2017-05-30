@@ -83,13 +83,13 @@ public class FeedTx extends DatabaseTx {
 
 //    public Atomic.Boolean editedSinceSnapshot;
     /**
-     * Create an agency tx.
+     * Create a feed tx.
      */
     public FeedTx(DB tx) {
         this(tx, true);
     }
 
-    /** Create an agency tx, optionally without secondary indices */
+    /** Create a feed tx, optionally without secondary indices */
     public FeedTx(DB tx, boolean buildSecondaryIndices) {
         super(tx);
 
@@ -106,7 +106,7 @@ public class FeedTx extends DatabaseTx {
         if (buildSecondaryIndices)
             buildSecondaryIndices();
 
-//        editedSinceSnapshot = tx.getAtomicBoolean("editedSinceSnapshot") == null ? tx.createAtomicBoolean("editedSinceSnapshot", false) : tx.;
+//        editedSinceSnapshot = tx.getAtomicBoolean("editedSinceSnapshot") == null ? tx.createAtomicBoolean("editedSinceSnapshot", false) : editedSinceSnapshot;
     }
 
     public void commit () {
