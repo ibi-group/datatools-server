@@ -62,7 +62,6 @@ public class DataManager {
     public static Map<String, ScheduledFuture> autoFetchMap = new HashMap<>();
     public final static ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
     private static final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
-    public static GTFSCache gtfsCache;
 
     public static String feedBucket;
     public static String awsRole;
@@ -72,11 +71,8 @@ public class DataManager {
     public static boolean useS3;
     public static final String API_PREFIX = "/api/manager/";
     public static final String EDITOR_API_PREFIX = "/api/editor/";
-
     public static final String DEFAULT_ENV = "configurations/default/env.yml";
     public static final String DEFAULT_CONFIG = "configurations/default/server.yml";
-
-    private static List<String> apiFeedSources = new ArrayList<>();
 
     public static void main(String[] args) throws IOException {
 
@@ -103,6 +99,7 @@ public class DataManager {
         awsRole = getConfigPropertyAsText("application.data.aws_role");
         bucketFolder = FeedStore.s3Prefix;
 
+        // initialize gtfs-api
         if (useS3) {
             LOG.info("Initializing gtfs-api for bucket {}/{} and cache dir {}", feedBucket, bucketFolder, FeedStore.basePath);
             ApiMain.initialize(feedBucket, bucketFolder, FeedStore.basePath.getAbsolutePath());
@@ -113,6 +110,13 @@ public class DataManager {
             // because otherwise zip files will be DELETED!!! on removal from GTFSCache.
             ApiMain.initialize(null, FeedStore.basePath.getAbsolutePath());
         }
+
+        registerRoutes();
+
+        registerExternalResources();
+    }
+
+    private static void registerRoutes() throws IOException {
         CorsFilter.apply();
 
         // core controllers
@@ -125,7 +129,7 @@ public class DataManager {
         OrganizationController.register(API_PREFIX);
 
         // Editor routes
-        if ("true".equals(getConfigPropertyAsText("modules.editor.enabled"))) {
+        if (isModuleEnabled("editor")) {
             String gtfs = IOUtils.toString(DataManager.class.getResourceAsStream("/gtfs/gtfs.yml"));
             gtfsConfig = yamlMapper.readTree(gtfs);
             AgencyController.register(EDITOR_API_PREFIX);
@@ -173,34 +177,9 @@ public class DataManager {
             Auth0Connection.checkUser(request);
         });
 
-        // lazy load by feed source id if new one is requested
-//        if ("true".equals(getConfigPropertyAsText("modules.gtfsapi.load_on_fetch"))) {
-//            before(API_PREFIX + "*", (request, response) -> {
-//                String feeds = request.queryParams("feed");
-//                if (feeds != null) {
-//                    String[] feedIds = feeds.split(",");
-//                    for (String feedId : feedIds) {
-//                        FeedSource fs = FeedSource.get(feedId);
-//                        if (fs == null) {
-//                            continue;
-//                        }
-//                        else if (!GtfsApiController.gtfsApi.registeredFeedSources.contains(fs.id) && !apiFeedSources.contains(fs.id)) {
-//                            apiFeedSources.add(fs.id);
-//
-//                            LoadGtfsApiFeedJob loadJob = new LoadGtfsApiFeedJob(fs);
-//                            new Thread(loadJob).start();
-//                        halt(202, "Initializing feed load...");
-//                        }
-//                        else if (apiFeedSources.contains(fs.id) && !GtfsApiController.gtfsApi.registeredFeedSources.contains(fs.id)) {
-//                            halt(202, "Loading feed, please try again later");
-//                        }
-//                    }
-//
-//                }
-//            });
-//        }
         // return "application/json" for all API routes
         after(API_PREFIX + "*", (request, response) -> {
+            LOG.info(request.pathInfo());
             response.type("application/json");
             response.header("Content-Encoding", "gzip");
         });
@@ -214,21 +193,12 @@ public class DataManager {
             halt(404, SparkUtils.formatJSON("Unknown error occurred.", 404));
             return null;
         });
-        
-//        // return assets as byte array
-//        get("/assets/*", (request, response) -> {
-//            try (InputStream stream = DataManager.class.getResourceAsStream("/public" + request.pathInfo())) {
-//                return IOUtils.toByteArray(stream);
-//            } catch (IOException e) {
-//                return null;
-//            }
-//        });
+
         // return index.html for any sub-directory
         get("/*", (request, response) -> {
             response.type("text/html");
             return index;
         });
-        registerExternalResources();
     }
 
     public static boolean hasConfigProperty(String name) {
