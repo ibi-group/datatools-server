@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.controllers.api;
 import com.conveyal.datatools.common.utils.Consts;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.utils.HashUtils;
@@ -350,8 +351,11 @@ public class GtfsPlusController {
                 for (JsonNode option : options) {
                     String optionValue = option.get("value").asText();
 
+                    // NOTE: per client's request, this check has been made case insensitive
+                    boolean valuesAreEqual = optionValue.equalsIgnoreCase(value);
+
                     // if value is found in list of options, break out of loop
-                    if (optionValue.equals(value) || (!fieldNode.get("required").asBoolean() && value.equals(""))) {
+                    if (valuesAreEqual || (!fieldNode.get("required").asBoolean() && value.equals(""))) {
                         invalid = false;
                         break;
                     }
@@ -361,6 +365,7 @@ public class GtfsPlusController {
                 }
                 break;
             case "TEXT":
+                // check if value exceeds max length requirement
                 if(fieldNode.get("maxLength") != null) {
                     int maxLength = fieldNode.get("maxLength").asInt();
                     if(value.length() > maxLength) {
