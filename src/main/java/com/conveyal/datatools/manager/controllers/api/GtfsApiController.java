@@ -17,6 +17,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -30,10 +31,10 @@ public class GtfsApiController {
     public static final String extensionType = DataManager.getConfigPropertyAsText("modules.gtfsapi.use_extension");
     public static String bucketFolder = DataManager.getConfigPropertyAsText("extensions." + extensionType + ".s3_download_prefix");
 
-    public static void register (String apiPrefix) throws IOException {
+    // store list of GTFS feed eTags here Map<FeedId, eTag value>
+    public static Map<String, String> eTagMap = new HashMap<>();
 
-        // store list of GTFS feed eTags here
-        Map<String, String> eTagMap = new HashMap<>();
+    public static void register (String apiPrefix) throws IOException {
 
         // check for use of extension...
         switch (extensionType) {
@@ -71,6 +72,14 @@ public class GtfsApiController {
         Routes.routes(apiPrefix);
     }
 
+    /**
+     * Used to register eTags (AWS file hash) of remote feeds in order to keep data-tools
+     * application in sync with any external processes (for example, MTC RTD).
+     * @param eTags
+     * @param bucket
+     * @param dir
+     * @return map of feedIDs to eTag values
+     */
     public static Map<String, String> registerS3Feeds (Map<String, String> eTags, String bucket, String dir) {
         if (eTags == null) {
             eTags = new HashMap<>();
@@ -91,17 +100,15 @@ public class GtfsApiController {
                 String filename = keyName.split("/")[1];
                 String feedId = filename.replace(".zip", "");
                 try {
-                    LOG.warn("New version found for " + keyName + " is null. Downloading from s3...");
+                    LOG.warn("New version found for " + keyName + ". Downloading from s3...");
                     S3Object object = FeedStore.s3Client.getObject(bucket, keyName);
                     InputStream in = object.getObjectContent();
                     byte[] buf = new byte[1024];
                     File file = new File(FeedStore.basePath, filename);
                     OutputStream out = new FileOutputStream(file);
                     int count;
-                    while( (count = in.read(buf)) != -1)
-                    {
-                        if( Thread.interrupted() )
-                        {
+                    while((count = in.read(buf)) != -1) {
+                        if(Thread.interrupted()) {
                             throw new InterruptedException();
                         }
                         out.write(buf, 0, count);
