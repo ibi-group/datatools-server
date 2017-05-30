@@ -98,7 +98,6 @@ public class S3Utils {
      * @return
      */
     public static Credentials getS3Credentials(String role, String bucket, String key, Statement.Effect effect, S3Actions action, int durationSeconds) {
-        String ROLE_ARN = role;
         AWSSecurityTokenService stsClient = AWSSecurityTokenServiceClientBuilder.defaultClient();
         Policy policy = new Policy();
         policy.setId("datatools-feed-access");
@@ -113,7 +112,7 @@ public class S3Utils {
         statements.add(statement);
         policy.setStatements(statements);
         AssumeRoleRequest assumeRequest = new AssumeRoleRequest()
-                .withRoleArn(ROLE_ARN)
+                .withRoleArn(role)
                 .withPolicy(policy.toJson()) // some policy that limits access to certain objects (intersects with ROLE_ARN policies
                 .withDurationSeconds(durationSeconds) // 900 is minimum duration (seconds)
                 .withRoleSessionName("feed-access");
