@@ -173,6 +173,7 @@ public class GtfsPlusController {
     }
 
     private static Boolean publishGtfsPlusFile(Request req, Response res) {
+        Auth0UserProfile profile = req.attribute("user");
         String feedVersionId = req.params("versionid");
         LOG.info("Publishing GTFS+ for " + feedVersionId);
         File plusFile = gtfsPlusStore.getFeed(feedVersionId);
@@ -254,12 +255,8 @@ public class GtfsPlusController {
 
         // validation for the main GTFS content hasn't changed
         newFeedVersion.validationResult = feedVersion.validationResult;
-
+        newFeedVersion.setUser(profile);
         newFeedVersion.save();
-
-        for(String resourceType : DataManager.feedResources.keySet()) {
-            DataManager.feedResources.get(resourceType).feedVersionCreated(newFeedVersion, null);
-        }
 
         return true;
     }
