@@ -1,13 +1,11 @@
 package com.conveyal.datatools.manager.models;
 
 import com.amazonaws.services.s3.model.CannedAccessControlList;
-import com.amazonaws.services.s3.model.DeleteObjectRequest;
 import com.amazonaws.services.s3.model.DeleteObjectsRequest;
-import com.conveyal.datatools.editor.datastore.FeedTx;
+import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.manager.DataManager;
-import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.persistence.DataStore;
 import com.conveyal.datatools.manager.persistence.FeedStore;
@@ -24,11 +22,15 @@ import spark.HaltException;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.InvalidClassException;
 import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
 import java.net.URL;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
@@ -422,23 +424,34 @@ public class FeedSource extends Model implements Cloneable {
     public void makePublic() {
         String sourceKey = FeedStore.s3Prefix + this.id + ".zip";
         String publicKey = getPublicKey();
-        if (DataManager.useS3 && FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, sourceKey)) {
-            LOG.info("copying feed {} to s3 public folder", this);
-            FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, sourceKey, CannedAccessControlList.PublicRead);
-            FeedStore.s3Client.copyObject(DataManager.feedBucket, sourceKey, DataManager.feedBucket, publicKey);
-            FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, publicKey, CannedAccessControlList.PublicRead);
-        } else if (DataManager.useS3) {
-            LOG.warn("Could not locate latest feed source {} on s3 at {}. Using latest version instead.", this, sourceKey);
-            String versionId = this.getLatestVersionId();
-            String latestVersionKey = FeedStore.s3Prefix + versionId;
-            if (FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, latestVersionKey)) {
-                LOG.info("copying feed version {} to s3 public folder", versionId);
-                FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, latestVersionKey, CannedAccessControlList.PublicRead);
-                FeedStore.s3Client.copyObject(DataManager.feedBucket, latestVersionKey, DataManager.feedBucket, publicKey);
-                FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, publicKey, CannedAccessControlList.PublicRead);
+        String versionId = this.getLatestVersionId();
+        String latestVersionKey = FeedStore.s3Prefix + versionId;
 
-                // also copy latest version to feedStore latest
-                FeedStore.s3Client.copyObject(DataManager.feedBucket, latestVersionKey, DataManager.feedBucket, sourceKey);
+        // only deploy to public if storing feeds on s3 (no mechanism for downloading/publishing
+        // them otherwise)
+        if (DataManager.useS3) {
+            boolean sourceExists = FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, sourceKey);
+            ObjectMetadata sourceMetadata = FeedStore.s3Client.getObjectMetadata(DataManager.feedBucket, sourceKey);
+            ObjectMetadata latestVersionMetadata = FeedStore.s3Client.getObjectMetadata(DataManager.feedBucket, latestVersionKey);
+            boolean latestVersionMatchesSource = sourceMetadata != null &&
+                    latestVersionMetadata != null &&
+                    sourceMetadata.getETag().equals(latestVersionMetadata.getETag());
+            if (sourceExists && latestVersionMatchesSource) {
+                LOG.info("copying feed {} to s3 public folder", this);
+                FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, sourceKey, CannedAccessControlList.PublicRead);
+                FeedStore.s3Client.copyObject(DataManager.feedBucket, sourceKey, DataManager.feedBucket, publicKey);
+                FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, publicKey, CannedAccessControlList.PublicRead);
+            } else {
+                LOG.warn("Latest feed source {} on s3 at {} does not exist or does not match latest version. Using latest version instead.", this, sourceKey);
+                if (FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, latestVersionKey)) {
+                    LOG.info("copying feed version {} to s3 public folder", versionId);
+                    FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, latestVersionKey, CannedAccessControlList.PublicRead);
+                    FeedStore.s3Client.copyObject(DataManager.feedBucket, latestVersionKey, DataManager.feedBucket, publicKey);
+                    FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, publicKey, CannedAccessControlList.PublicRead);
+
+                    // also copy latest version to feedStore latest
+                    FeedStore.s3Client.copyObject(DataManager.feedBucket, latestVersionKey, DataManager.feedBucket, sourceKey);
+                }
             }
         }
     }
