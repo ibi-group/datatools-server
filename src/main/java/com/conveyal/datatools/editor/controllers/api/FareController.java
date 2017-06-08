@@ -23,8 +23,8 @@ import static spark.Spark.delete;
  * Created by landon on 6/22/16.
  */
 public class FareController {
-    public static final JsonManager<Calendar> json =
-            new JsonManager<>(Calendar.class, JsonViews.UserInterface.class);
+    public static final JsonManager<Fare> json =
+            new JsonManager<>(Fare.class, JsonViews.UserInterface.class);
     private static final Logger LOG = LoggerFactory.getLogger(FareController.class);
 
     public static Object getFare(Request req, Response res) {

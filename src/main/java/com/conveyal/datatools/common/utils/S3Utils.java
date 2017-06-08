@@ -67,7 +67,7 @@ public class S3Utils {
             IOUtils.copy(inputStream, out);
         } catch (Exception e) {
 //            LOG.error("Unable to open input stream from upload");
-            halt("Unable to read uploaded file");
+            halt(SparkUtils.formatJSON("Unable to read uploaded file", 400));
         }
 
         try {
@@ -81,7 +81,7 @@ public class S3Utils {
             return url;
         }
         catch (AmazonServiceException ase) {
-            halt("Error uploading feed to S3");
+            halt(SparkUtils.formatJSON("Error uploading feed to S3", 400));
             return null;
         }
     }

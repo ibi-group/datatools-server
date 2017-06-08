@@ -26,7 +26,7 @@ public class Auth0Connection {
         String token = getToken(req);
 
         if(token == null) {
-            halt(401, "Could not find authorization token");
+            halt(401, SparkUtils.formatJSON("Could not find authorization token", 401));
         }
         Auth0UserProfile profile = null;
         try {
@@ -36,7 +36,7 @@ public class Auth0Connection {
         catch(Exception e) {
 //            e.printStackTrace();
             LOG.warn("Could not verify user", e);
-            halt(401, "Could not verify user");
+            halt(401, SparkUtils.formatJSON("Could not verify user", 401));
         }
     }
 
