@@ -3,7 +3,6 @@ package com.conveyal.datatools.manager;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 
-import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.controllers.DumpController;
 import com.conveyal.datatools.manager.controllers.api.*;
 import com.conveyal.datatools.editor.controllers.api.*;
@@ -14,11 +13,9 @@ import com.conveyal.datatools.manager.extensions.transitfeeds.TransitFeedsFeedRe
 import com.conveyal.datatools.manager.extensions.transitland.TransitLandFeedResource;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.utils.CorsFilter;
-import com.conveyal.gtfs.GTFSCache;
 import com.conveyal.gtfs.api.ApiMain;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -35,11 +32,8 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
