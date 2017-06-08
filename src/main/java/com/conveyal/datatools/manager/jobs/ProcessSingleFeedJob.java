@@ -4,6 +4,8 @@ import com.conveyal.datatools.editor.jobs.ProcessGtfsSnapshotMerge;
 import com.conveyal.datatools.editor.models.Snapshot;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedVersion;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * Process/validate a single GTFS feed
@@ -13,6 +15,7 @@ import com.conveyal.datatools.manager.models.FeedVersion;
 public class ProcessSingleFeedJob implements Runnable {
     FeedVersion feedVersion;
     private String owner;
+    private static final Logger LOG = LoggerFactory.getLogger(ProcessSingleFeedJob.class);
 
     /**
      * Create a job for the given feed version.
@@ -28,6 +31,7 @@ public class ProcessSingleFeedJob implements Runnable {
     }
 
     public void run() {
+        LOG.info("Processing feed for {}", feedVersion.id);
 
         // set up the validation job to run first
         ValidateFeedJob validateJob = new ValidateFeedJob(feedVersion, owner);
@@ -46,7 +50,9 @@ public class ProcessSingleFeedJob implements Runnable {
             validateJob.addNextJob(new BuildTransportNetworkJob(feedVersion, owner));
         }
 
-        new Thread(validateJob).start();
+        // validate job should be run here (rather than threaded/added to thread pool)
+        // so that the chain of jobs continues in the same thread
+        validateJob.run();
     }
 
 }

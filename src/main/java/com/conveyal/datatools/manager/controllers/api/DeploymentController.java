@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.controllers.api;
 
+import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.DeployJob;
 import com.conveyal.datatools.manager.models.Deployment;
@@ -272,8 +273,7 @@ public class DeploymentController {
         DeployJob job = new DeployJob(d, userProfile.getUser_id(), targetUrls, otpServer.publicUrl, otpServer.s3Bucket, otpServer.s3Credentials);
         deploymentJobsByServer.put(target, job);
 
-        Thread tnThread = new Thread(job);
-        tnThread.start();
+        DataManager.heavyExecutor.execute(job);
 
         halt(200, "{status: \"ok\"}");
         return null;

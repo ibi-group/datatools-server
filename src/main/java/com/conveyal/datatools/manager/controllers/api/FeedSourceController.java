@@ -137,12 +137,10 @@ public class FeedSourceController {
 
         // notify users after successful save
         NotifyUsersForSubscriptionJob notifyFeedJob = new NotifyUsersForSubscriptionJob("feed-updated", source.id, "Feed property updated for " + source.name);
-        Thread notifyThread = new Thread(notifyFeedJob);
-        notifyThread.start();
+        DataManager.lightExecutor.execute(notifyFeedJob);
 
         NotifyUsersForSubscriptionJob notifyProjectJob = new NotifyUsersForSubscriptionJob("project-updated", source.projectId, "Project updated (feed source property for " + source.name + ")");
-        Thread notifyProjectThread = new Thread(notifyProjectJob);
-        notifyProjectThread.start();
+        DataManager.lightExecutor.execute(notifyProjectJob);
 
         return source;
     }

@@ -276,8 +276,8 @@ public class FeedSource extends Model implements Cloneable {
             this.save();
 
             NotifyUsersForSubscriptionJob notifyFeedJob = new NotifyUsersForSubscriptionJob("feed-updated", this.id, "New feed version created for " + this.name);
-            Thread notifyThread = new Thread(notifyFeedJob);
-            notifyThread.start();
+            DataManager.lightExecutor.execute(notifyFeedJob);
+
             String message = String.format("Fetch complete for %s", this.name);
             LOG.info(message);
             statusMap.put("message", message);

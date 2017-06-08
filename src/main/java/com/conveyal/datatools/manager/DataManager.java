@@ -25,6 +25,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.google.common.io.Resources;
 import org.apache.commons.io.Charsets;
+import org.eclipse.jetty.util.ConcurrentHashSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.utils.IOUtils;
@@ -39,6 +40,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -55,13 +58,20 @@ public class DataManager {
     public static JsonNode gtfsPlusConfig;
     public static JsonNode gtfsConfig;
 
+    // TODO: define type for ExternalFeedResource Strings
     public static final Map<String, ExternalFeedResource> feedResources = new HashMap<>();
 
-    public static Map<String, Set<MonitorableJob>> userJobsMap = new HashMap<>();
+    public static ConcurrentHashMap<String, ConcurrentHashSet<MonitorableJob>> userJobsMap = new ConcurrentHashMap<>();
 
     public static Map<String, ScheduledFuture> autoFetchMap = new HashMap<>();
     public final static ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
     private static final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
+
+
+    // heavy executor should contain long-lived CPU-intensive tasks (e.g., feed loading/validation)
+    public static Executor heavyExecutor = Executors.newFixedThreadPool(4); // Runtime.getRuntime().availableProcessors()
+    // light executor is for tasks for things that should finish quickly (e.g., email notifications)
+    public static Executor lightExecutor = Executors.newSingleThreadExecutor();
 
     public static String feedBucket;
     public static String awsRole;
@@ -143,6 +153,7 @@ public class DataManager {
             SnapshotController.register(EDITOR_API_PREFIX);
             FeedInfoController.register(EDITOR_API_PREFIX);
             FareController.register(EDITOR_API_PREFIX);
+            GisController.register(EDITOR_API_PREFIX);
         }
 
         // log all exceptions to system.out

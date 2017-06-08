@@ -137,7 +137,10 @@ public class ProjectController {
         Project proj = requestProjectById(req, "manage");
 
         FetchProjectFeedsJob fetchProjectFeedsJob = new FetchProjectFeedsJob(proj, userProfile.getUser_id());
-        new Thread(fetchProjectFeedsJob).start();
+
+        // this is runnable because sometimes we schedule the task for a later time, but here we call it immediately
+        // because it is short lived and just cues more work
+        fetchProjectFeedsJob.run();
         return true;
     }
 
@@ -304,7 +307,7 @@ public class ProjectController {
     private static Project requestProjectById(Request req, String action) {
         String id = req.params("id");
         if (id == null) {
-            halt("Please specify id param");
+            halt(SparkUtils.formatJSON("Please specify id param", 400));
         }
         return requestProject(req, Project.get(id), action);
     }
@@ -312,9 +315,9 @@ public class ProjectController {
         Auth0UserProfile userProfile = req.attribute("user");
         Boolean publicFilter = Boolean.valueOf(req.queryParams("public"));
 
-        // check for null feedsource
+        // check for null project
         if (p == null)
-            halt(400, "Feed source ID does not exist");
+            halt(400, SparkUtils.formatJSON("Project ID does not exist", 400));
 
         boolean authorized;
         switch (action) {
@@ -689,7 +692,8 @@ public class ProjectController {
 
             LOG.info("Auto fetch begins in {} hours and runs every {} hours", String.valueOf(delayInMinutes / 60.0), TimeUnit.DAYS.toHours(intervalInDays));
 
-            FetchProjectFeedsJob fetchProjectFeedsJob = new FetchProjectFeedsJob(p, null);
+            // system is defined as owner because owner field must not be null
+            FetchProjectFeedsJob fetchProjectFeedsJob = new FetchProjectFeedsJob(p, "system");
 
             return DataManager.scheduler.scheduleAtFixedRate(fetchProjectFeedsJob, delayInMinutes, TimeUnit.DAYS.toMinutes(intervalInDays), minutes);
         } catch (Exception e) {
