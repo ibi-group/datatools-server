@@ -125,7 +125,7 @@ public class TransitLandFeed {
         this.license_attribution_text = jsonMap.get("license_attribution_text").asText();
         this.last_fetched_at = jsonMap.get("last_fetched_at").asText();
         this.last_imported_at = jsonMap.get("last_imported_at").asText();
-        this.latest_fetch_exception_log = jsonMap.get("latest_fetch_exception_log").asText();
+//        this.latest_fetch_exception_log = jsonMap.get("latest_fetch_exception_log").asText();
         this.import_status = jsonMap.get("import_status").asText();
         this.created_at = jsonMap.get("created_at").asText();
         this.updated_at = jsonMap.get("updated_at").asText();
