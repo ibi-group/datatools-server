@@ -153,7 +153,7 @@ public class DataManager {
             SnapshotController.register(EDITOR_API_PREFIX);
             FeedInfoController.register(EDITOR_API_PREFIX);
             FareController.register(EDITOR_API_PREFIX);
-            GisController.register(EDITOR_API_PREFIX);
+//            GisController.register(EDITOR_API_PREFIX);
         }
 
         // log all exceptions to system.out
