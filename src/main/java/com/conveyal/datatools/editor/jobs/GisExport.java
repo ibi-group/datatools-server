@@ -1,7 +1,6 @@
 package com.conveyal.datatools.editor.jobs;
 
 import com.conveyal.datatools.editor.datastore.FeedTx;
-import com.conveyal.datatools.manager.models.FeedSource;
 import com.google.common.io.Files;
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.GeometryFactory;
@@ -36,12 +35,12 @@ import java.util.Map;
 public class GisExport implements Runnable {
     File file;
     Type type;
-    Collection<String> agencyIds;
+    Collection<String> feedIds;
 
-    public GisExport(Type type, File file, Collection<String> agencyIds) {
+    public GisExport(Type type, File file, Collection<String> feedIds) {
         this.type = type;
         this.file = file;
-        this.agencyIds = agencyIds;
+        this.feedIds = feedIds;
     }
 
     @Override
@@ -50,7 +49,7 @@ public class GisExport implements Runnable {
         File outShp = new File(outDir, file.getName().replaceAll("\\.zip", "") + ".shp");
 
         GlobalTx gtx = VersionedDataStore.getGlobalTx();
-        FeedTx atx = null;
+        FeedTx feedtx = null;
         try {
             ShapefileDataStoreFactory dataStoreFactory = new ShapefileDataStoreFactory();
 
@@ -98,11 +97,11 @@ public class GisExport implements Runnable {
                 datastore.createSchema(STOP_TYPE);
                 featureBuilder = new SimpleFeatureBuilder(STOP_TYPE);
 
-                for (String feedId : agencyIds) {
+                for (String feedId : feedIds) {
                     EditorFeed fs = gtx.feeds.get(feedId);
 
-                    atx = VersionedDataStore.getFeedTx(feedId);
-                    for (Stop s : atx.stops.values()) {
+                    feedtx = VersionedDataStore.getFeedTx(feedId);
+                    for (Stop s : feedtx.stops.values()) {
                         featureBuilder.add(s.location);
                         featureBuilder.add(s.stopName);
                         featureBuilder.add(s.stopCode);
@@ -113,7 +112,7 @@ public class GisExport implements Runnable {
                         features.add(feature);
                     }
 
-                    atx.rollback();
+                    feedtx.rollback();
                 }
             } else if (type.equals(Type.ROUTES)) {
                 collectionType = ROUTE_TYPE;
@@ -122,14 +121,14 @@ public class GisExport implements Runnable {
 
                 GeometryFactory gf = new GeometryFactory();
 
-                for (String feedId : agencyIds) {
+                for (String feedId : feedIds) {
                     EditorFeed fs = gtx.feeds.get(feedId);
 
-                    atx = VersionedDataStore.getFeedTx(feedId);
+                    feedtx = VersionedDataStore.getFeedTx(feedId);
 
                     // we loop over trip patterns. Note that this will yield several lines for routes that have
                     // multiple patterns. There's no real good way to reconcile the shapes of multiple patterns.
-                    for (TripPattern tp : atx.tripPatterns.values()) {
+                    for (TripPattern tp : feedtx.tripPatterns.values()) {
                         LineString shape;
                         if (tp.shape != null) {
                             shape = tp.shape;
@@ -138,13 +137,13 @@ public class GisExport implements Runnable {
                             Coordinate[] coords = new Coordinate[tp.patternStops.size()];
 
                             for (int i = 0; i < coords.length; i++) {
-                                coords[i] = atx.stops.get(tp.patternStops.get(i).stopId).location.getCoordinate();
+                                coords[i] = feedtx.stops.get(tp.patternStops.get(i).stopId).location.getCoordinate();
                             }
 
                             shape = gf.createLineString(coords);
                         }
 
-                        Route r = atx.routes.get(tp.routeId);
+                        Route r = feedtx.routes.get(tp.routeId);
 
                         featureBuilder.add(shape);
                         featureBuilder.add(tp.name);
@@ -165,7 +164,7 @@ public class GisExport implements Runnable {
                         features.add(feature);
                     }
 
-                    atx.rollback();
+                    feedtx.rollback();
                 }
             }
             else
@@ -208,9 +207,9 @@ public class GisExport implements Runnable {
             e.printStackTrace();
         } finally {
             if (gtx != null) gtx.rollback();
-            if (atx != null) atx.rollbackIfOpen();
+            if (feedtx != null) feedtx.rollbackIfOpen();
         }
     }
 
-    public static enum Type { ROUTES, STOPS };
+    public enum Type { ROUTES, STOPS }
 }
