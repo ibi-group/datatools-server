@@ -165,7 +165,14 @@ public class FeedTx extends DatabaseTx {
         tripCountByPatternAndCalendar = getMap("tripCountByPatternAndCalendar");
         Bind.histogram(trips, tripCountByPatternAndCalendar, (tripId, trip) -> new Tuple2(trip.patternId, trip.calendarId));
 
-        scheduleExceptionCountByDate = getMap("scheduleExceptionCountByDate");
+        // getting schedule exception map appears to be causing issues for some feeds
+        try {
+            scheduleExceptionCountByDate = getMap("scheduleExceptionCountByDate");
+        } catch (Exception e) {
+            LOG.error("Error getting scheduleExceptionCountByDate map. Deleting.");
+            tx.delete("scheduleExceptionCountByDate"); // tx is underlying tx, delete corrupted map
+            scheduleExceptionCountByDate = getMap("scheduleExceptionCountByDate");
+        }
         BindUtils.multiHistogram(exceptions, scheduleExceptionCountByDate, (id, ex) -> ex.dates.toArray(new LocalDate[ex.dates.size()]));
 
         tripCountByCalendar = getMap("tripCountByCalendar");
