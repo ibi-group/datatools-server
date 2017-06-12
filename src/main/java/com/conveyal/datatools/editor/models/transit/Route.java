@@ -95,6 +95,12 @@ public class Route extends Model implements Cloneable, Serializable {
 
     public Route () {}
 
+    /**
+     * Construct editor route from gtfs-lib representation.
+     * @param route
+     * @param feed
+     * @param agency
+     */
     public Route(com.conveyal.gtfs.model.Route route, EditorFeed feed, Agency agency) {
         this.gtfsRouteId = route.route_id;
         this.routeShortName = route.route_short_name;
@@ -108,7 +114,7 @@ public class Route extends Model implements Cloneable, Serializable {
         this.routeTextColor = route.route_text_color;
 
         this.feedId = feed.id;
-        this.agencyId = agency.id;
+        this.agencyId = agency != null ? agency.id : null;
     }
 
 
