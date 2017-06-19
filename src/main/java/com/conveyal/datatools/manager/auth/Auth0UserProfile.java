@@ -1,18 +1,11 @@
 package com.conveyal.datatools.manager.auth;
 
 import com.conveyal.datatools.manager.DataManager;
-import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.ObjectMapper;
 
-import java.net.URL;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Date;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Created by demory on 1/18/16.
@@ -24,9 +17,18 @@ public class Auth0UserProfile {
     String user_id;
     AppMetadata app_metadata;
 
-    public Auth0UserProfile() {
-    }
+    public Auth0UserProfile() {}
 
+    /**
+     * Constructor for creating a mock user (app admin) for testing environment.
+     * @param email
+     * @param user_id
+     */
+    public Auth0UserProfile(String email, String user_id) {
+        setEmail(email);
+        setUser_id(user_id);
+        setApp_metadata(new AppMetadata());
+    }
 
     public String getUser_id() {
         return user_id;
@@ -60,15 +62,15 @@ public class Auth0UserProfile {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     public static class AppMetadata {
-        ObjectMapper mapper = new ObjectMapper();
         @JsonProperty("datatools")
         List<DatatoolsInfo> datatools;
 
-        public AppMetadata() {
-        }
+        public AppMetadata() {}
 
         @JsonIgnore
         public void setDatatoolsInfo(DatatoolsInfo datatools) {
+            if (Auth0Connection.authDisabled()) return;
+
             for(int i = 0; i < this.datatools.size(); i++) {
                 if (this.datatools.get(i).clientId.equals(DataManager.getConfigPropertyAsText("AUTH0_CLIENT_ID"))) {
                     this.datatools.set(i, datatools);
@@ -77,6 +79,8 @@ public class Auth0UserProfile {
         }
         @JsonIgnore
         public DatatoolsInfo getDatatoolsInfo() {
+            if (Auth0Connection.authDisabled()) return null;
+
             for(int i = 0; i < this.datatools.size(); i++) {
                 DatatoolsInfo dt = this.datatools.get(i);
                 if (dt.clientId.equals(DataManager.getConfigPropertyAsText("AUTH0_CLIENT_ID"))) {
@@ -95,8 +99,7 @@ public class Auth0UserProfile {
         Permission[] permissions;
         Subscription[] subscriptions;
 
-        public DatatoolsInfo() {
-        }
+        public DatatoolsInfo() {}
 
         public DatatoolsInfo(String clientId, Project[] projects, Permission[] permissions, Organization[] organizations, Subscription[] subscriptions) {
             this.clientId = clientId;
@@ -135,8 +138,7 @@ public class Auth0UserProfile {
         Permission[] permissions;
         String[] defaultFeeds;
 
-        public Project() {
-        }
+        public Project() {}
 
         public Project(String project_id, Permission[] permissions, String[] defaultFeeds) {
             this.project_id = project_id;
@@ -161,8 +163,7 @@ public class Auth0UserProfile {
         String type;
         String[] feeds;
 
-        public Permission() {
-        }
+        public Permission() {}
 
         public Permission(String type, String[] feeds) {
             this.type = type;
@@ -208,8 +209,7 @@ public class Auth0UserProfile {
         String type;
         String[] target;
 
-        public Subscription() {
-        }
+        public Subscription() {}
 
         public Subscription(String type, String[] target) {
             this.type = type;
@@ -244,6 +244,9 @@ public class Auth0UserProfile {
     }
 
     public boolean canAdministerApplication() {
+        // NOTE: user can administer application by default if running without authentication
+        if (Auth0Connection.authDisabled()) return true;
+
         if(app_metadata.getDatatoolsInfo() != null && app_metadata.getDatatoolsInfo().permissions != null) {
             for(Permission permission : app_metadata.getDatatoolsInfo().permissions) {
                 if(permission.type.equals("administer-application")) {

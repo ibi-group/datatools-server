@@ -22,19 +22,28 @@ import static spark.Spark.halt;
 
 public class Auth0Connection {
     private static final Logger LOG = LoggerFactory.getLogger(Auth0Connection.class);
+
+    /**
+     * Check API request for user token.
+     * @param req Spark request object
+     */
     public static void checkUser(Request req) {
+        // if in a development environment, assign a mock profile to request attribute
+        if (authDisabled()) {
+            req.attribute("user", new Auth0UserProfile("mock@example.com", "user_id:string"));
+            return;
+        }
         String token = getToken(req);
 
         if(token == null) {
             halt(401, SparkUtils.formatJSON("Could not find authorization token", 401));
         }
-        Auth0UserProfile profile = null;
+        Auth0UserProfile profile;
         try {
             profile = getUserProfile(token);
             req.attribute("user", profile);
         }
         catch(Exception e) {
-//            e.printStackTrace();
             LOG.warn("Could not verify user", e);
             halt(401, SparkUtils.formatJSON("Could not verify user", 401));
         }
@@ -93,7 +102,7 @@ public class Auth0Connection {
             Object json = m.readValue(userString, Object.class);
             System.out.println(m.writerWithDefaultPrettyPrinter().writeValueAsString(json));
             LOG.warn("Could not verify user", e);
-            halt(401, "Could not verify user");
+            halt(401, SparkUtils.formatJSON("Could not verify user", 401));
         }
         return profile;
     }
@@ -117,5 +126,9 @@ public class Auth0Connection {
                 halt(403, SparkUtils.formatJSON("User does not have permission to edit GTFS for feedId", 403));
             }
         }
+    }
+
+    public static boolean authDisabled() {
+        return DataManager.hasConfigProperty("DISABLE_AUTH") && "true".equals(DataManager.getConfigPropertyAsText("DISABLE_AUTH"));
     }
 }

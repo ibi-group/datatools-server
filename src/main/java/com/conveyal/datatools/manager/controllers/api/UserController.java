@@ -243,6 +243,7 @@ public class UserController {
                 }
             }
         } else {
+            // NOTE: this condition will also occur if DISABLE_AUTH is set to true
             halt(403, SparkUtils.formatJSON("User does not have permission to access to this application", 403));
         }
 
