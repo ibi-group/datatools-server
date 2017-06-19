@@ -69,7 +69,7 @@ public class Auth0UserProfile {
 
         @JsonIgnore
         public void setDatatoolsInfo(DatatoolsInfo datatools) {
-            if (Auth0Connection.runningWithoutAuth()) return;
+            if (Auth0Connection.authDisabled()) return;
 
             for(int i = 0; i < this.datatools.size(); i++) {
                 if (this.datatools.get(i).clientId.equals(DataManager.getConfigPropertyAsText("AUTH0_CLIENT_ID"))) {
@@ -79,7 +79,7 @@ public class Auth0UserProfile {
         }
         @JsonIgnore
         public DatatoolsInfo getDatatoolsInfo() {
-            if (Auth0Connection.runningWithoutAuth()) return null;
+            if (Auth0Connection.authDisabled()) return null;
 
             for(int i = 0; i < this.datatools.size(); i++) {
                 DatatoolsInfo dt = this.datatools.get(i);
@@ -245,7 +245,7 @@ public class Auth0UserProfile {
 
     public boolean canAdministerApplication() {
         // NOTE: user can administer application by default if running without authentication
-        if (Auth0Connection.runningWithoutAuth()) return true;
+        if (Auth0Connection.authDisabled()) return true;
 
         if(app_metadata.getDatatoolsInfo() != null && app_metadata.getDatatoolsInfo().permissions != null) {
             for(Permission permission : app_metadata.getDatatoolsInfo().permissions) {

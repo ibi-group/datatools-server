@@ -29,7 +29,7 @@ public class Auth0Connection {
      */
     public static void checkUser(Request req) {
         // if in a development environment, assign a mock profile to request attribute
-        if (runningWithoutAuth()) {
+        if (authDisabled()) {
             req.attribute("user", new Auth0UserProfile("mock@example.com", "user_id:string"));
             return;
         }
@@ -128,11 +128,7 @@ public class Auth0Connection {
         }
     }
 
-    public static boolean runningWithoutAuth() {
-        if (DataManager.getConfigPropertyAsText("AUTH0_CLIENT_ID") == null) {
-            return true;
-        } else {
-            return false;
-        }
+    public static boolean authDisabled() {
+        return DataManager.hasConfigProperty("DISABLE_AUTH") && "true".equals(DataManager.getConfigPropertyAsText("DISABLE_AUTH"));
     }
 }
