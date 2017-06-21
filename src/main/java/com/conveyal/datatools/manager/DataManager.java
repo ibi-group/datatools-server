@@ -179,7 +179,7 @@ public class DataManager {
 
         // return "application/json" for all API routes
         after(API_PREFIX + "*", (request, response) -> {
-            LOG.info(request.pathInfo());
+//            LOG.info(request.pathInfo());
             response.type("application/json");
             response.header("Content-Encoding", "gzip");
         });
