@@ -308,7 +308,7 @@ public class FeedVersion extends Model implements Serializable {
             eventBus.post(statusMap);
             e.printStackTrace();
 //            this.validationResult = null;
-            validationResult.loadStatus = LoadStatus.OTHER_FAILURE;
+            validationResult = new FeedValidationResult(LoadStatus.OTHER_FAILURE, "Could not calculate validation properties.");
 //            halt(400, "Error validating feed...");
             return;
         }
@@ -451,7 +451,7 @@ public class FeedVersion extends Model implements Serializable {
     }
     public TransportNetwork buildTransportNetwork(EventBus eventBus) {
         // return null if validation result is null (probably means something went wrong with validation, plus we won't have feed bounds).
-        if (this.validationResult == null) {
+        if (this.validationResult == null || validationResult.loadStatus == LoadStatus.OTHER_FAILURE) {
             return null;
         }
 
@@ -637,6 +637,7 @@ public class FeedVersion extends Model implements Serializable {
         }
         return r5.getAbsolutePath();
     }
+
     @JsonIgnore
     public File getTransportNetworkPath () {
         return new File(String.join(File.separator, getR5Path(), id + "_" + R5Version.describe + "_network.dat"));

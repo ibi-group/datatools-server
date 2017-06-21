@@ -431,7 +431,9 @@ public class FeedSource extends Model implements Cloneable {
         // them otherwise)
         if (DataManager.useS3) {
             boolean sourceExists = FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, sourceKey);
-            ObjectMetadata sourceMetadata = FeedStore.s3Client.getObjectMetadata(DataManager.feedBucket, sourceKey);
+            ObjectMetadata sourceMetadata = sourceExists
+                    ? FeedStore.s3Client.getObjectMetadata(DataManager.feedBucket, sourceKey)
+                    : null;
             ObjectMetadata latestVersionMetadata = FeedStore.s3Client.getObjectMetadata(DataManager.feedBucket, latestVersionKey);
             boolean latestVersionMatchesSource = sourceMetadata != null &&
                     latestVersionMetadata != null &&
