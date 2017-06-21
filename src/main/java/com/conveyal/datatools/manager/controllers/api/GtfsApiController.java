@@ -28,7 +28,9 @@ public class GtfsApiController {
     public static final Logger LOG = LoggerFactory.getLogger(GtfsApiController.class);
     public static String feedBucket;
     public static FeedUpdater feedUpdater;
-    public static final String extensionType = DataManager.getConfigPropertyAsText("modules.gtfsapi.use_extension");
+    public static final String extensionType = DataManager.hasConfigProperty("modules.gtfsapi.use_extension")
+            ? DataManager.getConfigPropertyAsText("modules.gtfsapi.use_extension")
+            : "false";
     public static String bucketFolder = DataManager.getConfigPropertyAsText("extensions." + extensionType + ".s3_download_prefix");
 
     // store list of GTFS feed eTags here Map<FeedId, eTag value>
