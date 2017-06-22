@@ -434,7 +434,10 @@ public class FeedSource extends Model implements Cloneable {
             ObjectMetadata sourceMetadata = sourceExists
                     ? FeedStore.s3Client.getObjectMetadata(DataManager.feedBucket, sourceKey)
                     : null;
-            ObjectMetadata latestVersionMetadata = FeedStore.s3Client.getObjectMetadata(DataManager.feedBucket, latestVersionKey);
+            boolean latestExists = FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, latestVersionKey);
+            ObjectMetadata latestVersionMetadata = latestExists
+                    ? FeedStore.s3Client.getObjectMetadata(DataManager.feedBucket, latestVersionKey)
+                    : null;
             boolean latestVersionMatchesSource = sourceMetadata != null &&
                     latestVersionMetadata != null &&
                     sourceMetadata.getETag().equals(latestVersionMetadata.getETag());
@@ -513,24 +516,6 @@ public class FeedSource extends Model implements Cloneable {
 
         sourceStore.delete(this.id);
     }
-
-    /*@JsonIgnore
-    public AgencyBranding getAgencyBranding(String agencyId) {
-        if(branding != null) {
-            for (AgencyBranding agencyBranding : branding) {
-                if (agencyBranding.agencyId.equals(agencyId)) return agencyBranding;
-            }
-        }
-        return null;
-    }
-
-    @JsonIgnore
-    public void addAgencyBranding(AgencyBranding agencyBranding) {
-        if(branding == null) {
-            branding = new ArrayList<>();
-        }
-        branding.add(agencyBranding);
-    }*/
 
     public FeedSource clone () throws CloneNotSupportedException {
         return (FeedSource) super.clone();
