@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.models;
 import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.DeleteObjectsRequest;
 import com.amazonaws.services.s3.model.ObjectMetadata;
+import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.manager.DataManager;
@@ -204,38 +205,37 @@ public class FeedSource extends Model implements Cloneable {
 
         try {
             conn.connect();
-
-            if (conn.getResponseCode() == HttpURLConnection.HTTP_NOT_MODIFIED) {
-                String message = String.format("Feed %s has not been modified", this.name);
-                LOG.warn(message);
-                statusMap.put("message", message);
-                statusMap.put("percentComplete", 100.0);
-                statusMap.put("error", true);
-                eventBus.post(statusMap);
-                halt(304, message);
-                return null;
-            }
-
-            // TODO: redirects
-            else if (conn.getResponseCode() == HttpURLConnection.HTTP_OK) {
-                String message = String.format("Saving %s feed.", this.name);
-                LOG.info(message);
-                statusMap.put("message", message);
-                statusMap.put("percentComplete", 75.0);
-                statusMap.put("error", false);
-                eventBus.post(statusMap);
-                newGtfsFile = version.newGtfsFile(conn.getInputStream());
-            }
-
-            else {
-                String message = String.format("HTTP status %s retrieving %s feed", conn.getResponseMessage(), this.name);
-                LOG.error(message);
-                statusMap.put("message", message);
-                statusMap.put("percentComplete", 100.0);
-                statusMap.put("error", true);
-                eventBus.post(statusMap);
-                halt(400, message);
-                return null;
+            String message;
+            switch (conn.getResponseCode()) {
+                case HttpURLConnection.HTTP_NOT_MODIFIED:
+                    message = String.format("Feed %s has not been modified", this.name);
+                    LOG.warn(message);
+                    statusMap.put("message", message);
+                    statusMap.put("percentComplete", 100.0);
+                    statusMap.put("error", true);
+                    eventBus.post(statusMap);
+                    halt(304, SparkUtils.formatJSON(message, 304));
+                    return null;
+                case HttpURLConnection.HTTP_OK:
+                case HttpURLConnection.HTTP_MOVED_TEMP:
+                case HttpURLConnection.HTTP_MOVED_PERM:
+                    message = String.format("Saving %s feed.", this.name);
+                    LOG.info(message);
+                    statusMap.put("message", message);
+                    statusMap.put("percentComplete", 75.0);
+                    statusMap.put("error", false);
+                    eventBus.post(statusMap);
+                    newGtfsFile = version.newGtfsFile(conn.getInputStream());
+                    break;
+                default:
+                    message = String.format("HTTP status (%d: %s) retrieving %s feed", conn.getResponseCode(), conn.getResponseMessage(), this.name);
+                    LOG.error(message);
+                    statusMap.put("message", message);
+                    statusMap.put("percentComplete", 100.0);
+                    statusMap.put("error", true);
+                    eventBus.post(statusMap);
+                    halt(400, SparkUtils.formatJSON(message, 400));
+                    return null;
             }
         } catch (IOException e) {
             String message = String.format("Unable to connect to %s; not fetching %s feed", url, this.name);
@@ -245,7 +245,7 @@ public class FeedSource extends Model implements Cloneable {
             statusMap.put("error", true);
             eventBus.post(statusMap);
             e.printStackTrace();
-            halt(400, message);
+            halt(400, SparkUtils.formatJSON(message, 400, e));
             return null;
         } catch (HaltException e) {
             LOG.warn("Halt thrown", e);
