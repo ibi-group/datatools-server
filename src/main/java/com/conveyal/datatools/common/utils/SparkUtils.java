@@ -39,7 +39,16 @@ public class SparkUtils {
         return res.raw();
     }
 
+    public static String formatJSON(String message, int code, Exception e) {
+        String detail = e != null ? e.getMessage() : null;
+        return String.format("{\"result\":\"ERR\",\"message\":\"%s\",\"code\":%d, \"detail\":\"%s\"}", message, code, detail);
+    }
+
     public static String formatJSON(String message, int code) {
-        return String.format("{\"result\":\"ERR\",\"message\":\"%s\",\"code\":%d}", message, code);
+        return formatJSON(message, code, null);
+    }
+
+    public static String formatJSON(String message) {
+        return formatJSON(message, 400);
     }
 }
