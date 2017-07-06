@@ -70,6 +70,7 @@ public class Stop extends Model implements Cloneable, Serializable {
         this.parentStation = stop.parent_station;
         this.pickupType = StopTimePickupDropOffType.SCHEDULED;
         this.dropOffType = StopTimePickupDropOffType.SCHEDULED;
+        this.wheelchairBoarding = AttributeAvailabilityType.fromGtfs(Integer.valueOf(stop.wheelchair_boarding));
         
         this.location  =  geometryFactory.createPoint(new Coordinate(stop.stop_lon,stop.stop_lat));
 

@@ -235,8 +235,8 @@ public class ProcessGtfsSnapshotExport implements Runnable {
                         if (pattern.shape != null && !pattern.useStraightLineDistances)
                             gtfsTrip.shape_id = pattern.id;
 
-                        // prefer trip wheelchair boarding value if available
-                        if (trip.wheelchairBoarding != null) {
+                        // prefer trip wheelchair boarding value if available and not UNKNOWN
+                        if (trip.wheelchairBoarding != null && !trip.wheelchairBoarding.equals(AttributeAvailabilityType.UNKNOWN)) {
                             gtfsTrip.wheelchair_accessible = trip.wheelchairBoarding.toGtfs();
                         } else if (route.wheelchairBoarding != null) {
                             gtfsTrip.wheelchair_accessible = route.wheelchairBoarding.toGtfs();

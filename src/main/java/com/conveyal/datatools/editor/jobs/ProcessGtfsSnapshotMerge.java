@@ -179,29 +179,6 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                 feedTx.stops.put(stop.id, stop);
                 stopIdMap.put(new Tuple2(gtfsStop.stop_id, feed.id), stop);
                 stopCount++;
-
-                /*
-                // duplicate the stop for all of the feeds by which it is used
-                Collection<Agency> agencies = Collections2.transform(
-                        stopsByAgency.subSet(new Tuple2(gtfsStop.stop_id, null), new Tuple2(gtfsStop.stop_id, Fun.HI)),
-                        new Function<Tuple2<String, String>, Agency>() {
-
-                            @Override
-                            public Agency apply(Tuple2<String, String> input) {
-                                return agencyIdMap.get(input.b);
-                            }
-                        });
-
-                // impossible to tell to whom unused stops belong, so give them to everyone
-                if (agencies.size() == 0)
-                    agencies = agencyIdMap.values();
-
-                for (Agency agency : agencies) {
-                    Stop stop = new Stop(gtfsStop, geometryFactory, agency);
-                    agencyTxs.get(agency.id).stops.put(stop.id, stop);
-                    stopIdMap.put(new Tuple2(gtfsStop.stop_id, agency.id), stop);
-                    stopEnvelopes.get(agency.id).expandToInclude(gtfsStop.stop_lon, gtfsStop.stop_lat);
-                }*/
             }
 
             LOG.info("Stops loaded: " + stopCount);
