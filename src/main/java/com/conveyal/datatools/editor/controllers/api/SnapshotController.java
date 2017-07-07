@@ -155,7 +155,7 @@ public class SnapshotController {
         ProcessGtfsSnapshotMerge processGtfsSnapshotMergeJob =
                 new ProcessGtfsSnapshotMerge(feedVersion, userProfile.getUser_id());
 
-        new Thread(processGtfsSnapshotMergeJob).start();
+        DataManager.heavyExecutor.execute(processGtfsSnapshotMergeJob);
 
         halt(200, "{status: \"ok\"}");
         return null;

@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.controllers.api;
 
 import com.amazonaws.auth.policy.Statement;
 import com.amazonaws.auth.policy.actions.S3Actions;
+import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.BuildTransportNetworkJob;
@@ -84,7 +85,7 @@ public class FeedVersionController  {
     private static FeedSource requestFeedSourceById(Request req, String action) {
         String id = req.queryParams("feedSourceId");
         if (id == null) {
-            halt("Please specify feedsourceId param");
+            halt(SparkUtils.formatJSON("Please specify feedsourceId param", 400));
         }
         return requestFeedSource(req, FeedSource.get(id), action);
     }
@@ -158,13 +159,10 @@ public class FeedVersionController  {
 //        v.fileTimestamp
         v.userId = userProfile.getUser_id();
         v.save();
-        new ProcessSingleFeedJob(v, userProfile.getUser_id()).run();
 
-        /*if (DataManager.config.get("modules").get("validator").get("enabled").asBoolean()) {
-            BuildTransportNetworkJob btnj = new BuildTransportNetworkJob(v);
-            Thread tnThread = new Thread(btnj);
-            tnThread.start();
-        }*/
+        // must be handled by executor because it
+        ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(v, userProfile.getUser_id());
+        DataManager.heavyExecutor.execute(processSingleFeedJob);
 
         return true;
     }
@@ -178,7 +176,7 @@ public class FeedVersionController  {
         CreateFeedVersionFromSnapshotJob createFromSnapshotJob =
                 new CreateFeedVersionFromSnapshotJob(v, req.queryParams("snapshotId"), userProfile.getUser_id());
         createFromSnapshotJob.addNextJob(new ProcessSingleFeedJob(v, userProfile.getUser_id()));
-        new Thread(createFromSnapshotJob).start();
+        DataManager.heavyExecutor.execute(createFromSnapshotJob);
 
         return true;
     }
@@ -255,8 +253,7 @@ public class FeedVersionController  {
                 try {
 //                    version.transportNetwork = TransportNetwork.read(is);
                     ReadTransportNetworkJob rtnj = new ReadTransportNetworkJob(version, userProfile.getUser_id());
-                    Thread readThread = new Thread(rtnj);
-                    readThread.start();
+                    DataManager.heavyExecutor.execute(rtnj);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -269,8 +266,7 @@ public class FeedVersionController  {
                 LOG.warn("Transport network not found. Beginning build.", e);
                 readingNetworkVersionList.add(version.id);
                 BuildTransportNetworkJob btnj = new BuildTransportNetworkJob(version, userProfile.getUser_id());
-                Thread tnThread = new Thread(btnj);
-                tnThread.start();
+                DataManager.heavyExecutor.execute(btnj);
             }
             halt(202, "Try again later. Building transport network");
         }
