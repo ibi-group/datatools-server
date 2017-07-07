@@ -254,9 +254,8 @@ public class FeedSourceController {
         LOG.info("Fetching feed for source {}", s.name);
 
         Auth0UserProfile userProfile = req.attribute("user");
-        FetchSingleFeedJob job = new FetchSingleFeedJob(s, userProfile.getUser_id());
-
         // Don't run in thread because we want to return the HTTP status of the fetch operation
+        FetchSingleFeedJob job = new FetchSingleFeedJob(s, userProfile.getUser_id(), false);
         job.run();
 
         // WARNING: infinite 2D bounds Jackson error when returning job.result, so this method now returns true

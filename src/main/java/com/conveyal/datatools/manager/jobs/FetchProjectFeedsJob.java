@@ -34,11 +34,11 @@ public class FetchProjectFeedsJob extends MonitorableJob {
         result = new HashMap<>();
 
         for(FeedSource feedSource : proj.getProjectFeedSources()) {
-
-            if (!FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.equals(feedSource.retrievalMethod))
+            // skip feed if not fetched automatically
+            if (!FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.equals(feedSource.retrievalMethod)) {
                 continue;
-//            LOG.info();
-            FetchSingleFeedJob fetchSingleFeedJob = new FetchSingleFeedJob(feedSource, owner);
+            }
+            FetchSingleFeedJob fetchSingleFeedJob = new FetchSingleFeedJob(feedSource, owner, true);
             DataManager.heavyExecutor.execute(fetchSingleFeedJob);
         }
         jobFinished();
