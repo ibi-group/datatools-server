@@ -163,15 +163,39 @@ public class FeedSourceController {
             if(entry.getKey().equals("url")) {
                 String url = entry.getValue().asText();
                 try {
-                    source.url = new URL(url);
-
+                    source.url = entry.getValue().isNull() ? null : new URL(url);
                     // reset the last fetched date so it can be fetched again
                     source.lastFetched = null;
-
                 } catch (MalformedURLException e) {
-                    halt(400, "URL '" + url + "' not valid.");
+                    halt(400, SparkUtils.formatJSON("URL '" + url + "' not valid.", 400));
                 }
+            }
 
+            if(entry.getKey().equals("serviceAlertsUrl")) {
+                String url = entry.getValue().asText();
+                try {
+                    source.serviceAlertsUrl = entry.getValue().isNull() ? null : new URL(url);
+                } catch (MalformedURLException e) {
+                    halt(400, SparkUtils.formatJSON("URL '" + url + "' not valid.", 400));
+                }
+            }
+
+            if(entry.getKey().equals("tripUpdatesUrl")) {
+                String url = entry.getValue().asText();
+                try {
+                    source.tripUpdatesUrl = entry.getValue().isNull() ? null : new URL(url);
+                } catch (MalformedURLException e) {
+                    halt(400, SparkUtils.formatJSON("URL '" + url + "' not valid.", 400));
+                }
+            }
+
+            if(entry.getKey().equals("vehiclePositionsUrl")) {
+                String url = entry.getValue().asText();
+                try {
+                    source.vehiclePositionsUrl = entry.getValue().isNull() ? null : new URL(url);
+                } catch (MalformedURLException e) {
+                    halt(400, SparkUtils.formatJSON("URL '" + url + "' not valid.", 400));
+                }
             }
 
             if(entry.getKey().equals("retrievalMethod")) {
@@ -256,7 +280,7 @@ public class FeedSourceController {
         Auth0UserProfile userProfile = req.attribute("user");
         // Don't run in thread because we want to return the HTTP status of the fetch operation
         FetchSingleFeedJob job = new FetchSingleFeedJob(s, userProfile.getUser_id(), false);
-        job.run();
+        DataManager.heavyExecutor.execute(job);
 
         // WARNING: infinite 2D bounds Jackson error when returning job.result, so this method now returns true
         // because we don't need to return the feed immediately anyways.
@@ -271,7 +295,7 @@ public class FeedSourceController {
      * @param action action type (either "view" or "manage")
      * @return feedsource object for ID
      */
-    private static FeedSource requestFeedSourceById(Request req, String action) {
+    public static FeedSource requestFeedSourceById(Request req, String action) {
         String id = req.params("id");
         if (id == null) {
             halt(400, SparkUtils.formatJSON("Please specify id param", 400));
