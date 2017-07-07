@@ -171,33 +171,6 @@ public class FeedSourceController {
                 }
             }
 
-            if(entry.getKey().equals("serviceAlertsUrl")) {
-                String url = entry.getValue().asText();
-                try {
-                    source.serviceAlertsUrl = entry.getValue().isNull() ? null : new URL(url);
-                } catch (MalformedURLException e) {
-                    halt(400, SparkUtils.formatJSON("URL '" + url + "' not valid.", 400));
-                }
-            }
-
-            if(entry.getKey().equals("tripUpdatesUrl")) {
-                String url = entry.getValue().asText();
-                try {
-                    source.tripUpdatesUrl = entry.getValue().isNull() ? null : new URL(url);
-                } catch (MalformedURLException e) {
-                    halt(400, SparkUtils.formatJSON("URL '" + url + "' not valid.", 400));
-                }
-            }
-
-            if(entry.getKey().equals("vehiclePositionsUrl")) {
-                String url = entry.getValue().asText();
-                try {
-                    source.vehiclePositionsUrl = entry.getValue().isNull() ? null : new URL(url);
-                } catch (MalformedURLException e) {
-                    halt(400, SparkUtils.formatJSON("URL '" + url + "' not valid.", 400));
-                }
-            }
-
             if(entry.getKey().equals("retrievalMethod")) {
                 source.retrievalMethod = FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.valueOf(entry.getValue().asText());
             }
