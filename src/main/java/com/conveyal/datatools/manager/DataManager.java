@@ -199,6 +199,16 @@ public class DataManager {
             return null;
         });
 
+        InputStream auth0Stream = DataManager.class.getResourceAsStream("/public/auth0-silent-callback.html");
+        String auth0html = IOUtils.toString(auth0Stream);
+        auth0Stream.close();
+
+        // auth0 silent callback
+        get("/auth0-silent-callback", (request, response) -> {
+            response.type("text/html");
+            return auth0html;
+        });
+
         // return index.html for any sub-directory
         get("/*", (request, response) -> {
             response.type("text/html");
