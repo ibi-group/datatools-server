@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.DeployJob;
 import com.conveyal.datatools.manager.models.Deployment;
@@ -179,7 +180,7 @@ public class DeploymentController {
     }
 
 //    @BodyParser.Of(value=BodyParser.Json.class, maxLength=1024*1024)
-    public static Object updateDeployment (Request req, Response res) throws IOException {
+    public static Object updateDeployment (Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         String id = req.params("id");
         Deployment d = Deployment.get(id);
@@ -190,12 +191,17 @@ public class DeploymentController {
         if (!userProfile.canAdministerProject(d.projectId, d.getOrganizationId()) && !userProfile.getUser_id().equals(d.getUser()))
             halt(401);
 
-        JsonNode params = mapper.readTree(req.body());
-        applyJsonToDeployment(d, params);
-
-        d.save();
-
-        return d;
+        JsonNode params;
+        try {
+            params = mapper.readTree(req.body());
+            applyJsonToDeployment(d, params);
+            d.save();
+            return d;
+        } catch (IOException e) {
+            e.printStackTrace();
+            halt(400, SparkUtils.formatJSON("Could not read deployment"));
+        }
+        return null;
     }
 
     /**
@@ -212,12 +218,18 @@ public class DeploymentController {
                 ArrayList<FeedVersion> versionsToInsert = new ArrayList<>(versions.size());
                 for (JsonNode version : versions) {
                     if (!version.has("id")) {
-                        halt(400, "Version not supplied");
+                        halt(400, SparkUtils.formatJSON("Version not supplied"));
                     }
-                    FeedVersion v = FeedVersion.get(version.get("id").asText());
+                    FeedVersion v = null;
+                    try {
+                        v = FeedVersion.get(version.get("id").asText());
+                    } catch (Exception e) {
+                        halt(404, SparkUtils.formatJSON("Version not found", 404));
+                    }
                     if (v == null) {
-                        halt(404, "Version not found");
+                        halt(404, SparkUtils.formatJSON("Version not found", 404));
                     }
+                    // check that the version belongs to the correct project
                     if (v.getFeedSource().projectId.equals(d.projectId)) {
                         versionsToInsert.add(v);
                     }

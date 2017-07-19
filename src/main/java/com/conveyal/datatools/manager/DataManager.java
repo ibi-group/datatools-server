@@ -75,6 +75,7 @@ public class DataManager {
     public static boolean useS3;
     public static final String API_PREFIX = "/api/manager/";
     public static final String EDITOR_API_PREFIX = "/api/editor/";
+    public static final String publicPath = "(" + DataManager.API_PREFIX + "|" + DataManager.EDITOR_API_PREFIX + ")public/.*";
     public static final String DEFAULT_ENV = "configurations/default/env.yml";
     public static final String DEFAULT_CONFIG = "configurations/default/server.yml";
 
