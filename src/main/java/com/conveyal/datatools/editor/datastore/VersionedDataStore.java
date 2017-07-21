@@ -13,6 +13,7 @@ import org.slf4j.LoggerFactory;
 import com.conveyal.datatools.editor.utils.ClassLoaderSerializer;
 
 import java.io.File;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
@@ -91,20 +92,27 @@ public class VersionedDataStore {
     /** Take a snapshot of an agency database. The snapshot will be saved in the global database. */
     public static Snapshot takeSnapshot (String feedId, String feedVersionId, String name, String comment) {
         FeedTx tx = getFeedTx(feedId);
+        Collection<Snapshot> snapshots = Snapshot.getSnapshots(feedId);
         GlobalTx gtx = getGlobalTx();
         int version = -1;
         DB snapshot = null;
-        Snapshot ret = null;
+        Snapshot ret;
         try {
             version = tx.getNextSnapshotId();
-
-            LOG.info("Creating snapshot {} for feed {}", feedId, version);
+            LOG.info("Creating snapshot {} for feed {}", version, feedId);
             long startTime = System.currentTimeMillis();
 
             ret = new Snapshot(feedId, version);
 
-            if (gtx.snapshots.containsKey(ret.id))
-                throw new IllegalStateException("Duplicate snapshot IDs");
+            // if we encounter a duplicate snapshot ID, increment until there is a safe one
+            if (gtx.snapshots.containsKey(ret.id)) {
+                LOG.error("Duplicate snapshot IDs, incrementing until we have a fresh one.");
+                while(gtx.snapshots.containsKey(ret.id)) {
+                    version = tx.getNextSnapshotId();
+                    LOG.info("Attempting to create snapshot {} for feed {}", version, feedId);
+                    ret = new Snapshot(feedId, version);
+                }
+            }
 
             ret.snapshotTime = System.currentTimeMillis();
             ret.feedVersionId = feedVersionId;
@@ -113,6 +121,14 @@ public class VersionedDataStore {
             ret.current = true;
 
             snapshot = getSnapshotDb(feedId, version, false);
+
+            // if snapshot contains maps, increment the version ID until we find a snapshot that is empty
+            while (snapshot.getAll().size() != 0) {
+                version = tx.getNextSnapshotId();
+                LOG.info("Attempting to create snapshot {} for feed {}", version, feedId);
+                ret = new Snapshot(feedId, version);
+                snapshot = getSnapshotDb(feedId, version, false);
+            }
 
             new SnapshotTx(snapshot).make(tx);
             // for good measure
