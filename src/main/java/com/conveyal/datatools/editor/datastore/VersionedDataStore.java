@@ -85,19 +85,44 @@ public class VersionedDataStore {
         return feedTxMakers.get(feedId).makeTx();
     }
 
+    /**
+     * WARNING: do not use unless you absolutely intend to delete active editor data for a given feedId.
+     * This function will delete the mapdb files for the specified feedId, but leave the snapshots for
+     * this feed intact. So this should only really be used for if/when an editor feed becomes corrupted.
+     * In that case, the steps to follow are:
+     * 1. Create snapshot of latest changes for feed.
+     * 2. Call this function.
+     * 3. Restore latest snapshot (new feed DB will be created where the deleted one once lived).
+     */
+    public static void wipeFeedDB(String feedId) {
+        File path = new File(dataDirectory, feedId);
+        String[] extensions = {".db", ".db.p", ".db.t"};
+        LOG.warn("Permanently deleting Feed DB for {}", feedId);
+
+        // remove entry for feedId in feedTxMaker
+        feedTxMakers.remove(feedId);
+        // delete local cache files (including zip) when feed removed from cache
+        for (String type : extensions) {
+            File file = new File(path, "master" + type);
+            file.delete();
+        }
+    }
+
     public static Snapshot takeSnapshot (String feedId, String name, String comment) {
         return takeSnapshot(feedId, null, name, comment);
     }
 
     /** Take a snapshot of an agency database. The snapshot will be saved in the global database. */
     public static Snapshot takeSnapshot (String feedId, String feedVersionId, String name, String comment) {
-        FeedTx tx = getFeedTx(feedId);
-        Collection<Snapshot> snapshots = Snapshot.getSnapshots(feedId);
-        GlobalTx gtx = getGlobalTx();
+        FeedTx tx = null;
+        GlobalTx gtx = null;
+        boolean transactionCommitError = false;
         int version = -1;
         DB snapshot = null;
         Snapshot ret;
         try {
+            tx = getFeedTx(feedId);
+            gtx = getGlobalTx();
             version = tx.getNextSnapshotId();
             LOG.info("Creating snapshot {} for feed {}", version, feedId);
             long startTime = System.currentTimeMillis();
@@ -137,7 +162,17 @@ public class VersionedDataStore {
 
             gtx.snapshots.put(ret.id, ret);
             gtx.commit();
-            tx.commit();
+
+            // unfortunately if a mapdb gets corrupted, trying to commit this transaction will cause things
+            // to go all haywired. Further, if we try to rollback after this commit, the snapshot will fail.
+            // So we keep track of transactionCommitError here and avoid rollback if an error is encountered.
+            // This will throw an unclosed transaction error, but since the
+            try {
+                tx.commit();
+            } catch (Exception e) {
+                transactionCommitError = true;
+                LOG.error("Error committing feed transaction", e);
+            }
             String snapshotMessage = String.format("Saving snapshot took %.2f seconds", (System.currentTimeMillis() - startTime) / 1000D);
             LOG.info(snapshotMessage);
 
@@ -157,12 +192,13 @@ public class VersionedDataStore {
                     }
                 }
             }
-
+//            if (tx != null) tx.rollbackIfOpen();
+//            gtx.rollbackIfOpen();
             // re-throw
             throw new RuntimeException(e);
         } finally {
-            tx.rollbackIfOpen();
-            gtx.rollbackIfOpen();
+            if (tx != null && !transactionCommitError) tx.rollbackIfOpen();
+            if (gtx != null) gtx.rollbackIfOpen();
         }
     }
 

@@ -1,7 +1,7 @@
 package com.conveyal.datatools.editor.controllers.api;
 
+import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.editor.controllers.Base;
-import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.EditorFeed;
@@ -123,29 +123,17 @@ public class FeedInfoController {
      */
     public static Object deleteFeedInfoAndEntireFeedEntryInEditor(Request req, Response res) {
         String id = req.params("id");
-
-        EditorFeed feed;
-        GlobalTx gtx = null;
+        if (!VersionedDataStore.feedExists(id)) {
+            halt(400, SparkUtils.formatJSON("Feed ID does not exist"));
+        }
         try {
-            gtx = VersionedDataStore.getGlobalTx();
-            if(!gtx.feeds.containsKey(id)) {
-                halt(400);
-            }
-            feed = gtx.feeds.get(id);
-            gtx.feeds.remove(id);
-            gtx.commit();
-
-            return feed;
-        } catch (HaltException e) {
-            LOG.error("Halt encountered", e);
-            throw e;
+            VersionedDataStore.wipeFeedDB(id);
+            return true;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400);
-        } finally {
-            if (gtx != null) gtx.rollbackIfOpen();
+            halt(400, SparkUtils.formatJSON("Error deleting feed", 400, e));
         }
-        return null;
+        return false;
     }
 
     public static void register (String apiPrefix) {
