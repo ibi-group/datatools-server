@@ -171,12 +171,18 @@ public class FeedTx extends DatabaseTx {
             scheduleExceptionCountByDate = getMap("scheduleExceptionCountByDate");
         } catch (RuntimeException e1) {
             LOG.error("Error getting scheduleExceptionCountByDate map. Getting a new one.");
+            int count = 0;
+            final int NEW_MAP_LIMIT = 100;
             while (true) {
-                int count = 0;
                 try {
                     scheduleExceptionCountByDate = getMap("scheduleExceptionCountByDateMapDBIsTheWORST" + count);
                 } catch (RuntimeException e2) {
                     LOG.error("Error getting {} scheduleExceptionCountByDateMapDBIsTheWORST map. Getting a new one.", count);
+                    count++;
+                    if (count > NEW_MAP_LIMIT) {
+                        LOG.error("Cannot create new map. Reached limit of {}", NEW_MAP_LIMIT);
+                        throw e2;
+                    }
                     continue;
                 }
                 break;
