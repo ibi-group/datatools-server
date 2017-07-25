@@ -204,7 +204,7 @@ public class DataManager {
         auth0Stream.close();
 
         // auth0 silent callback
-        get("/auth0-silent-callback", (request, response) -> {
+        get("/api/auth0-silent-callback", (request, response) -> {
             response.type("text/html");
             return auth0html;
         });
