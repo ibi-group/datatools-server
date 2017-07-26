@@ -171,15 +171,16 @@ public class FeedStore {
 
         // s3 storage
         if (DataManager.useS3) {
+            String key = getS3Key(id);
             try {
-                LOG.info("Downloading feed from s3");
+                LOG.info("Downloading feed from s3://{}/{}", s3Bucket, key);
                 S3Object object = s3Client.getObject(
-                        new GetObjectRequest(s3Bucket, getS3Key(id)));
+                        new GetObjectRequest(s3Bucket, key));
                 InputStream objectData = object.getObjectContent();
 
                 return createTempFile(id, objectData);
             } catch (AmazonServiceException ase) {
-                LOG.error("Error downloading from s3");
+                LOG.error("Error downloading s3://{}/{}", s3Bucket, key);
                 ase.printStackTrace();
             } catch (IOException e) {
                 e.printStackTrace();
