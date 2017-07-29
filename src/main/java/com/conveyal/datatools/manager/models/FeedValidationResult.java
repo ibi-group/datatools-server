@@ -1,10 +1,14 @@
 package com.conveyal.datatools.manager.models;
 
 import com.conveyal.gtfs.GTFSFeed;
+import com.conveyal.gtfs.loader.Feed;
+import com.conveyal.gtfs.loader.TableReader;
+import com.conveyal.gtfs.model.Stop;
 import com.conveyal.gtfs.model.ValidationResult;
 import com.conveyal.gtfs.stats.FeedStats;
 import com.conveyal.gtfs.validator.json.LoadStatus;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.google.common.collect.Iterators;
 
 import java.awt.geom.Rectangle2D;
 import java.io.Serializable;
@@ -46,6 +50,8 @@ public class FeedValidationResult implements Serializable {
         this.loadStatus = loadStatus;
         this.loadFailureReason = loadFailureReason;
     }
+
+    // TODO: construct FeedValidationResult from sql-loader Feed (or FeedInfo)
 
     public FeedValidationResult(GTFSFeed feed, FeedStats stats) {
         this.agencies = stats.getAllAgencies().stream().map(agency -> agency.agency_id).collect(Collectors.toList());
