@@ -359,7 +359,7 @@ public class FeedVersion extends Model implements Serializable {
             this.validate();
             this.save();
             // TODO: change to 202 status code
-            throw halt(503, SparkUtils.formatJSON("Try again later. Validating feed", 503));
+            halt(503, SparkUtils.formatJSON("Try again later. Validating feed", 503));
         }
         String keyName = validationSubdir + this.id + ".json";
         InputStream objectData = null;
@@ -372,7 +372,7 @@ public class FeedVersion extends Model implements Serializable {
                 // if json file does not exist, validate feed.
                 this.validate();
                 this.save();
-                throw halt(503, "Try again later. Validating feed");
+                halt(503, "Try again later. Validating feed");
             } catch (AmazonServiceException ase) {
                 LOG.error("Error downloading from s3");
                 ase.printStackTrace();
@@ -388,7 +388,7 @@ public class FeedVersion extends Model implements Serializable {
                 LOG.warn("Validation does not exist.  Validating feed.");
                 this.validate();
                 this.save();
-                throw halt(503, "Try again later. Validating feed");
+                halt(503, "Try again later. Validating feed");
             }
         }
         return ensureValidationIsCurrent(objectData);
@@ -407,13 +407,14 @@ public class FeedVersion extends Model implements Serializable {
             // if json file does not exist, validate feed.
             this.validate();
             this.save();
-            throw halt(503, "Try again later. Validating feed");
+            halt(503, "Try again later. Validating feed");
         } catch (Exception e) {
             e.printStackTrace();
             this.validate();
             this.save();
-            throw halt(503, "Try again later. Validating feed");
+            halt(503, "Try again later. Validating feed");
         }
+        return null;
     }
 
     private void saveValidationResult(File file) {

@@ -1,9 +1,9 @@
 package com.conveyal.datatools.editor.datastore;
 
 import com.conveyal.datatools.manager.DataManager;
-import com.google.common.collect.Maps;
 import com.conveyal.datatools.editor.models.Snapshot;
 import com.conveyal.datatools.editor.models.transit.Stop;
+import com.google.common.collect.Maps;
 import org.mapdb.BTreeMap;
 import org.mapdb.DB;
 import org.mapdb.DBMaker;
@@ -17,6 +17,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Create a new versioned com.conveyal.datatools.editor.datastore. A versioned data store handles multiple databases,
@@ -30,7 +31,8 @@ public class VersionedDataStore {
     private static File dataDirectory = new File(DataManager.getConfigPropertyAsText("application.data.editor_mapdb"));
     private static TxMaker globalTxMaker;
 
-    private static Map<String, TxMaker> feedTxMakers = Maps.newConcurrentMap();
+    // FIXME: is changing from Maps.newConcurrentMap() suitable here?  Check with mattwigway.
+    private static ConcurrentHashMap<String, TxMaker> feedTxMakers = new ConcurrentHashMap<>();
 
     static {
         File globalDataDirectory = new File(dataDirectory, "global");
