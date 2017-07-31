@@ -6,7 +6,6 @@ import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.FeedStore;
-import com.conveyal.datatools.manager.utils.HashUtils;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.conveyal.gtfs.GTFSFeed;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -270,7 +269,8 @@ public class GtfsPlusController {
 
 
         // load the main GTFS
-        GTFSFeed gtfsFeed = feedVersion.getGtfsFeed();
+        // FIXME: fix gtfs+ loading/validating for sql-load
+        GTFSFeed gtfsFeed = null; // feedVersion.getFeed();
         // check for saved GTFS+ data
         File file = gtfsPlusStore.getFeed(feedVersionId);
         if (file == null) {
