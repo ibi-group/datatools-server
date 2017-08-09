@@ -297,7 +297,8 @@ public class FeedStore {
                 } catch (InterruptedException e) {
                     e.printStackTrace();
                 }
-//                s3Client.putObject();
+
+                tm.shutdownNow(false);
 
                 if (feedSource != null){
                     LOG.info("Copying feed on s3 to latest version");
