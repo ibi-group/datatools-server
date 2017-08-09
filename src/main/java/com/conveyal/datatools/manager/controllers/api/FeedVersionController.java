@@ -1,5 +1,8 @@
 package com.conveyal.datatools.manager.controllers.api;
 
+import com.amazonaws.auth.policy.Statement;
+import com.amazonaws.auth.policy.actions.S3Actions;
+import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.BuildTransportNetworkJob;
@@ -10,6 +13,7 @@ import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
+import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.utils.HashUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.r5.analyst.PointSet;
@@ -46,6 +50,7 @@ import javax.servlet.MultipartConfigElement;
 import javax.servlet.ServletException;
 import javax.servlet.http.Part;
 
+import static com.conveyal.datatools.common.utils.S3Utils.getS3Credentials;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.manager.controllers.api.FeedSourceController.requestFeedSource;
 import static spark.Spark.*;
@@ -80,7 +85,7 @@ public class FeedVersionController  {
     private static FeedSource requestFeedSourceById(Request req, String action) {
         String id = req.queryParams("feedSourceId");
         if (id == null) {
-            halt("Please specify feedsourceId param");
+            halt(SparkUtils.formatJSON("Please specify feedsourceId param", 400));
         }
         return requestFeedSource(req, FeedSource.get(id), action);
     }
@@ -154,13 +159,10 @@ public class FeedVersionController  {
 //        v.fileTimestamp
         v.userId = userProfile.getUser_id();
         v.save();
-        new ProcessSingleFeedJob(v, userProfile.getUser_id()).run();
 
-        /*if (DataManager.config.get("modules").get("validator").get("enabled").asBoolean()) {
-            BuildTransportNetworkJob btnj = new BuildTransportNetworkJob(v);
-            Thread tnThread = new Thread(btnj);
-            tnThread.start();
-        }*/
+        // must be handled by executor because it
+        ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(v, userProfile.getUser_id());
+        DataManager.heavyExecutor.execute(processSingleFeedJob);
 
         return true;
     }
@@ -174,7 +176,7 @@ public class FeedVersionController  {
         CreateFeedVersionFromSnapshotJob createFromSnapshotJob =
                 new CreateFeedVersionFromSnapshotJob(v, req.queryParams("snapshotId"), userProfile.getUser_id());
         createFromSnapshotJob.addNextJob(new ProcessSingleFeedJob(v, userProfile.getUser_id()));
-        new Thread(createFromSnapshotJob).start();
+        DataManager.heavyExecutor.execute(createFromSnapshotJob);
 
         return true;
     }
@@ -197,7 +199,7 @@ public class FeedVersionController  {
         return version;
     }
 
-    private static FeedVersion requestFeedVersion(Request req, String action) {
+    public static FeedVersion requestFeedVersion(Request req, String action) {
         String id = req.params("id");
 
         FeedVersion version = FeedVersion.get(id);
@@ -251,8 +253,7 @@ public class FeedVersionController  {
                 try {
 //                    version.transportNetwork = TransportNetwork.read(is);
                     ReadTransportNetworkJob rtnj = new ReadTransportNetworkJob(version, userProfile.getUser_id());
-                    Thread readThread = new Thread(rtnj);
-                    readThread.start();
+                    DataManager.heavyExecutor.execute(rtnj);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -265,8 +266,7 @@ public class FeedVersionController  {
                 LOG.warn("Transport network not found. Beginning build.", e);
                 readingNetworkVersionList.add(version.id);
                 BuildTransportNetworkJob btnj = new BuildTransportNetworkJob(version, userProfile.getUser_id());
-                Thread tnThread = new Thread(btnj);
-                tnThread.start();
+                DataManager.heavyExecutor.execute(btnj);
             }
             halt(202, "Try again later. Building transport network");
         }
@@ -344,25 +344,28 @@ public class FeedVersionController  {
 
     private static Object downloadFeedVersionDirectly(Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "view");
-        return downloadFile(version.getGtfsFile(), res);
+        return downloadFile(version.getGtfsFile(), version.id, res);
     }
 
-    public static FeedDownloadToken getDownloadToken (Request req, Response res) {
+    /**
+     * Returns credentials that a client may use to then download a feed version. Functionality
+     * changes depending on whether application.data.use_s3_storage config property is true.
+     * @param req
+     * @param res
+     * @return token string or temporary S3 credentials, depending on whether feeds are stored on S3
+     */
+    public static Object getFeedDownloadCredentials(Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "view");
-        FeedDownloadToken token = new FeedDownloadToken(version);
-        token.save();
-        return token;
-    }
 
-    private static FeedDownloadToken getPublicDownloadToken (Request req, Response res) {
-        FeedVersion version = requestFeedVersion(req, "view");
-        if(!version.getFeedSource().isPublic) {
-            halt(401, "Not a public feed");
-            return null;
+        // if storing feeds on s3, return temporary s3 credentials for that zip file
+        if (DataManager.useS3) {
+            return getS3Credentials(DataManager.awsRole, DataManager.feedBucket, FeedStore.s3Prefix + version.id, Statement.Effect.Allow, S3Actions.GetObject, 900);
+        } else {
+            // when feeds are stored locally, single-use download token will still be used
+            FeedDownloadToken token = new FeedDownloadToken(version);
+            token.save();
+            return token;
         }
-        FeedDownloadToken token = new FeedDownloadToken(version);
-        token.save();
-        return token;
     }
 
     private static JsonNode validate (Request req, Response res) {
@@ -382,6 +385,7 @@ public class FeedVersionController  {
         fs.save();
         return version;
     }
+
     private static Object downloadFeedVersionWithToken (Request req, Response res) {
         FeedDownloadToken token = FeedDownloadToken.get(req.params("token"));
 
@@ -393,13 +397,13 @@ public class FeedVersionController  {
 
         token.delete();
 
-        return downloadFile(version.getGtfsFile(), res);
+        return downloadFile(version.getGtfsFile(), version.id, res);
     }
 
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/feedversion/:id", FeedVersionController::getFeedVersion, json::write);
         get(apiPrefix + "secure/feedversion/:id/download", FeedVersionController::downloadFeedVersionDirectly);
-        get(apiPrefix + "secure/feedversion/:id/downloadtoken", FeedVersionController::getDownloadToken, json::write);
+        get(apiPrefix + "secure/feedversion/:id/downloadtoken", FeedVersionController::getFeedDownloadCredentials, json::write);
         get(apiPrefix + "secure/feedversion/:id/validation", FeedVersionController::getValidationResult, json::write);
         post(apiPrefix + "secure/feedversion/:id/validate", FeedVersionController::validate, json::write);
         get(apiPrefix + "secure/feedversion/:id/isochrones", FeedVersionController::getIsochrones, json::write);
@@ -412,7 +416,7 @@ public class FeedVersionController  {
 
         get(apiPrefix + "public/feedversion", FeedVersionController::getAllFeedVersions, json::write);
         get(apiPrefix + "public/feedversion/:id/validation", FeedVersionController::getPublicValidationResult, json::write);
-        get(apiPrefix + "public/feedversion/:id/downloadtoken", FeedVersionController::getPublicDownloadToken, json::write);
+        get(apiPrefix + "public/feedversion/:id/downloadtoken", FeedVersionController::getFeedDownloadCredentials, json::write);
 
         get(apiPrefix + "downloadfeed/:token", FeedVersionController::downloadFeedVersionWithToken);
 

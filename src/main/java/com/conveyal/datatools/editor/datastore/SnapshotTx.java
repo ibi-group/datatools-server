@@ -63,17 +63,24 @@ public class SnapshotTx extends DatabaseTx {
      */
     public List<Stop> restore (String agencyId) {
         DB targetTx = VersionedDataStore.getRawFeedTx(agencyId);
-
+        try {
+            targetTx.getAll();
+        } catch (RuntimeException e) {
+            LOG.error("Target FeedTX for feed restore may be corrupted.  Consider wiping feed database editor/$FEED_ID/master.db*", e);
+        }
         for (String obj : targetTx.getAll().keySet()) {
-            if (obj.equals("snapshotVersion") || obj.equals("stops"))
+            if (obj.equals("snapshotVersion")
+//                    || obj.equals("stops")
+                    )
                 // except don't overwrite the counter that keeps track of snapshot versions
                 // we also don't overwrite the stops completely, as we need to merge them
+                // NOTE: we are now overwriting the stops completely...
                 continue;
             else
                 targetTx.delete(obj);
         }
 
-        int acount, rcount, ccount, ecount, pcount, tcount, fcount;
+        int acount, rcount, ccount, ecount, pcount, tcount, fcount, scount;
 
         if (tx.exists("agencies"))
             acount = pump(targetTx, "agencies", (BTreeMap) this.<String, Route>getMap("agencies"));
@@ -86,6 +93,12 @@ public class SnapshotTx extends DatabaseTx {
         else
             rcount = 0;
         LOG.info("Restored {} routes", rcount);
+
+        if (tx.exists("stops"))
+            scount = pump(targetTx, "stops", (BTreeMap) this.<String, Route>getMap("stops"));
+        else
+            scount = 0;
+        LOG.info("Restored {} stops", scount);
 
         if (tx.exists("calendars"))
             ccount = pump(targetTx, "calendars", (BTreeMap) this.<String, Calendar>getMap("calendars"));
@@ -149,7 +162,7 @@ public class SnapshotTx extends DatabaseTx {
 //        }
 //        LOG.info("Restored {} deleted stops", restoredStops.size());
 //
-//        atx.commit();
+        atx.commit();
 //
 //        return restoredStops;
         return new ArrayList<>();

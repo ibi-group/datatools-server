@@ -29,7 +29,9 @@ import com.conveyal.datatools.manager.controllers.api.GtfsApiController;
 import com.conveyal.datatools.manager.persistence.DataStore;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.utils.HashUtils;
+import com.conveyal.gtfs.BaseGTFSCache;
 import com.conveyal.gtfs.GTFSFeed;
+import com.conveyal.gtfs.api.ApiMain;
 import com.conveyal.gtfs.validator.json.LoadStatus;
 import com.conveyal.gtfs.stats.FeedStats;
 import com.conveyal.r5.common.R5Version;
@@ -83,11 +85,7 @@ public class FeedVersion extends Model implements Serializable {
         this.updated = new Date();
         this.feedSourceId = source.id;
 
-        // ISO time
-        DateFormat df = new SimpleDateFormat("yyyyMMdd'T'HHmmssX");
-
-        // since we store directly on the file system, this lets users look at the DB directly
-        this.id = getCleanName(source.name) + "-" + df.format(this.updated) + "-" + source.id + ".zip";
+       this.id = generateFeedVersionId(source);
 
         // infer the version
 //        FeedVersion prev = source.getLatest();
@@ -99,6 +97,15 @@ public class FeedVersion extends Model implements Serializable {
 //        }
         int count = source.getFeedVersionCount();
         this.version = count + 1;
+    }
+
+    private String generateFeedVersionId(FeedSource source) {
+        // ISO time
+        DateFormat df = new SimpleDateFormat("yyyyMMdd'T'HHmmssX");
+
+        // since we store directly on the file system, this lets users look at the DB directly
+        // TODO: no need to BaseGTFSCache.cleanId once we rely on GTFSCache to store the feed.
+        return BaseGTFSCache.cleanId(getCleanName(source.name) + "-" + df.format(this.updated) + "-" + source.id) + ".zip";
     }
 
     /**
@@ -176,9 +183,9 @@ public class FeedVersion extends Model implements Serializable {
     }
     @JsonIgnore
     public GTFSFeed getGtfsFeed() {
+        // clean feed version ID for use with GTFSCache/GTFS API ID system (appends ".zip" to IDs passed in)
         String apiId = id.replace(".zip", "");
-//        return DataManager.gtfsCache.get(apiId);
-        return GtfsApiController.gtfsApi.getFeedSource(apiId).feed;
+        return ApiMain.getFeedSource(apiId).feed;
     }
 
     /** The results of validating this feed */
@@ -238,7 +245,8 @@ public class FeedVersion extends Model implements Serializable {
             This may take a while for large feeds */
             gtfsFeed = getGtfsFeed();
         } catch (Exception e) {
-            String errorString = String.format("No GTFS feed exists for version: %s", this.id);
+            String errorString = String.format("Error getting GTFS feed for version: %s", this.id);
+            e.printStackTrace();
             LOG.warn(errorString);
             statusMap.put("message", errorString);
             statusMap.put("percentComplete", 0.0);
@@ -275,15 +283,12 @@ public class FeedVersion extends Model implements Serializable {
             gtfsFeed.validate();
             LOG.info("Calculating stats...");
             FeedStats stats = gtfsFeed.calculateStats();
-            validationResult = new FeedValidationResult(gtfsFeed, stats);
-            LOG.info("Total errors after validation: {}", validationResult.errorCount);
             try {
+                // getAverageRevenueTime occurs in FeedValidationResult, so we surround it with a try/catch just in case it fails
+                validationResult = new FeedValidationResult(gtfsFeed, stats);
                 // This may take a while for very large feeds.
                 LOG.info("Calculating # of trips per date of service");
                 tripsPerDate = stats.getTripCountPerDateOfService();
-
-                // get revenue time in seconds for Tuesdays in feed
-                stats.getAverageDailyRevenueTime(2);
             }catch (Exception e) {
                 e.printStackTrace();
                 statusMap.put("message", "Unable to validate feed.");
@@ -291,8 +296,7 @@ public class FeedVersion extends Model implements Serializable {
                 statusMap.put("error", true);
                 eventBus.post(statusMap);
                 e.printStackTrace();
-//                this.validationResult = null;
-                validationResult.loadStatus = LoadStatus.OTHER_FAILURE;
+                this.validationResult = new FeedValidationResult(LoadStatus.OTHER_FAILURE, "Could not calculate validation properties.");
                 return;
             }
         } catch (Exception e) {
@@ -304,7 +308,7 @@ public class FeedVersion extends Model implements Serializable {
             eventBus.post(statusMap);
             e.printStackTrace();
 //            this.validationResult = null;
-            validationResult.loadStatus = LoadStatus.OTHER_FAILURE;
+            validationResult = new FeedValidationResult(LoadStatus.OTHER_FAILURE, "Could not calculate validation properties.");
 //            halt(400, "Error validating feed...");
             return;
         }
@@ -329,6 +333,7 @@ public class FeedVersion extends Model implements Serializable {
         } catch (IOException e) {
             e.printStackTrace();
         }
+        LOG.info("Total errors after validation: {}", validationResult.errorCount);
         saveValidationResult(tempFile);
     }
 
@@ -446,7 +451,7 @@ public class FeedVersion extends Model implements Serializable {
     }
     public TransportNetwork buildTransportNetwork(EventBus eventBus) {
         // return null if validation result is null (probably means something went wrong with validation, plus we won't have feed bounds).
-        if (this.validationResult == null) {
+        if (this.validationResult == null || validationResult.loadStatus == LoadStatus.OTHER_FAILURE) {
             return null;
         }
 
@@ -527,8 +532,7 @@ public class FeedVersion extends Model implements Serializable {
             if (!osmPath.exists()) {
                 osmPath.mkdirs();
             }
-            File osmFile = new File(osmPath.getAbsolutePath() + "/data.osm.pbf");
-            return osmFile;
+            return new File(osmPath.getAbsolutePath() + "/data.osm.pbf");
         }
         else {
             return null;
@@ -542,30 +546,25 @@ public class FeedVersion extends Model implements Serializable {
 
     /**
      * Does this feed version have any critical errors that would prevent it being loaded to OTP?
-     * @return
+     * @return whether feed version has critical errors
      */
     public boolean hasCriticalErrors() {
-        if (hasCriticalErrorsExceptingDate() || (LocalDate.now()).isAfter(validationResult.endDate))
-            return true;
-
-        else
-            return false;
+        return hasCriticalErrorsExceptingDate() || (LocalDate.now()).isAfter(validationResult.endDate);
     }
 
     /**
      * Does this feed have any critical errors other than possibly being expired?
+     * @return whether feed version has critical errors (outside of expiration)
      */
     public boolean hasCriticalErrorsExceptingDate () {
         if (validationResult == null)
             return true;
 
-        if (validationResult.loadStatus != LoadStatus.SUCCESS)
-            return true;
+        return validationResult.loadStatus != LoadStatus.SUCCESS ||
+            validationResult.stopTimesCount == 0 ||
+            validationResult.tripCount == 0 ||
+            validationResult.agencyCount == 0;
 
-        if (validationResult.stopTimesCount == 0 || validationResult.tripCount == 0 || validationResult.agencyCount == 0)
-            return true;
-
-        return false;
     }
 
     @JsonView(JsonViews.UserInterface.class)
@@ -638,6 +637,7 @@ public class FeedVersion extends Model implements Serializable {
         }
         return r5.getAbsolutePath();
     }
+
     @JsonIgnore
     public File getTransportNetworkPath () {
         return new File(String.join(File.separator, getR5Path(), id + "_" + R5Version.describe + "_network.dat"));

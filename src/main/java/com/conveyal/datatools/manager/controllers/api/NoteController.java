@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.controllers.api;
 
+import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.models.*;
@@ -133,8 +134,7 @@ public class NoteController {
 
             // send notifications
             NotifyUsersForSubscriptionJob notifyFeedJob = new NotifyUsersForSubscriptionJob("feed-commented-on", s.id, n.userEmail + " commented on " + s.name + " at " + n.date.toString() + ":<blockquote>" + n.body + "</blockquote>");
-            Thread notifyThread = new Thread(notifyFeedJob);
-            notifyThread.start();
+            DataManager.lightExecutor.execute(notifyFeedJob);
 
             return n;
         }

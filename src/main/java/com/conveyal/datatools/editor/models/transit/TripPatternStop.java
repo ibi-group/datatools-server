@@ -24,13 +24,9 @@ public class TripPatternStop implements Cloneable, Serializable {
 
     public Double shapeDistTraveled;
 
-    public TripPatternStop()
-    {
+    public TripPatternStop() {}
 
-    }
-
-    public TripPatternStop(Stop stop, Integer defaultTravelTime)
-    {
+    public TripPatternStop(Stop stop, Integer defaultTravelTime) {
         this.stopId = stop.id;
         this.defaultTravelTime = defaultTravelTime;
     }

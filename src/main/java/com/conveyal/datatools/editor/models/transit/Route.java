@@ -1,6 +1,5 @@
 package com.conveyal.datatools.editor.models.transit;
 
-import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.conveyal.datatools.editor.datastore.FeedTx;
@@ -13,6 +12,8 @@ import java.io.Serializable;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Collection;
+import java.util.HashSet;
+import java.util.Set;
 
 public class Route extends Model implements Cloneable, Serializable {
     public static final long serialVersionUID = 1;
@@ -46,14 +47,9 @@ public class Route extends Model implements Cloneable, Serializable {
     
     public AttributeAvailabilityType wheelchairBoarding;
 
-    public int getNumberOfTrips () {
-        FeedTx tx = VersionedDataStore.getFeedTx(this.feedId);
-        Collection<Trip> trips = tx.getTripsByRoute(this.id);
-        return trips == null ? 0 : trips.size();
-    }
-
     /** on which days does this route have service? Derived from calendars on render */
     public transient Boolean monday, tuesday, wednesday, thursday, friday, saturday, sunday;
+    public transient int numberOfTrips = 0;
 
     // add getters so Jackson will serialize
     
@@ -92,8 +88,19 @@ public class Route extends Model implements Cloneable, Serializable {
         return sunday;
     }
 
+    @JsonProperty("numberOfTrips")
+    public int jsonGetNumberOfTrips() {
+        return numberOfTrips;
+    }
+
     public Route () {}
 
+    /**
+     * Construct editor route from gtfs-lib representation.
+     * @param route
+     * @param feed
+     * @param agency
+     */
     public Route(com.conveyal.gtfs.model.Route route, EditorFeed feed, Agency agency) {
         this.gtfsRouteId = route.route_id;
         this.routeShortName = route.route_short_name;
@@ -107,7 +114,7 @@ public class Route extends Model implements Cloneable, Serializable {
         this.routeTextColor = route.route_text_color;
 
         this.feedId = feed.id;
-        this.agencyId = agency.id;
+        this.agencyId = agency != null ? agency.id : null;
     }
 
 
@@ -118,20 +125,19 @@ public class Route extends Model implements Cloneable, Serializable {
         this.routeDesc = routeDescription;
 
         this.feedId = feed.id;
-        this.agencyId = agency.id;
+        this.agencyId = agency != null ? agency.id : null;
     }
 
     public com.conveyal.gtfs.model.Route toGtfs(com.conveyal.gtfs.model.Agency a, GlobalTx tx) {
         com.conveyal.gtfs.model.Route ret = new com.conveyal.gtfs.model.Route();
-        ret.agency_id = a.agency_id;
+        ret.agency_id = a != null ? a.agency_id : "";
         ret.route_color = routeColor;
         ret.route_desc = routeDesc;
         ret.route_id = getGtfsId();
         ret.route_long_name = routeLongName;
         ret.route_short_name = routeShortName;
         ret.route_text_color = routeTextColor;
-        // TODO also handle HVT types here
-        //ret.route_type = mapGtfsRouteType(routeTypeId);
+        ret.route_type = gtfsRouteType.toGtfs();
         try {
             ret.route_url = routeUrl == null ? null : new URL(routeUrl);
         } catch (MalformedURLException e) {
@@ -158,7 +164,7 @@ public class Route extends Model implements Cloneable, Serializable {
 
     /**
      * Get a name for this combining the short name and long name as available.
-     * @return
+     * @return combined route short and long names
      */
     @JsonIgnore
     public String getName() {
@@ -174,36 +180,56 @@ public class Route extends Model implements Cloneable, Serializable {
     }
 
     // Add information about the days of week this route is active
-    public void addDerivedInfo(FeedTx tx) {
-        monday = tuesday = wednesday = thursday = friday = saturday = sunday = false;
+    public void addDerivedInfo(final FeedTx tx) {
 
-        for (Trip trip : tx.getTripsByRoute(this.id)) {
-            ServiceCalendar cal = tx.calendars.get(trip.calendarId);
+        monday = false;
+        tuesday = false;
+        wednesday = false;
+        thursday = false;
+        friday = false;
+        saturday = false;
+        sunday = false;
+        Set<String> calendars = new HashSet<>();
 
-            if (cal.monday)
-                monday = true;
+        Collection<Trip> tripsForRoute = tx.getTripsByRoute(this.id);
+        numberOfTrips = tripsForRoute == null ? 0 : tripsForRoute.size();
 
-            if (cal.tuesday)
-                tuesday = true;
+        for (Trip trip : tripsForRoute) {
+            ServiceCalendar cal = null;
+            try {
+                if (calendars.contains(trip.calendarId)) continue;
+                cal = tx.calendars.get(trip.calendarId);
+                if (cal.monday)
+                    monday = true;
 
-            if (cal.wednesday)
-                wednesday = true;
+                if (cal.tuesday)
+                    tuesday = true;
 
-            if (cal.thursday)
-                thursday = true;
+                if (cal.wednesday)
+                    wednesday = true;
 
-            if (cal.friday)
-                friday = true;
+                if (cal.thursday)
+                    thursday = true;
 
-            if (cal.saturday)
-                saturday = true;
+                if (cal.friday)
+                    friday = true;
 
-            if (cal.sunday)
-                sunday = true;
+                if (cal.saturday)
+                    saturday = true;
 
-            if (monday && tuesday && wednesday && thursday && friday && saturday && sunday)
-                // optimization: no point in continuing
-                break;
+                if (cal.sunday)
+                    sunday = true;
+
+                if (monday && tuesday && wednesday && thursday && friday && saturday && sunday) {
+                    // optimization: no point in continuing
+                    break;
+                }
+            } catch (Exception e) {
+                LOG.error("Could not process trip {} or cal {} for route {}", trip, cal, this);
+            }
+
+            // track which calendars we've processed to avoid redundancy
+            calendars.add(trip.calendarId);
         }
     }
 
