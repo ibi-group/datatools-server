@@ -190,7 +190,7 @@ public class DataManager {
         });
         // load index.html
         InputStream stream = DataManager.class.getResourceAsStream("/public/index.html");
-        String index = IOUtils.toString(stream).replace("${S3BUCKET}", getConfigPropertyAsText("application.assets_bucket"));
+        final String index = IOUtils.toString(stream).replace("${S3BUCKET}", getConfigPropertyAsText("application.assets_bucket"));
         stream.close();
 
         // return 404 for any api response that's not found
@@ -200,7 +200,7 @@ public class DataManager {
         });
 
         InputStream auth0Stream = DataManager.class.getResourceAsStream("/public/auth0-silent-callback.html");
-        String auth0html = IOUtils.toString(auth0Stream);
+        final String auth0html = IOUtils.toString(auth0Stream);
         auth0Stream.close();
 
         // auth0 silent callback
