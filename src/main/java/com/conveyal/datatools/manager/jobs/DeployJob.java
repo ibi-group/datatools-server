@@ -10,6 +10,7 @@ import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.model.CopyObjectRequest;
 import com.amazonaws.services.s3.transfer.TransferManager;
+import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
 import com.amazonaws.services.s3.transfer.Upload;
 
 import java.io.File;
@@ -27,6 +28,7 @@ import java.util.Map;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.models.Deployment;
+import com.conveyal.datatools.manager.persistence.FeedStore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -149,37 +151,24 @@ public class DeployJob extends MonitorableJob {
             LOG.info("Uploading deployment {} to s3", deployment.name);
 
             try {
-                AWSCredentials creds;
-                if (this.s3CredentialsFilename != null) {
-                    creds = new ProfileCredentialsProvider(this.s3CredentialsFilename, "default").getCredentials();
-                }
-                else {
-                    // default credentials providers, e.g. IAM role
-                    creds = new DefaultAWSCredentialsProviderChain().getCredentials();
-                }
-
-                TransferManager tx = new TransferManager(creds);
+                TransferManager tx = TransferManagerBuilder.standard().withS3Client(FeedStore.s3Client).build();
                 String key = bundlePrefix + deployment.getProject().id + "/" + deployment.name + ".zip";
                 final Upload upload = tx.upload(this.s3Bucket, key, temp);
 
-                upload.addProgressListener(new ProgressListener() {
-                    public void progressChanged(ProgressEvent progressEvent) {
-                        synchronized (status) {
-                            status.percentUploaded = upload.getProgress().getPercentTransferred();
-                        }
+                upload.addProgressListener((ProgressListener) progressEvent -> {
+                    synchronized (status) {
+                        status.percentUploaded = upload.getProgress().getPercentTransferred();
                     }
                 });
 
                 upload.waitForCompletion();
-                tx.shutdownNow();
+                tx.shutdownNow(false);
 
                 // copy to [name]-latest.zip
                 String copyKey = bundlePrefix + deployment.getProject().id + "/" + deployment.getProject().name.toLowerCase() + "-latest.zip";
-                AmazonS3 s3client = new AmazonS3Client(creds);
                 CopyObjectRequest copyObjRequest = new CopyObjectRequest(
-                        this.s3Bucket, key, this.s3Bucket, copyKey);
-                s3client.copyObject(copyObjRequest);
-
+                    this.s3Bucket, key, this.s3Bucket, copyKey);
+                FeedStore.s3Client.copyObject(copyObjRequest);
             } catch (AmazonClientException|InterruptedException e) {
                 LOG.error("Error uploading deployment bundle to S3");
                 e.printStackTrace();

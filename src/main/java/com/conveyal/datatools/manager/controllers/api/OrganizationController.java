@@ -171,8 +171,6 @@ public class OrganizationController {
     }
 
     public static void register (String apiPrefix) {
-        options(apiPrefix + "secure/organization", (q, s) -> "");
-        options(apiPrefix + "secure/organization/:id", (q, s) -> "");
         get(apiPrefix + "secure/organization/:id", OrganizationController::getOrganization, json::write);
         get(apiPrefix + "secure/organization", OrganizationController::getAllOrganizations, json::write);
         post(apiPrefix + "secure/organization", OrganizationController::createOrganization, json::write);

@@ -26,13 +26,6 @@ public class StatusController {
     public static JsonManager<MonitorableJob.Status> json =
             new JsonManager<>(MonitorableJob.Status.class, JsonViews.UserInterface.class);
 
-    /*public static Object getStatus(Request req, Response res) {
-//        Auth0UserProfile userProfile = req.attribute("user");
-        String userId = req.params("id");
-        System.out.println("getting status for: " + userId);
-        return DataManager.userJobsMap.get(userId);
-    }*/
-
     public static Set getUserJobs(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         String userId = userProfile.getUser_id();
@@ -42,7 +35,6 @@ public class StatusController {
     }
 
     public static void register (String apiPrefix) {
-        options(apiPrefix + "public/status", (q, s) -> "");
         get(apiPrefix + "secure/status/jobs", StatusController::getUserJobs, json::write);
     }
 }

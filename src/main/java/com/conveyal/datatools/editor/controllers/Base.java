@@ -26,6 +26,7 @@ public class Base {
         mod.addSerializer(GtfsRouteType.class, new JacksonSerializers.GtfsRouteTypeSerializer());
         mod.addDeserializer(TripDirection.class, new JacksonSerializers.TripDirectionDeserializer());
         mod.addSerializer(TripDirection.class, new JacksonSerializers.TripDirectionSerializer());
+        mapper.getSerializerProvider().setNullKeySerializer(new JacksonSerializers.MyDtoNullKeySerializer());
         mapper.registerModule(mod);
         mapper.registerModule(new GeoJsonModule());
     }

@@ -4,6 +4,9 @@ import com.conveyal.datatools.manager.DataManager;
 import com.google.common.eventbus.EventBus;
 import com.google.common.eventbus.Subscribe;
 import jdk.nashorn.internal.scripts.JO;
+import org.eclipse.jetty.util.ConcurrentHashSet;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
@@ -14,6 +17,7 @@ import java.util.*;
  */
 public abstract class MonitorableJob implements Runnable {
 
+    private static final Logger LOG = LoggerFactory.getLogger(MonitorableJob.class);
     protected String owner;
     protected String name;
     protected JobType type;
@@ -60,9 +64,9 @@ public abstract class MonitorableJob implements Runnable {
     public abstract Status getStatus();
 
     protected void storeJob() {
-        Set<MonitorableJob> userJobs = DataManager.userJobsMap.get(this.owner);
+        ConcurrentHashSet<MonitorableJob> userJobs = DataManager.userJobsMap.get(this.owner);
         if (userJobs == null) {
-            userJobs = new HashSet<>();
+            userJobs = new ConcurrentHashSet<>();
         }
         userJobs.add(this);
 
@@ -70,14 +74,13 @@ public abstract class MonitorableJob implements Runnable {
     }
 
     protected void jobFinished() {
-        // kick off any next jobs
-        for(Runnable job : nextJobs) {
-            new Thread(job).start();
-        }
-
         // remove this job from the user-job map
-        Set<MonitorableJob> userJobs = DataManager.userJobsMap.get(this.owner);
+        ConcurrentHashSet<MonitorableJob> userJobs = DataManager.userJobsMap.get(this.owner);
         if (userJobs != null) userJobs.remove(this);
+
+        // we want to run any subsequent jobs in sequence
+        // using this current thread
+        nextJobs.forEach(Runnable::run);
     }
 
     public void addNextJob(Runnable job) {

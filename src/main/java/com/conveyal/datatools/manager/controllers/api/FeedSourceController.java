@@ -1,14 +1,14 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.amazonaws.services.s3.model.CannedAccessControlList;
-import com.amazonaws.services.s3.model.CopyObjectRequest;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
-import com.conveyal.datatools.manager.models.*;
-import com.conveyal.datatools.manager.persistence.FeedStore;
+import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
+import com.conveyal.datatools.manager.models.FeedSource;
+import com.conveyal.datatools.manager.models.JsonViews;
+import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -44,7 +44,6 @@ public class FeedSourceController {
     public static Collection<FeedSource> getAllFeedSources(Request req, Response res) {
         Collection<FeedSource> sources = new ArrayList<>();
         Auth0UserProfile requestingUser = req.attribute("user");
-        System.out.println(requestingUser.getEmail());
         String projectId = req.queryParams("projectId");
         Boolean publicFilter = req.pathInfo().contains("public");
         String userId = req.queryParams("userId");
@@ -138,12 +137,10 @@ public class FeedSourceController {
 
         // notify users after successful save
         NotifyUsersForSubscriptionJob notifyFeedJob = new NotifyUsersForSubscriptionJob("feed-updated", source.id, "Feed property updated for " + source.name);
-        Thread notifyThread = new Thread(notifyFeedJob);
-        notifyThread.start();
+        DataManager.lightExecutor.execute(notifyFeedJob);
 
         NotifyUsersForSubscriptionJob notifyProjectJob = new NotifyUsersForSubscriptionJob("project-updated", source.projectId, "Project updated (feed source property for " + source.name + ")");
-        Thread notifyProjectThread = new Thread(notifyProjectJob);
-        notifyProjectThread.start();
+        DataManager.lightExecutor.execute(notifyProjectJob);
 
         return source;
     }
@@ -166,15 +163,12 @@ public class FeedSourceController {
             if(entry.getKey().equals("url")) {
                 String url = entry.getValue().asText();
                 try {
-                    source.url = new URL(url);
-
+                    source.url = entry.getValue().isNull() ? null : new URL(url);
                     // reset the last fetched date so it can be fetched again
                     source.lastFetched = null;
-
                 } catch (MalformedURLException e) {
-                    halt(400, "URL '" + url + "' not valid.");
+                    halt(400, SparkUtils.formatJSON("URL '" + url + "' not valid.", 400));
                 }
-
             }
 
             if(entry.getKey().equals("retrievalMethod")) {
@@ -257,9 +251,9 @@ public class FeedSourceController {
         LOG.info("Fetching feed for source {}", s.name);
 
         Auth0UserProfile userProfile = req.attribute("user");
-        FetchSingleFeedJob job = new FetchSingleFeedJob(s, userProfile.getUser_id());
-
-        // Don't run in thread because we want to return the HTTP status of the fetch operation
+        // Don't run in executor because we want to return the embedded halt to return the HTTP status
+        // of the fetch operation
+        FetchSingleFeedJob job = new FetchSingleFeedJob(s, userProfile.getUser_id(), false);
         job.run();
 
         // WARNING: infinite 2D bounds Jackson error when returning job.result, so this method now returns true
@@ -275,21 +269,22 @@ public class FeedSourceController {
      * @param action action type (either "view" or "manage")
      * @return feedsource object for ID
      */
-    private static FeedSource requestFeedSourceById(Request req, String action) {
+    public static FeedSource requestFeedSourceById(Request req, String action) {
         String id = req.params("id");
         if (id == null) {
-            halt("Please specify id param");
+            halt(400, SparkUtils.formatJSON("Please specify id param", 400));
         }
         return requestFeedSource(req, FeedSource.get(id), action);
     }
     public static FeedSource requestFeedSource(Request req, FeedSource s, String action) {
         Auth0UserProfile userProfile = req.attribute("user");
-        Boolean publicFilter = Boolean.valueOf(req.queryParams("public")) || req.url().split("/api/manager/")[1].startsWith("public");
+        Boolean publicFilter = Boolean.valueOf(req.queryParams("public")) ||
+                req.url().split("/api/*/")[1].startsWith("public");
 //        System.out.println(req.url().split("/api/manager/")[1].startsWith("public"));
 
-        // check for null feedsource
+        // check for null feedSource
         if (s == null)
-            halt(400, "Feed source ID does not exist");
+            halt(400, SparkUtils.formatJSON("Feed source ID does not exist", 400));
         String orgId = s.getOrganizationId();
         boolean authorized;
         switch (action) {
@@ -298,6 +293,9 @@ public class FeedSourceController {
                 break;
             case "manage":
                 authorized = userProfile.canManageFeed(orgId, s.projectId, s.id);
+                break;
+            case "edit":
+                authorized = userProfile.canEditGTFS(orgId, s.projectId, s.id);
                 break;
             case "view":
                 if (!publicFilter) {
@@ -315,15 +313,15 @@ public class FeedSourceController {
         if (publicFilter){
             // if feed not public and user not authorized, halt
             if (!s.isPublic && !authorized)
-                halt(403, "User not authorized to perform action on feed source");
+                halt(403, SparkUtils.formatJSON("User not authorized to perform action on feed source", 403));
                 // if feed is public, but action is managerial, halt (we shouldn't ever get here, but just in case)
             else if (s.isPublic && action.equals("manage"))
-                halt(403, "User not authorized to perform action on feed source");
+                halt(403, SparkUtils.formatJSON("User not authorized to perform action on feed source", 403));
 
         }
         else {
             if (!authorized)
-                halt(403, "User not authorized to perform action on feed source");
+                halt(403, SparkUtils.formatJSON("User not authorized to perform action on feed source", 403));
         }
 
         // if we make it here, user has permission and it's a valid feedsource
@@ -331,8 +329,6 @@ public class FeedSourceController {
     }
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/feedsource/:id", FeedSourceController::getFeedSource, json::write);
-        options(apiPrefix + "secure/feedsource", (q, s) -> "");
-//        get(apiPrefix + "secure/feedsource/:id/status", FeedSourceController::fetchFeedStatus, json::write);
         get(apiPrefix + "secure/feedsource", FeedSourceController::getAllFeedSources, json::write);
         post(apiPrefix + "secure/feedsource", FeedSourceController::createFeedSource, json::write);
         put(apiPrefix + "secure/feedsource/:id", FeedSourceController::updateFeedSource, json::write);
