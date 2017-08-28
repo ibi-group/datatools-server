@@ -10,6 +10,7 @@ before_install:
 #- sed -i.bak -e 's|https://nexus.codehaus.org/snapshots/|https://oss.sonatype.org/content/repositories/codehaus-snapshots/|g' ~/.m2/settings.xml
 # set region in AWS config for S3 setup
 - mkdir ~/.aws && printf '%s\n' '[default]' 'aws_access_key_id=foo' 'aws_secret_access_key=bar' 'region=us-east-1' > ~/.aws/config
+- cp configurations/default/server.yml.tmp configurations/default/server.yml
 script:
 # package jar
 - mvn package
