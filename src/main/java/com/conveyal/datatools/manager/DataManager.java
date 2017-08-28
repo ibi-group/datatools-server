@@ -191,13 +191,23 @@ public class DataManager {
         });
         // load index.html
         InputStream stream = DataManager.class.getResourceAsStream("/public/index.html");
-        String index = IOUtils.toString(stream).replace("${S3BUCKET}", getConfigPropertyAsText("application.assets_bucket"));
+        final String index = IOUtils.toString(stream).replace("${S3BUCKET}", getConfigPropertyAsText("application.assets_bucket"));
         stream.close();
 
         // return 404 for any api response that's not found
         get(API_PREFIX + "*", (request, response) -> {
             halt(404, SparkUtils.formatJSON("Unknown error occurred.", 404));
             return null;
+        });
+
+        InputStream auth0Stream = DataManager.class.getResourceAsStream("/public/auth0-silent-callback.html");
+        final String auth0html = IOUtils.toString(auth0Stream);
+        auth0Stream.close();
+
+        // auth0 silent callback
+        get("/api/auth0-silent-callback", (request, response) -> {
+            response.type("text/html");
+            return auth0html;
         });
 
         // return index.html for any sub-directory
