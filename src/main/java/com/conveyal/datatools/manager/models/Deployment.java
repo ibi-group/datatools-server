@@ -31,6 +31,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -385,9 +386,9 @@ public class Deployment extends Model implements Serializable {
         // call vex server
         URL vexUrl = null;
         try {
-            vexUrl = new URL(String.format("%s/?n=%.6f&e=%.6f&s=%.6f&w=%.6f",
+            vexUrl = new URL(String.format(Locale.ROOT,"%s/%.6f,%.6f,%.6f,%.6f.pbf",
                     DataManager.getConfigPropertyAsText("OSM_VEX"),
-                    bounds.getMaxY(), bounds.getMaxX(), bounds.getMinY(), bounds.getMinX()));
+                    bounds.getMinY(), bounds.getMinX(), bounds.getMaxY(), bounds.getMaxX()));
         } catch (MalformedURLException e1) {
             e1.printStackTrace();
         }
