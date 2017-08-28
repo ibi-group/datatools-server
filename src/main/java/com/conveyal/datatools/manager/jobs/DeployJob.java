@@ -162,13 +162,17 @@ public class DeployJob extends MonitorableJob {
                 });
 
                 upload.waitForCompletion();
+
+                // Shutdown the Transfer Manager, but don't shut down the underlying S3 client.
+                // The default behavior for shutdownNow shut's down the underlying s3 client
+                // which will cause any following s3 operations to fail.
+                tx.shutdownNow(false);
+
                 // copy to [name]-latest.zip
                 String copyKey = bundlePrefix + deployment.getProject().id + "/" + deployment.getProject().name.toLowerCase() + "-latest.zip";
                 CopyObjectRequest copyObjRequest = new CopyObjectRequest(
                     this.s3Bucket, key, this.s3Bucket, copyKey);
                 FeedStore.s3Client.copyObject(copyObjRequest);
-
-                tx.shutdownNow();
             } catch (AmazonClientException|InterruptedException e) {
                 LOG.error("Error uploading deployment bundle to S3");
                 e.printStackTrace();
