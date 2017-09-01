@@ -1,7 +1,6 @@
 package com.conveyal.datatools.manager.auth;
 
 import com.conveyal.datatools.common.utils.SparkUtils;
-import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -120,10 +119,6 @@ public class Auth0Connection {
         if (feedSource == null) {
             LOG.warn("feedId {} not found", feedId);
             halt(400, SparkUtils.formatJSON("Must provide feedId parameter", 400));
-        }
-
-        if (!VersionedDataStore.feedExists(feedId)) {
-            halt(404, SparkUtils.formatJSON("Feed ID provided does not exist", 404));
         }
 
         if (!request.requestMethod().equals("GET")) {
