@@ -106,6 +106,13 @@ public class TripController {
 
                 tx = VersionedDataStore.getFeedTx(trip.feedId);
 
+                String errorMessage;
+                if (!tx.trips.containsKey(trip.id)) {
+                    errorMessage = "Trip ID" + trip.id + " already exists.";
+                    LOG.error(errorMessage);
+                    halt(400, SparkUtils.formatJSON(errorMessage));
+
+                }
                 validateTrip(tx, trip);
 
                 tx.trips.put(trip.id, trip);
@@ -186,11 +193,6 @@ public class TripController {
     private static TripPattern validateTrip(FeedTx tx, Trip trip) {
         TripPattern patt;
         String errorMessage;
-        if (!tx.trips.containsKey(trip.id)) {
-            errorMessage = "Trip ID" + trip.id + " already exists.";
-            LOG.error(errorMessage);
-            halt(400, SparkUtils.formatJSON(errorMessage));
-        }
         if (!tx.tripPatterns.containsKey(trip.patternId)) {
             errorMessage = "Pattern ID " + trip.patternId + " does not exist.";
             LOG.error(errorMessage);
