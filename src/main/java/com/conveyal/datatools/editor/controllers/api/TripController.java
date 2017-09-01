@@ -107,8 +107,8 @@ public class TripController {
                 tx = VersionedDataStore.getFeedTx(trip.feedId);
 
                 String errorMessage;
-                if (!tx.trips.containsKey(trip.id)) {
-                    errorMessage = "Trip ID" + trip.id + " already exists.";
+                if (tx.trips.containsKey(trip.id)) {
+                    errorMessage = "Trip ID " + trip.id + " already exists.";
                     LOG.error(errorMessage);
                     halt(400, SparkUtils.formatJSON(errorMessage));
 
