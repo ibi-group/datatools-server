@@ -166,7 +166,7 @@ public class FeedStore {
     public File getFeed (String id) {
         // local storage
         File feed = new File(path, id);
-        // don't let folks get feeds outside of the directory
+        // don't let folks retrieveById feeds outside of the directory
         if (feed.getParentFile().equals(path) && feed.exists()) return feed;
 
         // s3 storage

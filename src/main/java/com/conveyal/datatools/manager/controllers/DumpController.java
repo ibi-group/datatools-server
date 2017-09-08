@@ -1,7 +1,5 @@
 package com.conveyal.datatools.manager.controllers;
 
-import com.conveyal.datatools.manager.auth.Auth0UserProfile;
-import com.conveyal.datatools.manager.auth.Auth0Users;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -10,6 +8,7 @@ import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Note;
 import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.gtfs.validator.json.LoadStatus;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -54,12 +53,12 @@ public class DumpController {
 
     public static DatabaseState dump (Request req, Response res) throws JsonProcessingException {
         DatabaseState db = new DatabaseState();
-        db.projects = Project.getAll();
-        db.feedSources = FeedSource.getAll();
-        db.feedVersions = FeedVersion.getAll();
-        db.notes = Note.getAll();
-        db.deployments = Deployment.getAll();
-        db.externalProperties = ExternalFeedSourceProperty.getAll();
+        db.projects = Persistence.getProjects();
+        db.feedSources = Persistence.getFeedSources();
+        db.feedVersions = FeedVersion.retrieveAll();
+        db.notes = Note.retrieveAll();
+        db.deployments = Deployment.retrieveAll();
+        db.externalProperties = ExternalFeedSourceProperty.retrieveAll();
 
         return db;
     }
@@ -80,7 +79,7 @@ public class DumpController {
             return false;
         }
         for (Project c : db.projects) {
-            LOG.info("loading project {}", c.id);
+            LOG.info("loading retrieveProject {}", c.id);
             c.save(false);
         }
         Project.commit();
@@ -162,22 +161,22 @@ public class DumpController {
     private static void loadLegacyProject (JsonNode node) {
         String name = node.findValue("name").asText();
         String id = node.findValue("id").asText();
-        if (Project.get(id) == null) {
-            LOG.info("load legacy project " + name);
+        if (Project.retrieve(id) == null) {
+            LOG.info("load legacy retrieveProject " + name);
             Project project = new Project();
             project.id = id;
             project.name = name;
             project.save(false);
         }
         else {
-            LOG.warn("legacy project {} already exists... skipping", name);
+            LOG.warn("legacy retrieveProject {} already exists... skipping", name);
         }
     }
 
     private static void loadLegacyFeedSource (JsonNode node) throws Exception {
         String name = node.findValue("name").asText();
         String id = node.findValue("id").asText();
-        if (FeedSource.get(id) == null) {
+        if (Persistence.getFeedSourceById(id) == null) {
             LOG.info("load legacy FeedSource " + name);
             FeedSource fs = new FeedSource();
             fs.id = id;
@@ -213,7 +212,7 @@ public class DumpController {
 
     private static void loadLegacyFeedVersion (JsonNode node) throws Exception {
         String id = node.findValue("id").asText();
-        if (FeedVersion.get(id) == null) {
+        if (FeedVersion.retrieve(id) == null) {
             LOG.info("load legacy FeedVersion " + node.findValue("id"));
             FeedVersion version = new FeedVersion();
             version.id = node.findValue("id").asText();
@@ -231,7 +230,7 @@ public class DumpController {
 
     public static boolean validateAll (Request req, Response res) throws Exception {
         LOG.info("validating all feeds...");
-        Collection<FeedVersion> allVersions = FeedVersion.getAll();
+        Collection<FeedVersion> allVersions = FeedVersion.retrieveAll();
         for(FeedVersion version: allVersions) {
             boolean force = req.queryParams("force") != null ? req.queryParams("force").equals("true") : false;
             FeedValidationResult result = version.validationResult;

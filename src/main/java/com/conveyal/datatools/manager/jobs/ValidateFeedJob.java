@@ -1,10 +1,7 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.common.status.StatusEvent;
-import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
-import com.google.common.eventbus.Subscribe;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,7 +17,7 @@ public class ValidateFeedJob extends MonitorableJob {
     public Status status;
 
     public ValidateFeedJob(FeedVersion version, String owner) {
-        super(owner, "Validating Feed for " + version.getFeedSource().name, JobType.VALIDATE_FEED);
+        super(owner, "Validating Feed for " + version.feedSource().name, JobType.VALIDATE_FEED);
         feedVersion = version;
         status = new Status();
         status.message = "Waiting to begin validation...";
@@ -37,7 +34,7 @@ public class ValidateFeedJob extends MonitorableJob {
     @Override
     public void run() {
         LOG.info("Running ValidateFeedJob for {}", feedVersion.id);
-        feedVersion.setUserById(owner);
+        feedVersion.storeUser(owner);
         feedVersion.validate(eventBus);
         feedVersion.save();
         if (!status.error)

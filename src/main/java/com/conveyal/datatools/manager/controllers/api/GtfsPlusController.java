@@ -41,7 +41,7 @@ public class GtfsPlusController {
 
     public static Boolean uploadGtfsPlusFile (Request req, Response res) throws IOException, ServletException {
 
-        //FeedSource s = FeedSource.get(req.queryParams("feedSourceId"));
+        //FeedSource s = FeedSource.retrieveById(req.queryParams("feedSourceId"));
         String feedVersionId = req.params("versionid");
 
         if (req.raw().getAttribute("org.eclipse.jetty.multipartConfig") == null) {
@@ -81,7 +81,7 @@ public class GtfsPlusController {
 
     private static HttpServletResponse getGtfsPlusFromGtfs(String feedVersionId, Response res) {
         LOG.info("Extracting GTFS+ data from main GTFS feed");
-        FeedVersion version = FeedVersion.get(feedVersionId);
+        FeedVersion version = FeedVersion.retrieve(feedVersionId);
 
         File gtfsPlusFile = null;
 
@@ -99,7 +99,7 @@ public class GtfsPlusController {
             ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(gtfsPlusFile));
 
             // iterate through the existing GTFS file, copying any GTFS+ tables
-            ZipFile gtfsFile = new ZipFile(version.getGtfsFile());
+            ZipFile gtfsFile = new ZipFile(version.retrieveGtfsFile());
             final Enumeration<? extends ZipEntry> entries = gtfsFile.entries();
             byte[] buffer = new byte[512];
             while (entries.hasMoreElements()) {
@@ -155,9 +155,9 @@ public class GtfsPlusController {
         // check for saved GTFS+ data
         File file = gtfsPlusStore.getFeed(feedVersionId);
         if (file == null) {
-            FeedVersion feedVersion = FeedVersion.get(feedVersionId);
+            FeedVersion feedVersion = FeedVersion.retrieve(feedVersionId);
             if (feedVersion != null) {
-                file = feedVersion.getGtfsFile();
+                file = feedVersion.retrieveGtfsFile();
             } else {
                 halt(400, SparkUtils.formatJSON("Feed version ID is not valid", 400));
             }
@@ -180,7 +180,7 @@ public class GtfsPlusController {
             halt(400, "No saved GTFS+ data for version");
         }
 
-        FeedVersion feedVersion = FeedVersion.get(feedVersionId);
+        FeedVersion feedVersion = FeedVersion.retrieve(feedVersionId);
 
         // create a set of valid GTFS+ table names
         Set<String> gtfsPlusTables = new HashSet<>();
@@ -198,7 +198,7 @@ public class GtfsPlusController {
             ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(newFeed));
 
             // iterate through the existing GTFS file, copying all non-GTFS+ tables
-            ZipFile gtfsFile = new ZipFile(feedVersion.getGtfsFile());
+            ZipFile gtfsFile = new ZipFile(feedVersion.retrieveGtfsFile());
             final Enumeration<? extends ZipEntry> entries = gtfsFile.entries();
             byte[] buffer = new byte[512];
             while (entries.hasMoreElements()) {
@@ -241,7 +241,7 @@ public class GtfsPlusController {
             halt(500, "Error merging GTFS+ data with GTFS");
         }
 
-        FeedVersion newFeedVersion = new FeedVersion(feedVersion.getFeedSource());
+        FeedVersion newFeedVersion = new FeedVersion(feedVersion.feedSource());
 
         try {
             newFeedVersion.newGtfsFile(new FileInputStream(newFeed));
@@ -254,7 +254,7 @@ public class GtfsPlusController {
 
         // validation for the main GTFS content hasn't changed
         newFeedVersion.validationResult = feedVersion.validationResult;
-        newFeedVersion.setUser(profile);
+        newFeedVersion.storeUser(profile);
         newFeedVersion.save();
 
         return true;
@@ -263,19 +263,19 @@ public class GtfsPlusController {
     private static Collection<ValidationIssue> getGtfsPlusValidation(Request req, Response res) {
         String feedVersionId = req.params("versionid");
         LOG.info("Validating GTFS+ for " + feedVersionId);
-        FeedVersion feedVersion = FeedVersion.get(feedVersionId);
+        FeedVersion feedVersion = FeedVersion.retrieve(feedVersionId);
 
         List<ValidationIssue> issues = new LinkedList<>();
 
 
         // load the main GTFS
         // FIXME: fix gtfs+ loading/validating for sql-load
-        GTFSFeed gtfsFeed = null; // feedVersion.getFeed();
+        GTFSFeed gtfsFeed = null; // feedVersion.retrieveFeed();
         // check for saved GTFS+ data
         File file = gtfsPlusStore.getFeed(feedVersionId);
         if (file == null) {
             LOG.warn("GTFS+ file not found, loading from main version GTFS.");
-            file = feedVersion.getGtfsFile();
+            file = feedVersion.retrieveGtfsFile();
         }
         int gtfsPlusTableCount = 0;
         try {

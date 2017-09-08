@@ -23,17 +23,17 @@ public class FetchProjectFeedsJob extends MonitorableJob {
     private Status status;
 
     public FetchProjectFeedsJob (Project proj, String owner) {
-        super(owner, "Fetching feeds for " + proj.name + " project.", JobType.FETCH_PROJECT_FEEDS);
+        super(owner, "Fetching feeds for " + proj.name + " retrieveProject.", JobType.FETCH_PROJECT_FEEDS);
         this.proj = proj;
         this.status = new Status();
     }
 
     @Override
     public void run() {
-        LOG.info("Fetch job running for {} project at {}", proj.name, ZonedDateTime.now(ZoneId.of("America/New_York")));
+        LOG.info("Fetch job running for {} retrieveProject at {}", proj.name, ZonedDateTime.now(ZoneId.of("America/New_York")));
         result = new HashMap<>();
 
-        for(FeedSource feedSource : proj.getProjectFeedSources()) {
+        for(FeedSource feedSource : proj.retrieveProjectFeedSources()) {
             // skip feed if not fetched automatically
             if (!FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.equals(feedSource.retrievalMethod)) {
                 continue;

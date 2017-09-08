@@ -60,8 +60,8 @@ public class MakePublicJob extends MonitorableJob {
         r.append("<h1>" + title + "</h1>\n");
         r.append("The following feeds, in GTFS format, are available for download and use.\n");
         r.append("<ul>\n");
-        project.getProjectFeedSources().stream()
-                .filter(fs -> fs.isPublic && fs.getLatest() != null)
+        project.retrieveProjectFeedSources().stream()
+                .filter(fs -> fs.isPublic && fs.retrieveLatest() != null)
                 .forEach(fs -> {
                     // generate list item for feed source
                     String url;
@@ -71,9 +71,9 @@ public class MakePublicJob extends MonitorableJob {
                     else {
                         // ensure latest feed is written to the s3 public folder
                         fs.makePublic();
-                        url = String.join("/", "https://s3.amazonaws.com", DataManager.feedBucket, fs.getPublicKey());
+                        url = String.join("/", "https://s3.amazonaws.com", DataManager.feedBucket, fs.toPublicKey());
                     }
-                    FeedVersion latest = fs.getLatest();
+                    FeedVersion latest = fs.retrieveLatest();
                     r.append("<li>");
                     r.append("<a href=\"" + url + "\">");
                     r.append(fs.name);
@@ -82,8 +82,8 @@ public class MakePublicJob extends MonitorableJob {
                     if (fs.url != null && fs.lastFetched != null) {
                         r.append("last checked: " + new SimpleDateFormat("dd MMM yyyy").format(fs.lastFetched) + ", ");
                     }
-                    if (fs.getLastUpdated() != null) {
-                        r.append("last updated: " + new SimpleDateFormat("dd MMM yyyy").format(fs.getLastUpdated()) + ")");
+                    if (fs.lastUpdated() != null) {
+                        r.append("last updated: " + new SimpleDateFormat("dd MMM yyyy").format(fs.lastUpdated()) + ")");
                     }
                     r.append("</li>");
         });

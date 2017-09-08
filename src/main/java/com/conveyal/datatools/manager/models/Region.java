@@ -41,15 +41,15 @@ public class Region extends Model {
     /**
      * Get all of the FeedCollections that are defined
      */
-    public static Collection<Region> getAll () {
+    public static Collection<Region> retrieveAll() {
         return regionStore.getAll();
     }
 
     public static void deleteAll () {
-        Region.getAll().forEach(region -> region.delete());
+        Region.retrieveAll().forEach(region -> region.delete());
     }
 
-    public static Region get(String id) {
+    public static Region retrieve(String id) {
         return regionStore.getById(id);
     }
 
@@ -81,12 +81,12 @@ public class Region extends Model {
      * Get all the feed sources for this feed collection
      */
 
-    @JsonIgnore
-    public Collection<? extends FeedSource> getRegionFeedSources() {
-
-        // TODO: use index, but not important for now because we generally only have one FeedCollection
-//        if (this.id != null && fs.regions != null)
-        return FeedSource.getAll().stream().filter(fs -> Arrays.asList(fs.regions).contains(this.id)).collect(Collectors.toList());
-
-    }
+//    @JsonIgnore
+//    public Collection<? extends FeedSource> getRegionFeedSources() {
+//
+//        // TODO: use index, but not important for now because we generally only have one FeedCollection
+////        if (this.id != null && fs.regions != null)
+//        return Persistence.getFeedSources().stream().filter(fs -> Arrays.asList(fs.regions).contains(this.id)).collect(Collectors.toList());
+//
+//    }
 }

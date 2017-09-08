@@ -40,7 +40,7 @@ public class OrganizationController {
         if (id == null) {
             halt(400, "Must specify valid organization id");
         }
-        Organization org = Organization.get(id);
+        Organization org = Organization.retrieve(id);
         return org;
     }
 
@@ -48,7 +48,7 @@ public class OrganizationController {
         Auth0UserProfile userProfile = req.attribute("user");
         boolean isOrgAdmin = userProfile.canAdministerOrganization();
         if (userProfile.canAdministerApplication()) {
-            return Organization.getAll();
+            return Organization.retrieveAll();
         } else if (isOrgAdmin) {
             List<Organization> orgs = new ArrayList<>();
             orgs.add(userProfile.getOrganization());
@@ -109,18 +109,18 @@ public class OrganizationController {
             } else if(entry.getKey().equals("projects")) {
                 JsonNode projects = entry.getValue();
                 Collection<Project> projectsToInsert = new ArrayList<>(projects.size());
-                Collection<Project> existingProjects = org.getProjects();
+                Collection<Project> existingProjects = org.projects();
 
                 // set projects orgId for all valid projects in list
                 for (JsonNode project : projects) {
                     if (!project.has("id")) {
                         halt(400, "Project not supplied");
                     }
-                    Project p = Project.get(project.get("id").asText());
+                    Project p = Project.retrieve(project.get("id").asText());
                     if (p == null) {
                         halt(404, "Project not found");
                     }
-                    Organization previousOrg = p.getOrganization();
+                    Organization previousOrg = p.retrieveOrganization();
                     if (previousOrg != null && !previousOrg.id.equals(org.id)) {
                         halt(400, SparkUtils.formatJSON(String.format("Project %s cannot be reassigned while belonging to org %s", p.id, previousOrg.id), 400));
                     }
@@ -145,7 +145,7 @@ public class OrganizationController {
     public static Organization deleteOrganization (Request req, Response res) {
         Organization org = requestOrganizationById(req);
 
-        if (org.getProjects().size() > 0) {
+        if (org.projects().size() > 0) {
             halt(400, formatJSON("Cannot delete organization that is referenced by projects.", 400));
         }
         org.delete();
@@ -159,7 +159,7 @@ public class OrganizationController {
             halt(400, "Must specify valid organization id");
         }
         if (userProfile.canAdministerApplication()) {
-            Organization org = Organization.get(id);
+            Organization org = Organization.retrieve(id);
             if (org == null) {
                 halt(400, "Organization does not exist");
             }

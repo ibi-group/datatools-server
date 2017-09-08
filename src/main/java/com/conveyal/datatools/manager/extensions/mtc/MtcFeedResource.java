@@ -1,10 +1,5 @@
 package com.conveyal.datatools.manager.extensions.mtc;
 
-import com.amazonaws.auth.AWSCredentials;
-import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
-import com.amazonaws.auth.profile.ProfileCredentialsProvider;
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
@@ -13,6 +8,7 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.FeedStore;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,7 +35,7 @@ public class MtcFeedResource implements ExternalFeedResource {
         rtdApi = DataManager.getConfigPropertyAsText("extensions.mtc.rtd_api");
         s3Bucket = DataManager.getConfigPropertyAsText("extensions.mtc.s3_bucket");
         s3Prefix = DataManager.getConfigPropertyAsText("extensions.mtc.s3_prefix");
-        //s3CredentialsFilename = DataManager.config.get("extensions").get("mtc").get("s3_credentials_file").asText();
+        //s3CredentialsFilename = DataManager.config.retrieveById("extensions").retrieveById("mtc").retrieveById("s3_credentials_file").asText();
     }
 
     @Override
@@ -97,7 +93,7 @@ public class MtcFeedResource implements ExternalFeedResource {
                 FeedSource source = null;
 
                 // check if a FeedSource with this AgencyId already exists
-                for (FeedSource existingSource : project.getProjectFeedSources()) {
+                for (FeedSource existingSource : project.retrieveProjectFeedSources()) {
                     ExternalFeedSourceProperty agencyIdProp =
                             ExternalFeedSourceProperty.find(existingSource, this.getResourceType(), "AgencyId");
                     if (agencyIdProp != null && agencyIdProp.value != null && agencyIdProp.value.equals(car.AgencyId)) {
@@ -120,7 +116,7 @@ public class MtcFeedResource implements ExternalFeedResource {
                 }
                 else source.name = feedName;
 
-                source.setProject(project);
+                source.projectId = project.id;
 
                 source.save();
 
@@ -162,8 +158,8 @@ public class MtcFeedResource implements ExternalFeedResource {
 
         // sync w/ RTD
         RtdCarrier carrier = new RtdCarrier();
-        String feedSourceId = property.getFeedSourceId();
-        FeedSource source = FeedSource.get(feedSourceId);
+        String feedSourceId = property.feedSourceId;
+        FeedSource source = Persistence.getFeedSourceById(feedSourceId);
 
         carrier.AgencyId = ExternalFeedSourceProperty.find(source, this.getResourceType(), "AgencyId").value;
         carrier.AgencyPhone = ExternalFeedSourceProperty.find(source, this.getResourceType(), "AgencyPhone").value;
@@ -197,7 +193,7 @@ public class MtcFeedResource implements ExternalFeedResource {
         if(s3Bucket == null) return;
 
         ExternalFeedSourceProperty agencyIdProp =
-                ExternalFeedSourceProperty.find(feedVersion.getFeedSource(), this.getResourceType(), "AgencyId");
+                ExternalFeedSourceProperty.find(feedVersion.feedSource(), this.getResourceType(), "AgencyId");
 
         if(agencyIdProp == null || agencyIdProp.equals("null")) {
             LOG.error("Could not read AgencyId for FeedSource " + feedVersion.feedSourceId);
@@ -207,7 +203,7 @@ public class MtcFeedResource implements ExternalFeedResource {
         String keyName = this.s3Prefix + agencyIdProp.value + ".zip";
         LOG.info("Pushing to MTC S3 Bucket: " + keyName);
 
-        File file = feedVersion.getGtfsFile();
+        File file = feedVersion.retrieveGtfsFile();
 
         FeedStore.s3Client.putObject(new PutObjectRequest(
                 s3Bucket, keyName, file));

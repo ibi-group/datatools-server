@@ -12,7 +12,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
-import java.io.IOException;
 import java.io.InputStreamReader;
 import java.lang.reflect.Field;
 import java.net.HttpURLConnection;
@@ -93,7 +92,7 @@ public class TransitLandFeedResource implements ExternalFeedResource {
                     FeedSource source = null;
 
                     // check if a feed already exists with this id
-                    for (FeedSource existingSource : project.getProjectFeedSources()) {
+                    for (FeedSource existingSource : project.retrieveProjectFeedSources()) {
                         ExternalFeedSourceProperty onestopIdProp =
                                 ExternalFeedSourceProperty.find(existingSource, this.getResourceType(), "onestop_id");
                         if (onestopIdProp != null && onestopIdProp.value.equals(tlFeed.onestop_id)) {
@@ -114,9 +113,9 @@ public class TransitLandFeedResource implements ExternalFeedResource {
                     }
                     tlFeed.mapFeedSource(source);
 
-                    source.setName(feedName);
+                    source.name = feedName;
 
-                    source.setProject(project);
+                    source.projectId = project.id;
 
                     source.save();
 

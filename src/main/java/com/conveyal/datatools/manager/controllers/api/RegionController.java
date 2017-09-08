@@ -8,7 +8,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.vividsolutions.jts.geom.Envelope;
-import com.vividsolutions.jts.geom.Geometry;
 import com.vividsolutions.jts.geom.MultiPolygon;
 import com.vividsolutions.jts.geom.Point;
 import org.apache.commons.io.FilenameUtils;
@@ -19,13 +18,11 @@ import spark.Request;
 import spark.Response;
 
 import java.io.IOException;
-import java.io.InputStream;
 import java.io.Reader;
 import java.io.StringReader;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.Map;
@@ -44,7 +41,7 @@ public class RegionController {
 
     public static Region getRegion(Request req, Response res) {
         String id = req.params("id");
-        return Region.get(id);
+        return Region.retrieve(id);
     }
 
     public static Collection<Region> getAllRegions(Request req, Response res) throws JsonProcessingException {
@@ -52,10 +49,10 @@ public class RegionController {
 
         String projectId = req.queryParams("projectId");
         System.out.println(req.pathInfo());
-        regions = Region.getAll();
+        regions = Region.retrieveAll();
 //        Boolean publicFilter = Boolean.valueOf(req.queryParams("public"));
 //        if(projectId != null) {
-//            for (Region region: Region.getAll()) {
+//            for (Region region: Region.retrieveAll()) {
 //                if(region.projectId.equals(projectId)) {
 //                    // if requesting public regions and region is not public; skip region
 //                    if (publicFilter && !region.isPublic)
@@ -65,7 +62,7 @@ public class RegionController {
 //            }
 //        }
 //        else {
-//            for (Region region: Region.getAll()) {
+//            for (Region region: Region.retrieveAll()) {
 //                // if requesting public regions and region is not public; skip region
 //                if (publicFilter && !region.isPublic)
 //                    continue;
@@ -89,7 +86,7 @@ public class RegionController {
 
     public static Region updateRegion(Request req, Response res) throws IOException {
         String id = req.params("id");
-        Region region = Region.get(id);
+        Region region = Region.retrieve(id);
 
         applyJsonToRegion(region, req.body());
         region.save();
@@ -188,7 +185,7 @@ public class RegionController {
     }
     public static Region deleteRegion(Request req, Response res) {
         String id = req.params("id");
-        Region region = Region.get(id);
+        Region region = Region.retrieve(id);
         region.delete();
         return region;
     }

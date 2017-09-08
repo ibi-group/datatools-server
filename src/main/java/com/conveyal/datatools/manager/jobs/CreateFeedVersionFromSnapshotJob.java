@@ -3,7 +3,6 @@ package com.conveyal.datatools.manager.jobs;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.editor.controllers.api.SnapshotController;
 import com.conveyal.datatools.editor.models.Snapshot;
-import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -25,7 +24,7 @@ public class CreateFeedVersionFromSnapshotJob  extends MonitorableJob {
     private Status status;
 
     public CreateFeedVersionFromSnapshotJob (FeedVersion feedVersion, String snapshotId, String owner) {
-        super(owner, "Creating Feed Version from Snapshot for " + feedVersion.getFeedSource().name, JobType.CREATE_FEEDVERSION_FROM_SNAPSHOT);
+        super(owner, "Creating Feed Version from Snapshot for " + feedVersion.feedSource().name, JobType.CREATE_FEEDVERSION_FROM_SNAPSHOT);
         this.feedVersion = feedVersion;
         this.snapshotId = snapshotId;
         this.status = new Status();
@@ -62,7 +61,7 @@ public class CreateFeedVersionFromSnapshotJob  extends MonitorableJob {
             }
         }
 
-        feedVersion.name = Snapshot.get(snapshotId).name + " Snapshot Export";
+        feedVersion.setName(Snapshot.get(snapshotId).name + " Snapshot Export");
         feedVersion.hash();
         feedVersion.save();
         synchronized (status) {

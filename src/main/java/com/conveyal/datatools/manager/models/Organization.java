@@ -1,12 +1,11 @@
 package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.manager.persistence.DataStore;
-import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonView;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.io.Serializable;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashSet;
@@ -42,11 +41,11 @@ public class Organization extends Model implements Serializable {
             organizationStore.saveWithoutCommit(id, this);
     }
 
-    public static Organization get (String id) {
+    public static Organization retrieve(String id) {
         return organizationStore.getById(id);
     }
 
-    public static Collection<Organization> getAll() {
+    public static Collection<Organization> retrieveAll() {
         return organizationStore.getAll();
     }
 
@@ -58,16 +57,18 @@ public class Organization extends Model implements Serializable {
         organizationStore.delete(this.id);
     }
 
-    public Collection<Project> getProjects() {
-        return Project.getAll().stream().filter(p -> id.equals(p.organizationId)).collect(Collectors.toList());
+    @JsonProperty("projects")
+    public Collection<Project> projects() {
+        return Persistence.getProjects().stream().filter(p -> id.equals(p.organizationId)).collect(Collectors.toList());
     }
 
-    public long getTotalServiceSeconds () {
-        return getProjects().stream()
-                .map(p -> p.getProjectFeedSources())
+    @JsonProperty("totalServiceSeconds")
+    public long totalServiceSeconds() {
+        return projects().stream()
+                .map(p -> p.retrieveProjectFeedSources())
                 .flatMap(p -> p.stream())
-                .filter(fs -> fs.getLatestValidation() != null)
-                .map(fs -> fs.getLatestValidation().avgDailyRevenueTime)
+                .filter(fs -> fs.latestValidation() != null)
+                .map(fs -> fs.latestValidation().avgDailyRevenueTime)
                 .mapToLong(Long::longValue)
                 .sum();
     }

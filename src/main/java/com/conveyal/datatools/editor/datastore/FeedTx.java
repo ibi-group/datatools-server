@@ -291,7 +291,7 @@ public class FeedTx extends DatabaseTx {
         }
 
         feedCopy.id = newId;
-//        a2.name = Messages.get("agency.copy-of", a2.name);
+//        a2.name = Messages.retrieveById("agency.copy-of", a2.name);
 
         gtx.feeds.put(feedCopy.id, feedCopy);
 

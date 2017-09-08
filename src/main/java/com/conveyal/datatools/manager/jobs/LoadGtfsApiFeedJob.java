@@ -20,7 +20,7 @@ public class LoadGtfsApiFeedJob implements Runnable {
 
     @Override
     public void run() {
-        File latest = feedSource.getLatest() != null ? feedSource.getLatest().getGtfsFile() : null;
+        File latest = feedSource.retrieveLatest() != null ? feedSource.retrieveLatest().retrieveGtfsFile() : null;
         if (latest != null)
             try {
                 LOG.info("Loading feed into GTFS api: " + feedSource.id);

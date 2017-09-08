@@ -227,7 +227,7 @@ public class AgencyController {
         delete(apiPrefix + "secure/agency/:id", AgencyController::deleteAgency, json::write);
 
         // Public routes
-//        get(apiPrefix + "public/agency/:id", AgencyController::getFeedSource, json::write);
-//        get(apiPrefix + "public/agency", AgencyController::getAllFeedSources, json::write);
+//        retrieveById(apiPrefix + "public/agency/:id", AgencyController::feedSource, json::write);
+//        retrieveById(apiPrefix + "public/agency", AgencyController::getAllFeedSources, json::write);
     }
 }

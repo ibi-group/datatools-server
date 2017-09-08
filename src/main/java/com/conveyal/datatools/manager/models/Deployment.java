@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.persistence.DataStore;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.StringUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -60,25 +61,20 @@ public class Deployment extends Model implements Serializable {
     @JsonView(JsonViews.DataDump.class)
     public String projectId;
 
-    @JsonView(JsonViews.UserInterface.class)
-    public Project getProject () {
-        return Project.get(projectId);
-    }
-
-    public void setProject (Project project) {
-        this.projectId = project.id;
+    @JsonProperty("project")
+    public Project project() {
+        return Project.retrieve(projectId);
     }
 
     @JsonView(JsonViews.DataDump.class)
     public Collection<String> feedVersionIds;
 
     /** All of the feed versions used in this deployment */
-    @JsonIgnore
-    public List<FeedVersion> getFullFeedVersions () {
-        ArrayList<FeedVersion> ret = new ArrayList<FeedVersion>(feedVersionIds.size());
+    public List<FeedVersion> retrieveFullFeedVersions() {
+        ArrayList<FeedVersion> ret = new ArrayList<>(feedVersionIds.size());
 
         for (String id : feedVersionIds) {
-            FeedVersion v = FeedVersion.get(id);
+            FeedVersion v = FeedVersion.retrieve(id);
             if (v != null)
                 ret.add(v);
             else
@@ -89,16 +85,17 @@ public class Deployment extends Model implements Serializable {
     }
 
     /** All of the feed versions used in this deployment, summarized so that the Internet won't break */
-    @JsonView(JsonViews.UserInterface.class)
-    public List<SummarizedFeedVersion> getFeedVersions () {
-        ArrayList<SummarizedFeedVersion> ret = new ArrayList<SummarizedFeedVersion>(feedVersionIds.size());
+//    @JsonView(JsonViews.UserInterface.class)
+    @JsonProperty("feedVersions")
+    public List<SummarizedFeedVersion> retrieveFeedVersions() {
+        ArrayList<SummarizedFeedVersion> ret = new ArrayList<>(feedVersionIds.size());
 
         for (String id : feedVersionIds) {
-            FeedVersion v = FeedVersion.get(id);
+            FeedVersion v = FeedVersion.retrieve(id);
 
             // should never happen but can if someone monkeyed around with dump/restore
             if (v != null)
-                ret.add(new SummarizedFeedVersion(FeedVersion.get(id)));
+                ret.add(new SummarizedFeedVersion(FeedVersion.retrieve(id)));
             else
                 LOG.error("Reference integrity error for deployment {} ({}), feed version {} does not exist", this.name, this.id, id);
         }
@@ -106,8 +103,8 @@ public class Deployment extends Model implements Serializable {
         return ret;
     }
 
-    public void setFeedVersions (Collection<FeedVersion> versions) {
-        feedVersionIds = new ArrayList<String>(versions.size());
+    public void storeFeedVersions(Collection<FeedVersion> versions) {
+        feedVersionIds = new ArrayList<>(versions.size());
 
         for (FeedVersion version : versions) {
             feedVersionIds.add(version.id);
@@ -142,14 +139,15 @@ public class Deployment extends Model implements Serializable {
      */
     @JsonView(JsonViews.UserInterface.class)
     @JsonInclude(Include.ALWAYS)
-    public List<FeedSource> getInvalidFeedSources () {
+    @JsonProperty("invalidFeedSources")
+    public List<FeedSource> invalidFeedSources () {
         if (invalidFeedSourceIds == null)
             return null;
 
         ArrayList<FeedSource> ret = new ArrayList<FeedSource>(invalidFeedSourceIds.size());
 
         for (String id : invalidFeedSourceIds) {
-            ret.add(FeedSource.get(id));
+            ret.add(Persistence.getFeedSourceById(id));
         }
 
         return ret;
@@ -160,16 +158,16 @@ public class Deployment extends Model implements Serializable {
         super();
 
         this.feedSourceId = feedSource.id;
-        this.setProject(feedSource.getProject());
+        this.projectId = feedSource.projectId;
         this.dateCreated = new Date();
-        this.feedVersionIds = new ArrayList<String>();
+        this.feedVersionIds = new ArrayList<>();
 
         DateFormat df = new SimpleDateFormat("yyyyMMdd");
 
         this.name = StringUtils.getCleanName(feedSource.name) + "_" + df.format(dateCreated);
 
         // always use the latest, no matter how broken it is, so we can at least see how broken it is
-        this.feedVersionIds.add(feedSource.getLatestVersionId());
+        this.feedVersionIds.add(feedSource.latestVersionId());
 
         this.routerId = StringUtils.getCleanName(feedSource.name) + "_" + feedSourceId;
 
@@ -182,17 +180,17 @@ public class Deployment extends Model implements Serializable {
 
         this.feedSourceId = null;
 
-        this.setProject(project);
+        this.projectId = project.id;
 
         this.dateCreated = new Date();
 
         this.feedVersionIds = new ArrayList<String>();
         this.invalidFeedSourceIds = new ArrayList<String>();
 
-        FEEDSOURCE: for (FeedSource s : project.getProjectFeedSources()) {
+        FEEDSOURCE: for (FeedSource s : project.retrieveProjectFeedSources()) {
             // only include deployable feeds
             if (s.deployable) {
-                FeedVersion latest = s.getLatest();
+                FeedVersion latest = s.retrieveLatest();
 
                 // find the newest version that can be deployed
                 while (true) {
@@ -205,7 +203,7 @@ public class Deployment extends Model implements Serializable {
                         break;
                     }
 
-                    latest = latest.getPreviousVersion();
+                    latest = latest.previousVersion();
                 }
 
                 // this version is the latest good version
@@ -224,7 +222,7 @@ public class Deployment extends Model implements Serializable {
     }
 
     /** Get a deployment by ID */
-    public static Deployment get (String id) {
+    public static Deployment retrieveById(String id) {
         return deploymentStore.getById(id);
     }
 
@@ -281,15 +279,15 @@ public class Deployment extends Model implements Serializable {
         }
 
         // write each of the GTFS feeds
-        for (FeedVersion v : this.getFullFeedVersions()) {
-            File feed = v.getGtfsFile();
+        for (FeedVersion v : this.retrieveFullFeedVersions()) {
+            File feed = v.retrieveGtfsFile();
 
             FileInputStream in;
 
             try {
                 in = new FileInputStream(feed);
             } catch (FileNotFoundException e1) {
-                LOG.error("Could not retrieve file for {}", v.name);
+                LOG.error("Could not retrieve file for {}", v.getName());
                 throw new RuntimeException(e1);
             }
 
@@ -333,7 +331,7 @@ public class Deployment extends Model implements Serializable {
             // extract OSM and insert it into the deployment bundle
             ZipEntry e = new ZipEntry("osm.pbf");
             out.putNextEntry(e);
-            InputStream is = getOsmExtract(getProjectBounds());
+            InputStream is = downloadOsmExtract(retrieveProjectBounds());
             ByteStreams.copy(is, out);
             try {
                 is.close();
@@ -346,7 +344,7 @@ public class Deployment extends Model implements Serializable {
 
         if (includeOtpConfig) {
             // write build-config.json and router-config.json
-            Project proj = this.getProject();
+            Project proj = this.project();
 
             if (proj.buildConfig != null) {
                 ZipEntry buildConfigEntry = new ZipEntry("build-config.json");
@@ -382,7 +380,7 @@ public class Deployment extends Model implements Serializable {
     }
 
     // Get OSM extract
-    public static InputStream getOsmExtract(Rectangle2D bounds) {
+    public static InputStream downloadOsmExtract(Rectangle2D bounds) {
         // call vex server
         URL vexUrl = null;
         try {
@@ -414,22 +412,23 @@ public class Deployment extends Model implements Serializable {
         return is;
     }
 
-    public static Rectangle2D getFeedVersionBounds(FeedVersion version) {
-        return null;
-    }
+//    public static Rectangle2D getFeedVersionBounds(FeedVersion version) {
+//        return null;
+//    }
 
     // Get the union of the bounds of all the feeds in this deployment
     @JsonView(JsonViews.UserInterface.class)
-    public Rectangle2D getProjectBounds() {
+    @JsonProperty("projectBounds")
+    public Rectangle2D retrieveProjectBounds() {
 
-        Project proj = this.getProject();
+        Project proj = this.project();
         if(proj.useCustomOsmBounds != null && proj.useCustomOsmBounds) {
             Rectangle2D bounds = new Rectangle2D.Double(proj.osmWest, proj.osmSouth,
                     proj.osmEast - proj.osmWest, proj.osmNorth - proj.osmSouth);
             return bounds;
         }
 
-        List<SummarizedFeedVersion> versions = getFeedVersions();
+        List<SummarizedFeedVersion> versions = retrieveFeedVersions();
 
         if (versions.size() == 0)
             return null;
@@ -495,15 +494,15 @@ public class Deployment extends Model implements Serializable {
     /**
      * Get all of the deployments.
      */
-    public static Collection<Deployment> getAll () {
+    public static Collection<Deployment> retrieveAll() {
         return deploymentStore.getAll();
     }
 
     /**
      * Get the deployment currently deployed to a particular server.
      */
-    public static Deployment getDeploymentForServerAndRouterId (String server, String routerId) {
-        for (Deployment d : getAll()) {
+    public static Deployment retrieveDeploymentForServerAndRouterId(String server, String routerId) {
+        for (Deployment d : retrieveAll()) {
             if (d.deployedTo != null && d.deployedTo.equals(server)) {
                 if ((routerId != null && routerId.equals(d.routerId)) || d.routerId == routerId) {
                     return d;
@@ -514,8 +513,9 @@ public class Deployment extends Model implements Serializable {
         return null;
     }
 
-    public String getOrganizationId () {
-        Project project = getProject();
+    @JsonProperty("organizationId")
+    public String organizationId() {
+        Project project = project();
         return project == null ? null : project.organizationId;
     }
 
@@ -533,11 +533,11 @@ public class Deployment extends Model implements Serializable {
 
         public SummarizedFeedVersion (FeedVersion version) {
             this.validationResult = new FeedValidationResultSummary(version.validationResult);
-            this.feedSource = version.getFeedSource();
+            this.feedSource = version.feedSource();
             this.updated = version.updated;
             this.id = version.id;
-            this.nextVersionId = version.getNextVersionId();
-            this.previousVersionId = version.getPreviousVersionId();
+            this.nextVersionId = version.nextVersionId();
+            this.previousVersionId = version.previousVersionId();
             this.version = version.version;
         }
     }
@@ -551,10 +551,10 @@ public class Deployment extends Model implements Serializable {
      */
     public abstract static class DeploymentFullFeedVersionMixin {
         @JsonIgnore
-        public abstract Collection<SummarizedFeedVersion> getFeedVersions();
+        public abstract Collection<SummarizedFeedVersion> retrievefeedVersions();
 
-        @JsonProperty("feedVersions")
+//        @JsonProperty("feedVersions")
         @JsonIgnore(false)
-        public abstract Collection<FeedVersion> getFullFeedVersions ();
+        public abstract Collection<FeedVersion> retrieveFullFeedVersions ();
     }
 }

@@ -21,6 +21,7 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.persistence.FeedStore;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import org.mapdb.Fun;
 import org.mapdb.Fun.Tuple2;
@@ -71,13 +72,13 @@ public class SnapshotController {
                 Collection<Snapshot> snapshots;
                 if (feedId == null) {
                     // if it's still null just give them everything
-                    // this is used in GTFS Data Manager to get snapshots in bulk
+                    // this is used in GTFS Data Manager to retrieveById snapshots in bulk
                     // TODO this allows any authenticated user to fetch GTFS data for any agency
                     return new ArrayList<>(gtx.snapshots.values());
                 }
                 else {
                     // check view permissions
-                    FeedSourceController.requestFeedSource(req, FeedSource.get(feedId), "view");
+                    FeedSourceController.requestFeedSource(req, Persistence.getFeedSourceById(feedId), "view");
                     return gtx.snapshots.subMap(new Tuple2(feedId, null), new Tuple2(feedId, Fun.HI)).values()
                             .stream()
                             .collect(Collectors.toList());
@@ -95,7 +96,7 @@ public class SnapshotController {
     public static Object createSnapshot (Request req, Response res) {
         GlobalTx gtx = null;
         try {
-            // create a dummy snapshot from which to get values
+            // create a dummy snapshot from which to retrieveById values
             Snapshot original = Base.mapper.readValue(req.body(), Snapshot.class);
             Snapshot s = VersionedDataStore.takeSnapshot(original.feedId, original.name, original.comment);
             s.validFrom = original.validFrom;
@@ -143,12 +144,12 @@ public class SnapshotController {
             halt(400, SparkUtils.formatJSON("No FeedVersion ID specified", 400));
         }
 
-        FeedVersion feedVersion = FeedVersion.get(feedVersionId);
+        FeedVersion feedVersion = FeedVersion.retrieve(feedVersionId);
         if(feedVersion == null) {
             halt(404, SparkUtils.formatJSON("Could not find FeedVersion with ID " + feedVersionId, 404));
         }
 
-        FeedSource feedSource = feedVersion.getFeedSource();
+        FeedSource feedSource = feedVersion.feedSource();
         // check user's permission to import snapshot
         FeedSourceController.requestFeedSource(req, feedSource, "edit");
 
@@ -275,7 +276,7 @@ public class SnapshotController {
             key = "snapshots/" + filePrefix + ".zip";
 
             // ensure user has permission to download snapshot, otherwise halt them
-            FeedSourceController.requestFeedSource(req, FeedSource.get(snapshot.feedId), "view");
+            FeedSourceController.requestFeedSource(req, Persistence.getFeedSourceById(snapshot.feedId), "view");
         } finally {
             gtx.rollbackIfOpen();
         }
@@ -366,13 +367,13 @@ public class SnapshotController {
      */
     private static Object downloadSnapshotWithToken (Request req, Response res) {
         String id = req.params("token");
-        FeedDownloadToken token = FeedDownloadToken.get(id);
+        FeedDownloadToken token = FeedDownloadToken.retrieve(id);
 
         if(token == null || !token.isValid()) {
             halt(400, "Feed download token not valid");
         }
 
-        Snapshot snapshot = token.getSnapshot();
+        Snapshot snapshot = token.retrieveSnapshot();
         File file = null;
 
         try {

@@ -113,7 +113,7 @@ public class TransitFeedsFeedResource implements ExternalFeedResource {
                 String tfId = feed.get("id").asText();
 
                 // check if a feed already exists with this id
-                for (FeedSource existingSource : project.getProjectFeedSources()) {
+                for (FeedSource existingSource : project.retrieveProjectFeedSources()) {
                     ExternalFeedSourceProperty idProp =
                             ExternalFeedSourceProperty.find(existingSource, this.getResourceType(), "id");
                     if (idProp != null && idProp.value.equals(tfId)) {
@@ -128,7 +128,7 @@ public class TransitFeedsFeedResource implements ExternalFeedResource {
                 else source.name = feedName;
 
                 source.retrievalMethod = FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
-                source.setName(feedName);
+                source.name = feedName;
                 System.out.println(source.name);
 
                 try {
@@ -143,7 +143,7 @@ public class TransitFeedsFeedResource implements ExternalFeedResource {
                     LOG.error("Error constructing URLs from TransitFeeds API response");
                 }
 
-                source.setProject(project);
+                source.projectId = project.id;
                 source.save();
 
                 // create/update the external props

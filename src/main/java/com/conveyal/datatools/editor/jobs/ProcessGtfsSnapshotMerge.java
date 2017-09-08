@@ -5,28 +5,14 @@ import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.models.Snapshot;
 import com.conveyal.datatools.editor.models.transit.Agency;
 import com.conveyal.datatools.editor.models.transit.EditorFeed;
-import com.conveyal.datatools.editor.models.transit.Fare;
 import com.conveyal.datatools.editor.models.transit.GtfsRouteType;
 import com.conveyal.datatools.editor.models.transit.Route;
 import com.conveyal.datatools.editor.models.transit.RouteType;
 import com.conveyal.datatools.editor.models.transit.ServiceCalendar;
 import com.conveyal.datatools.editor.models.transit.Stop;
-import com.conveyal.datatools.editor.models.transit.StopTime;
-import com.conveyal.datatools.editor.models.transit.Trip;
-import com.conveyal.datatools.editor.models.transit.TripDirection;
-import com.conveyal.datatools.editor.models.transit.TripPattern;
-import com.conveyal.datatools.editor.models.transit.TripPatternStop;
 import com.conveyal.datatools.manager.models.FeedVersion;
-import com.conveyal.gtfs.GTFSFeed;
 import com.conveyal.gtfs.loader.Feed;
-import com.conveyal.gtfs.model.CalendarDate;
-import com.conveyal.gtfs.model.Entity;
-import com.conveyal.gtfs.model.FeedInfo;
-import com.conveyal.gtfs.model.Pattern;
-import com.conveyal.gtfs.model.Service;
 import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
-import com.google.common.primitives.Ints;
 import com.vividsolutions.jts.geom.Envelope;
 import com.vividsolutions.jts.geom.GeometryFactory;
 import com.vividsolutions.jts.geom.PrecisionModel;
@@ -34,17 +20,14 @@ import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import gnu.trove.map.TIntObjectMap;
 import gnu.trove.map.hash.TIntObjectHashMap;
-import org.joda.time.DateTimeConstants;
 
 import java.awt.geom.Rectangle2D;
-import java.time.LocalDate;
-import org.mapdb.Fun;
+
 import org.mapdb.Fun.Tuple2;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.*;
-import java.util.Map.Entry;
 
 public class ProcessGtfsSnapshotMerge extends MonitorableJob {
     public static final Logger LOG = LoggerFactory.getLogger(ProcessGtfsSnapshotMerge.class);
@@ -66,7 +49,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
     }*/
 
     public ProcessGtfsSnapshotMerge (FeedVersion feedVersion, String owner) {
-        super(owner, "Creating snapshot for " + feedVersion.getFeedSource().name, JobType.PROCESS_SNAPSHOT);
+        super(owner, "Creating snapshot for " + feedVersion.feedSource().name, JobType.PROCESS_SNAPSHOT);
         this.feedVersion = feedVersion;
         status = new Status();
         status.message = "Waiting to begin job...";
@@ -90,7 +73,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 
         feed = new EditorFeed();
         feed.setId(feedVersion.feedSourceId);
-        Rectangle2D bounds = feedVersion.getValidationSummary().bounds;
+        Rectangle2D bounds = feedVersion.validationSummary().bounds;
         if (bounds != null) {
             feed.defaultLat = bounds.getCenterY();
             feed.defaultLon = bounds.getCenterX();
@@ -118,9 +101,9 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                 status.percentComplete = 5;
             }
 
-            // get GTFSFeed for the feed version
+            // retrieveById GTFSFeed for the feed version
             // FIXME use sql-loader Feed object to load into editor
-            input = feedVersion.getFeed();
+            input = feedVersion.retrieveFeed();
             if(input == null) return;
 
             LOG.info("GtfsImporter: importing feed...");
@@ -343,7 +326,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 //            Set<String> processedTrips = new HashSet<>();
 //            for (Entry<String, Pattern> pattern : patterns.entrySet()) {
 //                // it is possible, though unlikely, for two routes to have the same stopping pattern
-//                // we want to ensure they get different trip patterns
+//                // we want to ensure they retrieveById different trip patterns
 //                Map<String, TripPattern> tripPatternsByRoute = Maps.newHashMap();
 //                for (String tripId : pattern.getValue().associatedTrips) {
 //
@@ -355,7 +338,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 //                        status.message = "Importing trips... (id: " + tripId + ") " + tripCount + "/" + input.trips.size();
 //                        status.percentComplete = 50 + 45 * tripCount / input.trips.size();
 //                    }
-//                    com.conveyal.gtfs.model.Trip gtfsTrip = input.trips.get(tripId);
+//                    com.conveyal.gtfs.model.Trip gtfsTrip = input.trips.retrieveById(tripId);
 //
 //                    if (!tripPatternsByRoute.containsKey(gtfsTrip.route_id)) {
 //                        TripPattern pat = createTripPatternFromTrip(gtfsTrip, feedTx);
@@ -368,9 +351,9 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 //                    // stopping patterns.
 //                    // (in DC, suppose there were trips on both the E2/weekday and E3/weekend from Friendship Heights
 //                    //  that short-turned at Missouri and 3rd).
-//                    TripPattern pat = tripPatternsByRoute.get(gtfsTrip.route_id);
+//                    TripPattern pat = tripPatternsByRoute.retrieveById(gtfsTrip.route_id);
 //
-//                    ServiceCalendar cal = calendars.get(gtfsTrip.service_id);
+//                    ServiceCalendar cal = calendars.retrieveById(gtfsTrip.service_id);
 //
 //                    // if the service calendar has not yet been imported, import it
 //                    if (feedTx.calendars != null && !feedTx.calendars.containsKey(cal.id)) {
@@ -378,7 +361,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 //                        feedTx.calendars.put(cal.id, cal);
 //                    }
 //
-//                    Trip trip = new Trip(gtfsTrip, routeIdMap.get(gtfsTrip.route_id), pat, cal);
+//                    Trip trip = new Trip(gtfsTrip, routeIdMap.retrieveById(gtfsTrip.route_id), pat, cal);
 //
 //                    // TODO: query ordered stopTimes for a given trip id
 //                    // FIXME: add back in stopTimes
@@ -386,7 +369,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 //                            input.stopTimes.subMap(new Tuple2(gtfsTrip.trip_id, null), new Tuple2(gtfsTrip.trip_id, Fun.HI)).values();
 //
 //                    for (com.conveyal.gtfs.model.StopTime st : stopTimes) {
-//                        trip.stopTimes.add(new StopTime(st, stopIdMap.get(new Tuple2<>(st.stop_id, feed.id)).id));
+//                        trip.stopTimes.add(new StopTime(st, stopIdMap.retrieveById(new Tuple2<>(st.stop_id, feed.id)).id));
 //                        stopTimeCount++;
 //                    }
 //
@@ -465,10 +448,10 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 //
 //        for (com.conveyal.gtfs.model.StopTime st : input.stop_times.values()) {
 //            String stopId = st.stop_id;
-//            com.conveyal.gtfs.model.Trip trip = input.trips.get(st.trip_id);
+//            com.conveyal.gtfs.model.Trip trip = input.trips.retrieveById(st.trip_id);
 //            if (trip != null) {
 //                String routeId = trip.route_id;
-//                String agencyId = input.routes.get(routeId).agency_id;
+//                String agencyId = input.routes.retrieveById(routeId).agency_id;
 //                Tuple2<String, String> key = new Tuple2(stopId, agencyId);
 //                ret.add(key);
 //            }
@@ -483,12 +466,12 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
      */
 //    public TripPattern createTripPatternFromTrip (com.conveyal.gtfs.model.Trip gtfsTrip, FeedTx tx) {
 //        TripPattern patt = new TripPattern();
-//        com.conveyal.gtfs.model.Route gtfsRoute = input.routes.get(gtfsTrip.route_id);
-//        patt.routeId = routeIdMap.get(gtfsTrip.route_id).id;
+//        com.conveyal.gtfs.model.Route gtfsRoute = input.routes.retrieveById(gtfsTrip.route_id);
+//        patt.routeId = routeIdMap.retrieveById(gtfsTrip.route_id).id;
 //        patt.feedId = feed.id;
 //
-//        String patternId = input.tripPatternMap.get(gtfsTrip.trip_id);
-//        Pattern gtfsPattern = input.patterns.get(patternId);
+//        String patternId = input.tripPatternMap.retrieveById(gtfsTrip.trip_id);
+//        Pattern gtfsPattern = input.patterns.retrieveById(patternId);
 //        patt.shape = gtfsPattern.geometry;
 //        patt.id = gtfsPattern.pattern_id;
 //
@@ -506,7 +489,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 //        for (com.conveyal.gtfs.model.StopTime st : stopTimes) {
 //            TripPatternStop tps = new TripPatternStop();
 //
-//            Stop stop = stopIdMap.get(new Tuple2(st.stop_id, patt.feedId));
+//            Stop stop = stopIdMap.retrieveById(new Tuple2(st.stop_id, patt.feedId));
 //            tps.stopId = stop.id;
 //
 //            // set timepoint according to first gtfs value and then whether arrival and departure times are present
@@ -533,7 +516,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 //            int startOfBlock = 0;
 //            // start at one because the first stop has no travel time
 //            // but don't put nulls in the data
-//            patt.patternStops.get(0).defaultTravelTime = 0;
+//            patt.patternStops.retrieveById(0).defaultTravelTime = 0;
 //            for (int i = 1; i < stopTimes.length; i++) {
 //                com.conveyal.gtfs.model.StopTime current = stopTimes[i];
 //
@@ -542,12 +525,12 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 //
 //                    int timeSinceLastSpecifiedTime = current.arrival_time - stopTimes[startOfBlock].departure_time;
 //
-//                    double blockLength = patt.patternStops.get(i).shapeDistTraveled - patt.patternStops.get(startOfBlock).shapeDistTraveled;
+//                    double blockLength = patt.patternStops.retrieveById(i).shapeDistTraveled - patt.patternStops.retrieveById(startOfBlock).shapeDistTraveled;
 //
 //                    // go back over all of the interpolated stop times and interpolate them
 //                    for (int j = startOfBlock + 1; j <= i; j++) {
-//                        TripPatternStop tps = patt.patternStops.get(j);
-//                        double distFromLastStop = patt.patternStops.get(j).shapeDistTraveled - patt.patternStops.get(j - 1).shapeDistTraveled;
+//                        TripPatternStop tps = patt.patternStops.retrieveById(j);
+//                        double distFromLastStop = patt.patternStops.retrieveById(j).shapeDistTraveled - patt.patternStops.retrieveById(j - 1).shapeDistTraveled;
 //                        tps.defaultTravelTime = (int) Math.round(timeSinceLastSpecifiedTime * distFromLastStop / blockLength);
 //                    }
 //

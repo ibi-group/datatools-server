@@ -46,7 +46,7 @@ public class Note extends Model implements Serializable {
             noteStore.saveWithoutCommit(id, this);
     }
 
-    public static Note get (String id) {
+    public static Note retrieve(String id) {
         return noteStore.getById(id);
     }
 
@@ -57,7 +57,7 @@ public class Note extends Model implements Serializable {
         FEED_VERSION, FEED_SOURCE
     }
 
-    public static Collection<Note> getAll() {
+    public static Collection<Note> retrieveAll() {
         return noteStore.getAll();
     }
 

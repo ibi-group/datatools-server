@@ -2,7 +2,6 @@ package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.editor.models.Snapshot;
 import com.conveyal.datatools.manager.persistence.DataStore;
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import org.mapdb.Fun;
 
 import java.util.Date;
@@ -40,25 +39,22 @@ public class FeedDownloadToken extends Model {
         timestamp = new Date();
     }
 
-    public static FeedDownloadToken get (String id) {
+    public static FeedDownloadToken retrieve(String id) {
         return tokenStore.getById(id);
     }
 
-    @JsonIgnore
-    public FeedVersion getFeedVersion () {
-        if (feedVersionId != null) return FeedVersion.get(feedVersionId);
+    public FeedVersion retrieveFeedVersion() {
+        if (feedVersionId != null) return FeedVersion.retrieve(feedVersionId);
         else return null;
     }
 
-    @JsonIgnore
-    public Snapshot getSnapshot () {
+    public Snapshot retrieveSnapshot() {
         if (snapshotId != null) return Snapshot.get(snapshotId);
         else return null;
     }
 
-    @JsonIgnore
-    public Project getProject () {
-        return Project.get(feedVersionId);
+    public Project retrieveProject() {
+        return Project.retrieve(feedVersionId);
     }
 
     public boolean isValid () {

@@ -16,8 +16,6 @@ public class ExternalFeedSourceProperty extends Model {
 
     private static DataStore<ExternalFeedSourceProperty> propertyStore = new DataStore<>("externalFeedSourceProperties");
 
-    private FeedSource feedSource;
-
     // constructor for data dump load
     public ExternalFeedSourceProperty() {}
 
@@ -29,14 +27,9 @@ public class ExternalFeedSourceProperty extends Model {
         this.value = value;
     }
 
-    @JsonProperty
-    public String getFeedSourceId() {
-        return feedSource != null ? feedSource.id : feedSourceId;
-    }
-
     public String resourceType;
 
-    private String feedSourceId;
+    public String feedSourceId;
 
     public String name;
 
@@ -78,7 +71,7 @@ public class ExternalFeedSourceProperty extends Model {
         return prop;
     }
 
-    public static Collection<ExternalFeedSourceProperty> getAll () {
+    public static Collection<ExternalFeedSourceProperty> retrieveAll() {
         return propertyStore.getAll();
     }
 

@@ -9,11 +9,14 @@ import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mongodb.client.result.UpdateResult;
+import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
@@ -25,6 +28,8 @@ import java.net.URL;
 import java.util.*;
 
 import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
+import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Updates.set;
 import static spark.Spark.*;
 
 /**
@@ -49,8 +54,8 @@ public class FeedSourceController {
         String userId = req.queryParams("userId");
 
         if (projectId != null) {
-            for (FeedSource source: FeedSource.getAll()) {
-                String orgId = source.getOrganizationId();
+            for (FeedSource source: Persistence.getFeedSources()) {
+                String orgId = source.organizationId();
                 if (
                     source != null && source.projectId != null && source.projectId.equals(projectId)
                     && requestingUser != null && (requestingUser.canManageFeed(orgId, source.projectId, source.id) || requestingUser.canViewFeed(orgId, source.projectId, source.id))
@@ -67,8 +72,8 @@ public class FeedSourceController {
             Auth0UserProfile user = getUserById(userId);
             if (user == null) return sources;
 
-            for (FeedSource source: FeedSource.getAll()) {
-                String orgId = source.getOrganizationId();
+            for (FeedSource source: Persistence.getFeedSources()) {
+                String orgId = source.organizationId();
                 if (
                     source != null && source.projectId != null &&
                     (user.canManageFeed(orgId, source.projectId, source.id) || user.canViewFeed(orgId, source.projectId, source.id))
@@ -80,8 +85,8 @@ public class FeedSourceController {
         }
         // request feed sources that are public
         else {
-            for (FeedSource source: FeedSource.getAll()) {
-                String orgId = source.getOrganizationId();
+            for (FeedSource source: Persistence.getFeedSources()) {
+                String orgId = source.organizationId();
                 // if user is logged in and cannot view feed; skip source
                 if ((requestingUser != null && !requestingUser.canManageFeed(orgId, source.projectId, source.id) && !requestingUser.canViewFeed(orgId, source.projectId, source.id)))
                     continue;
@@ -97,28 +102,14 @@ public class FeedSourceController {
     }
 
     public static FeedSource createFeedSource(Request req, Response res) throws IOException {
-        FeedSource source;
-        /*if (req.queryParams("type") != null){
-            //FeedSource.FeedSourceType type = FeedSource.FeedSourceType.TRANSITLAND;
-            source = new FeedSource("onestop-id");
-            applyJsonToFeedSource(source, req.body());
-            source.save();
-
-            return source;
-        }
-        else {
-            source = new FeedSource();
-
-        }*/
-
-        source = new FeedSource();
+        FeedSource source = new FeedSource();
 
         applyJsonToFeedSource(source, req.body());
 
         // check permissions before saving
         requestFeedSource(req, source, "create");
         if (source.projectId == null) {
-            halt(400, SparkUtils.formatJSON("Must provide project ID for feed source", 400));
+            halt(400, SparkUtils.formatJSON("Must provide retrieveProject ID for feed source", 400));
         }
         source.save();
 
@@ -130,71 +121,80 @@ public class FeedSourceController {
     }
 
     public static FeedSource updateFeedSource(Request req, Response res) throws IOException {
-        FeedSource source = requestFeedSourceById(req, "manage");
+        String feedSourceId = req.params("id");
 
-        applyJsonToFeedSource(source, req.body());
-        source.save();
+        // call this method just for null and permissions check
+        // TODO: it's wasteful to request the entire feed source here, need to factor out permissions checks
+        requestFeedSourceById(req, "manage");
+
+        Document updateDocument = Document.parse(req.body());
+
+        FeedSource source = Persistence.feedSources.findOneAndUpdate(eq(feedSourceId), new Document("$set", updateDocument));
 
         // notify users after successful save
         NotifyUsersForSubscriptionJob notifyFeedJob = new NotifyUsersForSubscriptionJob("feed-updated", source.id, "Feed property updated for " + source.name);
         DataManager.lightExecutor.execute(notifyFeedJob);
 
-        NotifyUsersForSubscriptionJob notifyProjectJob = new NotifyUsersForSubscriptionJob("project-updated", source.projectId, "Project updated (feed source property for " + source.name + ")");
+        NotifyUsersForSubscriptionJob notifyProjectJob = new NotifyUsersForSubscriptionJob("retrieveProject-updated", source.projectId, "Project updated (feed source property for " + source.name + ")");
         DataManager.lightExecutor.execute(notifyProjectJob);
 
         return source;
     }
 
     public static void applyJsonToFeedSource(FeedSource source, String json) throws IOException {
+
         JsonNode node = mapper.readTree(json);
         Iterator<Map.Entry<String, JsonNode>> fieldsIter = node.fields();
         while (fieldsIter.hasNext()) {
             Map.Entry<String, JsonNode> entry = fieldsIter.next();
 
-            if(entry.getKey().equals("projectId")) {
-                System.out.println("setting fs project");
-                source.setProject(Project.get(entry.getValue().asText()));
-            }
+            Persistence.feedSources.updateOne(eq(source.id), set(entry.getKey(), entry.getValue()));
 
-            if(entry.getKey().equals("name")) {
-                source.name = entry.getValue().asText();
-            }
-
-            if(entry.getKey().equals("url")) {
-                String url = entry.getValue().asText();
-                try {
-                    source.url = entry.getValue().isNull() ? null : new URL(url);
-                    // reset the last fetched date so it can be fetched again
-                    source.lastFetched = null;
-                } catch (MalformedURLException e) {
-                    halt(400, SparkUtils.formatJSON("URL '" + url + "' not valid.", 400));
-                }
-            }
-
-            if(entry.getKey().equals("retrievalMethod")) {
-                source.retrievalMethod = FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.valueOf(entry.getValue().asText());
-            }
-
-            if(entry.getKey().equals("snapshotVersion")) {
-                source.snapshotVersion = entry.getValue().asText();
-            }
-
-            if(entry.getKey().equals("isPublic")) {
-                source.isPublic = entry.getValue().asBoolean();
-                // TODO: set AWS GTFS zips to public/private after "isPublic" change
-                if (DataManager.useS3) {
-                    if (source.isPublic) {
-                        source.makePublic();
-                    }
-                    else {
-                        source.makePrivate();
-                    }
-                }
-            }
-
-            if(entry.getKey().equals("deployable")) {
-                source.deployable = entry.getValue().asBoolean();
-            }
+//            if(entry.getKey().equals("projectId")) {
+//                System.out.println("setting fs retrieveProject");
+//                Project project = Project.retrieve(entry.getValue().asText());
+//                source.projectId = project != null ? project.id : null;
+//            }
+//
+//            if(entry.getKey().equals("name")) {
+//                source.name = entry.getValue().asText();
+//            }
+//
+//            if(entry.getKey().equals("url")) {
+//                String url = entry.getValue().asText();
+//                try {
+//                    source.url = entry.getValue().isNull() ? null : new URL(url);
+//                    // reset the last fetched date so it can be fetched again
+//                    source.lastFetched = null;
+//                } catch (MalformedURLException e) {
+//                    halt(400, SparkUtils.formatJSON("URL '" + url + "' not valid.", 400));
+//                }
+//            }
+//
+//            if(entry.getKey().equals("retrievalMethod")) {
+//                source.retrievalMethod = FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.valueOf(entry.getValue().asText());
+//            }
+//
+//            if(entry.getKey().equals("snapshotVersion")) {
+//                source.snapshotVersion = entry.getValue().asText();
+//            }
+//
+//            if(entry.getKey().equals("isPublic")) {
+//                source.isPublic = entry.getValue().asBoolean();
+//                // TODO: set AWS GTFS zips to public/private after "isPublic" change
+//                if (DataManager.useS3) {
+//                    if (source.isPublic) {
+//                        source.makePublic();
+//                    }
+//                    else {
+//                        source.makePrivate();
+//                    }
+//                }
+//            }
+//
+//            if(entry.getKey().equals("deployable")) {
+//                source.deployable = entry.getValue().asBoolean();
+//            }
 
         }
     }
@@ -232,7 +232,7 @@ public class FeedSourceController {
         FeedSource source = requestFeedSourceById(req, "manage");
 
         try {
-            source.delete();
+            Persistence.removeFeedSource(source.id);
             return source;
         } catch (Exception e) {
             e.printStackTrace();
@@ -274,8 +274,9 @@ public class FeedSourceController {
         if (id == null) {
             halt(400, SparkUtils.formatJSON("Please specify id param", 400));
         }
-        return requestFeedSource(req, FeedSource.get(id), action);
+        return requestFeedSource(req, Persistence.getFeedSourceById(id), action);
     }
+
     public static FeedSource requestFeedSource(Request req, FeedSource s, String action) {
         Auth0UserProfile userProfile = req.attribute("user");
         Boolean publicFilter = Boolean.valueOf(req.queryParams("public")) ||
@@ -285,7 +286,7 @@ public class FeedSourceController {
         // check for null feedSource
         if (s == null)
             halt(400, SparkUtils.formatJSON("Feed source ID does not exist", 400));
-        String orgId = s.getOrganizationId();
+        String orgId = s.organizationId();
         boolean authorized;
         switch (action) {
             case "create":
@@ -314,7 +315,7 @@ public class FeedSourceController {
             // if feed not public and user not authorized, halt
             if (!s.isPublic && !authorized)
                 halt(403, SparkUtils.formatJSON("User not authorized to perform action on feed source", 403));
-                // if feed is public, but action is managerial, halt (we shouldn't ever get here, but just in case)
+                // if feed is public, but action is managerial, halt (we shouldn't ever retrieveById here, but just in case)
             else if (s.isPublic && action.equals("manage"))
                 halt(403, SparkUtils.formatJSON("User not authorized to perform action on feed source", 403));
 

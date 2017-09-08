@@ -1,10 +1,11 @@
 package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.manager.persistence.DataStore;
-import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -23,7 +24,7 @@ import java.util.stream.Collectors;
 public class Project extends Model {
     private static final long serialVersionUID = 1L;
 
-    private static DataStore<Project> projectStore = new DataStore<>("projects");
+//    private static DataStore<Project> projectStore = new DataStore<>("projects");
 
     /** The name of this feed collection, e.g. NYSDOT. */
     public String name;
@@ -40,8 +41,7 @@ public class Project extends Model {
 
     public String organizationId;
 
-    @JsonIgnore
-    public OtpServer getServer (String name) {
+    public OtpServer retrieveServer(String name) {
         for (OtpServer otpServer : otpServers) {
             if (otpServer.name.equals(name)) {
                 return otpServer;
@@ -55,7 +55,7 @@ public class Project extends Model {
     public String defaultLanguage;
 
     //@JsonView
-    public Collection<FeedSource> feedSources;
+    public transient Collection<FeedSource> feedSources;
 
     public Double defaultLocationLat, defaultLocationLon;
     public Boolean autoFetchFeeds;
@@ -74,12 +74,14 @@ public class Project extends Model {
     /**
      * Get all of the FeedCollections that are defined
      */
-    public static Collection<Project> getAll () {
-        return projectStore.getAll();
+    public static Collection<Project> retrieveAll() {
+//        return projectStore.getAll();
+        return null;
     }
 
-    public static Project get(String id) {
-        return projectStore.getById(id);
+    public static Project retrieve(String id) {
+//        return projectStore.getById(id);
+        return null;
     }
 
     public void save() {
@@ -87,58 +89,59 @@ public class Project extends Model {
     }
 
     public void save(boolean commit) {
-        if (commit)
-            projectStore.save(this.id, this);
-        else
-            projectStore.saveWithoutCommit(this.id, this);
+//        if (commit)
+//            projectStore.save(this.id, this);
+//        else
+//            projectStore.saveWithoutCommit(this.id, this);
     }
 
     public void delete() {
-        for (FeedSource s : getProjectFeedSources()) {
+        for (FeedSource s : retrieveProjectFeedSources()) {
             s.delete();
         }
-        for (Deployment d : getProjectDeployments()) {
+        for (Deployment d : retrieveDeployments()) {
             d.delete();
         }
 
-        projectStore.delete(this.id);
+//        projectStore.delete(this.id);
     }
 
     public static void commit () {
-        projectStore.commit();
+//        projectStore.commit();
     }
 
     /**
      * Get all the feed sources for this feed collection
      */
-    @JsonIgnore
-    public Collection<FeedSource> getProjectFeedSources() {
+    public Collection<FeedSource> retrieveProjectFeedSources() {
 //        ArrayList<? extends FeedSource> ret = new ArrayList<>();
 
         // TODO: use index, but not important for now because we generally only have one FeedCollection
-        return FeedSource.getAll().stream().filter(fs -> this.id.equals(fs.projectId)).collect(Collectors.toList());
+        return Persistence.getFeedSources().stream()
+                .filter(fs -> this.id.equals(fs.projectId))
+                .collect(Collectors.toList());
 
     }
-    public int getNumberOfFeeds () {
-        return FeedSource.getAll().stream().filter(fs -> this.id.equals(fs.projectId)).collect(Collectors.toList()).size();
+
+    @JsonProperty("numberOfFeeds")
+    public int numberOfFeeds() {
+        return retrieveProjectFeedSources().size();
     }
+
     /**
      * Get all the deployments for this feed collection
      */
-
-    @JsonIgnore
-    public Collection<Deployment> getProjectDeployments() {
-        ArrayList<Deployment> ret = Deployment.getAll().stream()
+    public Collection<Deployment> retrieveDeployments() {
+        ArrayList<Deployment> ret = Deployment.retrieveAll().stream()
                 .filter(d -> this.id.equals(d.projectId))
                 .collect(Collectors.toCollection(ArrayList::new));
 
         return ret;
     }
 
-    @JsonIgnore
-    public Organization getOrganization() {
+    public Organization retrieveOrganization() {
         if (organizationId != null) {
-            return Organization.get(organizationId);
+            return Organization.retrieve(organizationId);
         } else {
             return null;
         }

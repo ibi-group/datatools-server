@@ -83,11 +83,11 @@ public class ProcessGtfsSnapshotExport implements Runnable {
             for (Tuple2<String, Integer> ssid : snapshots) {
                 String feedId = ssid.a;
 
-                // get present feed database if no snapshot version provided
+                // retrieveById present feed database if no snapshot version provided
                 if (ssid.b == null) {
                     feedTx = VersionedDataStore.getFeedTx(feedId);
                 }
-                // else get snapshot version data
+                // else retrieveById snapshot version data
                 else {
                     feedTx = VersionedDataStore.getFeedTx(feedId, ssid.b);
                 }

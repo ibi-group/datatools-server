@@ -4,7 +4,6 @@ import com.conveyal.gtfs.GTFSFeed;
 import com.conveyal.gtfs.stats.FeedStats;
 import com.conveyal.gtfs.validator.json.LoadStatus;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.google.common.collect.Iterators;
 
 import java.awt.geom.Rectangle2D;
 import java.io.Serializable;
@@ -81,7 +80,7 @@ public class FeedValidationResult implements Serializable {
             this.endDate = calDateEnd.isAfter(calSvcEnd) ? calDateEnd : calSvcEnd;
 
         try {
-            // get revenue time in seconds for Tuesdays in feed
+            // retrieve revenue time in seconds for Tuesdays in feed
             this.avgDailyRevenueTime = stats.getAverageDailyRevenueTime(2);
         } catch (Exception e) {
             // temporarily catch errors in calculating this stat
@@ -94,7 +93,7 @@ public class FeedValidationResult implements Serializable {
         this.errorCount = feed.errors.size();
     }
 
-//    /** Why a GTFS feed failed to load */
+    /** Why a GTFS feed failed to load */
 //    public enum LoadStatus {
 //        SUCCESS, INVALID_ZIP_FILE, OTHER_FAILURE, MISSING_REQUIRED_FIELD, INCORRECT_FIELD_COUNT_IMPROPER_QUOTING;
 //    }

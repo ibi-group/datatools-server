@@ -4,6 +4,7 @@ import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.models.*;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -49,10 +50,10 @@ public class NoteController {
 
         switch (type) {
             case FEED_SOURCE:
-                model = FeedSource.get(objectId);
+                model = Persistence.getFeedSourceById(objectId);
                 break;
             case FEED_VERSION:
-                model = FeedVersion.get(objectId);
+                model = FeedVersion.retrieve(objectId);
                 break;
             default:
                 // this shouldn't ever happen, but Java requires that every case be covered somehow so model can't be used uninitialized
@@ -65,12 +66,12 @@ public class NoteController {
             s = (FeedSource) model;
         }
         else {
-            s = ((FeedVersion) model).getFeedSource();
+            s = ((FeedVersion) model).feedSource();
         }
-        String orgId = s.getOrganizationId();
+        String orgId = s.organizationId();
         // check if the user has permission
         if (userProfile.canAdministerProject(s.projectId, orgId) || userProfile.canViewFeed(orgId, s.projectId, s.id)) {
-            return model.getNotes();
+            return model.retrieveNotes();
         }
         else {
             halt(401);
@@ -97,10 +98,10 @@ public class NoteController {
 
         switch (type) {
             case FEED_SOURCE:
-                model = FeedSource.get(objectId);
+                model = Persistence.getFeedSourceById(objectId);
                 break;
             case FEED_VERSION:
-                model = FeedVersion.get(objectId);
+                model = FeedVersion.retrieve(objectId);
                 break;
             default:
                 // this shouldn't ever happen, but Java requires that every case be covered somehow so model can't be used uninitialized
@@ -113,13 +114,13 @@ public class NoteController {
             s = (FeedSource) model;
         }
         else {
-            s = ((FeedVersion) model).getFeedSource();
+            s = ((FeedVersion) model).feedSource();
         }
-        String orgId = s.getOrganizationId();
+        String orgId = s.organizationId();
         // check if the user has permission
         if (userProfile.canAdministerProject(s.projectId, orgId) || userProfile.canViewFeed(orgId, s.projectId, s.id)) {
             Note n = new Note();
-            n.setUser(userProfile);
+            n.storeUser(userProfile);
 
             ObjectMapper mapper = new ObjectMapper();
             JsonNode node = mapper.readTree(req.body());

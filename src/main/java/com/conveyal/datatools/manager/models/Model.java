@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.manager.auth.Auth0Users;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
 
 import java.io.Serializable;
@@ -50,12 +51,12 @@ public abstract class Model implements Serializable {
      */
     // notes are handled through a separate controller and in a separate DB
     @JsonIgnore
-    public List<Note> getNotes() {
+    public List<Note> retrieveNotes() {
         ArrayList<Note> ret = new ArrayList<Note>(noteIds != null ? noteIds.size() : 0);
 
         if (noteIds != null) {
             for (String id : noteIds) {
-                ret.add(Note.get(id));
+                ret.add(Note.retrieve(id));
             }
         }
 
@@ -66,14 +67,14 @@ public abstract class Model implements Serializable {
      * Get the user who owns this object.
      * @return the String user_id
      */
-    @JsonView(JsonViews.UserInterface.class)
-    public String getUser () {
+    @JsonProperty("user")
+    public String user () {
         return this.userEmail;
     }
     /**
      * Set the owner of this object
      */
-    public void setUser (Auth0UserProfile profile) {
+    public void storeUser(Auth0UserProfile profile) {
         userId = profile.getUser_id();
         userEmail = profile.getEmail();
     }
@@ -81,7 +82,7 @@ public abstract class Model implements Serializable {
     /**
      * Set the owner of this object by Id
      */
-    public void setUserById (String id) {
+    public void storeUser(String id) {
         userId = id;
         Auth0UserProfile profile = Auth0Users.getUserById(userId);
         userEmail = profile != null ? profile.getEmail() : null;

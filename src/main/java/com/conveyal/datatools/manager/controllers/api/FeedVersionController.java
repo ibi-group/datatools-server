@@ -14,6 +14,7 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.persistence.FeedStore;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.r5.analyst.PointSet;
@@ -79,7 +80,7 @@ public class FeedVersionController  {
         Auth0UserProfile userProfile = req.attribute("user");
         FeedSource s = requestFeedSourceById(req, "view");
 
-        return s.getFeedVersions().stream()
+        return s.retrieveFeedVersions().stream()
                 .collect(Collectors.toCollection(ArrayList::new));
     }
     private static FeedSource requestFeedSourceById(Request req, String action) {
@@ -87,13 +88,13 @@ public class FeedVersionController  {
         if (id == null) {
             halt(SparkUtils.formatJSON("Please specify feedsourceId param", 400));
         }
-        return requestFeedSource(req, FeedSource.get(id), action);
+        return requestFeedSource(req, Persistence.getFeedSourceById(id), action);
     }
 
     /**
      * Upload a feed version directly. This is done behind Backbone's back, and as such uses
      * x-multipart-formdata rather than a json blob. This is done because uploading files in a JSON
-     * blob is not pretty, and we don't really need to get the Backbone object directly; page re-render isn't
+     * blob is not pretty, and we don't really need to retrieveById the Backbone object directly; page re-render isn't
      * a problem.
      *
      * Auto-fetched feeds are no longer restricted from having directly-uploaded versions, so we're not picky about
@@ -106,9 +107,9 @@ public class FeedVersionController  {
         Auth0UserProfile userProfile = req.attribute("user");
         FeedSource s = requestFeedSourceById(req, "manage");
 
-        FeedVersion latest = s.getLatest();
+        FeedVersion latest = s.retrieveLatest();
         FeedVersion v = new FeedVersion(s);
-        v.setUser(userProfile);
+        v.storeUser(userProfile);
 
         if (req.raw().getAttribute("org.eclipse.jetty.multipartConfig") == null) {
             MultipartConfigElement multipartConfigElement = new MultipartConfigElement(System.getProperty("java.io.tmpdir"));
@@ -143,7 +144,7 @@ public class FeedVersionController  {
         // Check that hashes don't match (as long as v and latest are not the same entry)
         if (latest != null && latest.hash.equals(v.hash)) {
             LOG.error("Upload version {} matches latest version {}.", v.id, latest.id);
-            File gtfs = v.getGtfsFile();
+            File gtfs = v.retrieveGtfsFile();
             if (gtfs != null) {
                 gtfs.delete();
             } else {
@@ -155,7 +156,7 @@ public class FeedVersionController  {
             halt(304);
         }
 
-        v.name = v.getFormattedTimestamp() + " Upload";
+        v.setName(v.formattedTimestamp() + " Upload");
 //        v.fileTimestamp
         v.userId = userProfile.getUser_id();
         v.save();
@@ -187,7 +188,7 @@ public class FeedVersionController  {
         version.delete();
 
         // renumber the versions
-        Collection<FeedVersion> versions = version.getFeedSource().getFeedVersions();
+        Collection<FeedVersion> versions = version.feedSource().retrieveFeedVersions();
         FeedVersion[] versionArray = versions.toArray(new FeedVersion[versions.size()]);
         Arrays.sort(versionArray, (v1, v2) -> v1.updated.compareTo(v2.updated));
         for(int i = 0; i < versionArray.length; i++) {
@@ -202,12 +203,12 @@ public class FeedVersionController  {
     public static FeedVersion requestFeedVersion(Request req, String action) {
         String id = req.params("id");
 
-        FeedVersion version = FeedVersion.get(id);
+        FeedVersion version = FeedVersion.retrieve(id);
         if (version == null) {
             halt(404, "Version ID does not exist");
         }
         // performs permissions checks for at feed source level and halts if any issues
-        requestFeedSource(req, version.getFeedSource(), action);
+        requestFeedSource(req, version.feedSource(), action);
         return version;
     }
 
@@ -222,7 +223,7 @@ public class FeedVersionController  {
     public static JsonNode getValidationResult(Request req, Response res, boolean checkPublic) {
         FeedVersion version = requestFeedVersion(req, "view");
 
-        return version.getValidationResult(false);
+        return version.retrieveValidationResult(false);
     }
 
     public static JsonNode getIsochrones(Request req, Response res) {
@@ -248,7 +249,7 @@ public class FeedVersionController  {
         InputStream is = null;
         try {
             if (!readingNetworkVersionList.contains(version.id)) {
-                is = new FileInputStream(version.getTransportNetworkPath());
+                is = new FileInputStream(version.transportNetworkPath());
                 readingNetworkVersionList.add(version.id);
                 try {
 //                    version.transportNetwork = TransportNetwork.read(is);
@@ -337,14 +338,14 @@ public class FeedVersionController  {
             halt(400, "Name parameter not specified");
         }
 
-        v.name = name;
+        v.setName(name);
         v.save();
         return true;
     }
 
     private static Object downloadFeedVersionDirectly(Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "view");
-        return downloadFile(version.getGtfsFile(), version.id, res);
+        return downloadFile(version.retrieveGtfsFile(), version.id, res);
     }
 
     /**
@@ -367,7 +368,7 @@ public class FeedVersionController  {
 
     private static JsonNode validate (Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "manage");
-        return version.getValidationResult(true);
+        return version.retrieveValidationResult(true);
     }
 
     private static FeedVersion publishToExternalResource (Request req, Response res) {
@@ -377,24 +378,24 @@ public class FeedVersionController  {
         for(String resourceType : DataManager.feedResources.keySet()) {
             DataManager.feedResources.get(resourceType).feedVersionCreated(version, null);
         }
-        FeedSource fs = version.getFeedSource();
+        FeedSource fs = version.feedSource();
         fs.publishedVersionId = version.id;
         fs.save();
         return version;
     }
 
     private static Object downloadFeedVersionWithToken (Request req, Response res) {
-        FeedDownloadToken token = FeedDownloadToken.get(req.params("token"));
+        FeedDownloadToken token = FeedDownloadToken.retrieve(req.params("token"));
 
         if(token == null || !token.isValid()) {
             halt(400, "Feed download token not valid");
         }
 
-        FeedVersion version = token.getFeedVersion();
+        FeedVersion version = token.retrieveFeedVersion();
 
         token.delete();
 
-        return downloadFile(version.getGtfsFile(), version.id, res);
+        return downloadFile(version.retrieveGtfsFile(), version.id, res);
     }
 
     public static void register (String apiPrefix) {

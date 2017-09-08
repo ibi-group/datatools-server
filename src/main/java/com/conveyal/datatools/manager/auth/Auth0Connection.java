@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.auth;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -115,14 +116,14 @@ public class Auth0Connection {
             String[] parts = request.pathInfo().split("/");
             feedId = parts[parts.length - 1];
         }
-        FeedSource feedSource = feedId != null ? FeedSource.get(feedId) : null;
+        FeedSource feedSource = feedId != null ? Persistence.getFeedSourceById(feedId) : null;
         if (feedSource == null) {
             LOG.warn("feedId {} not found", feedId);
             halt(400, SparkUtils.formatJSON("Must provide feedId parameter", 400));
         }
 
         if (!request.requestMethod().equals("GET")) {
-            if (!userProfile.canEditGTFS(feedSource.getOrganizationId(), feedSource.projectId, feedSource.id)) {
+            if (!userProfile.canEditGTFS(feedSource.organizationId(), feedSource.projectId, feedSource.id)) {
                 LOG.warn("User {} cannot edit GTFS for {}", userProfile.email, feedId);
                 halt(403, SparkUtils.formatJSON("User does not have permission to edit GTFS for feedId", 403));
             }

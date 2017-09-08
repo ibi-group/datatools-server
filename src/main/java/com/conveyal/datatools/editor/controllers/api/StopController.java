@@ -65,7 +65,7 @@ public class StopController {
                 return tx.stops.get(id);
             }
               else if (Boolean.TRUE.equals(majorStops)) {
-                  // get the major stops for the agency
+                  // retrieveById the major stops for the agency
                   Collection<Stop> stops = tx.majorStops.stream()
                           .map(tx.stops::get)
                           .collect(Collectors.toList());

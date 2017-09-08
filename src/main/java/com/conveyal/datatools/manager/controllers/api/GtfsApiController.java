@@ -87,7 +87,7 @@ public class GtfsApiController {
             eTags = new HashMap<>();
         }
         Map<String, String> newTags = new HashMap<>();
-        // iterate over feeds in download_prefix folder and register to gtfsApi (MTC project)
+        // iterate over feeds in download_prefix folder and register to gtfsApi (MTC retrieveProject)
         ObjectListing gtfsList = FeedStore.s3Client.listObjects(bucket, dir);
         for (S3ObjectSummary objSummary : gtfsList.getObjectSummaries()) {
 
@@ -126,7 +126,7 @@ public class GtfsApiController {
                     }
                     newTags.put(feedId, eTag);
 
-                    // initiate load of feed source into API with get call
+                    // initiate load of feed source into API with retrieve call
                     ApiMain.getFeedSource(feedId);
                 } catch (Exception e) {
                     LOG.warn("Could not load feed " + keyName, e);

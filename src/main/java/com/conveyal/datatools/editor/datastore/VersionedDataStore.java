@@ -54,7 +54,7 @@ public class VersionedDataStore {
 
     /**
      * Start a transaction in an agency database. No checking is done to ensure the agency exists;
-     * if it does not you will get a (hopefully) empty DB, unless you've done the same thing previously.
+     * if it does not you will retrieveById a (hopefully) empty DB, unless you've done the same thing previously.
      */
     public static FeedTx getFeedTx(String feedId) {
         return new FeedTx(getRawFeedTx(feedId));
@@ -221,7 +221,7 @@ public class VersionedDataStore {
         }
     }
 
-    /** get the directory in which to store a snapshot */
+    /** retrieveById the directory in which to store a snapshot */
     public static DB getSnapshotDb (String feedId, int version, boolean readOnly) {
         File thisSnapshotDir = getSnapshotDir(feedId, version);
         thisSnapshotDir.mkdirs();
@@ -241,7 +241,7 @@ public class VersionedDataStore {
         return maker.make();
     }
 
-    /** get the directory in which a snapshot is stored */
+    /** retrieveById the directory in which a snapshot is stored */
     public static File getSnapshotDir (String feedId, int version) {
         File agencyDir = new File(dataDirectory, feedId);
         File snapshotsDir = new File(agencyDir, "snapshots");
@@ -270,7 +270,7 @@ public class VersionedDataStore {
         /** has this transaction been closed? */
         boolean closed = false;
 
-        /** Convenience function to get a map */
+        /** Convenience function to retrieveById a map */
         protected final <T1, T2> BTreeMap<T1, T2> getMap (String name) {
             return tx.createTreeMap(name)
                     // use java serialization to allow for schema upgrades
@@ -279,7 +279,7 @@ public class VersionedDataStore {
         }
 
         /**
-         * Convenience function to get a set. These are used as indices so they use the default serialization;
+         * Convenience function to retrieveById a set. These are used as indices so they use the default serialization;
          * if we make a schema change we drop and recreate them.
          */
         protected final <T> NavigableSet <T> getSet (String name) {
