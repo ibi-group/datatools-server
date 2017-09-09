@@ -35,7 +35,7 @@ import static org.bson.codecs.configuration.CodecRegistries.fromRegistries;
 /**
  * Created by landon on 9/5/17.
  */
-public class Persistence {
+public class Persistence<T> {
     private static final Logger LOG = LoggerFactory.getLogger(Persistence.class);
 
     private static MongoClient mongo;
@@ -50,6 +50,7 @@ public class Persistence {
     public static MongoCollection<Note> notes;
     public static MongoCollection<Organization> organizations;
     public static MongoCollection<ExternalFeedSourceProperty> externalFeedSourceProperties;
+    private static CodecRegistry pojoCodecRegistry;
 
     public static void initialize () {
         PojoCodecProvider pojoCodecProvider = PojoCodecProvider.builder()
@@ -62,7 +63,7 @@ public class Persistence {
                 new URLCodec(),
                 new Rectangle2DCodec(),
                 new LocalDateCodec());
-        CodecRegistry pojoCodecRegistry = fromRegistries(MongoClient.getDefaultCodecRegistry(),
+        pojoCodecRegistry = fromRegistries(MongoClient.getDefaultCodecRegistry(),
                 customRegistry,
                 fromProviders(pojoCodecProvider));
 
@@ -90,15 +91,34 @@ public class Persistence {
         organizations = mongoDatabase.getCollection(Organization.class.getSimpleName(), Organization.class);
         externalFeedSourceProperties = mongoDatabase.getCollection(ExternalFeedSourceProperty.class.getSimpleName(), ExternalFeedSourceProperty.class);
     }
-
-//    public T getById (String id) {
-//        return
-//    }
-
-    public static Project createProject(Project project, Document updateDocument) {
-        // TODO!!!! fix all of this, use updateProject
-//        return Persistence.projects.findOneAndUpdate(eq(), new Document("$set", updateDocument));
-        return project;
+    
+    /**
+     * when performing an update (in our case with findOneAndUpdate) the Document of updates
+     * may contain extra fields beyond those in the Java model class, or values of a type that
+     * do not match the Java model class. The update will nonetheless add these extra fields
+     * and wrong-typed values to MongoDB, which is not shocking considering its schemaless
+     * nature. Of course a retrieved Java object will not contain these extra values
+     * because it simply doesn't have a field to hold the values. If a value of the wrong
+     * type has been stored in the database, deserialization will just fail with
+     * "org.bson.codecs.configuration.CodecConfigurationException: Failed to decode X."
+     *
+     * This means clients have the potential to stuff any amount of garbage in our MongoDB
+     * and trigger deserialization errors during application execution unless we perform
+     * type checking and clean the incoming documents. There is probably a configuration
+     * option to force schema adherence, which would prevent long-term compatibility but
+     * would give us more safety in the short term.
+     *
+     * PojoCodecImpl does not seem to have any hooks to throw errors when unexpected fields
+     * are encountered (see else clause of
+     * org.bson.codecs.pojo.PojoCodecImpl#decodePropertyModel). We could make our own
+     * function to imitate the PropertyModel checking and fail early when unexpected fields
+     * are present in a document.
+     *
+     */
+    public static Project createProject(Document updateDocument) {
+        Project project = new Project();
+        Persistence.projects.insertOne(project);
+        return updateProject(project.id, updateDocument);
     }
 
     public static Project updateProject(String id, Document updateDocument) {
@@ -123,6 +143,16 @@ public class Persistence {
             LOG.warn("Could not delete project: {}", id);
             return false;
         }
+    }
+
+    public static FeedSource createFeedSource(Document updateDocument) {
+        FeedSource feedSource = new FeedSource();
+        Persistence.feedSources.insertOne(feedSource);
+        return updateFeedSource(feedSource.id, updateDocument);
+    }
+
+    public static FeedSource updateFeedSource(String id, Document updateDocument) {
+        return Persistence.feedSources.findOneAndUpdate(eq(id), new Document("$set", updateDocument));
     }
 
     public static FeedSource getFeedSourceById(String id) {

@@ -77,16 +77,8 @@ public class ProjectController {
     }
 
     private static Project createProject(Request req, Response res) {
-        Project p = new Project();
         // TODO: use Persistence createProject
-        Persistence.updateProject(p.id, Document.parse(req.body()));
-        try {
-            applyJsonToProject(p, req.body());
-            p.save();
-        } catch (Exception e) {
-            e.printStackTrace();
-            halt(400, SparkUtils.formatJSON("Error saving new retrieveProject"));
-        }
+        Project p = Persistence.createProject(Document.parse(req.body()));
         return p;
     }
 
