@@ -40,7 +40,7 @@ public class FeedInfoController {
             gtx = VersionedDataStore.getGlobalTx();
             if (!gtx.feeds.containsKey(id)) {
                 // create new EditorFeed if id exists in manager
-                if (Persistence.getFeedSourceById(id) != null) {
+                if (Persistence.feedSources.getById(id) != null) {
                     EditorFeed fs = new EditorFeed(id);
                     gtx.feeds.put(fs.id, fs);
                     gtx.commit();

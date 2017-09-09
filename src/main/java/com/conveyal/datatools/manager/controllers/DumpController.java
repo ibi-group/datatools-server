@@ -52,14 +52,14 @@ public class DumpController {
             new JsonManager<DatabaseState>(DatabaseState.class, JsonViews.DataDump.class);
 
     public static DatabaseState dump (Request req, Response res) throws JsonProcessingException {
+        // FIXME this appears to be capable of using unbounded amounts of memory (it copies an entire database into memory)
         DatabaseState db = new DatabaseState();
-        db.projects = Persistence.getProjects();
-        db.feedSources = Persistence.getFeedSources();
-        db.feedVersions = FeedVersion.retrieveAll();
-        db.notes = Note.retrieveAll();
-        db.deployments = Deployment.retrieveAll();
-        db.externalProperties = ExternalFeedSourceProperty.retrieveAll();
-
+        db.projects = Persistence.projects.getAll();
+        db.feedSources = Persistence.feedSources.getAll();
+        db.feedVersions = Persistence.feedVersions.getAll();
+        db.notes = Persistence.notes.getAll();
+        db.deployments = Persistence.deployments.getAll();
+        db.externalProperties = Persistence.externalFeedSourceProperties.getAll();
         return db;
     }
 
@@ -176,7 +176,7 @@ public class DumpController {
     private static void loadLegacyFeedSource (JsonNode node) throws Exception {
         String name = node.findValue("name").asText();
         String id = node.findValue("id").asText();
-        if (Persistence.getFeedSourceById(id) == null) {
+        if (Persistence.feedSources.getById(id) == null) {
             LOG.info("load legacy FeedSource " + name);
             FeedSource fs = new FeedSource();
             fs.id = id;

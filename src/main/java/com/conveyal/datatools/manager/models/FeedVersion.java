@@ -130,7 +130,7 @@ public class FeedVersion extends Model implements Serializable {
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("feedSource")
     public FeedSource feedSource() {
-        return Persistence.getFeedSourceById(feedSourceId);
+        return Persistence.feedSources.getById(feedSourceId);
     }
 
     @JsonIgnore

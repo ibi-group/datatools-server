@@ -50,7 +50,7 @@ public class NoteController {
 
         switch (type) {
             case FEED_SOURCE:
-                model = Persistence.getFeedSourceById(objectId);
+                model = Persistence.feedSources.getById(objectId);
                 break;
             case FEED_VERSION:
                 model = FeedVersion.retrieve(objectId);
@@ -98,7 +98,7 @@ public class NoteController {
 
         switch (type) {
             case FEED_SOURCE:
-                model = Persistence.getFeedSourceById(objectId);
+                model = Persistence.feedSources.getById(objectId);
                 break;
             case FEED_VERSION:
                 model = FeedVersion.retrieve(objectId);

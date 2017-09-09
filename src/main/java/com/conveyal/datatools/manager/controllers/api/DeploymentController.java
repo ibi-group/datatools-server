@@ -155,7 +155,7 @@ public class DeploymentController {
     public static Object createDeploymentFromFeedSource (Request req, Response res) throws JsonProcessingException {
         Auth0UserProfile userProfile = req.attribute("user");
         String id = req.params("id");
-        FeedSource s = Persistence.getFeedSourceById(id);
+        FeedSource s = Persistence.feedSources.getById(id);
 
         // three ways to have permission to do this:
         // 1) be an admin

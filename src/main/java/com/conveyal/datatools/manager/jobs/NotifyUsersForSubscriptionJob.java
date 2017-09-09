@@ -64,7 +64,7 @@ public class NotifyUsersForSubscriptionJob implements Runnable {
                     String[] subType = this.subscriptionType.split("-");
                     switch (subType[0]) {
                         case "feed":
-                            FeedSource fs = Persistence.getFeedSourceById(this.target);
+                            FeedSource fs = Persistence.feedSources.getById(this.target);
                             subject = DataManager.getConfigPropertyAsText("application.title")+ " Notification: " + this.subscriptionType.replace("-", " ") + " (" + fs.name + ")";
                             url = DataManager.getConfigPropertyAsText("application.public_url");
                             bodyAction = "</p><p>View <a href='" + url + "/feed/" + fs.id + "'>this feed</a>.</p>";

@@ -159,7 +159,7 @@ public class MtcFeedResource implements ExternalFeedResource {
         // sync w/ RTD
         RtdCarrier carrier = new RtdCarrier();
         String feedSourceId = property.feedSourceId;
-        FeedSource source = Persistence.getFeedSourceById(feedSourceId);
+        FeedSource source = Persistence.feedSources.getById(feedSourceId);
 
         carrier.AgencyId = ExternalFeedSourceProperty.find(source, this.getResourceType(), "AgencyId").value;
         carrier.AgencyPhone = ExternalFeedSourceProperty.find(source, this.getResourceType(), "AgencyPhone").value;

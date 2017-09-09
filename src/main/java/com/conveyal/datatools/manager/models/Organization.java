@@ -59,7 +59,7 @@ public class Organization extends Model implements Serializable {
 
     @JsonProperty("projects")
     public Collection<Project> projects() {
-        return Persistence.getProjects().stream().filter(p -> id.equals(p.organizationId)).collect(Collectors.toList());
+        return Persistence.projects.getAll().stream().filter(p -> id.equals(p.organizationId)).collect(Collectors.toList());
     }
 
     @JsonProperty("totalServiceSeconds")

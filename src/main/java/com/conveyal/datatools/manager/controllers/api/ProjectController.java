@@ -66,7 +66,7 @@ public class ProjectController {
     private static Collection<Project> getAllProjects(Request req, Response res) throws JsonProcessingException {
         Auth0UserProfile userProfile = req.attribute("user");
         // FIXME: move this filtering into database query
-        return Persistence.getProjects().stream()
+        return Persistence.projects.getAll().stream()
                 .filter(p -> req.pathInfo().matches(publicPath) || userProfile.hasProject(p.id, p.organizationId))
                 .map(p -> requestProject(req, p, "view"))
                 .collect(Collectors.toList());
@@ -77,9 +77,8 @@ public class ProjectController {
     }
 
     private static Project createProject(Request req, Response res) {
-        // TODO: use Persistence createProject
-        Project p = Persistence.createProject(Document.parse(req.body()));
-        return p;
+        // TODO error handling when request is bogus
+        return Persistence.projects.create(req.body());
     }
 
     private static Project updateProject(Request req, Response res) throws IOException {
@@ -214,7 +213,7 @@ public class ProjectController {
         if (id == null) {
             halt(SparkUtils.formatJSON("Please specify id param", 400));
         }
-        return requestProject(req, Persistence.getProjectById(id), action);
+        return requestProject(req, Persistence.projects.getById(id), action);
     }
     private static Project requestProject(Request req, Project p, String action) {
         Auth0UserProfile userProfile = req.attribute("user");

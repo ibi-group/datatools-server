@@ -117,7 +117,7 @@ public class Project extends Model {
 //        ArrayList<? extends FeedSource> ret = new ArrayList<>();
 
         // TODO: use index, but not important for now because we generally only have one FeedCollection
-        return Persistence.getFeedSources().stream()
+        return Persistence.feedSources.getAll().stream()
                 .filter(fs -> this.id.equals(fs.projectId))
                 .collect(Collectors.toList());
 

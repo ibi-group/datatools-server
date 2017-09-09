@@ -149,7 +149,7 @@ public class RouteController {
                     (route.status != oldRoute.status &&
                             (route.status.equals(StatusType.APPROVED) ||
                                     oldRoute.status.equals(StatusType.APPROVED)))) {
-                FeedSource feedSource = Persistence.getFeedSourceById(feedId);
+                FeedSource feedSource = Persistence.feedSources.getById(feedId);
                 Auth0UserProfile userProfile = req.attribute("user");
 
                 if (!userProfile.canApproveGTFS(feedSource.organizationId(), feedSource.projectId, feedId)) {

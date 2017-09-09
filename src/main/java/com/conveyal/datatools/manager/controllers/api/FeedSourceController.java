@@ -54,7 +54,7 @@ public class FeedSourceController {
         String userId = req.queryParams("userId");
 
         if (projectId != null) {
-            for (FeedSource source: Persistence.getFeedSources()) {
+            for (FeedSource source: Persistence.feedSources.getAll()) {
                 String orgId = source.organizationId();
                 if (
                     source != null && source.projectId != null && source.projectId.equals(projectId)
@@ -72,7 +72,7 @@ public class FeedSourceController {
             Auth0UserProfile user = getUserById(userId);
             if (user == null) return sources;
 
-            for (FeedSource source: Persistence.getFeedSources()) {
+            for (FeedSource source: Persistence.feedSources.getAll()) {
                 String orgId = source.organizationId();
                 if (
                     source != null && source.projectId != null &&
@@ -85,7 +85,7 @@ public class FeedSourceController {
         }
         // request feed sources that are public
         else {
-            for (FeedSource source: Persistence.getFeedSources()) {
+            for (FeedSource source: Persistence.feedSources.getAll()) {
                 String orgId = source.organizationId();
                 // if user is logged in and cannot view feed; skip source
                 if ((requestingUser != null && !requestingUser.canManageFeed(orgId, source.projectId, source.id) && !requestingUser.canViewFeed(orgId, source.projectId, source.id)))
@@ -102,9 +102,11 @@ public class FeedSourceController {
     }
 
     public static FeedSource createFeedSource(Request req, Response res) throws IOException {
-        FeedSource source = new FeedSource();
 
-        applyJsonToFeedSource(source, req.body());
+        FeedSource source = new FeedSource();
+        // FIXME permissions / retrieve / create ordering
+        //applyJsonToFeedSource(source, req.body());
+        //Persistence.feedSources.create(req.body());
 
         // check permissions before saving
         requestFeedSource(req, source, "create");
@@ -127,9 +129,7 @@ public class FeedSourceController {
         // TODO: it's wasteful to request the entire feed source here, need to factor out permissions checks
         requestFeedSourceById(req, "manage");
 
-        Document updateDocument = Document.parse(req.body());
-
-        FeedSource source = Persistence.feedSources.findOneAndUpdate(eq(feedSourceId), new Document("$set", updateDocument));
+        FeedSource source = Persistence.feedSources.update(feedSourceId, req.body());
 
         // notify users after successful save
         NotifyUsersForSubscriptionJob notifyFeedJob = new NotifyUsersForSubscriptionJob("feed-updated", source.id, "Feed property updated for " + source.name);
@@ -139,64 +139,6 @@ public class FeedSourceController {
         DataManager.lightExecutor.execute(notifyProjectJob);
 
         return source;
-    }
-
-    public static void applyJsonToFeedSource(FeedSource source, String json) throws IOException {
-
-        JsonNode node = mapper.readTree(json);
-        Iterator<Map.Entry<String, JsonNode>> fieldsIter = node.fields();
-        while (fieldsIter.hasNext()) {
-            Map.Entry<String, JsonNode> entry = fieldsIter.next();
-
-            Persistence.feedSources.updateOne(eq(source.id), set(entry.getKey(), entry.getValue()));
-
-//            if(entry.getKey().equals("projectId")) {
-//                System.out.println("setting fs retrieveProject");
-//                Project project = Project.retrieve(entry.getValue().asText());
-//                source.projectId = project != null ? project.id : null;
-//            }
-//
-//            if(entry.getKey().equals("name")) {
-//                source.name = entry.getValue().asText();
-//            }
-//
-//            if(entry.getKey().equals("url")) {
-//                String url = entry.getValue().asText();
-//                try {
-//                    source.url = entry.getValue().isNull() ? null : new URL(url);
-//                    // reset the last fetched date so it can be fetched again
-//                    source.lastFetched = null;
-//                } catch (MalformedURLException e) {
-//                    halt(400, SparkUtils.formatJSON("URL '" + url + "' not valid.", 400));
-//                }
-//            }
-//
-//            if(entry.getKey().equals("retrievalMethod")) {
-//                source.retrievalMethod = FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.valueOf(entry.getValue().asText());
-//            }
-//
-//            if(entry.getKey().equals("snapshotVersion")) {
-//                source.snapshotVersion = entry.getValue().asText();
-//            }
-//
-//            if(entry.getKey().equals("isPublic")) {
-//                source.isPublic = entry.getValue().asBoolean();
-//                // TODO: set AWS GTFS zips to public/private after "isPublic" change
-//                if (DataManager.useS3) {
-//                    if (source.isPublic) {
-//                        source.makePublic();
-//                    }
-//                    else {
-//                        source.makePrivate();
-//                    }
-//                }
-//            }
-//
-//            if(entry.getKey().equals("deployable")) {
-//                source.deployable = entry.getValue().asBoolean();
-//            }
-
-        }
     }
 
     public static FeedSource updateExternalFeedResource(Request req, Response res) throws IOException {
@@ -232,7 +174,7 @@ public class FeedSourceController {
         FeedSource source = requestFeedSourceById(req, "manage");
 
         try {
-            Persistence.removeFeedSource(source.id);
+            Persistence.feedSources.removeById(source.id);
             return source;
         } catch (Exception e) {
             e.printStackTrace();
@@ -274,7 +216,7 @@ public class FeedSourceController {
         if (id == null) {
             halt(400, SparkUtils.formatJSON("Please specify id param", 400));
         }
-        return requestFeedSource(req, Persistence.getFeedSourceById(id), action);
+        return requestFeedSource(req, Persistence.feedSources.getById(id), action);
     }
 
     public static FeedSource requestFeedSource(Request req, FeedSource s, String action) {

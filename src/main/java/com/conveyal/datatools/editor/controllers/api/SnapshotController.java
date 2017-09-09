@@ -78,7 +78,7 @@ public class SnapshotController {
                 }
                 else {
                     // check view permissions
-                    FeedSourceController.requestFeedSource(req, Persistence.getFeedSourceById(feedId), "view");
+                    FeedSourceController.requestFeedSource(req, Persistence.feedSources.getById(feedId), "view");
                     return gtx.snapshots.subMap(new Tuple2(feedId, null), new Tuple2(feedId, Fun.HI)).values()
                             .stream()
                             .collect(Collectors.toList());
@@ -276,7 +276,7 @@ public class SnapshotController {
             key = "snapshots/" + filePrefix + ".zip";
 
             // ensure user has permission to download snapshot, otherwise halt them
-            FeedSourceController.requestFeedSource(req, Persistence.getFeedSourceById(snapshot.feedId), "view");
+            FeedSourceController.requestFeedSource(req, Persistence.feedSources.getById(snapshot.feedId), "view");
         } finally {
             gtx.rollbackIfOpen();
         }

@@ -88,7 +88,7 @@ public class FeedVersionController  {
         if (id == null) {
             halt(SparkUtils.formatJSON("Please specify feedsourceId param", 400));
         }
-        return requestFeedSource(req, Persistence.getFeedSourceById(id), action);
+        return requestFeedSource(req, Persistence.feedSources.getById(id), action);
     }
 
     /**

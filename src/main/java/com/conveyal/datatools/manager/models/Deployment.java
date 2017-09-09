@@ -147,7 +147,7 @@ public class Deployment extends Model implements Serializable {
         ArrayList<FeedSource> ret = new ArrayList<FeedSource>(invalidFeedSourceIds.size());
 
         for (String id : invalidFeedSourceIds) {
-            ret.add(Persistence.getFeedSourceById(id));
+            ret.add(Persistence.feedSources.getById(id));
         }
 
         return ret;

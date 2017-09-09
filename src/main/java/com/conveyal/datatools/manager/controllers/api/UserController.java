@@ -215,7 +215,7 @@ public class UserController {
                         // TODO: add all activity types
                         case "feed-commented-on":
                             for (String targetId : sub.getTarget()) {
-                                FeedSource fs = Persistence.getFeedSourceById(targetId);
+                                FeedSource fs = Persistence.feedSources.getById(targetId);
                                 if(fs == null) continue;
                                 for (Note note : fs.retrieveNotes()) {
                                     // TODO: Check if actually recent
