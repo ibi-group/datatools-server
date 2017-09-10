@@ -49,8 +49,7 @@ public class TransitLandFeedResource implements ExternalFeedResource {
         String locationFilter = "";
         boolean nextPage = true;
 
-        if (project.north != null && project.south != null && project.east != null && project.west != null)
-            locationFilter = "&bbox=" + project.west + "," + + project.south + "," + project.east + "," + project.north;
+        locationFilter = "&bbox=" + project.west + "," + + project.south + "," + project.east + "," + project.north;
 
         do {
             offset = perPage * count;

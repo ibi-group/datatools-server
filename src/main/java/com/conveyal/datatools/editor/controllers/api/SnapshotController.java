@@ -78,7 +78,7 @@ public class SnapshotController {
                 }
                 else {
                     // check view permissions
-                    FeedSourceController.requestFeedSource(req, Persistence.feedSources.getById(feedId), "view");
+                    FeedSourceController.checkFeedSourcePermissions(req, Persistence.feedSources.getById(feedId), "view");
                     return gtx.snapshots.subMap(new Tuple2(feedId, null), new Tuple2(feedId, Fun.HI)).values()
                             .stream()
                             .collect(Collectors.toList());
@@ -149,9 +149,9 @@ public class SnapshotController {
             halt(404, SparkUtils.formatJSON("Could not find FeedVersion with ID " + feedVersionId, 404));
         }
 
-        FeedSource feedSource = feedVersion.feedSource();
+        FeedSource feedSource = feedVersion.parentFeedSource();
         // check user's permission to import snapshot
-        FeedSourceController.requestFeedSource(req, feedSource, "edit");
+        FeedSourceController.checkFeedSourcePermissions(req, feedSource, "edit");
 
         ProcessGtfsSnapshotMerge processGtfsSnapshotMergeJob =
                 new ProcessGtfsSnapshotMerge(feedVersion, userProfile.getUser_id());
@@ -276,7 +276,7 @@ public class SnapshotController {
             key = "snapshots/" + filePrefix + ".zip";
 
             // ensure user has permission to download snapshot, otherwise halt them
-            FeedSourceController.requestFeedSource(req, Persistence.feedSources.getById(snapshot.feedId), "view");
+            FeedSourceController.checkFeedSourcePermissions(req, Persistence.feedSources.getById(snapshot.feedId), "view");
         } finally {
             gtx.rollbackIfOpen();
         }

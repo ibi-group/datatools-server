@@ -231,7 +231,7 @@ public class DeploymentController {
                         halt(404, SparkUtils.formatJSON("Version not found", 404));
                     }
                     // check that the version belongs to the correct retrieveProject
-                    if (v.feedSource().projectId.equals(d.projectId)) {
+                    if (v.parentFeedSource().projectId.equals(d.projectId)) {
                         versionsToInsert.add(v);
                     }
                 }

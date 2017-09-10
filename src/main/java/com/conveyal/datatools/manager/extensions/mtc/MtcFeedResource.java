@@ -193,7 +193,7 @@ public class MtcFeedResource implements ExternalFeedResource {
         if(s3Bucket == null) return;
 
         ExternalFeedSourceProperty agencyIdProp =
-                ExternalFeedSourceProperty.find(feedVersion.feedSource(), this.getResourceType(), "AgencyId");
+                ExternalFeedSourceProperty.find(feedVersion.parentFeedSource(), this.getResourceType(), "AgencyId");
 
         if(agencyIdProp == null || agencyIdProp.equals("null")) {
             LOG.error("Could not read AgencyId for FeedSource " + feedVersion.feedSourceId);

@@ -422,7 +422,7 @@ public class Deployment extends Model implements Serializable {
     public Rectangle2D retrieveProjectBounds() {
 
         Project proj = this.project();
-        if(proj.useCustomOsmBounds != null && proj.useCustomOsmBounds) {
+        if(proj.useCustomOsmBounds) {
             Rectangle2D bounds = new Rectangle2D.Double(proj.osmWest, proj.osmSouth,
                     proj.osmEast - proj.osmWest, proj.osmNorth - proj.osmSouth);
             return bounds;
@@ -533,7 +533,7 @@ public class Deployment extends Model implements Serializable {
 
         public SummarizedFeedVersion (FeedVersion version) {
             this.validationResult = new FeedValidationResultSummary(version.validationResult);
-            this.feedSource = version.feedSource();
+            this.feedSource = version.parentFeedSource();
             this.updated = version.updated;
             this.id = version.id;
             this.nextVersionId = version.nextVersionId();

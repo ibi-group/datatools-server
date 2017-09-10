@@ -58,6 +58,8 @@ import org.slf4j.LoggerFactory;
 
 import static com.conveyal.datatools.manager.models.Deployment.downloadOsmExtract;
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
+import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Updates.pull;
 import static spark.Spark.halt;
 
 /**
@@ -129,7 +131,7 @@ public class FeedVersion extends Model implements Serializable {
 
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("feedSource")
-    public FeedSource feedSource() {
+    public FeedSource parentFeedSource() {
         return Persistence.feedSources.getById(feedSourceId);
     }
 
@@ -169,7 +171,7 @@ public class FeedVersion extends Model implements Serializable {
     }
 
     public File newGtfsFile(InputStream inputStream) {
-        File file = feedStore.newFeed(id, inputStream, feedSource());
+        File file = feedStore.newFeed(id, inputStream, parentFeedSource());
         this.fileSize = file.length();
         this.save();
         LOG.info("New GTFS file saved: {}", id);
@@ -293,7 +295,7 @@ public class FeedVersion extends Model implements Serializable {
         // STEP 3. VALIDATE GTFS feed
         try {
             // make feed public... this shouldn't take very long
-            FeedSource fs = feedSource();
+            FeedSource fs = parentFeedSource();
             if (fs.isPublic) {
                 fs.makePublic();
             }
@@ -629,34 +631,41 @@ public class FeedVersion extends Model implements Serializable {
     }
 
     /**
-     * Delete this feed version.
+     * Delete this feed version and clean up, removing references to it and derived objects and state.
+     * Steps:
+     * If we are deleting the latest version, change the memoized "last fetched" value in the FeedSource.
+     * Delete the GTFS Zip file locally or on S3
+     * Remove this feed version from all Deployments [shouldn't we be updating the version rather than deleting it?]
+     * Remove the transport network file from the local disk
+     * Finally delete the version object from the database.
      */
     public void delete() {
         try {
             // reset lastModified if feed is latest version
-            System.out.println("deleting version");
+            LOG.info("Deleting feed version {}", this.id);
             String id = this.id;
-            FeedSource fs = feedSource();
+            FeedSource fs = parentFeedSource();
             FeedVersion latest = fs.retrieveLatest();
             if (latest != null && latest.id.equals(this.id)) {
-                fs.lastFetched = null;
-                fs.save();
+                // Even if there are previous feed versions, we set to null to allow re-fetching the version that was just deleted
+                // TODO instead, set it to the fetch time of the previous feed version
+                Persistence.feedSources.update(fs.id, "{lastFetched:null}");
             }
             feedStore.deleteFeed(id);
-
-            for (Deployment d : Deployment.retrieveAll()) {
-                d.feedVersionIds.remove(this.id);
-            }
-
+            // Remove this FeedVersion from all Deployments associated with this FeedVersion's FeedSource's Project
+            // TODO TEST THOROUGHLY THAT THIS UPDATE EXPRESSION IS CORRECT
+            // Although outright deleting the feedVersion from deployments could be surprising and shouldn't be done anyway.
+            Persistence.deployments.getMongoCollection().updateMany(eq("projectId", this.parentFeedSource().projectId),
+                    pull("feedVersionIds", this.id));
             transportNetworkPath().delete();
-
-
-            versionStore.delete(this.id);
+            Persistence.feedVersions.removeById(this.id);
+            this.parentFeedSource().renumberFeedVersions();
             LOG.info("Version {} deleted", id);
         } catch (Exception e) {
             LOG.warn("Error deleting version", e);
         }
     }
+
     @JsonIgnore
     private String r5Path() {
         // r5 networks MUST be stored in separate directories (in this case under feed source ID

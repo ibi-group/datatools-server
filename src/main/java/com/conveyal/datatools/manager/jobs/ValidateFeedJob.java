@@ -17,7 +17,7 @@ public class ValidateFeedJob extends MonitorableJob {
     public Status status;
 
     public ValidateFeedJob(FeedVersion version, String owner) {
-        super(owner, "Validating Feed for " + version.feedSource().name, JobType.VALIDATE_FEED);
+        super(owner, "Validating Feed for " + version.parentFeedSource().name, JobType.VALIDATE_FEED);
         feedVersion = version;
         status = new Status();
         status.message = "Waiting to begin validation...";

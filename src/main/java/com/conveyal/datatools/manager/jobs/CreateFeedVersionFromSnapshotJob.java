@@ -24,7 +24,7 @@ public class CreateFeedVersionFromSnapshotJob  extends MonitorableJob {
     private Status status;
 
     public CreateFeedVersionFromSnapshotJob (FeedVersion feedVersion, String snapshotId, String owner) {
-        super(owner, "Creating Feed Version from Snapshot for " + feedVersion.feedSource().name, JobType.CREATE_FEEDVERSION_FROM_SNAPSHOT);
+        super(owner, "Creating Feed Version from Snapshot for " + feedVersion.parentFeedSource().name, JobType.CREATE_FEEDVERSION_FROM_SNAPSHOT);
         this.feedVersion = feedVersion;
         this.snapshotId = snapshotId;
         this.status = new Status();

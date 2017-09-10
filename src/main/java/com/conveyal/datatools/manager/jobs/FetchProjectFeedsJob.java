@@ -18,6 +18,7 @@ import java.util.Map;
  */
 public class FetchProjectFeedsJob extends MonitorableJob {
     public static final Logger LOG = LoggerFactory.getLogger(FetchProjectFeedsJob.class);
+    // FIXME store only the project ID  not the entire project object - it might change
     private Project proj;
     public Map<String, FeedVersion> result;
     private Status status;

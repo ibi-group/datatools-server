@@ -16,7 +16,7 @@ public class BuildTransportNetworkJob extends MonitorableJob {
     public Status status;
 
     public BuildTransportNetworkJob (FeedVersion feedVersion, String owner) {
-        super(owner, "Building Transport Network for " + feedVersion.feedSource().name, JobType.BUILD_TRANSPORT_NETWORK);
+        super(owner, "Building Transport Network for " + feedVersion.parentFeedSource().name, JobType.BUILD_TRANSPORT_NETWORK);
         this.feedVersion = feedVersion;
         this.result = null;
         this.status = new Status();

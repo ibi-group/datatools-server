@@ -66,7 +66,7 @@ public class NoteController {
             s = (FeedSource) model;
         }
         else {
-            s = ((FeedVersion) model).feedSource();
+            s = ((FeedVersion) model).parentFeedSource();
         }
         String orgId = s.organizationId();
         // check if the user has permission
@@ -114,7 +114,7 @@ public class NoteController {
             s = (FeedSource) model;
         }
         else {
-            s = ((FeedVersion) model).feedSource();
+            s = ((FeedVersion) model).parentFeedSource();
         }
         String orgId = s.organizationId();
         // check if the user has permission

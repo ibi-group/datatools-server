@@ -10,6 +10,7 @@ import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.persistence.DataStore;
 import com.conveyal.datatools.manager.persistence.FeedStore;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -17,6 +18,8 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.google.common.eventbus.EventBus;
+import com.mongodb.client.model.Sorts;
+import org.bson.Document;
 import org.mapdb.Fun;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -36,6 +39,8 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
+import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Sorts.orderBy;
 import static spark.Spark.halt;
 
 /**
@@ -43,11 +48,10 @@ import static spark.Spark.halt;
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class FeedSource extends Model implements Cloneable {
+
     private static final long serialVersionUID = 1L;
 
     public static final Logger LOG = LoggerFactory.getLogger(FeedSource.class);
-
-//    private static DataStore<FeedSource> sourceStore = new DataStore<FeedSource>("feedsources");
 
     /**
      * The collection of which this feed is a part
@@ -309,13 +313,13 @@ public class FeedSource extends Model implements Cloneable {
      */
     @JsonIgnore
     public FeedVersion retrieveLatest() {
-        FeedVersion v = FeedVersion.versionStore.findFloor("version", new Fun.Tuple2(this.id, Fun.HI));
-
-        // the ID doesn't necessarily match, because it will fall back to the previous source in the store if there are no versions for this source
-        if (v == null || !v.feedSourceId.equals(this.id))
+        FeedVersion newestVersion = Persistence.feedVersions
+                .getOneFiltered(eq("feedSourceId", this.id), Sorts.descending("version"));
+        if (newestVersion == null) {
+            // Is this what happens if there are none?
             return null;
-
-        return v;
+        }
+        return newestVersion;
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -399,10 +403,7 @@ public class FeedSource extends Model implements Cloneable {
      */
     @JsonIgnore
     public Collection<FeedVersion> retrieveFeedVersions() {
-        // TODO Indices
-        return FeedVersion.retrieveAll().stream()
-                .filter(v -> this.id.equals(v.feedSourceId))
-                .collect(Collectors.toCollection(ArrayList::new));
+        return Persistence.feedVersions.getFiltered(eq("feedSourceId", this.id));
     }
 
     @JsonView(JsonViews.UserInterface.class)
@@ -468,6 +469,17 @@ public class FeedSource extends Model implements Cloneable {
             LOG.info("removing feed {} from s3 public folder", this);
             FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, sourceKey, CannedAccessControlList.AuthenticatedRead);
             FeedStore.s3Client.deleteObject(DataManager.feedBucket, publicKey);
+        }
+    }
+
+    // TODO don't number the versions just timestamp them
+    // FIXME for a brief moment feed version numbers are incoherent. Do this in a single operation or eliminate feed version numbers.
+    public void renumberFeedVersions() {
+        int i = 1;
+        for (FeedVersion feedVersion : Persistence.feedVersions.getMongoCollection().find(eq("feedSourceId", this.id)).sort(Sorts.ascending("updated"))) {
+            // Yes it's ugly to pass in a string, but we need to change the parameter type of update to take a Document.
+            Persistence.feedVersions.update(feedVersion.id, String.format("{version:%d}", i));
+            i += 1;
         }
     }
 

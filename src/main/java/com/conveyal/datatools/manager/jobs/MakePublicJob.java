@@ -16,7 +16,8 @@ import java.text.SimpleDateFormat;
 import java.util.Map;
 
 /**
- * Created by landon on 1/31/17.
+ * TODO: JAVADOC and RENAME: this seems to be a single purpose run() method but it's just called "public job".
+ *
  */
 public class MakePublicJob extends MonitorableJob {
     public Project project;

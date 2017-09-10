@@ -8,14 +8,12 @@ import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.JsonViews;
-import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mongodb.client.result.UpdateResult;
 import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,19 +21,17 @@ import spark.Request;
 import spark.Response;
 
 import java.io.IOException;
-import java.net.MalformedURLException;
-import java.net.URL;
 import java.util.*;
 
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithError;
 import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
 import static com.mongodb.client.model.Filters.eq;
-import static com.mongodb.client.model.Updates.set;
 import static spark.Spark.*;
 
 /**
- * Created by demory on 3/21/16.
+ * Handlers for HTTP API requests that affect FeedSources.
+ * These methods are mapped to API endpoints by Spark.
  */
-
 public class FeedSourceController {
     public static final Logger LOG = LoggerFactory.getLogger(FeedSourceController.class);
     public static JsonManager<FeedSource> json =
@@ -102,24 +98,24 @@ public class FeedSourceController {
     }
 
     public static FeedSource createFeedSource(Request req, Response res) throws IOException {
-
-        FeedSource source = new FeedSource();
-        // FIXME permissions / retrieve / create ordering
-        //applyJsonToFeedSource(source, req.body());
-        //Persistence.feedSources.create(req.body());
-
-        // check permissions before saving
-        requestFeedSource(req, source, "create");
-        if (source.projectId == null) {
-            halt(400, SparkUtils.formatJSON("Must provide retrieveProject ID for feed source", 400));
+        // TODO factor out getting user profile, project ID and organization ID and permissions
+        Auth0UserProfile userProfile = req.attribute("user");
+        Document newFeedSourceFields = Document.parse(req.body());
+        String projectId = newFeedSourceFields.getString("projectId");
+        String organizationId = newFeedSourceFields.getString("organizationId");
+        boolean allowedToCreateFeedSource = userProfile.canAdministerProject(projectId, organizationId);
+        if (allowedToCreateFeedSource) {
+            FeedSource newFeedSource = Persistence.feedSources.create(req.body());
+            // Communicate to any registered external "resources" (sites / databases) the fact that a feed source has been
+            // created in our database.
+            for (String resourceType : DataManager.feedResources.keySet()) {
+                DataManager.feedResources.get(resourceType).feedSourceCreated(newFeedSource, req.headers("Authorization"));
+            }
+            return newFeedSource;
+        } else {
+            haltWithError(400, "Must provide project ID for feed source");
+            return null;
         }
-        source.save();
-
-        for(String resourceType : DataManager.feedResources.keySet()) {
-            DataManager.feedResources.get(resourceType).feedSourceCreated(source, req.headers("Authorization"));
-        }
-
-        return source;
     }
 
     public static FeedSource updateFeedSource(Request req, Response res) throws IOException {
@@ -216,10 +212,10 @@ public class FeedSourceController {
         if (id == null) {
             halt(400, SparkUtils.formatJSON("Please specify id param", 400));
         }
-        return requestFeedSource(req, Persistence.feedSources.getById(id), action);
+        return checkFeedSourcePermissions(req, Persistence.feedSources.getById(id), action);
     }
 
-    public static FeedSource requestFeedSource(Request req, FeedSource s, String action) {
+    public static FeedSource checkFeedSourcePermissions(Request req, FeedSource s, String action) {
         Auth0UserProfile userProfile = req.attribute("user");
         Boolean publicFilter = Boolean.valueOf(req.queryParams("public")) ||
                 req.url().split("/api/*/")[1].startsWith("public");

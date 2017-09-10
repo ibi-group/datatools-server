@@ -49,7 +49,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
     }*/
 
     public ProcessGtfsSnapshotMerge (FeedVersion feedVersion, String owner) {
-        super(owner, "Creating snapshot for " + feedVersion.feedSource().name, JobType.PROCESS_SNAPSHOT);
+        super(owner, "Creating snapshot for " + feedVersion.parentFeedSource().name, JobType.PROCESS_SNAPSHOT);
         this.feedVersion = feedVersion;
         status = new Status();
         status.message = "Waiting to begin job...";

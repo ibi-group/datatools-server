@@ -106,16 +106,6 @@ public class DataManager {
                 getConfigPropertyAsText("GTFS_DATABASE_PASSWORD")
         );
 
-        // initialize map of auto fetched projects
-//        for (Project p : Persistence.getProjects()) {
-//            if (p.autoFetchFeeds != null && autoFetchMap.get(p.id) == null){
-//                if (p.autoFetchFeeds) {
-//                    ScheduledFuture scheduledFuture = ProjectController.scheduleAutoFeedFetch(p.id, p.autoFetchHour, p.autoFetchMinute, 1, p.defaultTimeZone);
-//                    autoFetchMap.put(p.id, scheduledFuture);
-//                }
-//            }
-//        }
-
         feedBucket = getConfigPropertyAsText("application.data.gtfs_s3_bucket");
         awsRole = getConfigPropertyAsText("application.data.aws_role");
         bucketFolder = FeedStore.s3Prefix;
@@ -125,7 +115,14 @@ public class DataManager {
         LOG.info("Initialized gtfs-api at localhost:port{}", API_PREFIX);
 
         Persistence.initialize();
-//        persistence = new Persistence();
+
+        // initialize map of auto fetched projects
+        for (Project project : Persistence.projects.getAll()) {
+            if (project.autoFetchFeeds) {
+                ScheduledFuture scheduledFuture = ProjectController.scheduleAutoFeedFetch(project, 1);
+                autoFetchMap.put(project.id, scheduledFuture);
+            }
+        }
 
         registerRoutes();
 

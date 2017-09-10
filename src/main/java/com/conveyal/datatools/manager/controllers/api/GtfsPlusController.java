@@ -241,7 +241,7 @@ public class GtfsPlusController {
             halt(500, "Error merging GTFS+ data with GTFS");
         }
 
-        FeedVersion newFeedVersion = new FeedVersion(feedVersion.feedSource());
+        FeedVersion newFeedVersion = new FeedVersion(feedVersion.parentFeedSource());
 
         try {
             newFeedVersion.newGtfsFile(new FileInputStream(newFeed));
