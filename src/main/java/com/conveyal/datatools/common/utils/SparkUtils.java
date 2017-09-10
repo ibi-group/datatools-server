@@ -1,5 +1,6 @@
 package com.conveyal.datatools.common.utils;
 
+import spark.HaltException;
 import spark.Response;
 
 import java.io.BufferedInputStream;
@@ -42,6 +43,10 @@ public class SparkUtils {
     public static String formatJSON(String message, int code, Exception e) {
         String detail = e != null ? e.getMessage() : null;
         return String.format("{\"result\":\"ERR\",\"message\":\"%s\",\"code\":%d, \"detail\":\"%s\"}", message, code, detail);
+    }
+
+    public static void haltWithError (int errorCode, String message) throws HaltException {
+        halt(errorCode, formatJSON(message, errorCode));
     }
 
     public static String formatJSON(String message, int code) {
