@@ -35,7 +35,7 @@ import static org.bson.codecs.configuration.CodecRegistries.fromRegistries;
 /**
  * Groups together a bunch of TypedPersistence abstractions around MongoDB Collections.
  */
-public class Persistence<T> {
+public class Persistence {
 
     private static final Logger LOG = LoggerFactory.getLogger(Persistence.class);
 
