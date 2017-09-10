@@ -5,6 +5,7 @@ import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.result.DeleteResult;
 import org.bson.Document;
+import org.bson.conversions.Bson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,7 +43,7 @@ public class TypedPersistence<T extends Model> {
 
     private static final Logger LOG = LoggerFactory.getLogger(TypedPersistence.class);
 
-    MongoCollection<T> mongoCollection;
+    private MongoCollection<T> mongoCollection;
     private Constructor<T> noArgConstructor;
 
     public TypedPersistence(MongoDatabase mongoDatabase, Class<T> clazz) {
@@ -67,6 +68,14 @@ public class TypedPersistence<T extends Model> {
         return update(item.id, updateJson);
     }
 
+    /**
+     * TODO maybe merge this with the other create implementation above, passing in the base object and the updates.
+     */
+    public void create (T newObject) {
+        // What happens if an object already exists with the same ID?
+        mongoCollection.insertOne(newObject);
+    }
+
     public T update (String id, String updateJson) {
         Document updateDocument = Document.parse(updateJson);
         return mongoCollection.findOneAndUpdate(eq(id), new Document("$set", updateDocument));
@@ -82,6 +91,34 @@ public class TypedPersistence<T extends Model> {
      */
     public List<T> getAll () {
         return mongoCollection.find().into(new ArrayList<>());
+    }
+
+    /**
+     * Get all objects satisfying the supplied Mongo filter.
+     * This ties our persistence directly to Mongo for now but is expedient.
+     * We should really have a bit more abstraction here.
+     */
+    public List<T> getFiltered (Bson filter) {
+        return mongoCollection.find(filter).into(new ArrayList<T>());
+    }
+
+    /**
+     * Expose the internal MongoCollection to the caller.
+     * This ties our persistence directly to Mongo for now but is expedient.
+     * We will write all the queries we need in the calling methods, then make an abstraction here on TypedPersistence
+     * once we see everything we need to support.
+     */
+    public MongoCollection<T> getMongoCollection () {
+        return this.mongoCollection;
+    }
+
+    /**
+     * Get all objects satisfying the supplied Mongo filter.
+     * This ties our persistence directly to Mongo for now but is expedient.
+     * We should really have a bit more abstraction here.
+     */
+    public T getOneFiltered (Bson filter, Bson sortBy) {
+        return mongoCollection.find(filter).sort(sortBy).first();
     }
 
     public boolean removeById (String id) {
