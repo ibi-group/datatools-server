@@ -24,13 +24,12 @@ import java.util.stream.Collectors;
 public class Project extends Model {
     private static final long serialVersionUID = 1L;
 
-//    private static DataStore<Project> projectStore = new DataStore<>("projects");
-
     /** The name of this feed collection, e.g. NYSDOT. */
     public String name;
 
-    public Boolean useCustomOsmBounds;
+    public boolean useCustomOsmBounds;
 
+    // TODO either use primitives or a reference to a "bounds" object containing primitives
     public Double osmNorth, osmSouth, osmEast, osmWest;
 
     public OtpBuildConfig buildConfig;
@@ -54,15 +53,13 @@ public class Project extends Model {
 
     public String defaultLanguage;
 
-    //@JsonView
     public transient Collection<FeedSource> feedSources;
 
-    public Double defaultLocationLat, defaultLocationLon;
-    public Boolean autoFetchFeeds;
+    public double defaultLocationLat, defaultLocationLon;
+    public boolean autoFetchFeeds;
     public int autoFetchHour, autoFetchMinute;
 
-//    public Map<String, Double> boundingBox = new HashMap<>();
-
+    // TODO either use primitives or a reference to a "bounds" object containing primitives
     public Double north, south, east, west;
 
     public Project() {
@@ -95,16 +92,6 @@ public class Project extends Model {
 //            projectStore.saveWithoutCommit(this.id, this);
     }
 
-    public void delete() {
-        for (FeedSource s : retrieveProjectFeedSources()) {
-            s.delete();
-        }
-        for (Deployment d : retrieveDeployments()) {
-            d.delete();
-        }
-
-//        projectStore.delete(this.id);
-    }
 
     public static void commit () {
 //        projectStore.commit();
