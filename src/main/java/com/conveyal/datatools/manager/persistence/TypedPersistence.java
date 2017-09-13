@@ -45,9 +45,11 @@ public class TypedPersistence<T extends Model> {
 
     private MongoCollection<T> mongoCollection;
     private Constructor<T> noArgConstructor;
+    private String collectionName;
 
     public TypedPersistence(MongoDatabase mongoDatabase, Class<T> clazz) {
         mongoCollection = mongoDatabase.getCollection(clazz.getSimpleName(), clazz);
+        collectionName = clazz.getSimpleName();
         try {
             noArgConstructor = clazz.getConstructor(new Class<?>[0]);
         } catch (NoSuchMethodException ex) {
@@ -118,18 +120,33 @@ public class TypedPersistence<T extends Model> {
      * We should really have a bit more abstraction here.
      */
     public T getOneFiltered (Bson filter, Bson sortBy) {
-        return mongoCollection.find(filter).sort(sortBy).first();
+        if (sortBy != null)
+            return mongoCollection.find(filter).sort(sortBy).first();
+        else
+            return mongoCollection.find(filter).first();
     }
 
     public boolean removeById (String id) {
         DeleteResult result = mongoCollection.deleteOne(eq(id));
         if (result.getDeletedCount() == 1) {
-            LOG.info("Deleted object id={} type={}", id, mongoCollection.getDocumentClass().getSimpleName());
+            LOG.info("Deleted object id={} type={}", id, collectionName);
             return true;
         } else if (result.getDeletedCount() > 1) {
             LOG.error("Deleted more than one object for ID {}", id);
         } else {
             LOG.error("Could not delete project: {}", id);
+        }
+        return false;
+    }
+
+    public boolean removeFiltered (Bson filter) {
+        DeleteResult result = mongoCollection.deleteMany(filter);
+        long count = result.getDeletedCount();
+        if (count >= 1) {
+            LOG.info("Deleted {} objects of type {}", count, collectionName);
+            return true;
+        } else {
+            LOG.warn("No objects to delete for filter");
         }
         return false;
     }
