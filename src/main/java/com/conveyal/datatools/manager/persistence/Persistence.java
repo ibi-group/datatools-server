@@ -74,15 +74,16 @@ public class Persistence {
                 .codecRegistry(pojoCodecRegistry);
 
         if (DataManager.hasConfigProperty("mongo_uri")) {
-            mongo = new MongoClient(new MongoClientURI(DataManager.getConfigPropertyAsText("mongo_uri"), builder));
+            mongo = new MongoClient(new MongoClientURI(DataManager.getConfigPropertyAsText("MONGO_URI"), builder));
             LOG.info("Connecting to remote MongoDB instance");
         } else {
             LOG.info("Connecting to local MongoDB instance");
             mongo = new MongoClient("localhost", builder.build());
         }
 
-        // TODO: change database name
-        mongoDatabase = mongo.getDatabase("nest");
+        mongoDatabase = mongo.getDatabase(DataManager.getConfigPropertyAsText("MONGO_DB_NAME"));
+
+        // TODO: Set up indexes on feed versions by feedSourceId, version #?
 
         feedSources = new TypedPersistence(mongoDatabase, FeedSource.class);
         projects = new TypedPersistence(mongoDatabase, Project.class);
