@@ -13,6 +13,7 @@ import com.conveyal.datatools.manager.models.OtpBuildConfig;
 import com.conveyal.datatools.manager.models.OtpRouterConfig;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -349,6 +350,9 @@ public class ProjectController {
         }
         out.close();
 
+        // FIXME: quick fix to store the file on s3 for NYSDOT
+        FeedStore.s3Client.putObject(DataManager.feedBucket, p.id + "merged.zip", mergedFile);
+
         // Deliver zipfile
         res.raw().setContentType("application/octet-stream");
         res.raw().setHeader("Content-Disposition", "attachment; filename=" + mergedFile.getName());
@@ -385,8 +389,6 @@ public class ProjectController {
         String tableName = tableNode.get("name").asText();
         ByteArrayOutputStream tableOut = new ByteArrayOutputStream();
 
-//        int feedIndex = 0;
-
         ArrayNode fieldsNode = (ArrayNode) tableNode.get("fields");
         List<String> headers = new ArrayList<>();
         for (int i = 0; i < fieldsNode.size(); i++) {
@@ -422,7 +424,6 @@ public class ProjectController {
 
                         List<String> fieldList = Arrays.asList(fields);
 
-//                    int rowIndex = 0;
 
                         // iterate over rows in table
                         while((line = in.readLine()) != null) {
@@ -464,11 +465,9 @@ public class ProjectController {
                             // write line to table (plus new line char)
                             tableOut.write(newLine.getBytes());
                             tableOut.write("\n".getBytes());
-//                        rowIndex++;
                         }
                     }
                 }
-//            feedIndex++;
             }
         } catch (IOException e) {
             e.printStackTrace();
