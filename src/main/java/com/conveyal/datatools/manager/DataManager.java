@@ -13,11 +13,9 @@ import com.conveyal.datatools.manager.extensions.transitfeeds.TransitFeedsFeedRe
 import com.conveyal.datatools.manager.extensions.transitland.TransitLandFeedResource;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
-import com.conveyal.datatools.manager.persistence.TestThing;
 import com.conveyal.datatools.manager.utils.CorsFilter;
 import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.api.GraphQLMain;
@@ -25,7 +23,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.google.common.io.Resources;
-import com.mongodb.client.result.DeleteResult;
 import org.apache.commons.io.Charsets;
 import org.eclipse.jetty.util.ConcurrentHashSet;
 import org.slf4j.Logger;
@@ -46,7 +43,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 
-import static com.mongodb.client.model.Filters.eq;
 import static spark.Spark.*;
 
 public class DataManager {
