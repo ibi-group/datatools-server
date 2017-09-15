@@ -52,6 +52,7 @@ public class OrganizationController {
         return null;
     }
 
+    // TODO Fix organization controllers to properly write beginDate/endDate to database as DATE_TIME type, and not string (or some other)
     public static Organization createOrganization (Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         if (userProfile.canAdministerApplication()) {
