@@ -1,6 +1,5 @@
 package com.conveyal.datatools.manager.models;
 
-import com.conveyal.datatools.manager.persistence.DataStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -12,13 +11,19 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.mongodb.client.model.Filters.eq;
+
 /**
- * Created by landon on 1/30/17.
+ * An organization represents a group of users and projects (with contained feed sources). Currently, a user can only
+ * belong to one organization (although a future aim may be to extend this) and a project can only belong to one
+ * organization.
+ *
+ * Organizations are primarily intended to help organize multi-tenant instances where there needs to be separation
+ * between administrative control over users and projects.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class Organization extends Model implements Serializable {
     private static final long serialVersionUID = 1L;
-    private static DataStore<Organization> organizationStore = new DataStore<>("organizations");
 
     public String name;
     public String logoUrl;
@@ -30,43 +35,16 @@ public class Organization extends Model implements Serializable {
 
     public Organization () {}
 
-    public void save () {
-        save(true);
-    }
-
-    public void save(boolean commit) {
-        if (commit)
-            organizationStore.save(id, this);
-        else
-            organizationStore.saveWithoutCommit(id, this);
-    }
-
-    public static Organization retrieve(String id) {
-        return organizationStore.getById(id);
-    }
-
-    public static Collection<Organization> retrieveAll() {
-        return organizationStore.getAll();
-    }
-
-    public static void commit() {
-        organizationStore.commit();
-    }
-
-    public void delete() {
-        organizationStore.delete(this.id);
-    }
-
     @JsonProperty("projects")
     public Collection<Project> projects() {
-        return Persistence.projects.getAll().stream().filter(p -> id.equals(p.organizationId)).collect(Collectors.toList());
+        return Persistence.projects.getFiltered(eq("organizationId", id));
     }
 
     @JsonProperty("totalServiceSeconds")
     public long totalServiceSeconds() {
         return projects().stream()
-                .map(p -> p.retrieveProjectFeedSources())
-                .flatMap(p -> p.stream())
+                .map(Project::retrieveProjectFeedSources)
+                .flatMap(Collection::stream)
                 .filter(fs -> fs.latestValidation() != null)
                 .map(fs -> fs.latestValidation().avgDailyRevenueTime)
                 .mapToLong(Long::longValue)
@@ -76,7 +54,7 @@ public class Organization extends Model implements Serializable {
     /**
      * Created by landon on 1/30/17.
      */
-    public static enum Extension {
+    public enum Extension {
         GTFS_PLUS,
         DEPLOYMENT,
         VALIDATOR,
@@ -87,7 +65,7 @@ public class Organization extends Model implements Serializable {
     /**
      * Created by landon on 1/30/17.
      */
-    public static enum UsageTier {
+    public enum UsageTier {
         LOW,
         MEDIUM,
         HIGH

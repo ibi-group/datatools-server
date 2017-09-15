@@ -330,8 +330,7 @@ public class FeedVersionController  {
             halt(400, "Name parameter not specified");
         }
 
-        v.setName(name);
-        v.save();
+        Persistence.feedVersions.update(v.id, String.format("{name: %s}", name));
         return true;
     }
 
@@ -353,7 +352,7 @@ public class FeedVersionController  {
         } else {
             // when feeds are stored locally, single-use download token will still be used
             FeedDownloadToken token = new FeedDownloadToken(version);
-            token.save();
+            Persistence.tokens.create(token);
             return token;
         }
     }
@@ -370,22 +369,24 @@ public class FeedVersionController  {
         for(String resourceType : DataManager.feedResources.keySet()) {
             DataManager.feedResources.get(resourceType).feedVersionCreated(version, null);
         }
-        FeedSource fs = version.parentFeedSource();
-        fs.publishedVersionId = version.id;
-        fs.save();
+        // update published version ID on feed source
+        Persistence.feedSources.update(version.feedSourceId, String.format("{publishedVersionId: %s}", version.id));
         return version;
     }
 
     private static Object downloadFeedVersionWithToken (Request req, Response res) {
-        FeedDownloadToken token = FeedDownloadToken.retrieve(req.params("token"));
+        String tokenValue = req.params("token");
+        FeedDownloadToken token = Persistence.tokens.getById(tokenValue);
 
         if(token == null || !token.isValid()) {
             halt(400, "Feed download token not valid");
         }
 
+        // Fetch feed version to download.
         FeedVersion version = token.retrieveFeedVersion();
 
-        token.delete();
+        // Remove token so that it cannot be used again for feed download
+        Persistence.tokens.removeById(tokenValue);
 
         return downloadFile(version.retrieveGtfsFile(), version.id, res);
     }

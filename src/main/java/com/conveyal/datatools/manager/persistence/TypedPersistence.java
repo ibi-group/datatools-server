@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.persistence;
 
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Model;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
@@ -14,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Updates.set;
 
 /**
  * This provides some abstraction over the Mongo Java driver for storing a particular kind of POJO.
@@ -79,6 +81,16 @@ public class TypedPersistence<T extends Model> {
     }
 
     public T update (String id, String updateJson) {
+        Document updateDocument = Document.parse(updateJson);
+        return mongoCollection.findOneAndUpdate(eq(id), new Document("$set", updateDocument));
+    }
+
+    public T updateField (String id, String fieldName, Object value) {
+        return mongoCollection.findOneAndUpdate(eq(id), set(fieldName, value));
+    }
+
+    public T updateUser (String id, Auth0UserProfile profile) {
+        String updateJson = String.format("{userId: %s, userEmail: %s}", profile.getUser_id(), profile.getEmail());
         Document updateDocument = Document.parse(updateJson);
         return mongoCollection.findOneAndUpdate(eq(id), new Document("$set", updateDocument));
     }

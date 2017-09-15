@@ -1,6 +1,5 @@
 package com.conveyal.datatools.manager.models;
 
-import com.conveyal.datatools.manager.persistence.DataStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -9,6 +8,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.*;
 import java.util.stream.Collectors;
+
+import static com.mongodb.client.model.Filters.eq;
 
 /**
  * Represents a collection of feed sources that can be made into a deployment.
@@ -69,35 +70,6 @@ public class Project extends Model {
     }
 
     /**
-     * Get all of the FeedCollections that are defined
-     */
-    public static Collection<Project> retrieveAll() {
-//        return projectStore.getAll();
-        return null;
-    }
-
-    public static Project retrieve(String id) {
-//        return projectStore.getById(id);
-        return null;
-    }
-
-    public void save() {
-        save(true);
-    }
-
-    public void save(boolean commit) {
-//        if (commit)
-//            projectStore.save(this.id, this);
-//        else
-//            projectStore.saveWithoutCommit(this.id, this);
-    }
-
-
-    public static void commit () {
-//        projectStore.commit();
-    }
-
-    /**
      * Get all the feed sources for this feed collection
      */
     public Collection<FeedSource> retrieveProjectFeedSources() {
@@ -116,19 +88,17 @@ public class Project extends Model {
     }
 
     /**
-     * Get all the deployments for this feed collection
+     * Get all the deployments for this project.
      */
     public Collection<Deployment> retrieveDeployments() {
-        ArrayList<Deployment> ret = Deployment.retrieveAll().stream()
-                .filter(d -> this.id.equals(d.projectId))
-                .collect(Collectors.toCollection(ArrayList::new));
-
+        List<Deployment> ret = Persistence.deployments.getFiltered(eq("projectId", this.id));
         return ret;
     }
 
+    // TODO: Does this need to be returned with JSON
     public Organization retrieveOrganization() {
         if (organizationId != null) {
-            return Organization.retrieve(organizationId);
+            return Persistence.organizations.getById(organizationId);
         } else {
             return null;
         }

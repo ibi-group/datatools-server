@@ -36,7 +36,9 @@ public class ValidateFeedJob extends MonitorableJob {
         LOG.info("Running ValidateFeedJob for {}", feedVersion.id);
         feedVersion.storeUser(owner);
         feedVersion.validate(eventBus);
-        feedVersion.save();
+
+        // FIXME do we need to save feedVersion here (and in other places validate is called)?
+//        feedVersion.save();
         if (!status.error)
         synchronized (status) {
             if (!status.error) {

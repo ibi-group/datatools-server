@@ -16,6 +16,8 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.Date;
 
+import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Updates.push;
 import static spark.Spark.*;
 import static spark.Spark.get;
 import static spark.Spark.post;
@@ -53,7 +55,7 @@ public class NoteController {
                 model = Persistence.feedSources.getById(objectId);
                 break;
             case FEED_VERSION:
-                model = FeedVersion.retrieve(objectId);
+                model = Persistence.feedVersions.getById(objectId);
                 break;
             default:
                 // this shouldn't ever happen, but Java requires that every case be covered somehow so model can't be used uninitialized
@@ -94,50 +96,56 @@ public class NoteController {
             halt(400, "Please specify a valid type");
         }
 
-        Model model = null;
+        Model objectWithNote = null;
 
         switch (type) {
             case FEED_SOURCE:
-                model = Persistence.feedSources.getById(objectId);
+                objectWithNote = Persistence.feedSources.getById(objectId);
                 break;
             case FEED_VERSION:
-                model = FeedVersion.retrieve(objectId);
+                objectWithNote = Persistence.feedVersions.getById(objectId);
                 break;
             default:
                 // this shouldn't ever happen, but Java requires that every case be covered somehow so model can't be used uninitialized
                 halt(400, "Unsupported type for notes");
         }
 
-        FeedSource s;
+        FeedSource feedSource;
 
-        if (model instanceof FeedSource) {
-            s = (FeedSource) model;
+        if (objectWithNote instanceof FeedSource) {
+            feedSource = (FeedSource) objectWithNote;
+        } else {
+            feedSource = ((FeedVersion) objectWithNote).parentFeedSource();
         }
-        else {
-            s = ((FeedVersion) model).parentFeedSource();
-        }
-        String orgId = s.organizationId();
-        // check if the user has permission
-        if (userProfile.canAdministerProject(s.projectId, orgId) || userProfile.canViewFeed(orgId, s.projectId, s.id)) {
-            Note n = new Note();
-            n.storeUser(userProfile);
+        String orgId = feedSource.organizationId();
+        boolean allowedToCreate = userProfile.canAdministerProject(feedSource.projectId, orgId) ||
+                userProfile.canViewFeed(orgId, feedSource.projectId, feedSource.id);
+        if (allowedToCreate) {
+            Note note = new Note();
+            note.storeUser(userProfile);
 
             ObjectMapper mapper = new ObjectMapper();
             JsonNode node = mapper.readTree(req.body());
-            n.body = node.get("body").asText();
+            note.body = node.get("body").asText();
 
-            n.userEmail = userProfile.getEmail();
-            n.date = new Date();
-            n.type = type;
-            model.addNote(n);
-            n.save();
-            model.save();
+            note.userEmail = userProfile.getEmail();
+            note.date = new Date();
+            note.type = type;
+
+            Persistence.notes.create(note);
+
+            // TODO: figure out a cleaner way to handle this update
+            if (objectWithNote instanceof FeedSource) {
+                Persistence.feedSources.getMongoCollection().updateOne(eq(objectWithNote.id), push("noteIds", note.id));
+            } else {
+                Persistence.feedVersions.getMongoCollection().updateOne(eq(objectWithNote.id), push("noteIds", note.id));
+            }
 
             // send notifications
-            NotifyUsersForSubscriptionJob notifyFeedJob = new NotifyUsersForSubscriptionJob("feed-commented-on", s.id, n.userEmail + " commented on " + s.name + " at " + n.date.toString() + ":<blockquote>" + n.body + "</blockquote>");
+            NotifyUsersForSubscriptionJob notifyFeedJob = new NotifyUsersForSubscriptionJob("feed-commented-on", feedSource.id, note.userEmail + " commented on " + feedSource.name + " at " + note.date.toString() + ":<blockquote>" + note.body + "</blockquote>");
             DataManager.lightExecutor.execute(notifyFeedJob);
 
-            return n;
+            return note;
         }
         else {
             halt(401);

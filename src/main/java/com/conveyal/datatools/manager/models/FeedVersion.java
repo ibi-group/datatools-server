@@ -4,6 +4,7 @@ package com.conveyal.datatools.manager.models;
 import java.awt.geom.Rectangle2D;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -26,7 +27,6 @@ import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.model.S3Object;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
-import com.conveyal.datatools.manager.persistence.DataStore;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
@@ -34,7 +34,8 @@ import com.conveyal.gtfs.BaseGTFSCache;
 import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.GTFSFeed;
 import com.conveyal.gtfs.loader.Feed;
-import com.conveyal.gtfs.validator.json.LoadStatus;
+import com.conveyal.gtfs.loader.TableReader;
+import com.conveyal.gtfs.model.StopTime;
 import com.conveyal.r5.common.R5Version;
 import com.conveyal.r5.point_to_point.builder.TNBuilderConfig;
 import com.conveyal.r5.transit.TransportNetwork;
@@ -58,8 +59,10 @@ import org.slf4j.LoggerFactory;
 
 import static com.conveyal.datatools.manager.models.Deployment.downloadOsmExtract;
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
+import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 import static com.mongodb.client.model.Updates.pull;
+import static com.mongodb.client.model.Updates.set;
 import static spark.Spark.halt;
 
 /**
@@ -74,13 +77,8 @@ public class FeedVersion extends Model implements Serializable {
     private static ObjectMapper mapper = new ObjectMapper();
     public static final Logger LOG = LoggerFactory.getLogger(FeedVersion.class);
     private static final String validationSubdir = "validation/";
-    static DataStore<FeedVersion> versionStore = new DataStore<>("feedversions");
+    // FIXME: make this private?
     public static FeedStore feedStore = new FeedStore();
-
-    static {
-        // set up indexing on feed versions by feed source, indexed by <FeedSource ID, version>
-        versionStore.secondaryKey("version", (key, fv) -> new Tuple2(fv.feedSourceId, fv.version));
-    }
 
     /**
      * We generate IDs manually, but we need a bit of information to do so
@@ -137,7 +135,8 @@ public class FeedVersion extends Model implements Serializable {
 
     @JsonIgnore
     public FeedVersion previousVersion() {
-        return versionStore.find("version", new Tuple2(this.feedSourceId, this.version - 1));
+        return Persistence.feedVersions.getOneFiltered(and(
+                eq("version", this.version - 1), eq("feedSourceId", this.id)), null);
     }
 
     @JsonView(JsonViews.UserInterface.class)
@@ -147,9 +146,11 @@ public class FeedVersion extends Model implements Serializable {
         return p != null ? p.id : null;
     }
 
+    // TODO check that this filter is functional
     @JsonIgnore
     public FeedVersion nextVersion() {
-        return versionStore.find("version", new Tuple2(this.feedSourceId, this.version + 1));
+        return Persistence.feedVersions.getOneFiltered(and(
+                eq("version", this.version + 1), eq("feedSourceId", this.id)), null);
     }
 
     @JsonView(JsonViews.UserInterface.class)
@@ -172,8 +173,8 @@ public class FeedVersion extends Model implements Serializable {
 
     public File newGtfsFile(InputStream inputStream) {
         File file = feedStore.newFeed(id, inputStream, parentFeedSource());
-        this.fileSize = file.length();
-        this.save();
+        // FIXME: Should we be doing updates like this?
+        Persistence.feedVersions.update(id, String.format("{fileSize: %d}", file.length()));
         LOG.info("New GTFS file saved: {}", id);
         return file;
     }
@@ -186,7 +187,8 @@ public class FeedVersion extends Model implements Serializable {
         else {
             this.fileTimestamp = file.lastModified();
         }
-        this.save();
+        // FIXME
+        Persistence.feedVersions.update(id, String.format("{fileTimestamp: %d}", this.fileTimestamp));
         return file;
     }
     // FIXME return sql-loader Feed object.
@@ -236,14 +238,6 @@ public class FeedVersion extends Model implements Serializable {
         return format.format(this.updated);
     }
 
-    public static FeedVersion retrieve(String id) {
-        return versionStore.getById(id);
-    }
-
-    public static Collection<FeedVersion> retrieveAll() {
-        return versionStore.getAll();
-    }
-
     /**
      * Validate a version of GTFS. This method actually does a little more processing than just validation.
      * Because validate() is run on all GTFS feeds whether they're fetched, created from an editor snapshot,
@@ -266,7 +260,8 @@ public class FeedVersion extends Model implements Serializable {
 
             // Get SQL schema namespace for the feed version. This is needed for reconnecting with feeds
             // in the database.
-            namespace = GTFS.load(retrieveGtfsFile().getPath(), DataManager.GTFS_DATA_SOURCE);
+            String gtfsFilePath = retrieveGtfsFile().getPath();
+            namespace = GTFS.load(gtfsFilePath, DataManager.GTFS_DATA_SOURCE);
             LOG.info("Loaded GTFS into SQL {}", namespace);
         } catch (Exception e) {
             String errorString = String.format("Error loading GTFS feed for version: %s", this.id);
@@ -290,6 +285,11 @@ public class FeedVersion extends Model implements Serializable {
         }
 
         // STEP 2. Upload GTFS to S3
+        try {
+            FeedVersion.feedStore.uploadToS3(new FileInputStream(retrieveGtfsFile()), this.id, this.parentFeedSource());
+        } catch (FileNotFoundException e) {
+            e.printStackTrace();
+        }
         // TODO: load feed to s3 after loaded into gtfs database successfully
 
         // STEP 3. VALIDATE GTFS feed
@@ -312,7 +312,10 @@ public class FeedVersion extends Model implements Serializable {
             try {
                 // getAverageRevenueTime occurs in FeedValidationResult, so we surround it with a try/catch just in case it fails
                 // FIXME: create feedValidationResult with Feed object that has # of routes/stops/etc.
-                validationResult = new FeedValidationResult(LoadStatus.SUCCESS, null);
+                Feed feed = retrieveFeed();
+                validationResult = new FeedValidationResult(feed);
+                feed.close();
+                Persistence.feedVersions.updateField(this.id, "validationResult", validationResult);
                 // This may take a while for very large feeds.
                 LOG.info("Calculating # of trips per date of service");
 //                tripsPerDate = stats.getTripCountPerDateOfService();
@@ -338,6 +341,7 @@ public class FeedVersion extends Model implements Serializable {
         }
 
         // STEP 4. STORE validation result as json file on s3
+        // FIXME: this will likely change with sql-loading?
         File tempFile = null;
         try {
             statusMap.put("message", "Saving validation results...");
@@ -369,7 +373,6 @@ public class FeedVersion extends Model implements Serializable {
         if (revalidate) {
             LOG.warn("Revalidation requested.  Validating feed.");
             this.validate();
-            this.save();
             // TODO: change to 202 status code
             halt(503, SparkUtils.formatJSON("Try again later. Validating feed", 503));
         }
@@ -383,7 +386,6 @@ public class FeedVersion extends Model implements Serializable {
             } catch (AmazonS3Exception e) {
                 // if json file does not exist, validate feed.
                 this.validate();
-                this.save();
                 halt(503, "Try again later. Validating feed");
             } catch (AmazonServiceException ase) {
                 LOG.error("Error downloading from s3");
@@ -399,7 +401,6 @@ public class FeedVersion extends Model implements Serializable {
             } catch (Exception e) {
                 LOG.warn("Validation does not exist.  Validating feed.");
                 this.validate();
-                this.save();
                 halt(503, "Try again later. Validating feed");
             }
         }
@@ -418,12 +419,10 @@ public class FeedVersion extends Model implements Serializable {
         } catch (IOException e) {
             // if json file does not exist, validate feed.
             this.validate();
-            this.save();
             halt(503, "Try again later. Validating feed");
         } catch (Exception e) {
             e.printStackTrace();
             this.validate();
-            this.save();
             halt(503, "Try again later. Validating feed");
         }
         return null;
@@ -459,23 +458,8 @@ public class FeedVersion extends Model implements Serializable {
         validate(null);
     }
 
-    public void save () {
-        save(true);
-    }
-
-    public void save(boolean commit) {
-        if (commit)
-            versionStore.save(this.id, this);
-        else
-            versionStore.saveWithoutCommit(this.id, this);
-    }
-
     public void hash () {
         this.hash = HashUtils.hashFile(retrieveGtfsFile());
-    }
-
-    public static void commit() {
-        versionStore.commit();
     }
 
     public TransportNetwork buildTransportNetwork(EventBus eventBus) {
@@ -602,6 +586,7 @@ public class FeedVersion extends Model implements Serializable {
         return this.noteIds != null ? this.noteIds.size() : 0;
     }
 
+    // FIXME remove this? or make into a proper getter?
     @JsonInclude(Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("fileTimestamp")
@@ -611,11 +596,11 @@ public class FeedVersion extends Model implements Serializable {
         }
 
         this.fileTimestamp = feedStore.getFeedLastModified(id);
-        this.save();
 
         return this.fileTimestamp;
     }
 
+    // FIXME remove this? or make into a proper getter?
     @JsonInclude(Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("fileSize")
@@ -625,7 +610,6 @@ public class FeedVersion extends Model implements Serializable {
         }
 
         this.fileSize = feedStore.getFeedSize(id);
-        this.save();
 
         return fileSize;
     }

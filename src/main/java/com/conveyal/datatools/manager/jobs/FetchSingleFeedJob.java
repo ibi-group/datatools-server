@@ -4,6 +4,7 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import spark.HaltException;
 
 import java.util.Map;
@@ -44,6 +45,7 @@ public class FetchSingleFeedJob extends MonitorableJob {
             throw e;
         }
         if (result != null) {
+            Persistence.feedVersions.create(result);
             // in some cases (FetchProjectFeeds) job should be run here (rather than threaded)
             // so that the chain of jobs continues in the same thread as this (original
             // FetchSingleFeedJob instance)

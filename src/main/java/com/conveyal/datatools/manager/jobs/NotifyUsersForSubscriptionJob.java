@@ -70,11 +70,11 @@ public class NotifyUsersForSubscriptionJob implements Runnable {
                             bodyAction = "</p><p>View <a href='" + url + "/feed/" + fs.id + "'>this feed</a>.</p>";
                             sendNotification(email, subject, "Body", "<p>" + this.message + bodyAction);
                             break;
-                        case "retrieveProject":
-                            Project p = Project.retrieve(this.target);
+                        case "project":
+                            Project p = Persistence.projects.getById(this.target);
                             subject = "Datatools Notification: " + this.subscriptionType.replace("-", " ") + " (" + p.name + ")";
                             url = DataManager.getConfigPropertyAsText("application.public_url");
-                            bodyAction = "</p><p>View <a href='" + url + "/retrieveProject/" + p.id + "'>this retrieveProject</a>.</p>";
+                            bodyAction = "</p><p>View <a href='" + url + "/project/" + p.id + "'>this project</a>.</p>";
                             sendNotification(email, subject, "Body", "<p>" + this.message + bodyAction);
                             break;
                     }

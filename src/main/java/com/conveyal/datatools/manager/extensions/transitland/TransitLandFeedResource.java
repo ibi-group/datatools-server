@@ -6,6 +6,7 @@ import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -17,6 +18,8 @@ import java.lang.reflect.Field;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+
+import static com.conveyal.datatools.manager.models.ExternalFeedSourceProperty.constructId;
 
 /**
  * Created by demory on 3/31/16.
@@ -93,7 +96,7 @@ public class TransitLandFeedResource implements ExternalFeedResource {
                     // check if a feed already exists with this id
                     for (FeedSource existingSource : project.retrieveProjectFeedSources()) {
                         ExternalFeedSourceProperty onestopIdProp =
-                                ExternalFeedSourceProperty.find(existingSource, this.getResourceType(), "onestop_id");
+                                Persistence.externalFeedSourceProperties.getById(constructId(existingSource, this.getResourceType(), "onestop_id"));
                         if (onestopIdProp != null && onestopIdProp.value.equals(tlFeed.onestop_id)) {
                             source = existingSource;
                         }
@@ -110,13 +113,18 @@ public class TransitLandFeedResource implements ExternalFeedResource {
                         source.name = feedName;
                         LOG.info("Syncing properties: {}", source.name);
                     }
-                    tlFeed.mapFeedSource(source);
-
-                    source.name = feedName;
-
-                    source.projectId = project.id;
-
-                    source.save();
+                    // FIXME: Store feed source
+//                    source.retrievalMethod = FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
+//                    try {
+//                        source.url = new URL(tlFeed.url);
+//                    } catch (MalformedURLException e) {
+//                        e.printStackTrace();
+//                    }
+//                    source.name = feedName;
+//
+//                    source.projectId = project.id;
+//
+//                    source.save();
 
                     // create / update the properties
 
@@ -124,7 +132,8 @@ public class TransitLandFeedResource implements ExternalFeedResource {
                         String fieldName = tlField.getName();
                         String fieldValue = tlField.get(tlFeed) != null ? tlField.get(tlFeed).toString() : null;
 
-                        ExternalFeedSourceProperty.updateOrCreate(source, this.getResourceType(), fieldName, fieldValue);
+                        // FIXME
+//                        ExternalFeedSourceProperty.updateOrCreate(source, this.getResourceType(), fieldName, fieldValue);
                     }
                 }
             } catch (Exception ex) {

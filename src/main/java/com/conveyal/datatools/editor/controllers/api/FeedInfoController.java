@@ -33,7 +33,7 @@ public class FeedInfoController {
 
         if (id == null) {
             return null;
-            // TODO: return all feedInfos for retrieveProject?
+            // TODO: return all feedInfos for project?
         }
         GlobalTx gtx = null;
         try {

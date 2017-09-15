@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.manager.auth.Auth0Users;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
@@ -52,11 +53,11 @@ public abstract class Model implements Serializable {
     // notes are handled through a separate controller and in a separate DB
     @JsonIgnore
     public List<Note> retrieveNotes() {
-        ArrayList<Note> ret = new ArrayList<Note>(noteIds != null ? noteIds.size() : 0);
+        ArrayList<Note> ret = new ArrayList<>(noteIds != null ? noteIds.size() : 0);
 
         if (noteIds != null) {
             for (String id : noteIds) {
-                ret.add(Note.retrieve(id));
+                ret.add(Persistence.notes.getById(id));
             }
         }
 
@@ -90,12 +91,10 @@ public abstract class Model implements Serializable {
 
     public void addNote(Note n) {
         if (noteIds == null) {
-            noteIds = new ArrayList<String>();
+            noteIds = new ArrayList<>();
         }
 
         noteIds.add(n.id);
         n.objectId = this.id;
     }
-
-    public abstract void save();
 }

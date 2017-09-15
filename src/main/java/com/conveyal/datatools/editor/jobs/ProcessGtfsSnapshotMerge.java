@@ -38,9 +38,9 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
     private Map<Tuple2<String, String>, Stop> stopIdMap = Maps.newHashMap();
     private TIntObjectMap<String> routeTypeIdMap = new TIntObjectHashMap<>();
 
-    private Feed input;
+    private Feed inputFeedTables;
     private final Status status;
-    private EditorFeed feed;
+    private EditorFeed editorFeed;
 
     public FeedVersion feedVersion;
 
@@ -71,12 +71,12 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
         // create a new feed based on this version
         FeedTx feedTx = VersionedDataStore.getFeedTx(feedVersion.feedSourceId);
 
-        feed = new EditorFeed();
-        feed.setId(feedVersion.feedSourceId);
+        editorFeed = new EditorFeed();
+        editorFeed.setId(feedVersion.feedSourceId);
         Rectangle2D bounds = feedVersion.validationSummary().bounds;
         if (bounds != null) {
-            feed.defaultLat = bounds.getCenterY();
-            feed.defaultLon = bounds.getCenterX();
+            editorFeed.defaultLat = bounds.getCenterY();
+            editorFeed.defaultLon = bounds.getCenterX();
         }
 
 
@@ -101,10 +101,9 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                 status.percentComplete = 5;
             }
 
-            // retrieveById GTFSFeed for the feed version
-            // FIXME use sql-loader Feed object to load into editor
-            input = feedVersion.retrieveFeed();
-            if(input == null) return;
+            // retrieveById Feed connection to SQL tables for the feed version
+            inputFeedTables = feedVersion.retrieveFeed();
+            if(inputFeedTables == null) return;
 
             LOG.info("GtfsImporter: importing feed...");
             synchronized (status) {
@@ -113,22 +112,22 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
             }
             // load feed_info.txt
             // FIXME add back in feed info!!
-//            if(input.feedInfo.size() > 0) {
+//            if(inputFeedTables.feedInfo.size() > 0) {
 //                FeedInfo feedInfo = input.feedInfo.values().iterator().next();
-//                feed.feedPublisherName = feedInfo.feed_publisher_name;
-//                feed.feedPublisherUrl = feedInfo.feed_publisher_url;
-//                feed.feedLang = feedInfo.feed_lang;
-//                feed.feedEndDate = feedInfo.feed_end_date;
-//                feed.feedStartDate = feedInfo.feed_start_date;
-//                feed.feedVersion = feedInfo.feed_version;
+//                editorFeed.feedPublisherName = feedInfo.feed_publisher_name;
+//                editorFeed.feedPublisherUrl = feedInfo.feed_publisher_url;
+//                editorFeed.feedLang = feedInfo.feed_lang;
+//                editorFeed.feedEndDate = feedInfo.feed_end_date;
+//                editorFeed.feedStartDate = feedInfo.feed_start_date;
+//                editorFeed.feedVersion = feedInfo.feed_version;
 //            }
-            gtx.feeds.put(feedVersion.feedSourceId, feed);
+            gtx.feeds.put(feedVersion.feedSourceId, editorFeed);
 
             // load the GTFS agencies
-            Iterator<com.conveyal.gtfs.model.Agency> agencyIterator = input.agencies.iterator();
+            Iterator<com.conveyal.gtfs.model.Agency> agencyIterator = inputFeedTables.agencies.iterator();
             while (agencyIterator.hasNext()) {
                 com.conveyal.gtfs.model.Agency gtfsAgency = agencyIterator.next();
-                Agency agency = new Agency(gtfsAgency, feed);
+                Agency agency = new Agency(gtfsAgency, editorFeed);
 
                 // don't save the agency until we've come up with the stop centroid, below.
                 agencyCount++;
@@ -162,12 +161,10 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
             }
 
             GeometryFactory geometryFactory = new GeometryFactory(new PrecisionModel(), 4326);
-            Iterator<com.conveyal.gtfs.model.Stop> stopIterator = input.stops.iterator();
-            while (stopIterator.hasNext()) {
-                com.conveyal.gtfs.model.Stop gtfsStop = stopIterator.next();
-                Stop stop = new Stop(gtfsStop, geometryFactory, feed);
+            for (com.conveyal.gtfs.model.Stop gtfsStop : inputFeedTables.stops) {
+                Stop stop = new Stop(gtfsStop, geometryFactory, editorFeed);
                 feedTx.stops.put(stop.id, stop);
-                stopIdMap.put(new Tuple2(gtfsStop.stop_id, feed.id), stop);
+                stopIdMap.put(new Tuple2(gtfsStop.stop_id, editorFeed.id), stop);
                 stopCount++;
             }
 
@@ -182,9 +179,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                 status.percentComplete = 30;
             }
             // import routes
-            Iterator<com.conveyal.gtfs.model.Route> routeIterator = input.routes.iterator();
-            while (routeIterator.hasNext()) {
-                com.conveyal.gtfs.model.Route gtfsRoute = routeIterator.next();
+            for (com.conveyal.gtfs.model.Route gtfsRoute : inputFeedTables.routes) {
                 Agency agency = agencyIdMap.get(gtfsRoute.agency_id);
 
                 if (!routeTypeIdMap.containsKey(gtfsRoute.route_type)) {
@@ -194,7 +189,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                     routeTypeIdMap.put(gtfsRoute.route_type, rt.id);
                 }
 
-                Route route = new Route(gtfsRoute, feed, agency);
+                Route route = new Route(gtfsRoute, editorFeed, agency);
 
                 feedTx.routes.put(route.id, route);
                 routeIdMap.put(gtfsRoute.route_id, route);
@@ -320,7 +315,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                 status.message = "Importing trips...";
                 status.percentComplete = 50;
             }
-            // FIXME need to lodd patterns and trips
+            // FIXME need to load patterns and trips
             // import trips, stop times and patterns all at once
 //            Map<String, Pattern> patterns = input.patterns;
 //            Set<String> processedTrips = new HashSet<>();
@@ -413,7 +408,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
             gtx.commit();
             Snapshot.deactivateSnapshots(feedVersion.feedSourceId, null);
             // create an initial snapshot for this FeedVersion
-            Snapshot snapshot = VersionedDataStore.takeSnapshot(feed.id, feedVersion.id, "Snapshot of " + feedVersion.getName(), "none");
+            Snapshot snapshot = VersionedDataStore.takeSnapshot(editorFeed.id, feedVersion.id, "Snapshot of " + feedVersion.getName(), "none");
 
 
             LOG.info("Imported GTFS file: " + agencyCount + " agencies; " + routeCount + " routes;" + stopCount + " stops; " +  stopTimeCount + " stopTimes; " + tripCount + " trips;" + shapePointCount + " shapePoints");
@@ -434,7 +429,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
             gtx.rollbackIfOpen();
 
             // TODO: make sure this is right
-            input.close();
+            inputFeedTables.close();
 
             // set job as complete
             jobFinished();

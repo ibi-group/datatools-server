@@ -6,6 +6,7 @@ import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.FeedStore;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.conveyal.gtfs.GTFSFeed;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -81,7 +82,7 @@ public class GtfsPlusController {
 
     private static HttpServletResponse getGtfsPlusFromGtfs(String feedVersionId, Response res) {
         LOG.info("Extracting GTFS+ data from main GTFS feed");
-        FeedVersion version = FeedVersion.retrieve(feedVersionId);
+        FeedVersion version = Persistence.feedVersions.getById(feedVersionId);
 
         File gtfsPlusFile = null;
 
@@ -155,7 +156,7 @@ public class GtfsPlusController {
         // check for saved GTFS+ data
         File file = gtfsPlusStore.getFeed(feedVersionId);
         if (file == null) {
-            FeedVersion feedVersion = FeedVersion.retrieve(feedVersionId);
+            FeedVersion feedVersion = Persistence.feedVersions.getById(feedVersionId);
             if (feedVersion != null) {
                 file = feedVersion.retrieveGtfsFile();
             } else {
@@ -180,7 +181,7 @@ public class GtfsPlusController {
             halt(400, "No saved GTFS+ data for version");
         }
 
-        FeedVersion feedVersion = FeedVersion.retrieve(feedVersionId);
+        FeedVersion feedVersion = Persistence.feedVersions.getById(feedVersionId);
 
         // create a set of valid GTFS+ table names
         Set<String> gtfsPlusTables = new HashSet<>();
@@ -255,7 +256,9 @@ public class GtfsPlusController {
         // validation for the main GTFS content hasn't changed
         newFeedVersion.validationResult = feedVersion.validationResult;
         newFeedVersion.storeUser(profile);
-        newFeedVersion.save();
+
+        // FIXME: Add this back in after Mongo update
+//        newFeedVersion.save();
 
         return true;
     }
@@ -263,7 +266,7 @@ public class GtfsPlusController {
     private static Collection<ValidationIssue> getGtfsPlusValidation(Request req, Response res) {
         String feedVersionId = req.params("versionid");
         LOG.info("Validating GTFS+ for " + feedVersionId);
-        FeedVersion feedVersion = FeedVersion.retrieve(feedVersionId);
+        FeedVersion feedVersion = Persistence.feedVersions.getById(feedVersionId);
 
         List<ValidationIssue> issues = new LinkedList<>();
 

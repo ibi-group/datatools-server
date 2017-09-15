@@ -1,7 +1,7 @@
 package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.editor.models.Snapshot;
-import com.conveyal.datatools.manager.persistence.DataStore;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import org.mapdb.Fun;
 
 import java.util.Date;
@@ -14,12 +14,13 @@ import java.util.Date;
 public class FeedDownloadToken extends Model {
 
     private static final long serialVersionUID = 1L;
-    private static DataStore<FeedDownloadToken> tokenStore = new DataStore<FeedDownloadToken>("feeddownloadtokens");
 
     private String feedVersionId;
     private Fun.Tuple2<String, Integer> snapshotId;
 
     private Date timestamp;
+
+    public FeedDownloadToken () { }
 
     public FeedDownloadToken (FeedVersion feedVersion) {
         super();
@@ -39,12 +40,8 @@ public class FeedDownloadToken extends Model {
         timestamp = new Date();
     }
 
-    public static FeedDownloadToken retrieve(String id) {
-        return tokenStore.getById(id);
-    }
-
     public FeedVersion retrieveFeedVersion() {
-        if (feedVersionId != null) return FeedVersion.retrieve(feedVersionId);
+        if (feedVersionId != null) return Persistence.feedVersions.getById(feedVersionId);
         else return null;
     }
 
@@ -53,19 +50,13 @@ public class FeedDownloadToken extends Model {
         else return null;
     }
 
+    // TODO: Need to update feedVersionId field name to be more generic (downloadTargetId)
     public Project retrieveProject() {
-        return Project.retrieve(feedVersionId);
+        return Persistence.projects.getById(feedVersionId);
     }
 
     public boolean isValid () {
         return true;
     }
 
-    public void save () {
-        tokenStore.save(id, this);
-    }
-
-    public void delete () {
-        tokenStore.delete(id);
-    }
 }

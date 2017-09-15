@@ -25,6 +25,7 @@ import java.util.*;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithError;
 import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
+import static com.conveyal.datatools.manager.models.ExternalFeedSourceProperty.constructId;
 import static com.mongodb.client.model.Filters.eq;
 import static spark.Spark.*;
 
@@ -131,12 +132,16 @@ public class FeedSourceController {
         NotifyUsersForSubscriptionJob notifyFeedJob = new NotifyUsersForSubscriptionJob("feed-updated", source.id, "Feed property updated for " + source.name);
         DataManager.lightExecutor.execute(notifyFeedJob);
 
-        NotifyUsersForSubscriptionJob notifyProjectJob = new NotifyUsersForSubscriptionJob("retrieveProject-updated", source.projectId, "Project updated (feed source property for " + source.name + ")");
+        NotifyUsersForSubscriptionJob notifyProjectJob = new NotifyUsersForSubscriptionJob("project-updated", source.projectId, "Project updated (feed source property for " + source.name + ")");
         DataManager.lightExecutor.execute(notifyProjectJob);
 
         return source;
     }
 
+    /**
+     * FIXME: We should reconsider how we store external feed source properties now that we are using Mongo document
+     * storage
+     */
     public static FeedSource updateExternalFeedResource(Request req, Response res) throws IOException {
         FeedSource source = requestFeedSourceById(req, "manage");
         String resourceType = req.queryParams("resourceType");
@@ -146,13 +151,14 @@ public class FeedSourceController {
         while (fieldsIter.hasNext()) {
             Map.Entry<String, JsonNode> entry = fieldsIter.next();
             ExternalFeedSourceProperty prop =
-                    ExternalFeedSourceProperty.find(source, resourceType, entry.getKey());
+                    Persistence.externalFeedSourceProperties.getById(constructId(source, resourceType, entry.getKey()));
 
             if (prop != null) {
                 // update the property in our DB
                 String previousValue = prop.value;
                 prop.value = entry.getValue().asText();
-                prop.save();
+                // FIXME: add back storage of external feed source properties.
+//                prop.save();
 
                 // trigger an event on the external resource
                 if(DataManager.feedResources.containsKey(resourceType)) {

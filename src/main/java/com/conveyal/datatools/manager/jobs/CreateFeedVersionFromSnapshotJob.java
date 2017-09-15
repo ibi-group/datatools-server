@@ -4,6 +4,8 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.editor.controllers.api.SnapshotController;
 import com.conveyal.datatools.editor.models.Snapshot;
 import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.HashUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -62,8 +64,8 @@ public class CreateFeedVersionFromSnapshotJob  extends MonitorableJob {
         }
 
         feedVersion.setName(Snapshot.get(snapshotId).name + " Snapshot Export");
-        feedVersion.hash();
-        feedVersion.save();
+        Persistence.feedVersions.update(feedVersion.id,
+                String.format("{hash: %s}", HashUtils.hashFile(feedVersion.retrieveGtfsFile())));
         synchronized (status) {
             status.message = "Version created successfully.";
             status.completed = true;

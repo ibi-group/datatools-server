@@ -144,7 +144,7 @@ public class SnapshotController {
             halt(400, SparkUtils.formatJSON("No FeedVersion ID specified", 400));
         }
 
-        FeedVersion feedVersion = FeedVersion.retrieve(feedVersionId);
+        FeedVersion feedVersion = Persistence.feedVersions.getById(feedVersionId);
         if(feedVersion == null) {
             halt(404, SparkUtils.formatJSON("Could not find FeedVersion with ID " + feedVersionId, 404));
         }
@@ -307,7 +307,7 @@ public class SnapshotController {
         } else {
             // if not storing on s3, just use the token download method
             token = new FeedDownloadToken(snapshot);
-            token.save();
+            Persistence.tokens.create(token);
             return token;
         }
     }
@@ -367,7 +367,7 @@ public class SnapshotController {
      */
     private static Object downloadSnapshotWithToken (Request req, Response res) {
         String id = req.params("token");
-        FeedDownloadToken token = FeedDownloadToken.retrieve(id);
+        FeedDownloadToken token = Persistence.tokens.getById(id);
 
         if(token == null || !token.isValid()) {
             halt(400, "Feed download token not valid");
@@ -385,7 +385,7 @@ public class SnapshotController {
             String message = "Unable to create temp file for snapshot";
             LOG.error(message);
         }
-        token.delete();
+        Persistence.tokens.removeById(token.id);
         return downloadFile(file, snapshot.feedId + "_" + snapshot.snapshotTime + ".zip", res);
     }
 

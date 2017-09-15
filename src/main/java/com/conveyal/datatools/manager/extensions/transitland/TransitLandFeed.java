@@ -143,17 +143,4 @@ public class TransitLandFeed {
 //            this.operator_url = jsonMap.retrieveById("operator_url").asText();
 //            this.feed_url = jsonMap.retrieveById("feed_url").asText();
     }
-
-    public void mapFeedSource(FeedSource source){
-
-        // set the
-        source.retrievalMethod = FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
-        try {
-            source.url = new URL(this.url);
-        } catch (MalformedURLException e) {
-            e.printStackTrace();
-        }
-
-        source.save();
-    }
 }

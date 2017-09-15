@@ -260,16 +260,16 @@ public class FeedStore {
         return tempFile;
     }
 
-    private File uploadToS3 (InputStream inputStream, String id, FeedSource feedSource) {
+    public File uploadToS3 (InputStream inputStream, String s3FileName, FeedSource feedSource) {
         if (s3Bucket != null) {
             try {
                 // Use tempfile
-                LOG.info("Creating temp file for {}", id);
-                File tempFile = createTempFile(id, inputStream);
+                LOG.info("Creating temp file for {}", s3FileName);
+                File tempFile = createTempFile(s3FileName, inputStream);
 
-                LOG.info("Uploading feed {} to S3 from tempfile", id);
+                LOG.info("Uploading feed {} to S3 from tempfile", s3FileName);
                 TransferManager tm = TransferManagerBuilder.standard().withS3Client(s3Client).build();
-                PutObjectRequest request = new PutObjectRequest(s3Bucket, getS3Key(id), tempFile);
+                PutObjectRequest request = new PutObjectRequest(s3Bucket, getS3Key(s3FileName), tempFile);
                 // Subscribe to the event and provide event handler.
                 TLongList transferredBytes = new TLongArrayList();
                 long totalBytes = tempFile.length();
@@ -309,7 +309,7 @@ public class FeedStore {
                     // copy to [feedSourceId].zip
                     String copyKey = s3Prefix + feedSource.id + ".zip";
                     CopyObjectRequest copyObjRequest = new CopyObjectRequest(
-                            s3Bucket, getS3Key(id), s3Bucket, copyKey);
+                            s3Bucket, getS3Key(s3FileName), s3Bucket, copyKey);
                     s3Client.copyObject(copyObjRequest);
                 }
                 return tempFile;

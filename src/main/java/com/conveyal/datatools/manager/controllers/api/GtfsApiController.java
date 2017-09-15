@@ -87,7 +87,7 @@ public class GtfsApiController {
             eTags = new HashMap<>();
         }
         Map<String, String> newTags = new HashMap<>();
-        // iterate over feeds in download_prefix folder and register to gtfsApi (MTC retrieveProject)
+        // iterate over feeds in download_prefix folder and register to gtfsApi (MTC project)
         ObjectListing gtfsList = FeedStore.s3Client.listObjects(bucket, dir);
         for (S3ObjectSummary objSummary : gtfsList.getObjectSummaries()) {
 

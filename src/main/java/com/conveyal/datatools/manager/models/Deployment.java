@@ -1,7 +1,6 @@
 package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.manager.DataManager;
-import com.conveyal.datatools.manager.persistence.DataStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.StringUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
@@ -49,7 +48,6 @@ import org.slf4j.LoggerFactory;
 public class Deployment extends Model implements Serializable {
     private static final long serialVersionUID = 1L;
     private static final Logger LOG = LoggerFactory.getLogger(Deployment.class);
-    private static DataStore<Deployment> deploymentStore = new DataStore<Deployment>("deployments");
 
     public String name;
 
@@ -63,7 +61,7 @@ public class Deployment extends Model implements Serializable {
 
     @JsonProperty("project")
     public Project project() {
-        return Project.retrieve(projectId);
+        return Persistence.projects.getById(projectId);
     }
 
     @JsonView(JsonViews.DataDump.class)
@@ -74,7 +72,7 @@ public class Deployment extends Model implements Serializable {
         ArrayList<FeedVersion> ret = new ArrayList<>(feedVersionIds.size());
 
         for (String id : feedVersionIds) {
-            FeedVersion v = FeedVersion.retrieve(id);
+            FeedVersion v = Persistence.feedVersions.getById(id);
             if (v != null)
                 ret.add(v);
             else
@@ -91,11 +89,11 @@ public class Deployment extends Model implements Serializable {
         ArrayList<SummarizedFeedVersion> ret = new ArrayList<>(feedVersionIds.size());
 
         for (String id : feedVersionIds) {
-            FeedVersion v = FeedVersion.retrieve(id);
+            FeedVersion v = Persistence.feedVersions.getById(id);
 
             // should never happen but can if someone monkeyed around with dump/restore
             if (v != null)
-                ret.add(new SummarizedFeedVersion(FeedVersion.retrieve(id)));
+                ret.add(new SummarizedFeedVersion(Persistence.feedVersions.getById(id)));
             else
                 LOG.error("Reference integrity error for deployment {} ({}), feed version {} does not exist", this.name, this.id, id);
         }
@@ -219,31 +217,6 @@ public class Deployment extends Model implements Serializable {
      */
     public Deployment() {
         // do nothing.
-    }
-
-    /** Get a deployment by ID */
-    public static Deployment retrieveById(String id) {
-        return deploymentStore.getById(id);
-    }
-
-    /** Save this deployment and commit it */
-    public void save () {
-        this.save(true);
-    }
-
-    /** Save this deployment */
-    public void save (boolean commit) {
-        if (commit)
-            deploymentStore.save(id, this);
-        else
-            deploymentStore.saveWithoutCommit(id, this);
-    }
-
-    /**
-     * Delete this deployment and everything that it contains.
-     */
-    public void delete() {
-        deploymentStore.delete(this.id);
     }
 
     /** Dump this deployment to the given file
@@ -485,24 +458,10 @@ public class Deployment extends Model implements Serializable {
     }
 
     /**
-     * Commit changes to the datastore
-     */
-    public static void commit () {
-        deploymentStore.commit();
-    }
-
-    /**
-     * Get all of the deployments.
-     */
-    public static Collection<Deployment> retrieveAll() {
-        return deploymentStore.getAll();
-    }
-
-    /**
      * Get the deployment currently deployed to a particular server.
      */
     public static Deployment retrieveDeploymentForServerAndRouterId(String server, String routerId) {
-        for (Deployment d : retrieveAll()) {
+        for (Deployment d : Persistence.deployments.getAll()) {
             if (d.deployedTo != null && d.deployedTo.equals(server)) {
                 if ((routerId != null && routerId.equals(d.routerId)) || d.routerId == routerId) {
                     return d;

@@ -9,7 +9,7 @@
     <version>1.0.0</version>
 
 
-    <!-- Define where the source code for tretrieveProjectject lives -->
+    <!-- Define where the source code for project lives -->
     <scm>
         <connection>scm:git:https://github.com/conveyal/datatools-server.git</connection>
         <developerConnection>scm:git:ssh://git@github.com/conveyal/datatools-server.git</developerConnection>

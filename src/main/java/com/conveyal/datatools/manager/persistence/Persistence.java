@@ -3,9 +3,11 @@ package com.conveyal.datatools.manager.persistence;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.codec.LocalDateCodec;
 import com.conveyal.datatools.manager.codec.Rectangle2DCodec;
+import com.conveyal.datatools.manager.codec.Rectangle2DDoubleCodec;
 import com.conveyal.datatools.manager.codec.URLCodec;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
+import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Note;
@@ -53,6 +55,7 @@ public class Persistence {
     public static TypedPersistence<Note> notes;
     public static TypedPersistence<Organization> organizations;
     public static TypedPersistence<ExternalFeedSourceProperty> externalFeedSourceProperties;
+    public static TypedPersistence<FeedDownloadToken> tokens;
 
     public static void initialize () {
 
@@ -65,6 +68,7 @@ public class Persistence {
         CodecRegistry customRegistry = CodecRegistries.fromCodecs(
                 new URLCodec(),
                 new Rectangle2DCodec(),
+                new Rectangle2DDoubleCodec(),
                 new LocalDateCodec());
 
         pojoCodecRegistry = fromRegistries(MongoClient.getDefaultCodecRegistry(),
@@ -94,6 +98,7 @@ public class Persistence {
         notes = new TypedPersistence(mongoDatabase, Note.class);
         organizations = new TypedPersistence(mongoDatabase, Organization.class);
         externalFeedSourceProperties = new TypedPersistence(mongoDatabase, ExternalFeedSourceProperty.class);
+        tokens = new TypedPersistence(mongoDatabase, FeedDownloadToken.class);
     }
     
 }

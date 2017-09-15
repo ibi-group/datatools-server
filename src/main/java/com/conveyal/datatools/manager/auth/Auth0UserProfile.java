@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.auth;
 
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -306,7 +307,7 @@ public class Auth0UserProfile {
         for(Project project : app_metadata.getDatatoolsInfo().projects) {
             if (project.project_id.equals(projectID)) {
                 for(Permission permission : project.permissions) {
-                    if(permission.type.equals("administer-retrieveProject")) {
+                    if(permission.type.equals("administer-project")) {
                         return true;
                     }
                 }
@@ -376,7 +377,7 @@ public class Auth0UserProfile {
                 if(permission.feeds != null) {
                     feeds = permission.feeds;
                 }
-                // if permission is found in retrieveProject, check that it applies to the feed requested
+                // if permission is found in project, check that it applies to the feed requested
                 for(String thisFeedID : feeds) {
                     if (thisFeedID.equals(feedID) || thisFeedID.equals("*")) {
                         return true;
@@ -392,7 +393,7 @@ public class Auth0UserProfile {
     public com.conveyal.datatools.manager.models.Organization getOrganization () {
         Organization[] orgs = getApp_metadata().getDatatoolsInfo().organizations;
         if (orgs != null && orgs.length != 0) {
-            return orgs[0] != null ? com.conveyal.datatools.manager.models.Organization.retrieve(orgs[0].organizationId) : null;
+            return orgs[0] != null ? Persistence.organizations.getById(orgs[0].organizationId) : null;
         }
         return null;
     }

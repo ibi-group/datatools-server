@@ -28,18 +28,18 @@ public abstract class LoadFeedTest extends DatatoolsTest {
         super.setUp();
         LOG.info("ProcessGtfsSnapshotMergeTest setup");
 
-        File caltrainGTFS = new File(LoadFeedTest.class.getResource("caltrain_gtfs.zip").getFile());
-        source = new FeedSource("test");
-        source.save();
-        version = new FeedVersion(source);
-        InputStream is = null;
-        try {
-            is = new FileInputStream(caltrainGTFS);
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
-        }
-        version.newGtfsFile(is);
-        version.save();
-        setUpIsDone = true;
+//        File caltrainGTFS = new File(LoadFeedTest.class.getResource("caltrain_gtfs.zip").getFile());
+//        source = new FeedSource("test");
+//        source.save();
+//        version = new FeedVersion(source);
+//        InputStream is = null;
+//        try {
+//            is = new FileInputStream(caltrainGTFS);
+//        } catch (FileNotFoundException e) {
+//            e.printStackTrace();
+//        }
+//        version.newGtfsFile(is);
+//        version.save();
+//        setUpIsDone = true;
     }
 }

@@ -8,7 +8,6 @@ import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
-import com.conveyal.datatools.manager.persistence.DataStore;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
@@ -19,8 +18,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.google.common.eventbus.EventBus;
 import com.mongodb.client.model.Sorts;
-import org.bson.Document;
-import org.mapdb.Fun;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.HaltException;
@@ -29,18 +26,14 @@ import java.io.File;
 import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.mongodb.client.model.Filters.eq;
-import static com.mongodb.client.model.Sorts.orderBy;
+import static com.mongodb.client.model.Updates.set;
 import static spark.Spark.halt;
 
 /**
@@ -64,7 +57,7 @@ public class FeedSource extends Model implements Cloneable {
      * Get the Project of which this feed is a part
      */
     public Project retrieveProject() {
-        return projectId != null ? Project.retrieve(projectId) : null;
+        return projectId != null ? Persistence.projects.getById(projectId) : null;
     }
 
     @JsonProperty("organizationId")
@@ -73,6 +66,7 @@ public class FeedSource extends Model implements Cloneable {
         return project == null ? null : project.organizationId;
     }
 
+    // TODO: Add back in regions once they have been refactored
 //    public List<Region> retrieveRegionList () {
 //        return Region.retrieveAll().stream().filter(r -> Arrays.asList(regions).contains(r.id)).collect(Collectors.toList());
 //    }
@@ -270,8 +264,10 @@ public class FeedSource extends Model implements Cloneable {
         else {
             version.userId = this.userId;
 
-            this.lastFetched = version.updated;
-            this.save();
+            // FIXME: Does this work?
+            Persistence.feedSources.getMongoCollection().updateOne(eq(this.id), set("lastFetched", version.updated));
+//            this.lastFetched = version.updated;
+//            this.save();
 
             NotifyUsersForSubscriptionJob notifyFeedJob = new NotifyUsersForSubscriptionJob("feed-updated", this.id, "New feed version created for " + this.name);
             DataManager.lightExecutor.execute(notifyFeedJob);
@@ -294,17 +290,6 @@ public class FeedSource extends Model implements Cloneable {
 
     public String toString () {
         return "<FeedSource " + this.name + " (" + this.id + ")>";
-    }
-
-    public void save () {
-        save(true);
-    }
-
-    public void save (boolean commit) {
-//        if (commit)
-//            sourceStore.save(this.id, this);
-//        else
-//            sourceStore.saveWithoutCommit(this.id, this);
     }
 
     /**
@@ -378,7 +363,8 @@ public class FeedSource extends Model implements Cloneable {
         for(String resourceType : DataManager.feedResources.keySet()) {
             Map<String, String> propTable = new HashMap<>();
 
-            ExternalFeedSourceProperty.retrieveAll().stream()
+            // FIXME: use mongo filters instead
+            Persistence.externalFeedSourceProperties.getAll().stream()
                     .filter(prop -> prop.feedSourceId.equals(this.id))
                     .forEach(prop -> propTable.put(prop.name, prop.value));
 
@@ -492,10 +478,6 @@ public class FeedSource extends Model implements Cloneable {
         PRODUCED_IN_HOUSE // produced in-house in a GTFS Editor instance
     }
 
-    public static void commit() {
-//        sourceStore.commit();
-    }
-
     /**
      * Delete this feed source and everything that it contains.
      */
@@ -520,13 +502,13 @@ public class FeedSource extends Model implements Cloneable {
             gtx.commit();
         }
 
-        ExternalFeedSourceProperty.retrieveAll().stream()
+        // FIXME use Mongo filters instead
+        Persistence.externalFeedSourceProperties.getAll().stream()
                 .filter(prop -> prop.feedSourceId.equals(this.id))
-                .forEach(ExternalFeedSourceProperty::delete);
+                .forEach(prop -> Persistence.externalFeedSourceProperties.removeById(prop.id));
 
         // TODO: add delete for osm extract and r5 network (maybe that goes with version)
-
-//        sourceStore.delete(this.id);
+        Persistence.feedSources.removeById(this.id);
     }
 
     public FeedSource clone () throws CloneNotSupportedException {
