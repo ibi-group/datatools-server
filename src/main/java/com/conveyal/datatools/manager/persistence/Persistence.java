@@ -38,6 +38,8 @@ import static org.bson.codecs.configuration.CodecRegistries.fromRegistries;
 public class Persistence {
 
     private static final Logger LOG = LoggerFactory.getLogger(Persistence.class);
+    private static final String MONGO_URI = "MONGO_URI";
+    private static final String MONGO_DB_NAME = "MONGO_DB_NAME";
 
     private static MongoClient mongo;
     private static MongoDatabase mongoDatabase;
@@ -73,15 +75,15 @@ public class Persistence {
 //                .sslEnabled(true)
                 .codecRegistry(pojoCodecRegistry);
 
-        if (DataManager.hasConfigProperty("mongo_uri")) {
-            mongo = new MongoClient(new MongoClientURI(DataManager.getConfigPropertyAsText("MONGO_URI"), builder));
+        if (DataManager.hasConfigProperty(MONGO_URI)) {
+            mongo = new MongoClient(new MongoClientURI(DataManager.getConfigPropertyAsText(MONGO_URI), builder));
             LOG.info("Connecting to remote MongoDB instance");
         } else {
             LOG.info("Connecting to local MongoDB instance");
             mongo = new MongoClient("localhost", builder.build());
         }
 
-        mongoDatabase = mongo.getDatabase(DataManager.getConfigPropertyAsText("MONGO_DB_NAME"));
+        mongoDatabase = mongo.getDatabase(DataManager.getConfigPropertyAsText(MONGO_DB_NAME));
 
         // TODO: Set up indexes on feed versions by feedSourceId, version #?
 
