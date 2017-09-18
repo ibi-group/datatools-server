@@ -284,13 +284,18 @@ public class FeedVersion extends Model implements Serializable {
             return;
         }
 
-        // STEP 2. Upload GTFS to S3
-        try {
-            FeedVersion.feedStore.uploadToS3(new FileInputStream(retrieveGtfsFile()), this.id, this.parentFeedSource());
-        } catch (FileNotFoundException e) {
-            e.printStackTrace();
+        // STEP 2. Upload GTFS to S3 (storage on local machine is done when feed is fetched/uploaded)
+        if (DataManager.useS3) {
+            try {
+                FileInputStream fileStream = new FileInputStream(retrieveGtfsFile());
+                FeedVersion.feedStore.uploadToS3(fileStream, this.id, this.parentFeedSource());
+
+                // TODO: delete local copy of feed version after successful upload?
+            } catch (FileNotFoundException e) {
+                LOG.error("Could not upload version {} to s3 bucket", this.id);
+                e.printStackTrace();
+            }
         }
-        // TODO: load feed to s3 after loaded into gtfs database successfully
 
         // STEP 3. VALIDATE GTFS feed
         try {

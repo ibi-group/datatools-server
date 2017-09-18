@@ -384,11 +384,13 @@ public class FeedVersionController  {
 
         // Fetch feed version to download.
         FeedVersion version = token.retrieveFeedVersion();
-
+        if (version == null) {
+            haltWithError(400, "Could not retrieve version to download");
+        }
         // Remove token so that it cannot be used again for feed download
         Persistence.tokens.removeById(tokenValue);
-
-        return downloadFile(version.retrieveGtfsFile(), version.id, res);
+        File file = version.retrieveGtfsFile();
+        return downloadFile(file, version.id, res);
     }
 
     public static void register (String apiPrefix) {
