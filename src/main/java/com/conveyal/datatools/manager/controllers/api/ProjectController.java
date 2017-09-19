@@ -282,7 +282,7 @@ public class ProjectController {
 
         // if storing feeds on s3, return temporary s3 credentials for that zip file
         if (DataManager.useS3) {
-            return getS3Credentials(DataManager.awsRole, DataManager.feedBucket, "project" + project.id + ".zip", Statement.Effect.Allow, S3Actions.GetObject, 900);
+            return getS3Credentials(DataManager.awsRole, DataManager.feedBucket, "project/" + project.id + ".zip", Statement.Effect.Allow, S3Actions.GetObject, 900);
         } else {
             // when feeds are stored locally, single-use download token will still be used
             FeedDownloadToken token = new FeedDownloadToken(project);

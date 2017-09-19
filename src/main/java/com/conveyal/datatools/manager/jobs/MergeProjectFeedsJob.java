@@ -157,7 +157,9 @@ public class MergeProjectFeedsJob extends MonitorableJob {
         }
         // Store the project merged zip locally or on s3
         if (DataManager.useS3) {
-            FeedStore.s3Client.putObject(DataManager.feedBucket, project.id + ".zip", mergedFile);
+            String s3Key = "project/" + project.id + ".zip";
+            FeedStore.s3Client.putObject(DataManager.feedBucket, s3Key, mergedFile);
+            LOG.info("Storing merged project feed at s3://{}/{}", DataManager.feedBucket, s3Key);
         } else {
             try {
                 FeedVersion.feedStore.newFeed(project.id + ".zip", new FileInputStream(mergedFile), null);
