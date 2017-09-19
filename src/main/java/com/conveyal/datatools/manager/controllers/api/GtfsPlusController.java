@@ -256,9 +256,7 @@ public class GtfsPlusController {
         // validation for the main GTFS content hasn't changed
         newFeedVersion.validationResult = feedVersion.validationResult;
         newFeedVersion.storeUser(profile);
-
-        // FIXME: Add this back in after Mongo update
-//        newFeedVersion.save();
+        Persistence.feedVersions.create(newFeedVersion);
 
         return true;
     }
