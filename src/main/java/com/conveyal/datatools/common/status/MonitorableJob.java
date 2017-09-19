@@ -35,7 +35,8 @@ public abstract class MonitorableJob implements Runnable {
         VALIDATE_FEED,
         FETCH_PROJECT_FEEDS,
         FETCH_SINGLE_FEED,
-        MAKE_PROJECT_PUBLIC
+        MAKE_PROJECT_PUBLIC,
+        MERGE_PROJECT_FEEDS
     }
 
     public MonitorableJob(String owner, String name, JobType type) {

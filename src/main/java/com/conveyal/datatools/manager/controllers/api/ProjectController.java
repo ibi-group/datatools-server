@@ -1,39 +1,30 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.conveyal.datatools.common.utils.Consts;
+import com.amazonaws.auth.policy.Statement;
+import com.amazonaws.auth.policy.actions.S3Actions;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.FetchProjectFeedsJob;
 import com.conveyal.datatools.manager.jobs.MakePublicJob;
-import com.conveyal.datatools.manager.models.FeedSource;
+import com.conveyal.datatools.manager.jobs.MergeProjectFeedsJob;
+import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.OtpBuildConfig;
 import com.conveyal.datatools.manager.models.OtpRouterConfig;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
-import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.BufferedReader;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -41,26 +32,19 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
-import java.util.Enumeration;
-import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
-import java.util.zip.ZipOutputStream;
 
 import spark.Request;
 import spark.Response;
 
-import javax.servlet.http.HttpServletResponse;
-
+import static com.conveyal.datatools.common.utils.S3Utils.getS3Credentials;
+import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.manager.DataManager.publicPath;
 import static spark.Spark.*;
 
@@ -279,202 +263,32 @@ public class ProjectController {
         return p;
     }
 
-    private static HttpServletResponse downloadMergedFeed(Request req, Response res) throws IOException {
-        Project p = requestProjectById(req, "view");
+    private static boolean downloadMergedFeed(Request req, Response res) throws IOException {
+        Project project = requestProjectById(req, "view");
+        Auth0UserProfile userProfile = req.attribute("user");
+        // TODO: make this an authenticated call?
+        MergeProjectFeedsJob mergeProjectFeedsJob = new MergeProjectFeedsJob(project, userProfile.getUser_id());
+        DataManager.heavyExecutor.execute(mergeProjectFeedsJob);
 
-        // get feed sources in project
-        Collection<FeedSource> feeds = p.getProjectFeedSources();
-
-        // create temp merged zip file to add feed content to
-        File mergedFile;
-        try {
-            mergedFile = File.createTempFile(p.id + "-merged", ".zip");
-            mergedFile.deleteOnExit();
-
-        } catch (IOException e) {
-            LOG.error("Could not create temp file");
-            e.printStackTrace();
-            halt(400, SparkUtils.formatJSON("Unknown error while merging feeds.", 400));
-            return null;
-        }
-
-        // create the zipfile
-        ZipOutputStream out;
-        try {
-            out = new ZipOutputStream(new FileOutputStream(mergedFile));
-        } catch (FileNotFoundException e) {
-            throw new RuntimeException(e);
-        }
-
-        LOG.info("Created project merge file: " + mergedFile.getAbsolutePath());
-
-        // map of feed versions to table entries contained within version's GTFS
-        Map<FeedSource, ZipFile> feedSourceMap = new HashMap<>();
-
-        // collect zipFiles for each feedSource before merging tables
-        for (FeedSource fs : feeds) {
-            // check if feed source has version (use latest)
-            FeedVersion version = fs.getLatest();
-            if (version == null) {
-                LOG.info("Skipping {} because it has no feed versions", fs.name);
-                continue;
-            }
-            // modify feed version to use prepended feed id
-            LOG.info("Adding {} feed to merged zip", fs.name);
-            try {
-                File file = version.getGtfsFile();
-                ZipFile zipFile = new ZipFile(file);
-                feedSourceMap.put(fs, zipFile);
-            } catch(Exception e) {
-                e.printStackTrace();
-                LOG.error("Zipfile for version {} not found", version.id);
-            }
-        }
-
-        // loop through GTFS tables
-        for(int i = 0; i < DataManager.gtfsConfig.size(); i++) {
-            JsonNode tableNode = DataManager.gtfsConfig.get(i);
-            byte[] tableOut = mergeTables(tableNode, feedSourceMap);
-
-            // if at least one feed has the table, include it
-            if (tableOut != null) {
-                String tableName = tableNode.get("name").asText();
-
-                // create entry for zip file
-                ZipEntry tableEntry = new ZipEntry(tableName);
-                out.putNextEntry(tableEntry);
-                LOG.info("Writing {} to merged feed", tableEntry.getName());
-                out.write(tableOut);
-                out.closeEntry();
-            }
-        }
-        out.close();
-
-        // FIXME: quick fix to store the file on s3 for NYSDOT
-        FeedStore.s3Client.putObject(DataManager.feedBucket, p.id + "merged.zip", mergedFile);
-
-        // Deliver zipfile
-        res.raw().setContentType("application/octet-stream");
-        res.raw().setHeader("Content-Disposition", "attachment; filename=" + mergedFile.getName());
-
-
-        try {
-            BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(res.raw().getOutputStream());
-            BufferedInputStream bufferedInputStream = new BufferedInputStream(new FileInputStream(mergedFile));
-
-            byte[] buffer = new byte[1024];
-            int len;
-            while ((len = bufferedInputStream.read(buffer)) > 0) {
-                bufferedOutputStream.write(buffer, 0, len);
-            }
-
-            bufferedOutputStream.flush();
-            bufferedOutputStream.close();
-        } catch (Exception e) {
-            e.printStackTrace();
-            halt(500, SparkUtils.formatJSON("Error serving GTFS file"));
-        }
-
-        return res.raw();
+        return true;
     }
 
     /**
-     * Merge the specified table for multiple GTFS feeds.
-     * @param tableNode tableNode to merge
-     * @param feedSourceMap map of feedSources to zipFiles from which to extract the .txt tables
-     * @return single merged table for feeds
+     * Returns credentials that a client may use to then download a feed version. Functionality
+     * changes depending on whether application.data.use_s3_storage config property is true.
      */
-    private static byte[] mergeTables(JsonNode tableNode, Map<FeedSource, ZipFile> feedSourceMap) {
+    public static Object getFeedDownloadCredentials(Request req, Response res) {
+        Project project = requestProjectById(req, "view");
 
-        String tableName = tableNode.get("name").asText();
-        ByteArrayOutputStream tableOut = new ByteArrayOutputStream();
-
-        ArrayNode fieldsNode = (ArrayNode) tableNode.get("fields");
-        List<String> headers = new ArrayList<>();
-        for (int i = 0; i < fieldsNode.size(); i++) {
-            JsonNode fieldNode = fieldsNode.get(i);
-            String fieldName = fieldNode.get("name").asText();
-            Boolean notInSpec = fieldNode.has("datatools") && fieldNode.get("datatools").asBoolean();
-            if (notInSpec) {
-                fieldsNode.remove(i);
-            }
-            headers.add(fieldName);
+        // if storing feeds on s3, return temporary s3 credentials for that zip file
+        if (DataManager.useS3) {
+            return getS3Credentials(DataManager.awsRole, DataManager.feedBucket, "project" + project.id + ".zip", Statement.Effect.Allow, S3Actions.GetObject, 900);
+        } else {
+            // when feeds are stored locally, single-use download token will still be used
+            FeedDownloadToken token = new FeedDownloadToken(project);
+            token.save();
+            return token;
         }
-
-        try {
-            // write headers to table
-            tableOut.write(String.join(",", headers).getBytes());
-            tableOut.write("\n".getBytes());
-
-            // iterate over feed source to zipfile map
-            for ( Map.Entry<FeedSource, ZipFile> mapEntry : feedSourceMap.entrySet()) {
-                FeedSource fs = mapEntry.getKey();
-                ZipFile zipFile = mapEntry.getValue();
-                final Enumeration<? extends ZipEntry> entries = zipFile.entries();
-                while (entries.hasMoreElements()) {
-                    final ZipEntry entry = entries.nextElement();
-                    if(tableName.equals(entry.getName())) {
-                        LOG.info("Adding {} table for {}", entry.getName(), fs.name);
-
-                        InputStream inputStream = zipFile.getInputStream(entry);
-
-                        BufferedReader in = new BufferedReader(new InputStreamReader(inputStream));
-                        String line = in.readLine();
-                        String[] fields = line.split(",");
-
-                        List<String> fieldList = Arrays.asList(fields);
-
-
-                        // iterate over rows in table
-                        while((line = in.readLine()) != null) {
-                            String[] newValues = new String[fieldsNode.size()];
-                            String[] values = line.split(Consts.COLUMN_SPLIT, -1);
-                            if (values.length == 1) {
-                                LOG.warn("Found blank line. Skipping...");
-                                continue;
-                            }
-                            for(int v = 0; v < fieldsNode.size(); v++) {
-                                JsonNode fieldNode = fieldsNode.get(v);
-                                String fieldName = fieldNode.get("name").asText();
-
-                                // get index of field from GTFS spec as it appears in feed
-                                int index = fieldList.indexOf(fieldName);
-                                String val = "";
-                                try {
-                                    index = fieldList.indexOf(fieldName);
-                                    if(index != -1) {
-                                        val = values[index];
-                                    }
-                                } catch (ArrayIndexOutOfBoundsException e) {
-                                    LOG.warn("Index {} out of bounds for file {} and feed {}", index, entry.getName(), fs.name);
-                                    continue;
-                                }
-
-                                String fieldType = fieldNode.get("inputType").asText();
-
-                                // if field is a gtfs identifier, prepend with feed id/name
-                                if (fieldType.contains("GTFS") && !val.isEmpty()) {
-                                    newValues[v] = fs.name + ":" + val;
-                                }
-                                else {
-                                    newValues[v] = val;
-                                }
-                            }
-                            String newLine = String.join(",", newValues);
-
-                            // write line to table (plus new line char)
-                            tableOut.write(newLine.getBytes());
-                            tableOut.write("\n".getBytes());
-                        }
-                    }
-                }
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-            LOG.error("Error merging feed sources: {}", feedSourceMap.keySet().stream().map(fs -> fs.name).collect(Collectors.toList()).toString());
-            halt(400, SparkUtils.formatJSON("Error merging feed sources", 400, e));
-        }
-        return tableOut.toByteArray();
     }
 
     private static boolean deployPublic(Request req, Response res) {
@@ -579,10 +393,26 @@ public class ProjectController {
         post(apiPrefix + "secure/project/:id/fetch", ProjectController::fetch, json::write);
         post(apiPrefix + "secure/project/:id/deployPublic", ProjectController::deployPublic, json::write);
 
-        get(apiPrefix + "public/project/:id/download", ProjectController::downloadMergedFeed);
+        get(apiPrefix + "secure/project/:id/download", ProjectController::downloadMergedFeed);
+        get(apiPrefix + "secure/project/:id/downloadtoken", ProjectController::getFeedDownloadCredentials, json::write);
 
         get(apiPrefix + "public/project/:id", ProjectController::getProject, json::write);
         get(apiPrefix + "public/project", ProjectController::getAllProjects, json::write);
+        get(apiPrefix + "downloadprojectfeed/:token", ProjectController::downloadMergedFeedWithToken);
+    }
+
+    private static Object downloadMergedFeedWithToken(Request req, Response res) {
+        FeedDownloadToken token = FeedDownloadToken.get(req.params("token"));
+
+        if(token == null || !token.isValid()) {
+            halt(400, "Feed download token not valid");
+        }
+
+        Project project = token.getProject();
+
+        token.delete();
+        String fileName = project.id + ".zip";
+        return downloadFile(FeedVersion.feedStore.getFeed(fileName), fileName, res);
     }
 
 }

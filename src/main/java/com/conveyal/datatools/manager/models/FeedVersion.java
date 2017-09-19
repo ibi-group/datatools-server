@@ -71,7 +71,7 @@ public class FeedVersion extends Model implements Serializable {
     public static final Logger LOG = LoggerFactory.getLogger(FeedVersion.class);
     public static final String validationSubdir = "validation/";
     static DataStore<FeedVersion> versionStore = new DataStore<>("feedversions");
-    private static FeedStore feedStore = new FeedStore();
+    public static FeedStore feedStore = new FeedStore();
 
     static {
         // set up indexing on feed versions by feed source, indexed by <FeedSource ID, version>
