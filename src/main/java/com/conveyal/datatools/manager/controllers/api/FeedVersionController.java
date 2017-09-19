@@ -167,7 +167,7 @@ public class FeedVersionController  {
         return true;
     }
 
-    public static Boolean createFeedVersionFromSnapshot (Request req, Response res) throws IOException, ServletException {
+    public static boolean createFeedVersionFromSnapshot (Request req, Response res) throws IOException, ServletException {
 
         Auth0UserProfile userProfile = req.attribute("user");
         // TODO: should this be edit privilege?
@@ -350,9 +350,6 @@ public class FeedVersionController  {
     /**
      * Returns credentials that a client may use to then download a feed version. Functionality
      * changes depending on whether application.data.use_s3_storage config property is true.
-     * @param req
-     * @param res
-     * @return token string or temporary S3 credentials, depending on whether feeds are stored on S3
      */
     public static Object getFeedDownloadCredentials(Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "view");
