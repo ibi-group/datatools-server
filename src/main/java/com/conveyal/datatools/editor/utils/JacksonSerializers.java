@@ -169,9 +169,9 @@ public class JacksonSerializers {
         }
 
         @Override
-        public void serialize(GtfsRouteType gtfsRouteType, JsonGenerator jgen,
+        public void serialize(GtfsRouteType gtfsRouteType, JsonGenerator jsonGenerator,
                               SerializerProvider arg2) throws IOException {
-            jgen.writeNumber(gtfsRouteType.toGtfs());
+            jsonGenerator.writeNumber(gtfsRouteType.toGtfs());
         }
     }
 
@@ -205,34 +205,6 @@ public class JacksonSerializers {
         public void serialize(Object nullKey, JsonGenerator jsonGenerator, SerializerProvider unused)
                 throws IOException {
             jsonGenerator.writeFieldName("");
-        }
-    }
-
-    /** serialize GtfsRouteType as GTFS integer value */
-    public static class TripDirectionSerializer extends StdScalarSerializer<TripDirection> {
-        private static final long serialVersionUID = -5149227247056620599L;
-
-        public TripDirectionSerializer() {
-            super(TripDirection.class, false);
-        }
-
-        @Override
-        public void serialize(TripDirection gtfsRouteType, JsonGenerator jgen,
-                              SerializerProvider arg2) throws IOException {
-            jgen.writeNumber(gtfsRouteType.toGtfs());
-        }
-    }
-
-    /** serialize GTFS integer value  to TripDirection */
-    public static class TripDirectionDeserializer extends StdScalarDeserializer<TripDirection> {
-        private static final long serialVersionUID = 2351921879598816469L;
-
-        public TripDirectionDeserializer () { super(TripDirection.class); }
-
-        @Override
-        public TripDirection deserialize(JsonParser jp,
-                                         DeserializationContext arg1) throws IOException {
-            return TripDirection.fromGtfs(jp.getValueAsInt());
         }
     }
 
