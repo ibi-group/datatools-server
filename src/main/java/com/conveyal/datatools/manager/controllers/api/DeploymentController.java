@@ -29,6 +29,7 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithError;
 import static spark.Spark.*;
@@ -74,7 +75,7 @@ public class DeploymentController {
             return null;
         }
         if (!userProfile.canAdministerProject(d.projectId, d.organizationId()) && !userProfile.getUser_id().equals(d.user()))
-            halt(401);
+            haltWithError(401, "User not authorized to delete deployment");
         else {
             Persistence.deployments.removeById(id);
             return d;
@@ -90,12 +91,12 @@ public class DeploymentController {
         Deployment d = Persistence.deployments.getById(id);
 
         if (d == null) {
-            halt(400, "Deployment does not exist.");
+            haltWithError(400, "Deployment does not exist.");
             return null;
         }
 
         if (!userProfile.canAdministerProject(d.projectId, d.organizationId()) && !userProfile.getUser_id().equals(d.user()))
-            halt(401);
+            haltWithError(401, "User not authorized to download deployment");
 
         File temp = File.createTempFile("deployment", ".zip");
         // just include GTFS, not any of the ancillary information
@@ -183,38 +184,44 @@ public class DeploymentController {
         Auth0UserProfile userProfile = req.attribute("user");
         String deploymentId = req.params("id");
         Deployment deploymentToUpdate = Persistence.deployments.getById(deploymentId);
+        Document updateDocument = Document.parse(req.body());
         if (deploymentToUpdate == null)
             halt(404);
 
         boolean allowedToUpdate = userProfile.canAdministerProject(deploymentToUpdate.projectId, deploymentToUpdate.organizationId())
                 || userProfile.getUser_id().equals(deploymentToUpdate.user());
 
+        // FIXME use generic update hook, also feedVersions is getting serialized into MongoDB (which is undesirable)
+        // Check that feed versions in request body are OK to add to deployment, i.e., they exist and are a part of
+        // this project.
+        if (updateDocument.containsKey("feedVersions")) {
+            List<Document> versions = (List<Document>) updateDocument.get("feedVersions");
+            ArrayList<FeedVersion> versionsToInsert = new ArrayList<>(versions.size());
+            for (Document version : versions) {
+                if (!version.containsKey("id")) {
+                    halt(400, SparkUtils.formatJSON("Version not supplied"));
+                }
+                FeedVersion v = null;
+                try {
+                    v = Persistence.feedVersions.getById(version.getString("id"));
+                } catch (Exception e) {
+                    haltWithError(404, "Version not found");
+                }
+                if (v == null) {
+                    haltWithError(404, "Version not found");
+                }
+                // check that the version belongs to the correct project
+                if (v.parentFeedSource().projectId.equals(deploymentToUpdate.projectId)) {
+                    versionsToInsert.add(v);
+                }
+            }
 
-        // TODO add back in update hooks
-//        if (entry.getKey() == "feedVersions") {
-//            JsonNode versions = entry.getValue();
-//            ArrayList<FeedVersion> versionsToInsert = new ArrayList<>(versions.size());
-//            for (JsonNode version : versions) {
-//                if (!version.has("id")) {
-//                    halt(400, SparkUtils.formatJSON("Version not supplied"));
-//                }
-//                FeedVersion v = null;
-//                try {
-//                    v = FeedVersion.retrieve(version.get("id").asText());
-//                } catch (Exception e) {
-//                    halt(404, SparkUtils.formatJSON("Version not found", 404));
-//                }
-//                if (v == null) {
-//                    halt(404, SparkUtils.formatJSON("Version not found", 404));
-//                }
-//                // check that the version belongs to the correct project
-//                if (v.parentFeedSource().projectId.equals(d.projectId)) {
-//                    versionsToInsert.add(v);
-//                }
-//            }
-//
-//            d.storeFeedVersions(versionsToInsert);
-//        }
+            // Update deployment feedVersionIds field.
+            Persistence.deployments.updateField(deploymentId, "feedVersionIds", versionsToInsert.stream()
+                    .map(v -> v.id)
+                    .collect(Collectors.toList())
+            );
+        }
 
 
 
@@ -229,7 +236,6 @@ public class DeploymentController {
 
     /**
      * Create a deployment bundle, and push it to OTP
-     * @throws IOException
      */
     public static Object deploy (Request req, Response res) throws IOException {
         Auth0UserProfile userProfile = req.attribute("user");
@@ -284,17 +290,17 @@ public class DeploymentController {
     public static Object deploymentStatus (Request req, Response res) throws JsonProcessingException {
         // this is not access-controlled beyond requiring auth, which is fine
         // there's no good way to know who should be able to see this.
-        String target = req.queryParams("target");
+        String deploymentTarget = req.queryParams("target");
 
-        if (!deploymentJobsByServer.containsKey(target))
-            halt(404, "Deployment target '"+target+"' not found");
+        if (!deploymentJobsByServer.containsKey(deploymentTarget))
+            haltWithError(404, "Deployment target '" + deploymentTarget + "' not found");
 
-        DeployJob j = deploymentJobsByServer.get(target);
+        DeployJob deployJob = deploymentJobsByServer.get(deploymentTarget);
 
-        if (j == null)
-            halt(404, "No active job for " + target + " found");
+        if (deployJob == null)
+            haltWithError(404, "No active job for " + deploymentTarget + " found");
 
-        return j.getStatus();
+        return deployJob.getStatus();
     }
 
     public static void register (String apiPrefix) {

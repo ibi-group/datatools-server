@@ -146,7 +146,7 @@ public class DeployJob extends MonitorableJob {
 
             try {
                 TransferManager tx = TransferManagerBuilder.standard().withS3Client(FeedStore.s3Client).build();
-                String key = bundlePrefix + deployment.project().id + "/" + deployment.name + ".zip";
+                String key = bundlePrefix + deployment.parentProject().id + "/" + deployment.name + ".zip";
                 final Upload upload = tx.upload(this.s3Bucket, key, temp);
 
                 upload.addProgressListener((ProgressListener) progressEvent -> {
@@ -163,7 +163,7 @@ public class DeployJob extends MonitorableJob {
                 tx.shutdownNow(false);
 
                 // copy to [name]-latest.zip
-                String copyKey = bundlePrefix + deployment.project().id + "/" + deployment.project().name.toLowerCase() + "-latest.zip";
+                String copyKey = bundlePrefix + deployment.parentProject().id + "/" + deployment.parentProject().name.toLowerCase() + "-latest.zip";
                 CopyObjectRequest copyObjRequest = new CopyObjectRequest(
                     this.s3Bucket, key, this.s3Bucket, copyKey);
                 FeedStore.s3Client.copyObject(copyObjRequest);
