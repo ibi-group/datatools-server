@@ -4,6 +4,8 @@ import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Model;
 import com.mongodb.client.MongoCollection;
 import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.model.FindOneAndUpdateOptions;
+import com.mongodb.client.model.ReturnDocument;
 import com.mongodb.client.result.DeleteResult;
 import org.bson.Document;
 import org.bson.conversions.Bson;
@@ -48,6 +50,7 @@ public class TypedPersistence<T extends Model> {
     private MongoCollection<T> mongoCollection;
     private Constructor<T> noArgConstructor;
     private String collectionName;
+    private final FindOneAndUpdateOptions findOneAndUpdateOptions = new FindOneAndUpdateOptions();
 
     public TypedPersistence(MongoDatabase mongoDatabase, Class<T> clazz) {
         mongoCollection = mongoDatabase.getCollection(clazz.getSimpleName(), clazz);
@@ -57,6 +60,8 @@ public class TypedPersistence<T extends Model> {
         } catch (NoSuchMethodException ex) {
             throw new RuntimeException("Could not get no-arg constructor for class " + clazz.getName(), ex);
         }
+        // set options for findOneAndUpdate (return document should match document after update, not before)
+        findOneAndUpdateOptions.returnDocument(ReturnDocument.AFTER);
     }
 
     public T create (String updateJson) {
@@ -69,7 +74,8 @@ public class TypedPersistence<T extends Model> {
             throw new RuntimeException("Could not use no-arg constructor to instantiate class.", ex);
         }
         mongoCollection.insertOne(item);
-        return update(item.id, updateJson);
+        T updatedItem = update(item.id, updateJson);
+        return updatedItem;
     }
 
     /**
@@ -82,17 +88,17 @@ public class TypedPersistence<T extends Model> {
 
     public T update (String id, String updateJson) {
         Document updateDocument = Document.parse(updateJson);
-        return mongoCollection.findOneAndUpdate(eq(id), new Document("$set", updateDocument));
+        return mongoCollection.findOneAndUpdate(eq(id), new Document("$set", updateDocument), findOneAndUpdateOptions);
     }
 
     public T updateField (String id, String fieldName, Object value) {
-        return mongoCollection.findOneAndUpdate(eq(id), set(fieldName, value));
+        return mongoCollection.findOneAndUpdate(eq(id), set(fieldName, value), findOneAndUpdateOptions);
     }
 
     public T updateUser (String id, Auth0UserProfile profile) {
         String updateJson = String.format("{userId: %s, userEmail: %s}", profile.getUser_id(), profile.getEmail());
         Document updateDocument = Document.parse(updateJson);
-        return mongoCollection.findOneAndUpdate(eq(id), new Document("$set", updateDocument));
+        return mongoCollection.findOneAndUpdate(eq(id), new Document("$set", updateDocument), findOneAndUpdateOptions);
     }
 
     public T getById (String id) {
