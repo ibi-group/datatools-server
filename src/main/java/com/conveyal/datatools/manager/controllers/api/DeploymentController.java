@@ -140,8 +140,14 @@ public class DeploymentController {
         boolean allowedToCreate = userProfile.canAdministerProject(projectId, organizationId);
 
         if (allowedToCreate) {
-            Deployment newDeployment = Persistence.deployments.create(req.body());
-            return newDeployment;
+            Project project = Persistence.projects.getById(projectId);
+            Deployment newDeployment = new Deployment(project);
+
+            // FIXME: Here we are creating a deployment and updating it with the JSON string (two db operations)
+            // We do this because there is not currently apply JSON directly to an object (outside of Mongo codec
+            // operations)
+            Persistence.deployments.create(newDeployment);
+            return Persistence.deployments.update(newDeployment.id, req.body());
         } else {
             haltWithError(403, "Not authorized to create a deployment for project " + projectId);
             return null;
@@ -268,11 +274,11 @@ public class DeploymentController {
         // If there was a previous deployment sent to the server/router combination, set that to null because this new
         // one will overwrite it.
         if (oldDeployment != null) {
-            Persistence.deployments.update(oldDeployment.id, "{deployedTo: null}");
+            Persistence.deployments.updateField(oldDeployment.id, "deployedTo", null);
         }
 
         // Store the target server in the deployedTo field.
-        Persistence.deployments.update(d.id, String.format("{deployedTo: %s}", target));
+        Persistence.deployments.updateField(d.id, "deployedTo", target);
 
         DeployJob job = new DeployJob(d, userProfile.getUser_id(), targetUrls, otpServer.publicUrl, otpServer.s3Bucket, otpServer.s3Credentials);
         deploymentJobsByServer.put(target, job);
