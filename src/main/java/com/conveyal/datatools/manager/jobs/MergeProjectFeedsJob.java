@@ -67,7 +67,7 @@ public class MergeProjectFeedsJob extends MonitorableJob {
     @Override
     public void run() {
         // get feed sources in project
-        Collection<FeedSource> feeds = project.getProjectFeedSources();
+        Collection<FeedSource> feeds = project.retrieveProjectFeedSources();
 
         // create temp merged zip file to add feed content to
         File mergedFile = null;
@@ -97,7 +97,7 @@ public class MergeProjectFeedsJob extends MonitorableJob {
         // collect zipFiles for each feedSource before merging tables
         for (FeedSource fs : feeds) {
             // check if feed source has version (use latest)
-            FeedVersion version = fs.getLatest();
+            FeedVersion version = fs.retrieveLatest();
             if (version == null) {
                 LOG.info("Skipping {} because it has no feed versions", fs.name);
                 continue;
@@ -105,7 +105,7 @@ public class MergeProjectFeedsJob extends MonitorableJob {
             // modify feed version to use prepended feed id
             LOG.info("Adding {} feed to merged zip", fs.name);
             try {
-                File file = version.getGtfsFile();
+                File file = version.retrieveGtfsFile();
                 if (file == null) {
                     LOG.error("No file exists for {}", version.id);
                     continue;
