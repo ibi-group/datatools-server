@@ -30,7 +30,7 @@ public class FeedValidationResult implements Serializable {
     public int errorCount;
     public LocalDate startDate;
     public LocalDate endDate;
-    public Rectangle2D bounds;
+    public Bounds bounds;
     public long avgDailyRevenueTime;
 
     // legacy fields included for backwards compatibility (not currently used)
@@ -60,7 +60,7 @@ public class FeedValidationResult implements Serializable {
         this.routeCount = calcaluateCount(feed.routes);
 
         // FIXME: add back in.
-        this.bounds = calculateBounds(feed.stops);
+        this.bounds = new Bounds(calculateBounds(feed.stops));
 //        LocalDate calDateStart = stats.getCalendarDateStart();
 //        LocalDate calSvcStart = stats.getCalendarServiceRangeStart();
 //

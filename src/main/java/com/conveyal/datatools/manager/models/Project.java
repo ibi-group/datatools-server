@@ -25,13 +25,10 @@ import static com.mongodb.client.model.Filters.eq;
 public class Project extends Model {
     private static final long serialVersionUID = 1L;
 
-    /** The name of this feed collection, e.g. NYSDOT. */
+    /** The name of this project, e.g. NYSDOT. */
     public String name;
 
     public boolean useCustomOsmBounds;
-
-    // TODO either use primitives or a reference to a "bounds" object containing primitives
-    public Double osmNorth, osmSouth, osmEast, osmWest;
 
     public OtpBuildConfig buildConfig;
 
@@ -56,12 +53,14 @@ public class Project extends Model {
 
     public transient Collection<FeedSource> feedSources;
 
+    // TODO: remove default location fields (once needed for integration with gtfs-editor)
     public double defaultLocationLat, defaultLocationLon;
     public boolean autoFetchFeeds;
     public int autoFetchHour, autoFetchMinute;
 
-    // TODO either use primitives or a reference to a "bounds" object containing primitives
-    public Double north, south, east, west;
+    // Bounds is used for either OSM custom deployment bounds (if useCustomOsmBounds is true)
+    // and/or for applying a geographic filter when syncing with external feed registries.
+    public Bounds bounds;
 
     public Project() {
         this.buildConfig = new OtpBuildConfig();
@@ -70,16 +69,13 @@ public class Project extends Model {
     }
 
     /**
-     * Get all the feed sources for this feed collection
+     * Get all the feed sources for this project.
      */
     public Collection<FeedSource> retrieveProjectFeedSources() {
-//        ArrayList<? extends FeedSource> ret = new ArrayList<>();
-
         // TODO: use index, but not important for now because we generally only have one FeedCollection
         return Persistence.feedSources.getAll().stream()
                 .filter(fs -> this.id.equals(fs.projectId))
                 .collect(Collectors.toList());
-
     }
 
     @JsonProperty("numberOfFeeds")
@@ -91,11 +87,12 @@ public class Project extends Model {
      * Get all the deployments for this project.
      */
     public Collection<Deployment> retrieveDeployments() {
-        List<Deployment> ret = Persistence.deployments.getFiltered(eq("projectId", this.id));
-        return ret;
+        List<Deployment> deployments = Persistence.deployments
+                .getFiltered(eq("projectId", this.id));
+        return deployments;
     }
 
-    // TODO: Does this need to be returned with JSON
+    // TODO: Does this need to be returned with JSON API response
     public Organization retrieveOrganization() {
         if (organizationId != null) {
             return Persistence.organizations.getById(organizationId);

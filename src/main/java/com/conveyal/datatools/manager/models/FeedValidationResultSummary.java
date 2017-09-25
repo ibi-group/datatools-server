@@ -39,7 +39,7 @@ public class FeedValidationResultSummary implements Serializable {
     public LocalDate endDate;
 
     @JsonInclude(Include.ALWAYS)
-    public Rectangle2D bounds;
+    public Bounds bounds;
 
     /**
      * Construct a summarized version of the given FeedValidationResult.

@@ -8,6 +8,7 @@ import com.fasterxml.jackson.annotation.JsonView;
 
 import java.io.Serializable;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 import java.util.UUID;
 
@@ -28,9 +29,16 @@ public abstract class Model implements Serializable {
         // This autogenerates an ID
         // this is OK for dump/restore, because the ID will simply be overridden
         this.id = UUID.randomUUID().toString();
+        this.lastUpdated = new Date();
+        this.dateCreated = new Date();
     }
 
     public String id;
+
+    // FIXME: should this be stored here? Should we use lastUpdated as a nonce to protect against race conditions in DB
+    // writes?
+    public Date lastUpdated;
+    public Date dateCreated;
 
     /**
      * The ID of the user who owns this object.

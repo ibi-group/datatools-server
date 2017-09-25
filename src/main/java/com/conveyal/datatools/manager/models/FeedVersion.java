@@ -484,7 +484,7 @@ public class FeedVersion extends Model implements Serializable {
         statusMap.put("error", false);
         eventBus.post(statusMap);
 
-        Rectangle2D bounds = this.validationResult.bounds;
+        Rectangle2D bounds = this.validationResult.bounds.toRectangle2D();
 
         if (bounds == null) {
             String message = String.format("Could not build network for %s because feed bounds are unknown.", this.id);
@@ -498,7 +498,7 @@ public class FeedVersion extends Model implements Serializable {
 
         File osmExtract = downloadOSMFile(bounds);
         if (!osmExtract.exists()) {
-            InputStream is = downloadOsmExtract(this.validationResult.bounds);
+            InputStream is = downloadOsmExtract(bounds);
             OutputStream out;
             try {
                 out = new FileOutputStream(osmExtract);
@@ -567,7 +567,7 @@ public class FeedVersion extends Model implements Serializable {
      * @return whether feed version has critical errors
      */
     public boolean hasCriticalErrors() {
-        return hasCriticalErrorsExceptingDate() || (LocalDate.now()).isAfter(validationResult.endDate);
+        return hasCriticalErrorsExceptingDate() || validationResult.endDate == null || (LocalDate.now()).isAfter(validationResult.endDate);
     }
 
     /**

@@ -54,8 +54,6 @@ public class Deployment extends Model implements Serializable {
     /** What server is this currently deployed to? */
     public String deployedTo;
 
-    public Date dateCreated;
-
     @JsonView(JsonViews.DataDump.class)
     public String projectId;
 
@@ -83,7 +81,6 @@ public class Deployment extends Model implements Serializable {
     }
 
     /** All of the feed versions used in this deployment, summarized so that the Internet won't break */
-//    @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("feedVersions")
     public List<SummarizedFeedVersion> retrieveFeedVersions() {
         // return empty array if feedVersionIds is null
@@ -160,7 +157,6 @@ public class Deployment extends Model implements Serializable {
 
         this.feedSourceId = feedSource.id;
         this.projectId = feedSource.projectId;
-        this.dateCreated = new Date();
         this.feedVersionIds = new ArrayList<>();
 
         DateFormat df = new SimpleDateFormat("yyyyMMdd");
@@ -183,10 +179,8 @@ public class Deployment extends Model implements Serializable {
 
         this.projectId = project.id;
 
-        this.dateCreated = new Date();
-
-        this.feedVersionIds = new ArrayList<String>();
-        this.invalidFeedSourceIds = new ArrayList<String>();
+        this.feedVersionIds = new ArrayList<>();
+        this.invalidFeedSourceIds = new ArrayList<>();
 
         FEEDSOURCE: for (FeedSource s : project.retrieveProjectFeedSources()) {
             // only include deployable feeds
@@ -398,9 +392,8 @@ public class Deployment extends Model implements Serializable {
     public Rectangle2D retrieveProjectBounds() {
 
         Project proj = this.parentProject();
-        if(proj.useCustomOsmBounds) {
-            Rectangle2D bounds = new Rectangle2D.Double(proj.osmWest, proj.osmSouth,
-                    proj.osmEast - proj.osmWest, proj.osmNorth - proj.osmSouth);
+        if(proj.useCustomOsmBounds && proj.bounds != null) {
+            Rectangle2D bounds = proj.bounds.toRectangle2D();
             return bounds;
         }
 
@@ -420,10 +413,10 @@ public class Deployment extends Model implements Serializable {
             if (version.validationResult != null && version.validationResult.bounds != null) {
                 if (!boundsSet) {
                     // set the bounds, don't expand the null bounds
-                    bounds.setRect(versions.get(0).validationResult.bounds);
+                    bounds.setRect(versions.get(0).validationResult.bounds.toRectangle2D());
                     boundsSet = true;
                 } else {
-                    bounds.add(version.validationResult.bounds);
+                    bounds.add(version.validationResult.bounds.toRectangle2D());
                 }
             } else {
                 LOG.warn("Feed version {} has no bounds", version.id);

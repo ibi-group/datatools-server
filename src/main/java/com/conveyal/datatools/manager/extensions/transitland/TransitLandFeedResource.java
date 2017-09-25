@@ -52,7 +52,9 @@ public class TransitLandFeedResource implements ExternalFeedResource {
         String locationFilter = "";
         boolean nextPage = true;
 
-        locationFilter = "&bbox=" + project.west + "," + + project.south + "," + project.east + "," + project.north;
+        if (project.bounds != null) {
+            locationFilter = "&bbox=" + project.bounds.toCSVString();
+        }
 
         do {
             offset = perPage * count;
@@ -93,7 +95,8 @@ public class TransitLandFeedResource implements ExternalFeedResource {
 
                     FeedSource source = null;
 
-                    // check if a feed already exists with this id
+                    // Check if a feed source already exists in the project with this id, i.e., a sync
+                    // has already occurred in the past and most feed sources may already exist
                     for (FeedSource existingSource : project.retrieveProjectFeedSources()) {
                         ExternalFeedSourceProperty onestopIdProp =
                                 Persistence.externalFeedSourceProperties.getById(constructId(existingSource, this.getResourceType(), "onestop_id"));
@@ -105,26 +108,34 @@ public class TransitLandFeedResource implements ExternalFeedResource {
                     String feedName;
                     feedName = tlFeed.onestop_id;
 
+                    // FIXME: lots of duplicated code here, but I'm not sure if Mongo has an updateOrCreate function.
+                    // Feed source is new, let's store a new one.
                     if (source == null) {
                         source = new FeedSource(feedName);
+                        source.projectId = project.id;
+                        source.retrievalMethod = FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
+                        try {
+                            source.url = new URL(tlFeed.url);
+                        } catch (MalformedURLException e) {
+                            e.printStackTrace();
+                        }
+                        Persistence.feedSources.create(source);
                         LOG.info("Creating new feed source: {}", source.name);
-                    }
-                    else {
-                        source.name = feedName;
+                    } else {
+                        // Feed source already existed. Let's just sync it.
+                        URL feedUrl;
+                        source.retrievalMethod = FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
+                        try {
+                            feedUrl = new URL(tlFeed.url);
+                            Persistence.feedSources.updateField(source.id, "url", feedUrl);
+                        } catch (MalformedURLException e) {
+                            e.printStackTrace();
+                        }
+                        // FIXME: These shouldn't be separate updates.
+                        Persistence.feedSources.updateField(source.id, "name", feedName);
+                        Persistence.feedSources.updateField(source.id, "retrievalMethod", FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY);
                         LOG.info("Syncing properties: {}", source.name);
                     }
-                    // FIXME: Store feed source
-//                    source.retrievalMethod = FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
-//                    try {
-//                        source.url = new URL(tlFeed.url);
-//                    } catch (MalformedURLException e) {
-//                        e.printStackTrace();
-//                    }
-//                    source.name = feedName;
-//
-//                    source.projectId = project.id;
-//
-//                    source.save();
 
                     // create / update the properties
 

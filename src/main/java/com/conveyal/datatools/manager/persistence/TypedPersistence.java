@@ -88,10 +88,13 @@ public class TypedPersistence<T extends Model> {
 
     public T update (String id, String updateJson) {
         Document updateDocument = Document.parse(updateJson);
+
+        // TODO set lastUpdated when update is called?
         return mongoCollection.findOneAndUpdate(eq(id), new Document("$set", updateDocument), findOneAndUpdateOptions);
     }
 
     public T updateField (String id, String fieldName, Object value) {
+        // TODO set lastUpdated when update is called?
         return mongoCollection.findOneAndUpdate(eq(id), set(fieldName, value), findOneAndUpdateOptions);
     }
 

@@ -104,10 +104,10 @@ public class TransitFeedsFeedResource implements ExternalFeedResource {
                 }
 
                 // test that feed falls in bounding box (if box exists)
-                if (project.north != null) {
+                if (project.bounds != null) {
                     Double lat = feed.get("l").get("lat").asDouble();
                     Double lng = feed.get("l").get("lng").asDouble();
-                    if (lat < project.south || lat > project.north || lng < project.west || lng > project.east) {
+                    if (lat < project.bounds.south || lat > project.bounds.north || lng < project.bounds.west || lng > project.bounds.east) {
                         continue;
                     }
                 }
