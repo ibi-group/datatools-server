@@ -37,10 +37,6 @@ public class ValidateFeedJob extends MonitorableJob {
     @Override
     public void run() {
         LOG.info("Running ValidateFeedJob for {}", feedVersion.id);
-        synchronized (status) {
-            status.message = "Running validation...";
-            status.percentComplete = 30;
-        }
         feedVersion.setUserById(owner);
         feedVersion.validate(eventBus);
         feedVersion.save();

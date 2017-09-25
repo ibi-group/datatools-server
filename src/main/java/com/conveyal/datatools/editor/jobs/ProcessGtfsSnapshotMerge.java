@@ -4,56 +4,58 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.models.Snapshot;
 import com.conveyal.datatools.editor.models.transit.Agency;
+import com.conveyal.datatools.editor.models.transit.EditorFeed;
 import com.conveyal.datatools.editor.models.transit.Fare;
+import com.conveyal.datatools.editor.models.transit.GtfsRouteType;
 import com.conveyal.datatools.editor.models.transit.Route;
+import com.conveyal.datatools.editor.models.transit.RouteType;
+import com.conveyal.datatools.editor.models.transit.ServiceCalendar;
 import com.conveyal.datatools.editor.models.transit.Stop;
 import com.conveyal.datatools.editor.models.transit.StopTime;
 import com.conveyal.datatools.editor.models.transit.Trip;
+import com.conveyal.datatools.editor.models.transit.TripDirection;
+import com.conveyal.datatools.editor.models.transit.TripPattern;
+import com.conveyal.datatools.editor.models.transit.TripPatternStop;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.gtfs.GTFSFeed;
-import com.conveyal.gtfs.model.*;
+import com.conveyal.gtfs.model.CalendarDate;
+import com.conveyal.gtfs.model.Entity;
+import com.conveyal.gtfs.model.FeedInfo;
+import com.conveyal.gtfs.model.Pattern;
+import com.conveyal.gtfs.model.Service;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Sets;
 import com.google.common.primitives.Ints;
 import com.vividsolutions.jts.geom.Envelope;
 import com.vividsolutions.jts.geom.GeometryFactory;
-import com.vividsolutions.jts.geom.LineString;
 import com.vividsolutions.jts.geom.PrecisionModel;
 import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import gnu.trove.map.TIntObjectMap;
 import gnu.trove.map.hash.TIntObjectHashMap;
-import com.conveyal.datatools.editor.models.transit.*;
 import org.joda.time.DateTimeConstants;
 
 import java.awt.geom.Rectangle2D;
 import java.time.LocalDate;
-import org.mapdb.DBMaker;
 import org.mapdb.Fun;
 import org.mapdb.Fun.Tuple2;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-//import play.i18n.Messages;
 
-import java.io.File;
 import java.util.*;
 import java.util.Map.Entry;
-
-import static spark.Spark.halt;
-
 
 public class ProcessGtfsSnapshotMerge extends MonitorableJob {
     public static final Logger LOG = LoggerFactory.getLogger(ProcessGtfsSnapshotMerge.class);
     /** map from GTFS agency IDs to Agencies */
-    private Map<String, Agency> agencyIdMap = new HashMap<String, Agency>();
-    private Map<String, Route> routeIdMap = new HashMap<String, Route>();
+    private Map<String, Agency> agencyIdMap = new HashMap<>();
+    private Map<String, Route> routeIdMap = new HashMap<>();
     /** map from (gtfs stop ID, database agency ID) -> stop */
     private Map<Tuple2<String, String>, Stop> stopIdMap = Maps.newHashMap();
-    private TIntObjectMap<String> routeTypeIdMap = new TIntObjectHashMap<String>();
-    private Map<String, LineString> shapes = DBMaker.newTempHashMap();
+    private TIntObjectMap<String> routeTypeIdMap = new TIntObjectHashMap<>();
 
     private GTFSFeed input;
-    private Status status;
+    private final Status status;
     private EditorFeed feed;
 
     public FeedVersion feedVersion;
@@ -78,7 +80,6 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
         long tripCount = 0;
         long shapePointCount = 0;
         long serviceCalendarCount = 0;
-        long shapeCount = 0;
         long fareCount = 0;
 
         GlobalTx gtx = VersionedDataStore.getGlobalTx();
@@ -111,12 +112,12 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
             for(String key : feedTx.trips.keySet()) feedTx.trips.remove(key);
             LOG.info("Cleared old data");
 
-            // input = feedVersion.getGtfsFeed();
-            // TODO: use GtfsCache?
             synchronized (status) {
                 status.message = "Loading GTFS file...";
                 status.percentComplete = 5;
             }
+
+            // get GTFSFeed for the feed version
             input = feedVersion.getGtfsFeed();
             if(input == null) return;
 
@@ -162,7 +163,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
             }
             // TODO: remove stop ownership inference entirely?
             // infer agency ownership of stops, if there are multiple feeds
-            SortedSet<Tuple2<String, String>> stopsByAgency = inferAgencyStopOwnership();
+//            SortedSet<Tuple2<String, String>> stopsByAgency = inferAgencyStopOwnership();
 
             // build agency centroids as we go
             // note that these are not actually centroids, but the center of the extent of the stops . . .
@@ -178,30 +179,6 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                 feedTx.stops.put(stop.id, stop);
                 stopIdMap.put(new Tuple2(gtfsStop.stop_id, feed.id), stop);
                 stopCount++;
-
-                /*
-                // duplicate the stop for all of the feeds by which it is used
-                Collection<Agency> agencies = Collections2.transform(
-                        stopsByAgency.subSet(new Tuple2(gtfsStop.stop_id, null), new Tuple2(gtfsStop.stop_id, Fun.HI)),
-                        new Function<Tuple2<String, String>, Agency>() {
-
-                            @Override
-                            public Agency apply(Tuple2<String, String> input) {
-                                // TODO Auto-generated method stub
-                                return agencyIdMap.get(input.b);
-                            }
-                        });
-
-                // impossible to tell to whom unused stops belong, so give them to everyone
-                if (agencies.size() == 0)
-                    agencies = agencyIdMap.values();
-
-                for (Agency agency : agencies) {
-                    Stop stop = new Stop(gtfsStop, geometryFactory, agency);
-                    agencyTxs.get(agency.id).stops.put(stop.id, stop);
-                    stopIdMap.put(new Tuple2(gtfsStop.stop_id, agency.id), stop);
-                    stopEnvelopes.get(agency.id).expandToInclude(gtfsStop.stop_lon, gtfsStop.stop_lat);
-                }*/
             }
 
             LOG.info("Stops loaded: " + stopCount);
@@ -221,8 +198,6 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                 if (!routeTypeIdMap.containsKey(gtfsRoute.route_type)) {
                     RouteType rt = new RouteType();
                     rt.gtfsRouteType = GtfsRouteType.fromGtfs(gtfsRoute.route_type);
-//                    rt.hvtRouteType = rt.gtfsRouteType.toHvt();
-//                    rt.description = agencyIdMap.values().iterator().next().name + " " + rt.gtfsRouteType.toString();
                     gtx.routeTypes.put(rt.id, rt);
                     routeTypeIdMap.put(gtfsRoute.route_type, rt.id);
                 }
@@ -262,7 +237,6 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                     // number of mondays, etc. that this calendar is active
                     int monday, tuesday, wednesday, thursday, friday, saturday, sunday;
                     monday = tuesday = wednesday = thursday = friday = saturday = sunday = 0;
-
                     LocalDate startDate = null;
                     LocalDate endDate = null;
 
@@ -338,7 +312,6 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                     cal.gtfsServiceId = svc.service_id;
                 }
 
-//                feedTx.calendars.put(cal.gtfsServiceId, cal);
                 calendars.put(svc.service_id, cal);
 
                 serviceCalendarCount++;
@@ -401,6 +374,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 
                     for (com.conveyal.gtfs.model.StopTime st : stopTimes) {
                         trip.stopTimes.add(new StopTime(st, stopIdMap.get(new Tuple2<>(st.stop_id, feed.id)).id));
+                        stopTimeCount++;
                     }
 
                     feedTx.trips.put(trip.id, trip);
@@ -441,7 +415,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
             gtx.commit();
             Snapshot.deactivateSnapshots(feedVersion.feedSourceId, null);
             // create an initial snapshot for this FeedVersion
-            Snapshot snapshot = VersionedDataStore.takeSnapshot(feed.id, "Snapshot of " + feedVersion.getName(), "none");
+            Snapshot snapshot = VersionedDataStore.takeSnapshot(feed.id, feedVersion.id, "Snapshot of " + feedVersion.getName(), "none");
 
 
             LOG.info("Imported GTFS file: " + agencyCount + " agencies; " + routeCount + " routes;" + stopCount + " stops; " +  stopTimeCount + " stopTimes; " + tripCount + " trips;" + shapePointCount + " shapePoints");
@@ -456,7 +430,6 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
                 status.message = "Failed to process GTFS snapshot.";
                 status.error = true;
             }
-            halt(404, "Failed to process GTFS snapshot.");
         }
         finally {
             feedTx.rollbackIfOpen();
@@ -470,7 +443,6 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
     /** infer the ownership of stops based on what stops there
      * Returns a set of tuples stop ID, agency ID with GTFS IDs */
     private SortedSet<Tuple2<String, String>> inferAgencyStopOwnership() {
-        // agency
         SortedSet<Tuple2<String, String>> ret = Sets.newTreeSet();
 
         for (com.conveyal.gtfs.model.StopTime st : input.stop_times.values()) {
@@ -489,7 +461,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 
     /**
      * Create a trip pattern from the given trip.
-     * Neither the trippattern nor the trippatternstops are saved.
+     * Neither the TripPattern nor the TripPatternStops are saved.
      */
     public TripPattern createTripPatternFromTrip (com.conveyal.gtfs.model.Trip gtfsTrip, FeedTx tx) {
         TripPattern patt = new TripPattern();
@@ -502,7 +474,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
         patt.shape = gtfsPattern.geometry;
         patt.id = gtfsPattern.pattern_id;
 
-        patt.patternStops = new ArrayList<TripPatternStop>();
+        patt.patternStops = new ArrayList<>();
         patt.patternDirection = TripDirection.fromGtfs(gtfsTrip.direction_id);
 
         com.conveyal.gtfs.model.StopTime[] stopTimes =

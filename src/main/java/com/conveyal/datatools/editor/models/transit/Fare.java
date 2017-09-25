@@ -1,7 +1,6 @@
 package com.conveyal.datatools.editor.models.transit;
 
 import com.conveyal.datatools.editor.models.Model;
-import com.conveyal.gtfs.model.FareAttribute;
 import com.conveyal.gtfs.model.FareRule;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.google.common.collect.Lists;
@@ -27,7 +26,7 @@ public class Fare extends Model implements Cloneable, Serializable {
     public Integer transferDuration;
     public List<FareRule> fareRules  = Lists.newArrayList();
 
-    public Fare() {};
+    public Fare() {}
 
     public Fare(com.conveyal.gtfs.model.FareAttribute fare, List<com.conveyal.gtfs.model.FareRule> rules, EditorFeed feed) {
         this.gtfsFareId = fare.fare_id;

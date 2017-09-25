@@ -33,6 +33,7 @@ public class Agency extends Model implements Cloneable, Serializable, Comparable
         this.lang = agency.agency_lang;
         this.phone = agency.agency_phone;
         this.feedId = feed.id;
+        this.email = agency.agency_email;
     }
 
     public Agency () {}
@@ -63,7 +64,7 @@ public class Agency extends Model implements Cloneable, Serializable, Comparable
         ret.agency_timezone = timezone;
         ret.agency_lang = lang;
         ret.agency_phone = phone;
-//        ret.agency_email = email;
+        ret.agency_email = email;
 
         return ret;
     }
