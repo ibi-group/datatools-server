@@ -114,7 +114,6 @@ public class TripController {
 
                 }
                 validateTrip(tx, trip);
-
                 tx.trips.put(trip.id, trip);
             }
             tx.commit();
@@ -146,31 +145,7 @@ public class TripController {
             }
 
             tx = VersionedDataStore.getFeedTx(trip.feedId);
-            TripPattern patt = validateTrip(tx, trip);
-
-            String errorMessage;
-
-            // confirm that each stop in the trip matches the stop in the pattern
-            for (int i = 0; i < trip.stopTimes.size(); i++) {
-                TripPatternStop ps = patt.patternStops.get(i);
-                StopTime st =  trip.stopTimes.get(i);
-
-                if (st == null)
-                    // skipped stop
-                    continue;
-
-                if (!st.stopId.equals(ps.stopId)) {
-                    errorMessage = String.format(
-                            "Mismatch between stop sequence in trip and pattern at position %d, pattern: %s, stop: %s",
-                            i,
-                            ps.stopId,
-                            st.stopId
-                    );
-                    LOG.error(errorMessage);
-                    halt(400, SparkUtils.formatJSON(errorMessage));
-                }
-            }
-
+            validateTrip(tx, trip);
             tx.trips.put(trip.id, trip);
             tx.commit();
 
@@ -190,9 +165,14 @@ public class TripController {
         return null;
     }
 
-    private static TripPattern validateTrip(FeedTx tx, Trip trip) {
+    /**
+     * Validates that a saved trip will not cause issues with referenced pattern primarily due to
+     * mismatched stops.
+     */
+    private static void validateTrip(FeedTx tx, Trip trip) {
         TripPattern patt;
         String errorMessage;
+        // Confirm that referenced pattern ID exists
         if (!tx.tripPatterns.containsKey(trip.patternId)) {
             errorMessage = "Pattern ID " + trip.patternId + " does not exist.";
             LOG.error(errorMessage);
@@ -201,7 +181,7 @@ public class TripController {
         } else {
             patt = tx.tripPatterns.get(trip.patternId);
         }
-
+        // Confirm that # of stops in trip and pattern match.
         if (trip.stopTimes.size() != patt.patternStops.size()) {
             errorMessage = String.format(
                     "Number of stops in trip %d does not equal number of stops in pattern (%d)",
@@ -211,7 +191,26 @@ public class TripController {
             LOG.error(errorMessage);
             halt(400, SparkUtils.formatJSON(errorMessage));
         }
-        return patt;
+        // Confirm that each stop ID in the trip matches the stop ID in the pattern.
+        for (int i = 0; i < trip.stopTimes.size(); i++) {
+            TripPatternStop ps = patt.patternStops.get(i);
+            StopTime st =  trip.stopTimes.get(i);
+
+            if (st == null)
+                // null StopTime for a trip indicates a skipped stop
+                continue;
+
+            if (!st.stopId.equals(ps.stopId)) {
+                errorMessage = String.format(
+                        "Mismatch between stop sequence in trip and pattern at position %d, pattern: %s, stop: %s",
+                        i,
+                        ps.stopId,
+                        st.stopId
+                );
+                LOG.error(errorMessage);
+                halt(400, SparkUtils.formatJSON(errorMessage));
+            }
+        }
     }
 
     private static Object deleteTrip(Request req, Response res) {
