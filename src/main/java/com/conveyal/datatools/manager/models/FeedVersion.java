@@ -14,7 +14,6 @@ import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -34,8 +33,6 @@ import com.conveyal.gtfs.BaseGTFSCache;
 import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.GTFSFeed;
 import com.conveyal.gtfs.loader.Feed;
-import com.conveyal.gtfs.loader.TableReader;
-import com.conveyal.gtfs.model.StopTime;
 import com.conveyal.r5.common.R5Version;
 import com.conveyal.r5.point_to_point.builder.TNBuilderConfig;
 import com.conveyal.r5.transit.TransportNetwork;
@@ -48,7 +45,6 @@ import com.vividsolutions.jts.geom.Geometry;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.geotools.geojson.geom.GeometryJSON;
-import org.mapdb.Fun.Tuple2;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -62,7 +58,6 @@ import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 import static com.mongodb.client.model.Updates.pull;
-import static com.mongodb.client.model.Updates.set;
 import static spark.Spark.halt;
 
 /**
@@ -77,7 +72,7 @@ public class FeedVersion extends Model implements Serializable {
     private static ObjectMapper mapper = new ObjectMapper();
     public static final Logger LOG = LoggerFactory.getLogger(FeedVersion.class);
     private static final String validationSubdir = "validation/";
-    // FIXME: make this private?
+    // FIXME: move this out of FeedVersion (also, it should probably not be public)?
     public static FeedStore feedStore = new FeedStore();
 
     /**
@@ -600,7 +595,9 @@ public class FeedVersion extends Model implements Serializable {
             return fileTimestamp;
         }
 
-        this.fileTimestamp = feedStore.getFeedLastModified(id);
+        // FIXME: this is really messy.
+        Long timestamp = feedStore.getFeedLastModified(id);
+        Persistence.feedVersions.updateField(id, "fileTimestamp", timestamp);
 
         return this.fileTimestamp;
     }
@@ -614,7 +611,9 @@ public class FeedVersion extends Model implements Serializable {
             return fileSize;
         }
 
-        this.fileSize = feedStore.getFeedSize(id);
+        // FIXME: this is really messy.
+        Long feedVersionSize = feedStore.getFeedSize(id);
+        Persistence.feedVersions.updateField(id, "fileSize", feedVersionSize);
 
         return fileSize;
     }

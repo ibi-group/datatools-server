@@ -82,6 +82,7 @@ public class DataManager {
     public static final String DEFAULT_ENV = "configurations/default/env.yml";
     public static final String DEFAULT_CONFIG = "configurations/default/server.yml";
 
+//    public static FeedStore feedStore;
     public static DataSource GTFS_DATA_SOURCE;
 //    public static Persistence persistence;
 
@@ -89,6 +90,11 @@ public class DataManager {
 
         // load config
         loadConfig(args);
+
+        // FIXME: initialize feedStore here instaed of FeedVersion?
+//        feedStore = new FeedStore();
+        // FIXME: hack to statically load FeedStore
+        LOG.info(FeedStore.class.getSimpleName());
 
         // set port
         if (getConfigProperty("application.port") != null) {

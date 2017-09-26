@@ -45,6 +45,7 @@ public class FeedStore {
 
     public static final String s3Prefix = "gtfs/";
 
+    // FIXME: this should not be static most likely
     public static AmazonS3 s3Client;
     /** An AWS credentials file to use when uploading to S3 */
     private static final String S3_CREDENTIALS_FILENAME = DataManager.getConfigPropertyAsText("application.data.s3_credentials_file");
@@ -86,12 +87,17 @@ public class FeedStore {
             } catch (SdkClientException e) {
                 LOG.error("S3 client not initialized correctly.  Must provide config property application.data.s3_region or specify region in ~/.aws/config", e);
             }
+            // TODO: check for this??
+            if (s3Client == null || s3Bucket == null) {
+                throw new IllegalArgumentException("Fatal error initializing s3Bucket or s3Client");
+            }
         }
     }
 
     private static File getPath (String pathString) {
         File path = new File(pathString);
         if (!path.exists() || !path.isDirectory()) {
+            LOG.error("Directory does not exist {}", pathString);
             throw new IllegalArgumentException("Not a directory or not found: " + pathString);
         }
         return path;
@@ -156,7 +162,7 @@ public class FeedStore {
         }
     }
 
-    private String getS3Key (String id) {
+    private static String getS3Key (String id) {
         return s3Prefix + id;
     }
 
