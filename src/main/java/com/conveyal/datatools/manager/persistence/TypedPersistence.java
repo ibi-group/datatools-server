@@ -62,6 +62,9 @@ public class TypedPersistence<T extends Model> {
         }
         // set options for findOneAndUpdate (return document should match document after update, not before)
         findOneAndUpdateOptions.returnDocument(ReturnDocument.AFTER);
+
+        // TODO: can we merge update and create into createOrUpdate function using upsert option?
+//        findOneAndUpdateOptions.upsert(true);
     }
 
     public T create (String updateJson) {
