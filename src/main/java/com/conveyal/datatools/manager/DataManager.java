@@ -196,7 +196,8 @@ public class DataManager {
 
         // return 404 for any api response that's not found
         get(API_PREFIX + "*", (request, response) -> {
-            halt(404, SparkUtils.formatJSON("Unknown error occurred.", 404));
+            response.type("application/json");
+            halt(404, SparkUtils.formatJSON("API route not defined.", 404));
             return null;
         });
 
