@@ -1,13 +1,13 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.HashMap;
@@ -34,13 +34,12 @@ public class FetchProjectFeedsJob extends MonitorableJob {
         result = new HashMap<>();
 
         for(FeedSource feedSource : proj.getProjectFeedSources()) {
-
-            if (!FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.equals(feedSource.retrievalMethod))
+            // skip feed if not fetched automatically
+            if (!FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.equals(feedSource.retrievalMethod)) {
                 continue;
-//            LOG.info();
-            FetchSingleFeedJob fetchSingleFeedJob = new FetchSingleFeedJob(feedSource, owner);
-
-            new Thread(fetchSingleFeedJob).start();
+            }
+            FetchSingleFeedJob fetchSingleFeedJob = new FetchSingleFeedJob(feedSource, owner, true);
+            DataManager.heavyExecutor.execute(fetchSingleFeedJob);
         }
         jobFinished();
     }

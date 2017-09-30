@@ -1,30 +1,27 @@
 package com.conveyal.datatools.manager.jobs;
 
-import com.amazonaws.services.s3.AmazonS3Client;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.controllers.api.GtfsApiController;
 
-import java.util.List;
 import java.util.Map;
-import java.util.Timer;
-import java.util.TimerTask;
 import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.conveyal.datatools.manager.controllers.api.GtfsApiController.registerS3Feeds;
 
 /**
  * Created by landon on 3/24/16.
  */
 public class FeedUpdater {
     public Map<String, String> eTags;
-    private static Timer timer;
-    private static AmazonS3Client s3;
 
     public static final Logger LOG = LoggerFactory.getLogger(FeedUpdater.class);
 
     public FeedUpdater(Map<String, String> eTagMap, int delay, int seconds) {
         this.eTags = eTagMap;
+        LOG.info("Setting feed update to check every {} seconds", seconds);
         DataManager.scheduler.scheduleAtFixedRate(new UpdateFeedsTask(), delay, seconds, TimeUnit.SECONDS);
     }
 
@@ -36,22 +33,18 @@ public class FeedUpdater {
         this.eTags.putAll(eTagList);
     }
 
-    public void cancel(){
-        this.timer.cancel(); //Terminate the timer thread
-    }
-
-
     class UpdateFeedsTask implements Runnable {
         public void run() {
-            LOG.info("Fetching feeds...");
-            LOG.info("Current eTag list " + eTags.toString());
-            Map<String, String> updatedTags = GtfsApiController.registerS3Feeds(eTags, GtfsApiController.feedBucket, GtfsApiController.bucketFolder);
-            Boolean feedsUpdated = updatedTags.isEmpty() ? false : true;
-            addFeedETags(updatedTags);
-            if (!feedsUpdated) {
-                LOG.info("No feeds updated...");
+            Map<String, String> updatedTags;
+            boolean feedsUpdated = false;
+            try {
+                updatedTags = registerS3Feeds(eTags, GtfsApiController.feedBucket, GtfsApiController.bucketFolder);
+                feedsUpdated = !updatedTags.isEmpty();
+                addFeedETags(updatedTags);
+            } catch (Exception any) {
+                LOG.warn("Error updating feeds {}", any);
             }
-            else {
+            if (feedsUpdated) {
                 LOG.info("New eTag list " + eTags);
             }
             // TODO: compare current list of eTags against list in completed folder
