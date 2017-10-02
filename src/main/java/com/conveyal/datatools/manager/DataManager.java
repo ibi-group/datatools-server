@@ -131,6 +131,10 @@ public class DataManager {
         registerExternalResources();
     }
 
+    /**
+     * Register API routes with Spark. This register core application routes, any routes associated with optional
+     * modules and sets other core routes (e.g., 404 response) and response headers (e.g., API content type is JSON).
+     */
     private static void registerRoutes() throws IOException {
         CorsFilter.apply();
 
@@ -227,6 +231,10 @@ public class DataManager {
         });
     }
 
+    /**
+     * Convenience function to check existence of a config property (nested fields defined by dot notation
+     * "data.use_s3_storage") in either server.yml or env.yml.
+     */
     public static boolean hasConfigProperty(String name) {
         // try the server config first, then the main config
         boolean fromServerConfig = hasConfigProperty(serverConfig, name);
@@ -235,7 +243,7 @@ public class DataManager {
         return hasConfigProperty(config, name);
     }
 
-    public static boolean hasConfigProperty(JsonNode config, String name) {
+    private static boolean hasConfigProperty(JsonNode config, String name) {
         String parts[] = name.split("\\.");
         JsonNode node = config;
         for(int i = 0; i < parts.length; i++) {
@@ -245,6 +253,10 @@ public class DataManager {
         return node != null;
     }
 
+    /**
+     * Convenience function to get a config property (nested fields defined by dot notation "data.use_s3_storage") as
+     * JsonNode. Checks server.yml, then env.yml, and finally returns null if property is not found.
+     */
     public static JsonNode getConfigProperty(String name) {
         // try the server config first, then the main config
         JsonNode fromServerConfig = getConfigProperty(serverConfig, name);
@@ -253,7 +265,7 @@ public class DataManager {
         return getConfigProperty(config, name);
     }
 
-    public static JsonNode getConfigProperty(JsonNode config, String name) {
+    private static JsonNode getConfigProperty(JsonNode config, String name) {
         String parts[] = name.split("\\.");
         JsonNode node = config;
         for(int i = 0; i < parts.length; i++) {
@@ -266,6 +278,9 @@ public class DataManager {
         return node;
     }
 
+    /**
+     * Get a config property (nested fields defined by dot notation "data.use_s3_storage") as text.
+     */
     public static String getConfigPropertyAsText(String name) {
         JsonNode node = getConfigProperty(name);
         if (node != null) {
@@ -276,14 +291,25 @@ public class DataManager {
         }
     }
 
+    /**
+     * Checks if an application module (e.g., editor, GTFS+) has been enabled. The UI must also have the module
+     * enabled in order to use.
+     */
     public static boolean isModuleEnabled(String moduleName) {
         return hasConfigProperty("modules." + moduleName) && "true".equals(getConfigPropertyAsText("modules." + moduleName + ".enabled"));
     }
 
+    /**
+     * Checks if an extension has been enabled. Extensions primarily define external resources
+     * the application can sync with. The UI config must also have the extension enabled in order to use.
+     */
     public static boolean isExtensionEnabled(String extensionName) {
         return hasConfigProperty("extensions." + extensionName) && "true".equals(getConfigPropertyAsText("extensions." + extensionName + ".enabled"));
     }
 
+    /**
+     * Check if extension is enabled and, if so, register it.
+     */
     private static void registerExternalResources() {
 
         if (isExtensionEnabled("mtc")) {
@@ -301,6 +327,11 @@ public class DataManager {
             registerExternalResource(new TransitFeedsFeedResource());
         }
     }
+
+    /**
+     * Load config files from either program arguments or (if no args specified) from
+     * default configuration file locations. Config fields are retrieved with getConfigProperty.
+     */
     public static void loadConfig (String[] args) throws IOException {
         FileInputStream configStream;
         FileInputStream serverConfigStream;
@@ -321,6 +352,11 @@ public class DataManager {
         config = yamlMapper.readTree(configStream);
         serverConfig = yamlMapper.readTree(serverConfigStream);
     }
+
+    /**
+     * Register external feed resource (e.g., transit.land) with feedResources map.
+     * This essentially "enables" the syncing and storing feeds from the external resource.
+     */
     private static void registerExternalResource(ExternalFeedResource resource) {
         feedResources.put(resource.getResourceType(), resource);
     }
