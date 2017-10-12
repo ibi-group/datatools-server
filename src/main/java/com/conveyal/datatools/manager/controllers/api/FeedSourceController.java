@@ -272,6 +272,8 @@ public class FeedSourceController {
         // if we make it here, user has permission and it's a valid feedsource
         return s;
     }
+
+    // FIXME: use generic API controller and return JSON documents via BSON/Mongo
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/feedsource/:id", FeedSourceController::getFeedSource, json::write);
         get(apiPrefix + "secure/feedsource", FeedSourceController::getAllFeedSources, json::write);

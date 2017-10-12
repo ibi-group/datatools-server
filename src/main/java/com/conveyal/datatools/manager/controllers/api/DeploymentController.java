@@ -259,7 +259,7 @@ public class DeploymentController {
         // check if we can deploy
         if (deploymentJobsByServer.containsKey(target)) {
             DeployJob currentJob = deploymentJobsByServer.get(target);
-            if (currentJob != null && !currentJob.getStatus().completed) {
+            if (currentJob != null && !currentJob.status.completed) {
                 // send a 503 service unavailable as it is not possible to deploy to this target right now;
                 // someone else is deploying
                 halt(202, "Deployment currently in progress for target: " + target);
@@ -306,7 +306,7 @@ public class DeploymentController {
         if (deployJob == null)
             haltWithError(404, "No active job for " + deploymentTarget + " found");
 
-        return deployJob.getStatus();
+        return deployJob.status;
     }
 
     public static void register (String apiPrefix) {

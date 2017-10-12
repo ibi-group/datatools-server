@@ -18,23 +18,21 @@ import static spark.Spark.halt;
 /**
  * Created by demory on 7/27/16.
  */
-public class CreateFeedVersionFromSnapshotJob  extends MonitorableJob {
+public class CreateFeedVersionFromSnapshotJob extends MonitorableJob {
     public static final Logger LOG = LoggerFactory.getLogger(CreateFeedVersionFromSnapshotJob.class);
 
     public FeedVersion feedVersion;
     private String snapshotId;
-    private Status status;
 
     public CreateFeedVersionFromSnapshotJob (FeedVersion feedVersion, String snapshotId, String owner) {
         super(owner, "Creating Feed Version from Snapshot for " + feedVersion.parentFeedSource().name, JobType.CREATE_FEEDVERSION_FROM_SNAPSHOT);
         this.feedVersion = feedVersion;
         this.snapshotId = snapshotId;
-        this.status = new Status();
         status.message = "Initializing...";
     }
 
     @Override
-    public void run() {
+    public void jobLogic () {
         File file = null;
 
         try {
@@ -71,22 +69,6 @@ public class CreateFeedVersionFromSnapshotJob  extends MonitorableJob {
             status.completed = true;
             status.percentComplete = 100.0;
         }
-        jobFinished();
     }
 
-    @Override
-    public Status getStatus() {
-        synchronized (status) {
-            return status.clone();
-        }
-    }
-
-    @Override
-    public void handleStatusEvent(Map statusMap) {
-        synchronized (status) {
-            status.message = (String) statusMap.get("message");
-            status.percentComplete = (double) statusMap.get("percentComplete");
-            status.error = (boolean) statusMap.get("error");
-        }
-    }
 }

@@ -24,11 +24,11 @@ public class BuildTransportNetworkJob extends MonitorableJob {
     }
 
     @Override
-    public void run() {
+    public void jobLogic() {
         System.out.println("Building network");
         try {
             if (feedVersion.validationResult != null) {
-                feedVersion.buildTransportNetwork(eventBus);
+                feedVersion.buildTransportNetwork(status);
             }
             else {
                 synchronized (status) {
@@ -54,36 +54,6 @@ public class BuildTransportNetworkJob extends MonitorableJob {
                 status.completed = true;
             }
         }
-        jobFinished();
     }
-
-    @Override
-    public Status getStatus() {
-        synchronized (status) {
-            return status.clone();
-        }
-    }
-
-    @Override
-    public void handleStatusEvent(Map statusMap) {
-        try {
-            synchronized (status) {
-                status.message = (String) statusMap.get("message");
-                status.percentComplete = (double) statusMap.get("percentComplete");
-                status.error = (boolean) statusMap.get("error");
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-//    @Override
-//    public void handleStatusEvent(StatusEvent statusEvent) {
-//        synchronized (status) {
-//            status.message = statusEvent.message;
-//            status.percentComplete = statusEvent.percentComplete
-//            status.error = statusEvent.error;
-//        }
-//    }
 
 }

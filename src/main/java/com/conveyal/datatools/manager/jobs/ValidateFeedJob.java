@@ -14,28 +14,19 @@ public class ValidateFeedJob extends MonitorableJob {
     public static final Logger LOG = LoggerFactory.getLogger(ValidateFeedJob.class);
 
     public FeedVersion feedVersion;
-    public Status status;
 
     public ValidateFeedJob(FeedVersion version, String owner) {
         super(owner, "Validating Feed for " + version.parentFeedSource().name, JobType.VALIDATE_FEED);
         feedVersion = version;
-        status = new Status();
-        status.message = "Waiting to begin validation...";
-        status.percentComplete = 0;
+        status.update(false, "Waiting to begin validation...", 0);
     }
 
     @Override
-    public Status getStatus() {
-        synchronized (status) {
-            return status.clone();
-        }
-    }
-
-    @Override
-    public void run() {
+    public void jobLogic () {
         LOG.info("Running ValidateFeedJob for {}", feedVersion.id);
-        feedVersion.storeUser(owner);
-        feedVersion.validate(eventBus);
+        // FIXME
+//        feedVersion.storeUser(owner);
+        feedVersion.validate(status);
 
         // FIXME do we need to save feedVersion here (and in other places validate is called)?
 //        feedVersion.save();
@@ -47,19 +38,6 @@ public class ValidateFeedJob extends MonitorableJob {
                 status.completed = true;
             }
         }
-        jobFinished();
     }
 
-    @Override
-    public void handleStatusEvent(Map statusMap) {
-        synchronized (status) {
-            status.message = (String) statusMap.get("message");
-            status.percentComplete = (double) statusMap.get("percentComplete");
-            status.error = (boolean) statusMap.get("error");
-        }
-    }
-
-//    public void handleGTFSValidationEvent(GTFSValidationEvent gtfsValidationEvent) {
-//
-//    }
 }

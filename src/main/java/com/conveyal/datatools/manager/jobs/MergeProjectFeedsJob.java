@@ -43,29 +43,15 @@ public class MergeProjectFeedsJob extends MonitorableJob {
 
     private static final Logger LOG = LoggerFactory.getLogger(MonitorableJob.class);
     public final Project project;
-    private final Status status;
 
     public MergeProjectFeedsJob(Project project, String owner) {
         super(owner, "Merging project feeds for " + project.name, JobType.MERGE_PROJECT_FEEDS);
         this.project = project;
-        this.status = new Status();
         status.message = "Merging feeds...";
     }
 
     @Override
-    public Status getStatus() {
-        synchronized (status) {
-            return status.clone();
-        }
-    }
-
-    @Override
-    public void handleStatusEvent(Map statusMap) {
-
-    }
-
-    @Override
-    public void run() {
+    public void jobLogic () {
         // get feed sources in project
         Collection<FeedSource> feeds = project.retrieveProjectFeedSources();
 
@@ -176,7 +162,6 @@ public class MergeProjectFeedsJob extends MonitorableJob {
             status.completed = true;
             status.percentComplete = 100.0;
         }
-        jobFinished();
     }
 
     /**

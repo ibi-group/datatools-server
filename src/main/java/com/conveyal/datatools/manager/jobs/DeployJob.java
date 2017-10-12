@@ -48,43 +48,29 @@ public class DeployJob extends MonitorableJob {
     /** An AWS credentials file to use when uploading to S3 */
     private String s3CredentialsFilename;
 
-    /** The number of servers that have successfully been deployed to */
-    private DeployStatus status;
-
     /** The deployment to deploy */
     private Deployment deployment;
 
+    /** This hides the status field on the parent class, providing additional fields. */
+    public DeployStatus status;
+
     public DeployJob(Deployment deployment, String owner, List<String> targets, String publicUrl, String s3Bucket, String s3CredentialsFilename) {
-        super(owner);
+        // TODO add new job type or get rid of enum in favor of just using class names
+        super(owner, "Deploying " + deployment.name, JobType.UNKNOWN_TYPE);
         this.deployment = deployment;
         this.targets = targets;
         this.publicUrl = publicUrl;
         this.s3Bucket = s3Bucket;
         this.s3CredentialsFilename = s3CredentialsFilename;
+        // Use a special subclass of status here that has additional fields
         this.status = new DeployStatus();
-        this.name = "Deploying " + deployment.name;
         status.message = "Initializing...";
         status.built = false;
         status.numServersCompleted = 0;
         status.totalServers = targets == null ? 0 : targets.size();
     }
 
-    public DeployStatus getStatus () {
-        synchronized (status) {
-            return status.clone();
-        }
-    }
-
-    @Override
-    public void handleStatusEvent(Map statusMap) {
-        synchronized (status) {
-            status.message = (String) statusMap.get("message");
-            status.percentComplete = (double) statusMap.get("percentComplete");
-            status.error = (boolean) statusMap.get("error");
-        }
-    }
-
-    public void run() {
+    public void jobLogic () {
         int targetCount = targets != null ? targets.size() : 0;
         int totalTasks = 1 + targetCount;
         int tasksCompleted = 0;
@@ -96,14 +82,11 @@ public class DeployJob extends MonitorableJob {
         } catch (IOException e) {
             LOG.error("Could not create temp file");
             e.printStackTrace();
-
             synchronized (status) {
                 status.error = true;
                 status.completed = true;
                 status.message = "app.deployment.error.dump";
             }
-
-            jobFinished();
             return;
         }
 
@@ -125,8 +108,6 @@ public class DeployJob extends MonitorableJob {
                 status.completed = true;
                 status.message = "app.deployment.error.dump";
             }
-
-            jobFinished();
             return;
         }
 
@@ -190,8 +171,6 @@ public class DeployJob extends MonitorableJob {
             synchronized (status) {
                 status.completed = true;
             }
-
-            jobFinished();
             return;
         }
 
@@ -253,8 +232,6 @@ public class DeployJob extends MonitorableJob {
                     status.message = "app.deployment.error.net";
                     status.completed = true;
                 }
-
-                jobFinished();
                 return;
             }
 
@@ -270,8 +247,6 @@ public class DeployJob extends MonitorableJob {
                     status.message = "app.deployment.error.dump";
                     status.completed = true;
                 }
-
-                jobFinished();
                 return;
             }
 
@@ -285,8 +260,6 @@ public class DeployJob extends MonitorableJob {
                     status.message = "app.deployment.error.net";
                     status.completed = true;
                 }
-
-                jobFinished();
                 return;
             }
 
@@ -302,8 +275,6 @@ public class DeployJob extends MonitorableJob {
                     status.message = "app.deployment.error.net";
                     status.completed = true;
                 }
-
-                jobFinished();
                 return;
             }
 
@@ -318,7 +289,6 @@ public class DeployJob extends MonitorableJob {
                     status.message = "app.deployment.error.net";
                     status.completed = true;
                 }
-                jobFinished();
                 return;
             }
 
@@ -344,7 +314,6 @@ public class DeployJob extends MonitorableJob {
                     }
 
                     // no reason to take out more servers, it's going to have the same result
-                    jobFinished();
                     return;
                 }
             } catch (IOException e) {
@@ -368,8 +337,6 @@ public class DeployJob extends MonitorableJob {
             status.completed = true;
             status.baseUrl = this.publicUrl;
         }
-
-        jobFinished();
 
         temp.deleteOnExit();
     }
@@ -408,20 +375,5 @@ public class DeployJob extends MonitorableJob {
         /** Where can the user see the result? */
         public String baseUrl;
 
-        public DeployStatus clone () {
-            DeployStatus ret = new DeployStatus();
-            ret.message = message;
-            ret.completed = completed;
-            ret.error = error;
-            ret.built = built;
-            ret.uploading = uploading;
-            ret.uploadingS3 = uploadingS3;
-            ret.percentComplete = percentComplete;
-            ret.percentUploaded = percentUploaded;
-            ret.numServersCompleted = numServersCompleted;
-            ret.totalServers = totalServers;
-            ret.baseUrl = baseUrl;
-            return ret;
-        }
     }
 }

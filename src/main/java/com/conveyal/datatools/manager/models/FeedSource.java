@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.models;
 import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.DeleteObjectsRequest;
 import com.amazonaws.services.s3.model.ObjectMetadata;
+import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
@@ -11,12 +12,12 @@ import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
+import com.conveyal.gtfs.validator.ValidationResult;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
-import com.google.common.eventbus.EventBus;
 import com.mongodb.client.model.Sorts;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -136,12 +137,10 @@ public class FeedSource extends Model implements Cloneable {
     /**
      * Fetch the latest version of the feed.
      */
-    public FeedVersion fetch (EventBus eventBus, String fetchUser) {
-        Map<String, Object> statusMap = new HashMap<>();
-        statusMap.put("message", "Downloading file");
-        statusMap.put("percentComplete", 20.0);
-        statusMap.put("error", false);
-        eventBus.post(statusMap);
+    public FeedVersion fetch (MonitorableJob.Status status, String fetchUser) {
+        status.message = "Downloading file";
+        status.percentComplete = 20.0;
+        status.error = false;
 
         FeedVersion latest = retrieveLatest();
 
@@ -158,31 +157,11 @@ public class FeedSource extends Model implements Cloneable {
         HttpURLConnection conn;
         try {
             conn = (HttpURLConnection) url.openConnection();
-        } catch (IOException e) {
+        } catch (Exception e) {
             String message = String.format("Unable to open connection to %s; not fetching feed %s", url, this.name);
             LOG.error(message);
-            statusMap.put("message", message);
-            statusMap.put("percentComplete", 0.0);
-            statusMap.put("error", true);
-            eventBus.post(statusMap);
-            halt(400, message);
-            return null;
-        } catch (ClassCastException e) {
-            String message = String.format("Unable to open connection to %s; not fetching %s feed", url, this.name);
-            LOG.error(message);
-            statusMap.put("message", message);
-            statusMap.put("percentComplete", 0.0);
-            statusMap.put("error", true);
-            eventBus.post(statusMap);
-            halt(400, message);
-            return null;
-        } catch (NullPointerException e) {
-            String message = String.format("Unable to open connection to %s; not fetching %s feed", url, this.name);
-            LOG.error(message);
-            statusMap.put("message", message);
-            statusMap.put("percentComplete", 0.0);
-            statusMap.put("error", true);
-            eventBus.post(statusMap);
+            // TODO use this update function throughout this class
+            status.update(true, message, 0);
             halt(400, message);
             return null;
         }
@@ -202,10 +181,9 @@ public class FeedSource extends Model implements Cloneable {
                 case HttpURLConnection.HTTP_NOT_MODIFIED:
                     message = String.format("Feed %s has not been modified", this.name);
                     LOG.warn(message);
-                    statusMap.put("message", message);
-                    statusMap.put("percentComplete", 100.0);
-                    statusMap.put("error", true);
-                    eventBus.post(statusMap);
+                    status.message = message;
+                    status.percentComplete = 100.0;
+                    status.error = true;
                     halt(304, SparkUtils.formatJSON(message, 304));
                     return null;
                 case HttpURLConnection.HTTP_OK:
@@ -213,29 +191,26 @@ public class FeedSource extends Model implements Cloneable {
                 case HttpURLConnection.HTTP_MOVED_PERM:
                     message = String.format("Saving %s feed.", this.name);
                     LOG.info(message);
-                    statusMap.put("message", message);
-                    statusMap.put("percentComplete", 75.0);
-                    statusMap.put("error", false);
-                    eventBus.post(statusMap);
+                    status.message = message;
+                    status.percentComplete = 75.0;
+                    status.error = false;
                     newGtfsFile = version.newGtfsFile(conn.getInputStream());
                     break;
                 default:
                     message = String.format("HTTP status (%d: %s) retrieving %s feed", conn.getResponseCode(), conn.getResponseMessage(), this.name);
                     LOG.error(message);
-                    statusMap.put("message", message);
-                    statusMap.put("percentComplete", 100.0);
-                    statusMap.put("error", true);
-                    eventBus.post(statusMap);
+                    status.message = message;
+                    status.percentComplete = 100.0;
+                    status.error = true;
                     halt(400, SparkUtils.formatJSON(message, 400));
                     return null;
             }
         } catch (IOException e) {
             String message = String.format("Unable to connect to %s; not fetching %s feed", url, this.name);
             LOG.error(message);
-            statusMap.put("message", message);
-            statusMap.put("percentComplete", 100.0);
-            statusMap.put("error", true);
-            eventBus.post(statusMap);
+            status.message = message;
+            status.percentComplete = 100.0;
+            status.error = true;
             e.printStackTrace();
             halt(400, SparkUtils.formatJSON(message, 400, e));
             return null;
@@ -254,10 +229,9 @@ public class FeedSource extends Model implements Cloneable {
             LOG.warn(message);
             newGtfsFile.delete();
             version.delete();
-            statusMap.put("message", message);
-            statusMap.put("percentComplete", 100.0);
-            statusMap.put("error", true);
-            eventBus.post(statusMap);
+            status.message = message;
+            status.percentComplete = 100.0;
+            status.error = true;
             halt(304);
             return null;
         }
@@ -274,10 +248,9 @@ public class FeedSource extends Model implements Cloneable {
 
             String message = String.format("Fetch complete for %s", this.name);
             LOG.info(message);
-            statusMap.put("message", message);
-            statusMap.put("percentComplete", 100.0);
-            statusMap.put("error", false);
-            eventBus.post(statusMap);
+            status.message = message;
+            status.percentComplete = 100.0;
+            status.error = false;
             version.storeUser(fetchUser);
             version.fileTimestamp = conn.getLastModified();
             return version;
@@ -335,8 +308,8 @@ public class FeedSource extends Model implements Cloneable {
     @JsonProperty("latestValidation")
     public FeedValidationResultSummary latestValidation() {
         FeedVersion latest = retrieveLatest();
-        FeedValidationResult result = latest != null ? latest.validationResult : null;
-        return result != null ?new FeedValidationResultSummary(result) : null;
+        ValidationResult result = latest != null ? latest.validationResult : null;
+        return result != null ?new FeedValidationResultSummary(result, latest.feedLoadResult) : null;
     }
 
     // TODO: figure out some way to indicate whether feed has been edited since last snapshot (i.e, there exist changes)

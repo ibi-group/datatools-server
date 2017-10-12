@@ -15,15 +15,14 @@ import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.amazonaws.services.s3.model.GetObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.amazonaws.services.s3.model.S3Object;
+import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.persistence.FeedStore;
@@ -33,6 +32,8 @@ import com.conveyal.gtfs.BaseGTFSCache;
 import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.GTFSFeed;
 import com.conveyal.gtfs.loader.Feed;
+import com.conveyal.gtfs.loader.FeedLoadResult;
+import com.conveyal.gtfs.validator.ValidationResult;
 import com.conveyal.r5.common.R5Version;
 import com.conveyal.r5.point_to_point.builder.TNBuilderConfig;
 import com.conveyal.r5.transit.TransportNetwork;
@@ -40,11 +41,9 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.eventbus.EventBus;
-import com.vividsolutions.jts.geom.Geometry;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
-import org.geotools.geojson.geom.GeometryJSON;
+import org.bson.codecs.pojo.annotations.BsonProperty;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -69,6 +68,8 @@ import static spark.Spark.halt;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class FeedVersion extends Model implements Serializable {
     private static final long serialVersionUID = 1L;
+    public static final String VERSION_ID_DATE_FORMAT = "yyyyMMdd'T'HHmmssX";
+    private static final String HUMAN_READABLE_TIMESTAMP_FORMAT = "MM/dd/yyyy H:mm";
     private static ObjectMapper mapper = new ObjectMapper();
     public static final Logger LOG = LoggerFactory.getLogger(FeedVersion.class);
     private static final String validationSubdir = "validation/";
@@ -82,24 +83,14 @@ public class FeedVersion extends Model implements Serializable {
         this.updated = new Date();
         this.feedSourceId = source.id;
         this.name = formattedTimestamp() + " Version";
-
-       this.id = generateFeedVersionId(source);
-
-        // infer the version
-//        FeedVersion prev = source.retrieveLatest();
-//        if (prev != null) {
-//            this.version = prev.version + 1;
-//        }
-//        else {
-//            this.version = 1;
-//        }
+        this.id = generateFeedVersionId(source);
         int count = source.feedVersionCount();
         this.version = count + 1;
     }
 
     private String generateFeedVersionId(FeedSource source) {
         // ISO time
-        DateFormat df = new SimpleDateFormat("yyyyMMdd'T'HHmmssX");
+        DateFormat df = new SimpleDateFormat(VERSION_ID_DATE_FORMAT);
 
         // since we store directly on the file system, this lets users look at the DB directly
         // TODO: no need to BaseGTFSCache.cleanId once we rely on GTFSCache to store the feed.
@@ -128,7 +119,6 @@ public class FeedVersion extends Model implements Serializable {
         return Persistence.feedSources.getById(feedSourceId);
     }
 
-    @JsonIgnore
     public FeedVersion previousVersion() {
         return Persistence.feedVersions.getOneFiltered(and(
                 eq("version", this.version - 1), eq("feedSourceId", this.id)), null);
@@ -142,7 +132,6 @@ public class FeedVersion extends Model implements Serializable {
     }
 
     // TODO check that this filter is functional
-    @JsonIgnore
     public FeedVersion nextVersion() {
         return Persistence.feedVersions.getOneFiltered(and(
                 eq("version", this.version + 1), eq("feedSourceId", this.id)), null);
@@ -161,7 +150,6 @@ public class FeedVersion extends Model implements Serializable {
     @JsonView(JsonViews.DataDump.class)
     public String hash;
 
-    @JsonIgnore
     public File retrieveGtfsFile() {
         return feedStore.getFeed(id);
     }
@@ -178,8 +166,7 @@ public class FeedVersion extends Model implements Serializable {
         if (lastModified != null) {
             this.fileTimestamp = lastModified;
             file.setLastModified(lastModified);
-        }
-        else {
+        } else {
             this.fileTimestamp = file.lastModified();
         }
         // FIXME
@@ -189,17 +176,22 @@ public class FeedVersion extends Model implements Serializable {
     // FIXME return sql-loader Feed object.
     @JsonIgnore
     public Feed retrieveFeed() {
-        return new Feed(DataManager.GTFS_DATA_SOURCE, namespace);
+        if (feedLoadResult != null) {
+            return new Feed(DataManager.GTFS_DATA_SOURCE, feedLoadResult.uniqueIdentifier);
+        } else {
+            return null;
+        }
     }
 
     /** The results of validating this feed */
-    @JsonView(JsonViews.DataDump.class)
-    public FeedValidationResult validationResult;
+    public ValidationResult validationResult;
+
+    public FeedLoadResult feedLoadResult;
 
     @JsonView(JsonViews.UserInterface.class)
-    @JsonProperty("validationSummary")
+    @BsonProperty("validationSummary")
     public FeedValidationResultSummary validationSummary() {
-        return new FeedValidationResultSummary(validationResult);
+        return new FeedValidationResultSummary(validationResult, feedLoadResult);
     }
 
 
@@ -212,8 +204,10 @@ public class FeedVersion extends Model implements Serializable {
     /** A name for this version. Defaults to creation date if not specified by user */
     public String name;
 
+    /** The size of the original GTFS file uploaded/fetched */
     public Long fileSize;
 
+    /** The last modified timestamp of the original GTFS file uploaded/fetched */
     public Long fileTimestamp;
 
     /** SQL namespace for GTFS data */
@@ -227,9 +221,8 @@ public class FeedVersion extends Model implements Serializable {
         this.name = name;
     }
 
-    @JsonIgnore
     public String formattedTimestamp() {
-        SimpleDateFormat format = new SimpleDateFormat("MM/dd/yyyy H:mm");
+        SimpleDateFormat format = new SimpleDateFormat(HUMAN_READABLE_TIMESTAMP_FORMAT);
         return format.format(this.updated);
     }
 
@@ -240,42 +233,36 @@ public class FeedVersion extends Model implements Serializable {
      * the relational database, validating the data, and storing that validation result. Since those
      * processes more or less happen in a tight sequence, we handle all of that here.
      */
-    public void validate(EventBus eventBus) {
-        if (eventBus == null) {
-            eventBus = new EventBus();
-        }
-        Map<String, Object> statusMap = new HashMap<>();
+    public void validate(MonitorableJob.Status status) {
+
+        // Sometimes this method is called when no status object is available.
+        if (status == null) status = new MonitorableJob.Status();
 
         // STEP 1. LOAD GTFS feed into relational database
         try {
-            statusMap.put("message", "Unpacking feed...");
-            statusMap.put("percentComplete", 15.0);
-            statusMap.put("error", false);
-            eventBus.post(statusMap);
+            status.update(false,"Unpacking feed...", 15.0);
 
             // Get SQL schema namespace for the feed version. This is needed for reconnecting with feeds
             // in the database.
             String gtfsFilePath = retrieveGtfsFile().getPath();
-            namespace = GTFS.load(gtfsFilePath, DataManager.GTFS_DATA_SOURCE);
-            LOG.info("Loaded GTFS into SQL {}", namespace);
+            feedLoadResult = GTFS.load(gtfsFilePath, DataManager.GTFS_DATA_SOURCE);
+            Persistence.feedVersions.updateField(id, "feedLoadResult", feedLoadResult);
+            // FIXME: duplication of namespace (also stored as feedLoadResult.uniqueIdentifier)
+            Persistence.feedVersions.updateField(id, "namespace", feedLoadResult.uniqueIdentifier);
+            LOG.info("Loaded GTFS into SQL {}", feedLoadResult.uniqueIdentifier);
         } catch (Exception e) {
             String errorString = String.format("Error loading GTFS feed for version: %s", this.id);
             LOG.warn(errorString, e);
-            statusMap.put("message", errorString);
-            statusMap.put("percentComplete", 0.0);
-            statusMap.put("error", true);
-            eventBus.post(statusMap);
+            status.update(true, errorString, 0);
             return;
         }
 
+        // FIXME: is this the right approach?
         // if load was unsuccessful, commitAndClose with error status
-        if(namespace == null) {
+        if(feedLoadResult == null) {
             String errorString = String.format("Could not load GTFS for FeedVersion %s", id);
             LOG.warn(errorString);
-            statusMap.put("message", errorString);
-            statusMap.put("percentComplete", 0.0);
-            statusMap.put("error", true);
-            eventBus.post(statusMap);
+            status.update(true, errorString, 0);
             return;
         }
 
@@ -299,74 +286,22 @@ public class FeedVersion extends Model implements Serializable {
             if (fs.isPublic) {
                 fs.makePublic();
             }
-            statusMap.put("message", "Validating feed...");
-            statusMap.put("percentComplete", 30.0);
-            statusMap.put("error", false);
-            eventBus.post(statusMap);
+            status.update(false, "Validating feed...", 30);
             LOG.info("Beginning validation...");
-
             // run validation on feed version
-            GTFS.validate(namespace, DataManager.GTFS_DATA_SOURCE);
-
-            LOG.info("Calculating stats...");
-            try {
-                // getAverageRevenueTime occurs in FeedValidationResult, so we surround it with a try/catch just in case it fails
-                // FIXME: create feedValidationResult with Feed object that has # of routes/stops/etc.
-                Feed feed = retrieveFeed();
-                validationResult = new FeedValidationResult(feed);
-                feed.close();
-                Persistence.feedVersions.updateField(this.id, "validationResult", validationResult);
-                // This may take a while for very large feeds.
-                LOG.info("Calculating # of trips per date of service");
-//                tripsPerDate = stats.getTripCountPerDateOfService();
-            }catch (Exception e) {
-                String message = String.format("Unable to validate feed %s", this.id);
-                LOG.error(message, e);
-                statusMap.put("message", message);
-                statusMap.put("percentComplete", 0.0);
-                statusMap.put("error", true);
-                eventBus.post(statusMap);
-                validationResult = new FeedValidationResult(LoadStatus.OTHER_FAILURE, "Could not calculate validation properties.");
-                return;
-            }
+            validationResult = GTFS.validate(feedLoadResult.uniqueIdentifier, DataManager.GTFS_DATA_SOURCE);
         } catch (Exception e) {
             String message = String.format("Unable to validate feed %s", this.id);
             LOG.error(message, e);
-            statusMap.put("message", message);
-            statusMap.put("percentComplete", 0.0);
-            statusMap.put("error", true);
-            eventBus.post(statusMap);
-            validationResult = new FeedValidationResult(LoadStatus.OTHER_FAILURE, "Could not calculate validation properties.");
+            status.update(true, message, 0);
+            // FIXME create validation result with new constructor
+            validationResult = new ValidationResult();
+            validationResult.fatalException = "failure!";
             return;
+        } finally {
+            // update validation result field
+            Persistence.feedVersions.updateField(id, "validationResult", validationResult);
         }
-
-        // STEP 4. STORE validation result as json file on s3
-        // FIXME: this will likely change with sql-loading?
-        File tempFile = null;
-        try {
-            statusMap.put("message", "Saving validation results...");
-            statusMap.put("percentComplete", 80.0);
-            statusMap.put("error", false);
-            eventBus.post(statusMap);
-
-            // Use temp file
-            tempFile = File.createTempFile(this.id, ".json");
-            tempFile.deleteOnExit();
-            Map<String, Object> validation = new HashMap<>();
-            // FIXME: ensure errors loaded from sql the correct way
-            validation.put("errors", 0);
-            // FIXME: retrieveById tripsPerDate from sql
-//            validation.put("tripsPerDate", tripsPerDate);
-            GeometryJSON g = new GeometryJSON();
-            // FIXME: retrieveById merged buffers from sql
-            Geometry buffers = null; // gtfsFeed.getMergedBuffers();
-            validation.put("mergedBuffers", buffers != null ? g.toString(buffers) : null);
-            mapper.writeValue(tempFile, validation);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        LOG.info("Total errors after validation: {}", validationResult.errorCount);
-        saveValidationResult(tempFile);
     }
 
     public JsonNode retrieveValidationResult(boolean revalidate) {
@@ -462,32 +397,25 @@ public class FeedVersion extends Model implements Serializable {
         this.hash = HashUtils.hashFile(retrieveGtfsFile());
     }
 
-    public TransportNetwork buildTransportNetwork(EventBus eventBus) {
+    public TransportNetwork buildTransportNetwork(MonitorableJob.Status status) {
         // return null if validation result is null (probably means something went wrong with validation, plus we won't have feed bounds).
-        if (this.validationResult == null || validationResult.loadStatus == LoadStatus.OTHER_FAILURE) {
+        if (this.validationResult == null || validationResult.fatalException != null) {
             return null;
         }
 
-        if (eventBus == null) {
-            eventBus = new EventBus();
-        }
+        // Sometimes this method is called when no status object is available.
+        if (status == null) status = new MonitorableJob.Status();
 
         // Fetch OSM extract
-        Map<String, Object> statusMap = new HashMap<>();
-        statusMap.put("message", "Fetching OSM extract...");
-        statusMap.put("percentComplete", 10.0);
-        statusMap.put("error", false);
-        eventBus.post(statusMap);
+        status.update(false, "Fetching OSM extract...", 10);
 
-        Rectangle2D bounds = this.validationResult.bounds.toRectangle2D();
+        // FIXME: don't convert to Rectangle2D?
+        Rectangle2D bounds = this.validationResult.fullBounds.toRectangle2D();
 
         if (bounds == null) {
             String message = String.format("Could not build network for %s because feed bounds are unknown.", this.id);
             LOG.warn(message);
-            statusMap.put("message", message);
-            statusMap.put("percentComplete", 10.0);
-            statusMap.put("error", true);
-            eventBus.post(statusMap);
+            status.update(true, message, 10);
             return null;
         }
 
@@ -505,10 +433,7 @@ public class FeedVersion extends Model implements Serializable {
         }
 
         // Create/save r5 network
-        statusMap.put("message", "Creating transport network...");
-        statusMap.put("percentComplete", 50.0);
-        statusMap.put("error", false);
-        eventBus.post(statusMap);
+        status.update(false, "Creating transport network...", 50);
 
         List<GTFSFeed> feedList = new ArrayList<>();
         // FIXME: fix sql-loader integration to work with r5 TransportNetwork
@@ -519,10 +444,7 @@ public class FeedVersion extends Model implements Serializable {
         } catch (Exception e) {
             String message = String.format("Unknown error encountered while building network for %s.", this.id);
             LOG.warn(message);
-            statusMap.put("message", message);
-            statusMap.put("percentComplete", 100.0);
-            statusMap.put("error", true);
-            eventBus.post(statusMap);
+            status.update(true, message, 100);
             e.printStackTrace();
             return null;
         }
@@ -562,7 +484,9 @@ public class FeedVersion extends Model implements Serializable {
      * @return whether feed version has critical errors
      */
     public boolean hasCriticalErrors() {
-        return hasCriticalErrorsExceptingDate() || validationResult.endDate == null || (LocalDate.now()).isAfter(validationResult.endDate);
+        return hasCriticalErrorsExceptingDate() ||
+                validationResult.lastCalendarDate == null ||
+                (LocalDate.now()).isAfter(validationResult.lastCalendarDate);
     }
 
     /**
@@ -573,10 +497,10 @@ public class FeedVersion extends Model implements Serializable {
         if (validationResult == null)
             return true;
 
-        return validationResult.loadStatus != LoadStatus.SUCCESS ||
-            validationResult.stopTimesCount == 0 ||
-            validationResult.tripCount == 0 ||
-            validationResult.agencyCount == 0;
+        return validationResult.fatalException != null ||
+            feedLoadResult.stopTimes.rowCount == 0 ||
+            feedLoadResult.trips.rowCount == 0 ||
+            feedLoadResult.agency.rowCount == 0;
 
     }
 

@@ -21,16 +21,14 @@ public class FetchProjectFeedsJob extends MonitorableJob {
     // FIXME store only the project ID  not the entire project object - it might change
     private Project proj;
     public Map<String, FeedVersion> result;
-    private Status status;
 
     public FetchProjectFeedsJob (Project proj, String owner) {
         super(owner, "Fetching feeds for " + proj.name + " project.", JobType.FETCH_PROJECT_FEEDS);
         this.proj = proj;
-        this.status = new Status();
     }
 
     @Override
-    public void run() {
+    public void jobLogic() {
         LOG.info("Fetch job running for {} project at {}", proj.name, ZonedDateTime.now(ZoneId.of("America/New_York")));
         result = new HashMap<>();
 
@@ -42,22 +40,6 @@ public class FetchProjectFeedsJob extends MonitorableJob {
             FetchSingleFeedJob fetchSingleFeedJob = new FetchSingleFeedJob(feedSource, owner, true);
             DataManager.heavyExecutor.execute(fetchSingleFeedJob);
         }
-        jobFinished();
     }
 
-    @Override
-    public Status getStatus() {
-        synchronized (status) {
-            return status.clone();
-        }
-    }
-
-    @Override
-    public void handleStatusEvent(Map statusMap) {
-        synchronized (status) {
-            status.message = (String) statusMap.get("message");
-            status.percentComplete = (double) statusMap.get("percentComplete");
-            status.error = (boolean) statusMap.get("error");
-        }
-    }
 }

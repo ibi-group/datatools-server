@@ -16,7 +16,6 @@ public class ReadTransportNetworkJob extends MonitorableJob {
     private static final Logger LOG = LoggerFactory.getLogger(ReadTransportNetworkJob.class);
     public FeedVersion feedVersion;
     public TransportNetwork result;
-    public Status status;
 
     public ReadTransportNetworkJob (FeedVersion feedVersion, String owner) {
         super(owner, "Reading in Transport Network for " + feedVersion.parentFeedSource().name, JobType.BUILD_TRANSPORT_NETWORK);
@@ -27,7 +26,7 @@ public class ReadTransportNetworkJob extends MonitorableJob {
     }
 
     @Override
-    public void run() {
+    public void jobLogic () {
         LOG.info("Reading network");
         File is;
         is = feedVersion.transportNetworkPath();
@@ -45,36 +44,6 @@ public class ReadTransportNetworkJob extends MonitorableJob {
             status.percentComplete = 100;
             status.completed = true;
         }
-        jobFinished();
     }
-
-    @Override
-    public Status getStatus() {
-        synchronized (status) {
-            return status.clone();
-        }
-    }
-
-    @Override
-    public void handleStatusEvent(Map statusMap) {
-        try {
-            synchronized (status) {
-                status.message = (String) statusMap.get("message");
-                status.percentComplete = (double) statusMap.get("percentComplete");
-                status.error = (boolean) statusMap.get("error");
-            }
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
-    }
-
-//    @Override
-//    public void handleStatusEvent(StatusEvent statusEvent) {
-//        synchronized (status) {
-//            status.message = statusEvent.message;
-//            status.percentComplete = statusEvent.percentComplete
-//            status.error = statusEvent.error;
-//        }
-//    }
 
 }

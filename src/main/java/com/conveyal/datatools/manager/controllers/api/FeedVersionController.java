@@ -103,8 +103,10 @@ public class FeedVersionController  {
      *
      * Auto-fetched feeds are no longer restricted from having directly-uploaded versions, so we're not picky about
      * that anymore.
+     *
+     * @return the job ID that allows monitoring progress of the load process
      */
-    public static Boolean createFeedVersion (Request req, Response res) throws IOException, ServletException {
+    public static String createFeedVersion (Request req, Response res) throws IOException, ServletException {
 
         Auth0UserProfile userProfile = req.attribute("user");
         FeedSource feedSource = requestFeedSourceById(req, "manage");
@@ -129,7 +131,8 @@ public class FeedVersionController  {
              * Set last modified based on value of query param. This is determined/supplied by the client
              * request because this data gets lost in the uploadStream otherwise.
              */
-            file = newFeedVersion.newGtfsFile(uploadStream, Long.valueOf(req.queryParams("lastModified")));
+            Long lastModified = req.queryParams("lastModified") != null ? Long.valueOf(req.queryParams("lastModified")) : null;
+            file = newFeedVersion.newGtfsFile(uploadStream, lastModified);
             LOG.info("Last modified: {}", new Date(file.lastModified()));
         } catch (Exception e) {
             e.printStackTrace();
@@ -167,7 +170,7 @@ public class FeedVersionController  {
         ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(newFeedVersion, userProfile.getUser_id());
         DataManager.heavyExecutor.execute(processSingleFeedJob);
 
-        return true;
+        return processSingleFeedJob.jobId;
     }
 
     public static boolean createFeedVersionFromSnapshot (Request req, Response res) throws IOException, ServletException {
@@ -330,7 +333,7 @@ public class FeedVersionController  {
             halt(400, "Name parameter not specified");
         }
 
-        Persistence.feedVersions.update(v.id, String.format("{name: %s}", name));
+        Persistence.feedVersions.updateField(v.id, "name", name);
         return true;
     }
 

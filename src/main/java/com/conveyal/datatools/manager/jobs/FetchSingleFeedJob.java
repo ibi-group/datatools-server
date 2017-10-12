@@ -5,7 +5,6 @@ import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.Persistence;
-import spark.HaltException;
 
 import java.util.Map;
 
@@ -13,7 +12,6 @@ public class FetchSingleFeedJob extends MonitorableJob {
 
     private FeedSource feedSource;
     public FeedVersion result;
-    private Status status;
     private boolean continueThread;
 
     /**
@@ -26,7 +24,6 @@ public class FetchSingleFeedJob extends MonitorableJob {
         super(owner, "Fetching feed for " + feedSource.name, JobType.FETCH_SINGLE_FEED);
         this.feedSource = feedSource;
         this.result = null;
-        this.status = new Status();
         this.continueThread = continueThread;
         status.message = "Fetching...";
         status.percentComplete = 0.0;
@@ -34,16 +31,12 @@ public class FetchSingleFeedJob extends MonitorableJob {
     }
 
     @Override
-    public void run() {
+    public void jobLogic () {
         // TODO: fetch automatically vs. manually vs. in-house
-        try {
-            result = feedSource.fetch(eventBus, owner);
-            jobFinished();
-        } catch (Exception e) {
-            jobFinished();
-            // throw any halts that may have prevented this job from finishing
-            throw e;
-        }
+        result = feedSource.fetch(status, owner);
+
+        // FIXME: null result should indicate that a fetch was not needed (GTFS has not been modified)
+        // True failures will throw exceptions.
         if (result != null) {
             Persistence.feedVersions.create(result);
             // in some cases (FetchProjectFeeds) job should be run here (rather than threaded)
@@ -58,19 +51,4 @@ public class FetchSingleFeedJob extends MonitorableJob {
         }
     }
 
-    @Override
-    public Status getStatus() {
-        synchronized (status) {
-            return status.clone();
-        }
-    }
-
-    @Override
-    public void handleStatusEvent(Map statusMap) {
-        synchronized (status) {
-            status.message = (String) statusMap.get("message");
-            status.percentComplete = (double) statusMap.get("percentComplete");
-            status.error = (boolean) statusMap.get("error");
-        }
-    }
 }

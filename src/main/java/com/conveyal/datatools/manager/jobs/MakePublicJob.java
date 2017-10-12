@@ -21,28 +21,16 @@ import java.util.Map;
  */
 public class MakePublicJob extends MonitorableJob {
     public Project project;
-    public Status status;
     private static final Logger LOG = LoggerFactory.getLogger(MakePublicJob.class);
 
     public MakePublicJob(Project project, String owner) {
         super(owner, "Generating public html for " + project.name, JobType.MAKE_PROJECT_PUBLIC);
         this.project = project;
-        status = new Status();
-        status.message = "Waiting to begin validation...";
-        status.percentComplete = 0;
-    }
-    @Override
-    public Status getStatus() {
-        return null;
+        status.update(false, "Waiting to begin validation...", 0);
     }
 
     @Override
-    public void handleStatusEvent(Map statusMap) {
-
-    }
-
-    @Override
-    public void run() {
+    public void jobLogic () {
         LOG.info("Generating new html for public feeds");
         String output;
         String title = "Public Feeds";
@@ -105,7 +93,6 @@ public class MakePublicJob extends MonitorableJob {
         FeedStore.s3Client.putObject(DataManager.feedBucket, folder + fileName, file);
         FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, folder + fileName, CannedAccessControlList.PublicRead);
 
-        jobFinished();
         LOG.info("Public page updated on s3");
     }
 }

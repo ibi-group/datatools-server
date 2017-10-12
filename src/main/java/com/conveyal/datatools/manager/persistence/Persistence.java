@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.persistence;
 
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.codec.IntArrayCodec;
 import com.conveyal.datatools.manager.codec.LocalDateCodec;
 import com.conveyal.datatools.manager.codec.URLCodec;
 import com.conveyal.datatools.manager.models.Deployment;
@@ -51,11 +52,14 @@ public class Persistence {
 
         PojoCodecProvider pojoCodecProvider = PojoCodecProvider.builder()
                 .register("com.conveyal.datatools.manager.models")
+                .register("com.conveyal.gtfs.loader")
+                .register("com.conveyal.gtfs.validator")
                 .automatic(true)
                 .build();
 
         // Register our custom codecs which cannot be properly auto-built by reflection
         CodecRegistry customRegistry = CodecRegistries.fromCodecs(
+                new IntArrayCodec(),
                 new URLCodec(),
                 new LocalDateCodec());
 

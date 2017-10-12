@@ -39,7 +39,6 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
     private TIntObjectMap<String> routeTypeIdMap = new TIntObjectHashMap<>();
 
     private Feed inputFeedTables;
-    private final Status status;
     private EditorFeed editorFeed;
 
     public FeedVersion feedVersion;
@@ -51,12 +50,11 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
     public ProcessGtfsSnapshotMerge (FeedVersion feedVersion, String owner) {
         super(owner, "Creating snapshot for " + feedVersion.parentFeedSource().name, JobType.PROCESS_SNAPSHOT);
         this.feedVersion = feedVersion;
-        status = new Status();
-        status.message = "Waiting to begin job...";
-        status.percentComplete = 0;
+        status.update(false, "Waiting to begin job...", 0);
         LOG.info("GTFS Snapshot Merge for feedVersion {}", feedVersion.id);
     }
-    public void run () {
+
+    public void jobLogic () {
         long agencyCount = 0;
         long routeCount = 0;
         long stopCount = 0;
@@ -73,7 +71,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 
         editorFeed = new EditorFeed();
         editorFeed.setId(feedVersion.feedSourceId);
-        Rectangle2D bounds = feedVersion.validationSummary().bounds.toRectangle2D();
+        Rectangle2D bounds = feedVersion.validationResult.fullBounds.toRectangle2D();
         if (bounds != null) {
             editorFeed.defaultLat = bounds.getCenterY();
             editorFeed.defaultLon = bounds.getCenterX();
@@ -428,11 +426,9 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
             feedTx.rollbackIfOpen();
             gtx.rollbackIfOpen();
 
-            // TODO: make sure this is right
-            inputFeedTables.close();
+            // FIXME: anything we need to do at the end of using Feed?
+//            inputFeedTables.close();
 
-            // set job as complete
-            jobFinished();
         }
     }
 
@@ -537,20 +533,5 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
 //        return patt;
 //    }
 
-    @Override
-    public Status getStatus() {
-        synchronized (status) {
-            return status.clone();
-        }
-    }
-
-    @Override
-    public void handleStatusEvent(Map statusMap) {
-        synchronized (status) {
-            status.message = (String) statusMap.get("message");
-            status.percentComplete = (double) statusMap.get("percentComplete");
-            status.error = (boolean) statusMap.get("error");
-        }
-    }
 }
 

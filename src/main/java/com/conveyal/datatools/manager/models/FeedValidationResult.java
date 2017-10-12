@@ -1,9 +1,11 @@
 package com.conveyal.datatools.manager.models;
 
 import com.conveyal.gtfs.loader.Feed;
+import com.conveyal.gtfs.loader.FeedLoadResult;
 import com.conveyal.gtfs.loader.TableReader;
 import com.conveyal.gtfs.model.Agency;
 import com.conveyal.gtfs.model.Stop;
+import com.conveyal.gtfs.validator.ValidationResult;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.Iterators;
 
@@ -22,7 +24,6 @@ public class FeedValidationResult implements Serializable {
     @JsonProperty
     public LoadStatus loadStatus;
     public String loadFailureReason;
-    public Collection<String> agencies;
     public int agencyCount;
     public int routeCount;
     public int tripCount;
@@ -51,16 +52,14 @@ public class FeedValidationResult implements Serializable {
 
     // TODO: construct FeedValidationResult from sql-loader Feed (or FeedInfo)
 
-    public FeedValidationResult(Feed feed) {
-        ArrayList<String> agencyIds = new ArrayList<>();
-        TableReader<Agency> agencyReader = feed.agencies;
-        agencyReader.forEach(agency -> agencyIds.add(agency.agency_id));
-        this.agencies = agencyIds;
-        this.agencyCount = calcaluateCount(agencyReader);
-        this.routeCount = calcaluateCount(feed.routes);
+    public FeedValidationResult(ValidationResult validationResult, FeedLoadResult feedLoadResult) {
+        this.agencyCount = feedLoadResult.agency.rowCount;
+        this.routeCount = feedLoadResult.routes.rowCount;
+        this.tripCount = feedLoadResult.trips.rowCount;
+        this.errorCount = feedLoadResult.errorCount;
 
         // FIXME: add back in.
-        this.bounds = new Bounds(calculateBounds(feed.stops));
+//        this.bounds = new Bounds(calculateBounds(feed.stops));
 //        LocalDate calDateStart = stats.getCalendarDateStart();
 //        LocalDate calSvcStart = stats.getCalendarServiceRangeStart();
 //
@@ -97,15 +96,6 @@ public class FeedValidationResult implements Serializable {
 //        }
 
         this.loadStatus = LoadStatus.SUCCESS;
-        this.tripCount = calcaluateCount(feed.trips);
-        this.stopTimesCount = calcaluateCount(feed.stopTimes);
-        // FIXME this is not the right way to grab errors
-        this.errorCount = feed.errors.size();
-    }
-
-    private int calcaluateCount(TableReader tableReader) {
-        int count = Iterators.size(tableReader.iterator());
-        return count;
     }
 
     private Rectangle2D calculateBounds (TableReader<Stop> stops) {

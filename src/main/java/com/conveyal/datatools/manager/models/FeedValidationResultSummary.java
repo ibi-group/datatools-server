@@ -5,6 +5,8 @@ import java.io.Serializable;
 import java.time.LocalDate;
 import java.util.Collection;
 
+import com.conveyal.gtfs.loader.FeedLoadResult;
+import com.conveyal.gtfs.validator.ValidationResult;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 
@@ -43,26 +45,36 @@ public class FeedValidationResultSummary implements Serializable {
 
     /**
      * Construct a summarized version of the given FeedValidationResult.
-     * @param result
+     * @param validationResult
      */
-    public FeedValidationResultSummary (FeedValidationResult result) {
-        if (result != null) {
-            this.loadStatus = result.loadStatus;
-            this.loadFailureReason = result.loadFailureReason;
-            this.agencies = result.agencies;
-
+    public FeedValidationResultSummary (ValidationResult validationResult, FeedLoadResult feedLoadResult) {
+        if (validationResult != null) {
+            this.loadStatus = validationResult.fatalException == null
+                    ? LoadStatus.SUCCESS
+                    : LoadStatus.OTHER_FAILURE;
+            this.loadFailureReason = validationResult.fatalException != null ? validationResult.fatalException.getClass().getSimpleName() : null;
             if (loadStatus == LoadStatus.SUCCESS) {
-                this.errorCount = result.errorCount;
-                this.agencyCount = result.agencyCount;
-                this.routeCount = result.routeCount;
-                this.tripCount = result.tripCount;
-                this.stopTimesCount = result.stopTimesCount;
-                this.startDate = result.startDate;
-                this.endDate = result.endDate;
-                this.bounds = result.bounds;
-                this.avgDailyRevenueTime = result.avgDailyRevenueTime;
+                this.errorCount = validationResult.errorCount;
+                this.agencyCount = feedLoadResult.agency.rowCount;
+                this.routeCount = feedLoadResult.routes.rowCount;
+                this.tripCount = feedLoadResult.trips.rowCount;
+                this.stopTimesCount = feedLoadResult.stopTimes.rowCount;
+                this.startDate = validationResult.firstCalendarDate;
+                this.endDate = validationResult.lastCalendarDate;
+                this.bounds = boundsFromValidationResult(validationResult);
+                // FIXME: compute avg revenue time
+//                this.avgDailyRevenueTime = validationResult.avgDailyRevenueTime;
             }
         }
 
+    }
+
+    private static Bounds boundsFromValidationResult (ValidationResult result) {
+        Bounds bounds = new Bounds();
+        bounds.north = result.fullBounds.maxLat;
+        bounds.south = result.fullBounds.minLat;
+        bounds.east = result.fullBounds.maxLon;
+        bounds.west = result.fullBounds.minLon;
+        return bounds;
     }
 }
