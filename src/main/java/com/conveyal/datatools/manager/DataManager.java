@@ -84,7 +84,6 @@ public class DataManager {
     public static final String publicPath = "(" + DataManager.API_PREFIX + "|" + DataManager.EDITOR_API_PREFIX + ")public/.*";
     public static final String DEFAULT_ENV = "configurations/default/env.yml";
     public static final String DEFAULT_CONFIG = "configurations/default/server.yml";
-    public static Bugsnag bugsnag;
 //    public static FeedStore feedStore;
     public static DataSource GTFS_DATA_SOURCE;
 //    public static Persistence persistence;
