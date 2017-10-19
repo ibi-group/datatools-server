@@ -156,9 +156,9 @@ public class TypedPersistence<T extends Model> {
             LOG.info("Deleted object id={} type={}", id, collectionName);
             return true;
         } else if (result.getDeletedCount() > 1) {
-            LOG.error("Deleted more than one object for ID {}", id);
+            LOG.error("Deleted more than one {} for ID {}",collectionName, id);
         } else {
-            LOG.error("Could not delete project: {}", id);
+            LOG.error("Could not delete {}: {}", collectionName, id);
         }
         return false;
     }
