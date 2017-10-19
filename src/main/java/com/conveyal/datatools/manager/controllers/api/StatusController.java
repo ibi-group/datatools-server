@@ -113,7 +113,7 @@ public class StatusController {
 
     public static void register (String apiPrefix) {
 
-        // These two endpoints return all jobs for the current user or a specific job
+        // These endpoints return all jobs for the current user, all application jobs, or a specific job
         get(apiPrefix + "secure/status/jobs", StatusController::getUserJobsRoute, json::write);
         // FIXME Change endpoint for all jobs (to avoid overlap with jobId param)?
         get(apiPrefix + "secure/status/jobs/all", StatusController::getAllJobsRoute, json::write);
