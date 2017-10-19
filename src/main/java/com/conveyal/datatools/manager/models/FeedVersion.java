@@ -43,6 +43,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.bson.codecs.pojo.annotations.BsonProperty;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -70,9 +71,7 @@ public class FeedVersion extends Model implements Serializable {
     private static final long serialVersionUID = 1L;
     public static final String VERSION_ID_DATE_FORMAT = "yyyyMMdd'T'HHmmssX";
     private static final String HUMAN_READABLE_TIMESTAMP_FORMAT = "MM/dd/yyyy H:mm";
-    private static ObjectMapper mapper = new ObjectMapper();
     public static final Logger LOG = LoggerFactory.getLogger(FeedVersion.class);
-    private static final String validationSubdir = "validation/";
     // FIXME: move this out of FeedVersion (also, it should probably not be public)?
     public static FeedStore feedStore = new FeedStore();
 
@@ -232,6 +231,10 @@ public class FeedVersion extends Model implements Serializable {
      * uploaded manually, or god knows however else, we need a single function to handle loading a feed into
      * the relational database, validating the data, and storing that validation result. Since those
      * processes more or less happen in a tight sequence, we handle all of that here.
+     *
+     * This function is called in the job logic of a MonitorableJob. When the job is complete, the validated
+     * FeedVersion will be stored in MongoDB along with the ValidationResult and other fields populated during
+     * validation.
      */
     public void validate(MonitorableJob.Status status) {
 
@@ -246,9 +249,8 @@ public class FeedVersion extends Model implements Serializable {
             // in the database.
             String gtfsFilePath = retrieveGtfsFile().getPath();
             feedLoadResult = GTFS.load(gtfsFilePath, DataManager.GTFS_DATA_SOURCE);
-            Persistence.feedVersions.updateField(id, "feedLoadResult", feedLoadResult);
-            // FIXME: duplication of namespace (also stored as feedLoadResult.uniqueIdentifier)
-            Persistence.feedVersions.updateField(id, "namespace", feedLoadResult.uniqueIdentifier);
+            // FIXME? duplication of namespace (also stored as feedLoadResult.uniqueIdentifier)
+            namespace = feedLoadResult.uniqueIdentifier;
             LOG.info("Loaded GTFS into SQL {}", feedLoadResult.uniqueIdentifier);
         } catch (Exception e) {
             String errorString = String.format("Error loading GTFS feed for version: %s", this.id);
@@ -261,7 +263,7 @@ public class FeedVersion extends Model implements Serializable {
         // if load was unsuccessful, commitAndClose with error status
         if(feedLoadResult == null) {
             String errorString = String.format("Could not load GTFS for FeedVersion %s", id);
-            LOG.warn(errorString);
+            LOG.error(errorString);
             status.update(true, errorString, 0);
             return;
         }
@@ -294,98 +296,14 @@ public class FeedVersion extends Model implements Serializable {
             String message = String.format("Unable to validate feed %s", this.id);
             LOG.error(message, e);
             status.update(true, message, 0);
-            // FIXME create validation result with new constructor
+            // FIXME create validation result with new constructor?
             validationResult = new ValidationResult();
             validationResult.fatalException = "failure!";
             return;
-        } finally {
-            // update validation result field
-            Persistence.feedVersions.updateField(id, "validationResult", validationResult);
         }
-    }
 
-    public JsonNode retrieveValidationResult(boolean revalidate) {
-        if (revalidate) {
-            LOG.warn("Revalidation requested.  Validating feed.");
-            this.validate();
-            // TODO: change to 202 status code
-            halt(503, SparkUtils.formatJSON("Try again later. Validating feed", 503));
-        }
-        String keyName = validationSubdir + this.id + ".json";
-        InputStream objectData = null;
-        if (DataManager.feedBucket != null && DataManager.useS3) {
-            try {
-                LOG.info("Getting validation results from s3");
-                S3Object object = FeedStore.s3Client.getObject(new GetObjectRequest(DataManager.feedBucket, keyName));
-                objectData = object.getObjectContent();
-            } catch (AmazonS3Exception e) {
-                // if json file does not exist, validate feed.
-                this.validate();
-                halt(503, "Try again later. Validating feed");
-            } catch (AmazonServiceException ase) {
-                LOG.error("Error downloading from s3");
-                ase.printStackTrace();
-            }
-
-        }
-        // if s3 upload set to false
-        else {
-            File file = new File(FeedStore.basePath + "/" + keyName);
-            try {
-                objectData = new FileInputStream(file);
-            } catch (Exception e) {
-                LOG.warn("Validation does not exist.  Validating feed.");
-                this.validate();
-                halt(503, "Try again later. Validating feed");
-            }
-        }
-        return ensureValidationIsCurrent(objectData);
-    }
-
-    private JsonNode ensureValidationIsCurrent(InputStream objectData) {
-        JsonNode n;
-        // Process the objectData stream.
-        try {
-            n = mapper.readTree(objectData);
-            if (!n.has("errors") || !n.has("tripsPerDate")) {
-                throw new Exception("Validation for feed version not up to date");
-            }
-            return n;
-        } catch (IOException e) {
-            // if json file does not exist, validate feed.
-            this.validate();
-            halt(503, "Try again later. Validating feed");
-        } catch (Exception e) {
-            e.printStackTrace();
-            this.validate();
-            halt(503, "Try again later. Validating feed");
-        }
-        return null;
-    }
-
-    private void saveValidationResult(File file) {
-        String keyName = validationSubdir + this.id + ".json";
-
-        // upload to S3, if we have bucket name and use s3 storage
-        if(DataManager.feedBucket != null && DataManager.useS3) {
-            try {
-                LOG.info("Uploading validation json to S3");
-                FeedStore.s3Client.putObject(new PutObjectRequest(
-                        DataManager.feedBucket, keyName, file));
-            } catch (AmazonServiceException ase) {
-                LOG.error("Error uploading validation json to S3", ase);
-            }
-        }
-        // save to validation directory in gtfs folder
-        else {
-            File validationDir = new File(FeedStore.basePath + "/" + validationSubdir);
-            // ensure directory exists
-            validationDir.mkdir();
-            try {
-                FileUtils.copyFile(file, new File(FeedStore.basePath + "/" + keyName));
-            } catch (IOException e) {
-                LOG.error("Error saving validation json to local disk", e);
-            }
+        if (validationResult.fatalException != null) {
+            status.update(true, "Error during validation", 100, true);
         }
     }
 
@@ -445,6 +363,8 @@ public class FeedVersion extends Model implements Serializable {
             String message = String.format("Unknown error encountered while building network for %s.", this.id);
             LOG.warn(message);
             status.update(true, message, 100);
+            status.exceptionType = e.getMessage();
+            status.exceptionDetails = ExceptionUtils.getStackTrace(e);
             e.printStackTrace();
             return null;
         }

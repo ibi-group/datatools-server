@@ -136,11 +136,11 @@ public class FeedSource extends Model implements Cloneable {
 
     /**
      * Fetch the latest version of the feed.
+     *
+     * @return the fetched FeedVersion if a new version is available or null if nothing needs to be updated.
      */
     public FeedVersion fetch (MonitorableJob.Status status, String fetchUser) {
         status.message = "Downloading file";
-        status.percentComplete = 20.0;
-        status.error = false;
 
         FeedVersion latest = retrieveLatest();
 
@@ -162,7 +162,6 @@ public class FeedSource extends Model implements Cloneable {
             LOG.error(message);
             // TODO use this update function throughout this class
             status.update(true, message, 0);
-            halt(400, message);
             return null;
         }
 
@@ -181,42 +180,28 @@ public class FeedSource extends Model implements Cloneable {
                 case HttpURLConnection.HTTP_NOT_MODIFIED:
                     message = String.format("Feed %s has not been modified", this.name);
                     LOG.warn(message);
-                    status.message = message;
-                    status.percentComplete = 100.0;
-                    status.error = true;
-                    halt(304, SparkUtils.formatJSON(message, 304));
+                    status.update(false, message, 100.0);
                     return null;
                 case HttpURLConnection.HTTP_OK:
                 case HttpURLConnection.HTTP_MOVED_TEMP:
                 case HttpURLConnection.HTTP_MOVED_PERM:
                     message = String.format("Saving %s feed.", this.name);
                     LOG.info(message);
-                    status.message = message;
-                    status.percentComplete = 75.0;
-                    status.error = false;
+                    status.update(false, message, 75.0);
                     newGtfsFile = version.newGtfsFile(conn.getInputStream());
                     break;
                 default:
                     message = String.format("HTTP status (%d: %s) retrieving %s feed", conn.getResponseCode(), conn.getResponseMessage(), this.name);
                     LOG.error(message);
-                    status.message = message;
-                    status.percentComplete = 100.0;
-                    status.error = true;
-                    halt(400, SparkUtils.formatJSON(message, 400));
+                    status.update(true, message, 100.0);
                     return null;
             }
         } catch (IOException e) {
             String message = String.format("Unable to connect to %s; not fetching %s feed", url, this.name);
             LOG.error(message);
-            status.message = message;
-            status.percentComplete = 100.0;
-            status.error = true;
+            status.update(true, message, 100.0);
             e.printStackTrace();
-            halt(400, SparkUtils.formatJSON(message, 400, e));
             return null;
-        } catch (HaltException e) {
-            LOG.warn("Halt thrown", e);
-            throw e;
         }
 
         // note that anything other than a new feed fetched successfully will have already returned from the function
@@ -225,14 +210,12 @@ public class FeedSource extends Model implements Cloneable {
 
 
         if (latest != null && version.hash.equals(latest.hash)) {
+            // If new version hash equals the hash for the latest version, do not error. Simply indicate that server
+            // operators should add If-Modified-Since support to avoid wasting bandwidth.
             String message = String.format("Feed %s was fetched but has not changed; server operators should add If-Modified-Since support to avoid wasting bandwidth", this.name);
             LOG.warn(message);
             newGtfsFile.delete();
-            version.delete();
-            status.message = message;
-            status.percentComplete = 100.0;
-            status.error = true;
-            halt(304);
+            status.update(false, message, 100.0, true);
             return null;
         }
         else {
@@ -248,9 +231,7 @@ public class FeedSource extends Model implements Cloneable {
 
             String message = String.format("Fetch complete for %s", this.name);
             LOG.info(message);
-            status.message = message;
-            status.percentComplete = 100.0;
-            status.error = false;
+            status.update(false, message, 100.0);
             version.storeUser(fetchUser);
             version.fileTimestamp = conn.getLastModified();
             return version;

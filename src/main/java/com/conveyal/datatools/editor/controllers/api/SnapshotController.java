@@ -42,6 +42,7 @@ import spark.Response;
 
 import static com.conveyal.datatools.common.utils.S3Utils.getS3Credentials;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
+import static com.conveyal.datatools.editor.models.Snapshot.writeSnapshotAsGtfs;
 import static spark.Spark.*;
 
 
@@ -131,9 +132,6 @@ public class SnapshotController {
 
     /**
      * Create snapshot from feedVersion and load/import into editor database.
-     * @param req
-     * @param res
-     * @return
      */
     public static Boolean importSnapshot (Request req, Response res) {
 
@@ -312,34 +310,6 @@ public class SnapshotController {
         }
     }
 
-    /** Write snapshot to disk as GTFS */
-    public static boolean writeSnapshotAsGtfs (Tuple2<String, Integer> decodedId, File outFile) {
-        GlobalTx gtx = VersionedDataStore.getGlobalTx();
-        Snapshot local;
-        try {
-            if (!gtx.snapshots.containsKey(decodedId)) {
-                return false;
-            }
-
-            local = gtx.snapshots.get(decodedId);
-
-            new ProcessGtfsSnapshotExport(local, outFile).run();
-        } finally {
-            gtx.rollbackIfOpen();
-        }
-
-        return true;
-    }
-    public static boolean writeSnapshotAsGtfs (String id, File outFile) {
-        Tuple2<String, Integer> decodedId;
-        try {
-            decodedId = JacksonSerializers.Tuple2IntDeserializer.deserialize(id);
-        } catch (IOException e1) {
-            return false;
-        }
-        return writeSnapshotAsGtfs(decodedId, outFile);
-    }
-
     public static Object deleteSnapshot(Request req, Response res) {
         String id = req.params("id");
         Tuple2<String, Integer> decodedId;
@@ -361,9 +331,6 @@ public class SnapshotController {
     /**
      * This method is used only when NOT storing feeds on S3. It will deliver a
      * snapshot file from the local storage if a valid token is provided.
-     * @param req
-     * @param res
-     * @return
      */
     private static Object downloadSnapshotWithToken (Request req, Response res) {
         String id = req.params("token");

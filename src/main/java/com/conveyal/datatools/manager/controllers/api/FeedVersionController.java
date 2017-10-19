@@ -155,16 +155,15 @@ public class FeedVersionController  {
                 file.delete();
                 LOG.warn("File deleted");
             }
-            newFeedVersion.delete();
+            // There is no need to delete the newFeedVersion because it has not yet been persisted to MongoDB.
+//            newFeedVersion.delete();
             haltWithError(304, "Uploaded feed is identical to the latest version known to the database.");
         }
 
         newFeedVersion.setName(newFeedVersion.formattedTimestamp() + " Upload");
         // TODO newFeedVersion.fileTimestamp still exists
-        // SHould the following be removed, considering storeUserProfile is called above?
-        newFeedVersion.userId = userProfile.getUser_id();
-
-        Persistence.feedVersions.create(newFeedVersion);
+        // Should the following be removed, considering storeUserProfile is called above?
+        newFeedVersion.storeUser(userProfile);
 
         // Must be handled by executor because it takes a long time.
         ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(newFeedVersion, userProfile.getUser_id());
@@ -176,12 +175,11 @@ public class FeedVersionController  {
     public static boolean createFeedVersionFromSnapshot (Request req, Response res) throws IOException, ServletException {
 
         Auth0UserProfile userProfile = req.attribute("user");
-        // TODO: should this be edit privilege?
+        // TODO: Should the ability to create a feedVersion from snapshot be controlled by the 'edit-gtfs' privilege?
         FeedSource feedSource = requestFeedSourceById(req, "manage");
         FeedVersion feedVersion = new FeedVersion(feedSource);
         CreateFeedVersionFromSnapshotJob createFromSnapshotJob =
                 new CreateFeedVersionFromSnapshotJob(feedVersion, req.queryParams("snapshotId"), userProfile.getUser_id());
-        createFromSnapshotJob.addNextJob(new ProcessSingleFeedJob(feedVersion, userProfile.getUser_id()));
         DataManager.heavyExecutor.execute(createFromSnapshotJob);
 
         return true;
@@ -207,19 +205,20 @@ public class FeedVersionController  {
         return version;
     }
 
-    public static JsonNode getValidationResult(Request req, Response res) {
-        return getValidationResult(req, res, false);
-    }
+//    public static JsonNode getValidationResult(Request req, Response res) {
+//        return getValidationResult(req, res, false);
+//    }
 
-    public static JsonNode getPublicValidationResult(Request req, Response res) {
-        return getValidationResult(req, res, true);
-    }
+//    public static JsonNode getPublicValidationResult(Request req, Response res) {
+//        return getValidationResult(req, res, true);
+//    }
 
-    public static JsonNode getValidationResult(Request req, Response res, boolean checkPublic) {
-        FeedVersion version = requestFeedVersion(req, "view");
-
-        return version.retrieveValidationResult(false);
-    }
+    // FIXME: this used to control authenticated access to validation results.
+//    public static JsonNode getValidationResult(Request req, Response res, boolean checkPublic) {
+//        FeedVersion version = requestFeedVersion(req, "view");
+//
+//        return version.retrieveValidationResult(false);
+//    }
 
     public static JsonNode getIsochrones(Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "view");
@@ -360,9 +359,15 @@ public class FeedVersionController  {
         }
     }
 
+    /**
+     * API endpoint that instructs application to validate a feed if validation does not exist for version.
+     */
     private static JsonNode validate (Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "manage");
-        return version.retrieveValidationResult(true);
+
+        // FIXME: Update for sql-loader validation process?
+        return null;
+//        return version.retrieveValidationResult(true);
     }
 
     private static FeedVersion publishToExternalResource (Request req, Response res) {
@@ -400,7 +405,7 @@ public class FeedVersionController  {
         get(apiPrefix + "secure/feedversion/:id", FeedVersionController::getFeedVersion, json::write);
         get(apiPrefix + "secure/feedversion/:id/download", FeedVersionController::downloadFeedVersionDirectly);
         get(apiPrefix + "secure/feedversion/:id/downloadtoken", FeedVersionController::getFeedDownloadCredentials, json::write);
-        get(apiPrefix + "secure/feedversion/:id/validation", FeedVersionController::getValidationResult, json::write);
+//        get(apiPrefix + "secure/feedversion/:id/validation", FeedVersionController::getValidationResult, json::write);
         post(apiPrefix + "secure/feedversion/:id/validate", FeedVersionController::validate, json::write);
         get(apiPrefix + "secure/feedversion/:id/isochrones", FeedVersionController::getIsochrones, json::write);
         get(apiPrefix + "secure/feedversion", FeedVersionController::getAllFeedVersionsForFeedSource, json::write);
@@ -411,7 +416,7 @@ public class FeedVersionController  {
         delete(apiPrefix + "secure/feedversion/:id", FeedVersionController::deleteFeedVersion, json::write);
 
         get(apiPrefix + "public/feedversion", FeedVersionController::getAllFeedVersionsForFeedSource, json::write);
-        get(apiPrefix + "public/feedversion/:id/validation", FeedVersionController::getPublicValidationResult, json::write);
+//        get(apiPrefix + "public/feedversion/:id/validation", FeedVersionController::getPublicValidationResult, json::write);
         get(apiPrefix + "public/feedversion/:id/downloadtoken", FeedVersionController::getFeedDownloadCredentials, json::write);
 
         get(apiPrefix + "downloadfeed/:token", FeedVersionController::downloadFeedVersionWithToken);

@@ -3,6 +3,9 @@ package com.conveyal.datatools.manager.jobs;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.r5.transit.TransportNetwork;
+import org.apache.commons.lang.exception.ExceptionUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
@@ -11,48 +14,44 @@ import java.util.Map;
  */
 public class BuildTransportNetworkJob extends MonitorableJob {
 
+    private static final Logger LOG = LoggerFactory.getLogger(BuildTransportNetworkJob.class);
     public FeedVersion feedVersion;
-    private TransportNetwork result;
-    public Status status;
 
     public BuildTransportNetworkJob (FeedVersion feedVersion, String owner) {
         super(owner, "Building Transport Network for " + feedVersion.parentFeedSource().name, JobType.BUILD_TRANSPORT_NETWORK);
         this.feedVersion = feedVersion;
-        this.result = null;
-        this.status = new Status();
         status.message = "Waiting to begin job...";
     }
 
     @Override
     public void jobLogic() {
-        System.out.println("Building network");
+        TransportNetwork transportNetwork = null;
+        LOG.info("Building transport network");
         try {
-            if (feedVersion.validationResult != null) {
+            if (feedVersion.validationResult != null && feedVersion.validationResult.fatalException == null) {
+                // Build network if validation result is OK.
                 feedVersion.buildTransportNetwork(status);
             }
             else {
-                synchronized (status) {
-                    status.message = "Transport network skipped because of bad validation.";
-                    status.percentComplete = 100;
-                    status.error = true;
-                    status.completed = true;
-                }
+                // If there were validation problems, don't bother building network because it will likely have a bad
+                // result.
+                String message = "Transport network skipped because of bad validation.";
+                LOG.error(message);
+                status.update(true, message, 100, true);
+                return;
             }
         } catch (Exception e) {
-            e.printStackTrace();
-            synchronized (status) {
-                status.message = "Transport network failed!";
-                status.percentComplete = 100;
-                status.error = true;
-                status.completed = true;
-            }
+            String message = "Transport network build failed!";
+            LOG.error(message, e);
+            status.update(true, message, 100, true);
+            status.exceptionType = e.getMessage();
+            status.exceptionDetails = ExceptionUtils.getStackTrace(e);
+            return;
         }
+
         if (!status.error) {
-            synchronized (status) {
-                status.message = "Transport network built successfully!";
-                status.percentComplete = 100;
-                status.completed = true;
-            }
+            // If no error was reported in FeedVersion::buildTransportNetwork, update status.
+            status.update(false, "Transport network built successfully!", 100, true);
         }
     }
 

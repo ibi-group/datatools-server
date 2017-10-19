@@ -37,7 +37,7 @@ public class FetchProjectFeedsJob extends MonitorableJob {
             if (!FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.equals(feedSource.retrievalMethod)) {
                 continue;
             }
-            FetchSingleFeedJob fetchSingleFeedJob = new FetchSingleFeedJob(feedSource, owner, true);
+            FetchSingleFeedJob fetchSingleFeedJob = new FetchSingleFeedJob(feedSource, owner);
             DataManager.heavyExecutor.execute(fetchSingleFeedJob);
         }
     }

@@ -1,19 +1,16 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.editor.controllers.api.SnapshotController;
 import com.conveyal.datatools.editor.models.Snapshot;
 import com.conveyal.datatools.manager.models.FeedVersion;
-import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.util.Map;
 
-import static spark.Spark.halt;
+import static com.conveyal.datatools.editor.models.Snapshot.writeSnapshotAsGtfs;
 
 /**
  * Created by demory on 7/27/16.
@@ -24,7 +21,7 @@ public class CreateFeedVersionFromSnapshotJob extends MonitorableJob {
     public FeedVersion feedVersion;
     private String snapshotId;
 
-    public CreateFeedVersionFromSnapshotJob (FeedVersion feedVersion, String snapshotId, String owner) {
+    public CreateFeedVersionFromSnapshotJob(FeedVersion feedVersion, String snapshotId, String owner) {
         super(owner, "Creating Feed Version from Snapshot for " + feedVersion.parentFeedSource().name, JobType.CREATE_FEEDVERSION_FROM_SNAPSHOT);
         this.feedVersion = feedVersion;
         this.snapshotId = snapshotId;
@@ -32,43 +29,36 @@ public class CreateFeedVersionFromSnapshotJob extends MonitorableJob {
     }
 
     @Override
-    public void jobLogic () {
+    public void jobLogic() {
+        // Process feed version once GTFS file written.
+        addNextJob(new ProcessSingleFeedJob(feedVersion, owner));
+
         File file = null;
 
         try {
+            // Write snapshot as GTFS file.
             file = File.createTempFile("snapshot", ".zip");
-            SnapshotController.writeSnapshotAsGtfs(snapshotId, file);
+            writeSnapshotAsGtfs(snapshotId, file);
         } catch (Exception e) {
             e.printStackTrace();
             String message = "Unable to create temp file for snapshot";
             LOG.error(message);
-            synchronized (status) {
-                status.error = true;
-                status.message = message;
-                status.completed = true;
-            }
+            status.update(true, message, 100, true);
         }
 
         try {
             feedVersion.newGtfsFile(new FileInputStream(file));
         } catch (Exception e) {
-            LOG.error("Unable to open input stream from upload");
-            String message = "Unable to read uploaded feed";
-            synchronized (status) {
-                status.error = true;
-                status.message = message;
-                status.completed = true;
-            }
+            String message = "Unable to open input stream from upload";
+            LOG.error(message);
+            status.update(true, message, 100, true);
         }
 
         feedVersion.setName(Snapshot.get(snapshotId).name + " Snapshot Export");
-        Persistence.feedVersions.update(feedVersion.id,
-                String.format("{hash: %s}", HashUtils.hashFile(feedVersion.retrieveGtfsFile())));
-        synchronized (status) {
-            status.message = "Version created successfully.";
-            status.completed = true;
-            status.percentComplete = 100.0;
-        }
-    }
+        feedVersion.hash = HashUtils.hashFile(feedVersion.retrieveGtfsFile());
 
+        status.update(false, "Version created successfully.", 100, true);
+
+        // ProcessSingleFeedJob will now be executed, the final step of which is storing the FeedVersion in MongoDB.
+    }
 }

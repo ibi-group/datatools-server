@@ -24,19 +24,13 @@ public class ValidateFeedJob extends MonitorableJob {
     @Override
     public void jobLogic () {
         LOG.info("Running ValidateFeedJob for {}", feedVersion.id);
-        // FIXME
-//        feedVersion.storeUser(owner);
         feedVersion.validate(status);
+    }
 
-        // FIXME do we need to save feedVersion here (and in other places validate is called)?
-//        feedVersion.save();
-        if (!status.error)
-        synchronized (status) {
-            if (!status.error) {
-                status.message = "Validation complete!";
-                status.percentComplete = 100;
-                status.completed = true;
-            }
+    @Override
+    public void jobFinished () {
+        if (!status.error) {
+            status.update(false, "Validation finished!", 100, true);
         }
     }
 
