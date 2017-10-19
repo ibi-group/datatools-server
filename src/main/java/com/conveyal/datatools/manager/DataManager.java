@@ -58,7 +58,7 @@ public class DataManager {
     // TODO: define type for ExternalFeedResource Strings
     public static final Map<String, ExternalFeedResource> feedResources = new HashMap<>();
 
-    public static ConcurrentHashMap<String, ConcurrentHashSet<MonitorableJob>> userJobsMap = new ConcurrentHashMap<>();
+    public static Map<String, ConcurrentHashSet<MonitorableJob>> userJobsMap = new ConcurrentHashMap<>();
 
     public static Map<String, ScheduledFuture> autoFetchMap = new HashMap<>();
     public final static ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
@@ -77,11 +77,14 @@ public class DataManager {
 //    public final AmazonS3Client s3Client;
     public static boolean useS3;
     public static final String API_PREFIX = "/api/manager/";
+    // TODO: move gtfs-api routes to gtfs path and add auth
+    // private static final String GTFS_API_PREFIX = API_PREFIX + "gtfs/";
+    private static final String GTFS_API_PREFIX = API_PREFIX;
     public static final String EDITOR_API_PREFIX = "/api/editor/";
     public static final String publicPath = "(" + DataManager.API_PREFIX + "|" + DataManager.EDITOR_API_PREFIX + ")public/.*";
     public static final String DEFAULT_ENV = "configurations/default/env.yml";
     public static final String DEFAULT_CONFIG = "configurations/default/server.yml";
-
+    public static Bugsnag bugsnag;
 //    public static FeedStore feedStore;
     public static DataSource GTFS_DATA_SOURCE;
 //    public static Persistence persistence;
@@ -173,7 +176,7 @@ public class DataManager {
             DeploymentController.register(API_PREFIX);
         }
         if (isModuleEnabled("gtfsapi")) {
-            GtfsApiController.register(API_PREFIX);
+            GtfsApiController.register(GTFS_API_PREFIX);
         }
         if (isModuleEnabled("gtfsplus")) {
             GtfsPlusController.register(API_PREFIX);
@@ -196,6 +199,12 @@ public class DataManager {
             if(request.requestMethod().equals("OPTIONS")) return;
             Auth0Connection.checkUser(request);
         });
+
+        // FIXME: add auth check for gtfs-api. Should access to certain feeds be restricted by feedId or namespace?
+//        before(GTFS_API_PREFIX + "*", (request, response) -> {
+//            if(request.requestMethod().equals("OPTIONS")) return;
+//            Auth0Connection.checkUser(request);
+//        });
 
         // return "application/json" for all API routes
         after(API_PREFIX + "*", (request, response) -> {
