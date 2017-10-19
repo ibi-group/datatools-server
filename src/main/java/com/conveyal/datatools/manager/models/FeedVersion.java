@@ -258,15 +258,17 @@ public class FeedVersion extends Model implements Serializable {
             String errorString = String.format("Error loading GTFS feed for version: %s", this.id);
             LOG.warn(errorString, e);
             status.update(true, errorString, 0);
+            // FIXME: Delete local copy of feed version after failed load?
             return;
         }
 
         // FIXME: is this the right approach?
-        // if load was unsuccessful, commitAndClose with error status
+        // if load was unsuccessful, update status and return
         if(feedLoadResult == null) {
             String errorString = String.format("Could not load GTFS for FeedVersion %s", id);
             LOG.error(errorString);
             status.update(true, errorString, 0);
+            // FIXME: Delete local copy of feed version after failed load?
             return;
         }
 
@@ -276,7 +278,7 @@ public class FeedVersion extends Model implements Serializable {
                 FileInputStream fileStream = new FileInputStream(gtfsFile);
                 FeedVersion.feedStore.uploadToS3(fileStream, this.id, this.parentFeedSource());
 
-                // Delete local copy of feed version after successful upload
+                // Delete local copy of feed version after successful s3 upload
                 boolean fileDeleted = gtfsFile.delete();
                 if (fileDeleted) {
                     LOG.info("Local GTFS file deleted after s3 upload");
