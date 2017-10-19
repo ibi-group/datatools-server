@@ -241,13 +241,15 @@ public class FeedVersion extends Model implements Serializable {
         // Sometimes this method is called when no status object is available.
         if (status == null) status = new MonitorableJob.Status();
 
+        File gtfsFile;
         // STEP 1. LOAD GTFS feed into relational database
         try {
             status.update(false,"Unpacking feed...", 15.0);
 
             // Get SQL schema namespace for the feed version. This is needed for reconnecting with feeds
             // in the database.
-            String gtfsFilePath = retrieveGtfsFile().getPath();
+            gtfsFile = retrieveGtfsFile();
+            String gtfsFilePath = gtfsFile.getPath();
             feedLoadResult = GTFS.load(gtfsFilePath, DataManager.GTFS_DATA_SOURCE);
             // FIXME? duplication of namespace (also stored as feedLoadResult.uniqueIdentifier)
             namespace = feedLoadResult.uniqueIdentifier;
@@ -271,10 +273,16 @@ public class FeedVersion extends Model implements Serializable {
         // STEP 2. Upload GTFS to S3 (storage on local machine is done when feed is fetched/uploaded)
         if (DataManager.useS3) {
             try {
-                FileInputStream fileStream = new FileInputStream(retrieveGtfsFile());
+                FileInputStream fileStream = new FileInputStream(gtfsFile);
                 FeedVersion.feedStore.uploadToS3(fileStream, this.id, this.parentFeedSource());
 
-                // TODO: delete local copy of feed version after successful upload?
+                // Delete local copy of feed version after successful upload
+                boolean fileDeleted = gtfsFile.delete();
+                if (fileDeleted) {
+                    LOG.info("Local GTFS file deleted after s3 upload");
+                } else {
+                    LOG.error("Local GTFS file failed to delete. Server may encounter storage capacity issues!");
+                }
             } catch (FileNotFoundException e) {
                 LOG.error("Could not upload version {} to s3 bucket", this.id);
                 e.printStackTrace();
