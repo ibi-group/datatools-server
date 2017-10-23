@@ -266,7 +266,7 @@ public class FeedStore {
         return tempFile;
     }
 
-    public File uploadToS3 (InputStream inputStream, String s3FileName, FeedSource feedSource) {
+    public boolean uploadToS3 (InputStream inputStream, String s3FileName, FeedSource feedSource) {
         if (s3Bucket != null) {
             try {
                 // Use tempfile
@@ -297,11 +297,9 @@ public class FeedStore {
                 try {
                     // You can block and wait for the upload to finish
                     upload.waitForCompletion();
-                } catch (AmazonClientException amazonClientException) {
-                    System.out.println("Unable to upload file, upload aborted.");
-                    amazonClientException.printStackTrace();
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
+                } catch (AmazonClientException | InterruptedException e) {
+                    LOG.error("Unable to upload file, upload aborted.", e);
+                    return false;
                 }
 
                 // Shutdown the Transfer Manager, but don't shut down the underlying S3 client.
@@ -318,15 +316,12 @@ public class FeedStore {
                             s3Bucket, getS3Key(s3FileName), s3Bucket, copyKey);
                     s3Client.copyObject(copyObjRequest);
                 }
-                return tempFile;
-            } catch (AmazonServiceException ase) {
-                LOG.error("Error uploading feed to S3");
-                ase.printStackTrace();
-                return null;
-            } catch (IOException e) {
-                e.printStackTrace();
+                return true;
+            } catch (AmazonServiceException | IOException e) {
+                LOG.error("Error uploading feed to S3", e);
+                return false;
             }
         }
-        return null;
+        return false;
     }
 }

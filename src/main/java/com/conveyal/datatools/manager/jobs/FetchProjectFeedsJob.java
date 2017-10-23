@@ -5,11 +5,13 @@ import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -18,26 +20,29 @@ import java.util.Map;
  */
 public class FetchProjectFeedsJob extends MonitorableJob {
     public static final Logger LOG = LoggerFactory.getLogger(FetchProjectFeedsJob.class);
-    // FIXME store only the project ID  not the entire project object - it might change
-    private Project proj;
-    public Map<String, FeedVersion> result;
+    public String projectId;
 
-    public FetchProjectFeedsJob (Project proj, String owner) {
-        super(owner, "Fetching feeds for " + proj.name + " project.", JobType.FETCH_PROJECT_FEEDS);
-        this.proj = proj;
+    public FetchProjectFeedsJob (Project project, String owner) {
+        super(owner, "Fetching feeds for " + project.name + " project.", JobType.FETCH_PROJECT_FEEDS);
+        this.projectId = project.id;
     }
 
     @Override
     public void jobLogic() {
-        LOG.info("Fetch job running for {} project at {}", proj.name, ZonedDateTime.now(ZoneId.of("America/New_York")));
-        result = new HashMap<>();
-
-        for(FeedSource feedSource : proj.retrieveProjectFeedSources()) {
+        Project project = Persistence.projects.getById(projectId);
+        LOG.info("Fetch job running for {} project at {}", project.name, ZonedDateTime.now(ZoneId.of("America/New_York")));
+        Collection<FeedSource> projectFeeds = project.retrieveProjectFeedSources();
+        for(FeedSource feedSource : projectFeeds) {
             // skip feed if not fetched automatically
             if (!FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.equals(feedSource.retrievalMethod)) {
                 continue;
             }
-            FetchSingleFeedJob fetchSingleFeedJob = new FetchSingleFeedJob(feedSource, owner);
+            // No need to track overall status on this FetchProjectFeedsJob. All "child" jobs execute in threadpool,
+            // so we don't know their status.
+            FetchSingleFeedJob fetchSingleFeedJob = new FetchSingleFeedJob(feedSource, owner, true);
+            // Run this in a heavy executor with continueThread = true, so that fetch/process jobs for each
+            // feed source execute in order (i.e., fetch feed source A, then process; next, fetch feed source b, then
+            // process).
             DataManager.heavyExecutor.execute(fetchSingleFeedJob);
         }
     }

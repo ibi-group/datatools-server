@@ -21,6 +21,7 @@ public abstract class MonitorableJob implements Runnable {
     public final String name;
     public final JobType type;
     public String parentJobId;
+    public JobType parentJobType;
     // Not final to allow some jobs to have extra status fields.
     public Status status = new Status();
     public final String jobId = UUID.randomUUID().toString();
@@ -36,10 +37,13 @@ public abstract class MonitorableJob implements Runnable {
         BUILD_TRANSPORT_NETWORK,
         CREATE_FEEDVERSION_FROM_SNAPSHOT,
         PROCESS_SNAPSHOT,
+        LOAD_FEED,
         VALIDATE_FEED,
+        DEPLOY_TO_OTP,
         FETCH_PROJECT_FEEDS,
         FETCH_SINGLE_FEED,
         MAKE_PROJECT_PUBLIC,
+        PROCESS_FEED,
         MERGE_PROJECT_FEEDS
     }
 
@@ -55,7 +59,7 @@ public abstract class MonitorableJob implements Runnable {
     }
 
     /**
-     * This method should never be called directly or overriden.
+     * This method should never be called directly or overridden.
      * It is a standard start-up stage for all monitorable jobs.
      */
     private void registerJob() {
@@ -176,6 +180,7 @@ public abstract class MonitorableJob implements Runnable {
      */
     public void addNextJob(MonitorableJob job) {
         job.parentJobId = this.jobId;
+        job.parentJobType = this.type;
         subJobs.add(job);
     }
 

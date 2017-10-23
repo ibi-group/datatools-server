@@ -17,13 +17,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
-import com.amazonaws.AmazonServiceException;
-import com.amazonaws.services.s3.model.AmazonS3Exception;
-import com.amazonaws.services.s3.model.GetObjectRequest;
-import com.amazonaws.services.s3.model.PutObjectRequest;
-import com.amazonaws.services.s3.model.S3Object;
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -39,9 +33,6 @@ import com.conveyal.r5.point_to_point.builder.TNBuilderConfig;
 import com.conveyal.r5.transit.TransportNetwork;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.bson.codecs.pojo.annotations.BsonProperty;
@@ -58,7 +49,6 @@ import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 import static com.mongodb.client.model.Updates.pull;
-import static spark.Spark.halt;
 
 /**
  * Represents a version of a feed.
@@ -225,6 +215,66 @@ public class FeedVersion extends Model implements Serializable {
         return format.format(this.updated);
     }
 
+    public void load(MonitorableJob.Status status) {
+        File gtfsFile;
+        // STEP 1. LOAD GTFS feed into relational database
+        try {
+            status.update(false,"Unpacking feed...", 15.0);
+            // Get SQL schema namespace for the feed version. This is needed for reconnecting with feeds
+            // in the database.
+            gtfsFile = retrieveGtfsFile();
+            String gtfsFilePath = gtfsFile.getPath();
+            this.feedLoadResult = GTFS.load(gtfsFilePath, DataManager.GTFS_DATA_SOURCE);
+            // FIXME? duplication of namespace (also stored as feedLoadResult.uniqueIdentifier)
+            this.namespace = feedLoadResult.uniqueIdentifier;
+            LOG.info("Loaded GTFS into SQL {}", feedLoadResult.uniqueIdentifier);
+        } catch (Exception e) {
+            String errorString = String.format("Error loading GTFS feed for version: %s", this.id);
+            LOG.warn(errorString, e);
+            status.update(true, errorString, 0);
+            // FIXME: Delete local copy of feed version after failed load?
+            return;
+        }
+
+        // FIXME: is this the right approach?
+        // if load was unsuccessful, update status and return
+        if(this.feedLoadResult == null) {
+            String errorString = String.format("Could not load GTFS for FeedVersion %s", id);
+            LOG.error(errorString);
+            status.update(true, errorString, 0);
+            // FIXME: Delete local copy of feed version after failed load?
+            return;
+        }
+
+        // STEP 2. Upload GTFS to S3 (storage on local machine is done when feed is fetched/uploaded)
+        if (DataManager.useS3) {
+            try {
+                FileInputStream fileStream = new FileInputStream(gtfsFile);
+                boolean fileUploaded = FeedVersion.feedStore.uploadToS3(fileStream, this.id, this.parentFeedSource());
+                if (fileUploaded) {
+                    // Delete local copy of feed version after successful s3 upload
+                    boolean fileDeleted = gtfsFile.delete();
+                    if (fileDeleted) {
+                        LOG.info("Local GTFS file deleted after s3 upload");
+                    } else {
+                        LOG.error("Local GTFS file failed to delete. Server may encounter storage capacity issues!");
+                    }
+                } else {
+                    LOG.error("Local GTFS file not uploaded not successfully to s3!");
+                }
+                // FIXME: should this happen here?
+                FeedSource fs = parentFeedSource();
+                if (fs.isPublic) {
+                    // make feed version public... this shouldn't take very long
+                    fs.makePublic();
+                }
+            } catch (FileNotFoundException e) {
+                LOG.error("Could not upload version {} to s3 bucket", this.id);
+                e.printStackTrace();
+            }
+        }
+    }
+
     /**
      * Validate a version of GTFS. This method actually does a little more processing than just validation.
      * Because validate() is run on all GTFS feeds whether they're fetched, created from an editor snapshot,
@@ -241,79 +291,20 @@ public class FeedVersion extends Model implements Serializable {
         // Sometimes this method is called when no status object is available.
         if (status == null) status = new MonitorableJob.Status();
 
-        File gtfsFile;
-        // STEP 1. LOAD GTFS feed into relational database
+        // VALIDATE GTFS feed
         try {
-            status.update(false,"Unpacking feed...", 15.0);
-
-            // Get SQL schema namespace for the feed version. This is needed for reconnecting with feeds
-            // in the database.
-            gtfsFile = retrieveGtfsFile();
-            String gtfsFilePath = gtfsFile.getPath();
-            feedLoadResult = GTFS.load(gtfsFilePath, DataManager.GTFS_DATA_SOURCE);
-            // FIXME? duplication of namespace (also stored as feedLoadResult.uniqueIdentifier)
-            namespace = feedLoadResult.uniqueIdentifier;
-            LOG.info("Loaded GTFS into SQL {}", feedLoadResult.uniqueIdentifier);
-        } catch (Exception e) {
-            String errorString = String.format("Error loading GTFS feed for version: %s", this.id);
-            LOG.warn(errorString, e);
-            status.update(true, errorString, 0);
-            // FIXME: Delete local copy of feed version after failed load?
-            return;
-        }
-
-        // FIXME: is this the right approach?
-        // if load was unsuccessful, update status and return
-        if(feedLoadResult == null) {
-            String errorString = String.format("Could not load GTFS for FeedVersion %s", id);
-            LOG.error(errorString);
-            status.update(true, errorString, 0);
-            // FIXME: Delete local copy of feed version after failed load?
-            return;
-        }
-
-        // STEP 2. Upload GTFS to S3 (storage on local machine is done when feed is fetched/uploaded)
-        if (DataManager.useS3) {
-            try {
-                FileInputStream fileStream = new FileInputStream(gtfsFile);
-                FeedVersion.feedStore.uploadToS3(fileStream, this.id, this.parentFeedSource());
-
-                // Delete local copy of feed version after successful s3 upload
-                boolean fileDeleted = gtfsFile.delete();
-                if (fileDeleted) {
-                    LOG.info("Local GTFS file deleted after s3 upload");
-                } else {
-                    LOG.error("Local GTFS file failed to delete. Server may encounter storage capacity issues!");
-                }
-            } catch (FileNotFoundException e) {
-                LOG.error("Could not upload version {} to s3 bucket", this.id);
-                e.printStackTrace();
-            }
-        }
-
-        // STEP 3. VALIDATE GTFS feed
-        try {
-            // make feed public... this shouldn't take very long
-            FeedSource fs = parentFeedSource();
-            if (fs.isPublic) {
-                fs.makePublic();
-            }
-            status.update(false, "Validating feed...", 30);
             LOG.info("Beginning validation...");
             // run validation on feed version
+            // FIXME: pass status to validate? Or somehow listen to events?
             validationResult = GTFS.validate(feedLoadResult.uniqueIdentifier, DataManager.GTFS_DATA_SOURCE);
         } catch (Exception e) {
             String message = String.format("Unable to validate feed %s", this.id);
             LOG.error(message, e);
-            status.update(true, message, 0);
+            status.update(true, message, 100, true);
             // FIXME create validation result with new constructor?
             validationResult = new ValidationResult();
             validationResult.fatalException = "failure!";
             return;
-        }
-
-        if (validationResult.fatalException != null) {
-            status.update(true, "Error during validation", 100, true);
         }
     }
 
