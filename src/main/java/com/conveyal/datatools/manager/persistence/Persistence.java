@@ -16,6 +16,7 @@ import com.mongodb.MongoClient;
 import com.mongodb.MongoClientOptions;
 import com.mongodb.MongoClientURI;
 import com.mongodb.client.MongoDatabase;
+import com.mongodb.client.model.Indexes;
 import org.bson.codecs.configuration.CodecRegistries;
 import org.bson.codecs.configuration.CodecRegistry;
 import org.bson.codecs.pojo.PojoCodecProvider;
@@ -81,8 +82,6 @@ public class Persistence {
 
         mongoDatabase = mongo.getDatabase(DataManager.getConfigPropertyAsText(MONGO_DB_NAME));
 
-        // TODO: Set up indexes on feed versions by feedSourceId, version #?
-
         feedSources = new TypedPersistence(mongoDatabase, FeedSource.class);
         projects = new TypedPersistence(mongoDatabase, Project.class);
         feedVersions = new TypedPersistence(mongoDatabase, FeedVersion.class);
@@ -91,6 +90,11 @@ public class Persistence {
         organizations = new TypedPersistence(mongoDatabase, Organization.class);
         externalFeedSourceProperties = new TypedPersistence(mongoDatabase, ExternalFeedSourceProperty.class);
         tokens = new TypedPersistence(mongoDatabase, FeedDownloadToken.class);
+
+        // TODO: Set up indexes on feed versions by feedSourceId, version #? deployments, feedSources by projectId.
+//        deployments.getMongoCollection().createIndex(Indexes.descending("projectId"));
+//        feedSources.getMongoCollection().createIndex(Indexes.descending("projectId"));
+//        feedVersions.getMongoCollection().createIndex(Indexes.descending("feedSourceId", "version"));
     }
     
 }
