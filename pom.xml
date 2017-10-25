@@ -113,6 +113,10 @@
             <id>conveyal</id>
             <name>conveyal</name>
             <url>https://maven.conveyal.com</url>
+            <snapshots>
+                <enabled>true</enabled>
+                <updatePolicy>always</updatePolicy>
+            </snapshots>
         </repository>
         <repository>
             <id>osgeo</id>
