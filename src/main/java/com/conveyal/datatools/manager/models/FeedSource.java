@@ -4,7 +4,6 @@ import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.DeleteObjectsRequest;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.manager.DataManager;
@@ -21,7 +20,6 @@ import com.fasterxml.jackson.annotation.JsonView;
 import com.mongodb.client.model.Sorts;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import spark.HaltException;
 
 import java.io.File;
 import java.io.IOException;
@@ -35,7 +33,6 @@ import java.util.Map;
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.mongodb.client.model.Filters.eq;
 import static com.mongodb.client.model.Updates.set;
-import static spark.Spark.halt;
 
 /**
  * Created by demory on 3/22/16.

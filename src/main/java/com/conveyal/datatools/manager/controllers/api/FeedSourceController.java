@@ -196,7 +196,7 @@ public class FeedSourceController {
 
         Auth0UserProfile userProfile = req.attribute("user");
         // Run in heavyExecutor because ProcessSingleFeedJob is chained to this job (if update finds new version).
-        FetchSingleFeedJob job = new FetchSingleFeedJob(s, userProfile.getUser_id());
+        FetchSingleFeedJob job = new FetchSingleFeedJob(s, userProfile.getUser_id(), false);
         DataManager.lightExecutor.execute(job);
 
         // WARNING: infinite 2D bounds Jackson error when returning job.result, so this method now returns true

@@ -6,6 +6,7 @@ import com.conveyal.datatools.editor.models.Snapshot;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -23,10 +24,9 @@ public class ProcessSingleFeedJob extends MonitorableJob {
 
     /**
      * Create a job for the given feed version.
-     * @param feedVersion
      */
     public ProcessSingleFeedJob (FeedVersion feedVersion, String owner) {
-        super(owner, "Processing new GTFS feed version", JobType.UNKNOWN_TYPE);
+        super(owner, "Processing GTFS for " + feedVersion.parentFeedSource().name, JobType.PROCESS_FEED);
         this.feedVersion = feedVersion;
         this.owner = owner;
         status.update(false,  "Processing...", 0);
@@ -38,24 +38,31 @@ public class ProcessSingleFeedJob extends MonitorableJob {
      * initiated; however, we will not store the FeedVersion in the mongo application database until the upload and
      * processing is completed. This prevents clients from manipulating GTFS data before it is entirely imported.
      */
+    @JsonProperty
     public String getFeedVersionId () {
         return feedVersion.id;
+    }
+
+    @JsonProperty
+    public String getFeedSourceId () {
+        return feedVersion.parentFeedSource().id;
     }
 
     @Override
     public void jobLogic () {
         LOG.info("Processing feed for {}", feedVersion.id);
 
-        // set up the validation job to run first
-        ValidateFeedJob validateJob = new ValidateFeedJob(feedVersion, owner);
-        addNextJob(validateJob);
+        // First, load the feed into database.
+        addNextJob(new LoadFeedJob(feedVersion, owner));
 
-        // use this FeedVersion to seed Editor DB provided no snapshots for feed already exist
+        // Next, validate the feed.
+        addNextJob(new ValidateFeedJob(feedVersion, owner));
+
+        // Use this FeedVersion to seed Editor DB (provided no snapshots for feed already exist).
         if(DataManager.isModuleEnabled("editor")) {
             // chain snapshot-creation job if no snapshots currently exist for feed
             if (Snapshot.getSnapshots(feedVersion.feedSourceId).size() == 0) {
-                ProcessGtfsSnapshotMerge processGtfsSnapshotMergeJob = new ProcessGtfsSnapshotMerge(feedVersion, owner);
-                addNextJob(processGtfsSnapshotMergeJob);
+                addNextJob(new ProcessGtfsSnapshotMerge(feedVersion, owner));
             }
         }
 
@@ -68,8 +75,7 @@ public class ProcessSingleFeedJob extends MonitorableJob {
     @Override
     public void jobFinished () {
         if (!status.error) {
-            // At this point all GTFS data has been loaded and validated, so we record the FeedVersion into mongo.
-            Persistence.feedVersions.create(feedVersion);
+            // Note: storing a new feed version in database is handled at completion of the ValidateFeedJob subtask.
             status.update(false, "New version saved.", 100, true);
         } else {
             LOG.warn("Not storing version {} because error occurred during processing.", feedVersion.id);

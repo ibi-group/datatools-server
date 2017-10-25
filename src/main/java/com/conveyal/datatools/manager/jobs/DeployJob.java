@@ -59,7 +59,7 @@ public class DeployJob extends MonitorableJob {
 
     public DeployJob(Deployment deployment, String owner, List<String> targets, String publicUrl, String s3Bucket, String s3CredentialsFilename) {
         // TODO add new job type or get rid of enum in favor of just using class names
-        super(owner, "Deploying " + deployment.name, JobType.UNKNOWN_TYPE);
+        super(owner, "Deploying " + deployment.name, JobType.DEPLOY_TO_OTP);
         this.deployment = deployment;
         this.targets = targets;
         this.publicUrl = publicUrl;
