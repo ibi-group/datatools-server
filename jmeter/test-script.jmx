@@ -155,8 +155,8 @@
         <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="HTTP Request - Create Feed Version (by uploading zip)" enabled="true">
           <elementProp name="HTTPsampler.Files" elementType="HTTPFileArgs">
             <collectionProp name="HTTPFileArgs.files">
-              <elementProp name="fixtures/gtfs_ASC.zip" elementType="HTTPFileArg">
-                <stringProp name="File.path">fixtures/gtfs_ASC.zip</stringProp>
+              <elementProp name="fixtures/gtfs.zip" elementType="HTTPFileArg">
+                <stringProp name="File.path">fixtures/gtfs.zip</stringProp>
                 <stringProp name="File.paramname">file</stringProp>
                 <stringProp name="File.mimetype">application/zip</stringProp>
               </elementProp>
