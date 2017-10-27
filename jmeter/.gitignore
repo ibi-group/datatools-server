@@ -3,5 +3,4 @@ apache-jmeter*
 *.log
 
 # test output
-report/*
-result/*
+output/*

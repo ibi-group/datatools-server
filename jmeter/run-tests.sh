@@ -1,16 +1,30 @@
 #!/bin/sh
 
-# clean up old output
-rm -rf result
-rm -rf report
-mkdir result
-mkdir report
-
-# sanity check: make sure datatools server is running
-if wget -q http://localhost:4000 > /dev/null; then
-  # assume we're good to go
-  apache-jmeter-3.3/bin/jmeter.sh -n -t test-script.jmx -l result/result.csv -e -o report
-else
-  # TODO: add some more notes about how it needs auth disabled?
-  echo "No server running on port 4000.  Please start up datatools-server."
+if [ -z $1 ]
+then
+  echo 'WARNING: s3 bucket not supplied, results will not be uploaded to s3'
 fi
+
+# clean up old output
+rm -rf output
+mkdir output
+mkdir output/result
+mkdir output/report
+
+echo "Begin jmeter script"
+
+apache-jmeter-3.3/bin/jmeter.sh -n -t test-script.jmx -l output/result/result.csv -e -o output/report
+
+tar -czvf output.tar.gz output
+
+if [ -z $1 ]
+then
+  echo 'WARNING: s3 bucket not supplied, results will not be uploaded to s3'
+else
+  s3location="s3://$1/dt_jmeter_run_$(date +%Y-%m-%dT%H-%M-%S-%Z).tar.gz"
+  echo "Uploading to $s3location"
+  aws s3 cp output.tar.gz $s3location
+  echo "Uploaded to $s3location"
+fi
+
+echo "done"
