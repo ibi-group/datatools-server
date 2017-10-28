@@ -341,6 +341,26 @@ vars.put(&quot;feedUploadCompleteTime&quot;, String.valueOf(feedUploadCompleteTi
                 <stringProp name="TestPlan.comments">Check if job is complete and if so, prepare to exit loop and calculate feed processing time</stringProp>
               </BeanShellPostProcessor>
               <hashTree/>
+              <JSR223Assertion guiclass="TestBeanGUI" testclass="JSR223Assertion" testname="JSR223 Assertion - Check that stop lengths are expected length" enabled="true">
+                <stringProp name="cacheKey"></stringProp>
+                <stringProp name="filename"></stringProp>
+                <stringProp name="parameters"></stringProp>
+                <stringProp name="script">def failureMessage = &quot;&quot;;
+
+// see if job is complete
+if (vars.get(&quot;processingFeedVersionJob&quot;) == &quot;false&quot; &amp;&amp; vars.get(&quot;feedSourceJobError&quot;) == &quot;true&quot;) {
+	failureMessage += &quot;an error occurred while processing the feed: &quot;
+	failureMessage += vars.get(&quot;feedSourceJobMessage&quot;) + &quot;\n&quot;
+}
+
+// set assertion result to fail if an error happened
+if (failureMessage?.trim()) {
+	AssertionResult.setFailureMessage(failureMessage);
+     AssertionResult.setFailure(true);    
+}</stringProp>
+                <stringProp name="scriptLanguage">groovy</stringProp>
+              </JSR223Assertion>
+              <hashTree/>
             </hashTree>
           </hashTree>
         </hashTree>
