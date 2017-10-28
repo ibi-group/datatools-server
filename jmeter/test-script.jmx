@@ -45,9 +45,9 @@
           <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
             <collectionProp name="Arguments.arguments"/>
           </elementProp>
-          <stringProp name="HTTPSampler.domain">gtfs-manager-dev.conveyal.com</stringProp>
-          <stringProp name="HTTPSampler.port"></stringProp>
-          <stringProp name="HTTPSampler.protocol">https</stringProp>
+          <stringProp name="HTTPSampler.domain">localhost</stringProp>
+          <stringProp name="HTTPSampler.port">4000</stringProp>
+          <stringProp name="HTTPSampler.protocol"></stringProp>
           <stringProp name="HTTPSampler.contentEncoding"></stringProp>
           <stringProp name="HTTPSampler.path"></stringProp>
           <stringProp name="TestPlan.comments">Assumes that datatools-server is running on port 4000</stringProp>
@@ -122,13 +122,17 @@ try {
 	e.printStackTrace();
 }
 
-// overwrite old file by writing new headers
-FileOutputStream out = new FileOutputStream(&quot;output/result/feed-processing-job-times.csv&quot;);
-String headers = &quot;timeStamp,elapsed,label,threadName,success,failureMessage&quot;;
-out.write(headers.getBytes(&quot;UTF-8&quot;));
-out.write(System.getProperty(&quot;line.separator&quot;).getBytes(&quot;UTF-8&quot;));
-out.flush();
-out.close();</stringProp>
+// if file already exists, don&apos;t overwrite it
+File f = new File(&quot;output/result/feed-processing-job-times.csv&quot;);
+if (!f.exists()) {
+	// write new file with headers
+	FileOutputStream out = new FileOutputStream(&quot;output/result/feed-processing-job-times.csv&quot;);
+	String headers = &quot;timeStamp,elapsed,label,threadName,success,failureMessage&quot;;
+	out.write(headers.getBytes(&quot;UTF-8&quot;));
+	out.write(System.getProperty(&quot;line.separator&quot;).getBytes(&quot;UTF-8&quot;));
+	out.flush();
+	out.close();
+}</stringProp>
             </BeanShellPreProcessor>
             <hashTree/>
             <JSONPostProcessor guiclass="JSONPostProcessorGui" testclass="JSONPostProcessor" testname="JSON Extractor - get projectId" enabled="true">
@@ -283,7 +287,7 @@ vars.put(&quot;feedUploadCompleteTime&quot;, String.valueOf(feedUploadCompleteTi
                 <stringProp name="JSONPostProcessor.referenceNames">feedSourceJobComplete;feedVersionId;feedSourceJobError;feedSourceJobMessage</stringProp>
                 <stringProp name="JSONPostProcessor.jsonPathExprs">$.status.completed;$.feedVersionId;$.status.error;$.status.message</stringProp>
                 <stringProp name="JSONPostProcessor.match_numbers"></stringProp>
-                <stringProp name="JSONPostProcessor.defaultValues">false;false;false;</stringProp>
+                <stringProp name="JSONPostProcessor.defaultValues">false;false;false;no message</stringProp>
               </JSONPostProcessor>
               <hashTree/>
               <BeanShellPostProcessor guiclass="TestBeanGUI" testclass="BeanShellPostProcessor" testname="BeanShell PostProcessor" enabled="true">
@@ -320,10 +324,10 @@ vars.put(&quot;feedUploadCompleteTime&quot;, String.valueOf(feedUploadCompleteTi
 	row += &quot;Thread Group 1-&quot; + (ctx.getThreadNum() + 1) + &quot;,&quot;;
 	
 	// success and failureMessage
-	String success = vars.get(&quot;feedSourceJobError&quot;);
-	if (error.equals(&quot;true&quot;) {
+	String error = vars.get(&quot;feedSourceJobError&quot;);
+	if (error.equals(&quot;true&quot;)) {
 		String errorMessage = vars.get(&quot;feedSourceJobMessage&quot;);
-		row += &quot;false,&quot; + errorMessage
+		row += &quot;false,&quot; + errorMessage;
 	} else {
 		row += &quot;true,&quot;;
 	}
@@ -514,30 +518,52 @@ vars.put(&quot;feedUploadCompleteTime&quot;, String.valueOf(feedUploadCompleteTi
             </collectionProp>
           </HeaderManager>
           <hashTree/>
-          <JSONPostProcessor guiclass="JSONPostProcessorGui" testclass="JSONPostProcessor" testname="JSON Extractor" enabled="true">
-            <stringProp name="JSONPostProcessor.referenceNames">numFeedStops;stopsLen</stringProp>
-            <stringProp name="JSONPostProcessor.jsonPathExprs">$.feed.row_counts.stops;$.feed.stops.length()</stringProp>
-            <stringProp name="JSONPostProcessor.match_numbers"></stringProp>
-            <stringProp name="JSONPostProcessor.defaultValues">0;0</stringProp>
-          </JSONPostProcessor>
-          <hashTree/>
-          <com.atlantbh.jmeter.plugins.jsonutils.jsonpathassertion.JSONPathAssertion guiclass="com.atlantbh.jmeter.plugins.jsonutils.jsonpathassertion.gui.JSONPathAssertionGui" testclass="com.atlantbh.jmeter.plugins.jsonutils.jsonpathassertion.JSONPathAssertion" testname="jp@gc - JSON Path Assertion - assert that feed.stops.length" enabled="true">
-            <stringProp name="JSON_PATH">$.feed.stops.length()</stringProp>
-            <stringProp name="EXPECTED_VALUE">12</stringProp>
-            <boolProp name="JSONVALIDATION">true</boolProp>
-            <boolProp name="EXPECT_NULL">false</boolProp>
-            <boolProp name="INVERT">false</boolProp>
-            <boolProp name="ISREGEX">false</boolProp>
-          </com.atlantbh.jmeter.plugins.jsonutils.jsonpathassertion.JSONPathAssertion>
-          <hashTree/>
-          <com.atlantbh.jmeter.plugins.jsonutils.jsonpathassertion.JSONPathAssertion guiclass="com.atlantbh.jmeter.plugins.jsonutils.jsonpathassertion.gui.JSONPathAssertionGui" testclass="com.atlantbh.jmeter.plugins.jsonutils.jsonpathassertion.JSONPathAssertion" testname="jp@gc - JSON Path Assertion - assert that feed.row_counts.stops" enabled="true">
-            <stringProp name="JSON_PATH">$.feed.row_counts.stops</stringProp>
-            <stringProp name="EXPECTED_VALUE">12</stringProp>
-            <boolProp name="JSONVALIDATION">true</boolProp>
-            <boolProp name="EXPECT_NULL">false</boolProp>
-            <boolProp name="INVERT">false</boolProp>
-            <boolProp name="ISREGEX">false</boolProp>
-          </com.atlantbh.jmeter.plugins.jsonutils.jsonpathassertion.JSONPathAssertion>
+          <JSR223Assertion guiclass="TestBeanGUI" testclass="JSR223Assertion" testname="JSR223 Assertion - Check that stop lengths are expected length" enabled="true">
+            <stringProp name="cacheKey"></stringProp>
+            <stringProp name="filename"></stringProp>
+            <stringProp name="parameters"></stringProp>
+            <stringProp name="script">import groovy.json.JsonSlurper;
+
+def failureMessage = &quot;&quot;;
+def jsonResponse = null;
+
+JsonSlurper JSON = new JsonSlurper ();
+
+// parse json
+try {
+	jsonResponse = JSON.parseText(prev.getResponseDataAsString());
+} catch (Exception e) {
+	failureMessage += &quot;Invalid JSON.\n&quot;
+}
+
+def totalNumStops = jsonResponse.feed.row_counts.stops
+def lenQueriedStops = jsonResponse.feed.stops.size()
+
+if (totalNumStops == 0) {
+	failureMessage += &quot;recieved stop row count of 0 stops\n&quot;
+}
+
+
+if (lenQueriedStops == 0) {
+	failureMessage += &quot;recieved 0 returned stops\n&quot;
+}
+
+if (lenQueriedStops &gt; 50) {
+	failureMessage += &quot;recieved more than 50 returned stops\n&quot;
+}
+
+if (totalNumStops &lt; lenQueriedStops) {
+	failureMessage += &quot;recieved more returned stops (&quot; + lenQueriedStops
+	failureMessage += &quot;) than amount listed in row count of stops (&quot; + totalNumStops + &quot;)\n&quot;
+}
+
+// set assertion result to fail if an error happened
+if (failureMessage?.trim()) {
+	AssertionResult.setFailureMessage(failureMessage);
+     AssertionResult.setFailure(true);    
+}</stringProp>
+            <stringProp name="scriptLanguage">groovy</stringProp>
+          </JSR223Assertion>
           <hashTree/>
         </hashTree>
         <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="HTTP Request - Graphql - get feed routes" enabled="true">
