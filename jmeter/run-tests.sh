@@ -2,6 +2,24 @@
 
 if [ -z $1 ]
 then
+  >&2 echo 'Must supply "upload" or "fetch" as first argument'
+  exit 1
+fi
+
+if [ -z $2 ]
+then
+  >&2 echo 'Must supply second argument (number of threads)'
+  exit 1
+fi
+
+if [ -z $3 ]
+then
+  >&2 echo 'Must supply third argument (number of loops)'
+  exit 1
+fi
+
+if [ -z $4 ]
+then
   echo 'WARNING: s3 bucket not supplied, results will not be uploaded to s3'
 fi
 
@@ -11,17 +29,17 @@ mkdir output
 mkdir output/result
 mkdir output/report
 
-echo "Begin jmeter script"
+echo "starting jmeter script"
+echo "apache-jmeter-3.3/bin/jmeter.sh -Jmode=$1 -Jthreads=$2 -Jloops=$3 -n -t test-script.jmx -l output/result/result.csv -e -o output/report"
 
-apache-jmeter-3.3/bin/jmeter.sh -n -t test-script.jmx -l output/result/result.csv -e -o output/report
+apache-jmeter-3.3/bin/jmeter.sh -Jmode=$1 -Jthreads=$2 -Jloops=$3 -n -t test-script.jmx -l output/result/result.csv -e -o output/report
 
-tar -czvf output.tar.gz output
-
-if [ -z $1 ]
+if [ -z $4 ]
 then
   echo 'WARNING: s3 bucket not supplied, results will not be uploaded to s3'
 else
-  s3location="s3://$1/dt_jmeter_run_$(date +%Y-%m-%dT%H-%M-%S-%Z).tar.gz"
+  tar -czvf output.tar.gz output
+  s3location="s3://$4/dt_jmeter_run_$(date +%Y-%m-%dT%H-%M-%S-%Z).tar.gz"
   echo "Uploading to $s3location"
   aws s3 cp output.tar.gz $s3location
   echo "Uploaded to $s3location"
