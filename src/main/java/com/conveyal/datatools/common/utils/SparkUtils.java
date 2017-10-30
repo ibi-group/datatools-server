@@ -42,7 +42,7 @@ public class SparkUtils {
 
     public static String formatJSON(String message, int code, Exception e) {
         String detail = e != null ? e.getMessage() : null;
-        return String.format("{\"result\":\"ERR\",\"message\":\"%s\",\"code\":%d, \"detail\":\"%s\"}", message, code, detail);
+        return String.format("{\"result\":\"%s\",\"message\":\"%s\",\"code\":%d, \"detail\":\"%s\"}", code >= 400 ? "ERR" : "OK", message, code, detail);
     }
 
     public static void haltWithError (int errorCode, String message) throws HaltException {
