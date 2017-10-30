@@ -47,7 +47,8 @@ public abstract class Model implements Serializable {
     @JsonView(JsonViews.DataDump.class)
     public String userId;
 
-    private String userEmail;
+    @JsonView(JsonViews.DataDump.class)
+    public String userEmail;
 
     /**
      * Notes on this object
@@ -89,7 +90,7 @@ public abstract class Model implements Serializable {
     }
 
     /**
-     * Set the owner of this object by Id
+     * Set the owner of this object by ID.
      */
     public void storeUser(String id) {
         userId = id;

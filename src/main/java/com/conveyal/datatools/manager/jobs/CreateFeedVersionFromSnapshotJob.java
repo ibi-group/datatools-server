@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.editor.models.Snapshot;
+import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.utils.HashUtils;
 import org.slf4j.Logger;
@@ -54,6 +55,7 @@ public class CreateFeedVersionFromSnapshotJob extends MonitorableJob {
             status.update(true, message, 100, true);
         }
 
+        feedVersion.retrievalMethod = FeedSource.FeedRetrievalMethod.PRODUCED_IN_HOUSE;
         feedVersion.setName(Snapshot.get(snapshotId).name + " Snapshot Export");
         feedVersion.hash = HashUtils.hashFile(feedVersion.retrieveGtfsFile());
 

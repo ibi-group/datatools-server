@@ -189,7 +189,7 @@ public class FeedSourceController {
      * Refetch this feed
      * @throws JsonProcessingException
      */
-    public static boolean fetch (Request req, Response res) throws JsonProcessingException {
+    public static String fetch (Request req, Response res) throws JsonProcessingException {
         FeedSource s = requestFeedSourceById(req, "manage");
 
         LOG.info("Fetching feed for source {}", s.name);
@@ -202,8 +202,7 @@ public class FeedSourceController {
         // WARNING: infinite 2D bounds Jackson error when returning job.result, so this method now returns true
         // because we don't need to return the feed immediately anyways.
         // return job.result;
-
-        return true;
+        return SparkUtils.formatJSON("ok", 200);
     }
 
     /**

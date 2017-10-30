@@ -92,8 +92,9 @@ public class FeedSource extends Model implements Cloneable {
 
     /**
      * When was this feed last updated?
+     * FIXME: this is currently dynamically determined by lastUpdated() with calls retrieveLatest().
      */
-    public transient Date lastUpdated;
+//    public transient Date lastUpdated;
 
     /**
      * From whence is this feed fetched?
@@ -145,6 +146,7 @@ public class FeedSource extends Model implements Cloneable {
         // fetch occurs. That way, in the highly unlikely event that a feed is updated while we're
         // fetching it, we will not miss a new feed.
         FeedVersion version = new FeedVersion(this);
+        version.retrievalMethod = FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
 
         // build the URL from which to fetch
         URL url = this.url;
@@ -219,18 +221,16 @@ public class FeedSource extends Model implements Cloneable {
             version.userId = this.userId;
 
             // FIXME: Does this work?
-            Persistence.feedSources.getMongoCollection().updateOne(eq(this.id), set("lastFetched", version.updated));
-//            this.lastFetched = version.updated;
-//            this.save();
+            Persistence.feedSources.updateField(this.id, "lastFetched", version.updated);
 
+            // Set file timestamp according to last modified header from connection
+            version.fileTimestamp = conn.getLastModified();
             NotifyUsersForSubscriptionJob notifyFeedJob = new NotifyUsersForSubscriptionJob("feed-updated", this.id, "New feed version created for " + this.name);
             DataManager.lightExecutor.execute(notifyFeedJob);
 
             String message = String.format("Fetch complete for %s", this.name);
             LOG.info(message);
             status.update(false, message, 100.0);
-            version.storeUser(fetchUser);
-            version.fileTimestamp = conn.getLastModified();
             return version;
         }
     }
