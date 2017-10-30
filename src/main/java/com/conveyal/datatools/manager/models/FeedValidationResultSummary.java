@@ -52,7 +52,7 @@ public class FeedValidationResultSummary implements Serializable {
             this.loadStatus = validationResult.fatalException == null
                     ? LoadStatus.SUCCESS
                     : LoadStatus.OTHER_FAILURE;
-            this.loadFailureReason = validationResult.fatalException != null ? validationResult.fatalException.getClass().getSimpleName() : null;
+            this.loadFailureReason = validationResult.fatalException;
             if (loadStatus == LoadStatus.SUCCESS) {
                 this.errorCount = validationResult.errorCount;
                 this.agencyCount = feedLoadResult.agency.rowCount;
