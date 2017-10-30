@@ -84,7 +84,8 @@ public class FeedVersionController  {
     public static Collection<FeedVersion> getAllFeedVersionsForFeedSource(Request req, Response res) throws JsonProcessingException {
         // Check permissions and get the FeedSource whose FeedVersions we want.
         FeedSource feedSource = requestFeedSourceById(req, "view");
-        return feedSource.retrieveFeedVersions();
+        Collection<FeedVersion> feedVersions = feedSource.retrieveFeedVersions();
+        return feedVersions;
     }
 
     private static FeedSource requestFeedSourceById(Request req, String action) {
@@ -112,7 +113,7 @@ public class FeedVersionController  {
         FeedSource feedSource = requestFeedSourceById(req, "manage");
         FeedVersion latestVersion = feedSource.retrieveLatest();
         FeedVersion newFeedVersion = new FeedVersion(feedSource);
-        newFeedVersion.storeUser(userProfile);
+        newFeedVersion.retrievalMethod = FeedSource.FeedRetrievalMethod.MANUALLY_UPLOADED;
 
         // Get the zip file out of the Spark request
         if (req.raw().getAttribute("org.eclipse.jetty.multipartConfig") == null) {
@@ -148,22 +149,19 @@ public class FeedVersionController  {
         // (as long as there is a latest version, i.e. the feed source is not completely new)
         if (latestVersion != null && latestVersion.hash.equals(newFeedVersion.hash)) {
             LOG.error("Upload version {} matches latest version {}.", newFeedVersion.id, latestVersion.id);
-            File gtfs = newFeedVersion.retrieveGtfsFile();
-            if (gtfs != null) {
-                gtfs.delete();
+            File gtfsFile = newFeedVersion.retrieveGtfsFile();
+            if (gtfsFile != null) {
+                gtfsFile.delete();
             } else {
                 file.delete();
                 LOG.warn("File deleted");
             }
             // There is no need to delete the newFeedVersion because it has not yet been persisted to MongoDB.
-//            newFeedVersion.delete();
             haltWithError(304, "Uploaded feed is identical to the latest version known to the database.");
         }
 
         newFeedVersion.setName(newFeedVersion.formattedTimestamp() + " Upload");
         // TODO newFeedVersion.fileTimestamp still exists
-        // Should the following be removed, considering storeUserProfile is called above?
-        newFeedVersion.storeUser(userProfile);
 
         // Must be handled by executor because it takes a long time.
         ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(newFeedVersion, userProfile.getUser_id());

@@ -39,6 +39,7 @@ public class ValidateFeedJob extends MonitorableJob {
                 // This happens here because otherwise we would have to wait for other jobs,
                 // such as BuildTransportNetwork, to finish. If those subsequent jobs fail,
                 // the version won't get loaded into the database (even though it exists in postgres).
+                feedVersion.storeUser(owner);
                 Persistence.feedVersions.create(feedVersion);
             }
             // TODO: If ValidateFeedJob is called without a parent job (e.g., to "re-validate" a feed), we should handle

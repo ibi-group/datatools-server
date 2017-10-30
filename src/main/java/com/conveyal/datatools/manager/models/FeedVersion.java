@@ -59,9 +59,9 @@ import static com.mongodb.client.model.Updates.pull;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class FeedVersion extends Model implements Serializable {
     private static final long serialVersionUID = 1L;
-    public static final String VERSION_ID_DATE_FORMAT = "yyyyMMdd'T'HHmmssX";
+    private static final String VERSION_ID_DATE_FORMAT = "yyyyMMdd'T'HHmmssX";
     private static final String HUMAN_READABLE_TIMESTAMP_FORMAT = "MM/dd/yyyy H:mm";
-    public static final Logger LOG = LoggerFactory.getLogger(FeedVersion.class);
+    private static final Logger LOG = LoggerFactory.getLogger(FeedVersion.class);
     // FIXME: move this out of FeedVersion (also, it should probably not be public)?
     public static FeedStore feedStore = new FeedStore();
 
@@ -98,6 +98,8 @@ public class FeedVersion extends Model implements Serializable {
      */
     @JsonView(JsonViews.DataDump.class)
     public String feedSourceId;
+
+    public FeedSource.FeedRetrievalMethod retrievalMethod;
 
     @JsonIgnore
     public transient TransportNetwork transportNetwork;
@@ -158,8 +160,9 @@ public class FeedVersion extends Model implements Serializable {
         } else {
             this.fileTimestamp = file.lastModified();
         }
-        // FIXME
-        Persistence.feedVersions.update(id, String.format("{fileTimestamp: %d}", this.fileTimestamp));
+        // FIXME: This field will not be stored until new FeedVersion is stored in MongoDB (usually in
+        // the final steps of ValidateFeedJob).
+//        Persistence.feedVersions.update(id, String.format("{fileTimestamp: %d}", this.fileTimestamp));
         return file;
     }
     // FIXME return sql-loader Feed object.
