@@ -211,9 +211,9 @@ public class FeedStore {
         } catch (IOException e) {
             e.printStackTrace();
         }
-        if (feedSource != null) {
+        if (feedSource != null && !DataManager.useS3) {
+            // Store latest as feed-source-id.zip if feedSource provided and if not using s3
             try {
-                // store latest as feed-source-id.zip if feedSource provided
                 copyVersionToLatest(feed, feedSource);
             } catch (Exception e) {
                 e.printStackTrace();
