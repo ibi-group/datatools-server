@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.models;
 
+import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.auth.Auth0Users;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -94,8 +95,13 @@ public abstract class Model implements Serializable {
      */
     public void storeUser(String id) {
         userId = id;
-        Auth0UserProfile profile = Auth0Users.getUserById(userId);
-        userEmail = profile != null ? profile.getEmail() : null;
+        if (!Auth0Connection.authDisabled()) {
+            Auth0UserProfile profile = Auth0Users.getUserById(userId);
+            userEmail = profile != null ? profile.getEmail() : null;
+        } else {
+            userEmail = "no_auth@conveyal.com";
+        }
+
     }
 
     public void addNote(Note n) {
