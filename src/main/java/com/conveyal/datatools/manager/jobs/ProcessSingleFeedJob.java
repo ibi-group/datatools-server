@@ -78,7 +78,11 @@ public class ProcessSingleFeedJob extends MonitorableJob {
             // Note: storing a new feed version in database is handled at completion of the ValidateFeedJob subtask.
             status.update(false, "New version saved.", 100, true);
         } else {
-            LOG.warn("Not storing version {} because error occurred during processing.", feedVersion.id);
+            // Processing did not complete. Depending on which sub-task this occurred in,
+            // there may or may not have been a successful load/validation of the feed. For instance,
+            // if an error occurred while building a TransportNetwork, the only impact is that there will
+            // be no r5 network to use for generating isochrones.
+            LOG.warn("Error processing version {} because error due to {}.", feedVersion.id, status.exceptionType);
         }
     }
 
