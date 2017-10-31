@@ -13,7 +13,7 @@ import java.util.Map;
 public class LoadFeedJob extends MonitorableJob {
     public static final Logger LOG = LoggerFactory.getLogger(LoadFeedJob.class);
 
-    public FeedVersion feedVersion;
+    private FeedVersion feedVersion;
 
     public LoadFeedJob(FeedVersion version, String owner) {
         super(owner, "Loading GTFS", JobType.LOAD_FEED);
