@@ -33,6 +33,7 @@ import com.conveyal.r5.point_to_point.builder.TNBuilderConfig;
 import com.conveyal.r5.transit.TransportNetwork;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.bson.codecs.pojo.annotations.BsonProperty;
@@ -147,22 +148,22 @@ public class FeedVersion extends Model implements Serializable {
 
     public File newGtfsFile(InputStream inputStream) {
         File file = feedStore.newFeed(id, inputStream, parentFeedSource());
-        // FIXME: Should we be doing updates like this?
-        Persistence.feedVersions.update(id, String.format("{fileSize: %d}", file.length()));
+        // fileSize field will not be stored until new FeedVersion is stored in MongoDB (usually in
+        // the final steps of ValidateFeedJob).
+        this.fileSize = file.length();
         LOG.info("New GTFS file saved: {}", id);
         return file;
     }
     public File newGtfsFile(InputStream inputStream, Long lastModified) {
         File file = newGtfsFile(inputStream);
+        // fileTimestamp field will not be stored until new FeedVersion is stored in MongoDB (usually in
+        // the final steps of ValidateFeedJob).
         if (lastModified != null) {
             this.fileTimestamp = lastModified;
             file.setLastModified(lastModified);
         } else {
             this.fileTimestamp = file.lastModified();
         }
-        // FIXME: This field will not be stored until new FeedVersion is stored in MongoDB (usually in
-        // the final steps of ValidateFeedJob).
-//        Persistence.feedVersions.update(id, String.format("{fileTimestamp: %d}", this.fileTimestamp));
         return file;
     }
     // FIXME return sql-loader Feed object.
@@ -252,8 +253,7 @@ public class FeedVersion extends Model implements Serializable {
         // STEP 2. Upload GTFS to S3 (storage on local machine is done when feed is fetched/uploaded)
         if (DataManager.useS3) {
             try {
-                FileInputStream fileStream = new FileInputStream(gtfsFile);
-                boolean fileUploaded = FeedVersion.feedStore.uploadToS3(fileStream, this.id, this.parentFeedSource());
+                boolean fileUploaded = FeedVersion.feedStore.uploadToS3(gtfsFile, this.id, this.parentFeedSource());
                 if (fileUploaded) {
                     // Delete local copy of feed version after successful s3 upload
                     boolean fileDeleted = gtfsFile.delete();
@@ -271,7 +271,7 @@ public class FeedVersion extends Model implements Serializable {
                     // make feed version public... this shouldn't take very long
                     fs.makePublic();
                 }
-            } catch (FileNotFoundException e) {
+            } catch (Exception e) {
                 LOG.error("Could not upload version {} to s3 bucket", this.id);
                 e.printStackTrace();
             }
@@ -357,19 +357,28 @@ public class FeedVersion extends Model implements Serializable {
         // Create/save r5 network
         status.update(false, "Creating transport network...", 50);
 
+        // FIXME: fix sql-loader integration to work with r5 TransportNetwork. Currently it provides an empty list of
+        // feeds.
         List<GTFSFeed> feedList = new ArrayList<>();
-        // FIXME: fix sql-loader integration to work with r5 TransportNetwork
 //        feedList.add(retrieveFeed());
         TransportNetwork tn;
         try {
             tn = TransportNetwork.fromFeeds(osmExtract.getAbsolutePath(), feedList, TNBuilderConfig.defaultConfig());
         } catch (Exception e) {
             String message = String.format("Unknown error encountered while building network for %s.", this.id);
-            LOG.warn(message);
+            LOG.warn(message, e);
+            // Delete the OSM extract directory because it is probably corrupted and may cause issues for the next
+            // version loaded with the same bounds.
+            File osmDirectory = osmExtract.getParentFile();
+            LOG.info("Deleting OSM dir for this version {}", osmDirectory.getAbsolutePath());
+            try {
+                FileUtils.deleteDirectory(osmDirectory);
+            } catch (IOException e1) {
+                LOG.error("Could not delete OSM dir", e);
+            }
             status.update(true, message, 100);
             status.exceptionType = e.getMessage();
             status.exceptionDetails = ExceptionUtils.getStackTrace(e);
-            e.printStackTrace();
             return null;
         }
         tn.transitLayer.buildDistanceTables(null);
