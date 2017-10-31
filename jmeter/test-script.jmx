@@ -26,11 +26,25 @@
         <stringProp name="ThreadGroup.delay"></stringProp>
       </ThreadGroup>
       <hashTree>
+        <CounterConfig guiclass="CounterConfigGui" testclass="CounterConfig" testname="Counter" enabled="true">
+          <stringProp name="CounterConfig.start">1</stringProp>
+          <stringProp name="CounterConfig.end"></stringProp>
+          <stringProp name="CounterConfig.incr">1</stringProp>
+          <stringProp name="CounterConfig.name">runNumber</stringProp>
+          <stringProp name="CounterConfig.format"></stringProp>
+          <boolProp name="CounterConfig.per_user">false</boolProp>
+        </CounterConfig>
+        <hashTree/>
         <Arguments guiclass="ArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
           <collectionProp name="Arguments.arguments">
             <elementProp name="processingFeedVersionJob" elementType="Argument">
               <stringProp name="Argument.name">processingFeedVersionJob</stringProp>
               <stringProp name="Argument.value">true</stringProp>
+              <stringProp name="Argument.metadata">=</stringProp>
+            </elementProp>
+            <elementProp name="projectName" elementType="Argument">
+              <stringProp name="Argument.name">projectName</stringProp>
+              <stringProp name="Argument.value">${__P(project,test project)}</stringProp>
               <stringProp name="Argument.metadata">=</stringProp>
             </elementProp>
             <elementProp name="testPlanMode" elementType="Argument">
@@ -76,7 +90,9 @@
               <collectionProp name="Arguments.arguments">
                 <elementProp name="" elementType="HTTPArgument">
                   <boolProp name="HTTPArgument.always_encode">false</boolProp>
-                  <stringProp name="Argument.value">${__FileToString(fixtures/create-project.json,,)}</stringProp>
+                  <stringProp name="Argument.value">{&#xd;
+  &quot;name&quot;: &quot;${projectName} ${runNumber}&quot;&#xd;
+}</stringProp>
                   <stringProp name="Argument.metadata">=</stringProp>
                 </elementProp>
               </collectionProp>
@@ -132,7 +148,10 @@ if (!f.exists()) {
 	out.write(System.getProperty(&quot;line.separator&quot;).getBytes(&quot;UTF-8&quot;));
 	out.flush();
 	out.close();
-}</stringProp>
+}
+
+// set variables for each thread loop, cause jmeter doesn&apos;t update it???
+vars.put(&quot;processingFeedVersionJob&quot;, &quot;true&quot;);</stringProp>
             </BeanShellPreProcessor>
             <hashTree/>
             <JSONPostProcessor guiclass="JSONPostProcessorGui" testclass="JSONPostProcessor" testname="JSON Extractor - get projectId" enabled="true">
@@ -348,9 +367,16 @@ vars.put(&quot;feedUploadCompleteTime&quot;, String.valueOf(feedUploadCompleteTi
                 <stringProp name="script">def failureMessage = &quot;&quot;;
 
 // see if job is complete
-if (vars.get(&quot;processingFeedVersionJob&quot;) == &quot;false&quot; &amp;&amp; vars.get(&quot;feedSourceJobError&quot;) == &quot;true&quot;) {
-	failureMessage += &quot;an error occurred while processing the feed: &quot;
-	failureMessage += vars.get(&quot;feedSourceJobMessage&quot;) + &quot;\n&quot;
+if (vars.get(&quot;processingFeedVersionJob&quot;) == &quot;false&quot;) {
+	if (vars.get(&quot;feedSourceJobError&quot;) == &quot;true&quot;) {
+		failureMessage += &quot;an error occurred while processing the feed: &quot;
+		failureMessage += vars.get(&quot;feedSourceJobMessage&quot;) + &quot;\n&quot;
+	}
+} else {
+	// capture null response in event that job status returns null before it returns completion message
+	if (prev.getResponseDataAsString().equals(&quot;null&quot;)) {
+		failureMessage += &quot;received null job status response before job status completion was set to true\n&quot;
+	}
 }
 
 // set assertion result to fail if an error happened

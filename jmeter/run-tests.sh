@@ -20,6 +20,11 @@ fi
 
 if [ -z $4 ]
 then
+  echo 'WARNING: name of project not supplied.  In upload mode, all projects will be named "test project #"'
+fi
+
+if [ -z $5 ]
+then
   echo 'WARNING: s3 bucket not supplied, results will not be uploaded to s3'
 fi
 
@@ -30,16 +35,23 @@ mkdir output/result
 mkdir output/report
 
 echo "starting jmeter script"
-echo "apache-jmeter-3.3/bin/jmeter.sh -Jmode=$1 -Jthreads=$2 -Jloops=$3 -n -t test-script.jmx -l output/result/result.csv -e -o output/report"
 
-apache-jmeter-3.3/bin/jmeter.sh -Jmode=$1 -Jthreads=$2 -Jloops=$3 -n -t test-script.jmx -l output/result/result.csv -e -o output/report
+jmeter_cmd="apache-jmeter-3.3/bin/jmeter.sh -n -t test-script.jmx -l output/result/result.csv -e -o output/report -Jmode=$1 -Jthreads=$2 -Jloops=$3"
 
-if [ -z $4 ]
+if [ -n "$4" ]
+then
+  jmeter_cmd="$jmeter_cmd -Jproject=$4"
+fi
+
+echo "$jmeter_cmd"
+eval "$jmeter_cmd"
+
+if [ -z $5 ]
 then
   echo 'WARNING: s3 bucket not supplied, results will not be uploaded to s3'
 else
   tar -czvf output.tar.gz output
-  s3location="s3://$4/dt_jmeter_run_$(date +%Y-%m-%dT%H-%M-%S-%Z).tar.gz"
+  s3location="s3://$5/dt_jmeter_run_$(date +%Y-%m-%dT%H-%M-%S-%Z).tar.gz"
   echo "Uploading to $s3location"
   aws s3 cp output.tar.gz $s3location
   echo "Uploaded to $s3location"
