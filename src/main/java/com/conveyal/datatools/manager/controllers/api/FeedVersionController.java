@@ -124,38 +124,35 @@ public class FeedVersionController  {
         LOG.info("Saving feed from upload {}", feedSource);
 
         InputStream uploadStream;
-        File file = null;
+        File newGtfsFile = null;
         try {
             uploadStream = zipFilePart.getInputStream();
 
-            /**
-             * Set last modified based on value of query param. This is determined/supplied by the client
-             * request because this data gets lost in the uploadStream otherwise.
-             */
+            // Set last modified based on value of query param. This is determined/supplied by the client
+            // request because this data gets lost in the uploadStream otherwise.
             Long lastModified = req.queryParams("lastModified") != null ? Long.valueOf(req.queryParams("lastModified")) : null;
-            file = newFeedVersion.newGtfsFile(uploadStream, lastModified);
-            LOG.info("Last modified: {}", new Date(file.lastModified()));
+            newGtfsFile = newFeedVersion.newGtfsFile(uploadStream, lastModified);
+            LOG.info("Last modified: {}", new Date(newGtfsFile.lastModified()));
         } catch (Exception e) {
             e.printStackTrace();
             LOG.error("Unable to open input stream from upload");
-            halt(400, "Unable to read uploaded feed");
+            haltWithError(400, "Unable to read uploaded feed");
+        } finally {
+            zipFilePart.delete();
         }
 
         // TODO: fix FeedVersion.hash() call when called in this context. Nothing gets hashed because the file has not been saved yet.
         // newFeedVersion.hash();
-        newFeedVersion.hash = HashUtils.hashFile(file);
+        newFeedVersion.hash = HashUtils.hashFile(newGtfsFile);
 
         // Check that the hashes of the feeds don't match, i.e. that the feed has changed since the last version.
         // (as long as there is a latest version, i.e. the feed source is not completely new)
         if (latestVersion != null && latestVersion.hash.equals(newFeedVersion.hash)) {
+            // Uploaded feed matches latest. Delete GTFS file because it is a duplicate.
             LOG.error("Upload version {} matches latest version {}.", newFeedVersion.id, latestVersion.id);
-            File gtfsFile = newFeedVersion.retrieveGtfsFile();
-            if (gtfsFile != null) {
-                gtfsFile.delete();
-            } else {
-                file.delete();
-                LOG.warn("File deleted");
-            }
+            newGtfsFile.delete();
+            LOG.warn("File deleted");
+
             // There is no need to delete the newFeedVersion because it has not yet been persisted to MongoDB.
             haltWithError(304, "Uploaded feed is identical to the latest version known to the database.");
         }
@@ -380,6 +377,10 @@ public class FeedVersionController  {
         return version;
     }
 
+    /**
+     * Download locally stored feed version with token supplied by this application. This method is only used when
+     * useS3 is set to false. Otherwise, a direct download from s3 should be used.
+     */
     private static Object downloadFeedVersionWithToken (Request req, Response res) {
         String tokenValue = req.params("token");
         FeedDownloadToken token = Persistence.tokens.getById(tokenValue);
