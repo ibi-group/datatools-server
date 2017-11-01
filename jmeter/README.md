@@ -31,7 +31,8 @@ The test plan can be ran straight from the command line.  A helper script is pro
 | 1 | test plan mode | `upload` or `fetch` | whether or not to run the script in upload or fetch mode (see notes below for more explanation of these test plan modes) |
 | 2 | number of threads | an integer greater than 0 | The number of simultaneous threads to run at a time.  The threads will be have staggered start times 1 second apart. |
 | 3 | number of loops | an integer greater than 0 | the number of loops of to run.  This is combined with the number of threads, so if the number of threads is 10 and the number of loops is 8, the total number of test plans to run will be 80. |
-| 4 | s3 bucket | string of an s3 bucket | OPTIONAL.  If provided, the script will tar up the output folder and attempt to upload to the specified s3 bucket.  This assumes that aws credentials have been setup for use by the `aws` command line tool. |
+| 4 | project name | string of the project name | OPTIONAL.  If provided, when the script is ran in upload mode, the script will create new projects with this name plus the current iteration number.  Ex: "project-name #".  Otherwise the project names will be called "test project #". |
+| 5 | s3 bucket | string of an s3 bucket | OPTIONAL.  If provided, the script will tar up the output folder and attempt to upload to the specified s3 bucket.  This assumes that aws credentials have been setup for use by the `aws` command line tool. |
 
 Examples:
 
