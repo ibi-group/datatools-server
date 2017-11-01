@@ -41,6 +41,7 @@ import java.util.*;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.io.ByteStreams;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
@@ -48,6 +49,8 @@ import spark.Response;
 
 import javax.servlet.MultipartConfigElement;
 import javax.servlet.ServletException;
+import javax.servlet.ServletInputStream;
+import javax.servlet.ServletRequestWrapper;
 import javax.servlet.http.Part;
 
 import static com.conveyal.datatools.common.utils.S3Utils.getS3Credentials;
@@ -115,30 +118,29 @@ public class FeedVersionController  {
         FeedVersion newFeedVersion = new FeedVersion(feedSource);
         newFeedVersion.retrievalMethod = FeedSource.FeedRetrievalMethod.MANUALLY_UPLOADED;
 
-        // Get the zip file out of the Spark request
-        if (req.raw().getAttribute("org.eclipse.jetty.multipartConfig") == null) {
-            MultipartConfigElement multipartConfigElement = new MultipartConfigElement(System.getProperty("java.io.tmpdir"));
-            req.raw().setAttribute("org.eclipse.jetty.multipartConfig", multipartConfigElement);
-        }
-        Part zipFilePart = req.raw().getPart("file");
-        LOG.info("Saving feed from upload {}", feedSource);
 
-        InputStream uploadStream;
-        File newGtfsFile = null;
+        // FIXME: Make the creation of new GTFS files generic to handle other feed creation methods, including fetching
+        // by URL and loading from the editor.
+        File newGtfsFile = new File(DataManager.getConfigPropertyAsText("application.data.gtfs"), newFeedVersion.id);
         try {
-            uploadStream = zipFilePart.getInputStream();
-
+            // Bypass Spark's request wrapper which always caches the request body in memory that may be a very large
+            // GTFS file. Also, the body of the request is the GTFS file instead of using multipart form data because
+            // multipart form handling code also caches the request body.
+            ServletInputStream inputStream = ((ServletRequestWrapper) req.raw()).getRequest().getInputStream();
+            FileOutputStream fileOutputStream = new FileOutputStream(newGtfsFile);
+            // Guava's ByteStreams.copy uses a 4k buffer (no need to wrap output stream), but does not close streams.
+            ByteStreams.copy(inputStream, fileOutputStream);
+            fileOutputStream.close();
+            inputStream.close();
             // Set last modified based on value of query param. This is determined/supplied by the client
             // request because this data gets lost in the uploadStream otherwise.
             Long lastModified = req.queryParams("lastModified") != null ? Long.valueOf(req.queryParams("lastModified")) : null;
-            newGtfsFile = newFeedVersion.newGtfsFile(uploadStream, lastModified);
+            if (lastModified != null) newGtfsFile.setLastModified(lastModified);
             LOG.info("Last modified: {}", new Date(newGtfsFile.lastModified()));
+            LOG.info("Saving feed from upload {}", feedSource);
         } catch (Exception e) {
-            e.printStackTrace();
-            LOG.error("Unable to open input stream from upload");
+            LOG.error("Unable to open input stream from uploaded file", e);
             haltWithError(400, "Unable to read uploaded feed");
-        } finally {
-            zipFilePart.delete();
         }
 
         // TODO: fix FeedVersion.hash() call when called in this context. Nothing gets hashed because the file has not been saved yet.
