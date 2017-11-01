@@ -142,9 +142,6 @@
             </snapshots>
         </repository>
         <repository>
-            <snapshots>
-                <enabled>true</enabled>
-            </snapshots>
             <id>boundless</id>
             <name>Boundless Maven Repository</name>
             <url>https://repo.boundlessgeo.com/main</url>
