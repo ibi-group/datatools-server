@@ -8,6 +8,7 @@ import org.slf4j.LoggerFactory;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.TimeUnit;
 
 /**
  * Created by landon on 6/13/16.
@@ -103,6 +104,7 @@ public abstract class MonitorableJob implements Runnable {
         boolean parentJobErrored = false;
         boolean subTaskErrored = false;
         String cancelMessage = "";
+        long startTimeNanos = System.nanoTime();
         try {
             // First execute the core logic of the specific MonitorableJob subclass
             jobLogic();
@@ -160,6 +162,9 @@ public abstract class MonitorableJob implements Runnable {
             // so the job continues to exist in the failed state and the user can see it.
             status.update(true, ex.getMessage(), 100, true);
         }
+        status.startTime = TimeUnit.NANOSECONDS.toMillis(startTimeNanos);
+        status.duration = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNanos);
+        LOG.info("{} {} {} in {} ms", type, jobId, status.error ? "errored" : "completed", status.duration);
     }
 
     /**
@@ -210,6 +215,9 @@ public abstract class MonitorableJob implements Runnable {
 
         /** How much of task is complete? */
         public double percentComplete;
+
+        public long startTime;
+        public long duration;
 
         // When was the job initialized?
         public String initialized = LocalDateTime.now().format(DateTimeFormatter.ISO_DATE_TIME);
