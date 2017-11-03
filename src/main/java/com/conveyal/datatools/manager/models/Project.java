@@ -78,10 +78,8 @@ public class Project extends Model {
                 .collect(Collectors.toList());
     }
 
-    @JsonProperty("numberOfFeeds")
-    public int numberOfFeeds() {
-        return retrieveProjectFeedSources().size();
-    }
+    // Note: Previously a numberOfFeeds() dynamic Jackson JsonProperty was in place here. But when the number of projects
+    // in the database grows large, the efficient calculation of this field does not scale.
 
     /**
      * Get all the deployments for this project.
