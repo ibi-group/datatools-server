@@ -16,7 +16,7 @@ modules:
   enterprise:
     enabled: false
   editor:
-    enabled: true
+    enabled: false
   user_admin:
     enabled: true
   r5_network:
