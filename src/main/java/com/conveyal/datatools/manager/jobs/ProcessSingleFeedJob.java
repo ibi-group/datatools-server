@@ -67,7 +67,7 @@ public class ProcessSingleFeedJob extends MonitorableJob {
         }
 
         // chain on a network builder job, if applicable
-        if(DataManager.isModuleEnabled("validator")) {
+        if(DataManager.isModuleEnabled("r5_network")) {
             addNextJob(new BuildTransportNetworkJob(feedVersion, owner));
         }
     }

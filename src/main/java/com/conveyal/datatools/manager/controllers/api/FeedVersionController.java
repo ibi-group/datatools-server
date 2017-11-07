@@ -254,7 +254,7 @@ public class FeedVersionController  {
         }
         // Catch exception if transport network not built yet
         catch (Exception e) {
-            if (DataManager.isModuleEnabled("validator") && !readingNetworkVersionList.contains(version.id)) {
+            if (DataManager.isModuleEnabled("r5_network") && !readingNetworkVersionList.contains(version.id)) {
                 LOG.warn("Transport network not found. Beginning build.", e);
                 readingNetworkVersionList.add(version.id);
                 BuildTransportNetworkJob btnj = new BuildTransportNetworkJob(version, userProfile.getUser_id());

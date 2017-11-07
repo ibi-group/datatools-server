@@ -19,8 +19,8 @@ modules:
     enabled: true
   user_admin:
     enabled: true
-  validator:
-    enabled: true
+  r5_network:
+    enabled: false
   gtfsapi:
     enabled: true
     load_on_fetch: false
