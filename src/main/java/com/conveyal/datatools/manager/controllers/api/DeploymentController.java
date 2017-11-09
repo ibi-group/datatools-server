@@ -10,10 +10,12 @@ import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
@@ -27,7 +29,9 @@ import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithError;
 import static spark.Spark.*;
 import static spark.Spark.get;
 
@@ -49,12 +53,12 @@ public class DeploymentController {
     public static Object getDeployment (Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         String id = req.params("id");
-        Deployment d = Deployment.get(id);
+        Deployment d = Persistence.deployments.getById(id);
         if (d == null) {
             halt(400, "Deployment does not exist.");
             return null;
         }
-        if (!userProfile.canAdministerProject(d.projectId, d.getOrganizationId()) && !userProfile.getUser_id().equals(d.getUser()))
+        if (!userProfile.canAdministerProject(d.projectId, d.organizationId()) && !userProfile.getUser_id().equals(d.user()))
             halt(401);
         else
             return d;
@@ -65,18 +69,17 @@ public class DeploymentController {
     public static Object deleteDeployment (Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         String id = req.params("id");
-        Deployment d = Deployment.get(id);
+        Deployment d = Persistence.deployments.getById(id);
         if (d == null) {
             halt(400, "Deployment does not exist.");
             return null;
         }
-        if (!userProfile.canAdministerProject(d.projectId, d.getOrganizationId()) && !userProfile.getUser_id().equals(d.getUser()))
-            halt(401);
+        if (!userProfile.canAdministerProject(d.projectId, d.organizationId()) && !userProfile.getUser_id().equals(d.user()))
+            haltWithError(401, "User not authorized to delete deployment");
         else {
-            d.delete();
+            Persistence.deployments.removeById(id);
             return d;
         }
-
         return null;
     }
 
@@ -85,15 +88,15 @@ public class DeploymentController {
         Auth0UserProfile userProfile = req.attribute("user");
         String id = req.params("id");
         System.out.println(id);
-        Deployment d = Deployment.get(id);
+        Deployment d = Persistence.deployments.getById(id);
 
         if (d == null) {
-            halt(400, "Deployment does not exist.");
+            haltWithError(400, "Deployment does not exist.");
             return null;
         }
 
-        if (!userProfile.canAdministerProject(d.projectId, d.getOrganizationId()) && !userProfile.getUser_id().equals(d.getUser()))
-            halt(401);
+        if (!userProfile.canAdministerProject(d.projectId, d.organizationId()) && !userProfile.getUser_id().equals(d.user()))
+            haltWithError(401, "User not authorized to download deployment");
 
         File temp = File.createTempFile("deployment", ".zip");
         // just include GTFS, not any of the ancillary information
@@ -114,37 +117,41 @@ public class DeploymentController {
     public static Object getAllDeployments (Request req, Response res) throws JsonProcessingException {
         Auth0UserProfile userProfile = req.attribute("user");
         String projectId = req.queryParams("projectId");
-        Project project = Project.get(projectId);
+        Project project = Persistence.projects.getById(projectId);
         if (!userProfile.canAdministerProject(projectId, project.organizationId))
             halt(401);
 
         if (projectId != null) {
-            Project p = Project.get(projectId);
-            return p.getProjectDeployments();
-        }
-        else {
-            return Deployment.getAll();
+            Project p = Persistence.projects.getById(projectId);
+            return p.retrieveDeployments();
+        } else {
+            return Persistence.deployments.getAll();
         }
     }
 
     public static Object createDeployment (Request req, Response res) throws IOException {
+        // TODO error handling when request is bogus
+        // TODO factor out user profile fetching, permissions checks etc.
         Auth0UserProfile userProfile = req.attribute("user");
-        JsonNode params = mapper.readTree(req.body());
+        Document newDeploymentFields = Document.parse(req.body());
+        String projectId = newDeploymentFields.getString("projectId");
+        String organizationId = newDeploymentFields.getString("organizationId");
 
-        // find the project
-        Project p = Project.get(params.get("projectId").asText());
+        boolean allowedToCreate = userProfile.canAdministerProject(projectId, organizationId);
 
-        if (!userProfile.canAdministerProject(p.id, p.organizationId))
-            halt(401);
+        if (allowedToCreate) {
+            Project project = Persistence.projects.getById(projectId);
+            Deployment newDeployment = new Deployment(project);
 
-        Deployment d = new Deployment(p);
-        d.setUser(userProfile);
-
-        applyJsonToDeployment(d, params);
-
-        d.save();
-
-        return d;
+            // FIXME: Here we are creating a deployment and updating it with the JSON string (two db operations)
+            // We do this because there is not currently apply JSON directly to an object (outside of Mongo codec
+            // operations)
+            Persistence.deployments.create(newDeployment);
+            return Persistence.deployments.update(newDeployment.id, req.body());
+        } else {
+            haltWithError(403, "Not authorized to create a deployment for project " + projectId);
+            return null;
+        }
     }
 
     /**
@@ -154,7 +161,7 @@ public class DeploymentController {
     public static Object createDeploymentFromFeedSource (Request req, Response res) throws JsonProcessingException {
         Auth0UserProfile userProfile = req.attribute("user");
         String id = req.params("id");
-        FeedSource s = FeedSource.get(id);
+        FeedSource s = Persistence.feedSources.getById(id);
 
         // three ways to have permission to do this:
         // 1) be an admin
@@ -162,125 +169,116 @@ public class DeploymentController {
         // 3) have access to this feed through project permissions
         // if all fail, the user cannot do this.
         if (
-                !userProfile.canAdministerProject(s.projectId, s.getOrganizationId())
-                        && !userProfile.getUser_id().equals(s.getUser())
+                !userProfile.canAdministerProject(s.projectId, s.organizationId())
+                        && !userProfile.getUser_id().equals(s.user())
 //                        && !userProfile.hasWriteAccess(s.id)
                 )
             halt(401);
 
         // never loaded
-        if (s.getLatestVersionId() == null)
+        if (s.latestVersionId() == null)
             halt(400);
 
         Deployment d = new Deployment(s);
-        d.setUser(userProfile);
-        d.save();
-
+        d.storeUser(userProfile);
+        Persistence.deployments.create(d);
         return d;
     }
 
 //    @BodyParser.Of(value=BodyParser.Json.class, maxLength=1024*1024)
     public static Object updateDeployment (Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
-        String id = req.params("id");
-        Deployment d = Deployment.get(id);
-
-        if (d == null)
+        String deploymentId = req.params("id");
+        Deployment deploymentToUpdate = Persistence.deployments.getById(deploymentId);
+        Document updateDocument = Document.parse(req.body());
+        if (deploymentToUpdate == null)
             halt(404);
-        
-        if (!userProfile.canAdministerProject(d.projectId, d.getOrganizationId()) && !userProfile.getUser_id().equals(d.getUser()))
-            halt(401);
 
-        JsonNode params;
-        try {
-            params = mapper.readTree(req.body());
-            applyJsonToDeployment(d, params);
-            d.save();
-            return d;
-        } catch (IOException e) {
-            e.printStackTrace();
-            halt(400, SparkUtils.formatJSON("Could not read deployment"));
-        }
-        return null;
-    }
+        boolean allowedToUpdate = userProfile.canAdministerProject(deploymentToUpdate.projectId, deploymentToUpdate.organizationId())
+                || userProfile.getUser_id().equals(deploymentToUpdate.user());
 
-    /**
-     * Apply JSON params to a deployment.
-     * @param d
-     * @param params
-     */
-    private static void applyJsonToDeployment(Deployment d, JsonNode params) {
-        Iterator<Map.Entry<String, JsonNode>> fieldsIter = params.fields();
-        while (fieldsIter.hasNext()) {
-            Map.Entry<String, JsonNode> entry = fieldsIter.next();
-            if (entry.getKey() == "feedVersions") {
-                JsonNode versions = entry.getValue();
-                ArrayList<FeedVersion> versionsToInsert = new ArrayList<>(versions.size());
-                for (JsonNode version : versions) {
-                    if (!version.has("id")) {
-                        halt(400, SparkUtils.formatJSON("Version not supplied"));
-                    }
-                    FeedVersion v = null;
-                    try {
-                        v = FeedVersion.get(version.get("id").asText());
-                    } catch (Exception e) {
-                        halt(404, SparkUtils.formatJSON("Version not found", 404));
-                    }
-                    if (v == null) {
-                        halt(404, SparkUtils.formatJSON("Version not found", 404));
-                    }
-                    // check that the version belongs to the correct project
-                    if (v.getFeedSource().projectId.equals(d.projectId)) {
-                        versionsToInsert.add(v);
-                    }
+        // FIXME use generic update hook, also feedVersions is getting serialized into MongoDB (which is undesirable)
+        // Check that feed versions in request body are OK to add to deployment, i.e., they exist and are a part of
+        // this project.
+        if (updateDocument.containsKey("feedVersions")) {
+            List<Document> versions = (List<Document>) updateDocument.get("feedVersions");
+            ArrayList<FeedVersion> versionsToInsert = new ArrayList<>(versions.size());
+            for (Document version : versions) {
+                if (!version.containsKey("id")) {
+                    halt(400, SparkUtils.formatJSON("Version not supplied"));
                 }
+                FeedVersion v = null;
+                try {
+                    v = Persistence.feedVersions.getById(version.getString("id"));
+                } catch (Exception e) {
+                    haltWithError(404, "Version not found");
+                }
+                if (v == null) {
+                    haltWithError(404, "Version not found");
+                }
+                // check that the version belongs to the correct project
+                if (v.parentFeedSource().projectId.equals(deploymentToUpdate.projectId)) {
+                    versionsToInsert.add(v);
+                }
+            }
 
-                d.setFeedVersions(versionsToInsert);
-            }
-            if (entry.getKey() == "name") {
-                d.name = entry.getValue().asText();
-            }
+            // Update deployment feedVersionIds field.
+            Persistence.deployments.updateField(deploymentId, "feedVersionIds", versionsToInsert.stream()
+                    .map(v -> v.id)
+                    .collect(Collectors.toList())
+            );
+        }
+
+
+
+        if (allowedToUpdate) {
+            Deployment updatedDeployment = Persistence.deployments.update(deploymentId, req.body());
+            return updatedDeployment;
+        } else {
+            haltWithError(403, "Not authorized to update deployment " + deploymentId);
+            return null;
         }
     }
 
     /**
      * Create a deployment bundle, and push it to OTP
-     * @throws IOException
      */
     public static Object deploy (Request req, Response res) throws IOException {
         Auth0UserProfile userProfile = req.attribute("user");
         String target = req.params("target");
         String id = req.params("id");
-        Deployment d = Deployment.get(id);
-        Project p = Project.get(d.projectId);
+        Deployment d = Persistence.deployments.getById(id);
+        Project p = Persistence.projects.getById(d.projectId);
 
-        if (!userProfile.canAdministerProject(d.projectId, d.getOrganizationId()) && !userProfile.getUser_id().equals(d.getUser()))
+        if (!userProfile.canAdministerProject(d.projectId, d.organizationId()) && !userProfile.getUser_id().equals(d.user()))
             halt(401);
 
-        if (!userProfile.canAdministerProject(d.projectId, d.getOrganizationId()) && p.getServer(target).admin)
+        if (!userProfile.canAdministerProject(d.projectId, d.organizationId()) && p.retrieveServer(target).admin)
             halt(401);
 
         // check if we can deploy
         if (deploymentJobsByServer.containsKey(target)) {
             DeployJob currentJob = deploymentJobsByServer.get(target);
-            if (currentJob != null && !currentJob.getStatus().completed) {
+            if (currentJob != null && !currentJob.status.completed) {
                 // send a 503 service unavailable as it is not possible to deploy to this target right now;
                 // someone else is deploying
                 halt(202, "Deployment currently in progress for target: " + target);
                 LOG.warn("Deployment currently in progress for target: " + target);
             }
         }
-        OtpServer otpServer = p.getServer(target);
+        OtpServer otpServer = p.retrieveServer(target);
         List<String> targetUrls = otpServer.internalUrl;
 
-        Deployment oldD = Deployment.getDeploymentForServerAndRouterId(target, d.routerId);
-        if (oldD != null) {
-            oldD.deployedTo = null;
-            oldD.save();
+        Deployment oldDeployment = Deployment.retrieveDeploymentForServerAndRouterId(target, d.routerId);
+
+        // If there was a previous deployment sent to the server/router combination, set that to null because this new
+        // one will overwrite it.
+        if (oldDeployment != null) {
+            Persistence.deployments.updateField(oldDeployment.id, "deployedTo", null);
         }
 
-        d.deployedTo = target;
-        d.save();
+        // Store the target server in the deployedTo field.
+        Persistence.deployments.updateField(d.id, "deployedTo", target);
 
         DeployJob job = new DeployJob(d, userProfile.getUser_id(), targetUrls, otpServer.publicUrl, otpServer.s3Bucket, otpServer.s3Credentials);
         deploymentJobsByServer.put(target, job);
@@ -298,32 +296,23 @@ public class DeploymentController {
     public static Object deploymentStatus (Request req, Response res) throws JsonProcessingException {
         // this is not access-controlled beyond requiring auth, which is fine
         // there's no good way to know who should be able to see this.
-        String target = req.queryParams("target");
+        String deploymentTarget = req.queryParams("target");
 
-        if (!deploymentJobsByServer.containsKey(target))
-            halt(404, "Deployment target '"+target+"' not found");
+        if (!deploymentJobsByServer.containsKey(deploymentTarget))
+            haltWithError(404, "Deployment target '" + deploymentTarget + "' not found");
 
-        DeployJob j = deploymentJobsByServer.get(target);
+        DeployJob deployJob = deploymentJobsByServer.get(deploymentTarget);
 
-        if (j == null)
-            halt(404, "No active job for " + target + " found");
+        if (deployJob == null)
+            haltWithError(404, "No active job for " + deploymentTarget + " found");
 
-        return j.getStatus();
+        return deployJob.status;
     }
-
-    /**
-     * The servers that it is possible to deploy to.
-     */
-//    public static Object deploymentTargets (Request req, Response res) {
-//        Auth0UserProfile userProfile = req.attribute("user");
-//        return DeploymentManager.getDeploymentNames(userProfile.canAdministerApplication());
-//    }
 
     public static void register (String apiPrefix) {
         post(apiPrefix + "secure/deployments/:id/deploy/:target", DeploymentController::deploy, json::write);
         options(apiPrefix + "secure/deployments", (q, s) -> "");
         get(apiPrefix + "secure/deployments/status/:target", DeploymentController::deploymentStatus, json::write);
-//        get(apiPrefix + "secure/deployments/targets", DeploymentController::deploymentTargets, json::write);
         get(apiPrefix + "secure/deployments/:id/download", DeploymentController::downloadDeployment);
         get(apiPrefix + "secure/deployments/:id", DeploymentController::getDeployment, json::write);
         delete(apiPrefix + "secure/deployments/:id", DeploymentController::deleteDeployment, json::write);

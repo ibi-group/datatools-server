@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.auth;
 
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -392,7 +393,7 @@ public class Auth0UserProfile {
     public com.conveyal.datatools.manager.models.Organization getOrganization () {
         Organization[] orgs = getApp_metadata().getDatatoolsInfo().organizations;
         if (orgs != null && orgs.length != 0) {
-            return orgs[0] != null ? com.conveyal.datatools.manager.models.Organization.get(orgs[0].organizationId) : null;
+            return orgs[0] != null ? Persistence.organizations.getById(orgs[0].organizationId) : null;
         }
         return null;
     }

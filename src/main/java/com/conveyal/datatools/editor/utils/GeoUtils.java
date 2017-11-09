@@ -39,7 +39,7 @@ public class GeoUtils {
         return geometyFactory.createPolygon(ring, holes);
     }
 
-    /** get the distances from the start of the line string to every coordinate along the line string */
+    /** retrieve the distances from the start of the line string to every coordinate along the line string */
     public static double[] getCoordDistances(LineString line) {
         double[] coordDist = new double[line.getNumPoints()];
         coordDist[0] = 0;

@@ -94,7 +94,7 @@ public class TripPattern extends Model implements Cloneable, Serializable {
 //            LocationIndexedLine shapeIdx = new LocationIndexedLine(shape);
 //
 //            for (int i = 0; i < ret.length; i++) {
-//                TripPatternStop ps = patternStops.get(i);
+//                TripPatternStop ps = patternStops.retrieveById(i);
 //
 //                if (ps.shapeDistTraveled == null) {
 //                    return null;
@@ -103,7 +103,7 @@ public class TripPattern extends Model implements Cloneable, Serializable {
 //                Coordinate snapped = shapeIdx.extractPoint(getLoc(coordDistances, ps.shapeDistTraveled));
 //                // offset it slightly so that line creation does not fail if the stop is coincident
 //                snapped.x = snapped.x - 0.00000001;
-//                Stop st = tx.stops.get(ps.stopId);
+//                Stop st = tx.stops.retrieveById(ps.stopId);
 //                Coordinate stop = st.location.getCoordinate();
 //                ret[i] = GeoUtils.geometyFactory.createLineString(new Coordinate[] {stop, snapped});
 //            }
@@ -511,7 +511,7 @@ public class TripPattern extends Model implements Cloneable, Serializable {
     }
 
     /**
-     * From an array of distances at coordinates and a distance, get a linear location for that distance.
+     * From an array of distances at coordinates and a distance, retrieveById a linear location for that distance.
      */
     private static LinearLocation getLoc(double[] distances, double distTraveled) {
         if (distTraveled < 0)
@@ -535,7 +535,7 @@ public class TripPattern extends Model implements Cloneable, Serializable {
     }
 
     /**
-     * From an array of distances at coordinates and linear locs, get a distance for that location.
+     * From an array of distances at coordinates and linear locs, retrieveById a distance for that location.
      */
     private static double getDist(double[] distances, LinearLocation loc) {
         if (loc.getSegmentIndex() == distances.length - 1)

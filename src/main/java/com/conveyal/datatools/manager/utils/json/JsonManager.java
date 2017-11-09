@@ -9,7 +9,6 @@ import java.util.Map;
 import com.conveyal.datatools.editor.models.transit.GtfsRouteType;
 import com.conveyal.datatools.editor.utils.JacksonSerializers;
 import com.conveyal.geojson.GeoJsonModule;
-import com.conveyal.gtfs.model.InvalidValue;
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -38,7 +37,8 @@ public class JsonManager<T> {
     public JsonManager (Class<T> theClass, Class view) {
         this.theClass = theClass;
         this.om = new ObjectMapper();
-        om.addMixIn(InvalidValue.class, InvalidValueMixIn.class);
+        // previous model for gtfs validation errors
+//        om.addMixIn(InvalidValue.class, InvalidValueMixIn.class);
         om.addMixIn(Rectangle2D.class, Rectangle2DMixIn.class);
         om.registerModule(new GeoJsonModule());
         SimpleModule deser = new SimpleModule();

@@ -126,7 +126,7 @@ public class GtfsApiController {
                     }
                     newTags.put(feedId, eTag);
 
-                    // initiate load of feed source into API with get call
+                    // initiate load of feed source into API with retrieve call
                     ApiMain.getFeedSource(feedId);
                 } catch (Exception e) {
                     LOG.warn("Could not load feed " + keyName, e);

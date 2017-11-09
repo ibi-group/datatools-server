@@ -153,7 +153,7 @@ public class SnapshotTx extends DatabaseTx {
 //            for (TripPattern tp : atx.tripPatterns.values()) {
 //                for (TripPatternStop ps : tp.patternStops) {
 //                    if (!atx.stops.containsKey(ps.stopId)) {
-//                        Stop stop = oldStops.get(ps.stopId);
+//                        Stop stop = oldStops.retrieve(ps.stopId);
 //                        atx.stops.put(ps.stopId, stop);
 //                        restoredStops.add(stop);
 //                    }

@@ -2,6 +2,7 @@ node_modules/
 data/
 .DS_Store
 dist
+*.iml
 *.log
 coverage
 .idea

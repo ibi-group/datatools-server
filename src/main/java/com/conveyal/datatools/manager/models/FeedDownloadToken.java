@@ -1,8 +1,9 @@
 package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.editor.models.Snapshot;
-import com.conveyal.datatools.manager.persistence.DataStore;
-import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.conveyal.datatools.manager.persistence.Persistence;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import org.bson.codecs.pojo.annotations.BsonProperty;
 import org.mapdb.Fun;
 
 import java.util.Date;
@@ -15,61 +16,48 @@ import java.util.Date;
 public class FeedDownloadToken extends Model {
 
     private static final long serialVersionUID = 1L;
-    private static DataStore<FeedDownloadToken> tokenStore = new DataStore<FeedDownloadToken>("feeddownloadtokens");
 
-    private String feedVersionId;
-    private Fun.Tuple2<String, Integer> snapshotId;
+    public String feedVersionId;
+    public Fun.Tuple2<String, Integer> snapshotId;
 
-    private Date timestamp;
+    public Date timestamp;
+
+    public FeedDownloadToken () { }
 
     public FeedDownloadToken (FeedVersion feedVersion) {
-        super();
         feedVersionId = feedVersion.id;
         timestamp = new Date();
     }
 
     public FeedDownloadToken (Snapshot snapshot) {
-        super();
         snapshotId = snapshot.id;
         timestamp = new Date();
     }
 
     public FeedDownloadToken (Project project) {
-        super();
         feedVersionId = project.id;
         timestamp = new Date();
     }
 
-    public static FeedDownloadToken get (String id) {
-        return tokenStore.getById(id);
-    }
-
-    @JsonIgnore
-    public FeedVersion getFeedVersion () {
-        if (feedVersionId != null) return FeedVersion.get(feedVersionId);
+    @JsonProperty("feedVersion")
+    public FeedVersion retrieveFeedVersion() {
+        if (feedVersionId != null) return Persistence.feedVersions.getById(feedVersionId);
         else return null;
     }
 
-    @JsonIgnore
-    public Snapshot getSnapshot () {
+    @JsonProperty("snapshot")
+    public Snapshot retrieveSnapshot() {
         if (snapshotId != null) return Snapshot.get(snapshotId);
         else return null;
     }
 
-    @JsonIgnore
-    public Project getProject () {
-        return Project.get(feedVersionId);
+    // TODO: Need to update feedVersionId field name to be more generic (downloadTargetId)
+    public Project retrieveProject() {
+        return Persistence.projects.getById(feedVersionId);
     }
 
     public boolean isValid () {
         return true;
     }
 
-    public void save () {
-        tokenStore.save(id, this);
-    }
-
-    public void delete () {
-        tokenStore.delete(id);
-    }
 }

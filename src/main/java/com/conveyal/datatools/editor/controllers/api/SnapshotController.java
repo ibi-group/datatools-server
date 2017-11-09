@@ -21,6 +21,7 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.persistence.FeedStore;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import org.mapdb.Fun;
 import org.mapdb.Fun.Tuple2;
@@ -41,6 +42,7 @@ import spark.Response;
 
 import static com.conveyal.datatools.common.utils.S3Utils.getS3Credentials;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
+import static com.conveyal.datatools.editor.models.Snapshot.writeSnapshotAsGtfs;
 import static spark.Spark.*;
 
 
@@ -71,13 +73,13 @@ public class SnapshotController {
                 Collection<Snapshot> snapshots;
                 if (feedId == null) {
                     // if it's still null just give them everything
-                    // this is used in GTFS Data Manager to get snapshots in bulk
+                    // this is used in GTFS Data Manager to retrieveById snapshots in bulk
                     // TODO this allows any authenticated user to fetch GTFS data for any agency
                     return new ArrayList<>(gtx.snapshots.values());
                 }
                 else {
                     // check view permissions
-                    FeedSourceController.requestFeedSource(req, FeedSource.get(feedId), "view");
+                    FeedSourceController.checkFeedSourcePermissions(req, Persistence.feedSources.getById(feedId), "view");
                     return gtx.snapshots.subMap(new Tuple2(feedId, null), new Tuple2(feedId, Fun.HI)).values()
                             .stream()
                             .collect(Collectors.toList());
@@ -95,7 +97,7 @@ public class SnapshotController {
     public static Object createSnapshot (Request req, Response res) {
         GlobalTx gtx = null;
         try {
-            // create a dummy snapshot from which to get values
+            // create a dummy snapshot from which to retrieveById values
             Snapshot original = Base.mapper.readValue(req.body(), Snapshot.class);
             Snapshot s = VersionedDataStore.takeSnapshot(original.feedId, original.name, original.comment);
             s.validFrom = original.validFrom;
@@ -130,9 +132,6 @@ public class SnapshotController {
 
     /**
      * Create snapshot from feedVersion and load/import into editor database.
-     * @param req
-     * @param res
-     * @return
      */
     public static Boolean importSnapshot (Request req, Response res) {
 
@@ -143,14 +142,14 @@ public class SnapshotController {
             halt(400, SparkUtils.formatJSON("No FeedVersion ID specified", 400));
         }
 
-        FeedVersion feedVersion = FeedVersion.get(feedVersionId);
+        FeedVersion feedVersion = Persistence.feedVersions.getById(feedVersionId);
         if(feedVersion == null) {
             halt(404, SparkUtils.formatJSON("Could not find FeedVersion with ID " + feedVersionId, 404));
         }
 
-        FeedSource feedSource = feedVersion.getFeedSource();
+        FeedSource feedSource = feedVersion.parentFeedSource();
         // check user's permission to import snapshot
-        FeedSourceController.requestFeedSource(req, feedSource, "edit");
+        FeedSourceController.checkFeedSourcePermissions(req, feedSource, "edit");
 
         ProcessGtfsSnapshotMerge processGtfsSnapshotMergeJob =
                 new ProcessGtfsSnapshotMerge(feedVersion, userProfile.getUser_id());
@@ -275,7 +274,7 @@ public class SnapshotController {
             key = "snapshots/" + filePrefix + ".zip";
 
             // ensure user has permission to download snapshot, otherwise halt them
-            FeedSourceController.requestFeedSource(req, FeedSource.get(snapshot.feedId), "view");
+            FeedSourceController.checkFeedSourcePermissions(req, Persistence.feedSources.getById(snapshot.feedId), "view");
         } finally {
             gtx.rollbackIfOpen();
         }
@@ -306,37 +305,9 @@ public class SnapshotController {
         } else {
             // if not storing on s3, just use the token download method
             token = new FeedDownloadToken(snapshot);
-            token.save();
+            Persistence.tokens.create(token);
             return token;
         }
-    }
-
-    /** Write snapshot to disk as GTFS */
-    public static boolean writeSnapshotAsGtfs (Tuple2<String, Integer> decodedId, File outFile) {
-        GlobalTx gtx = VersionedDataStore.getGlobalTx();
-        Snapshot local;
-        try {
-            if (!gtx.snapshots.containsKey(decodedId)) {
-                return false;
-            }
-
-            local = gtx.snapshots.get(decodedId);
-
-            new ProcessGtfsSnapshotExport(local, outFile).run();
-        } finally {
-            gtx.rollbackIfOpen();
-        }
-
-        return true;
-    }
-    public static boolean writeSnapshotAsGtfs (String id, File outFile) {
-        Tuple2<String, Integer> decodedId;
-        try {
-            decodedId = JacksonSerializers.Tuple2IntDeserializer.deserialize(id);
-        } catch (IOException e1) {
-            return false;
-        }
-        return writeSnapshotAsGtfs(decodedId, outFile);
     }
 
     public static Object deleteSnapshot(Request req, Response res) {
@@ -360,19 +331,16 @@ public class SnapshotController {
     /**
      * This method is used only when NOT storing feeds on S3. It will deliver a
      * snapshot file from the local storage if a valid token is provided.
-     * @param req
-     * @param res
-     * @return
      */
     private static Object downloadSnapshotWithToken (Request req, Response res) {
         String id = req.params("token");
-        FeedDownloadToken token = FeedDownloadToken.get(id);
+        FeedDownloadToken token = Persistence.tokens.getById(id);
 
         if(token == null || !token.isValid()) {
             halt(400, "Feed download token not valid");
         }
 
-        Snapshot snapshot = token.getSnapshot();
+        Snapshot snapshot = token.retrieveSnapshot();
         File file = null;
 
         try {
@@ -384,7 +352,7 @@ public class SnapshotController {
             String message = "Unable to create temp file for snapshot";
             LOG.error(message);
         }
-        token.delete();
+        Persistence.tokens.removeById(token.id);
         return downloadFile(file, snapshot.feedId + "_" + snapshot.snapshotTime + ".zip", res);
     }
 

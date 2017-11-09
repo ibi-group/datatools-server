@@ -7,6 +7,7 @@ import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.JsonViews;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.google.common.base.Function;
 import com.google.common.collect.Collections2;
@@ -148,10 +149,10 @@ public class RouteController {
                     (route.status != oldRoute.status &&
                             (route.status.equals(StatusType.APPROVED) ||
                                     oldRoute.status.equals(StatusType.APPROVED)))) {
-                FeedSource feedSource = FeedSource.get(feedId);
+                FeedSource feedSource = Persistence.feedSources.getById(feedId);
                 Auth0UserProfile userProfile = req.attribute("user");
 
-                if (!userProfile.canApproveGTFS(feedSource.getOrganizationId(), feedSource.projectId, feedId)) {
+                if (!userProfile.canApproveGTFS(feedSource.organizationId(), feedSource.projectId, feedId)) {
                     halt(403, SparkUtils.formatJSON("User does not have permission to change status of route", 403));
                 }
             }
@@ -288,7 +289,7 @@ public class RouteController {
                 halt(400);
             }
 
-            // get all the trip patterns for route from
+            // retrieveById all the trip patterns for route from
             // note that we clone them here so we can later modify them
             Collection<TripPattern> tps = Collections2.transform(
                     tx.tripPatternsByRoute.subSet(new Tuple2(from, null), new Tuple2(from, Fun.HI)),
