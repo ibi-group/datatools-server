@@ -18,7 +18,7 @@ import static com.conveyal.datatools.manager.utils.NotificationsUtils.sendNotifi
  * Created by landon on 6/6/16.
  */
 public class NotifyUsersForSubscriptionJob implements Runnable {
-    private ObjectMapper mapper = new ObjectMapper();
+    private static final ObjectMapper mapper = new ObjectMapper();
     public static final Logger LOG = LoggerFactory.getLogger(NotifyUsersForSubscriptionJob.class);
     private String subscriptionType;
     private String target;
@@ -40,10 +40,11 @@ public class NotifyUsersForSubscriptionJob implements Runnable {
         if (DataManager.hasConfigProperty("application.notifications_enabled") && !DataManager.getConfigProperty("application.notifications_enabled").asBoolean()) {
             return;
         }
-        String userString = getUsersBySubscription(this.subscriptionType, this.target);
+        LOG.info("Checking for subscribed users to notify type={} target={}", subscriptionType, target);
+        String userString = getUsersBySubscription(subscriptionType, target);
         JsonNode subscribedUsers = null;
         try {
-            subscribedUsers = this.mapper.readTree(userString);
+            subscribedUsers = mapper.readTree(userString);
         } catch (IOException e) {
             e.printStackTrace();
         }
