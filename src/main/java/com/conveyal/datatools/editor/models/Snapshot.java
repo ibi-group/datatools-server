@@ -85,6 +85,10 @@ public class Snapshot implements Cloneable, Serializable {
         }
     }
 
+    public String generateFileName () {
+        return this.feedId + "_" + this.snapshotTime + ".zip";
+    }
+
     /** Write snapshot to disk as GTFS */
     public static boolean writeSnapshotAsGtfs (Tuple2<String, Integer> decodedId, File outFile) {
         GlobalTx gtx = VersionedDataStore.getGlobalTx();
@@ -93,14 +97,11 @@ public class Snapshot implements Cloneable, Serializable {
             if (!gtx.snapshots.containsKey(decodedId)) {
                 return false;
             }
-
             local = gtx.snapshots.get(decodedId);
-
             new ProcessGtfsSnapshotExport(local, outFile).run();
         } finally {
             gtx.rollbackIfOpen();
         }
-
         return true;
     }
 
