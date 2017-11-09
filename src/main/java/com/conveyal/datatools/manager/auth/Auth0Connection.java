@@ -15,6 +15,7 @@ import java.io.DataOutputStream;
 import java.io.InputStreamReader;
 import java.net.URL;
 
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithError;
 import static spark.Spark.halt;
 
 /**
@@ -37,7 +38,7 @@ public class Auth0Connection {
         String token = getToken(req);
 
         if(token == null) {
-            halt(401, SparkUtils.formatJSON("Could not find authorization token", 401));
+            haltWithError(401, "Could not find authorization token");
         }
         Auth0UserProfile profile;
         try {
@@ -46,7 +47,7 @@ public class Auth0Connection {
         }
         catch(Exception e) {
             LOG.warn("Could not verify user", e);
-            halt(401, SparkUtils.formatJSON("Could not verify user", 401));
+            haltWithError(401, "Could not verify user");
         }
     }
 
