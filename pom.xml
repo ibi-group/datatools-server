@@ -6,7 +6,7 @@
 
     <groupId>com.conveyal</groupId>
     <artifactId>datatools-server</artifactId>
-    <version>3.0.0</version>
+    <version>3.1.0-SNAPSHOT</version>
 
     <!-- Define where the source code for project lives -->
     <scm>
