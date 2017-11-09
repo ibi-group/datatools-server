@@ -5,8 +5,8 @@ import com.conveyal.datatools.editor.controllers.Base;
 import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.EditorFeed;
-import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.JsonViews;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -40,7 +40,7 @@ public class FeedInfoController {
             gtx = VersionedDataStore.getGlobalTx();
             if (!gtx.feeds.containsKey(id)) {
                 // create new EditorFeed if id exists in manager
-                if (FeedSource.get(id) != null) {
+                if (Persistence.feedSources.getById(id) != null) {
                     EditorFeed fs = new EditorFeed(id);
                     gtx.feeds.put(fs.id, fs);
                     gtx.commit();

@@ -6,11 +6,11 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Note;
 import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.datatools.manager.DataManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
@@ -25,15 +25,9 @@ import spark.Response;
 
 import java.io.*;
 import java.net.URLEncoder;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.util.*;
 
 import com.conveyal.datatools.manager.auth.Auth0Users;
-
-import javax.persistence.Entity;
 
 import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
 import static spark.Spark.*;
@@ -165,7 +159,7 @@ public class UserController {
         request.setHeader("Content-Type", "application/json");
 
         JsonNode jsonNode = mapper.readTree(req.body());
-//        JsonNode data = mapper.readValue(jsonNode.get("data"), Auth0UserProfile.DatatoolsInfo.class); //jsonNode.get("data");
+//        JsonNode data = mapper.readValue(jsonNode.retrieveById("data"), Auth0UserProfile.DatatoolsInfo.class); //jsonNode.retrieveById("data");
         JsonNode data = jsonNode.get("data");
         System.out.println(data.asText());
         Iterator<Map.Entry<String, JsonNode>> fieldsIter = data.fields();
@@ -174,7 +168,7 @@ public class UserController {
             System.out.println(entry.getValue());
         }
 //        if (!data.has("client_id")) {
-//            ((ObjectNode)data).put("client_id", DataManager.config.get("auth0").get("client_id").asText());
+//            ((ObjectNode)data).put("client_id", DataManager.config.retrieveById("auth0").retrieveById("client_id").asText());
 //        }
         String json = "{ \"app_metadata\": { \"datatools\" : " + data + " }}";
         System.out.println(json);
@@ -221,9 +215,9 @@ public class UserController {
                         // TODO: add all activity types
                         case "feed-commented-on":
                             for (String targetId : sub.getTarget()) {
-                                FeedSource fs = FeedSource.get(targetId);
+                                FeedSource fs = Persistence.feedSources.getById(targetId);
                                 if(fs == null) continue;
-                                for (Note note : fs.getNotes()) {
+                                for (Note note : fs.retrieveNotes()) {
                                     // TODO: Check if actually recent
 //                            if (note.date.after(Date.from(Instant.ofEpochSecond(from))) && note.date.before(Date.from(Instant.ofEpochSecond(to)))) {
                                     Activity act = new Activity();

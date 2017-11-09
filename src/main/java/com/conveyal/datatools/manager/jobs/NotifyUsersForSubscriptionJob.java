@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.jobs;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -63,14 +64,14 @@ public class NotifyUsersForSubscriptionJob implements Runnable {
                     String[] subType = this.subscriptionType.split("-");
                     switch (subType[0]) {
                         case "feed":
-                            FeedSource fs = FeedSource.get(this.target);
+                            FeedSource fs = Persistence.feedSources.getById(this.target);
                             subject = DataManager.getConfigPropertyAsText("application.title")+ " Notification: " + this.subscriptionType.replace("-", " ") + " (" + fs.name + ")";
                             url = DataManager.getConfigPropertyAsText("application.public_url");
                             bodyAction = "</p><p>View <a href='" + url + "/feed/" + fs.id + "'>this feed</a>.</p>";
                             sendNotification(email, subject, "Body", "<p>" + this.message + bodyAction);
                             break;
                         case "project":
-                            Project p = Project.get(this.target);
+                            Project p = Persistence.projects.getById(this.target);
                             subject = "Datatools Notification: " + this.subscriptionType.replace("-", " ") + " (" + p.name + ")";
                             url = DataManager.getConfigPropertyAsText("application.public_url");
                             bodyAction = "</p><p>View <a href='" + url + "/project/" + p.id + "'>this project</a>.</p>";

@@ -1,6 +1,5 @@
 package com.conveyal.datatools.manager.models;
 
-import com.conveyal.datatools.manager.persistence.DataStore;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 
 import java.util.Arrays;
@@ -12,8 +11,6 @@ import java.util.stream.Collectors;
  */
 public class Region extends Model {
     private static final long serialVersionUID = 1L;
-
-    private static DataStore<Region> regionStore = new DataStore<>("region");
 
     /** The name of this region, e.g. Atlanta. */
     public String name;
@@ -38,55 +35,4 @@ public class Region extends Model {
 
     }
 
-    /**
-     * Get all of the FeedCollections that are defined
-     */
-    public static Collection<Region> getAll () {
-        return regionStore.getAll();
-    }
-
-    public static void deleteAll () {
-        Region.getAll().forEach(region -> region.delete());
-    }
-
-    public static Region get(String id) {
-        return regionStore.getById(id);
-    }
-
-    public void save() {
-        save(true);
-    }
-
-    public void save(boolean commit) {
-        if (commit)
-            regionStore.save(this.id, this);
-        else
-            regionStore.saveWithoutCommit(this.id, this);
-    }
-
-    public void delete() {
-//        for (FeedSource fs : getRegionFeedSources()) {
-//            Arrays.asList(fs.regions).remove(this.id);
-//            fs.save();
-//        }
-
-        regionStore.delete(this.id);
-    }
-
-    public static void commit () {
-        regionStore.commit();
-    }
-
-    /**
-     * Get all the feed sources for this feed collection
-     */
-
-    @JsonIgnore
-    public Collection<? extends FeedSource> getRegionFeedSources() {
-
-        // TODO: use index, but not important for now because we generally only have one FeedCollection
-//        if (this.id != null && fs.regions != null)
-        return FeedSource.getAll().stream().filter(fs -> Arrays.asList(fs.regions).contains(this.id)).collect(Collectors.toList());
-
-    }
 }

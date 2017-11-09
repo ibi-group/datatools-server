@@ -52,9 +52,6 @@ public class S3Utils {
             MultipartConfigElement multipartConfigElement = new MultipartConfigElement(System.getProperty("java.io.tmpdir"));
             req.raw().setAttribute("org.eclipse.jetty.multipartConfig", multipartConfigElement);
         }
-
-//        req.attribute("org.eclipse.jetty.multipartConfig", new MultipartConfigElement("/temp"));
-
         Part part = req.raw().getPart("file");
         String extension = "." + part.getContentType().split("/", 0)[1];
         File tempFile = File.createTempFile(id, extension);

@@ -66,7 +66,7 @@ public class TripPatternController {
                     return patts;
                 }
             }
-            else { // get all patterns
+            else { // retrieveById all patterns
 
                 // put values into a new ArrayList to avoid returning MapDB BTreeMap
                 // (and possible access error once transaction is closed)

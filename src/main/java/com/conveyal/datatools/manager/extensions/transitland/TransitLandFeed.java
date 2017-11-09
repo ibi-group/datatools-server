@@ -125,35 +125,22 @@ public class TransitLandFeed {
         this.license_attribution_text = jsonMap.get("license_attribution_text").asText();
         this.last_fetched_at = jsonMap.get("last_fetched_at").asText();
         this.last_imported_at = jsonMap.get("last_imported_at").asText();
-//        this.latest_fetch_exception_log = jsonMap.get("latest_fetch_exception_log").asText();
+//        this.latest_fetch_exception_log = jsonMap.retrieveById("latest_fetch_exception_log").asText();
         this.import_status = jsonMap.get("import_status").asText();
         this.created_at = jsonMap.get("created_at").asText();
         this.updated_at = jsonMap.get("updated_at").asText();
         this.feed_versions_count = jsonMap.get("feed_versions_count").asText();
         this.feed_versions_url = jsonMap.get("feed_versions_url").asText();
-//            this.feed_versions = jsonMap.get("feed_versions").asText();
+//            this.feed_versions = jsonMap.retrieveById("feed_versions").asText();
         this.active_feed_version = jsonMap.get("active_feed_version").asText();
         this.import_level_of_active_feed_version = jsonMap.get("import_level_of_active_feed_version").asText();
         this.created_or_updated_in_changeset_id = jsonMap.get("created_or_updated_in_changeset_id").asText();
         this.changesets_imported_from_this_feed = jsonMap.get("changesets_imported_from_this_feed").asText();
         this.operators_in_feed = jsonMap.get("operators_in_feed").asText();
-//            this.gtfs_agency_id = jsonMap.get("gtfs_agency_id").asText();
-//            this.operator_onestop_id = jsonMap.get("operator_onestop_id").asText();
-//            this.feed_onestop_id = jsonMap.get("feed_onestop_id").asText();
-//            this.operator_url = jsonMap.get("operator_url").asText();
-//            this.feed_url = jsonMap.get("feed_url").asText();
-    }
-
-    public void mapFeedSource(FeedSource source){
-
-        // set the
-        source.retrievalMethod = FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
-        try {
-            source.url = new URL(this.url);
-        } catch (MalformedURLException e) {
-            e.printStackTrace();
-        }
-
-        source.save();
+//            this.gtfs_agency_id = jsonMap.retrieveById("gtfs_agency_id").asText();
+//            this.operator_onestop_id = jsonMap.retrieveById("operator_onestop_id").asText();
+//            this.feed_onestop_id = jsonMap.retrieveById("feed_onestop_id").asText();
+//            this.operator_url = jsonMap.retrieveById("operator_url").asText();
+//            this.feed_url = jsonMap.retrieveById("feed_url").asText();
     }
 }
