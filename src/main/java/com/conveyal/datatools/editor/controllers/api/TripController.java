@@ -1,5 +1,6 @@
 package com.conveyal.datatools.editor.controllers.api;
 
+import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.editor.controllers.Base;
 import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
@@ -15,7 +16,9 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import spark.HaltException;
 import spark.Request;
@@ -27,17 +30,14 @@ import static spark.Spark.*;
 public class TripController {
     public static final Logger LOG = LoggerFactory.getLogger(TripController.class);
 
-    public static JsonManager<Trip> json =
+    public static final JsonManager<Trip> json =
             new JsonManager<>(Trip.class, JsonViews.UserInterface.class);
 
-    public static Object getTrip(Request req, Response res) {
+    private static Object getTrip(Request req, Response res) {
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
         String patternId = req.queryParams("patternId");
         String calendarId = req.queryParams("calendarId");
-
-        if (feedId == null)
-            feedId = req.session().attribute("feedId");
 
         if (feedId == null) {
             halt(400);
@@ -59,15 +59,15 @@ public class TripController {
                 }
                 else {
                     LOG.info("requesting trips for pattern/cal");
-                    return Base.toJson(tx.getTripsByPatternAndCalendar(patternId, calendarId), false);
+                    return tx.getTripsByPatternAndCalendar(patternId, calendarId);
                 }
             }
 
             else if(patternId != null) {
-                return Base.toJson(tx.getTripsByPattern(patternId), false);
+                return tx.getTripsByPattern(patternId);
             }
             else {
-                return Base.toJson(tx.trips.values(), false);
+                return new ArrayList<>(tx.trips.values());
             }
                 
         } catch (IOException e) {
@@ -77,7 +77,6 @@ public class TripController {
             LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
-            if (tx != null) tx.rollbackIfOpen();
             e.printStackTrace();
             halt(400);
         } finally {
@@ -86,7 +85,7 @@ public class TripController {
         return null;
     }
 
-    public static Object createTrip(Request req, Response res) {
+    private static Object createTrip(Request req, Response res) {
         FeedTx tx = null;
         String createMultiple = req.queryParams("multiple");
         try {
@@ -107,21 +106,19 @@ public class TripController {
 
                 tx = VersionedDataStore.getFeedTx(trip.feedId);
 
+                String errorMessage;
                 if (tx.trips.containsKey(trip.id)) {
-                    tx.rollback();
-                    halt(400);
-                }
+                    errorMessage = "Trip ID " + trip.id + " already exists.";
+                    LOG.error(errorMessage);
+                    halt(400, SparkUtils.formatJSON(errorMessage));
 
-                if (!tx.tripPatterns.containsKey(trip.patternId) || trip.stopTimes.size() != tx.tripPatterns.get(trip.patternId).patternStops.size()) {
-                    tx.rollback();
-                    halt(400);
                 }
-
+                validateTrip(tx, trip);
                 tx.trips.put(trip.id, trip);
             }
             tx.commit();
 
-            return Base.toJson(trips, false);
+            return trips;
         } catch (IOException e) {
             e.printStackTrace();
             halt(400);
@@ -129,7 +126,6 @@ public class TripController {
             LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
-            if (tx != null) tx.rollbackIfOpen();
             e.printStackTrace();
             halt(400);
         } finally {
@@ -138,96 +134,117 @@ public class TripController {
         return null;
     }
     
-    public static Object updateTrip(Request req, Response res) {
+    private static Object updateTrip(Request req, Response res) {
         FeedTx tx = null;
 
         try {
             Trip trip = Base.mapper.readValue(req.body(), Trip.class);
-
-            if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(trip.feedId))
-                halt(400);
 
             if (!VersionedDataStore.feedExists(trip.feedId)) {
                 halt(400);
             }
 
             tx = VersionedDataStore.getFeedTx(trip.feedId);
-
-            if (!tx.trips.containsKey(trip.id)) {
-                tx.rollback();
-                halt(400);
-            }
-
-            if (!tx.tripPatterns.containsKey(trip.patternId) || trip.stopTimes.size() != tx.tripPatterns.get(trip.patternId).patternStops.size()) {
-                tx.rollback();
-                halt(400);
-            }
-
-            TripPattern patt = tx.tripPatterns.get(trip.patternId);
-
-            // confirm that each stop in the trip matches the stop in the pattern
-
-            for (int i = 0; i < trip.stopTimes.size(); i++) {
-                TripPatternStop ps = patt.patternStops.get(i);
-                StopTime st =  trip.stopTimes.get(i);
-
-                if (st == null)
-                    // skipped stop
-                    continue;
-
-                if (!st.stopId.equals(ps.stopId)) {
-                    LOG.error("Mismatch between stop sequence in trip and pattern at position {}, pattern: {}, stop: {}", i, ps.stopId, st.stopId);
-                    tx.rollback();
-                    halt(400);
-                }
-            }
-
+            validateTrip(tx, trip);
             tx.trips.put(trip.id, trip);
             tx.commit();
 
-            return Base.toJson(trip, false);
+            return trip;
         } catch (IOException e) {
             e.printStackTrace();
-            halt(400);
+            halt(400, SparkUtils.formatJSON("Unknown IO error occurred saving trip"));
         } catch (HaltException e) {
             LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
-            if (tx != null) tx.rollbackIfOpen();
             e.printStackTrace();
-            halt(400);
+            halt(400, SparkUtils.formatJSON("Unknown error occurred saving trip"));
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }
         return null;
     }
 
-    public static Object deleteTrip(Request req, Response res) {
+    /**
+     * Validates that a saved trip will not cause issues with referenced pattern primarily due to
+     * mismatched stops.
+     */
+    private static void validateTrip(FeedTx tx, Trip trip) {
+        TripPattern patt;
+        String errorMessage;
+        // Confirm that referenced pattern ID exists
+        if (!tx.tripPatterns.containsKey(trip.patternId)) {
+            errorMessage = "Pattern ID " + trip.patternId + " does not exist.";
+            LOG.error(errorMessage);
+            halt(400, SparkUtils.formatJSON(errorMessage));
+            throw new IllegalStateException("Cannot create/update trip for pattern that does not exist");
+        } else {
+            patt = tx.tripPatterns.get(trip.patternId);
+        }
+        // Confirm that # of stops in trip and pattern match.
+        if (trip.stopTimes.size() != patt.patternStops.size()) {
+            errorMessage = String.format(
+                    "Number of stops in trip %d does not equal number of stops in pattern (%d)",
+                    trip.stopTimes.size(),
+                    patt.patternStops.size()
+            );
+            LOG.error(errorMessage);
+            halt(400, SparkUtils.formatJSON(errorMessage));
+        }
+        // Confirm that each stop ID in the trip matches the stop ID in the pattern.
+        for (int i = 0; i < trip.stopTimes.size(); i++) {
+            TripPatternStop ps = patt.patternStops.get(i);
+            StopTime st =  trip.stopTimes.get(i);
+
+            if (st == null)
+                // null StopTime for a trip indicates a skipped stop
+                continue;
+
+            if (!st.stopId.equals(ps.stopId)) {
+                errorMessage = String.format(
+                        "Mismatch between stop sequence in trip and pattern at position %d, pattern: %s, stop: %s",
+                        i,
+                        ps.stopId,
+                        st.stopId
+                );
+                LOG.error(errorMessage);
+                halt(400, SparkUtils.formatJSON(errorMessage));
+            }
+        }
+    }
+
+    private static Object deleteTrip(Request req, Response res) {
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
-        Object json = null;
+        String[] idList = req.queryParams("tripIds").split(",");
 
-        if (feedId == null)
-            feedId = req.session().attribute("feedId");
-
-        if (id == null || feedId == null) {
-            halt(400);
+        if (feedId == null) {
+            halt(400, SparkUtils.formatJSON("Must provide feedId"));
         }
 
         FeedTx tx = null;
         try {
             tx = VersionedDataStore.getFeedTx(feedId);
-            Trip trip = tx.trips.remove(id);
-            tx.commit();
-            return Base.toJson(trip, false);
-        } catch (IOException e) {
-            e.printStackTrace();
-            halt(400);
+
+            // for a single trip
+            if (id != null) {
+                Trip trip = tx.trips.remove(id);
+                return trip;
+            }
+            if (idList.length > 0) {
+                Set<Trip> trips = new HashSet<>();
+                for (String tripId : idList) {
+                    Trip trip = tx.trips.remove(tripId);
+                    trips.add(trip);
+                }
+                tx.commit();
+                return trips;
+            }
+
         } catch (HaltException e) {
             LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
-            if (tx != null) tx.rollbackIfOpen();
             e.printStackTrace();
             halt(400);
         } finally {
@@ -242,6 +259,7 @@ public class TripController {
         get(apiPrefix + "secure/trip", TripController::getTrip, json::write);
         post(apiPrefix + "secure/trip", TripController::createTrip, json::write);
         put(apiPrefix + "secure/trip/:id", TripController::updateTrip, json::write);
+        delete(apiPrefix + "secure/trip", TripController::deleteTrip, json::write);
         delete(apiPrefix + "secure/trip/:id", TripController::deleteTrip, json::write);
     }
 }

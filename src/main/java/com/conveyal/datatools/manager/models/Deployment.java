@@ -31,6 +31,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -288,6 +289,7 @@ public class Deployment extends Model implements Serializable {
             try {
                 in = new FileInputStream(feed);
             } catch (FileNotFoundException e1) {
+                LOG.error("Could not retrieve file for {}", v.name);
                 throw new RuntimeException(e1);
             }
 
@@ -384,9 +386,9 @@ public class Deployment extends Model implements Serializable {
         // call vex server
         URL vexUrl = null;
         try {
-            vexUrl = new URL(String.format("%s/?n=%.6f&e=%.6f&s=%.6f&w=%.6f",
-                    DataManager.getConfigPropertyAsText("application.osm_vex"),
-                    bounds.getMaxY(), bounds.getMaxX(), bounds.getMinY(), bounds.getMinX()));
+            vexUrl = new URL(String.format(Locale.ROOT,"%s/%.6f,%.6f,%.6f,%.6f.pbf",
+                    DataManager.getConfigPropertyAsText("OSM_VEX"),
+                    bounds.getMinY(), bounds.getMinX(), bounds.getMaxY(), bounds.getMaxX()));
         } catch (MalformedURLException e1) {
             e1.printStackTrace();
         }
@@ -438,7 +440,8 @@ public class Deployment extends Model implements Serializable {
         // i = 1 because we've already included bounds 0
         for (int i = 0; i < versions.size(); i++) {
             SummarizedFeedVersion version = versions.get(i);
-//            return getFeedVersionBounds(version);
+
+            // set version bounds from validation result
             if (version.validationResult != null && version.validationResult.bounds != null) {
                 if (!boundsSet) {
                     // set the bounds, don't expand the null bounds
@@ -447,9 +450,9 @@ public class Deployment extends Model implements Serializable {
                 } else {
                     bounds.add(version.validationResult.bounds);
                 }
+            } else {
+                LOG.warn("Feed version {} has no bounds", version.id);
             }
-            else
-                LOG.warn("Feed version %s has no bounds", version);
         }
 
         // expand the bounds by (about) 10 km in every direction

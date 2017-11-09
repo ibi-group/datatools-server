@@ -2,9 +2,8 @@ package com.conveyal.datatools.manager.models;
 
 import java.awt.geom.Rectangle2D;
 import java.io.Serializable;
-import java.time.ZoneId;
+import java.time.LocalDate;
 import java.util.Collection;
-import java.util.Date;
 
 import com.conveyal.gtfs.validator.json.LoadStatus;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -34,11 +33,11 @@ public class FeedValidationResultSummary implements Serializable {
 
     /** The first date the feed has service, either in calendar.txt or calendar_dates.txt */
     @JsonInclude(Include.ALWAYS)
-    public Date startDate;
+    public LocalDate startDate;
 
     /** The last date the feed has service, either in calendar.txt or calendar_dates.txt */
     @JsonInclude(Include.ALWAYS)
-    public Date endDate;
+    public LocalDate endDate;
 
     @JsonInclude(Include.ALWAYS)
     public Rectangle2D bounds;
@@ -59,8 +58,8 @@ public class FeedValidationResultSummary implements Serializable {
                 this.routeCount = result.routeCount;
                 this.tripCount = result.tripCount;
                 this.stopTimesCount = result.stopTimesCount;
-                this.startDate = result.startDate != null ? Date.from(result.startDate.atStartOfDay(ZoneId.systemDefault()).toInstant()) : null;
-                this.endDate = result.endDate != null ? Date.from(result.endDate.atStartOfDay(ZoneId.systemDefault()).toInstant()) : null;
+                this.startDate = result.startDate;
+                this.endDate = result.endDate;
                 this.bounds = result.bounds;
                 this.avgDailyRevenueTime = result.avgDailyRevenueTime;
             }

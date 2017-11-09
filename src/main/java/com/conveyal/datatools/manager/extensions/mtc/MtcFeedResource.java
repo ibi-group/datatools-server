@@ -12,11 +12,13 @@ import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.lang.reflect.Field;
@@ -98,7 +100,7 @@ public class MtcFeedResource implements ExternalFeedResource {
                 for (FeedSource existingSource : project.getProjectFeedSources()) {
                     ExternalFeedSourceProperty agencyIdProp =
                             ExternalFeedSourceProperty.find(existingSource, this.getResourceType(), "AgencyId");
-                    if (agencyIdProp != null && agencyIdProp.value.equals(car.AgencyId)) {
+                    if (agencyIdProp != null && agencyIdProp.value != null && agencyIdProp.value.equals(car.AgencyId)) {
                         //System.out.println("already exists: " + car.AgencyId);
                         source = existingSource;
                     }
@@ -194,16 +196,6 @@ public class MtcFeedResource implements ExternalFeedResource {
 
         if(s3Bucket == null) return;
 
-        AWSCredentials creds;
-        if (this.s3CredentialsFilename != null) {
-            creds = new ProfileCredentialsProvider(this.s3CredentialsFilename, "default").getCredentials();
-            LOG.info("Writing to S3 using supplied credentials file");
-        }
-        else {
-            // default credentials providers, e.g. IAM role
-            creds = new DefaultAWSCredentialsProviderChain().getCredentials();
-        }
-
         ExternalFeedSourceProperty agencyIdProp =
                 ExternalFeedSourceProperty.find(feedVersion.getFeedSource(), this.getResourceType(), "AgencyId");
 
@@ -215,9 +207,10 @@ public class MtcFeedResource implements ExternalFeedResource {
         String keyName = this.s3Prefix + agencyIdProp.value + ".zip";
         LOG.info("Pushing to MTC S3 Bucket: " + keyName);
 
-        AmazonS3 s3client = new AmazonS3Client(creds);
-        s3client.putObject(new PutObjectRequest(
-                s3Bucket, keyName, feedVersion.getGtfsFile()));
+        File file = feedVersion.getGtfsFile();
+
+        FeedStore.s3Client.putObject(new PutObjectRequest(
+                s3Bucket, keyName, file));
     }
 
     private void writeCarrierToRtd(RtdCarrier carrier, boolean createNew, String authHeader) {

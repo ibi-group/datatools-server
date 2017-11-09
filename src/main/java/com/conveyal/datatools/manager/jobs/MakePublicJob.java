@@ -42,6 +42,7 @@ public class MakePublicJob extends MonitorableJob {
 
     @Override
     public void run() {
+        LOG.info("Generating new html for public feeds");
         String output;
         String title = "Public Feeds";
         StringBuilder r = new StringBuilder();
@@ -62,7 +63,16 @@ public class MakePublicJob extends MonitorableJob {
         project.getProjectFeedSources().stream()
                 .filter(fs -> fs.isPublic && fs.getLatest() != null)
                 .forEach(fs -> {
-                    String url = fs.url != null ? fs.url.toString() : "https://s3.amazonaws.com/" + DataManager.feedBucket + "/public/" + fs.name +".zip";
+                    // generate list item for feed source
+                    String url;
+                    if (fs.url != null) {
+                        url = fs.url.toString();
+                    }
+                    else {
+                        // ensure latest feed is written to the s3 public folder
+                        fs.makePublic();
+                        url = String.join("/", "https://s3.amazonaws.com", DataManager.feedBucket, fs.getPublicKey());
+                    }
                     FeedVersion latest = fs.getLatest();
                     r.append("<li>");
                     r.append("<a href=\"" + url + "\">");
@@ -95,5 +105,6 @@ public class MakePublicJob extends MonitorableJob {
         FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, folder + fileName, CannedAccessControlList.PublicRead);
 
         jobFinished();
+        LOG.info("Public page updated on s3");
     }
 }

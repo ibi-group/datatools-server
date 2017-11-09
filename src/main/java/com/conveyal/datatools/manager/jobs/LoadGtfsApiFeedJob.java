@@ -1,11 +1,10 @@
 package com.conveyal.datatools.manager.jobs;
 
-import com.conveyal.datatools.manager.controllers.api.GtfsApiController;
 import com.conveyal.datatools.manager.models.FeedSource;
+import com.conveyal.gtfs.api.ApiMain;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.util.logging.Logger;
 
 /**
  * Created by landon on 4/30/16.
@@ -25,7 +24,7 @@ public class LoadGtfsApiFeedJob implements Runnable {
         if (latest != null)
             try {
                 LOG.info("Loading feed into GTFS api: " + feedSource.id);
-                GtfsApiController.gtfsApi.registerFeedSource(feedSource.id, latest);
+                ApiMain.registerFeedSource(feedSource.id, latest);
             } catch (Exception e) {
                 e.printStackTrace();
             }

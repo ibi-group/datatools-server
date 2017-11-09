@@ -1,6 +1,8 @@
 package com.conveyal.datatools.manager.auth;
 
+import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.models.FeedSource;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,21 +22,30 @@ import static spark.Spark.halt;
 
 public class Auth0Connection {
     private static final Logger LOG = LoggerFactory.getLogger(Auth0Connection.class);
+
+    /**
+     * Check API request for user token.
+     * @param req Spark request object
+     */
     public static void checkUser(Request req) {
+        // if in a development environment, assign a mock profile to request attribute
+        if (authDisabled()) {
+            req.attribute("user", new Auth0UserProfile("mock@example.com", "user_id:string"));
+            return;
+        }
         String token = getToken(req);
 
         if(token == null) {
-            halt(401, "Could not find authorization token");
+            halt(401, SparkUtils.formatJSON("Could not find authorization token", 401));
         }
-
+        Auth0UserProfile profile;
         try {
-            Auth0UserProfile profile = getUserProfile(token);
+            profile = getUserProfile(token);
             req.attribute("user", profile);
         }
         catch(Exception e) {
-//            e.printStackTrace();
             LOG.warn("Could not verify user", e);
-            halt(401, "Could not verify user");
+            halt(401, SparkUtils.formatJSON("Could not verify user", 401));
         }
     }
 
@@ -57,7 +68,7 @@ public class Auth0Connection {
 
     public static Auth0UserProfile getUserProfile(String token) throws Exception {
 
-        URL url = new URL("https://" + DataManager.getConfigPropertyAsText("auth0.domain") + "/tokeninfo");
+        URL url = new URL("https://" + DataManager.getConfigPropertyAsText("AUTH0_DOMAIN") + "/tokeninfo");
         HttpsURLConnection con = (HttpsURLConnection) url.openConnection();
 
         //add request header
@@ -82,6 +93,43 @@ public class Auth0Connection {
         in.close();
 
         ObjectMapper m = new ObjectMapper();
-        return m.readValue(response.toString(), Auth0UserProfile.class);
+        Auth0UserProfile profile = null;
+        String userString = response.toString();
+        try {
+            profile = m.readValue(userString, Auth0UserProfile.class);
+        }
+        catch(Exception e) {
+            Object json = m.readValue(userString, Object.class);
+            System.out.println(m.writerWithDefaultPrettyPrinter().writeValueAsString(json));
+            LOG.warn("Could not verify user", e);
+            halt(401, SparkUtils.formatJSON("Could not verify user", 401));
+        }
+        return profile;
+    }
+
+    public static void checkEditPrivileges(Request request) {
+
+        Auth0UserProfile userProfile = request.attribute("user");
+        String feedId = request.queryParams("feedId");
+        if (feedId == null) {
+            String[] parts = request.pathInfo().split("/");
+            feedId = parts[parts.length - 1];
+        }
+        FeedSource feedSource = feedId != null ? FeedSource.get(feedId) : null;
+        if (feedSource == null) {
+            LOG.warn("feedId {} not found", feedId);
+            halt(400, SparkUtils.formatJSON("Must provide feedId parameter", 400));
+        }
+
+        if (!request.requestMethod().equals("GET")) {
+            if (!userProfile.canEditGTFS(feedSource.getOrganizationId(), feedSource.projectId, feedSource.id)) {
+                LOG.warn("User {} cannot edit GTFS for {}", userProfile.email, feedId);
+                halt(403, SparkUtils.formatJSON("User does not have permission to edit GTFS for feedId", 403));
+            }
+        }
+    }
+
+    public static boolean authDisabled() {
+        return DataManager.hasConfigProperty("DISABLE_AUTH") && "true".equals(DataManager.getConfigPropertyAsText("DISABLE_AUTH"));
     }
 }
