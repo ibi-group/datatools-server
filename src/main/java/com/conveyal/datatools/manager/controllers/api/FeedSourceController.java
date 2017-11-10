@@ -23,6 +23,7 @@ import spark.Response;
 import java.io.IOException;
 import java.util.*;
 
+import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithError;
 import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
 import static com.conveyal.datatools.manager.models.ExternalFeedSourceProperty.constructId;
@@ -186,23 +187,20 @@ public class FeedSourceController {
     }
 
     /**
-     * Refetch this feed
-     * @throws JsonProcessingException
+     * Re-fetch the feed source specified by the provided ID.
      */
-    public static String fetch (Request req, Response res) throws JsonProcessingException {
+    public static String fetch (Request req, Response res) {
         FeedSource s = requestFeedSourceById(req, "manage");
 
         LOG.info("Fetching feed for source {}", s.name);
 
         Auth0UserProfile userProfile = req.attribute("user");
         // Run in heavyExecutor because ProcessSingleFeedJob is chained to this job (if update finds new version).
-        FetchSingleFeedJob job = new FetchSingleFeedJob(s, userProfile.getUser_id(), false);
-        DataManager.lightExecutor.execute(job);
+        FetchSingleFeedJob fetchSingleFeedJob = new FetchSingleFeedJob(s, userProfile.getUser_id(), false);
+        DataManager.lightExecutor.execute(fetchSingleFeedJob);
 
-        // WARNING: infinite 2D bounds Jackson error when returning job.result, so this method now returns true
-        // because we don't need to return the feed immediately anyways.
-        // return job.result;
-        return SparkUtils.formatJSON("ok", 200);
+        // Return the jobId so that the requester can track the job's progress.
+        return formatJobMessage(fetchSingleFeedJob.jobId, "Fetching latest feed source.");
     }
 
     /**
