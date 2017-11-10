@@ -170,7 +170,6 @@ public class FeedVersionController  {
         // Return the jobId so that the requester can track the job's progress.
         return formatJobMessage(processSingleFeedJob.jobId, "Processing feed version upload.");
     }
-    }
 
     public static boolean createFeedVersionFromSnapshot (Request req, Response res) throws IOException, ServletException {
 
