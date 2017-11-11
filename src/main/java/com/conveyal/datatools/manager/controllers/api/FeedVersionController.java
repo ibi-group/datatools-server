@@ -55,6 +55,7 @@ import javax.servlet.http.Part;
 
 import static com.conveyal.datatools.common.utils.S3Utils.getS3Credentials;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
+import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithError;
 import static com.conveyal.datatools.manager.controllers.api.FeedSourceController.checkFeedSourcePermissions;
 import static spark.Spark.*;
@@ -166,7 +167,8 @@ public class FeedVersionController  {
         ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(newFeedVersion, userProfile.getUser_id());
         DataManager.heavyExecutor.execute(processSingleFeedJob);
 
-        return processSingleFeedJob.jobId;
+        // Return the jobId so that the requester can track the job's progress.
+        return formatJobMessage(processSingleFeedJob.jobId, "Processing feed version upload.");
     }
 
     public static boolean createFeedVersionFromSnapshot (Request req, Response res) throws IOException, ServletException {

@@ -56,4 +56,8 @@ public class SparkUtils {
     public static String formatJSON(String message) {
         return formatJSON(message, 400);
     }
+
+    public static String formatJobMessage (String jobId, String message) {
+        return String.format("{\"jobId\":\"%s\",\"message\":\"%s\"}", jobId, message);
+    }
 }
