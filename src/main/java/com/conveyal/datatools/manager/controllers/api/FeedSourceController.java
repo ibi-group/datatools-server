@@ -10,8 +10,6 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
-import com.conveyal.datatools.manager.utils.json.JsonUtil;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.bson.Document;
@@ -21,13 +19,15 @@ import spark.Request;
 import spark.Response;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.Map;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithError;
 import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
 import static com.conveyal.datatools.manager.models.ExternalFeedSourceProperty.constructId;
-import static com.mongodb.client.model.Filters.eq;
 import static spark.Spark.*;
 
 /**
@@ -277,7 +277,7 @@ public class FeedSourceController {
         put(apiPrefix + "secure/feedsource/:id", FeedSourceController::updateFeedSource, json::write);
         put(apiPrefix + "secure/feedsource/:id/updateExternal", FeedSourceController::updateExternalFeedResource, json::write);
         delete(apiPrefix + "secure/feedsource/:id", FeedSourceController::deleteFeedSource, json::write);
-        post(apiPrefix + "secure/feedsource/:id/fetch", FeedSourceController::fetch, JsonUtil.objectMapper::writeValueAsString);
+        post(apiPrefix + "secure/feedsource/:id/fetch", FeedSourceController::fetch, json::write);
 
         // Public routes
         get(apiPrefix + "public/feedsource/:id", FeedSourceController::getFeedSource, json::write);
