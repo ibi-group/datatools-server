@@ -72,7 +72,7 @@ There is also a helper python script that can be used to run the jmeter script i
 Example:
 
 ```sh
-python run-upload-tests.py gtfs-test-feeds datatools-jmeter-results
+python run-upload-tests.py fetch gtfs-test-feeds datatools-jmeter-results
 ```
 
 

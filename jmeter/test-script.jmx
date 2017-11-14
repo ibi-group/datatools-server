@@ -64,7 +64,7 @@
             </elementProp>
             <elementProp name="testPlanMode" elementType="Argument">
               <stringProp name="Argument.name">testPlanMode</stringProp>
-              <stringProp name="Argument.value">${__P(mode,batch)}</stringProp>
+              <stringProp name="Argument.value">${__P(mode,upload)}</stringProp>
               <stringProp name="Argument.metadata">=</stringProp>
             </elementProp>
             <elementProp name="uploadPath" elementType="Argument">
@@ -113,23 +113,11 @@
             <boolProp name="CounterConfig.reset_on_tg_iteration">true</boolProp>
           </CounterConfig>
           <hashTree/>
-          <DebugSampler guiclass="TestBeanGUI" testclass="DebugSampler" testname="Debug Sampler - after while counter" enabled="true">
-            <boolProp name="displayJMeterProperties">false</boolProp>
-            <boolProp name="displayJMeterVariables">true</boolProp>
-            <boolProp name="displaySystemProperties">false</boolProp>
-          </DebugSampler>
-          <hashTree/>
           <IfController guiclass="IfControllerPanel" testclass="IfController" testname="If Controller - upload or fetch feed test plan" enabled="true">
             <stringProp name="IfController.condition">&quot;${testPlanMode}&quot;==&quot;batch&quot; || &quot;${testPlanMode}&quot;==&quot;fetch&quot; || &quot;${testPlanMode}&quot;==&quot;upload&quot;</stringProp>
             <boolProp name="IfController.evaluateAll">false</boolProp>
           </IfController>
           <hashTree>
-            <DebugSampler guiclass="TestBeanGUI" testclass="DebugSampler" testname="Debug Sampler - batch, fetch or upload" enabled="true">
-              <boolProp name="displayJMeterProperties">false</boolProp>
-              <boolProp name="displayJMeterVariables">true</boolProp>
-              <boolProp name="displaySystemProperties">false</boolProp>
-            </DebugSampler>
-            <hashTree/>
             <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="JSR223 Sampler" enabled="true">
               <stringProp name="cacheKey"></stringProp>
               <stringProp name="filename"></stringProp>
@@ -196,10 +184,10 @@ if (vars.get(&quot;testPlanMode&quot;).equals(&quot;batch&quot;)) {
 	int feedIdx = Integer.parseInt(vars.get(&quot;batchFeedIdx&quot;));
 	
 	 // read csv file
-	Reader in = null;
+	Reader rdr = null;
 	try {
-		  in = new FileReader(vars.get(&quot;batchCsvFile&quot;));
-		  Iterable&lt;CSVRecord&gt; records = CSVFormat.EXCEL.parse(in);
+		  rdr = new FileReader(vars.get(&quot;batchCsvFile&quot;));
+		  Iterable&lt;CSVRecord&gt; records = CSVFormat.RFC4180.withFirstRecordAsHeader().parse(rdr);
 		  int curRowIdx = 0;
 		  Iterator&lt;CSVRecord&gt; recordIterator = records.iterator();
 		  while (recordIterator.hasNext() || curRowIdx &lt; feedIdx) {
@@ -216,6 +204,13 @@ if (vars.get(&quot;testPlanMode&quot;).equals(&quot;batch&quot;)) {
 		          } else {
 		              vars.put(&quot;feedUrl&quot;, record.get(&quot;file or http address&quot;));
 	          	}
+
+	          	// check if loop should be exited
+		      	if (!recordIterator.hasNext()) {
+	          		vars.put(&quot;continueBatchLoop&quot;, &quot;false&quot;);
+	      		}
+	      		// data has been found, exit loop
+	      		break;
 	     	 }
 	
 		      // check if loop should be exited
@@ -232,7 +227,7 @@ if (vars.get(&quot;testPlanMode&quot;).equals(&quot;batch&quot;)) {
 	vars.put(&quot;continueBatchLoop&quot;, &quot;false&quot;);
 }
 </stringProp>
-              <stringProp name="scriptLanguage">java</stringProp>
+              <stringProp name="scriptLanguage">groovy</stringProp>
             </JSR223Sampler>
             <hashTree/>
             <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="HTTP Request - Create Project" enabled="true">
@@ -388,14 +383,11 @@ long feedUploadCompleteTime = prev.getEndTime();
 vars.put(&quot;feedUploadCompleteTime&quot;, String.valueOf(feedUploadCompleteTime));</stringProp>
                 </BeanShellPostProcessor>
                 <hashTree/>
-                <RegexExtractor guiclass="RegexExtractorGui" testclass="RegexExtractor" testname="Regular Expression Extractor - get jobId" enabled="true">
-                  <stringProp name="RegexExtractor.useHeaders">false</stringProp>
-                  <stringProp name="RegexExtractor.refname">jobId</stringProp>
-                  <stringProp name="RegexExtractor.regex">.*</stringProp>
-                  <stringProp name="RegexExtractor.template">$0$</stringProp>
-                  <stringProp name="RegexExtractor.default"></stringProp>
-                  <stringProp name="RegexExtractor.match_number"></stringProp>
-                </RegexExtractor>
+                <JSONPostProcessor guiclass="JSONPostProcessorGui" testclass="JSONPostProcessor" testname="JSON Extractor" enabled="true">
+                  <stringProp name="JSONPostProcessor.referenceNames">jobId</stringProp>
+                  <stringProp name="JSONPostProcessor.jsonPathExprs">$.jobId</stringProp>
+                  <stringProp name="JSONPostProcessor.match_numbers"></stringProp>
+                </JSONPostProcessor>
                 <hashTree/>
               </hashTree>
             </hashTree>
@@ -456,15 +448,6 @@ vars.put(&quot;feedUploadCompleteTime&quot;, String.valueOf(feedUploadCompleteTi
                 <hashTree/>
               </hashTree>
               <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="HTTP Request - Create Feed Version (by fetching zip)" enabled="true">
-                <elementProp name="HTTPsampler.Files" elementType="HTTPFileArgs">
-                  <collectionProp name="HTTPFileArgs.files">
-                    <elementProp name="fixtures/gtfs.zip" elementType="HTTPFileArg">
-                      <stringProp name="File.path">fixtures/gtfs.zip</stringProp>
-                      <stringProp name="File.paramname"></stringProp>
-                      <stringProp name="File.mimetype"></stringProp>
-                    </elementProp>
-                  </collectionProp>
-                </elementProp>
                 <elementProp name="HTTPsampler.Arguments" elementType="Arguments" guiclass="HTTPArgumentsPanel" testclass="Arguments" testname="User Defined Variables" enabled="true">
                   <collectionProp name="Arguments.arguments"/>
                 </elementProp>
@@ -509,14 +492,11 @@ long feedUploadCompleteTime = prev.getEndTime();
 vars.put(&quot;feedUploadCompleteTime&quot;, String.valueOf(feedUploadCompleteTime));</stringProp>
                 </BeanShellPostProcessor>
                 <hashTree/>
-                <RegexExtractor guiclass="RegexExtractorGui" testclass="RegexExtractor" testname="Regular Expression Extractor - get jobId" enabled="true">
-                  <stringProp name="RegexExtractor.useHeaders">false</stringProp>
-                  <stringProp name="RegexExtractor.refname">jobId</stringProp>
-                  <stringProp name="RegexExtractor.regex">.*</stringProp>
-                  <stringProp name="RegexExtractor.template">$0$</stringProp>
-                  <stringProp name="RegexExtractor.default"></stringProp>
-                  <stringProp name="RegexExtractor.match_number"></stringProp>
-                </RegexExtractor>
+                <JSONPostProcessor guiclass="JSONPostProcessorGui" testclass="JSONPostProcessor" testname="JSON Extractor" enabled="true">
+                  <stringProp name="JSONPostProcessor.referenceNames">jobId</stringProp>
+                  <stringProp name="JSONPostProcessor.jsonPathExprs">$.jobId</stringProp>
+                  <stringProp name="JSONPostProcessor.match_numbers"></stringProp>
+                </JSONPostProcessor>
                 <hashTree/>
               </hashTree>
             </hashTree>
@@ -745,12 +725,6 @@ vars.put(&quot;continueBatchLoop&quot;, &quot;false&quot;)</stringProp>
           </hashTree>
           <GenericController guiclass="LogicControllerGui" testclass="GenericController" testname="Simple Controller - API Integrity" enabled="true"/>
           <hashTree>
-            <DebugSampler guiclass="TestBeanGUI" testclass="DebugSampler" testname="Debug Sampler - begin API integrity" enabled="true">
-              <boolProp name="displayJMeterProperties">false</boolProp>
-              <boolProp name="displayJMeterVariables">true</boolProp>
-              <boolProp name="displaySystemProperties">false</boolProp>
-            </DebugSampler>
-            <hashTree/>
             <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="HTTP Request - Get Feed Version info" enabled="true">
               <elementProp name="HTTPsampler.Files" elementType="HTTPFileArgs">
                 <collectionProp name="HTTPFileArgs.files">
@@ -1215,12 +1189,6 @@ if (failureMessage?.trim()) {
             </hashTree>
           </hashTree>
         </hashTree>
-        <DebugSampler guiclass="TestBeanGUI" testclass="DebugSampler" testname="Debug Sampler" enabled="true">
-          <boolProp name="displayJMeterProperties">false</boolProp>
-          <boolProp name="displayJMeterVariables">true</boolProp>
-          <boolProp name="displaySystemProperties">false</boolProp>
-        </DebugSampler>
-        <hashTree/>
         <ResultCollector guiclass="TableVisualizer" testclass="ResultCollector" testname="View Results in Table" enabled="true">
           <boolProp name="ResultCollector.error_logging">false</boolProp>
           <objProp>

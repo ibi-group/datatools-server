@@ -71,7 +71,7 @@ else
   s3location="s3://$5/dt_jmeter_run_"
   if [ -n "$4" ]
   then
-    s3location="$s3location_$4_"
+    s3location=${s3location}${tar_file}_
   fi
   s3location="$s3location$(date +%Y-%m-%dT%H-%M-%S-%Z).tar.gz"
   
