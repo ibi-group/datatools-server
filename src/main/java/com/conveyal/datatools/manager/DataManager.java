@@ -18,7 +18,7 @@ import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.CorsFilter;
 import com.conveyal.gtfs.GTFS;
-import com.conveyal.gtfs.api.GraphQLMain;
+import com.conveyal.gtfs.GraphQLMain;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -74,27 +74,21 @@ public class DataManager {
     public static String awsRole;
     public static String bucketFolder;
 
-//    public final AmazonS3Client s3Client;
     public static boolean useS3;
     public static final String API_PREFIX = "/api/manager/";
     // TODO: move gtfs-api routes to gtfs path and add auth
-    // private static final String GTFS_API_PREFIX = API_PREFIX + "gtfs/";
     private static final String GTFS_API_PREFIX = API_PREFIX;
     public static final String EDITOR_API_PREFIX = "/api/editor/";
     public static final String publicPath = "(" + DataManager.API_PREFIX + "|" + DataManager.EDITOR_API_PREFIX + ")public/.*";
     public static final String DEFAULT_ENV = "configurations/default/env.yml";
     public static final String DEFAULT_CONFIG = "configurations/default/server.yml";
-//    public static FeedStore feedStore;
     public static DataSource GTFS_DATA_SOURCE;
-//    public static Persistence persistence;
 
     public static void main(String[] args) throws IOException {
 
         // load config
         loadConfig(args);
 
-        // FIXME: initialize feedStore here instaed of FeedVersion?
-//        feedStore = new FeedStore();
         // FIXME: hack to statically load FeedStore
         LOG.info(FeedStore.class.getSimpleName());
 
@@ -114,7 +108,7 @@ public class DataManager {
         awsRole = getConfigPropertyAsText("application.data.aws_role");
         bucketFolder = FeedStore.s3Prefix;
 
-        // initialize GTFS GraphQL API service
+        // Initialize GTFS GraphQL API service
         GraphQLMain.initialize(GTFS_DATA_SOURCE, API_PREFIX);
         LOG.info("Initialized gtfs-api at localhost:port{}", API_PREFIX);
 
