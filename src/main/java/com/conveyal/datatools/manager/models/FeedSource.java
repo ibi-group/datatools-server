@@ -1,49 +1,48 @@
 package com.conveyal.datatools.manager.models;
 
 import com.amazonaws.services.s3.model.CannedAccessControlList;
-import com.amazonaws.services.s3.model.DeleteObjectRequest;
 import com.amazonaws.services.s3.model.DeleteObjectsRequest;
-import com.conveyal.datatools.editor.datastore.FeedTx;
+import com.amazonaws.services.s3.model.ObjectMetadata;
+import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.manager.DataManager;
-import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
-import com.conveyal.datatools.manager.persistence.DataStore;
 import com.conveyal.datatools.manager.persistence.FeedStore;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
+import com.conveyal.gtfs.validator.ValidationResult;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
-import com.google.common.eventbus.EventBus;
-import org.mapdb.Fun;
+import com.mongodb.client.model.Sorts;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import spark.HaltException;
 
 import java.io.File;
 import java.io.IOException;
-import java.io.InvalidClassException;
 import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
 import java.net.URL;
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.Collection;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
-import static spark.Spark.halt;
+import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Updates.set;
 
 /**
  * Created by demory on 3/22/16.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class FeedSource extends Model implements Cloneable {
+
     private static final long serialVersionUID = 1L;
 
     public static final Logger LOG = LoggerFactory.getLogger(FeedSource.class);
-
-    private static DataStore<FeedSource> sourceStore = new DataStore<FeedSource>("feedsources");
 
     /**
      * The collection of which this feed is a part
@@ -51,30 +50,24 @@ public class FeedSource extends Model implements Cloneable {
     //@JsonView(JsonViews.DataDump.class)
     public String projectId;
 
-    public String[] regions = {"1"};
+//    public String[] regions = {"1"};
     /**
      * Get the Project of which this feed is a part
      */
-    @JsonIgnore
-    public Project getProject () {
-        return projectId != null ? Project.get(projectId) : null;
+    public Project retrieveProject() {
+        return projectId != null ? Persistence.projects.getById(projectId) : null;
     }
 
-    public String getOrganizationId () {
-        Project project = getProject();
+    @JsonProperty("organizationId")
+    public String organizationId () {
+        Project project = retrieveProject();
         return project == null ? null : project.organizationId;
     }
 
-    @JsonIgnore
-    public List<Region> getRegionList () {
-        return Region.getAll().stream().filter(r -> Arrays.asList(regions).contains(r.id)).collect(Collectors.toList());
-    }
-
-    public void setProject(Project proj) {
-        this.projectId = proj.id;
-        this.save();
-        proj.save();
-    }
+    // TODO: Add back in regions once they have been refactored
+//    public List<Region> retrieveRegionList () {
+//        return Region.retrieveAll().stream().filter(r -> Arrays.asList(regions).contains(r.id)).collect(Collectors.toList());
+//    }
 
     /** The name of this feed source, e.g. MTA New York City Subway */
     public String name;
@@ -99,8 +92,9 @@ public class FeedSource extends Model implements Cloneable {
 
     /**
      * When was this feed last updated?
+     * FIXME: this is currently dynamically determined by lastUpdated() with calls retrieveLatest().
      */
-    public transient Date lastUpdated;
+//    public transient Date lastUpdated;
 
     /**
      * From whence is this feed fetched?
@@ -140,20 +134,19 @@ public class FeedSource extends Model implements Cloneable {
 
     /**
      * Fetch the latest version of the feed.
+     *
+     * @return the fetched FeedVersion if a new version is available or null if nothing needs to be updated.
      */
-    public FeedVersion fetch (EventBus eventBus, String fetchUser) {
-        Map<String, Object> statusMap = new HashMap<>();
-        statusMap.put("message", "Downloading file");
-        statusMap.put("percentComplete", 20.0);
-        statusMap.put("error", false);
-        eventBus.post(statusMap);
+    public FeedVersion fetch (MonitorableJob.Status status, String fetchUser) {
+        status.message = "Downloading file";
 
-        FeedVersion latest = getLatest();
+        FeedVersion latest = retrieveLatest();
 
         // We create a new FeedVersion now, so that the fetched date is (milliseconds) before
         // fetch occurs. That way, in the highly unlikely event that a feed is updated while we're
         // fetching it, we will not miss a new feed.
         FeedVersion version = new FeedVersion(this);
+        version.retrievalMethod = FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
 
         // build the URL from which to fetch
         URL url = this.url;
@@ -163,32 +156,11 @@ public class FeedSource extends Model implements Cloneable {
         HttpURLConnection conn;
         try {
             conn = (HttpURLConnection) url.openConnection();
-        } catch (IOException e) {
+        } catch (Exception e) {
             String message = String.format("Unable to open connection to %s; not fetching feed %s", url, this.name);
             LOG.error(message);
-            statusMap.put("message", message);
-            statusMap.put("percentComplete", 0.0);
-            statusMap.put("error", true);
-            eventBus.post(statusMap);
-            halt(400, message);
-            return null;
-        } catch (ClassCastException e) {
-            String message = String.format("Unable to open connection to %s; not fetching %s feed", url, this.name);
-            LOG.error(message);
-            statusMap.put("message", message);
-            statusMap.put("percentComplete", 0.0);
-            statusMap.put("error", true);
-            eventBus.post(statusMap);
-            halt(400, message);
-            return null;
-        } catch (NullPointerException e) {
-            String message = String.format("Unable to open connection to %s; not fetching %s feed", url, this.name);
-            LOG.error(message);
-            statusMap.put("message", message);
-            statusMap.put("percentComplete", 0.0);
-            statusMap.put("error", true);
-            eventBus.post(statusMap);
-            halt(400, message);
+            // TODO use this update function throughout this class
+            status.update(true, message, 0);
             return null;
         }
 
@@ -202,52 +174,33 @@ public class FeedSource extends Model implements Cloneable {
 
         try {
             conn.connect();
-
-            if (conn.getResponseCode() == HttpURLConnection.HTTP_NOT_MODIFIED) {
-                String message = String.format("Feed %s has not been modified", this.name);
-                LOG.warn(message);
-                statusMap.put("message", message);
-                statusMap.put("percentComplete", 100.0);
-                statusMap.put("error", true);
-                eventBus.post(statusMap);
-                halt(304, message);
-                return null;
-            }
-
-            // TODO: redirects
-            else if (conn.getResponseCode() == HttpURLConnection.HTTP_OK) {
-                String message = String.format("Saving %s feed.", this.name);
-                LOG.info(message);
-                statusMap.put("message", message);
-                statusMap.put("percentComplete", 75.0);
-                statusMap.put("error", false);
-                eventBus.post(statusMap);
-                newGtfsFile = version.newGtfsFile(conn.getInputStream());
-            }
-
-            else {
-                String message = String.format("HTTP status %s retrieving %s feed", conn.getResponseMessage(), this.name);
-                LOG.error(message);
-                statusMap.put("message", message);
-                statusMap.put("percentComplete", 100.0);
-                statusMap.put("error", true);
-                eventBus.post(statusMap);
-                halt(400, message);
-                return null;
+            String message;
+            switch (conn.getResponseCode()) {
+                case HttpURLConnection.HTTP_NOT_MODIFIED:
+                    message = String.format("Feed %s has not been modified", this.name);
+                    LOG.warn(message);
+                    status.update(false, message, 100.0);
+                    return null;
+                case HttpURLConnection.HTTP_OK:
+                case HttpURLConnection.HTTP_MOVED_TEMP:
+                case HttpURLConnection.HTTP_MOVED_PERM:
+                    message = String.format("Saving %s feed.", this.name);
+                    LOG.info(message);
+                    status.update(false, message, 75.0);
+                    newGtfsFile = version.newGtfsFile(conn.getInputStream());
+                    break;
+                default:
+                    message = String.format("HTTP status (%d: %s) retrieving %s feed", conn.getResponseCode(), conn.getResponseMessage(), this.name);
+                    LOG.error(message);
+                    status.update(true, message, 100.0);
+                    return null;
             }
         } catch (IOException e) {
             String message = String.format("Unable to connect to %s; not fetching %s feed", url, this.name);
             LOG.error(message);
-            statusMap.put("message", message);
-            statusMap.put("percentComplete", 100.0);
-            statusMap.put("error", true);
-            eventBus.post(statusMap);
+            status.update(true, message, 100.0);
             e.printStackTrace();
-            halt(400, message);
             return null;
-        } catch (HaltException e) {
-            LOG.warn("Halt thrown", e);
-            throw e;
         }
 
         // note that anything other than a new feed fetched successfully will have already returned from the function
@@ -256,34 +209,28 @@ public class FeedSource extends Model implements Cloneable {
 
 
         if (latest != null && version.hash.equals(latest.hash)) {
+            // If new version hash equals the hash for the latest version, do not error. Simply indicate that server
+            // operators should add If-Modified-Since support to avoid wasting bandwidth.
             String message = String.format("Feed %s was fetched but has not changed; server operators should add If-Modified-Since support to avoid wasting bandwidth", this.name);
             LOG.warn(message);
             newGtfsFile.delete();
-            version.delete();
-            statusMap.put("message", message);
-            statusMap.put("percentComplete", 100.0);
-            statusMap.put("error", true);
-            eventBus.post(statusMap);
-            halt(304);
+            status.update(false, message, 100.0, true);
             return null;
         }
         else {
             version.userId = this.userId;
 
-            this.lastFetched = version.updated;
-            this.save();
+            // FIXME: Does this work?
+            Persistence.feedSources.updateField(this.id, "lastFetched", version.updated);
 
+            // Set file timestamp according to last modified header from connection
+            version.fileTimestamp = conn.getLastModified();
             NotifyUsersForSubscriptionJob notifyFeedJob = new NotifyUsersForSubscriptionJob("feed-updated", this.id, "New feed version created for " + this.name);
-            Thread notifyThread = new Thread(notifyFeedJob);
-            notifyThread.start();
+            DataManager.lightExecutor.execute(notifyFeedJob);
+
             String message = String.format("Fetch complete for %s", this.name);
             LOG.info(message);
-            statusMap.put("message", message);
-            statusMap.put("percentComplete", 100.0);
-            statusMap.put("error", false);
-            eventBus.post(statusMap);
-            version.setUserById(fetchUser);
-            version.fileTimestamp = conn.getLastModified();
+            status.update(false, message, 100.0);
             return version;
         }
     }
@@ -296,39 +243,26 @@ public class FeedSource extends Model implements Cloneable {
         return "<FeedSource " + this.name + " (" + this.id + ")>";
     }
 
-    public void save () {
-        save(true);
-    }
-    public void setName(String name){
-        this.name = name;
-        this.save();
-    }
-    public void save (boolean commit) {
-        if (commit)
-            sourceStore.save(this.id, this);
-        else
-            sourceStore.saveWithoutCommit(this.id, this);
-    }
-
     /**
      * Get the latest version of this feed
      * @return the latest version of this feed
      */
     @JsonIgnore
-    public FeedVersion getLatest () {
-        FeedVersion v = FeedVersion.versionStore.findFloor("version", new Fun.Tuple2(this.id, Fun.HI));
-
-        // the ID doesn't necessarily match, because it will fall back to the previous source in the store if there are no versions for this source
-        if (v == null || !v.feedSourceId.equals(this.id))
+    public FeedVersion retrieveLatest() {
+        FeedVersion newestVersion = Persistence.feedVersions
+                .getOneFiltered(eq("feedSourceId", this.id), Sorts.descending("version"));
+        if (newestVersion == null) {
+            // Is this what happens if there are none?
             return null;
-
-        return v;
+        }
+        return newestVersion;
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
-    public String getLatestVersionId () {
-        FeedVersion latest = getLatest();
+    @JsonProperty("latestVersionId")
+    public String latestVersionId() {
+        FeedVersion latest = retrieveLatest();
         return latest != null ? latest.id : null;
     }
 
@@ -340,44 +274,49 @@ public class FeedSource extends Model implements Cloneable {
     // TODO: use summarized feed source here. requires serious refactoring on client side.
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
-    public Date getLastUpdated() {
-        FeedVersion latest = getLatest();
+    @JsonProperty("lastUpdated")
+    public Date lastUpdated() {
+        FeedVersion latest = retrieveLatest();
         return latest != null ? latest.updated : null;
     }
 
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
-    public FeedValidationResultSummary getLatestValidation () {
-        FeedVersion latest = getLatest();
-        FeedValidationResult result = latest != null ? latest.validationResult : null;
-        return result != null ?new FeedValidationResultSummary(result) : null;
+    @JsonProperty("latestValidation")
+    public FeedValidationResultSummary latestValidation() {
+        FeedVersion latest = retrieveLatest();
+        ValidationResult result = latest != null ? latest.validationResult : null;
+        return result != null ?new FeedValidationResultSummary(result, latest.feedLoadResult) : null;
     }
+
+    // TODO: figure out some way to indicate whether feed has been edited since last snapshot (i.e, there exist changes)
+//    @JsonInclude(JsonInclude.Include.NON_NULL)
+//    @JsonView(JsonViews.UserInterface.class)
+//    public boolean getEditedSinceSnapshot() {
+////        FeedTx tx;
+////        try {
+////            tx = VersionedDataStore.getFeedTx(id);
+////        } catch (Exception e) {
+////
+////        }
+////        return tx.editedSinceSnapshot.retrieveById();
+//        return false;
+//    }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
-    public boolean getEditedSinceSnapshot() {
-//        FeedTx tx;
-//        try {
-//            tx = VersionedDataStore.getFeedTx(id);
-//        } catch (Exception e) {
-//
-//        }
-//        return tx.editedSinceSnapshot.get();
-        return false;
-    }
-
-    @JsonInclude(JsonInclude.Include.NON_NULL)
-    @JsonView(JsonViews.UserInterface.class)
-    public Map<String, Map<String, String>> getExternalProperties() {
+    @JsonProperty("externalProperties")
+    public Map<String, Map<String, String>> externalProperties() {
 
         Map<String, Map<String, String>> resourceTable = new HashMap<>();
 
         for(String resourceType : DataManager.feedResources.keySet()) {
             Map<String, String> propTable = new HashMap<>();
 
-            ExternalFeedSourceProperty.getAll().stream()
-                    .filter(prop -> prop.getFeedSourceId().equals(this.id))
+            // FIXME: use mongo filters instead
+            Persistence.externalFeedSourceProperties.getAll().stream()
+                    .filter(prop -> prop.feedSourceId.equals(this.id))
                     .forEach(prop -> propTable.put(prop.name, prop.value));
 
             resourceTable.put(resourceType, propTable);
@@ -385,12 +324,14 @@ public class FeedSource extends Model implements Cloneable {
         return resourceTable;
     }
 
-    public static FeedSource get(String id) {
-        return sourceStore.getById(id);
+    public static FeedSource retrieve(String id) {
+//        return sourceStore.getById(id);
+        return null;
     }
 
-    public static Collection<FeedSource> getAll() {
-        return sourceStore.getAll();
+    public static Collection<FeedSource> retrieveAll() {
+//        return sourceStore.getAll();
+        return null;
     }
 
     /**
@@ -398,58 +339,84 @@ public class FeedSource extends Model implements Cloneable {
      * @return collection of feed versions
      */
     @JsonIgnore
-    public Collection<FeedVersion> getFeedVersions() {
-        // TODO Indices
-        return FeedVersion.getAll().stream()
-                .filter(v -> this.id.equals(v.feedSourceId))
-                .collect(Collectors.toCollection(ArrayList::new));
+    public Collection<FeedVersion> retrieveFeedVersions() {
+        return Persistence.feedVersions.getFiltered(eq("feedSourceId", this.id));
     }
 
     @JsonView(JsonViews.UserInterface.class)
-    public int getFeedVersionCount() {
-        return getFeedVersions().size();
+    @JsonProperty("feedVersionCount")
+    public int feedVersionCount() {
+        return retrieveFeedVersions().size();
     }
 
     @JsonView(JsonViews.UserInterface.class)
-    public int getNoteCount() {
+    @JsonProperty("noteCount")
+    public int noteCount() {
         return this.noteIds != null ? this.noteIds.size() : 0;
     }
 
-    public String getPublicKey () {
+    public String toPublicKey() {
         return "public/" + getCleanName(this.name) + ".zip";
     }
 
     public void makePublic() {
         String sourceKey = FeedStore.s3Prefix + this.id + ".zip";
-        String publicKey = getPublicKey();
-        if (FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, sourceKey)) {
-            LOG.info("copying feed {} to s3 public folder", this);
-            FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, sourceKey, CannedAccessControlList.PublicRead);
-            FeedStore.s3Client.copyObject(DataManager.feedBucket, sourceKey, DataManager.feedBucket, publicKey);
-            FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, publicKey, CannedAccessControlList.PublicRead);
-        } else {
-            LOG.warn("Could not locate latest feed source {} on s3 at {}. Using latest version instead.", this, sourceKey);
-            String versionId = this.getLatestVersionId();
-            String latestVersionKey = FeedStore.s3Prefix + versionId;
-            if (FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, latestVersionKey)) {
-                LOG.info("copying feed version {} to s3 public folder", versionId);
-                FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, latestVersionKey, CannedAccessControlList.PublicRead);
-                FeedStore.s3Client.copyObject(DataManager.feedBucket, latestVersionKey, DataManager.feedBucket, publicKey);
-                FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, publicKey, CannedAccessControlList.PublicRead);
+        String publicKey = toPublicKey();
+        String versionId = this.latestVersionId();
+        String latestVersionKey = FeedStore.s3Prefix + versionId;
 
-                // also copy latest version to feedStore latest
-                FeedStore.s3Client.copyObject(DataManager.feedBucket, latestVersionKey, DataManager.feedBucket, sourceKey);
+        // only deploy to public if storing feeds on s3 (no mechanism for downloading/publishing
+        // them otherwise)
+        if (DataManager.useS3) {
+            boolean sourceExists = FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, sourceKey);
+            ObjectMetadata sourceMetadata = sourceExists
+                    ? FeedStore.s3Client.getObjectMetadata(DataManager.feedBucket, sourceKey)
+                    : null;
+            boolean latestExists = FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, latestVersionKey);
+            ObjectMetadata latestVersionMetadata = latestExists
+                    ? FeedStore.s3Client.getObjectMetadata(DataManager.feedBucket, latestVersionKey)
+                    : null;
+            boolean latestVersionMatchesSource = sourceMetadata != null &&
+                    latestVersionMetadata != null &&
+                    sourceMetadata.getETag().equals(latestVersionMetadata.getETag());
+            if (sourceExists && latestVersionMatchesSource) {
+                LOG.info("copying feed {} to s3 public folder", this);
+                FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, sourceKey, CannedAccessControlList.PublicRead);
+                FeedStore.s3Client.copyObject(DataManager.feedBucket, sourceKey, DataManager.feedBucket, publicKey);
+                FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, publicKey, CannedAccessControlList.PublicRead);
+            } else {
+                LOG.warn("Latest feed source {} on s3 at {} does not exist or does not match latest version. Using latest version instead.", this, sourceKey);
+                if (FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, latestVersionKey)) {
+                    LOG.info("copying feed version {} to s3 public folder", versionId);
+                    FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, latestVersionKey, CannedAccessControlList.PublicRead);
+                    FeedStore.s3Client.copyObject(DataManager.feedBucket, latestVersionKey, DataManager.feedBucket, publicKey);
+                    FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, publicKey, CannedAccessControlList.PublicRead);
+
+                    // also copy latest version to feedStore latest
+                    FeedStore.s3Client.copyObject(DataManager.feedBucket, latestVersionKey, DataManager.feedBucket, sourceKey);
+                }
             }
         }
     }
 
     public void makePrivate() {
         String sourceKey = FeedStore.s3Prefix + this.id + ".zip";
-        String publicKey = getPublicKey();
+        String publicKey = toPublicKey();
         if (FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, sourceKey)) {
             LOG.info("removing feed {} from s3 public folder", this);
             FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, sourceKey, CannedAccessControlList.AuthenticatedRead);
             FeedStore.s3Client.deleteObject(DataManager.feedBucket, publicKey);
+        }
+    }
+
+    // TODO don't number the versions just timestamp them
+    // FIXME for a brief moment feed version numbers are incoherent. Do this in a single operation or eliminate feed version numbers.
+    public void renumberFeedVersions() {
+        int i = 1;
+        for (FeedVersion feedVersion : Persistence.feedVersions.getMongoCollection().find(eq("feedSourceId", this.id)).sort(Sorts.ascending("updated"))) {
+            // Yes it's ugly to pass in a string, but we need to change the parameter type of update to take a Document.
+            Persistence.feedVersions.update(feedVersion.id, String.format("{version:%d}", i));
+            i += 1;
         }
     }
 
@@ -462,15 +429,11 @@ public class FeedSource extends Model implements Cloneable {
         PRODUCED_IN_HOUSE // produced in-house in a GTFS Editor instance
     }
 
-    public static void commit() {
-        sourceStore.commit();
-    }
-
     /**
      * Delete this feed source and everything that it contains.
      */
     public void delete() {
-        getFeedVersions().forEach(FeedVersion::delete);
+        retrieveFeedVersions().forEach(FeedVersion::delete);
 
         // delete latest copy of feed source
         if (DataManager.useS3) {
@@ -490,32 +453,14 @@ public class FeedSource extends Model implements Cloneable {
             gtx.commit();
         }
 
-        ExternalFeedSourceProperty.getAll().stream()
-                .filter(prop -> prop.getFeedSourceId().equals(this.id))
-                .forEach(ExternalFeedSourceProperty::delete);
+        // FIXME use Mongo filters instead
+        Persistence.externalFeedSourceProperties.getAll().stream()
+                .filter(prop -> prop.feedSourceId.equals(this.id))
+                .forEach(prop -> Persistence.externalFeedSourceProperties.removeById(prop.id));
 
         // TODO: add delete for osm extract and r5 network (maybe that goes with version)
-
-        sourceStore.delete(this.id);
+        Persistence.feedSources.removeById(this.id);
     }
-
-    /*@JsonIgnore
-    public AgencyBranding getAgencyBranding(String agencyId) {
-        if(branding != null) {
-            for (AgencyBranding agencyBranding : branding) {
-                if (agencyBranding.agencyId.equals(agencyId)) return agencyBranding;
-            }
-        }
-        return null;
-    }
-
-    @JsonIgnore
-    public void addAgencyBranding(AgencyBranding agencyBranding) {
-        if(branding == null) {
-            branding = new ArrayList<>();
-        }
-        branding.add(agencyBranding);
-    }*/
 
     public FeedSource clone () throws CloneNotSupportedException {
         return (FeedSource) super.clone();

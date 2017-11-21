@@ -1,13 +1,15 @@
 package com.conveyal.datatools.manager.models;
 
-import com.conveyal.datatools.manager.persistence.DataStore;
-import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.*;
 import java.util.stream.Collectors;
+
+import static com.mongodb.client.model.Filters.eq;
 
 /**
  * Represents a collection of feed sources that can be made into a deployment.
@@ -23,14 +25,10 @@ import java.util.stream.Collectors;
 public class Project extends Model {
     private static final long serialVersionUID = 1L;
 
-    private static DataStore<Project> projectStore = new DataStore<>("projects");
-
-    /** The name of this feed collection, e.g. NYSDOT. */
+    /** The name of this project, e.g. NYSDOT. */
     public String name;
 
-    public Boolean useCustomOsmBounds;
-
-    public Double osmNorth, osmSouth, osmEast, osmWest;
+    public boolean useCustomOsmBounds;
 
     public OtpBuildConfig buildConfig;
 
@@ -40,8 +38,7 @@ public class Project extends Model {
 
     public String organizationId;
 
-    @JsonIgnore
-    public OtpServer getServer (String name) {
+    public OtpServer retrieveServer(String name) {
         for (OtpServer otpServer : otpServers) {
             if (otpServer.name.equals(name)) {
                 return otpServer;
@@ -54,16 +51,16 @@ public class Project extends Model {
 
     public String defaultLanguage;
 
-    //@JsonView
-    public Collection<FeedSource> feedSources;
+    public transient Collection<FeedSource> feedSources;
 
-    public Double defaultLocationLat, defaultLocationLon;
-    public Boolean autoFetchFeeds;
+    // TODO: remove default location fields (once needed for integration with gtfs-editor)
+    public double defaultLocationLat, defaultLocationLon;
+    public boolean autoFetchFeeds;
     public int autoFetchHour, autoFetchMinute;
 
-//    public Map<String, Double> boundingBox = new HashMap<>();
-
-    public Double north, south, east, west;
+    // Bounds is used for either OSM custom deployment bounds (if useCustomOsmBounds is true)
+    // and/or for applying a geographic filter when syncing with external feed registries.
+    public Bounds bounds;
 
     public Project() {
         this.buildConfig = new OtpBuildConfig();
@@ -72,73 +69,31 @@ public class Project extends Model {
     }
 
     /**
-     * Get all of the FeedCollections that are defined
+     * Get all the feed sources for this project.
      */
-    public static Collection<Project> getAll () {
-        return projectStore.getAll();
-    }
-
-    public static Project get(String id) {
-        return projectStore.getById(id);
-    }
-
-    public void save() {
-        save(true);
-    }
-
-    public void save(boolean commit) {
-        if (commit)
-            projectStore.save(this.id, this);
-        else
-            projectStore.saveWithoutCommit(this.id, this);
-    }
-
-    public void delete() {
-        for (FeedSource s : getProjectFeedSources()) {
-            s.delete();
-        }
-        for (Deployment d : getProjectDeployments()) {
-            d.delete();
-        }
-
-        projectStore.delete(this.id);
-    }
-
-    public static void commit () {
-        projectStore.commit();
-    }
-
-    /**
-     * Get all the feed sources for this feed collection
-     */
-    @JsonIgnore
-    public Collection<FeedSource> getProjectFeedSources() {
-//        ArrayList<? extends FeedSource> ret = new ArrayList<>();
-
+    public Collection<FeedSource> retrieveProjectFeedSources() {
         // TODO: use index, but not important for now because we generally only have one FeedCollection
-        return FeedSource.getAll().stream().filter(fs -> this.id.equals(fs.projectId)).collect(Collectors.toList());
+        return Persistence.feedSources.getAll().stream()
+                .filter(fs -> this.id.equals(fs.projectId))
+                .collect(Collectors.toList());
+    }
 
-    }
-    public int getNumberOfFeeds () {
-        return FeedSource.getAll().stream().filter(fs -> this.id.equals(fs.projectId)).collect(Collectors.toList()).size();
-    }
+    // Note: Previously a numberOfFeeds() dynamic Jackson JsonProperty was in place here. But when the number of projects
+    // in the database grows large, the efficient calculation of this field does not scale.
+
     /**
-     * Get all the deployments for this feed collection
+     * Get all the deployments for this project.
      */
-
-    @JsonIgnore
-    public Collection<Deployment> getProjectDeployments() {
-        ArrayList<Deployment> ret = Deployment.getAll().stream()
-                .filter(d -> this.id.equals(d.projectId))
-                .collect(Collectors.toCollection(ArrayList::new));
-
-        return ret;
+    public Collection<Deployment> retrieveDeployments() {
+        List<Deployment> deployments = Persistence.deployments
+                .getFiltered(eq("projectId", this.id));
+        return deployments;
     }
 
-    @JsonIgnore
-    public Organization getOrganization() {
+    // TODO: Does this need to be returned with JSON API response
+    public Organization retrieveOrganization() {
         if (organizationId != null) {
-            return Organization.get(organizationId);
+            return Persistence.organizations.getById(organizationId);
         } else {
             return null;
         }

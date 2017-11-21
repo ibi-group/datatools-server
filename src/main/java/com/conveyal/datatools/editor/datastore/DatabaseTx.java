@@ -28,7 +28,7 @@ public class DatabaseTx {
     /** is this transaction read-only? */
     protected boolean readOnly;
 
-    /** Convenience function to get a map */
+    /** Convenience function to retrieve a map */
     protected final <T1, T2> BTreeMap<T1, T2> getMap (String name) {
         try {
             return getMapMaker(tx, name)
@@ -39,7 +39,7 @@ public class DatabaseTx {
         }
     }
 
-    /** get a map maker, that can then be further modified */
+    /** retrieve a map maker, that can then be further modified */
     private static final BTreeMapMaker getMapMaker (DB tx, String name) {
         return tx.createTreeMap(name)
                 // use java serialization to allow for schema upgrades
@@ -47,7 +47,7 @@ public class DatabaseTx {
     }
 
     /**
-     * Convenience function to get a set. These are used as indices so they use the default serialization;
+     * Convenience function to retrieve a set. These are used as indices so they use the default serialization;
      * if we make a schema change we drop and recreate them.
      */
     protected final <T> NavigableSet <T> getSet (String name) {
@@ -113,7 +113,7 @@ public class DatabaseTx {
         return pump(tx, mapName, pumpSourceForMap(source));
     }
 
-    /** get a pump source from a map */
+    /** retrieve a pump source from a map */
     protected static <K, V> Iterator<Tuple2<K, V>> pumpSourceForMap(BTreeMap source) {
         Iterator<Entry<K, V>> values = source.descendingMap().entrySet().iterator();
         Iterator<Tuple2<K, V>> valueTuples = Iterators.transform(values, new Function<Entry<K, V>, Tuple2<K, V>>() {

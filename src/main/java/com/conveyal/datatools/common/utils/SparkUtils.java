@@ -1,5 +1,6 @@
 package com.conveyal.datatools.common.utils;
 
+import spark.HaltException;
 import spark.Response;
 
 import java.io.BufferedInputStream;
@@ -14,11 +15,11 @@ import static spark.Spark.halt;
  */
 public class SparkUtils {
 
-    public static Object downloadFile(File file, Response res) {
-        if(file == null) halt(404, "File is null");
+    public static Object downloadFile(File file, String filename, Response res) {
+        if(file == null) haltWithError(404, "File is null");
 
         res.raw().setContentType("application/octet-stream");
-        res.raw().setHeader("Content-Disposition", "attachment; filename=" + file.getName());
+        res.raw().setHeader("Content-Disposition", "attachment; filename=" + filename);
 
         try {
             BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(res.raw().getOutputStream());
@@ -39,7 +40,20 @@ public class SparkUtils {
         return res.raw();
     }
 
+    public static String formatJSON(String message, int code, Exception e) {
+        String detail = e != null ? e.getMessage() : null;
+        return String.format("{\"result\":\"%s\",\"message\":\"%s\",\"code\":%d, \"detail\":\"%s\"}", code >= 400 ? "ERR" : "OK", message, code, detail);
+    }
+
+    public static void haltWithError (int errorCode, String message) throws HaltException {
+        halt(errorCode, formatJSON(message, errorCode));
+    }
+
     public static String formatJSON(String message, int code) {
-        return String.format("{\"result\":\"ERR\",\"message\":\"%s\",\"code\":%d}", message, code);
+        return formatJSON(message, code, null);
+    }
+
+    public static String formatJSON(String message) {
+        return formatJSON(message, 400);
     }
 }

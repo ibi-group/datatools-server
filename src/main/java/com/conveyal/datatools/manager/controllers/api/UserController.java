@@ -1,15 +1,16 @@
 package com.conveyal.datatools.manager.controllers.api;
 
+import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Note;
 import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.datatools.manager.DataManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
@@ -24,15 +25,9 @@ import spark.Response;
 
 import java.io.*;
 import java.net.URLEncoder;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.util.*;
 
 import com.conveyal.datatools.manager.auth.Auth0Users;
-
-import javax.persistence.Entity;
 
 import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
 import static spark.Spark.*;
@@ -164,7 +159,7 @@ public class UserController {
         request.setHeader("Content-Type", "application/json");
 
         JsonNode jsonNode = mapper.readTree(req.body());
-//        JsonNode data = mapper.readValue(jsonNode.get("data"), Auth0UserProfile.DatatoolsInfo.class); //jsonNode.get("data");
+//        JsonNode data = mapper.readValue(jsonNode.retrieveById("data"), Auth0UserProfile.DatatoolsInfo.class); //jsonNode.retrieveById("data");
         JsonNode data = jsonNode.get("data");
         System.out.println(data.asText());
         Iterator<Map.Entry<String, JsonNode>> fieldsIter = data.fields();
@@ -173,7 +168,7 @@ public class UserController {
             System.out.println(entry.getValue());
         }
 //        if (!data.has("client_id")) {
-//            ((ObjectNode)data).put("client_id", DataManager.config.get("auth0").get("client_id").asText());
+//            ((ObjectNode)data).put("client_id", DataManager.config.retrieveById("auth0").retrieveById("client_id").asText());
 //        }
         String json = "{ \"app_metadata\": { \"datatools\" : " + data + " }}";
         System.out.println(json);
@@ -211,37 +206,46 @@ public class UserController {
 //            halt(400, "Please provide valid from/to dates");
 //        }
         List<Activity> activity = new ArrayList<>();
-
-        for (Auth0UserProfile.Subscription sub : userProfile.getApp_metadata().getDatatoolsInfo().getSubscriptions()) {
-            switch (sub.getType()) {
-                // TODO: add all activity types
-                case "feed-commented-on":
-                    for (String targetId : sub.getTarget()) {
-                        FeedSource fs = FeedSource.get(targetId);
-                        if(fs == null) continue;
-                        for (Note note : fs.getNotes()) {
-                            // TODO: Check if actually recent
+        Auth0UserProfile.DatatoolsInfo datatools = userProfile.getApp_metadata().getDatatoolsInfo();
+        if (datatools != null) {
+            Auth0UserProfile.Subscription[] subscriptions = datatools.getSubscriptions();
+            if (subscriptions != null) {
+                for (Auth0UserProfile.Subscription sub : subscriptions) {
+                    switch (sub.getType()) {
+                        // TODO: add all activity types
+                        case "feed-commented-on":
+                            for (String targetId : sub.getTarget()) {
+                                FeedSource fs = Persistence.feedSources.getById(targetId);
+                                if(fs == null) continue;
+                                for (Note note : fs.retrieveNotes()) {
+                                    // TODO: Check if actually recent
 //                            if (note.date.after(Date.from(Instant.ofEpochSecond(from))) && note.date.before(Date.from(Instant.ofEpochSecond(to)))) {
-                                Activity act = new Activity();
-                                act.type = sub.getType();
-                                act.userId = note.userId;
-                                act.userName = note.userEmail;
-                                act.body = note.body;
-                                act.date = note.date;
-                                act.targetId = targetId;
-                                act.targetName = fs.name;
-                                activity.add(act);
+                                    Activity act = new Activity();
+                                    act.type = sub.getType();
+                                    act.userId = note.userId;
+                                    act.userName = note.userEmail;
+                                    act.body = note.body;
+                                    act.date = note.date;
+                                    act.targetId = targetId;
+                                    act.targetName = fs.name;
+                                    activity.add(act);
 //                            }
-                        }
+                                }
+                            }
+                            break;
                     }
-                    break;
+                }
             }
+        } else {
+            // NOTE: this condition will also occur if DISABLE_AUTH is set to true
+            halt(403, SparkUtils.formatJSON("User does not have permission to access to this application", 403));
         }
 
         return activity;
     }
 
     static class Activity implements Serializable {
+        private static final long serialVersionUID = 1L;
         public String type;
         public String userId;
         public String userName;

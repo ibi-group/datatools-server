@@ -1,14 +1,11 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.amazonaws.services.s3.AmazonS3Client;
 import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.jobs.FeedUpdater;
-import com.conveyal.gtfs.api.ApiMain;
-import com.conveyal.gtfs.api.Routes;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,24 +25,21 @@ public class GtfsApiController {
     public static final Logger LOG = LoggerFactory.getLogger(GtfsApiController.class);
     public static String feedBucket;
     public static FeedUpdater feedUpdater;
-    private static AmazonS3Client s3 = new AmazonS3Client();
-    public static ApiMain gtfsApi;
-    public static String bucketFolder;
+    public static final String extensionType = DataManager.hasConfigProperty("modules.gtfsapi.use_extension")
+            ? DataManager.getConfigPropertyAsText("modules.gtfsapi.use_extension")
+            : "false";
+    public static String bucketFolder = DataManager.getConfigPropertyAsText("extensions." + extensionType + ".s3_download_prefix");
+
+    // store list of GTFS feed eTags here Map<FeedId, eTag value>
+    public static Map<String, String> eTagMap = new HashMap<>();
+
     public static void register (String apiPrefix) throws IOException {
 
-        // store list of GTFS feed eTags here
-        Map<String, String> eTagMap = new HashMap<>();
-
-        // uses bucket, folder, and local cache according to main app config
-        gtfsApi.initialize(DataManager.gtfsCache);
-
         // check for use of extension...
-        String extensionType = DataManager.getConfigPropertyAsText("modules.gtfsapi.use_extension");
         switch (extensionType) {
             case "mtc":
                 LOG.info("Using extension " + extensionType + " for service alerts module");
                 feedBucket = DataManager.getConfigPropertyAsText("extensions." + extensionType + ".s3_bucket");
-                bucketFolder = DataManager.getConfigPropertyAsText("extensions." + extensionType + ".s3_download_prefix");
 
                 // Adds feeds on startup
                 eTagMap.putAll(registerS3Feeds(null, feedBucket, bucketFolder));
@@ -66,20 +60,32 @@ public class GtfsApiController {
         // check for update interval (in seconds) and initialize feedUpdater
         JsonNode updateFrequency = DataManager.getConfigProperty("modules.gtfsapi.update_frequency");
         if (updateFrequency != null) {
-            feedUpdater = new FeedUpdater(eTagMap, 0, updateFrequency.asInt());
+            if (feedBucket != null) {
+                feedUpdater = new FeedUpdater(eTagMap, 0, updateFrequency.asInt());
+            } else {
+                LOG.warn("FeedUpdater not initialized. No s3 bucket provided (or use_s3_storage set to false).");
+            }
         }
 
         // set gtfs-api routes with apiPrefix
-        Routes.routes(apiPrefix);
+        // FIXME this no longer compiles Routes.routes(apiPrefix);
     }
 
+    /**
+     * Used to register eTags (AWS file hash) of remote feeds in order to keep data-tools
+     * application in sync with any external processes (for example, MTC RTD).
+     * @param eTags
+     * @param bucket
+     * @param dir
+     * @return map of feedIDs to eTag values
+     */
     public static Map<String, String> registerS3Feeds (Map<String, String> eTags, String bucket, String dir) {
         if (eTags == null) {
             eTags = new HashMap<>();
         }
         Map<String, String> newTags = new HashMap<>();
         // iterate over feeds in download_prefix folder and register to gtfsApi (MTC project)
-        ObjectListing gtfsList = s3.listObjects(bucket, dir);
+        ObjectListing gtfsList = FeedStore.s3Client.listObjects(bucket, dir);
         for (S3ObjectSummary objSummary : gtfsList.getObjectSummaries()) {
 
             String eTag = objSummary.getETag();
@@ -93,17 +99,15 @@ public class GtfsApiController {
                 String filename = keyName.split("/")[1];
                 String feedId = filename.replace(".zip", "");
                 try {
-                    LOG.warn("New version found for " + keyName + " is null. Downloading from s3...");
-                    S3Object object = s3.getObject(bucket, keyName);
+                    LOG.warn("New version found for " + keyName + ". Downloading from s3...");
+                    S3Object object = FeedStore.s3Client.getObject(bucket, keyName);
                     InputStream in = object.getObjectContent();
                     byte[] buf = new byte[1024];
                     File file = new File(FeedStore.basePath, filename);
                     OutputStream out = new FileOutputStream(file);
                     int count;
-                    while( (count = in.read(buf)) != -1)
-                    {
-                        if( Thread.interrupted() )
-                        {
+                    while((count = in.read(buf)) != -1) {
+                        if(Thread.interrupted()) {
                             throw new InterruptedException();
                         }
                         out.write(buf, 0, count);
@@ -119,8 +123,8 @@ public class GtfsApiController {
                     }
                     newTags.put(feedId, eTag);
 
-                    // initiate load of feed source into API with get call
-                    gtfsApi.getFeedSource(feedId);
+                    // initiate load of feed source into API with retrieve call
+                    // FIXME this no longer compiles ApiMain.getFeedSource(feedId);
                 } catch (Exception e) {
                     LOG.warn("Could not load feed " + keyName, e);
                 }

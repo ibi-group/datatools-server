@@ -4,6 +4,7 @@ package com.conveyal.datatools.manager.models;
 import java.awt.geom.Rectangle2D;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -13,37 +14,29 @@ import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 
-import com.amazonaws.AmazonServiceException;
-import com.amazonaws.services.s3.model.AmazonS3Exception;
-import com.amazonaws.services.s3.model.GetObjectRequest;
-import com.amazonaws.services.s3.model.PutObjectRequest;
-import com.amazonaws.services.s3.model.S3Object;
+import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
-import com.conveyal.datatools.manager.controllers.api.GtfsApiController;
-import com.conveyal.datatools.manager.persistence.DataStore;
 import com.conveyal.datatools.manager.persistence.FeedStore;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
+import com.conveyal.gtfs.BaseGTFSCache;
+import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.GTFSFeed;
-import com.conveyal.gtfs.validator.json.LoadStatus;
-import com.conveyal.gtfs.stats.FeedStats;
+import com.conveyal.gtfs.loader.Feed;
+import com.conveyal.gtfs.loader.FeedLoadResult;
+import com.conveyal.gtfs.validator.ValidationResult;
 import com.conveyal.r5.common.R5Version;
 import com.conveyal.r5.point_to_point.builder.TNBuilderConfig;
 import com.conveyal.r5.transit.TransportNetwork;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.common.eventbus.EventBus;
-import com.vividsolutions.jts.geom.Geometry;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
-import org.geotools.geojson.geom.GeometryJSON;
-import org.mapdb.Fun.Tuple2;
+import org.apache.commons.lang.exception.ExceptionUtils;
+import org.bson.codecs.pojo.annotations.BsonProperty;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -52,9 +45,11 @@ import com.fasterxml.jackson.annotation.JsonView;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.conveyal.datatools.manager.models.Deployment.getOsmExtract;
+import static com.conveyal.datatools.manager.models.Deployment.downloadOsmExtract;
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
-import static spark.Spark.halt;
+import static com.mongodb.client.model.Filters.and;
+import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Updates.pull;
 
 /**
  * Represents a version of a feed.
@@ -65,16 +60,11 @@ import static spark.Spark.halt;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class FeedVersion extends Model implements Serializable {
     private static final long serialVersionUID = 1L;
-    private static ObjectMapper mapper = new ObjectMapper();
-    public static final Logger LOG = LoggerFactory.getLogger(FeedVersion.class);
-    public static final String validationSubdir = "validation/";
-    static DataStore<FeedVersion> versionStore = new DataStore<>("feedversions");
-    private static FeedStore feedStore = new FeedStore();
-
-    static {
-        // set up indexing on feed versions by feed source, indexed by <FeedSource ID, version>
-        versionStore.secondaryKey("version", (key, fv) -> new Tuple2(fv.feedSourceId, fv.version));
-    }
+    private static final String VERSION_ID_DATE_FORMAT = "yyyyMMdd'T'HHmmssX";
+    private static final String HUMAN_READABLE_TIMESTAMP_FORMAT = "MM/dd/yyyy H:mm";
+    private static final Logger LOG = LoggerFactory.getLogger(FeedVersion.class);
+    // FIXME: move this out of FeedVersion (also, it should probably not be public)?
+    public static FeedStore feedStore = new FeedStore();
 
     /**
      * We generate IDs manually, but we need a bit of information to do so
@@ -82,23 +72,19 @@ public class FeedVersion extends Model implements Serializable {
     public FeedVersion(FeedSource source) {
         this.updated = new Date();
         this.feedSourceId = source.id;
+        this.name = formattedTimestamp() + " Version";
+        this.id = generateFeedVersionId(source);
+        int count = source.feedVersionCount();
+        this.version = count + 1;
+    }
 
+    private String generateFeedVersionId(FeedSource source) {
         // ISO time
-        DateFormat df = new SimpleDateFormat("yyyyMMdd'T'HHmmssX");
+        DateFormat df = new SimpleDateFormat(VERSION_ID_DATE_FORMAT);
 
         // since we store directly on the file system, this lets users look at the DB directly
-        this.id = getCleanName(source.name) + "-" + df.format(this.updated) + "-" + source.id + ".zip";
-
-        // infer the version
-//        FeedVersion prev = source.getLatest();
-//        if (prev != null) {
-//            this.version = prev.version + 1;
-//        }
-//        else {
-//            this.version = 1;
-//        }
-        int count = source.getFeedVersionCount();
-        this.version = count + 1;
+        // TODO: no need to BaseGTFSCache.cleanId once we rely on GTFSCache to store the feed.
+        return BaseGTFSCache.cleanId(getCleanName(source.name) + "-" + df.format(this.updated) + "-" + source.id) + ".zip";
     }
 
     /**
@@ -114,33 +100,39 @@ public class FeedVersion extends Model implements Serializable {
     @JsonView(JsonViews.DataDump.class)
     public String feedSourceId;
 
+    public FeedSource.FeedRetrievalMethod retrievalMethod;
+
     @JsonIgnore
     public transient TransportNetwork transportNetwork;
 
     @JsonView(JsonViews.UserInterface.class)
-    public FeedSource getFeedSource() {
-        return FeedSource.get(feedSourceId);
+    @JsonProperty("feedSource")
+    public FeedSource parentFeedSource() {
+        return Persistence.feedSources.getById(feedSourceId);
     }
 
-    @JsonIgnore
-    public FeedVersion getPreviousVersion() {
-        return versionStore.find("version", new Tuple2(this.feedSourceId, this.version - 1));
+    public FeedVersion previousVersion() {
+        return Persistence.feedVersions.getOneFiltered(and(
+                eq("version", this.version - 1), eq("feedSourceId", this.id)), null);
     }
 
     @JsonView(JsonViews.UserInterface.class)
-    public String getPreviousVersionId() {
-        FeedVersion p = getPreviousVersion();
+    @JsonProperty("previousVersionId")
+    public String previousVersionId() {
+        FeedVersion p = previousVersion();
         return p != null ? p.id : null;
     }
 
-    @JsonIgnore
-    public FeedVersion getNextVersion() {
-        return versionStore.find("version", new Tuple2(this.feedSourceId, this.version + 1));
+    // TODO check that this filter is functional
+    public FeedVersion nextVersion() {
+        return Persistence.feedVersions.getOneFiltered(and(
+                eq("version", this.version + 1), eq("feedSourceId", this.id)), null);
     }
 
     @JsonView(JsonViews.UserInterface.class)
-    public String getNextVersionId() {
-        FeedVersion p = getNextVersion();
+    @JsonProperty("nextVersionId")
+    public String nextVersionId() {
+        FeedVersion p = nextVersion();
         return p != null ? p.id : null;
     }
 
@@ -150,44 +142,49 @@ public class FeedVersion extends Model implements Serializable {
     @JsonView(JsonViews.DataDump.class)
     public String hash;
 
-    @JsonIgnore
-    public File getGtfsFile() {
+    public File retrieveGtfsFile() {
         return feedStore.getFeed(id);
     }
 
     public File newGtfsFile(InputStream inputStream) {
-        File file = feedStore.newFeed(id, inputStream, getFeedSource());
+        File file = feedStore.newFeed(id, inputStream, parentFeedSource());
+        // fileSize field will not be stored until new FeedVersion is stored in MongoDB (usually in
+        // the final steps of ValidateFeedJob).
         this.fileSize = file.length();
-        this.save();
         LOG.info("New GTFS file saved: {}", id);
         return file;
     }
     public File newGtfsFile(InputStream inputStream, Long lastModified) {
         File file = newGtfsFile(inputStream);
+        // fileTimestamp field will not be stored until new FeedVersion is stored in MongoDB (usually in
+        // the final steps of ValidateFeedJob).
         if (lastModified != null) {
             this.fileTimestamp = lastModified;
             file.setLastModified(lastModified);
-        }
-        else {
+        } else {
             this.fileTimestamp = file.lastModified();
         }
-        this.save();
         return file;
     }
+    // FIXME return sql-loader Feed object.
     @JsonIgnore
-    public GTFSFeed getGtfsFeed() {
-        String apiId = id.replace(".zip", "");
-//        return DataManager.gtfsCache.get(apiId);
-        return GtfsApiController.gtfsApi.getFeedSource(apiId).feed;
+    public Feed retrieveFeed() {
+        if (feedLoadResult != null) {
+            return new Feed(DataManager.GTFS_DATA_SOURCE, feedLoadResult.uniqueIdentifier);
+        } else {
+            return null;
+        }
     }
 
     /** The results of validating this feed */
-    @JsonView(JsonViews.DataDump.class)
-    public FeedValidationResult validationResult;
+    public ValidationResult validationResult;
+
+    public FeedLoadResult feedLoadResult;
 
     @JsonView(JsonViews.UserInterface.class)
-    public FeedValidationResultSummary getValidationSummary() {
-        return new FeedValidationResultSummary(validationResult);
+    @BsonProperty("validationSummary")
+    public FeedValidationResultSummary validationSummary() {
+        return new FeedValidationResultSummary(validationResult, feedLoadResult);
     }
 
 
@@ -200,225 +197,117 @@ public class FeedVersion extends Model implements Serializable {
     /** A name for this version. Defaults to creation date if not specified by user */
     public String name;
 
+    /** The size of the original GTFS file uploaded/fetched */
     public Long fileSize;
 
+    /** The last modified timestamp of the original GTFS file uploaded/fetched */
     public Long fileTimestamp;
 
+    /** SQL namespace for GTFS data */
+    public String namespace;
+
     public String getName() {
-        return name != null ? name : (getFormattedTimestamp() + " Version");
+        return name;
     }
 
-    @JsonIgnore
-    public String getFormattedTimestamp() {
-        SimpleDateFormat format = new SimpleDateFormat("MM/dd/yyyy H:mm");
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public String formattedTimestamp() {
+        SimpleDateFormat format = new SimpleDateFormat(HUMAN_READABLE_TIMESTAMP_FORMAT);
         return format.format(this.updated);
     }
 
-    public static FeedVersion get(String id) {
-        return versionStore.getById(id);
-    }
-
-    public static Collection<FeedVersion> getAll() {
-        return versionStore.getAll();
-    }
-
-    public void validate(EventBus eventBus) {
-        if (eventBus == null) {
-            eventBus = new EventBus();
-        }
-        Map<String, Object> statusMap = new HashMap<>();
-        GTFSFeed gtfsFeed;
+    public void load(MonitorableJob.Status status) {
+        File gtfsFile;
+        // STEP 1. LOAD GTFS feed into relational database
         try {
-            statusMap.put("message", "Unpacking feed...");
-            statusMap.put("percentComplete", 15.0);
-            statusMap.put("error", false);
-            eventBus.post(statusMap);
-
-            /* First getGtfsFeed() call triggers feed load from zip file into gtfsCache
-            This may take a while for large feeds */
-            gtfsFeed = getGtfsFeed();
+            status.update(false,"Unpacking feed...", 15.0);
+            // Get SQL schema namespace for the feed version. This is needed for reconnecting with feeds
+            // in the database.
+            gtfsFile = retrieveGtfsFile();
+            String gtfsFilePath = gtfsFile.getPath();
+            this.feedLoadResult = GTFS.load(gtfsFilePath, DataManager.GTFS_DATA_SOURCE);
+            // FIXME? duplication of namespace (also stored as feedLoadResult.uniqueIdentifier)
+            this.namespace = feedLoadResult.uniqueIdentifier;
+            LOG.info("Loaded GTFS into SQL {}", feedLoadResult.uniqueIdentifier);
         } catch (Exception e) {
-            String errorString = String.format("No GTFS feed exists for version: %s", this.id);
-            LOG.warn(errorString);
-            statusMap.put("message", errorString);
-            statusMap.put("percentComplete", 0.0);
-            statusMap.put("error", true);
-            eventBus.post(statusMap);
+            String errorString = String.format("Error loading GTFS feed for version: %s", this.id);
+            LOG.warn(errorString, e);
+            status.update(true, errorString, 0);
+            // FIXME: Delete local copy of feed version after failed load?
             return;
         }
 
-        if(gtfsFeed == null) {
-            String errorString = String.format("Could not get GTFSFeed object for FeedVersion %s", id);
-            LOG.warn(errorString);
-//            eventBus.post(new StatusEvent(errorString, 0, true));
-            statusMap.put("message", errorString);
-            statusMap.put("percentComplete", 0.0);
-            statusMap.put("error", true);
-            eventBus.post(statusMap);
+        // FIXME: is this the right approach?
+        // if load was unsuccessful, update status and return
+        if(this.feedLoadResult == null) {
+            String errorString = String.format("Could not load GTFS for FeedVersion %s", id);
+            LOG.error(errorString);
+            status.update(true, errorString, 0);
+            // FIXME: Delete local copy of feed version after failed load?
             return;
         }
 
-        Map<LocalDate, Integer> tripsPerDate;
-
-        try {
-            // make feed public... this shouldn't take very long
-            FeedSource fs = this.getFeedSource();
-            if (fs.isPublic) {
-                fs.makePublic();
-            }
-//            eventBus.post(new StatusEvent("Validating feed...", 30, false));
-            statusMap.put("message", "Validating feed...");
-            statusMap.put("percentComplete", 30.0);
-            statusMap.put("error", false);
-            eventBus.post(statusMap);
-            LOG.info("Beginning validation...");
-            gtfsFeed.validate();
-            LOG.info("Calculating stats...");
-            FeedStats stats = gtfsFeed.calculateStats();
-            validationResult = new FeedValidationResult(gtfsFeed, stats);
-            LOG.info("Total errors after validation: {}", validationResult.errorCount);
+        // STEP 2. Upload GTFS to S3 (storage on local machine is done when feed is fetched/uploaded)
+        if (DataManager.useS3) {
             try {
-                // This may take a while for very large feeds.
-                LOG.info("Calculating # of trips per date of service");
-                tripsPerDate = stats.getTripCountPerDateOfService();
-
-                // get revenue time in seconds for Tuesdays in feed
-                stats.getAverageDailyRevenueTime(2);
-            }catch (Exception e) {
-                e.printStackTrace();
-                statusMap.put("message", "Unable to validate feed.");
-                statusMap.put("percentComplete", 0.0);
-                statusMap.put("error", true);
-                eventBus.post(statusMap);
-                e.printStackTrace();
-//                this.validationResult = null;
-                validationResult.loadStatus = LoadStatus.OTHER_FAILURE;
-                return;
-            }
-        } catch (Exception e) {
-            LOG.error("Unable to validate feed {}", this.id);
-//            eventBus.post(new StatusEvent("Unable to validate feed.", 0, true));
-            statusMap.put("message", "Unable to validate feed.");
-            statusMap.put("percentComplete", 0.0);
-            statusMap.put("error", true);
-            eventBus.post(statusMap);
-            e.printStackTrace();
-//            this.validationResult = null;
-            validationResult.loadStatus = LoadStatus.OTHER_FAILURE;
-//            halt(400, "Error validating feed...");
-            return;
-        }
-
-        File tempFile = null;
-        try {
-//            eventBus.post(new StatusEvent("Saving validation results...", 80, false));
-            statusMap.put("message", "Saving validation results...");
-            statusMap.put("percentComplete", 80.0);
-            statusMap.put("error", false);
-            eventBus.post(statusMap);
-            // Use tempfile
-            tempFile = File.createTempFile(this.id, ".json");
-            tempFile.deleteOnExit();
-            Map<String, Object> validation = new HashMap<>();
-            validation.put("errors", gtfsFeed.errors);
-            validation.put("tripsPerDate", tripsPerDate);
-            GeometryJSON g = new GeometryJSON();
-            Geometry buffers = gtfsFeed.getMergedBuffers();
-            validation.put("mergedBuffers", buffers != null ? g.toString(buffers) : null);
-            mapper.writeValue(tempFile, validation);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        saveValidationResult(tempFile);
-    }
-
-    @JsonIgnore
-    public JsonNode getValidationResult(boolean revalidate) {
-        if (revalidate) {
-            LOG.warn("Revalidation requested.  Validating feed.");
-            this.validate();
-            this.save();
-            halt(503, "Try again later. Validating feed");
-        }
-        String keyName = validationSubdir + this.id + ".json";
-        InputStream objectData = null;
-        if (DataManager.feedBucket != null && DataManager.useS3) {
-            try {
-                LOG.info("Getting validation results from s3");
-                S3Object object = FeedStore.s3Client.getObject(new GetObjectRequest(DataManager.feedBucket, keyName));
-                objectData = object.getObjectContent();
-            } catch (AmazonS3Exception e) {
-                // if json file does not exist, validate feed.
-                this.validate();
-                this.save();
-                halt(503, "Try again later. Validating feed");
-            } catch (AmazonServiceException ase) {
-                LOG.error("Error downloading from s3");
-                ase.printStackTrace();
-            }
-
-        }
-        // if s3 upload set to false
-        else {
-            File file = new File(FeedStore.basePath + "/" + keyName);
-            try {
-                objectData = new FileInputStream(file);
+                boolean fileUploaded = FeedVersion.feedStore.uploadToS3(gtfsFile, this.id, this.parentFeedSource());
+                if (fileUploaded) {
+                    // Delete local copy of feed version after successful s3 upload
+                    boolean fileDeleted = gtfsFile.delete();
+                    if (fileDeleted) {
+                        LOG.info("Local GTFS file deleted after s3 upload");
+                    } else {
+                        LOG.error("Local GTFS file failed to delete. Server may encounter storage capacity issues!");
+                    }
+                } else {
+                    LOG.error("Local GTFS file not uploaded not successfully to s3!");
+                }
+                // FIXME: should this happen here?
+                FeedSource fs = parentFeedSource();
+                if (fs.isPublic) {
+                    // make feed version public... this shouldn't take very long
+                    fs.makePublic();
+                }
             } catch (Exception e) {
-                LOG.warn("Validation does not exist.  Validating feed.");
-                this.validate();
-                this.save();
-                halt(503, "Try again later. Validating feed");
+                LOG.error("Could not upload version {} to s3 bucket", this.id);
+                e.printStackTrace();
             }
         }
-        return ensureValidationIsCurrent(objectData);
     }
 
-    private JsonNode ensureValidationIsCurrent(InputStream objectData) {
-        JsonNode n;
-        // Process the objectData stream.
+    /**
+     * Validate a version of GTFS. This method actually does a little more processing than just validation.
+     * Because validate() is run on all GTFS feeds whether they're fetched, created from an editor snapshot,
+     * uploaded manually, or god knows however else, we need a single function to handle loading a feed into
+     * the relational database, validating the data, and storing that validation result. Since those
+     * processes more or less happen in a tight sequence, we handle all of that here.
+     *
+     * This function is called in the job logic of a MonitorableJob. When the job is complete, the validated
+     * FeedVersion will be stored in MongoDB along with the ValidationResult and other fields populated during
+     * validation.
+     */
+    public void validate(MonitorableJob.Status status) {
+
+        // Sometimes this method is called when no status object is available.
+        if (status == null) status = new MonitorableJob.Status();
+
+        // VALIDATE GTFS feed
         try {
-            n = mapper.readTree(objectData);
-            if (!n.has("errors") || !n.has("tripsPerDate")) {
-                throw new Exception("Validation for feed version not up to date");
-            }
-            return n;
-        } catch (IOException e) {
-            // if json file does not exist, validate feed.
-            this.validate();
-            this.save();
-            halt(503, "Try again later. Validating feed");
+            LOG.info("Beginning validation...");
+            // run validation on feed version
+            // FIXME: pass status to validate? Or somehow listen to events?
+            validationResult = GTFS.validate(feedLoadResult.uniqueIdentifier, DataManager.GTFS_DATA_SOURCE);
         } catch (Exception e) {
-            e.printStackTrace();
-            this.validate();
-            this.save();
-            halt(503, "Try again later. Validating feed");
-        }
-        return null;
-    }
-
-    private void saveValidationResult(File file) {
-        String keyName = validationSubdir + this.id + ".json";
-
-        // upload to S3, if we have bucket name and use s3 storage
-        if(DataManager.feedBucket != null && DataManager.useS3) {
-            try {
-                LOG.info("Uploading validation json to S3");
-                FeedStore.s3Client.putObject(new PutObjectRequest(
-                        DataManager.feedBucket, keyName, file));
-            } catch (AmazonServiceException ase) {
-                LOG.error("Error uploading validation json to S3", ase);
-            }
-        }
-        // save to validation directory in gtfs folder
-        else {
-            File validationDir = new File(FeedStore.basePath + "/" + validationSubdir);
-            // ensure directory exists
-            validationDir.mkdir();
-            try {
-                FileUtils.copyFile(file, new File(FeedStore.basePath + "/" + keyName));
-            } catch (IOException e) {
-                LOG.error("Error saving validation json to local disk", e);
-            }
+            String message = String.format("Unable to validate feed %s", this.id);
+            LOG.error(message, e);
+            status.update(true, message, 100, true);
+            // FIXME create validation result with new constructor?
+            validationResult = new ValidationResult();
+            validationResult.fatalException = "failure!";
+            return;
         }
     }
 
@@ -426,56 +315,35 @@ public class FeedVersion extends Model implements Serializable {
         validate(null);
     }
 
-    public void save () {
-        save(true);
-    }
-
-    public void save(boolean commit) {
-        if (commit)
-            versionStore.save(this.id, this);
-        else
-            versionStore.saveWithoutCommit(this.id, this);
-    }
-
     public void hash () {
-        this.hash = HashUtils.hashFile(getGtfsFile());
+        this.hash = HashUtils.hashFile(retrieveGtfsFile());
     }
 
-    public static void commit() {
-        versionStore.commit();
-    }
-    public TransportNetwork buildTransportNetwork(EventBus eventBus) {
+    public TransportNetwork buildTransportNetwork(MonitorableJob.Status status) {
         // return null if validation result is null (probably means something went wrong with validation, plus we won't have feed bounds).
-        if (this.validationResult == null) {
+        if (this.validationResult == null || validationResult.fatalException != null) {
             return null;
         }
 
-        if (eventBus == null) {
-            eventBus = new EventBus();
-        }
+        // Sometimes this method is called when no status object is available.
+        if (status == null) status = new MonitorableJob.Status();
 
         // Fetch OSM extract
-        Map<String, Object> statusMap = new HashMap<>();
-        statusMap.put("message", "Fetching OSM extract...");
-        statusMap.put("percentComplete", 10.0);
-        statusMap.put("error", false);
-        eventBus.post(statusMap);
+        status.update(false, "Fetching OSM extract...", 10);
 
-        Rectangle2D bounds = this.validationResult.bounds;
+        // FIXME: don't convert to Rectangle2D?
+        Rectangle2D bounds = this.validationResult.fullBounds.toRectangle2D();
 
         if (bounds == null) {
             String message = String.format("Could not build network for %s because feed bounds are unknown.", this.id);
             LOG.warn(message);
-            statusMap.put("message", message);
-            statusMap.put("percentComplete", 10.0);
-            statusMap.put("error", true);
-            eventBus.post(statusMap);
+            status.update(true, message, 10);
             return null;
         }
 
-        File osmExtract = getOSMFile(bounds);
+        File osmExtract = downloadOSMFile(bounds);
         if (!osmExtract.exists()) {
-            InputStream is = getOsmExtract(this.validationResult.bounds);
+            InputStream is = downloadOsmExtract(bounds);
             OutputStream out;
             try {
                 out = new FileOutputStream(osmExtract);
@@ -487,29 +355,34 @@ public class FeedVersion extends Model implements Serializable {
         }
 
         // Create/save r5 network
-        statusMap.put("message", "Creating transport network...");
-        statusMap.put("percentComplete", 50.0);
-        statusMap.put("error", false);
-        eventBus.post(statusMap);
+        status.update(false, "Creating transport network...", 50);
 
+        // FIXME: fix sql-loader integration to work with r5 TransportNetwork. Currently it provides an empty list of
+        // feeds.
         List<GTFSFeed> feedList = new ArrayList<>();
-        feedList.add(getGtfsFeed());
+//        feedList.add(retrieveFeed());
         TransportNetwork tn;
         try {
             tn = TransportNetwork.fromFeeds(osmExtract.getAbsolutePath(), feedList, TNBuilderConfig.defaultConfig());
         } catch (Exception e) {
             String message = String.format("Unknown error encountered while building network for %s.", this.id);
-            LOG.warn(message);
-            statusMap.put("message", message);
-            statusMap.put("percentComplete", 100.0);
-            statusMap.put("error", true);
-            eventBus.post(statusMap);
-            e.printStackTrace();
+            LOG.warn(message, e);
+            // Delete the OSM extract directory because it is probably corrupted and may cause issues for the next
+            // version loaded with the same bounds.
+            File osmDirectory = osmExtract.getParentFile();
+            LOG.info("Deleting OSM dir for this version {}", osmDirectory.getAbsolutePath());
+            try {
+                FileUtils.deleteDirectory(osmDirectory);
+            } catch (IOException e1) {
+                LOG.error("Could not delete OSM dir", e);
+            }
+            status.update(true, message, 100);
+            status.exceptionType = e.getMessage();
+            status.exceptionDetails = ExceptionUtils.getStackTrace(e);
             return null;
         }
-        this.transportNetwork = tn;
-        this.transportNetwork.transitLayer.buildDistanceTables(null);
-        File tnFile = getTransportNetworkPath();
+        tn.transitLayer.buildDistanceTables(null);
+        File tnFile = transportNetworkPath();
         try {
             tn.write(tnFile);
             return transportNetwork;
@@ -520,15 +393,14 @@ public class FeedVersion extends Model implements Serializable {
     }
 
     @JsonIgnore
-    public static File getOSMFile(Rectangle2D bounds) {
+    private static File downloadOSMFile(Rectangle2D bounds) {
         if (bounds != null) {
             String baseDir = FeedStore.basePath.getAbsolutePath() + File.separator + "osm";
             File osmPath = new File(String.format("%s/%.6f_%.6f_%.6f_%.6f", baseDir, bounds.getMaxX(), bounds.getMaxY(), bounds.getMinX(), bounds.getMinY()));
             if (!osmPath.exists()) {
                 osmPath.mkdirs();
             }
-            File osmFile = new File(osmPath.getAbsolutePath() + "/data.osm.pbf");
-            return osmFile;
+            return new File(osmPath.getAbsolutePath() + "/data.osm.pbf");
         }
         else {
             return null;
@@ -542,94 +414,105 @@ public class FeedVersion extends Model implements Serializable {
 
     /**
      * Does this feed version have any critical errors that would prevent it being loaded to OTP?
-     * @return
+     * @return whether feed version has critical errors
      */
     public boolean hasCriticalErrors() {
-        if (hasCriticalErrorsExceptingDate() || (LocalDate.now()).isAfter(validationResult.endDate))
-            return true;
-
-        else
-            return false;
+        return hasCriticalErrorsExceptingDate() ||
+                validationResult.lastCalendarDate == null ||
+                (LocalDate.now()).isAfter(validationResult.lastCalendarDate);
     }
 
     /**
      * Does this feed have any critical errors other than possibly being expired?
+     * @return whether feed version has critical errors (outside of expiration)
      */
-    public boolean hasCriticalErrorsExceptingDate () {
+    private boolean hasCriticalErrorsExceptingDate() {
         if (validationResult == null)
             return true;
 
-        if (validationResult.loadStatus != LoadStatus.SUCCESS)
-            return true;
+        return validationResult.fatalException != null ||
+            feedLoadResult.stopTimes.rowCount == 0 ||
+            feedLoadResult.trips.rowCount == 0 ||
+            feedLoadResult.agency.rowCount == 0;
 
-        if (validationResult.stopTimesCount == 0 || validationResult.tripCount == 0 || validationResult.agencyCount == 0)
-            return true;
-
-        return false;
     }
 
     @JsonView(JsonViews.UserInterface.class)
-    public int getNoteCount() {
+    @JsonProperty("noteCount")
+    public int noteCount() {
         return this.noteIds != null ? this.noteIds.size() : 0;
     }
 
+    // FIXME remove this? or make into a proper getter?
     @JsonInclude(Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
-    public Long getFileTimestamp() {
+    @JsonProperty("fileTimestamp")
+    public Long fileTimestamp() {
         if (fileTimestamp != null) {
             return fileTimestamp;
         }
 
-        this.fileTimestamp = feedStore.getFeedLastModified(id);
-        this.save();
+        // FIXME: this is really messy.
+        Long timestamp = feedStore.getFeedLastModified(id);
+        Persistence.feedVersions.updateField(id, "fileTimestamp", timestamp);
 
         return this.fileTimestamp;
     }
 
+    // FIXME remove this? or make into a proper getter?
     @JsonInclude(Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
-    public Long getFileSize() {
+    @JsonProperty("fileSize")
+    public Long fileSize() {
         if (fileSize != null) {
             return fileSize;
         }
 
-        this.fileSize = feedStore.getFeedSize(id);
-        this.save();
+        // FIXME: this is really messy.
+        Long feedVersionSize = feedStore.getFeedSize(id);
+        Persistence.feedVersions.updateField(id, "fileSize", feedVersionSize);
 
         return fileSize;
     }
 
     /**
-     * Delete this feed version.
+     * Delete this feed version and clean up, removing references to it and derived objects and state.
+     * Steps:
+     * If we are deleting the latest version, change the memoized "last fetched" value in the FeedSource.
+     * Delete the GTFS Zip file locally or on S3
+     * Remove this feed version from all Deployments [shouldn't we be updating the version rather than deleting it?]
+     * Remove the transport network file from the local disk
+     * Finally delete the version object from the database.
      */
     public void delete() {
         try {
             // reset lastModified if feed is latest version
-            System.out.println("deleting version");
+            LOG.info("Deleting feed version {}", this.id);
             String id = this.id;
-            FeedSource fs = getFeedSource();
-            FeedVersion latest = fs.getLatest();
+            FeedSource fs = parentFeedSource();
+            FeedVersion latest = fs.retrieveLatest();
             if (latest != null && latest.id.equals(this.id)) {
-                fs.lastFetched = null;
-                fs.save();
+                // Even if there are previous feed versions, we set to null to allow re-fetching the version that was just deleted
+                // TODO instead, set it to the fetch time of the previous feed version
+                Persistence.feedSources.update(fs.id, "{lastFetched:null}");
             }
             feedStore.deleteFeed(id);
-
-            for (Deployment d : Deployment.getAll()) {
-                d.feedVersionIds.remove(this.id);
-            }
-
-            getTransportNetworkPath().delete();
-
-
-            versionStore.delete(this.id);
+            // Remove this FeedVersion from all Deployments associated with this FeedVersion's FeedSource's Project
+            // TODO TEST THOROUGHLY THAT THIS UPDATE EXPRESSION IS CORRECT
+            // Although outright deleting the feedVersion from deployments could be surprising and shouldn't be done anyway.
+            Persistence.deployments.getMongoCollection().updateMany(eq("projectId", this.parentFeedSource().projectId),
+                    pull("feedVersionIds", this.id));
+            transportNetworkPath().delete();
+            Persistence.feedVersions.removeById(this.id);
+            this.parentFeedSource().renumberFeedVersions();
             LOG.info("Version {} deleted", id);
         } catch (Exception e) {
             LOG.warn("Error deleting version", e);
         }
     }
+
     @JsonIgnore
-    public String getR5Path () {
+    private String r5Path() {
         // r5 networks MUST be stored in separate directories (in this case under feed source ID
         // because of shared osm.mapdb used by r5 networks placed in same dir
         File r5 = new File(String.join(File.separator, FeedStore.basePath.getAbsolutePath(), this.feedSourceId));
@@ -638,8 +521,9 @@ public class FeedVersion extends Model implements Serializable {
         }
         return r5.getAbsolutePath();
     }
+
     @JsonIgnore
-    public File getTransportNetworkPath () {
-        return new File(String.join(File.separator, getR5Path(), id + "_" + R5Version.describe + "_network.dat"));
+    public File transportNetworkPath() {
+        return new File(String.join(File.separator, r5Path(), id + "_" + R5Version.describe + "_network.dat"));
     }
 }

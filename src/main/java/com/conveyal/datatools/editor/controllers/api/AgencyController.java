@@ -1,11 +1,11 @@
 package com.conveyal.datatools.editor.controllers.api;
 
+import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.editor.controllers.Base;
 import com.conveyal.datatools.editor.datastore.FeedTx;
-import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.Agency;
-import com.conveyal.datatools.editor.utils.S3Utils;
+import com.conveyal.datatools.common.utils.S3Utils;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import org.slf4j.Logger;
@@ -14,53 +14,56 @@ import spark.HaltException;
 import spark.Request;
 import spark.Response;
 
+import java.util.ArrayList;
+import java.util.Collection;
+
 import static spark.Spark.*;
 
 public class AgencyController {
-    public static JsonManager<Agency> json =
+    public static final JsonManager<Agency> json =
             new JsonManager<>(Agency.class, JsonViews.UserInterface.class);
     private static Logger LOG = LoggerFactory.getLogger(AgencyController.class);
+
     public static Object getAgency(Request req, Response res) {
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
-        Object json = null;
+        FeedTx tx = null;
         try {
-            final FeedTx tx = VersionedDataStore.getFeedTx(feedId);
+            tx = VersionedDataStore.getFeedTx(feedId);
             if(id != null) {
                 if (!tx.agencies.containsKey(id)) {
-                    tx.rollback();
                     halt(404);
                 }
 
-                json = Base.toJson(tx.agencies.get(id), false);
+                return tx.agencies.get(id);
             }
             else {
-                json = Base.toJson(tx.agencies.values(), false);
+                return new ArrayList<>(tx.agencies.values());
             }
-            
-            tx.rollback();
         } catch (HaltException e) {
             LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
             halt(400);
+        } finally {
+            if (tx != null) tx.rollbackIfOpen();
         }
-        return json;
+        return null;
     }
 
-    public static Object createAgency(Request req, Response res) {
+    public static Agency createAgency(Request req, Response res) {
         Agency agency;
         String feedId = req.queryParams("feedId");
         if (feedId == null)
             halt(400, "You must provide a valid feedId");
 
+        FeedTx tx = null;
         try {
             agency = Base.mapper.readValue(req.body(), Agency.class);
             
-            final FeedTx tx = VersionedDataStore.getFeedTx(feedId);
+            tx = VersionedDataStore.getFeedTx(feedId);
             if (tx.agencies.containsKey(agency.id)) {
-                tx.rollback();
                 halt(400, "Agency " + agency.id + " already exists");
             }
             
@@ -74,59 +77,63 @@ public class AgencyController {
         } catch (Exception e) {
             e.printStackTrace();
             halt(400);
+        } finally {
+            if (tx != null) tx.rollbackIfOpen();
         }
         return null;
     }
 
 
-    public static Object updateAgency(Request req, Response res) {
+    public static Agency updateAgency(Request req, Response res) {
         Agency agency;
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
 
+        FeedTx tx = null;
         try {
             agency = Base.mapper.readValue(req.body(), Agency.class);
             
-            final FeedTx tx = VersionedDataStore.getFeedTx(feedId);
+            tx = VersionedDataStore.getFeedTx(feedId);
             if(!tx.agencies.containsKey(agency.id)) {
-                tx.rollback();
                 halt(400);
             }
             
-            tx.agencies.put(agency.id, agency);
+            tx.agencies.put(id, agency);
             tx.commit();
 
-            return Base.toJson(agency, false);
+            return agency;
         } catch (HaltException e) {
             LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
             halt(400);
+        } finally {
+            if (tx != null) tx.rollbackIfOpen();
         }
         return null;
     }
 
-    public static Object uploadAgencyBranding(Request req, Response res) {
+    public static Agency uploadAgencyBranding(Request req, Response res) {
         Agency agency;
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
 
+        FeedTx tx = null;
         try {
             if (feedId == null) {
                 halt(400);
             }
-            FeedTx tx = VersionedDataStore.getFeedTx(feedId);
+            tx = VersionedDataStore.getFeedTx(feedId);
 
             if (!tx.agencies.containsKey(id)) {
-                tx.rollback();
                 halt(404);
             }
 
             agency = tx.agencies.get(id);
 
             String url = S3Utils.uploadBranding(req, id);
-            System.out.println(url);
+
             // set agencyBrandingUrl to s3 location
             agency.agencyBrandingUrl = url;
 
@@ -140,45 +147,74 @@ public class AgencyController {
         } catch (Exception e) {
             e.printStackTrace();
             halt(400);
+        } finally {
+            if (tx != null) tx.rollbackIfOpen();
         }
         return null;
     }
-    public static Object deleteAgency(Request req, Response res) {
+
+    public static Agency deleteAgency(Request req, Response res) {
         String id = req.params("id");
         String feedId = req.queryParams("feedId");
-        if(id == null) {
+        if (id == null) {
             halt(400);
         }
-        final FeedTx tx = VersionedDataStore.getFeedTx(feedId);
-        if(!tx.agencies.containsKey(id)) {
-            tx.rollback();
-            halt(400);
-        }
+        FeedTx tx = null;
 
-        tx.agencies.remove(id);
-        tx.commit();
-        
-        return true; // ok();
+        try {
+            if (feedId == null) {
+                halt(400);
+            }
+            tx = VersionedDataStore.getFeedTx(feedId);
+
+            if(!tx.agencies.containsKey(id)) {
+                halt(400);
+            }
+
+            // ensure that no routes reference agency
+            tx.routes.values().stream().forEach(route -> {
+                if (route.agencyId.equals(id)) {
+                    halt(400, SparkUtils.formatJSON("Cannot delete agency referenced by routes.", 400));
+                }
+            });
+
+            Agency agency = tx.agencies.get(id);
+
+            tx.agencies.remove(id);
+            tx.commit();
+
+            return agency;
+        } catch (HaltException e) {
+            LOG.error("Halt encountered", e);
+            throw e;
+        } catch (Exception e) {
+            e.printStackTrace();
+            halt(400);
+        } finally {
+            if (tx != null) tx.rollbackIfOpen();
+        }
+        return null;
     }
     
     /** duplicate an agency */
-    public static Object duplicateAgency(Request req, Response res) {
-
-        String id = req.params("id");
-        String feedId = req.queryParams("feedId");
-
-        // make sure the agency exists
-//        GlobalTx gtx = VersionedDataStore.getGlobalTx();
-        final FeedTx tx = VersionedDataStore.getFeedTx(feedId);
-        if (!tx.agencies.containsKey(id)) {
-            tx.rollback();
-            halt(404);
-        }
-        tx.rollback();
-
-        FeedTx.duplicate(id);
-        return true; // ok();
-    }
+    // TODO: move this is feedInfo?? (Below function is for old editor)
+//    public static Object duplicateAgency(Request req, Response res) {
+//
+//        String id = req.params("id");
+//        String feedId = req.queryParams("feedId");
+//
+//        // make sure the agency exists
+////        GlobalTx gtx = VersionedDataStore.getGlobalTx();
+//        FeedTx tx = VersionedDataStore.getFeedTx(feedId);
+//        if (!tx.agencies.containsKey(id)) {
+//            tx.rollback();
+//            halt(404);
+//        }
+//        tx.rollback();
+//
+//        FeedTx.duplicate(id);
+//        return true; // ok();
+//    }
 
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/agency/:id", AgencyController::getAgency, json::write);
@@ -186,12 +222,12 @@ public class AgencyController {
         get(apiPrefix + "secure/agency", AgencyController::getAgency, json::write);
         post(apiPrefix + "secure/agency", AgencyController::createAgency, json::write);
         put(apiPrefix + "secure/agency/:id", AgencyController::updateAgency, json::write);
-        post(apiPrefix + "secure/agency/:id/duplicate", AgencyController::duplicateAgency, json::write);
+//        post(apiPrefix + "secure/agency/:id/duplicate", AgencyController::duplicateAgency, json::write);
         post(apiPrefix + "secure/agency/:id/uploadbranding", AgencyController::uploadAgencyBranding, json::write);
         delete(apiPrefix + "secure/agency/:id", AgencyController::deleteAgency, json::write);
 
         // Public routes
-//        get(apiPrefix + "public/agency/:id", AgencyController::getFeedSource, json::write);
-//        get(apiPrefix + "public/agency", AgencyController::getAllFeedSources, json::write);
+//        retrieveById(apiPrefix + "public/agency/:id", AgencyController::feedSource, json::write);
+//        retrieveById(apiPrefix + "public/agency", AgencyController::getAllFeedSources, json::write);
     }
 }

@@ -16,32 +16,21 @@ import java.text.SimpleDateFormat;
 import java.util.Map;
 
 /**
- * Created by landon on 1/31/17.
+ * TODO: JAVADOC and RENAME: this seems to be a single purpose run() method but it's just called "public job".
+ *
  */
 public class MakePublicJob extends MonitorableJob {
     public Project project;
-    public Status status;
     private static final Logger LOG = LoggerFactory.getLogger(MakePublicJob.class);
 
     public MakePublicJob(Project project, String owner) {
         super(owner, "Generating public html for " + project.name, JobType.MAKE_PROJECT_PUBLIC);
         this.project = project;
-        status = new Status();
-        status.message = "Waiting to begin validation...";
-        status.percentComplete = 0;
-    }
-    @Override
-    public Status getStatus() {
-        return null;
+        status.update(false, "Waiting to begin validation...", 0);
     }
 
     @Override
-    public void handleStatusEvent(Map statusMap) {
-
-    }
-
-    @Override
-    public void run() {
+    public void jobLogic () {
         LOG.info("Generating new html for public feeds");
         String output;
         String title = "Public Feeds";
@@ -60,8 +49,8 @@ public class MakePublicJob extends MonitorableJob {
         r.append("<h1>" + title + "</h1>\n");
         r.append("The following feeds, in GTFS format, are available for download and use.\n");
         r.append("<ul>\n");
-        project.getProjectFeedSources().stream()
-                .filter(fs -> fs.isPublic && fs.getLatest() != null)
+        project.retrieveProjectFeedSources().stream()
+                .filter(fs -> fs.isPublic && fs.retrieveLatest() != null)
                 .forEach(fs -> {
                     // generate list item for feed source
                     String url;
@@ -71,9 +60,9 @@ public class MakePublicJob extends MonitorableJob {
                     else {
                         // ensure latest feed is written to the s3 public folder
                         fs.makePublic();
-                        url = String.join("/", "https://s3.amazonaws.com", DataManager.feedBucket, fs.getPublicKey());
+                        url = String.join("/", "https://s3.amazonaws.com", DataManager.feedBucket, fs.toPublicKey());
                     }
-                    FeedVersion latest = fs.getLatest();
+                    FeedVersion latest = fs.retrieveLatest();
                     r.append("<li>");
                     r.append("<a href=\"" + url + "\">");
                     r.append(fs.name);
@@ -82,8 +71,8 @@ public class MakePublicJob extends MonitorableJob {
                     if (fs.url != null && fs.lastFetched != null) {
                         r.append("last checked: " + new SimpleDateFormat("dd MMM yyyy").format(fs.lastFetched) + ", ");
                     }
-                    if (fs.getLastUpdated() != null) {
-                        r.append("last updated: " + new SimpleDateFormat("dd MMM yyyy").format(fs.getLastUpdated()) + ")");
+                    if (fs.lastUpdated() != null) {
+                        r.append("last updated: " + new SimpleDateFormat("dd MMM yyyy").format(fs.lastUpdated()) + ")");
                     }
                     r.append("</li>");
         });
@@ -104,7 +93,6 @@ public class MakePublicJob extends MonitorableJob {
         FeedStore.s3Client.putObject(DataManager.feedBucket, folder + fileName, file);
         FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, folder + fileName, CannedAccessControlList.PublicRead);
 
-        jobFinished();
         LOG.info("Public page updated on s3");
     }
 }

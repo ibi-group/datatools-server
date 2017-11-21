@@ -3,29 +3,39 @@ jdk:
 - oraclejdk8
 install: true
 sudo: false
+# Install mongoDB to perform persistence tests
+services: mongodb
 cache:
   directories:
-  - "$HOME/.m2/repository"
+  - "$HOME/.m2"
 before_install:
-- sed -i.bak -e 's|https://nexus.codehaus.org/snapshots/|https://oss.sonatype.org/content/repositories/codehaus-snapshots/|g'
-  ~/.m2/settings.xml
+#- sed -i.bak -e 's|https://nexus.codehaus.org/snapshots/|https://oss.sonatype.org/content/repositories/codehaus-snapshots/|g' ~/.m2/settings.xml
+# set region in AWS config for S3 setup
+- mkdir ~/.aws && printf '%s\n' '[default]' 'aws_access_key_id=foo' 'aws_secret_access_key=bar' 'region=us-east-1' > ~/.aws/config
+- cp configurations/default/server.yml.tmp configurations/default/server.yml
 script:
-- mvn package -DskipTests
+# package jar
+- mvn package
+# notify slack channel of build status
 notifications:
   slack: conveyal:WQxmWiu8PdmujwLw4ziW72Gc
 before_deploy:
+# get branch name of current branch for use in jar name: https://graysonkoonce.com/getting-the-current-branch-name-during-a-pull-request-in-travis-ci/
+- export BRANCH=$(if [ "$TRAVIS_PULL_REQUEST" == "false" ]; then echo $TRAVIS_BRANCH; else echo $TRAVIS_PULL_REQUEST_BRANCH; fi)
+# copy packaged jars over to deploy dir
 - mkdir deploy
 - cp target/dt-*.jar deploy/
-- cp "target/dt-$(git describe --always).jar" "deploy/dt-latest-$(git rev-parse --abbrev-ref HEAD).jar"
+- cp "target/dt-$(git describe --always).jar" "deploy/dt-latest-${BRANCH}.jar"
 deploy:
-  skip_cleanup: true
   provider: s3
+  skip_cleanup: true
   access_key_id: AKIAJISY76KTZBNHS4SA
   secret_access_key:
-    secure: txyT+nwgYM+JKM9m+yj+VmOzu3B8PZle12bucZN7lD/uy25y7qVSAO+hqdj5mHR2j3EZ57BYzPbrma0DnFe7pKJKYPss3C7LeU/NEsVRsJp0cpsMwZnnJGdxHYLa5Q8/RsW0LPhO6LWk2XRswJfv4/oCjPBKJOGip/IYr03rFu7+QWNmQ8CAlAdIHrgoGayfX99x/6GZ6fZ37IweUY9/YGdjT8D7IWF0XQ5kkkyaWBw/nDZAKbqZrpfPxykwJhnKzLa1SpAuFjzAU6QkGilptod/ZmF1NdT9XZMqy1Dgwvs84lGoI2T5KtZ12UCKKZa3e5masyrfQjgmnr14nDmWNq1dZswhTw8nacq9f5FSu56fuw5dA0CggZAn+BrHuEkbL+0Kp5Bdj7eOIkB3RDERO6jW8SHSGB/XiAG27j4MSsjA1FvipMYYSo8LTsik3YfFjNHapkLHcbqwzpMqW8E6pe2towcNR1Hnn+EbdIUJabxUrYAF71+TxlewbTqOF3ZcAvW6Qwn8A06aCyNvZO0+Yk6xQItuf/PWXAYp1RI5B4w6X+ylXvoDeFtB+KJK3CiJYp7UKT32Kj6YP+r1m3KJ8PJ4Spqzfll21jTLa9CYS+7ZtXHxwJunNRzTQ3h90c810KhWlgcreIT/OX5NhyafcwlnPQ1ijKa/i7o+4JjCRKI=
+    secure: a2PNYiv7kzgKxfSx6IhZxSCFBZTCjrbIAK/vmCB1KcpnlV4vTt/IL13i3u6XC8wAbUxhd6iJMtVRm4diIwmy0K7nnpp0h3cQDxYqWCmf1dHZWBJXkpurDpbfxW5G6IlL14i+EsTSCpmwalov+atOBDVyJWVGqfEYaj9c6Q1E0fiYNP3QwZQcsVuD1CRw91xzckfERwqYcz70p/hmTEPOgUwDHuyHsjFafJx+krY3mnBdRdDRLcnPavjcEtprjGkdiVbNETe3CHVNQrAVfqm187OoDA2tHTPjTFmlAdUedp4rYqLmF/WWbHZLzUkQb95FJkklx30vlwC0bIutP1TwIlr3ma5aCRFc58x3SzG07AeM+vbt/nh5A52cpdRjBnhctC2kL++QvwkJhwRy2xptl/WEd5AUagoN4ngnGzyDS4kk/taQFL0IAav5C2WH668kGyH17KNeWG/bCDd55oCvwNlppAYXH+WdbtylqiVb9Fllvs1wcIYWqqyX5zdYiyFEI8LyEQsNF/D5ekuAtLXcF25uwjNtHMjdAxQxHbAbBOeaaLwJd29os9GrKFI/2C0TVXZo2zaFLZyFaIsDHqAC+MXDBDtktimC9Uuozz7bXENCrOUBfsDEQXb46tkXLGaQNXeOhe3KwVKxlGDCsLb7iHIcdDyBm19hqUWhU3uA+dU=
+  # upload jars in deploy dir to bucket
   bucket: datatools-builds
   local-dir: deploy
   acl: public_read
   on:
-    repo: conveyal/datatools-server
+    repo: catalogueglobal/datatools-server
     all_branches: true
