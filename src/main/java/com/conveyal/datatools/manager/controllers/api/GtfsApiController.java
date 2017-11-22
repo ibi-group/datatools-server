@@ -6,8 +6,6 @@ import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.jobs.FeedUpdater;
-import com.conveyal.gtfs.api.ApiMain;
-import com.conveyal.gtfs.api.Routes;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,7 +15,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -71,7 +68,7 @@ public class GtfsApiController {
         }
 
         // set gtfs-api routes with apiPrefix
-        Routes.routes(apiPrefix);
+        // FIXME this no longer compiles Routes.routes(apiPrefix);
     }
 
     /**
@@ -127,7 +124,7 @@ public class GtfsApiController {
                     newTags.put(feedId, eTag);
 
                     // initiate load of feed source into API with retrieve call
-                    ApiMain.getFeedSource(feedId);
+                    // FIXME this no longer compiles ApiMain.getFeedSource(feedId);
                 } catch (Exception e) {
                     LOG.warn("Could not load feed " + keyName, e);
                 }
