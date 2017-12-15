@@ -1,6 +1,5 @@
 package com.conveyal.datatools.manager;
 
-import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 
 import com.conveyal.datatools.manager.controllers.DumpController;
@@ -19,6 +18,15 @@ import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.CorsFilter;
 import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.GraphQLMain;
+import com.conveyal.gtfs.loader.Table;
+import com.conveyal.gtfs.model.Agency;
+import com.conveyal.gtfs.model.Calendar;
+import com.conveyal.gtfs.model.Fare;
+import com.conveyal.gtfs.model.FeedInfo;
+import com.conveyal.gtfs.model.Pattern;
+import com.conveyal.gtfs.model.Route;
+import com.conveyal.gtfs.model.Stop;
+import com.conveyal.gtfs.model.Trip;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -43,25 +51,37 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithError;
 import static spark.Spark.*;
 
+/**
+ * This is the singleton where the application is initialized. It currently stores a number of static fields which are
+ * referenced throughout the application.
+ */
 public class DataManager {
+    private static final Logger LOG = LoggerFactory.getLogger(DataManager.class);
 
-    public static final Logger LOG = LoggerFactory.getLogger(DataManager.class);
+    // These fields hold YAML files that represent the server configuration.
+    private static JsonNode config;
+    private static JsonNode serverConfig;
 
-    public static JsonNode config;
-    public static JsonNode serverConfig;
-
+    // These fields hold YAML files that represent the GTFS and GTFS+ specifications.
     public static JsonNode gtfsPlusConfig;
     public static JsonNode gtfsConfig;
 
-    // TODO: define type for ExternalFeedResource Strings
+    // Contains the config-enabled ExternalFeedResource objects that define connections to third-party feed indexes
     public static final Map<String, ExternalFeedResource> feedResources = new HashMap<>();
+    // TODO: define type for ExternalFeedResource Strings
 
+    // (e.g., transit.land, TransitFeeds.com)
     public static Map<String, ConcurrentHashSet<MonitorableJob>> userJobsMap = new ConcurrentHashMap<>();
+    // Stores jobs underway by user ID.
 
+    // Stores ScheduledFuture objects that kick off runnable tasks (e.g., fetch project feeds at 2:00 AM).
     public static Map<String, ScheduledFuture> autoFetchMap = new HashMap<>();
+    // Scheduled executor that handles running scheduled jobs.
     public final static ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+    // ObjectMapper that loads in YAML config files
     private static final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
 
 
