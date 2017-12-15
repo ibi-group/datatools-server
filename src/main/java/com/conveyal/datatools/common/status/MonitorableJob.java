@@ -1,6 +1,7 @@
 package com.conveyal.datatools.common.status;
 
 import com.conveyal.datatools.manager.DataManager;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.eclipse.jetty.util.ConcurrentHashSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,7 +46,7 @@ public abstract class MonitorableJob implements Runnable {
         FETCH_SINGLE_FEED,
         MAKE_PROJECT_PUBLIC,
         PROCESS_FEED,
-        MERGE_PROJECT_FEEDS
+        CREATE_SNAPSHOT, MERGE_PROJECT_FEEDS
     }
 
     public MonitorableJob(String owner, String name, JobType type) {
@@ -227,6 +228,11 @@ public abstract class MonitorableJob implements Runnable {
 
         // Name of file/item once completed
         public String completedName;
+
+        public void update (String message, double percentComplete) {
+            this.message = message;
+            this.percentComplete = percentComplete;
+        }
 
         public void update (boolean isError, String message, double percentComplete) {
             this.error = isError;
