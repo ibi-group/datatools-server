@@ -115,6 +115,8 @@ public class FeedSource extends Model implements Cloneable {
 
     public String publishedVersionId;
 
+    public String editorNamespace;
+
     /**
      * Create a new feed.
      */
