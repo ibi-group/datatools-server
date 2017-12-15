@@ -51,7 +51,7 @@ public class S3Utils {
         }
         Part part = req.raw().getPart("file");
         String extension = "." + part.getContentType().split("/", 0)[1];
-        File tempFile = File.createTempFile(id, extension);
+        File tempFile = File.createTempFile(id + "_branding", extension);
         tempFile.deleteOnExit();
 
         InputStream inputStream;
