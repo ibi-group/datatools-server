@@ -65,6 +65,7 @@ public class GraphQLController {
             List<GraphQLError> errs = result.getErrors();
             if (!errs.isEmpty()) {
                 response.status(400);
+                response.type("application/json");
                 return errs;
             } else {
                 long endTime = System.currentTimeMillis();
