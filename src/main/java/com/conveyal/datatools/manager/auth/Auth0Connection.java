@@ -35,7 +35,8 @@ public class Auth0Connection {
     private static final JsonParser jsonParser = new JsonParser();
 
     /**
-     * Check API request for user token.
+     * Check API request for user token and assign as the "user" attribute on the incoming request object for use in
+     * downstream controllers.
      * @param req Spark request object
      */
     public static void checkUser(Request req) {
@@ -77,6 +78,9 @@ public class Auth0Connection {
         return token;
     }
 
+    /**
+     * Gets the Auth0 user profile for the provided token.
+     */
     public static Auth0UserProfile getUserProfile(String token) throws Exception {
 
         URL url = new URL("https://" + getConfigPropertyAsText("AUTH0_DOMAIN") + "/tokeninfo");
@@ -118,6 +122,10 @@ public class Auth0Connection {
         return profile;
     }
 
+    /**
+     * Check that the user has edit privileges for the feed ID specified.
+     * FIXME: Needs an update for SQL editor.
+     */
     public static void checkEditPrivileges(Request request) {
 
         Auth0UserProfile userProfile = request.attribute("user");
@@ -140,10 +148,17 @@ public class Auth0Connection {
         }
     }
 
+    /**
+     * Check whether authentication has been disabled via the DISABLE_AUTH config variable.
+     */
     public static boolean authDisabled() {
         return DataManager.hasConfigProperty("DISABLE_AUTH") && "true".equals(getConfigPropertyAsText("DISABLE_AUTH"));
     }
 
+    /**
+     * Log API requests made to the string prefix provided, e.g. "/api/editor/". This will also attempt to parse and log
+     * the request body if the content type is JSON.
+     */
     public static void logRequest(String baseUrl, String prefix) {
         before(prefix + "*", (request, response) -> {
             Auth0UserProfile userProfile = request.attribute("user");
