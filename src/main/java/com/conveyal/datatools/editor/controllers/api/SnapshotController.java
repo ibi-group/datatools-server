@@ -151,10 +151,10 @@ public class SnapshotController {
         // check user's permission to import snapshot
         FeedSourceController.checkFeedSourcePermissions(req, feedSource, "edit");
 
-        ProcessGtfsSnapshotMerge processGtfsSnapshotMergeJob =
-                new ProcessGtfsSnapshotMerge(feedVersion, userProfile.getUser_id());
+        CreateSnapshotJob createSnapshotJob =
+                new CreateSnapshotJob(feedVersion, userProfile.getUser_id(), true);
 
-        DataManager.heavyExecutor.execute(processGtfsSnapshotMergeJob);
+        DataManager.heavyExecutor.execute(createSnapshotJob);
 
         halt(200, "{status: \"ok\"}");
         return null;
