@@ -218,9 +218,9 @@ public class DataManager {
         final String index = IOUtils.toString(stream).replace("${S3BUCKET}", getConfigPropertyAsText("application.assets_bucket"));
         stream.close();
 
-        // return 404 for any api response that's not found
-        get(API_PREFIX + "*", (request, response) -> {
-            halt(404, SparkUtils.formatJSON("Unknown error occurred.", 404));
+        // Return 404 for any API path that is not configured.
+        get("/api/" + "*", (request, response) -> {
+            haltWithError(404, "No API route configured for this path.");
             return null;
         });
 
