@@ -167,17 +167,13 @@ public class DataManager {
         if (isModuleEnabled("editor")) {
             String gtfs = IOUtils.toString(DataManager.class.getResourceAsStream("/gtfs/gtfs.yml"));
             gtfsConfig = yamlMapper.readTree(gtfs);
-            AgencyController.register(EDITOR_API_PREFIX);
-            CalendarController.register(EDITOR_API_PREFIX);
-            RouteController.register(EDITOR_API_PREFIX);
-            RouteTypeController.register(EDITOR_API_PREFIX);
-            ScheduleExceptionController.register(EDITOR_API_PREFIX);
-            StopController.register(EDITOR_API_PREFIX);
-            TripController.register(EDITOR_API_PREFIX);
-            TripPatternController.register(EDITOR_API_PREFIX);
-            SnapshotController.register(EDITOR_API_PREFIX);
-            FeedInfoController.register(EDITOR_API_PREFIX);
-            FareController.register(EDITOR_API_PREFIX);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.AGENCY, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.CALENDAR, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.FARE_ATTRIBUTES, DataManager.GTFS_DATA_SOURCE);
+            // FIXME: need fare, feedInfo, pattern, scheduleException, and trip Tables and Controllers
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.ROUTES, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.STOPS, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.TRIPS, DataManager.GTFS_DATA_SOURCE);
 //            GisController.register(EDITOR_API_PREFIX);
         }
 
