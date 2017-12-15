@@ -55,11 +55,22 @@ public class SparkUtils {
         halt(errorCode, formatJSON(message, errorCode));
     }
 
+    public static void haltWithError (int errorCode, String message, Exception e) throws HaltException {
+        halt(errorCode, formatJSON(message, errorCode, e));
+    }
+
     public static String formatJSON(String message, int code) {
         return formatJSON(message, code, null);
     }
 
     public static String formatJSON(String message) {
         return formatJSON(message, 400);
+    }
+
+    public static String formatJobMessage (String jobId, String message) {
+        JsonObject object = new JsonObject();
+        object.addProperty("jobId", jobId);
+        object.addProperty("message", message);
+        return object.toString();
     }
 }
