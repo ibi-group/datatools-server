@@ -1,5 +1,6 @@
 package com.conveyal.datatools.common.utils;
 
+import com.google.gson.JsonObject;
 import spark.HaltException;
 import spark.Response;
 
@@ -42,7 +43,12 @@ public class SparkUtils {
 
     public static String formatJSON(String message, int code, Exception e) {
         String detail = e != null ? e.getMessage() : null;
-        return String.format("{\"result\":\"%s\",\"message\":\"%s\",\"code\":%d, \"detail\":\"%s\"}", code >= 400 ? "ERR" : "OK", message, code, detail);
+        JsonObject object = new JsonObject();
+        object.addProperty("result", code >= 400 ? "ERR" : "OK");
+        object.addProperty("message", message);
+        object.addProperty("code", code);
+        object.addProperty("detail", detail);
+        return object.toString();
     }
 
     public static void haltWithError (int errorCode, String message) throws HaltException {
