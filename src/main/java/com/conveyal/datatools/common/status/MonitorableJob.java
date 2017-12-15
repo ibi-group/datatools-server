@@ -241,5 +241,21 @@ public abstract class MonitorableJob implements Runnable {
             this.completed = isComplete;
         }
 
+        public void fail (String message, Exception e) {
+            this.error = true;
+            this.percentComplete = 100;
+            this.completed = true;
+            this.message = message;
+            this.exceptionDetails = ExceptionUtils.getStackTrace(e);
+            this.exceptionType = e.getMessage();
+        }
+
+        public void fail (String message) {
+            this.error = true;
+            this.percentComplete = 100;
+            this.completed = true;
+            this.message = message;
+        }
+
     }
 }
