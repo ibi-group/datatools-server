@@ -23,6 +23,8 @@ import com.google.gson.GsonBuilder;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonSyntaxException;
+import gnu.trove.set.TIntSet;
+import gnu.trove.set.hash.TIntHashSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
@@ -245,37 +247,97 @@ public abstract class EditorController<T extends Entity> {
         ResultSet resultSet = statement.executeQuery(idCheckSql);
         // Keep track of number of records found with key field
         int size = 0;
-        Set<String> uniqueIds = new HashSet<>();
+        TIntSet uniqueIds = new TIntHashSet();
         while (resultSet.next()) {
-            String uniqueId = resultSet.getString(1);
+            int uniqueId = resultSet.getInt(1);
             uniqueIds.add(uniqueId);
             LOG.info("id: {}, name: {}", uniqueId, resultSet.getString(4));
             size++;
         }
-        if (size == 1) {
-            if (isCreating) {
-                // Under no circumstance should a entity have a conflict with existing key field.
-                throw new Exception("New entity's key field must not match existing value.");
+        if (size == 0 || (size == 1 && uniqueIds.contains(id))) {
+            // OK.
+            if (size == 0 && !isCreating) {
+                // FIXME: Need to update referencing tables because entity has changed ID.
+                // Entity key value is being changed to an entirely new one.  If there are entities that
+                // reference this value, we need to update them.
+                updateForeignReferences(id, keyValue, namespace, table, connection);
             }
-            if (!uniqueIds.contains(id.toString())) {
-                // ID for this entity has been updated to match some other entity's ID (conflict).
-                // If this condition is not met, the entity being updated is the same as the queried entity (no conflict).
-                throw new Exception("Entity ID must be unique.");
+        } else {
+            // Conflict. The different conflict conditions are outlined below.
+            if (size == 1) {
+                // There was one match found.
+                if (isCreating) {
+                    // Under no circumstance should a new entity have a conflict with existing key field.
+                    throw new Exception("New entity's key field must not match existing value.");
+                }
+                if (!uniqueIds.contains(id)) {
+                    // There are two circumstances we could encounter here.
+                    // 1. The key value for this entity has been updated to match some other entity's key value (conflict).
+                    // 2. The int ID provided in the request parameter does not match any rows in the table.
+                    throw new Exception("Key field must be unique and request parameter ID must exist.");
+                }
+            } else if (size > 1) {
+                // FIXME: Handle edge case where original data set contains duplicate values for key field and this is an
+                // attempt to rectify bad data.
+                LOG.warn("{} entity shares the same key field ({}={})! This is Bad!!", size, keyField, keyValue);
+                throw new Exception("More than one entity must not share the same id field");
             }
-        } else if (size > 1) {
-            // FIXME: Handle edge case where original data set contains duplicate values for key field and this is an
-            // attempt to rectify bad data.
-            LOG.warn("{} entity shares the same key field ({}={})! This is Bad!!", size, keyField, keyValue);
-            throw new Exception("More than one entity must not share the same id field");
-        } else if (size == 0 && !isCreating) {
-            // FIXME: update referencing tables.
-            // Entity key value is being changed to an entirely new one.  We need to update any entities that
-            // reference this value
-            LOG.info("Key being changed, but no matches. FIXME: need to update related entities.");
         }
     }
 
-    private long handleStatementExecution(Connection connection, PreparedStatement statement, boolean isCreating) {
+    /**
+     * Updates any foreign references that exist should a GTFS key field (e.g., stop_id or route_id) be updated via an
+     * HTTP request for a given integer ID. First, all GTFS tables are filtered to find referencing tables. Then records
+     * in these tables that match the old key value are modified to match the new key value.
+     */
+    private static void updateForeignReferences(Integer id, String newKeyValue, String namespace, Table table, Connection connection) throws Exception {
+        String keyField = table.getKeyFieldName();
+        String tableName = String.join(".", namespace, table.name);
+        LOG.info("Updating referencing entities.");
+        // Here we need to know about all of the tables that reference this key field. So we need to iterate
+        // over all of the tables and find the foreign refs.
+        Set<Table> referencingTables = new HashSet<>();
+        for (Table gtfsTable : Table.tablesInOrder) {
+            // IMPORTANT: Skip the table for the entity we're modifying or if loop table does not have field.
+            if (table.name.equals(gtfsTable.name) || !gtfsTable.hasField(keyField)) continue;
+            Field tableField = gtfsTable.getFieldForName(keyField);
+            // If field is not a foreign reference, continue. (This should probably never be the case because a field
+            // that shares the key field's name ought to refer to the key field.
+            if (!tableField.isForeignReference()) continue;
+            referencingTables.add(gtfsTable);
+        }
+        // If there are no referencing tables, there is no need to update any values.
+        if (referencingTables.size() == 0) return;
+        // First get the key value for the ID.
+        String selectIdSql = String.format("select %s from %s where id = %d", keyField, tableName, id);
+        LOG.info(selectIdSql);
+        Statement selectIdStatement = connection.createStatement();
+        ResultSet selectResults = selectIdStatement.executeQuery(selectIdSql);
+        String oldKeyValue = null;
+        while (selectResults.next()) {
+            oldKeyValue = selectResults.getString(1);
+        }
+        // There should always be
+        if (oldKeyValue == null) throw new Exception("Could not find entity for provided ID!");
+        for (Table referencingTable : referencingTables) {
+            // Update foreign references that have the old key value with the new key value.
+            String refTableName = String.join(".", namespace, referencingTable.name);
+            String updateRefSql = String.format("update %s set %s = '%s' where %s = '%s'", refTableName, keyField, newKeyValue, keyField, oldKeyValue);
+            LOG.info(updateRefSql);
+            Statement updateStatement = connection.createStatement();
+            int result = updateStatement.executeUpdate(updateRefSql);
+            if (result > 0) {
+                LOG.info("{} reference(s) in {} updated!", result, refTableName);
+            } else {
+                LOG.info("No references in {} found!", refTableName);
+            }
+        }
+    }
+
+    /**
+     * Handle executing a prepared statement and return the ID for the newly-generated or updated entity.
+     */
+    private static long handleStatementExecution(Connection connection, PreparedStatement statement, boolean isCreating) {
         try {
             // Log the SQL for the prepared statement
             LOG.info(statement.toString());
