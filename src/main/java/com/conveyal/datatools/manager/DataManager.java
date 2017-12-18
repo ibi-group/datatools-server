@@ -157,6 +157,9 @@ public class DataManager {
 
         // Editor routes
         if (isModuleEnabled("editor")) {
+
+            SnapshotController.register(EDITOR_API_PREFIX);
+
             String gtfs = IOUtils.toString(DataManager.class.getResourceAsStream("/gtfs/gtfs.yml"));
             gtfsConfig = yamlMapper.readTree(gtfs);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.AGENCY, DataManager.GTFS_DATA_SOURCE);
