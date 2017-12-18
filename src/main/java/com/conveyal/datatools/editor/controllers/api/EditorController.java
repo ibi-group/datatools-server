@@ -78,15 +78,6 @@ public abstract class EditorController<T extends Entity> {
         registerRoutes();
     }
 
-    private FeedSource getFeedSourceFromRequest(Request req) {
-        String feedId = req.queryParams("feedId");
-        FeedSource feedSource = Persistence.feedSources.getById(feedId);
-        if (feedSource == null) {
-            haltWithError(400, "Feed ID is invalid");
-        }
-        return feedSource;
-    }
-
     private void registerRoutes() {
         LOG.info("Registering editor routes for {}", ROOT_ROUTE);
         // Get single entity method
@@ -111,13 +102,13 @@ public abstract class EditorController<T extends Entity> {
     }
 
     private String deleteOne(Request req, Response res) {
-        FeedSource feedSource = getFeedSourceFromRequest(req);
+        String namespace = getNamespaceFromRequest(req);
         Connection connection;
         try {
             connection = datasource.getConnection();
             PreparedStatement statement =
-                    connection.prepareStatement(table.generateDeleteSql(feedSource.editorNamespace));
-            // FIXME: Handle cascading delete
+                    connection.prepareStatement(table.generateDeleteSql(namespace));
+            // FIXME: Handle cascading delete or constraints
             statement.setInt(1, Integer.parseInt(req.params("id")));
             LOG.info(statement.toString());
             // Execute query
@@ -152,7 +143,8 @@ public abstract class EditorController<T extends Entity> {
         try {
             connection = datasource.getConnection();
             // set x_branding_url to new s3 URL
-            String tableName = getTableNameFromRequest(req);
+            String namespace = getNamespaceFromRequest(req);
+            String tableName = String.join(".", namespace, table.name);
             String statementString = String.format("update %s set %s_branding_url = '%s' where id = %d", tableName, classToLowercase, url, id);
             PreparedStatement statement = connection.prepareStatement(statementString, Statement.RETURN_GENERATED_KEYS);
             handleStatementExecution(connection, statement, false);
@@ -190,12 +182,13 @@ public abstract class EditorController<T extends Entity> {
         JsonObject jsonObject = getJsonObjectFromRequest(req);
         // Parse the fields/values into a Field -> String map (drops ALL unknown fields)
         Map<Field, String> fieldStringMap = jsonToFieldStringMap(jsonObject);
-        String tableName = getTableNameFromRequest(req);
+        String namespace = getNamespaceFromRequest(req);
+        String tableName = String.join(".", namespace, table.name);
         Connection connection;
         try {
             connection = datasource.getConnection();
             // Ensure that the key field is unique and that referencing tables are updated if the value is updated.
-            ensureReferentialIntegrity(connection, jsonObject, isCreating, tableName, table.getKeyFieldName(), id);
+            ensureReferentialIntegrity(connection, jsonObject, namespace, table, id);
             // Collect field names for string joining from JsonObject.
             List<String> fieldNames = fieldStringMap.keySet().stream()
                     // If updating, add suffix for use in set clause
@@ -239,8 +232,11 @@ public abstract class EditorController<T extends Entity> {
      * both uniqueness and that referencing tables are appropriately updated.
      * @throws Exception
      */
-    private static void ensureReferentialIntegrity(Connection connection, JsonObject jsonObject, boolean isCreating, String tableName, String keyField, Integer id) throws Exception {
+    private static void ensureReferentialIntegrity(Connection connection, JsonObject jsonObject, String namespace, Table table, Integer id) throws Exception {
+        final boolean isCreating = id == null;
+        String keyField = table.getKeyFieldName();
         String keyValue = jsonObject.get(keyField).getAsString();
+        String tableName = String.join(".", namespace, table.name);
         // If updating key field, check that there is no ID conflict on value (e.g., stop_id or route_id)
         String idCheckSql = String.format("select * from %s where %s = '%s'", tableName, keyField, keyValue);
         LOG.info(idCheckSql);
@@ -309,16 +305,25 @@ public abstract class EditorController<T extends Entity> {
         return 0;
     }
 
-    private String getTableNameFromRequest(Request req) {
-        FeedSource feedSource = getFeedSourceFromRequest(req);
+    /**
+     * Get the namespace for the feed ID found in the request
+     */
+    private String getNamespaceFromRequest(Request req) {
+        String feedId = req.queryParams("feedId");
+        FeedSource feedSource = Persistence.feedSources.getById(feedId);
+        if (feedSource == null) {
+            haltWithError(400, "Feed ID is invalid");
+        }
         String namespace = feedSource.editorNamespace;
         if (namespace == null) {
             haltWithError(400, "Cannot edit feed that has not been snapshotted (namespace is null).");
         }
-        String tableName = String.join(".", namespace, table.name);
-        return tableName;
+        return namespace;
     }
 
+    /**
+     * Get integer entity ID from request.
+     */
     private Integer getIdFromRequest(Request req) {
         Integer id = null;
         // FIXME: what if a null value is specified in id param
@@ -360,48 +365,16 @@ public abstract class EditorController<T extends Entity> {
         return fieldStringMap;
     }
 
-    private T getEntityFromRequest(Request req) {
-        try {
-            if ("".equals(req.body())) {
-                haltWithError(400, "JSON body must not be empty");
-            }
-            T entity = (T) Base.mapper.readValue(req.body(), entityClass);
-            return entity;
-        } catch (IOException e) {
-            LOG.error("Could not read entity from JSON", e);
-            haltWithError(400, "Could not read entity from JSON.", e);
-        }
-        return null;
-    }
-
     // TODO add hooks
     abstract void getEntityHook(T entity);
     abstract void createEntityHook(T entity);
     abstract void updateEntityHook(T entity);
     abstract void deleteEntityHook(T entity);
 
-//    /**
-//     * Wrapper function to get entity without throwing SQL exception.
-//     */
-//    private T getEntity (TableReader table, String id) {
-//        try {
-//            return (T) table.get(id);
-//        } catch (Exception e) {
-//            LOG.error("Could not find entity: {}", e.getMessage());
-//            return null;
-//        }
-//    }
 
-    private Feed getFeedFromRequest(Request req) {
-        String feedId = req.queryParams("feedId");
-        FeedSource feedSource = Persistence.feedSources.getById(feedId);
-        if (feedSource == null) {
-            haltWithError(400, "Feed ID is invalid");
-        }
-        Feed feed = new Feed(DataManager.GTFS_DATA_SOURCE, feedSource.editorNamespace);
-        return feed;
-    }
-
+    /**
+     * Used to map SQL query ResultSet to JSON string response.
+     */
     private class ResultMapper {
         private final ObjectMapper objectMapper;
 
@@ -413,15 +386,15 @@ public abstract class EditorController<T extends Entity> {
         }
 
         // FIXME: does not filter with where clause on ID
-        public String getOne(Request req, Response res) {
-            FeedSource feedSource = getFeedSourceFromRequest(req);
+        String getOne(Request req, Response res) {
+            String namespace = getNamespaceFromRequest(req);
             Integer id = Integer.valueOf(req.params("id"));
             Connection connection = null;
             try {
                 connection = datasource.getConnection();
                 // FIXME: add where clause for single entity
                 PreparedStatement statement =
-                        connection.prepareStatement(table.generateSelectSql(feedSource.editorNamespace));
+                        connection.prepareStatement(table.generateSelectSql(namespace));
                 // Execute query
                 ResultSet resultset = statement.executeQuery();
 
@@ -440,13 +413,13 @@ public abstract class EditorController<T extends Entity> {
             return null;
         }
 
-        public String getAll(Request req, Response res) {
-            FeedSource feedSource = getFeedSourceFromRequest(req);
-            Connection connection = null;
+        String getAll(Request req, Response res) {
+            String namespace = getNamespaceFromRequest(req);
+            Connection connection;
             try {
                 connection = datasource.getConnection();
                 PreparedStatement statement =
-                        connection.prepareStatement(table.generateSelectSql(feedSource.editorNamespace));
+                        connection.prepareStatement(table.generateSelectSql(namespace));
                 // Execute query
                 ResultSet resultset = statement.executeQuery();
 
@@ -476,20 +449,20 @@ public abstract class EditorController<T extends Entity> {
         }
 
         @Override
-        public void serialize(ResultSet rs, JsonGenerator jgen, SerializerProvider provider) throws IOException {
+        public void serialize(ResultSet rs, JsonGenerator jsonGenerator, SerializerProvider provider) throws IOException {
 
             try {
-                ResultSetMetaData rsmd = rs.getMetaData();
-                int numColumns = rsmd.getColumnCount();
+                ResultSetMetaData resultSetMetaData = rs.getMetaData();
+                int numColumns = resultSetMetaData.getColumnCount();
                 String[] columnNames = new String[numColumns];
                 int[] columnTypes = new int[numColumns];
 
                 for (int i = 0; i < columnNames.length; i++) {
-                    columnNames[i] = rsmd.getColumnLabel(i + 1);
-                    columnTypes[i] = rsmd.getColumnType(i + 1);
+                    columnNames[i] = resultSetMetaData.getColumnLabel(i + 1);
+                    columnTypes[i] = resultSetMetaData.getColumnType(i + 1);
                 }
 
-                jgen.writeStartArray();
+                jsonGenerator.writeStartArray();
 
                 while (rs.next()) {
 
@@ -497,34 +470,34 @@ public abstract class EditorController<T extends Entity> {
                     long l;
                     double d;
 
-                    jgen.writeStartObject();
+                    jsonGenerator.writeStartObject();
 
                     for (int i = 0; i < columnNames.length; i++) {
 
-                        jgen.writeFieldName(columnNames[i]);
+                        jsonGenerator.writeFieldName(columnNames[i]);
                         switch (columnTypes[i]) {
 
                             case Types.INTEGER:
                                 l = rs.getInt(i + 1);
                                 if (rs.wasNull()) {
-                                    jgen.writeNull();
+                                    jsonGenerator.writeNull();
                                 } else {
-                                    jgen.writeNumber(l);
+                                    jsonGenerator.writeNumber(l);
                                 }
                                 break;
 
                             case Types.BIGINT:
                                 l = rs.getLong(i + 1);
                                 if (rs.wasNull()) {
-                                    jgen.writeNull();
+                                    jsonGenerator.writeNull();
                                 } else {
-                                    jgen.writeNumber(l);
+                                    jsonGenerator.writeNumber(l);
                                 }
                                 break;
 
                             case Types.DECIMAL:
                             case Types.NUMERIC:
-                                jgen.writeNumber(rs.getBigDecimal(i + 1));
+                                jsonGenerator.writeNumber(rs.getBigDecimal(i + 1));
                                 break;
 
                             case Types.FLOAT:
@@ -532,9 +505,9 @@ public abstract class EditorController<T extends Entity> {
                             case Types.DOUBLE:
                                 d = rs.getDouble(i + 1);
                                 if (rs.wasNull()) {
-                                    jgen.writeNull();
+                                    jsonGenerator.writeNull();
                                 } else {
-                                    jgen.writeNumber(d);
+                                    jsonGenerator.writeNumber(d);
                                 }
                                 break;
 
@@ -542,52 +515,52 @@ public abstract class EditorController<T extends Entity> {
                             case Types.VARCHAR:
                             case Types.LONGNVARCHAR:
                             case Types.LONGVARCHAR:
-                                jgen.writeString(rs.getString(i + 1));
+                                jsonGenerator.writeString(rs.getString(i + 1));
                                 break;
 
                             case Types.BOOLEAN:
                             case Types.BIT:
                                 b = rs.getBoolean(i + 1);
                                 if (rs.wasNull()) {
-                                    jgen.writeNull();
+                                    jsonGenerator.writeNull();
                                 } else {
-                                    jgen.writeBoolean(b);
+                                    jsonGenerator.writeBoolean(b);
                                 }
                                 break;
 
                             case Types.BINARY:
                             case Types.VARBINARY:
                             case Types.LONGVARBINARY:
-                                jgen.writeBinary(rs.getBytes(i + 1));
+                                jsonGenerator.writeBinary(rs.getBytes(i + 1));
                                 break;
 
                             case Types.TINYINT:
                             case Types.SMALLINT:
                                 l = rs.getShort(i + 1);
                                 if (rs.wasNull()) {
-                                    jgen.writeNull();
+                                    jsonGenerator.writeNull();
                                 } else {
-                                    jgen.writeNumber(l);
+                                    jsonGenerator.writeNumber(l);
                                 }
                                 break;
 
                             case Types.DATE:
-                                provider.defaultSerializeDateValue(rs.getDate(i + 1), jgen);
+                                provider.defaultSerializeDateValue(rs.getDate(i + 1), jsonGenerator);
                                 break;
 
                             case Types.TIMESTAMP:
-                                provider.defaultSerializeDateValue(rs.getTime(i + 1), jgen);
+                                provider.defaultSerializeDateValue(rs.getTime(i + 1), jsonGenerator);
                                 break;
 
                             case Types.BLOB:
                                 Blob blob = rs.getBlob(i);
-                                provider.defaultSerializeValue(blob.getBinaryStream(), jgen);
+                                provider.defaultSerializeValue(blob.getBinaryStream(), jsonGenerator);
                                 blob.free();
                                 break;
 
                             case Types.CLOB:
                                 Clob clob = rs.getClob(i);
-                                provider.defaultSerializeValue(clob.getCharacterStream(), jgen);
+                                provider.defaultSerializeValue(clob.getCharacterStream(), jsonGenerator);
                                 clob.free();
                                 break;
 
@@ -605,15 +578,15 @@ public abstract class EditorController<T extends Entity> {
 
                             case Types.JAVA_OBJECT:
                             default:
-                                provider.defaultSerializeValue(rs.getObject(i + 1), jgen);
+                                provider.defaultSerializeValue(rs.getObject(i + 1), jsonGenerator);
                                 break;
                         }
                     }
 
-                    jgen.writeEndObject();
+                    jsonGenerator.writeEndObject();
                 }
 
-                jgen.writeEndArray();
+                jsonGenerator.writeEndArray();
 
             } catch (SQLException e) {
                 throw new IOException(e);
