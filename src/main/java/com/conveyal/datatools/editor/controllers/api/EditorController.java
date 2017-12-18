@@ -115,10 +115,11 @@ public abstract class EditorController<T extends Entity> {
         Connection connection;
         try {
             connection = datasource.getConnection();
-            PreparedStatement statement =
-                    connection.prepareStatement(table.generateDeleteSql(namespace));
-            // FIXME: Handle cascading delete or constraints
+            // Handle "cascading" delete or constraints on deleting entities that other entities depend on
+            // (e.g., keep a calendar from being deleted if trips reference it).
+            // FIXME: actually add "cascading"? Currently, it just deletes one level down.
             deleteFromReferencingTables(namespace, table, connection, id);
+            PreparedStatement statement = connection.prepareStatement(table.generateDeleteSql(namespace));
             statement.setInt(1, id);
             LOG.info(statement.toString());
             // Execute query
@@ -354,7 +355,6 @@ public abstract class EditorController<T extends Entity> {
                 // Entity key value is being changed to an entirely new one.  If there are entities that
                 // reference this value, we need to update them.
                 updateReferencingTables(namespace, table, connection, id, keyValue);
-//                updateForeignReferences(id, keyValue, namespace, table, connection);
             }
         } else {
             // Conflict. The different conflict conditions are outlined below.
