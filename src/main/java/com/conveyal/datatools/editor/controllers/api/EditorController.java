@@ -1,16 +1,16 @@
 package com.conveyal.datatools.editor.controllers.api;
 
 import com.conveyal.datatools.common.utils.S3Utils;
-import com.conveyal.datatools.editor.controllers.Base;
-import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
-import com.conveyal.gtfs.loader.Feed;
 import com.conveyal.gtfs.loader.Field;
 import com.conveyal.gtfs.loader.Table;
+import com.conveyal.gtfs.model.Agency;
+import com.conveyal.gtfs.model.Calendar;
 import com.conveyal.gtfs.model.Entity;
+import com.conveyal.gtfs.model.FareAttribute;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonSerializer;
@@ -58,10 +58,8 @@ import static spark.Spark.post;
 public abstract class EditorController<T extends Entity> {
     private static final String ID_PARAM = "/:id";
     private final String ROOT_ROUTE;
-    private final Class entityClass;
     private static final String SECURE = "secure/";
     private static final Logger LOG = LoggerFactory.getLogger(EditorController.class);
-    private final String apiPrefix;
     private DataSource datasource;
     private final String classToLowercase;
     public static final JsonManager<Entity> json = new JsonManager<>(Entity.class, JsonViews.UserInterface.class);
@@ -69,17 +67,25 @@ public abstract class EditorController<T extends Entity> {
     private final Table table;
     private Gson gson = new GsonBuilder().setPrettyPrinting().create();
 
+    /**
+     * Enum containing available methods for updating in SQL.
+     */
+    private enum SqlMethod {
+        DELETE, UPDATE, CREATE
+    }
+
     EditorController(String apiPrefix, Table table, DataSource datasource) {
         this.table = table;
-        this.entityClass = table.getEntityClass();
-        this.apiPrefix = apiPrefix;
         this.datasource = datasource;
-        this.classToLowercase = entityClass.getSimpleName().toLowerCase();
+        this.classToLowercase = table.getEntityClass().getSimpleName().toLowerCase();
         this.ROOT_ROUTE = apiPrefix + SECURE + classToLowercase;
         this.resultMapper = new ResultMapper();
         registerRoutes();
     }
 
+    /**
+     * Add static HTTP endpoints to Spark static instance.
+     */
     private void registerRoutes() {
         LOG.info("Registering editor routes for {}", ROOT_ROUTE);
         // Get single entity method
@@ -105,13 +111,15 @@ public abstract class EditorController<T extends Entity> {
 
     private String deleteOne(Request req, Response res) {
         String namespace = getNamespaceFromRequest(req);
+        int id = getIdFromRequest(req);
         Connection connection;
         try {
             connection = datasource.getConnection();
             PreparedStatement statement =
                     connection.prepareStatement(table.generateDeleteSql(namespace));
             // FIXME: Handle cascading delete or constraints
-            statement.setInt(1, Integer.parseInt(req.params("id")));
+            deleteFromReferencingTables(namespace, table, connection, id);
+            statement.setInt(1, id);
             LOG.info(statement.toString());
             // Execute query
             int result = statement.executeUpdate();
@@ -121,11 +129,98 @@ public abstract class EditorController<T extends Entity> {
             }
             // FIXME: change return message based on result value
             return formatJSON(String.valueOf(result), 200);
-        } catch (SQLException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             haltWithError(400, "Error deleting entity", e);
         }
         return null;
+    }
+
+    /**
+     * Delete entities from any referencing tables (if required). This method is defined for convenience and clarity, but
+     * essentially just runs updateReferencingTables with a null value for newKeyValue param.
+     */
+    private static void deleteFromReferencingTables(String namespace, Table table, Connection connection, int id) throws Exception {
+        updateReferencingTables(namespace, table, connection, id, null);
+    }
+
+    /**
+     * Updates any foreign references that exist should a GTFS key field (e.g., stop_id or route_id) be updated via an
+     * HTTP request for a given integer ID. First, all GTFS tables are filtered to find referencing tables. Then records
+     * in these tables that match the old key value are modified to match the new key value.
+     *
+     * The function determines whether the method is update or delete depending on the presence of the newKeyValue
+     * parameter (if null, the method is DELETE). Custom logic/hooks could be added here to check if there are entities
+     * referencing the entity being updated.
+     *
+     * FIXME: add custom logic/hooks. Right now entity table checks are hard-coded in (e.g., if Agency, skip all. OR if
+     * Calendar, rollback transaction if there are referencing trips).
+     *
+     * FIXME: Do we need to clarify the impact of the direction of the relationship (e.g., if we delete a trip, that should
+     * not necessarily delete a shape that is shared by multiple trips)? I think not because we are skipping foreign refs
+     * found in the table for the entity being updated/deleted. [Leaving this comment in place for now though.]
+     */
+    private static void updateReferencingTables(String namespace, Table table, Connection connection, int id, String newKeyValue) throws Exception {
+        String keyField = table.getKeyFieldName();
+        Class<? extends Entity> entityClass = table.getEntityClass();
+        // Determine method (update vs. delete) depending on presence of newKeyValue field.
+        SqlMethod sqlMethod = newKeyValue != null ? SqlMethod.UPDATE : SqlMethod.DELETE;
+        Set<Table> referencingTables = getReferencingTables(table);
+        // If there are no referencing tables, there is no need to update any values (e.g., .
+        if (referencingTables.size() == 0) return;
+        String keyValue = getKeyValueForId(id, namespace, table, connection);
+        if (keyValue == null) {
+            // FIXME: should we still check referencing tables for null value?
+            LOG.warn("Entity {} to {} has null value for {}. Skipping references check.", id, sqlMethod, keyField);
+            return;
+        }
+
+        if (sqlMethod.equals(SqlMethod.DELETE) && entityClass.equals(Agency.class)) {
+            // Do not delete routes that reference agency being updated. Currently, this would not cascade down to trips
+            // and patterns, so referential integrity would be severely affected. (Also, agency_id is a "soft" reference
+            // and is more of a tag rather than a foreign key that matters much).
+            return;
+        }
+        for (Table referencingTable : referencingTables) {
+            // Update/delete foreign references that have match the key value.
+            String refTableName = String.join(".", namespace, referencingTable.name);
+            String updateRefSql = getUpdateReferencesSql(sqlMethod, refTableName, keyField, keyValue, newKeyValue);
+            LOG.info(updateRefSql);
+            Statement updateStatement = connection.createStatement();
+            int result = updateStatement.executeUpdate(updateRefSql);
+            if (result > 0) {
+                // FIXME: is this where a delete hook should go? (E.g., CalendarController subclass would override
+                // deleteEntityHook).
+                if (sqlMethod.equals(SqlMethod.DELETE) && entityClass.equals(Calendar.class)) {
+//                    deleteEntityHook();
+                    // Calendar must not have any referencing trips.
+                    // FIXME: use switch or some field on Field to indicate constraint on Calendar (and other tables)?
+                    connection.rollback();
+                    String message = String.format("Cannot delete calendar %s=%s. %d trips reference this calendar.", keyField, keyValue, result);
+                    LOG.warn(message);
+                    throw new Exception(message);
+                } else if (sqlMethod.equals(SqlMethod.DELETE) && entityClass.equals(FareAttribute.class)) {
+                    // FIXME: Should there be other conditions that throw exceptions on delete (what about other soft references)?
+                }
+                LOG.info("{} reference(s) in {} {}D!", result, refTableName, sqlMethod);
+            } else {
+                LOG.info("No references in {} found!", refTableName);
+            }
+        }
+    }
+
+    /**
+     * Constructs SQL string based on method provided.
+     */
+    private static String getUpdateReferencesSql(SqlMethod sqlMethod, String refTableName, String keyField, String keyValue, String newKeyValue) throws Exception {
+        switch (sqlMethod) {
+            case DELETE:
+                return String.format("delete from %s where %s = '%s'", refTableName, keyField, keyValue);
+            case UPDATE:
+                return String.format("update %s set %s = '%s' where %s = '%s'", refTableName, keyField, newKeyValue, keyField, keyValue);
+            default:
+                throw new Exception("SQL Method must be DELETE or UPDATE.");
+        }
     }
 
     private String uploadEntityBranding (Request req, Response res) {
@@ -168,8 +263,7 @@ public abstract class EditorController<T extends Entity> {
             LOG.error("Bad JSON syntax", e);
             haltWithError(400, "Bad JSON syntax", e);
         }
-        JsonObject jsonObject = jsonElement.getAsJsonObject();
-        return jsonObject;
+        return jsonElement.getAsJsonObject();
     }
 
     /**
@@ -232,7 +326,6 @@ public abstract class EditorController<T extends Entity> {
     /**
      * Checks for modification of GTFS key field (e.g., stop_id, route_id) in supplied JSON object and ensures
      * both uniqueness and that referencing tables are appropriately updated.
-     * @throws Exception
      */
     private static void ensureReferentialIntegrity(Connection connection, JsonObject jsonObject, String namespace, Table table, Integer id) throws Exception {
         final boolean isCreating = id == null;
@@ -260,7 +353,8 @@ public abstract class EditorController<T extends Entity> {
                 // FIXME: Need to update referencing tables because entity has changed ID.
                 // Entity key value is being changed to an entirely new one.  If there are entities that
                 // reference this value, we need to update them.
-                updateForeignReferences(id, keyValue, namespace, table, connection);
+                updateReferencingTables(namespace, table, connection, id, keyValue);
+//                updateForeignReferences(id, keyValue, namespace, table, connection);
             }
         } else {
             // Conflict. The different conflict conditions are outlined below.
@@ -286,16 +380,10 @@ public abstract class EditorController<T extends Entity> {
     }
 
     /**
-     * Updates any foreign references that exist should a GTFS key field (e.g., stop_id or route_id) be updated via an
-     * HTTP request for a given integer ID. First, all GTFS tables are filtered to find referencing tables. Then records
-     * in these tables that match the old key value are modified to match the new key value.
+     * Finds the tables that reference
      */
-    private static void updateForeignReferences(Integer id, String newKeyValue, String namespace, Table table, Connection connection) throws Exception {
+    private static Set<Table> getReferencingTables(Table table) {
         String keyField = table.getKeyFieldName();
-        String tableName = String.join(".", namespace, table.name);
-        LOG.info("Updating referencing entities.");
-        // Here we need to know about all of the tables that reference this key field. So we need to iterate
-        // over all of the tables and find the foreign refs.
         Set<Table> referencingTables = new HashSet<>();
         for (Table gtfsTable : Table.tablesInOrder) {
             // IMPORTANT: Skip the table for the entity we're modifying or if loop table does not have field.
@@ -306,32 +394,24 @@ public abstract class EditorController<T extends Entity> {
             if (!tableField.isForeignReference()) continue;
             referencingTables.add(gtfsTable);
         }
-        // If there are no referencing tables, there is no need to update any values.
-        if (referencingTables.size() == 0) return;
-        // First get the key value for the ID.
+        return referencingTables;
+    }
+
+    /**
+     * For a given integer ID, return the key field (e.g., stop_id) of that entity.
+     */
+    private static String getKeyValueForId(int id, String namespace, Table table, Connection connection) throws SQLException {
+        String tableName = String.join(".", namespace, table.name);
+        String keyField = table.getKeyFieldName();
         String selectIdSql = String.format("select %s from %s where id = %d", keyField, tableName, id);
         LOG.info(selectIdSql);
         Statement selectIdStatement = connection.createStatement();
         ResultSet selectResults = selectIdStatement.executeQuery(selectIdSql);
-        String oldKeyValue = null;
+        String keyValue = null;
         while (selectResults.next()) {
-            oldKeyValue = selectResults.getString(1);
+            keyValue = selectResults.getString(1);
         }
-        // There should always be
-        if (oldKeyValue == null) throw new Exception("Could not find entity for provided ID!");
-        for (Table referencingTable : referencingTables) {
-            // Update foreign references that have the old key value with the new key value.
-            String refTableName = String.join(".", namespace, referencingTable.name);
-            String updateRefSql = String.format("update %s set %s = '%s' where %s = '%s'", refTableName, keyField, newKeyValue, keyField, oldKeyValue);
-            LOG.info(updateRefSql);
-            Statement updateStatement = connection.createStatement();
-            int result = updateStatement.executeUpdate(updateRefSql);
-            if (result > 0) {
-                LOG.info("{} reference(s) in {} updated!", result, refTableName);
-            } else {
-                LOG.info("No references in {} found!", refTableName);
-            }
-        }
+        return keyValue;
     }
 
     /**
@@ -412,11 +492,11 @@ public abstract class EditorController<T extends Entity> {
         for (Map.Entry<String, JsonElement> entry : jsonObject.entrySet()) {
             // TODO: clean field names? Currently, unknown fields are just skipped, but in the future, if a bad
             // field name is found, we will want to throw an exception, log an error, and halt.
-            Field field = table.getFieldForName(entry.getKey());
-            if (field.isUnknown()) {
+            if (!table.hasField(entry.getKey())) {
                 // Skip all unknown fields (this includes id field because it is not listed in table fields)
                 continue;
             }
+            Field field = table.getFieldForName(entry.getKey());
             JsonElement value = entry.getValue();
             // FIXME: need to be able to set fields to null and handle empty strings -> null
             if (!value.isJsonNull()) {
