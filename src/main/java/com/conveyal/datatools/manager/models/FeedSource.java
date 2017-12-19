@@ -158,6 +158,9 @@ public class FeedSource extends Model implements Cloneable {
         HttpURLConnection conn;
         try {
             conn = (HttpURLConnection) url.openConnection();
+            // Set user agent request header in order to avoid 403 Forbidden response from some servers.
+            // https://stackoverflow.com/questions/13670692/403-forbidden-with-java-but-not-web-browser
+            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.95 Safari/537.11");
         } catch (Exception e) {
             String message = String.format("Unable to open connection to %s; not fetching feed %s", url, this.name);
             LOG.error(message);
@@ -177,7 +180,9 @@ public class FeedSource extends Model implements Cloneable {
         try {
             conn.connect();
             String message;
-            switch (conn.getResponseCode()) {
+            int responseCode = conn.getResponseCode();
+            LOG.info("Fetch feed response code={}", responseCode);
+            switch (responseCode) {
                 case HttpURLConnection.HTTP_NOT_MODIFIED:
                     message = String.format("Feed %s has not been modified", this.name);
                     LOG.warn(message);
@@ -192,7 +197,7 @@ public class FeedSource extends Model implements Cloneable {
                     newGtfsFile = version.newGtfsFile(conn.getInputStream());
                     break;
                 default:
-                    message = String.format("HTTP status (%d: %s) retrieving %s feed", conn.getResponseCode(), conn.getResponseMessage(), this.name);
+                    message = String.format("HTTP status (%d: %s) retrieving %s feed", responseCode, conn.getResponseMessage(), this.name);
                     LOG.error(message);
                     status.update(true, message, 100.0);
                     return null;
