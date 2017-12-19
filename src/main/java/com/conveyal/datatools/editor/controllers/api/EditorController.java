@@ -11,6 +11,7 @@ import com.conveyal.gtfs.model.Agency;
 import com.conveyal.gtfs.model.Calendar;
 import com.conveyal.gtfs.model.Entity;
 import com.conveyal.gtfs.model.FareAttribute;
+import com.conveyal.gtfs.model.Stop;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonSerializer;
@@ -175,13 +176,6 @@ public abstract class EditorController<T extends Entity> {
             LOG.warn("Entity {} to {} has null value for {}. Skipping references check.", id, sqlMethod, keyField);
             return;
         }
-
-        if (sqlMethod.equals(SqlMethod.DELETE) && entityClass.equals(Agency.class)) {
-            // Do not delete routes that reference agency being updated. Currently, this would not cascade down to trips
-            // and patterns, so referential integrity would be severely affected. (Also, agency_id is a "soft" reference
-            // and is more of a tag rather than a foreign key that matters much).
-            return;
-        }
         for (Table referencingTable : referencingTables) {
             // Update/delete foreign references that have match the key value.
             String refTableName = String.join(".", namespace, referencingTable.name);
@@ -192,16 +186,30 @@ public abstract class EditorController<T extends Entity> {
             if (result > 0) {
                 // FIXME: is this where a delete hook should go? (E.g., CalendarController subclass would override
                 // deleteEntityHook).
-                if (sqlMethod.equals(SqlMethod.DELETE) && entityClass.equals(Calendar.class)) {
 //                    deleteEntityHook();
-                    // Calendar must not have any referencing trips.
-                    // FIXME: use switch or some field on Field to indicate constraint on Calendar (and other tables)?
-                    connection.rollback();
-                    String message = String.format("Cannot delete calendar %s=%s. %d trips reference this calendar.", keyField, keyValue, result);
-                    LOG.warn(message);
-                    throw new Exception(message);
-                } else if (sqlMethod.equals(SqlMethod.DELETE) && entityClass.equals(FareAttribute.class)) {
-                    // FIXME: Should there be other conditions that throw exceptions on delete (what about other soft references)?
+                if (sqlMethod.equals(SqlMethod.DELETE)) {
+                    if (entityClass.equals(Calendar.class)) {
+                        // Calendar must not have any referencing trips.
+                        // FIXME: use switch or some field on Field to indicate constraint on Calendar (and other tables)?
+                        connection.rollback();
+                        String message = String.format("Cannot delete calendar %s=%s. %d trips reference this calendar.", keyField, keyValue, result);
+                        LOG.warn(message);
+                        throw new Exception(message);
+                    } else if (entityClass.equals(FareAttribute.class)) {
+                        // FIXME: Should there be other conditions that throw exceptions on delete (what about other soft references)?
+                    } else if (entityClass.equals(Stop.class)) {
+                        // Stop must not have any referencing trip patterns / pattern stops
+                        connection.rollback();
+                        String message = String.format("Cannot delete stop %s=%s. %d trip patterns reference this stop.", keyField, keyValue, result);
+                        LOG.warn(message);
+                        throw new Exception(message);
+                    } else if (entityClass.equals(Agency.class)) {
+                        // Agency must not have any referencing routes
+                        connection.rollback();
+                        String message = String.format("Cannot delete agency %s=%s. %d routes reference this agency.", keyField, keyValue, result);
+                        LOG.warn(message);
+                        throw new Exception(message);
+                    }
                 }
                 LOG.info("{} reference(s) in {} {}D!", result, refTableName, sqlMethod);
             } else {
