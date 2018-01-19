@@ -59,12 +59,13 @@ public class ProcessSingleFeedJob extends MonitorableJob {
         addNextJob(new ValidateFeedJob(feedVersion, owner));
 
         // Use this FeedVersion to seed Editor DB (provided no snapshots for feed already exist).
-        if(DataManager.isModuleEnabled("editor")) {
-            // chain snapshot-creation job if no snapshots currently exist for feed
-            if (Snapshot.getSnapshots(feedVersion.feedSourceId).size() == 0) {
-                addNextJob(new ProcessGtfsSnapshotMerge(feedVersion, owner));
-            }
-        }
+        // FIXME should this happen for SQL db feeds also?
+//        if(DataManager.isModuleEnabled("editor")) {
+//            // chain snapshot-creation job if no snapshots currently exist for feed
+//            if (Snapshot.getSnapshots(feedVersion.feedSourceId).size() == 0) {
+//                addNextJob(new ProcessGtfsSnapshotMerge(feedVersion, owner));
+//            }
+//        }
 
         // chain on a network builder job, if applicable
         if(DataManager.isModuleEnabled("r5_network")) {

@@ -28,6 +28,7 @@ import java.net.URL;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
@@ -116,6 +117,8 @@ public class FeedSource extends Model implements Cloneable {
     public String publishedVersionId;
 
     public String editorNamespace;
+
+    public List<Snapshot> editorSnapshots;
 
     /**
      * Create a new feed.
@@ -348,6 +351,15 @@ public class FeedSource extends Model implements Cloneable {
     @JsonIgnore
     public Collection<FeedVersion> retrieveFeedVersions() {
         return Persistence.feedVersions.getFiltered(eq("feedSourceId", this.id));
+    }
+
+    /**
+     * Get all of the snapshots for this source
+     * @return collection of snapshots
+     */
+    @JsonIgnore
+    public Collection<Snapshot> retrieveSnapshots() {
+        return Persistence.snapshots.getFiltered(eq("feedSourceId", this.id));
     }
 
     @JsonView(JsonViews.UserInterface.class)
