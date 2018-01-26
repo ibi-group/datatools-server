@@ -44,6 +44,7 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithError;
+import static com.conveyal.datatools.manager.auth.Auth0Connection.logRequest;
 import static spark.Spark.*;
 
 /**
@@ -165,7 +166,8 @@ public class DataManager {
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.AGENCY, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.CALENDAR, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.FARE_ATTRIBUTES, DataManager.GTFS_DATA_SOURCE);
-            // FIXME: need fare, feedInfo, pattern, scheduleException, and trip Tables and Controllers
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.FEED_INFO, DataManager.GTFS_DATA_SOURCE);
+            // FIXME: need scheduleException Tables and Controllers
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.ROUTES, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.PATTERNS, DataManager.GTFS_DATA_SOURCE);
 //            new StopController(EDITOR_API_PREFIX, DataManager.GTFS_DATA_SOURCE);
@@ -195,11 +197,11 @@ public class DataManager {
         if (isModuleEnabled("dump")) {
             DumpController.register("/");
         }
-
         before(EDITOR_API_PREFIX + "secure/*", ((request, response) -> {
             Auth0Connection.checkUser(request);
             Auth0Connection.checkEditPrivileges(request);
         }));
+
 
         before(API_PREFIX + "secure/*", (request, response) -> {
             if(request.requestMethod().equals("OPTIONS")) return;
@@ -207,14 +209,17 @@ public class DataManager {
         });
 
         // FIXME: add auth check for gtfs-api. Should access to certain feeds be restricted by feedId or namespace?
-//        before(GTFS_API_PREFIX + "*", (request, response) -> {
-//            if(request.requestMethod().equals("OPTIONS")) return;
-//            Auth0Connection.checkUser(request);
-//        });
+        //        before(GTFS_API_PREFIX + "*", (request, response) -> {
+        //            if(request.requestMethod().equals("OPTIONS")) return;
+        //            Auth0Connection.checkUser(request);
+        //        });
+
+//        logRequest(getConfigPropertyAsText("application.public_url"), API_PREFIX);
+//        logRequest(getConfigPropertyAsText("application.public_url"), EDITOR_API_PREFIX);
 
         // return "application/json" for all API routes
         after(API_PREFIX + "*", (request, response) -> {
-//            LOG.info(request.pathInfo());
+            //            LOG.info(request.pathInfo());
             response.type("application/json");
             response.header("Content-Encoding", "gzip");
         });

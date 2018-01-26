@@ -50,7 +50,6 @@ public abstract class EditorController<T extends Entity> {
     private DataSource datasource;
     private final String classToLowercase;
     public static final JsonManager<Entity> json = new JsonManager<>(Entity.class, JsonViews.UserInterface.class);
-    private final ResultMapper resultMapper;
     private final Table table;
 
     EditorController(String apiPrefix, Table table, DataSource datasource) {
@@ -58,7 +57,6 @@ public abstract class EditorController<T extends Entity> {
         this.datasource = datasource;
         this.classToLowercase = table.getEntityClass().getSimpleName().toLowerCase();
         this.ROOT_ROUTE = apiPrefix + SECURE + classToLowercase;
-        this.resultMapper = new ResultMapper();
         registerRoutes();
     }
 
@@ -67,14 +65,10 @@ public abstract class EditorController<T extends Entity> {
      */
     private void registerRoutes() {
         LOG.info("Registering editor routes for {}", ROOT_ROUTE);
-        // Get single entity method
-        // TODO: Delete unneeded query?
-        get(ROOT_ROUTE + ID_PARAM, resultMapper::getOne, json::write);
+        // Note, get single and multiple entity methods are handled by GraphQLGtfsSchema class. Only create, update, and
+        // delete HTTP endpoints are handled as REST. TODO: migrate these REST endpoints to GraphQL mutations.
         // Options response for CORS
         options(ROOT_ROUTE, (q, s) -> "");
-        // Get all entities request
-        // TODO: Delete unneeded query?
-        get(ROOT_ROUTE, resultMapper::getAll, json::write);
         // Create entity request
         post(ROOT_ROUTE, this::createOrUpdate, json::write);
         // Update entity request
@@ -146,7 +140,7 @@ public abstract class EditorController<T extends Entity> {
         jsonObject.addProperty(String.format("%s_branding_url", classToLowercase), url);
         try {
             return tableWriter.update(id, jsonObject.getAsString());
-        } catch (SQLException e) {
+        } catch (SQLException | IOException e) {
             e.printStackTrace();
             haltWithError(400, "Could not update branding url", e);
         }
@@ -220,228 +214,4 @@ public abstract class EditorController<T extends Entity> {
     abstract void createEntityHook(T entity);
     abstract void updateEntityHook(T entity);
     abstract void deleteEntityHook(T entity);
-
-
-    /**
-     * Used to map SQL query ResultSet to JSON string response.
-     */
-    private class ResultMapper {
-        private final ObjectMapper objectMapper;
-
-        ResultMapper () {
-            SimpleModule module = new SimpleModule();
-            module.addSerializer(new ResultSetSerializer());
-            objectMapper = new ObjectMapper();
-            objectMapper.registerModule(module);
-        }
-
-        // FIXME: does not filter with where clause on ID
-        String getOne(Request req, Response res) {
-            String namespace = getNamespaceFromRequest(req);
-            Integer id = Integer.valueOf(req.params("id"));
-            Connection connection = null;
-            try {
-                connection = datasource.getConnection();
-                // FIXME: add where clause for single entity
-                PreparedStatement statement =
-                        connection.prepareStatement(table.generateSelectSql(namespace));
-                // Execute query
-                ResultSet resultset = statement.executeQuery();
-
-                // Use the DataBind Api here
-                ObjectNode objectNode = objectMapper.createObjectNode();
-
-                // put the resultset in a containing structure
-                objectNode.putPOJO("data", resultset);
-
-                // generate all
-                return objectMapper.writeValueAsString(objectNode.get("data"));
-            } catch (SQLException | JsonProcessingException e) {
-                e.printStackTrace();
-                haltWithError(400, "Error fetching entities", e);
-            }
-            return null;
-        }
-
-        String getAll(Request req, Response res) {
-            String namespace = getNamespaceFromRequest(req);
-            Connection connection;
-            try {
-                connection = datasource.getConnection();
-                PreparedStatement statement =
-                        connection.prepareStatement(table.generateSelectSql(namespace));
-                // Execute query
-                ResultSet resultset = statement.executeQuery();
-
-                // Use the DataBind Api here
-                ObjectNode objectNode = objectMapper.createObjectNode();
-
-                // put the resultset in a containing structure
-                objectNode.putPOJO("data", resultset);
-
-                // generate all
-                return objectMapper.writeValueAsString(objectNode.get("data"));
-            } catch (SQLException | JsonProcessingException e) {
-                e.printStackTrace();
-                haltWithError(400, "Error fetching entities", e);
-            }
-            return null;
-        }
-    }
-
-    private class ResultSetSerializer extends JsonSerializer<ResultSet> {
-
-
-
-        @Override
-        public Class<ResultSet> handledType() {
-            return ResultSet.class;
-        }
-
-        @Override
-        public void serialize(ResultSet rs, JsonGenerator jsonGenerator, SerializerProvider provider) throws IOException {
-
-            try {
-                ResultSetMetaData resultSetMetaData = rs.getMetaData();
-                int numColumns = resultSetMetaData.getColumnCount();
-                String[] columnNames = new String[numColumns];
-                int[] columnTypes = new int[numColumns];
-
-                for (int i = 0; i < columnNames.length; i++) {
-                    columnNames[i] = resultSetMetaData.getColumnLabel(i + 1);
-                    columnTypes[i] = resultSetMetaData.getColumnType(i + 1);
-                }
-
-                jsonGenerator.writeStartArray();
-
-                while (rs.next()) {
-
-                    boolean b;
-                    long l;
-                    double d;
-
-                    jsonGenerator.writeStartObject();
-
-                    for (int i = 0; i < columnNames.length; i++) {
-
-                        jsonGenerator.writeFieldName(columnNames[i]);
-                        switch (columnTypes[i]) {
-
-                            case Types.INTEGER:
-                                l = rs.getInt(i + 1);
-                                if (rs.wasNull()) {
-                                    jsonGenerator.writeNull();
-                                } else {
-                                    jsonGenerator.writeNumber(l);
-                                }
-                                break;
-
-                            case Types.BIGINT:
-                                l = rs.getLong(i + 1);
-                                if (rs.wasNull()) {
-                                    jsonGenerator.writeNull();
-                                } else {
-                                    jsonGenerator.writeNumber(l);
-                                }
-                                break;
-
-                            case Types.DECIMAL:
-                            case Types.NUMERIC:
-                                jsonGenerator.writeNumber(rs.getBigDecimal(i + 1));
-                                break;
-
-                            case Types.FLOAT:
-                            case Types.REAL:
-                            case Types.DOUBLE:
-                                d = rs.getDouble(i + 1);
-                                if (rs.wasNull()) {
-                                    jsonGenerator.writeNull();
-                                } else {
-                                    jsonGenerator.writeNumber(d);
-                                }
-                                break;
-
-                            case Types.NVARCHAR:
-                            case Types.VARCHAR:
-                            case Types.LONGNVARCHAR:
-                            case Types.LONGVARCHAR:
-                                jsonGenerator.writeString(rs.getString(i + 1));
-                                break;
-
-                            case Types.BOOLEAN:
-                            case Types.BIT:
-                                b = rs.getBoolean(i + 1);
-                                if (rs.wasNull()) {
-                                    jsonGenerator.writeNull();
-                                } else {
-                                    jsonGenerator.writeBoolean(b);
-                                }
-                                break;
-
-                            case Types.BINARY:
-                            case Types.VARBINARY:
-                            case Types.LONGVARBINARY:
-                                jsonGenerator.writeBinary(rs.getBytes(i + 1));
-                                break;
-
-                            case Types.TINYINT:
-                            case Types.SMALLINT:
-                                l = rs.getShort(i + 1);
-                                if (rs.wasNull()) {
-                                    jsonGenerator.writeNull();
-                                } else {
-                                    jsonGenerator.writeNumber(l);
-                                }
-                                break;
-
-                            case Types.DATE:
-                                provider.defaultSerializeDateValue(rs.getDate(i + 1), jsonGenerator);
-                                break;
-
-                            case Types.TIMESTAMP:
-                                provider.defaultSerializeDateValue(rs.getTime(i + 1), jsonGenerator);
-                                break;
-
-                            case Types.BLOB:
-                                Blob blob = rs.getBlob(i);
-                                provider.defaultSerializeValue(blob.getBinaryStream(), jsonGenerator);
-                                blob.free();
-                                break;
-
-                            case Types.CLOB:
-                                Clob clob = rs.getClob(i);
-                                provider.defaultSerializeValue(clob.getCharacterStream(), jsonGenerator);
-                                clob.free();
-                                break;
-
-                            case Types.ARRAY:
-                                throw new RuntimeException("ResultSetSerializer not yet implemented for SQL type ARRAY");
-
-                            case Types.STRUCT:
-                                throw new RuntimeException("ResultSetSerializer not yet implemented for SQL type STRUCT");
-
-                            case Types.DISTINCT:
-                                throw new RuntimeException("ResultSetSerializer not yet implemented for SQL type DISTINCT");
-
-                            case Types.REF:
-                                throw new RuntimeException("ResultSetSerializer not yet implemented for SQL type REF");
-
-                            case Types.JAVA_OBJECT:
-                            default:
-                                provider.defaultSerializeValue(rs.getObject(i + 1), jsonGenerator);
-                                break;
-                        }
-                    }
-
-                    jsonGenerator.writeEndObject();
-                }
-
-                jsonGenerator.writeEndArray();
-
-            } catch (SQLException e) {
-                throw new IOException(e);
-            }
-        }
-    }
-
 }

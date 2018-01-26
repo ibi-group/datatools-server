@@ -47,14 +47,13 @@ import org.slf4j.LoggerFactory;
 import spark.Request;
 import spark.Response;
 
-import javax.servlet.MultipartConfigElement;
 import javax.servlet.ServletException;
 import javax.servlet.ServletInputStream;
 import javax.servlet.ServletRequestWrapper;
-import javax.servlet.http.Part;
 
 import static com.conveyal.datatools.common.utils.S3Utils.getS3Credentials;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
+import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithError;
 import static com.conveyal.datatools.manager.controllers.api.FeedSourceController.checkFeedSourcePermissions;
 import static spark.Spark.*;
@@ -91,12 +90,16 @@ public class FeedVersionController  {
         return feedVersions;
     }
 
-    private static FeedSource requestFeedSourceById(Request req, String action) {
-        String id = req.queryParams("feedSourceId");
+    public static FeedSource requestFeedSourceById(Request req, String action, String paramName) {
+        String id = req.queryParams(paramName);
         if (id == null) {
             halt(SparkUtils.formatJSON("Please specify feedSourceId param", 400));
         }
         return checkFeedSourcePermissions(req, Persistence.feedSources.getById(id), action);
+    }
+
+    public static FeedSource requestFeedSourceById(Request req, String action) {
+        return requestFeedSourceById(req, action, "feedSourceId");
     }
 
     /**
@@ -110,7 +113,7 @@ public class FeedVersionController  {
      *
      * @return the job ID that allows monitoring progress of the load process
      */
-    public static String createFeedVersion (Request req, Response res) throws IOException, ServletException {
+    public static String createFeedVersionViaUpload(Request req, Response res) throws IOException, ServletException {
 
         Auth0UserProfile userProfile = req.attribute("user");
         FeedSource feedSource = requestFeedSourceById(req, "manage");
@@ -166,9 +169,19 @@ public class FeedVersionController  {
         ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(newFeedVersion, userProfile.getUser_id());
         DataManager.heavyExecutor.execute(processSingleFeedJob);
 
-        return processSingleFeedJob.jobId;
+        return formatJobMessage(processSingleFeedJob.jobId, "Feed version is processing.");
     }
 
+    /**
+     * HTTP API handler that converts an editor snapshot into a "published" data manager feed version.
+     *
+     * FIXME: How should we handle this for the SQL version of the application. One proposal might be to:
+     *  1. "Freeze" the feed in the DB (making it read only).
+     *  2. Run validation on the feed.
+     *  3. Export a copy of the data to a GTFS file.
+     *
+     *  OR we could just export the feed to a file and then re-import it per usual. This seems like it's wasting time/energy.
+     */
     public static boolean createFeedVersionFromSnapshot (Request req, Response res) throws IOException, ServletException {
 
         Auth0UserProfile userProfile = req.attribute("user");
@@ -201,21 +214,6 @@ public class FeedVersionController  {
         checkFeedSourcePermissions(req, version.parentFeedSource(), action);
         return version;
     }
-
-//    public static JsonNode getValidationResult(Request req, Response res) {
-//        return getValidationResult(req, res, false);
-//    }
-
-//    public static JsonNode getPublicValidationResult(Request req, Response res) {
-//        return getValidationResult(req, res, true);
-//    }
-
-    // FIXME: this used to control authenticated access to validation results.
-//    public static JsonNode getValidationResult(Request req, Response res, boolean checkPublic) {
-//        FeedVersion version = requestFeedVersion(req, "view");
-//
-//        return version.retrieveValidationResult(false);
-//    }
 
     public static JsonNode getIsochrones(Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "view");
@@ -358,6 +356,7 @@ public class FeedVersionController  {
 
     /**
      * API endpoint that instructs application to validate a feed if validation does not exist for version.
+     * FIXME!
      */
     private static JsonNode validate (Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "manage");
@@ -410,7 +409,7 @@ public class FeedVersionController  {
         post(apiPrefix + "secure/feedversion/:id/validate", FeedVersionController::validate, json::write);
         get(apiPrefix + "secure/feedversion/:id/isochrones", FeedVersionController::getIsochrones, json::write);
         get(apiPrefix + "secure/feedversion", FeedVersionController::getAllFeedVersionsForFeedSource, json::write);
-        post(apiPrefix + "secure/feedversion", FeedVersionController::createFeedVersion, json::write);
+        post(apiPrefix + "secure/feedversion", FeedVersionController::createFeedVersionViaUpload, json::write);
         post(apiPrefix + "secure/feedversion/fromsnapshot", FeedVersionController::createFeedVersionFromSnapshot, json::write);
         put(apiPrefix + "secure/feedversion/:id/rename", FeedVersionController::renameFeedVersion, json::write);
         post(apiPrefix + "secure/feedversion/:id/publish", FeedVersionController::publishToExternalResource, json::write);

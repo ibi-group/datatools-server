@@ -33,7 +33,7 @@ import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
 import static spark.Spark.*;
 
 /**
- * Created by landon on 3/29/16.
+ * Handles the HTTP endpoints related to CRUD operations for Auth0 users.
  */
 public class UserController {
 
@@ -45,7 +45,11 @@ public class UserController {
     public static JsonManager<Project> json =
             new JsonManager<>(Project.class, JsonViews.UserInterface.class);
 
-    public static Object getUser(Request req, Response res) throws IOException {
+    /**
+     * HTTP endpoint to get a single Auth0 user for the application (by specified ID param). Note, this uses a different
+     * Auth0 API (get user) than the other get methods (user search query).
+     */
+    private static String getUser(Request req, Response res) throws IOException {
         String url = "https://" + AUTH0_DOMAIN + "/api/v2/users/" + URLEncoder.encode(req.params("id"), "UTF-8");
         String charset = "UTF-8";
 
@@ -60,42 +64,62 @@ public class UserController {
         return result;
     }
 
-    public static Object getAllUsers(Request req, Response res) throws IOException {
+    /**
+     * HTTP endpoint to get all users for the application (using a filtered search on all users for the Auth0 tenant).
+     */
+    private static String getAllUsers(Request req, Response res) throws IOException {
         res.type("application/json");
         int page = Integer.parseInt(req.queryParams("page"));
-        String queryString = getUserQuery(req);
-        Object users = mapper.readTree(Auth0Users.getAuth0Users(queryString, page));
+        String queryString = filterUserSearchQuery(req);
+        String users = Auth0Users.getAuth0Users(queryString, page);
         return users;
     }
 
-    private static String getUserQuery(Request req) {
+    /**
+     * Filters a search query for users by the query string and the requesting user's permissions. For example, an
+     * organization admin is only permitted to view the users assigned to that organization, whereas an application
+     * admin can view all users for all organizations.
+     */
+    private static String filterUserSearchQuery(Request req) {
         Auth0UserProfile userProfile = req.attribute("user");
         String queryString = req.queryParams("queryString");
         if(queryString != null) queryString = "email:" + queryString + "*";
 
         if (userProfile.canAdministerApplication()) {
-            // do nothing, proceed with search
-        }
-        else if (userProfile.canAdministerOrganization()) {
+            // do not filter further based on permissions, proceed with search
+            return queryString;
+        } else if (userProfile.canAdministerOrganization()) {
+            String organizationId = userProfile.getOrganizationId();
             // filter by organization_id
             if (queryString == null) {
-                queryString = "app_metadata.datatools.organizations.organization_id:" + userProfile.getOrganizationId();
+                queryString = "app_metadata.datatools.organizations.organization_id:" + organizationId;
             } else {
-                queryString += " AND app_metadata.datatools.organizations.organization_id:" + userProfile.getOrganizationId();
+                queryString += " AND app_metadata.datatools.organizations.organization_id:" + organizationId;
             }
+            return queryString;
         } else {
             halt(401, "Must be application or organization admin to view users");
+            // Return statement cannot be reached due to halt.
+            return null;
         }
-        return queryString;
     }
 
-    public static Object getUserCount(Request req, Response res) throws IOException {
+    /**
+     * Gets the total count of users that match the filtered user search query.
+     */
+    private static int getUserCount(Request req, Response res) throws IOException {
         res.type("application/json");
-        String queryString = getUserQuery(req);
+        String queryString = filterUserSearchQuery(req);
         return Auth0Users.getAuth0UserCount(queryString);
     }
 
-    public static Object createPublicUser(Request req, Response res) throws IOException {
+    /**
+     * HTTP endpoint to create a "public user" that has no permissions to access projects in the application.
+     *
+     * Note, this passes a "blank" app_metadata object to the newly created user, so there is no risk of someone
+     * injecting permissions somehow into the create user request.
+     */
+    private static String createPublicUser(Request req, Response res) throws IOException {
         String url = "https://" + AUTH0_DOMAIN + "/api/v2/users";
         String charset = "UTF-8";
 
@@ -104,7 +128,12 @@ public class UserController {
         request.setHeader("Accept-Charset", charset);
         request.setHeader("Content-Type", "application/json");
         JsonNode jsonNode = mapper.readTree(req.body());
-        String json = String.format("{ \"connection\": \"Username-Password-Authentication\", \"email\": %s, \"password\": %s, \"app_metadata\": {\"datatools\": [{\"permissions\": [], \"projects\": [], \"subscriptions\": [], \"client_id\": \"%s\" }] } }", jsonNode.get("email"), jsonNode.get("password"), AUTH0_CLIENT_ID);
+        String json = String.format("{" +
+                "\"connection\": \"Username-Password-Authentication\"," +
+                "\"email\": %s," +
+                "\"password\": %s," +
+                "\"app_metadata\": {\"datatools\": [{\"permissions\": [], \"projects\": [], \"subscriptions\": [], \"client_id\": \"%s\" }] } }",
+                jsonNode.get("email"), jsonNode.get("password"), AUTH0_CLIENT_ID);
         HttpEntity entity = new ByteArrayEntity(json.getBytes(charset));
         request.setEntity(entity);
 
@@ -117,7 +146,12 @@ public class UserController {
         return result;
     }
 
-    public static Object createUser(Request req, Response res) throws IOException {
+    /**
+     * HTTP endpoint to create new Auth0 user for the application.
+     *
+     * FIXME: This endpoint fails if the user's email already exists in the Auth0 tenant.
+     */
+    private static String createUser(Request req, Response res) throws IOException {
         String url = "https://" + AUTH0_DOMAIN + "/api/v2/users";
         String charset = "UTF-8";
 
@@ -126,7 +160,12 @@ public class UserController {
         request.setHeader("Accept-Charset", charset);
         request.setHeader("Content-Type", "application/json");
         JsonNode jsonNode = mapper.readTree(req.body());
-        String json = String.format("{ \"connection\": \"Username-Password-Authentication\", \"email\": %s, \"password\": %s, \"app_metadata\": {\"datatools\": [%s] } }", jsonNode.get("email"), jsonNode.get("password"), jsonNode.get("permissions"));
+        String json = String.format("{" +
+                "\"connection\": \"Username-Password-Authentication\"," +
+                "\"email\": %s," +
+                "\"password\": %s," +
+                "\"app_metadata\": {\"datatools\": [%s] } }"
+                , jsonNode.get("email"), jsonNode.get("password"), jsonNode.get("permissions"));
         HttpEntity entity = new ByteArrayEntity(json.getBytes(charset));
         request.setEntity(entity);
 
@@ -142,7 +181,7 @@ public class UserController {
         return result;
     }
 
-    public static Object updateUser(Request req, Response res) throws IOException {
+    private static Object updateUser(Request req, Response res) throws IOException {
         String userId = req.params("id");
         Auth0UserProfile user = getUserById(userId);
 
@@ -182,7 +221,7 @@ public class UserController {
         return mapper.readTree(result);
     }
 
-    public static Object deleteUser(Request req, Response res) throws IOException {
+    private static Object deleteUser(Request req, Response res) throws IOException {
         String url = "https://" + AUTH0_DOMAIN + "/api/v2/users/" + URLEncoder.encode(req.params("id"), "UTF-8");
         String charset = "UTF-8";
 
@@ -198,7 +237,7 @@ public class UserController {
         return true;
     }
 
-    public static Object getRecentActivity(Request req, Response res) {
+    private static Object getRecentActivity(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         String from = req.queryParams("from");
         String to = req.queryParams("to");

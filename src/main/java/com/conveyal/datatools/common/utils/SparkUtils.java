@@ -47,7 +47,9 @@ public class SparkUtils {
         object.addProperty("result", code >= 400 ? "ERR" : "OK");
         object.addProperty("message", message);
         object.addProperty("code", code);
-        object.addProperty("detail", detail);
+        if (detail != null) {
+            object.addProperty("detail", detail);
+        }
         return object.toString();
     }
 

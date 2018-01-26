@@ -28,6 +28,12 @@ public class Snapshot extends Model {
     /** The feed version this snapshot was generated from or published to, if any */
     public String feedVersionId;
 
+    /** The namespace this snapshot is a copy of */
+    public String snapshotOf;
+
+    /** The namespace the snapshot copied tables to */
+    public String namespace;
+
     public FeedLoadResult feedLoadResult;
 
     /** the date/time this snapshot was taken (millis since epoch) */
@@ -36,9 +42,11 @@ public class Snapshot extends Model {
     /** Used for deserialization */
     public Snapshot() {}
 
-    public Snapshot(String feedSourceId, int version, FeedLoadResult feedLoadResult) {
+    public Snapshot(String feedSourceId, int version, String snapshotOf, FeedLoadResult feedLoadResult) {
         this.feedSourceId = feedSourceId;
         this.version = version;
+        this.snapshotOf = snapshotOf;
+        this.namespace = feedLoadResult.uniqueIdentifier;
         this.feedLoadResult = feedLoadResult;
     }
 

@@ -21,7 +21,6 @@ import com.conveyal.datatools.manager.utils.json.JsonManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
 import java.util.Collection;
 
 import spark.Request;
@@ -43,10 +42,14 @@ public class SnapshotController {
     /**
      * HTTP endpoint that returns a single snapshot for a specified ID.
      */
-    public static Snapshot getSnapshotById(Request req, Response res) throws IOException {
+    private static Snapshot getSnapshotById(Request req, Response res) {
         return getSnapshotFromRequest(req);
     }
 
+    /**
+     * Wrapper method that checks requesting user's permissions on feed source (via feedId param) and returns snapshot
+     * for ID param if the permissions check is OK.
+     */
     private static Snapshot getSnapshotFromRequest(Request req) {
         String id = req.params("id");
         if (id == null) haltWithError(400, "Must provide valid snapshot ID");
@@ -55,7 +58,10 @@ public class SnapshotController {
         return Persistence.snapshots.getById(id);
     }
 
-    public static Collection<Snapshot> getSnapshots(Request req, Response res) throws IOException {
+    /**
+     * HTTP endpoint that returns the list of snapshots for a given feed source.
+     */
+    private static Collection<Snapshot> getSnapshots(Request req, Response res) {
         // Get feed source and check user permissions.
         FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, "view", "feedId");
         // FIXME Do we need a way to return all snapshots?
@@ -68,7 +74,7 @@ public class SnapshotController {
     /**
      * HTTP endpoint that makes a snapshot copy of the current data loaded in the editor for a given feed source.
      */
-    public static String createSnapshot (Request req, Response res) {
+    private static String createSnapshot (Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         // FIXME Take fields from request body for creating snapshot.
 //        Document newSnapshotFields = Document.parse(req.body());
@@ -88,7 +94,7 @@ public class SnapshotController {
     /**
      * Create snapshot from feedVersion and load/import into editor database.
      */
-    public static Object importSnapshot (Request req, Response res) {
+    private static String importSnapshot (Request req, Response res) {
 
         Auth0UserProfile userProfile = req.attribute("user");
         String feedVersionId = req.queryParams("feedVersionId");
@@ -109,23 +115,22 @@ public class SnapshotController {
         CreateSnapshotJob createSnapshotJob =
                 new CreateSnapshotJob(feedSource, feedVersion.namespace, userProfile.getUser_id(), true);
         DataManager.heavyExecutor.execute(createSnapshotJob);
-        haltWithOK("Importing snapshot...");
-        return null;
+        return formatJSON("Importing snapshot...", 200);
     }
 
     // FIXME: Is this method used anywhere? Can we delete?
-    public static Object updateSnapshot (Request req, Response res) {
+    private static Object updateSnapshot (Request req, Response res) {
         // FIXME
         haltWithError(400, "Method not implemented");
         return null;
     }
 
     /**
-     * HTTP API method to "restore" snapshot (specified by ID param) to the active editor buffer.
-     *
-     * FIXME: Should this also save a copy of the snapshot before restoring (where the snapshot can be modified).
+     * HTTP API method to "restore" snapshot (specified by ID param) to the active editor buffer. This essentially makes
+     * a copy of the namespace to preserve the "save point" and then updates the working buffer to point to the newly
+     * created namespace.
      */
-    public static FeedSource restoreSnapshot (Request req, Response res) {
+    private static String restoreSnapshot (Request req, Response res) {
         // Get the snapshot ID to restore (set the namespace pointer)
         String id = req.params("id");
         // FIXME Ensure namespace id exists in database.
@@ -134,15 +139,17 @@ public class SnapshotController {
         Snapshot snapshotToRestore = Persistence.snapshots.getById(id);
         if (snapshotToRestore == null) haltWithError(400, "Must specify valid snapshot ID");
         // Update editor namespace pointer.
-        // FIXME: Should this make a copy of the namespace to preserve the "save point"
         if (snapshotToRestore.feedLoadResult == null) {
             haltWithError(400, "Failed to restore snapshot. No namespace found.");
         }
-        FeedSource updatedFeedSource = Persistence.feedSources.updateField(
-                feedSource.id, "editorNamespace", snapshotToRestore.feedLoadResult.uniqueIdentifier);
-        LOG.info("Updated feedsource {} active buffer to {}", updatedFeedSource.id, updatedFeedSource.editorNamespace);
-        // FIXME: Should return value be snapshot object?
-        return updatedFeedSource;
+        // Create and run snapshot job
+        Auth0UserProfile userProfile = req.attribute("user");
+        // FIXME what if the snapshot has not had any edits made to it? In this case, we would just be making copy upon
+        // copy of a feed for no reason.
+        CreateSnapshotJob createSnapshotJob =
+                new CreateSnapshotJob(feedSource, snapshotToRestore.namespace, userProfile.getUser_id(), true);
+        DataManager.heavyExecutor.execute(createSnapshotJob);
+        return formatJSON("Restoring snapshot...", 200);
     }
 
     /**
@@ -160,8 +167,11 @@ public class SnapshotController {
         return formatJobMessage(exportSnapshotToGTFSJob.jobId, "Exporting snapshot to GTFS.");
     }
 
-
-    public static Object getSnapshotToken(Request req, Response res) {
+    /**
+     * Depending on the application's configuration, returns either temporary S3 credentials to download get an object
+     * at the specified key OR a single-use download token to download a snapshot's GTFS file.
+     */
+    private static Object getSnapshotToken(Request req, Response res) {
         Snapshot snapshot = getSnapshotFromRequest(req);
         FeedDownloadToken token;
         String filePrefix = snapshot.feedSourceId + "_" + snapshot.snapshotTime;
@@ -193,7 +203,7 @@ public class SnapshotController {
     /**
      * HTTP endpoint to PERMANENTLY delete a snapshot given for the specified ID.
      */
-    public static Snapshot deleteSnapshot(Request req, Response res) {
+    private static Snapshot deleteSnapshot(Request req, Response res) {
         // Get the snapshot ID to restore (set the namespace pointer)
         String id = req.params("id");
         // FIXME Ensure namespace id exists in database.
@@ -204,6 +214,9 @@ public class SnapshotController {
         if (snapshot == null) haltWithError(400, "Must provide valid snapshot ID.");
         try {
             Persistence.snapshots.removeById(snapshot.id);
+            // FIXME Renumber existing snapshots?
+            // FIXME Are there references that need to be removed? E.g., what if the active buffer snapshot is deleted?
+            // FIXME delete tables from database?
             return snapshot;
         } catch (Exception e) {
             e.printStackTrace();

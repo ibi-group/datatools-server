@@ -46,7 +46,9 @@ public abstract class MonitorableJob implements Runnable {
         FETCH_SINGLE_FEED,
         MAKE_PROJECT_PUBLIC,
         PROCESS_FEED,
-        CREATE_SNAPSHOT, MERGE_PROJECT_FEEDS
+        CREATE_SNAPSHOT,
+        EXPORT_SNAPSHOT_TO_GTFS,
+        MERGE_PROJECT_FEEDS
     }
 
     public MonitorableJob(String owner, String name, JobType type) {
