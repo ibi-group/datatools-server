@@ -151,7 +151,7 @@ public class FeedVersion extends Model implements Serializable {
         // fileSize field will not be stored until new FeedVersion is stored in MongoDB (usually in
         // the final steps of ValidateFeedJob).
         this.fileSize = file.length();
-        LOG.info("New GTFS file saved: {}", id);
+        LOG.info("New GTFS file saved: {} ({} bytes)", id, this.fileSize);
         return file;
     }
     public File newGtfsFile(InputStream inputStream, Long lastModified) {

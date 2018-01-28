@@ -24,6 +24,7 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
 import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Collection;
 import java.util.Date;
@@ -137,12 +138,19 @@ public class FeedSource extends Model implements Cloneable {
         this(null);
     }
 
+
+    public FeedVersion fetch (MonitorableJob.Status status) {
+        return fetch(status, null);
+    }
     /**
-     * Fetch the latest version of the feed.
+     * Fetch the latest version of the feed. Optionally provide an override URL from which to fetch the feed. This
+     * optional URL is used for a one-level deep recursive call of fetch when a redirect is encountered.
+     *
+     * FIXME: Should the FeedSource fetch URL field be updated if a recursive call with new URL is successful?
      *
      * @return the fetched FeedVersion if a new version is available or null if nothing needs to be updated.
      */
-    public FeedVersion fetch (MonitorableJob.Status status, String fetchUser) {
+    public FeedVersion fetch (MonitorableJob.Status status, String optionalUrlOverride) {
         status.message = "Downloading file";
 
         FeedVersion latest = retrieveLatest();
@@ -154,7 +162,14 @@ public class FeedSource extends Model implements Cloneable {
         version.retrievalMethod = FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
 
         // build the URL from which to fetch
-        URL url = this.url;
+        URL url = null;
+        try {
+            // If an optional URL is provided (in the case of a recursive fetch) use that. Otherwise, use the fetch URL
+            url = optionalUrlOverride != null ? new URL(optionalUrlOverride) : this.url;
+        } catch (MalformedURLException e) {
+            e.printStackTrace();
+            status.fail(String.format("Could not connect to bad redirect URL %s", optionalUrlOverride));
+        }
         LOG.info("Fetching from {}", url.toString());
 
         // make the request, using the proper HTTP caching headers to prevent refetch, if applicable
@@ -163,7 +178,10 @@ public class FeedSource extends Model implements Cloneable {
             conn = (HttpURLConnection) url.openConnection();
             // Set user agent request header in order to avoid 403 Forbidden response from some servers.
             // https://stackoverflow.com/questions/13670692/403-forbidden-with-java-but-not-web-browser
-            conn.setRequestProperty("User-Agent", "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.95 Safari/537.11");
+            conn.setRequestProperty(
+                    "User-Agent",
+                    "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.95 Safari/537.11"
+            );
         } catch (Exception e) {
             String message = String.format("Unable to open connection to %s; not fetching feed %s", url, this.name);
             LOG.error(message);
@@ -192,23 +210,43 @@ public class FeedSource extends Model implements Cloneable {
                     status.update(false, message, 100.0);
                     return null;
                 case HttpURLConnection.HTTP_OK:
-                case HttpURLConnection.HTTP_MOVED_TEMP:
-                case HttpURLConnection.HTTP_MOVED_PERM:
+                    // Response is OK. Continue on to save the GTFS file.
                     message = String.format("Saving %s feed.", this.name);
                     LOG.info(message);
                     status.update(false, message, 75.0);
                     newGtfsFile = version.newGtfsFile(conn.getInputStream());
                     break;
+                case HttpURLConnection.HTTP_MOVED_TEMP:
+                case HttpURLConnection.HTTP_MOVED_PERM:
+                case HttpURLConnection.HTTP_SEE_OTHER:
+                    // Get redirect url from "location" header field
+                    String newUrl = conn.getHeaderField("Location");
+                    if (optionalUrlOverride != null) {
+                        // Only permit recursion one level deep. If more than one redirect is detected, fail the job and
+                        // suggest that user try again with new URL.
+                        message = String.format("More than one redirects for fetch URL detected. Please try fetch again with latest URL: %s", newUrl);
+                        LOG.error(message);
+                        status.fail(message);
+                        return null;
+                    } else {
+                        // If override URL is null, this is the zeroth fetch. Recursively call fetch, but only one time
+                        // to prevent multiple (possibly infinite?) redirects. Any more redirects than one should
+                        // probably be met with user action to update the fetch URL.
+                        LOG.info("Recursively calling fetch feed with new URL: {}", newUrl);
+                        return fetch(status, newUrl);
+                    }
                 default:
+                    // Any other HTTP codes result in failure.
+                    // FIXME Are there "success" codes we're not accounting for?
                     message = String.format("HTTP status (%d: %s) retrieving %s feed", responseCode, conn.getResponseMessage(), this.name);
                     LOG.error(message);
-                    status.update(true, message, 100.0);
+                    status.fail(message);
                     return null;
             }
         } catch (IOException e) {
             String message = String.format("Unable to connect to %s; not fetching %s feed", url, this.name);
             LOG.error(message);
-            status.update(true, message, 100.0);
+            status.fail(message);
             e.printStackTrace();
             return null;
         }

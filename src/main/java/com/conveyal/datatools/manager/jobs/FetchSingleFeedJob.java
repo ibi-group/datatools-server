@@ -32,7 +32,7 @@ public class FetchSingleFeedJob extends MonitorableJob {
     @Override
     public void jobLogic () {
         // TODO: fetch automatically vs. manually vs. in-house
-        result = feedSource.fetch(status, owner);
+        result = feedSource.fetch(status);
 
         // Null result indicates that a fetch was not needed (GTFS has not been modified)
         // True failures will throw exceptions.
