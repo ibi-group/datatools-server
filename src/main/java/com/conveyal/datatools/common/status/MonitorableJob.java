@@ -38,7 +38,10 @@ public abstract class MonitorableJob implements Runnable {
         UNKNOWN_TYPE,
         BUILD_TRANSPORT_NETWORK,
         CREATE_FEEDVERSION_FROM_SNAPSHOT,
-        PROCESS_SNAPSHOT,
+        // **** Legacy snapshot jobs
+        PROCESS_SNAPSHOT_MERGE,
+        PROCESS_SNAPSHOT_EXPORT,
+        // ****
         LOAD_FEED,
         VALIDATE_FEED,
         DEPLOY_TO_OTP,
@@ -48,6 +51,7 @@ public abstract class MonitorableJob implements Runnable {
         PROCESS_FEED,
         CREATE_SNAPSHOT,
         EXPORT_SNAPSHOT_TO_GTFS,
+        CONVERT_EDITOR_MAPDB_TO_SQL,
         MERGE_PROJECT_FEEDS
     }
 
@@ -163,6 +167,7 @@ public abstract class MonitorableJob implements Runnable {
             // Set job status to failed
             // Note that when an exception occurs during job execution we do not call unRegisterJob,
             // so the job continues to exist in the failed state and the user can see it.
+            LOG.error("Job failed", ex);
             status.update(true, ex.getMessage(), 100, true);
         }
         status.startTime = TimeUnit.NANOSECONDS.toMillis(startTimeNanos);

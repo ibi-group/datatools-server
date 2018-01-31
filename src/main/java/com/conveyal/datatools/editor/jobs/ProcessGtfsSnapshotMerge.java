@@ -48,7 +48,7 @@ public class ProcessGtfsSnapshotMerge extends MonitorableJob {
     }*/
 
     public ProcessGtfsSnapshotMerge (FeedVersion feedVersion, String owner) {
-        super(owner, "Creating snapshot for " + feedVersion.parentFeedSource().name, JobType.PROCESS_SNAPSHOT);
+        super(owner, "Creating snapshot for " + feedVersion.parentFeedSource().name, JobType.PROCESS_SNAPSHOT_MERGE);
         this.feedVersion = feedVersion;
         status.update(false, "Waiting to begin job...", 0);
         LOG.info("GTFS Snapshot Merge for feedVersion {}", feedVersion.id);
