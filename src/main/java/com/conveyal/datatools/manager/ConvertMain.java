@@ -38,14 +38,14 @@ public class ConvertMain {
         // STEP 1: Load in JSON dump into MongoDB (args 0 and 1 are the config files)
         String jsonString = FileUtils.readFileToString(new File(args[2]), Charset.defaultCharset());
         // FIXME: Do we still need to map certain project fields?
-//        DumpController.load(jsonString);
+        DumpController.load(jsonString);
 
         // STEP 2: For each feed version, load GTFS in Postgres and validate.
-        DumpController.validateAll(true, true, AMTRAK_FEED_ID);
+        DumpController.validateAll(true, true, null);
 
         // STEP 3: For each feed source in MongoDB, load all snapshots (and current editor buffer) into Postgres DB.
         // STEP 3A: For each snapshot/editor DB, create a snapshot Mongo object for the feed source with the FeedLoadResult.
-        migrateEditorFeeds(AMTRAK_FEED_ID);
+        migrateEditorFeeds(null);
 //        migrateSingleSnapshot(null);
         System.out.println("Done queueing!!!!!!!!");
         while (!StatusController.filterActiveJobs(StatusController.getAllJobs()).isEmpty()) {
