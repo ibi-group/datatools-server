@@ -1,6 +1,8 @@
 package com.conveyal.datatools.editor.controllers.api;
 
 import com.conveyal.datatools.common.utils.S3Utils;
+import com.conveyal.datatools.editor.controllers.EditorLockController;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -8,13 +10,6 @@ import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.gtfs.loader.JdbcTableWriter;
 import com.conveyal.gtfs.loader.Table;
 import com.conveyal.gtfs.model.Entity;
-import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonSerializer;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializerProvider;
-import com.fasterxml.jackson.databind.module.SimpleModule;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.gson.JsonObject;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,17 +18,11 @@ import spark.Response;
 
 import javax.sql.DataSource;
 import java.io.IOException;
-import java.sql.Blob;
-import java.sql.Clob;
-import java.sql.Connection;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
-import java.sql.Types;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJSON;
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithError;
+import static com.conveyal.datatools.editor.controllers.EditorLockController.sessionsForFeedIds;
 import static spark.Spark.*;
 import static spark.Spark.delete;
 import static spark.Spark.post;
@@ -83,35 +72,74 @@ public abstract class EditorController<T extends Entity> {
 
         // Handle special multiple delete method for trip endpoint
         if ("trip".equals(classToLowercase)) {
-            delete(ROOT_ROUTE, this::deleteMultiple, json::write);
+            delete(ROOT_ROUTE, this::deleteMultipleTrips, json::write);
+        }
+
+        // Handle update useFrequency field. Hitting this endpoint will delete all trips for a pattern and update the
+        // useFrequency field.
+        if ("pattern".equals(classToLowercase)) {
+            delete(ROOT_ROUTE + ID_PARAM + "/trips", this::deleteTripsForPattern, json::write);
         }
     }
 
-    private String deleteMultiple(Request req, Response res) {
+    /**
+     * HTTP endpoint to delete all trips for a given string pattern_id (i.e., not the integer ID field).
+     */
+    private String deleteTripsForPattern(Request req, Response res) {
+        String namespace = getNamespaceFromRequest(req);
+        // NOTE: This is a string pattern ID, not the integer ID that all other HTTP endpoints use.
+        String patternId = req.params("id");
+        if (patternId == null) {
+            haltWithError(400, "Must provide valid pattern_id");
+        }
+        JdbcTableWriter tableWriter = new JdbcTableWriter(Table.TRIPS, datasource, namespace);
+        try {
+            int deletedCount = tableWriter.deleteWhere("pattern_id", patternId, true);
+            return formatJSON(String.format("Deleted %d.", deletedCount), 200);
+        } catch (SQLException e) {
+            e.printStackTrace();
+            haltWithError(400, "Error deleting entity", e);
+            return null;
+        }
+    }
+
+    /**
+     * Currently designed to delete multiple trips in a single transaction. Trip IDs should be comma-separated in a query
+     * parameter. TODO: Implement this for other entity types?
+     */
+    private String deleteMultipleTrips(Request req, Response res) {
         String namespace = getNamespaceFromRequest(req);
         JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
         String[] tripIds = req.queryParams("tripIds").split(",");
-        for (String tripId: tripIds) {
-            try {
-                if (tableWriter.delete(Integer.parseInt(tripId)) == 1) {
-                    continue;
-                    // FIXME: change return message based on result value
-//                        return formatJSON(String.valueOf("Deleted one."), 200);
+        try {
+            for (String tripId: tripIds) {
+                // Delete each trip ID found in query param WITHOUT auto-committing.
+                int result = tableWriter.delete(Integer.parseInt(tripId), false);
+                if (result != 1) {
+                    // If exactly one entity was not deleted, throw an error.
+                    String message = String.format("Could not delete trip %s. Result: %d", tripId, result);
+                    throw new SQLException(message);
                 }
-            } catch (Exception e) {
-                e.printStackTrace();
-                haltWithError(400, "Error deleting entity", e);
             }
+            // Commit the transaction after iterating over trip IDs (because the deletes where made without autocommit).
+            tableWriter.commit();
+            LOG.info("Deleted {} trips", tripIds.length);
+        } catch (Exception e) {
+            e.printStackTrace();
+            haltWithError(400, "Error deleting entity", e);
         }
         return formatJSON(String.format("Deleted %d.", tripIds.length), 200);
     }
 
+    /**
+     * HTTP endpoint to delete one GTFS editor entity specified by the integer ID field.
+     */
     private String deleteOne(Request req, Response res) {
         String namespace = getNamespaceFromRequest(req);
         Integer id = getIdFromRequest(req);
         JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
         try {
-            if (tableWriter.delete(id) == 1) {
+            if (tableWriter.delete(id, true) == 1) {
                 // FIXME: change return message based on result value
                 return formatJSON(String.valueOf("Deleted one."), 200);
             }
@@ -122,6 +150,10 @@ public abstract class EditorController<T extends Entity> {
         return null;
     }
 
+    /**
+     * HTTP endpoint to upload branding image to S3 for either agency or route entities. The endpoint also handles
+     * updating the branding URL field to match the S3 URL.
+     */
     private String uploadEntityBranding (Request req, Response res) {
         int id = getIdFromRequest(req);
         String url = null;
@@ -139,7 +171,7 @@ public abstract class EditorController<T extends Entity> {
         JsonObject jsonObject = new JsonObject();
         jsonObject.addProperty(String.format("%s_branding_url", classToLowercase), url);
         try {
-            return tableWriter.update(id, jsonObject.getAsString());
+            return tableWriter.update(id, jsonObject.getAsString(), true);
         } catch (SQLException | IOException e) {
             e.printStackTrace();
             haltWithError(400, "Could not update branding url", e);
@@ -148,7 +180,9 @@ public abstract class EditorController<T extends Entity> {
     }
 
     /**
-     * Create or update entity. Update depends on existence of ID param, which should only be supplied by the PUT method.
+     * HTTP endpoint to create or update a single GTFS editor entity. If the ID param is supplied and the HTTP method is
+     * PUT, an update operation will be applied to the specified entity using the JSON body. Otherwise, a new entity will
+     * be created.
      */
     private String createOrUpdate(Request req, Response res) {
         // Check if an update or create operation depending on presence of id param
@@ -163,9 +197,9 @@ public abstract class EditorController<T extends Entity> {
         JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
         try {
             if (isCreating) {
-                return tableWriter.create(req.body());
+                return tableWriter.create(req.body(), true);
             } else {
-                return tableWriter.update(id, req.body());
+                return tableWriter.update(id, req.body(), true);
             }
         } catch (Exception e) {
             e.printStackTrace();
@@ -175,13 +209,30 @@ public abstract class EditorController<T extends Entity> {
     }
 
     /**
-     * Get the namespace for the feed ID found in the request
+     * Get the namespace for the feed ID found in the request. And check that the user has an active editing session.
      */
     private String getNamespaceFromRequest(Request req) {
         String feedId = req.queryParams("feedId");
         FeedSource feedSource = Persistence.feedSources.getById(feedId);
         if (feedSource == null) {
             haltWithError(400, "Feed ID is invalid");
+        }
+        String sessionId = req.session().id();
+        EditorLockController.EditorSession currentSession = sessionsForFeedIds.get(feedId);
+        if (currentSession == null) {
+            haltWithError(400, "There is no active editing session for user.");
+        }
+        if (!currentSession.sessionId.equals(sessionId)) {
+            // This session does not match the current active session for the feed.
+            Auth0UserProfile userProfile = req.attribute("user");
+            if (currentSession.userEmail.equals(userProfile.getEmail())) {
+                haltWithError(400, "You have another edit session open");
+            } else {
+                haltWithError(400, "Somebody else is editing this feed.");
+            }
+        } else {
+            currentSession.lastEdit = System.currentTimeMillis();
+            LOG.info("Updating session {} last edit time to {}", sessionId, currentSession.lastEdit);
         }
         String namespace = feedSource.editorNamespace;
         if (namespace == null) {
