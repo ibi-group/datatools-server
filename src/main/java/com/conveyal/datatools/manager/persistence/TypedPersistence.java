@@ -89,6 +89,10 @@ public class TypedPersistence<T extends Model> {
         mongoCollection.insertOne(newObject);
     }
 
+    public void replace (String id, T replaceObject) {
+        mongoCollection.replaceOne(eq(id), replaceObject);
+    }
+
     public T update (String id, String updateJson) {
         Document updateDocument = Document.parse(updateJson);
 
