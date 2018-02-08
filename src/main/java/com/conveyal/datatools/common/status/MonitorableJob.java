@@ -52,7 +52,7 @@ public abstract class MonitorableJob implements Runnable {
         CREATE_SNAPSHOT,
         EXPORT_SNAPSHOT_TO_GTFS,
         CONVERT_EDITOR_MAPDB_TO_SQL,
-        MERGE_PROJECT_FEEDS
+        VALIDATE_ALL_FEEDS, MERGE_PROJECT_FEEDS
     }
 
     public MonitorableJob(String owner, String name, JobType type) {
@@ -191,10 +191,12 @@ public abstract class MonitorableJob implements Runnable {
     /**
      * Enqueues a sub-job to be run when the main logic of this job has finished.
      */
-    public void addNextJob(MonitorableJob job) {
-        job.parentJobId = this.jobId;
-        job.parentJobType = this.type;
-        subJobs.add(job);
+    public void addNextJob(MonitorableJob ...jobs) {
+        for (MonitorableJob job : jobs) {
+            job.parentJobId = this.jobId;
+            job.parentJobType = this.type;
+            subJobs.add(job);
+        }
     }
 
     /**

@@ -41,7 +41,7 @@ public class ExportSnapshotToGTFSJob extends MonitorableJob {
             status.fail("Error creating local file for snapshot.", e);
             return;
         }
-        JdbcGtfsExporter exporter = new JdbcGtfsExporter(snapshot.feedLoadResult.uniqueIdentifier, tempFile.getAbsolutePath(), DataManager.GTFS_DATA_SOURCE);
+        JdbcGtfsExporter exporter = new JdbcGtfsExporter(snapshot.feedLoadResult.uniqueIdentifier, tempFile.getAbsolutePath(), DataManager.GTFS_DATA_SOURCE, true);
         FeedLoadResult result = exporter.exportTables();
 
         // FIXME: replace with use of refactored FeedStore.

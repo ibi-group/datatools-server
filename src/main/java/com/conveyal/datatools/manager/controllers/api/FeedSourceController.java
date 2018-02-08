@@ -106,13 +106,19 @@ public class FeedSourceController {
         String organizationId = newFeedSourceFields.getString("organizationId");
         boolean allowedToCreateFeedSource = userProfile.canAdministerProject(projectId, organizationId);
         if (allowedToCreateFeedSource) {
-            FeedSource newFeedSource = Persistence.feedSources.create(req.body());
-            // Communicate to any registered external "resources" (sites / databases) the fact that a feed source has been
-            // created in our database.
-            for (String resourceType : DataManager.feedResources.keySet()) {
-                DataManager.feedResources.get(resourceType).feedSourceCreated(newFeedSource, req.headers("Authorization"));
+            try {
+                FeedSource newFeedSource = Persistence.feedSources.create(req.body());
+                // Communicate to any registered external "resources" (sites / databases) the fact that a feed source has been
+                // created in our database.
+                for (String resourceType : DataManager.feedResources.keySet()) {
+                    DataManager.feedResources.get(resourceType).feedSourceCreated(newFeedSource, req.headers("Authorization"));
+                }
+                return newFeedSource;
+            } catch (Exception e) {
+                LOG.error("Unknown error creating feed source", e);
+                haltWithError(400, "Unknown error encountered creating feed source", e);
+                return null;
             }
-            return newFeedSource;
         } else {
             haltWithError(400, "Must provide project ID for feed source");
             return null;

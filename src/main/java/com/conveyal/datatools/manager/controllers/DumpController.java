@@ -1,5 +1,9 @@
 package com.conveyal.datatools.manager.controllers;
 
+import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
+import com.conveyal.datatools.manager.jobs.ValidateFeedJob;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -10,6 +14,7 @@ import com.conveyal.datatools.manager.models.Note;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
+import com.conveyal.gtfs.validator.ValidationResult;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -19,22 +24,28 @@ import spark.Request;
 import spark.Response;
 
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Collection;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.Map;
 
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithError;
 import static spark.Spark.*;
 
 /**
- * Created by demory on 5/25/16.
+ * This class contains HTTP endpoints that should ONLY be used in controlled environments (i.e., when the application is
+ * not accessible on the Internet. The endpoints allow for dumping the entirety of the manager application data
+ * (projects, feed sources, feed versions, etc.) into a JSON file. NOTE: this does not include actual GTFS feed contents
+ * stored in PostgreSQL, but rather the metadata about these feeds and how they are organized into feed sources and
+ * projects. This allows for backing up and restoring the MongoDB data.
  */
 
 public class DumpController {
     public static final Logger LOG = LoggerFactory.getLogger(DumpController.class);
     /**
-     * Represents a snapshot of the database. This require loading the entire database into RAM.
+     * Represents a snapshot of the database. This requires loading the entire database into RAM.
      * This shouldn't be an issue, though, as the feeds are stored separately. This is only metadata.
      */
     public static class DatabaseState {
@@ -42,174 +53,194 @@ public class DumpController {
         public Collection<FeedSource> feedSources;
         public Collection<FeedVersion> feedVersions;
         public Collection<Note> notes;
-        //        public Collection<Auth0UserProfile> users;
+        // Users are maintained in Auth0 database.
+        // public Collection<Auth0UserProfile> users;
         public Collection<Deployment> deployments;
         public Collection<ExternalFeedSourceProperty> externalProperties;
     }
 //
     private static JsonManager<DatabaseState> json =
-            new JsonManager<DatabaseState>(DatabaseState.class, JsonViews.DataDump.class);
-//
+        new JsonManager<>(DatabaseState.class, JsonViews.DataDump.class);
+
+    /**
+     * Copies each table containing application data into the database state object and returns entire set of data. This,
+     * along with the other methods in this class, should only be used in a controlled environment where no outside access
+     * is permitted (e.g., using a cloned database on a local development machine). Otherwise, application data is
+     * visible to the entire world.
+     */
     public static DatabaseState dump (Request req, Response res) throws JsonProcessingException {
 //        // FIXME this appears to be capable of using unbounded amounts of memory (it copies an entire database into memory)
         DatabaseState db = new DatabaseState();
-//        db.projects = Persistence.projects.getAll();
-//        db.feedSources = Persistence.feedSources.getAll();
-//        db.feedVersions = Persistence.feedVersions.getAll();
-//        db.notes = Persistence.notes.getAll();
-//        db.deployments = Persistence.deployments.getAll();
-//        db.externalProperties = Persistence.externalFeedSourceProperties.getAll();
+        db.projects = Persistence.projects.getAll();
+        db.feedSources = Persistence.feedSources.getAll();
+        db.feedVersions = Persistence.feedVersions.getAll();
+        db.notes = Persistence.notes.getAll();
+        db.deployments = Persistence.deployments.getAll();
+        db.externalProperties = Persistence.externalFeedSourceProperties.getAll();
         return db;
     }
-//
-//    // this is not authenticated, because it has to happen with a bare database (i.e. no users)
-//    // this method in particular is coded to allow up to 500MB of data to be posted
-////    @BodyParser.Of(value=BodyParser.Json.class, maxLength = 500 * 1024 * 1024)
-    public static boolean load (Request req, Response res) {
-//        // TODO: really ought to check all tables
-//        LOG.info("loading data...");
-//        DatabaseState db = null;
-//        try {
-//            db = json.read(req.body());
-//            LOG.info("data loaded successfully");
-//        } catch (IOException e) {
-//            e.printStackTrace();
-//            LOG.error("data load error.  check json validity.");
-//            return false;
-//        }
-//        for (Project c : db.projects) {
-//            LOG.info("loading project {}", c.id);
-//            c.save(false);
-//        }
-//        Project.commit();
-//
-//        for (FeedSource s : db.feedSources) {
-//            LOG.info("loading feed source {}", s.id);
-//            s.save(false);
-//        }
-//        FeedSource.commit();
-//
-//        for (FeedVersion v : db.feedVersions) {
-//            LOG.info("loading version {}", v.id);
-//            v.save(false);
-//        }
-//        FeedVersion.commit();
-//
-//        for (Note n : db.notes) {
-//            LOG.info("loading note {}", n.id);
-//            n.save(false);
-//        }
-//        Note.commit();
-//
-//        for (Deployment d : db.deployments) {
-//            LOG.info("loading deployment {}", d.id);
-//            d.save(false);
-//        }
-//        Deployment.commit();
-//
-//        for (ExternalFeedSourceProperty d : db.externalProperties) {
-//            LOG.info("loading external properties {}", d.id);
-//            d.save(false);
-//        }
-//        ExternalFeedSourceProperty.commit();
-//
-//        LOG.info("load completed.");
+    // FIXME: This can now be authenticated because users are stored in Auth0.
+    // this is not authenticated, because it has to happen with a bare database (i.e. no users)
+    // this method in particular is coded to allow up to 500MB of data to be posted
+//    @BodyParser.Of(value=BodyParser.Json.class, maxLength = 500 * 1024 * 1024)
+
+    /**
+     * Load a JSON dump into the manager database. This should be performed with the python script load.py found
+     * in the datatools-ui/scripts directory.
+     */
+    public static boolean load (String jsonString) {
+        // TODO: really ought to check all tables
+        LOG.info("loading data...");
+        DatabaseState db;
+        try {
+            db = json.read(jsonString);
+            LOG.info("data loaded successfully");
+        } catch (IOException e) {
+            e.printStackTrace();
+            LOG.error("data load error.  check json validity.");
+            return false;
+        }
+        for (Project project : db.projects) {
+            LOG.info("loading project {}", project.id);
+            Persistence.projects.create(project);
+        }
+
+        for (FeedSource feedSource : db.feedSources) {
+            LOG.info("loading feed source {}", feedSource.id);
+            Persistence.feedSources.create(feedSource);
+        }
+
+        for (FeedVersion feedVersion : db.feedVersions) {
+            LOG.info("loading version {}", feedVersion.id);
+            Persistence.feedVersions.create(feedVersion);
+        }
+
+        for (Note note : db.notes) {
+            LOG.info("loading note {}", note.id);
+            Persistence.notes.create(note);
+        }
+
+        for (Deployment deployment : db.deployments) {
+            LOG.info("loading deployment {}", deployment.id);
+            Persistence.deployments.create(deployment);
+        }
+
+        for (ExternalFeedSourceProperty externalFeedSourceProperty : db.externalProperties) {
+            LOG.info("loading external properties {}", externalFeedSourceProperty.id);
+            Persistence.externalFeedSourceProperties.create(externalFeedSourceProperty);
+        }
+
+        LOG.info("load completed.");
         return true;
     }
-//
-    public static boolean loadLegacy (Request req, Response res) throws Exception {
-//        ObjectMapper mapper = new ObjectMapper();
-//        JsonNode node = mapper.readTree(req.body());
-//
-//        Iterator<Map.Entry<String, JsonNode>> fieldsIter = node.fields();
-//        while (fieldsIter.hasNext()) {
-//            Map.Entry<String, JsonNode> entry = fieldsIter.next();
-//            LOG.info("Loading {} {}...", entry.getValue().size(), entry.getKey());
-//            switch(entry.getKey()) {
-//                case "feedCollections":
-//                    for(int i=0; i< entry.getValue().size(); i++) {
-//                        loadLegacyProject(entry.getValue().get(i));
-//                    }
-//                    Project.commit();
-//                    break;
-//                case "projects":
-//                    for(int i=0; i< entry.getValue().size(); i++) {
-//                        loadLegacyProject(entry.getValue().get(i));
-//                    }
-//                    Project.commit();
-//                    break;
-//                case "feedSources":
-//                    for(int i=0; i< entry.getValue().size(); i++) {
-//                        loadLegacyFeedSource(entry.getValue().get(i));
-//                    }
-//                    FeedSource.commit();
-//                    break;
-//                case "feedVersions":
-//                    for(int i=0; i< entry.getValue().size(); i++) {
-//                        loadLegacyFeedVersion(entry.getValue().get(i));
-//                    }
-//                    FeedVersion.commit();
-//                    break;
-//                default:
-//                    break;
-//            }
-//        }
-        return true;
+
+    /**
+     * Load a v2 JSON dump (i.e., objects with the class structure immediately before the MongoDB migration).
+     */
+    private static boolean loadLegacy(String jsonString) {
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode node;
+        try {
+            node = mapper.readTree(jsonString);
+            Iterator<Map.Entry<String, JsonNode>> fieldsIter = node.fields();
+            while (fieldsIter.hasNext()) {
+                Map.Entry<String, JsonNode> entry = fieldsIter.next();
+                LOG.info("Loading {} {}...", entry.getValue().size(), entry.getKey());
+                switch(entry.getKey()) {
+                    case "projects":
+                        for(int i=0; i< entry.getValue().size(); i++) {
+                            loadLegacyProject(entry.getValue().get(i));
+                        }
+                        break;
+                    case "feedSources":
+                        for(int i=0; i< entry.getValue().size(); i++) {
+                            loadLegacyFeedSource(entry.getValue().get(i));
+                        }
+                        break;
+                    case "feedVersions":
+                        for(int i=0; i< entry.getValue().size(); i++) {
+                            loadLegacyFeedVersion(entry.getValue().get(i));
+                        }
+                        break;
+                    // FIXME: add deployments, etc.
+                    default:
+                        break;
+                }
+            }
+            return true;
+        } catch (Exception e) {
+            e.printStackTrace();
+            haltWithError(400, "Error loading legacy JSON", e);
+            return false;
+        }
     }
-//
-//    private static void loadLegacyProject (JsonNode node) {
-//        String name = node.findValue("name").asText();
-//        String id = node.findValue("id").asText();
-//        if (Project.retrieve(id) == null) {
-//            LOG.info("load legacy project " + name);
-//            Project project = new Project();
-//            project.id = id;
-//            project.name = name;
-//            project.save(false);
-//        }
-//        else {
-//            LOG.warn("legacy project {} already exists... skipping", name);
-//        }
-//    }
-//
-//    private static void loadLegacyFeedSource (JsonNode node) throws Exception {
-//        String name = node.findValue("name").asText();
-//        String id = node.findValue("id").asText();
-//        if (Persistence.feedSources.getById(id) == null) {
-//            LOG.info("load legacy FeedSource " + name);
-//            FeedSource fs = new FeedSource();
-//            fs.id = id;
-//            fs.projectId = node.findValue("feedCollectionId").asText();
-//            fs.name = name;
-//            switch(node.findValue("retrievalMethod").asText()) {
-//                case "FETCHED_AUTOMATICALLY":
-//                    fs.retrievalMethod = FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
-//                    break;
-//                case "MANUALLY_UPLOADED":
-//                    fs.retrievalMethod = FeedSource.FeedRetrievalMethod.MANUALLY_UPLOADED;
-//                    break;
-//                case "PRODUCED_IN_HOUSE":
-//                    fs.retrievalMethod = FeedSource.FeedRetrievalMethod.PRODUCED_IN_HOUSE;
-//                    break;
-//            }
-//            fs.snapshotVersion = node.findValue("snapshotVersion").asText();
-//            Object url = node.findValue("url").asText();
-//            fs.url = url != null && !url.equals("null") ? new URL(url.toString()) : null;
-//
-//            //fs.lastFetched = new Date(node.findValue("lastFetched").asText());
-//            //System.out.println("wrote lastFetched");
-//
-//            fs.deployable = node.findValue("deployable").asBoolean();
-//            fs.isPublic = node.findValue("isPublic").asBoolean();
-//            fs.save(false);
-//        }
-//        else {
-//            LOG.warn("legacy FeedSource {} already exists... skipping", name);
-//        }
-//
-//    }
-//
-    private static void loadLegacyFeedVersion (JsonNode node) throws Exception {
+
+    /**
+     * Load a v2 project (i.e., a project with the class structure immediately before the MongoDB migration).
+     */
+    private static void loadLegacyProject (JsonNode node) {
+        String name = node.findValue("name").asText();
+        String id = node.findValue("id").asText();
+        if (Persistence.projects.getById(id) == null) {
+            LOG.info("load legacy project " + name);
+            Project project = new Project();
+            project.id = id;
+            project.name = name;
+            Persistence.projects.create(project);
+        }
+        else {
+            LOG.warn("legacy project {} already exists... skipping", name);
+        }
+    }
+
+    /**
+     * Load a v2 feed source (i.e., a feed source with the class structure immediately before the MongoDB migration).
+     */
+    private static void loadLegacyFeedSource (JsonNode node) {
+        String name = node.findValue("name").asText();
+        String id = node.findValue("id").asText();
+        if (Persistence.feedSources.getById(id) == null) {
+            LOG.info("load legacy FeedSource " + name);
+            FeedSource feedSource = new FeedSource();
+            feedSource.id = id;
+            feedSource.projectId = node.findValue("feedCollectionId").asText();
+            feedSource.name = name;
+            switch(node.findValue("retrievalMethod").asText()) {
+                case "FETCHED_AUTOMATICALLY":
+                    feedSource.retrievalMethod = FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
+                    break;
+                case "MANUALLY_UPLOADED":
+                    feedSource.retrievalMethod = FeedSource.FeedRetrievalMethod.MANUALLY_UPLOADED;
+                    break;
+                case "PRODUCED_IN_HOUSE":
+                    feedSource.retrievalMethod = FeedSource.FeedRetrievalMethod.PRODUCED_IN_HOUSE;
+                    break;
+            }
+            feedSource.snapshotVersion = node.findValue("snapshotVersion").asText();
+            Object url = node.findValue("url").asText();
+            try {
+                feedSource.url = url != null && !url.equals("null") ? new URL(url.toString()) : null;
+            } catch (MalformedURLException e) {
+                e.printStackTrace();
+            }
+
+            //fs.lastFetched = new Date(node.findValue("lastFetched").asText());
+            //System.out.println("wrote lastFetched");
+
+            feedSource.deployable = node.findValue("deployable").asBoolean();
+            feedSource.isPublic = node.findValue("isPublic").asBoolean();
+            Persistence.feedSources.create(feedSource);
+        }
+        else {
+            LOG.warn("legacy FeedSource {} already exists... skipping", name);
+        }
+
+    }
+
+    /**
+     * Load a v2 feed version (i.e., a feed version with the class structure immediately before the MongoDB migration).
+     */
+    private static void loadLegacyFeedVersion (JsonNode node) {
         String id = node.findValue("id").asText();
         if (Persistence.feedVersions.getById(id) == null) {
             LOG.info("load legacy FeedVersion " + node.findValue("id"));
@@ -226,34 +257,50 @@ public class DumpController {
             LOG.warn("legacy FeedVersion {} already exists... skipping", id);
         }
     }
-//
-    public static boolean validateAll (Request req, Response res) throws Exception {
-//        LOG.info("validating all feeds...");
-//        Collection<FeedVersion> allVersions = FeedVersion.retrieveAll();
-//        for(FeedVersion version: allVersions) {
-//            boolean force = req.queryParams("force") != null ? req.queryParams("force").equals("true") : false;
-//            FeedValidationResult result = version.validationResult;
-//            if(!force && result != null && result.loadStatus.equals(LoadStatus.SUCCESS)) {
-//                continue;
-//            }
-//            LOG.info("Validating {}", version.id);
-//            try {
-//                version.validate();
-//                version.save();
-//            } catch (Exception e) {
-//                LOG.error("Could not validate", e);
-////                halt(400, "Error validating feed");
-//            }
-//        }
-//        LOG.info("Finished validation...");
+
+    /**
+     * HTTP endpoint that will trigger the initial or re-validation of all feed versions contained in the application.
+     * The intended use cases here are 1) to validate all versions after a fresh database copy has been loaded in and
+     * 2) to trigger a revalidation of all feed versions should a new validation stage be added to the validation process
+     * that needs to be applied to all feeds.
+     */
+    public static boolean validateAll (boolean load, boolean force, String filterFeedId) throws Exception {
+        LOG.info("validating all feeds...");
+        Collection<FeedVersion> allVersions = Persistence.feedVersions.getAll();
+        for(FeedVersion version: allVersions) {
+            ValidationResult result = version.validationResult;
+            if(!force && result != null && result.fatalException != null) {
+                // If the force option is not true and the validation result did not fail, re-validate.
+                continue;
+            }
+            MonitorableJob job;
+            if (filterFeedId != null && !version.feedSourceId.equals(filterFeedId)) {
+                // Skip all feeds except Cortland for now.
+                continue;
+            }
+            if (load) {
+                job = new ProcessSingleFeedJob(version, "system", false);
+            } else {
+                job = new ValidateFeedJob(version, "system", false);
+            }
+            DataManager.heavyExecutor.execute(job);
+        }
+        // ValidateAllFeedsJob validateAllFeedsJob = new ValidateAllFeedsJob("system", force, load);
         return true;
     }
-//
+
+    /**
+     * Enables the HTTP controllers at the specified prefix.
+     */
     public static void register (String apiPrefix) {
-        post(apiPrefix + "loadLegacy", DumpController::loadLegacy, json::write);
-        post(apiPrefix + "load", DumpController::load, json::write);
-        post(apiPrefix + "validateAll", DumpController::validateAll, json::write);
+        post(apiPrefix + "loadLegacy", (request, response) -> loadLegacy(request.body()), json::write);
+        post(apiPrefix + "load", (request, response) -> load(request.body()), json::write);
+        post(apiPrefix + "validateAll", (request, response) -> {
+            boolean force = request.queryParams("force") != null && request.queryParams("force").equals("true");
+            boolean load = request.queryParams("load") != null && request.queryParams("load").equals("true");
+            return validateAll(load, force, null);
+        }, json::write);
         get(apiPrefix + "dump", DumpController::dump, json::write);
-        System.out.println("registered dump w/ prefix " + apiPrefix);
+        LOG.warn("registered dump w/ prefix " + apiPrefix);
     }
 }

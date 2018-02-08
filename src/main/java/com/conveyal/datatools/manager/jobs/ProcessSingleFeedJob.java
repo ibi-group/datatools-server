@@ -4,6 +4,7 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.editor.jobs.ProcessGtfsSnapshotMerge;
 import com.conveyal.datatools.editor.models.Snapshot;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -20,15 +21,17 @@ import java.util.Map;
 public class ProcessSingleFeedJob extends MonitorableJob {
     private FeedVersion feedVersion;
     private String owner;
+    private final boolean isNewVersion;
     private static final Logger LOG = LoggerFactory.getLogger(ProcessSingleFeedJob.class);
 
     /**
      * Create a job for the given feed version.
      */
-    public ProcessSingleFeedJob (FeedVersion feedVersion, String owner) {
-        super(owner, "Processing GTFS for " + feedVersion.parentFeedSource().name, JobType.PROCESS_FEED);
+    public ProcessSingleFeedJob (FeedVersion feedVersion, String owner, boolean isNewVersion) {
+        super(owner, "Processing GTFS for " + (feedVersion.parentFeedSource() != null ? feedVersion.parentFeedSource().name : "unknown feed source"), JobType.PROCESS_FEED);
         this.feedVersion = feedVersion;
         this.owner = owner;
+        this.isNewVersion = isNewVersion;
         status.update(false,  "Processing...", 0);
         status.uploading = true;
     }
@@ -53,10 +56,10 @@ public class ProcessSingleFeedJob extends MonitorableJob {
         LOG.info("Processing feed for {}", feedVersion.id);
 
         // First, load the feed into database.
-        addNextJob(new LoadFeedJob(feedVersion, owner));
+        addNextJob(new LoadFeedJob(feedVersion, owner, isNewVersion));
 
         // Next, validate the feed.
-        addNextJob(new ValidateFeedJob(feedVersion, owner));
+        addNextJob(new ValidateFeedJob(feedVersion, owner, isNewVersion));
 
         // Use this FeedVersion to seed Editor DB (provided no snapshots for feed already exist).
         // FIXME should this happen for SQL db feeds also?
@@ -83,7 +86,8 @@ public class ProcessSingleFeedJob extends MonitorableJob {
             // there may or may not have been a successful load/validation of the feed. For instance,
             // if an error occurred while building a TransportNetwork, the only impact is that there will
             // be no r5 network to use for generating isochrones.
-            LOG.warn("Error processing version {} because error due to {}.", feedVersion.id, status.exceptionType);
+            String errorReason = status.exceptionType != null ? String.format("error due to %s", status.exceptionType) : "unknown error";
+            LOG.warn("Error processing version {} because of {}.", feedVersion.id, errorReason);
         }
     }
 

@@ -137,7 +137,7 @@ public class Auth0Connection {
         FeedSource feedSource = feedId != null ? Persistence.feedSources.getById(feedId) : null;
         if (feedSource == null) {
             LOG.warn("feedId {} not found", feedId);
-            halt(400, SparkUtils.formatJSON("Must provide feedId parameter", 400));
+            halt(400, SparkUtils.formatJSON("Must provide valid feedId parameter", 400));
         }
 
         if (!request.requestMethod().equals("GET")) {

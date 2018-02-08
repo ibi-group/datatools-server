@@ -20,6 +20,8 @@ import org.mapdb.DB;
 import org.mapdb.Fun;
 import org.mapdb.Fun.Tuple2;
 import com.conveyal.datatools.editor.utils.BindUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.Iterator;
@@ -34,6 +36,7 @@ import static com.conveyal.datatools.editor.jobs.ProcessGtfsSnapshotExport.toGtf
 
 /** a transaction in an agency database */
 public class FeedTx extends DatabaseTx {
+    private static final Logger LOG = LoggerFactory.getLogger(FeedTx.class);
     // primary com.conveyal.datatools.editor.datastores
     // if you add another, you MUST update SnapshotTx.java
     // if you don't, not only will your new data not be backed up, IT WILL BE THROWN AWAY WHEN YOU RESTORE!
@@ -457,17 +460,15 @@ public class FeedTx extends DatabaseTx {
 
     /**
      * Convert Editor MapDB database (snapshot or active buffer) into a {@link com.conveyal.gtfs.GTFSFeed} object. This
-     * should be run in a {@link com.conveyal.datatools.common.status.MonitorableJob}
+     * should be run in an asynchronously executed {@link com.conveyal.datatools.common.status.MonitorableJob}
      * (see {@link com.conveyal.datatools.editor.jobs.ProcessGtfsSnapshotExport} to avoid consuming resources.
      * @return
      */
     public GTFSFeed toGTFSFeed(boolean ignoreRouteStatus) {
         GTFSFeed feed = new GTFSFeed();
         if (agencies != null) {
+            LOG.info("Exporting {} agencies", agencies.size());
             for (Agency agency : agencies.values()) {
-                com.conveyal.gtfs.model.Agency gtfsAgency = agency.toGtfs();
-                LOG.info("Exporting agency {}", gtfsAgency);
-
                 // if agencyId is null (allowed if there is only a single agency), set to empty string
                 if (agency.agencyId == null) {
                     if (feed.agency.containsKey("")) {
@@ -477,7 +478,6 @@ public class FeedTx extends DatabaseTx {
                         agency.agencyId = "";
                     }
                 }
-
                 // write the agency.txt entry
                 feed.agency.put(agency.agencyId, agency.toGtfs());
             }
@@ -486,9 +486,9 @@ public class FeedTx extends DatabaseTx {
         }
 
         if (fares != null) {
+            LOG.info("Exporting {} fares", fares.values().size());
             for (Fare fare : fares.values()) {
                 com.conveyal.gtfs.model.Fare gtfsFare = fare.toGtfs();
-                LOG.info("Exporting fare {}", gtfsFare);
 
                 // write the fares.txt entry
                 feed.fares.put(fare.gtfsFareId, gtfsFare);
@@ -537,6 +537,7 @@ public class FeedTx extends DatabaseTx {
 
         // write the routes
         if(routes != null) {
+            LOG.info("Exporting {} routes", routes.size());
             for (Route route : routes.values()) {
                 // only export approved routes
                 // TODO: restore route approval check?
@@ -545,7 +546,6 @@ public class FeedTx extends DatabaseTx {
                     com.conveyal.gtfs.model.Route gtfsRoute = route.toGtfs(agency);
                     feed.routes.put(route.getGtfsId(), gtfsRoute);
                     gtfsRoutes.put(route.id, gtfsRoute);
-                    LOG.info("Exporting route {}", gtfsRoute);
                 } else {
                     LOG.warn("Route {} not approved", route.gtfsRouteId);
                 }
@@ -555,6 +555,7 @@ public class FeedTx extends DatabaseTx {
         // write the trips on those routes
         // we can't use the trips-by-route index because we may be exporting a snapshot database without indices
         if(trips != null) {
+            LOG.info("Exporting {} trips", trips.size());
             for (Trip trip : trips.values()) {
                 if (!gtfsRoutes.containsKey(trip.routeId)) {
                     LOG.warn("Trip {} has no matching route. This may be because route {} was not approved", trip, trip.routeId);
@@ -621,6 +622,7 @@ public class FeedTx extends DatabaseTx {
                 // write the stop times
                 int cumulativeTravelTime = 0;
                 for (StopTime st : trip.stopTimes) {
+                    // FIXME: set ID field
                     TripPatternStop ps = psi.hasNext() ? psi.next() : null;
                     if (st == null)
                         continue;

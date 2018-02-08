@@ -219,7 +219,7 @@ public class FeedVersion extends Model implements Serializable {
         return format.format(this.updated);
     }
 
-    public void load(MonitorableJob.Status status) {
+    public void load(MonitorableJob.Status status, boolean isNewVersion) {
         File gtfsFile;
         // STEP 1. LOAD GTFS feed into relational database
         try {
@@ -253,8 +253,13 @@ public class FeedVersion extends Model implements Serializable {
         // STEP 2. Upload GTFS to S3 (storage on local machine is done when feed is fetched/uploaded)
         if (DataManager.useS3) {
             try {
-                boolean fileUploaded = FeedVersion.feedStore.uploadToS3(gtfsFile, this.id, this.parentFeedSource());
-                if (fileUploaded) {
+                boolean fileUploaded = false;
+                if (isNewVersion) {
+                    // Only upload file to S3 if it is a new version (otherwise, it would have been downloaded from here.
+                    fileUploaded = FeedVersion.feedStore.uploadToS3(gtfsFile, this.id, this.parentFeedSource());
+                }
+                if (fileUploaded || !isNewVersion) {
+                    // Note: If feed is not a new version, it is presumed to already exist on S3, so uploading is not required.
                     // Delete local copy of feed version after successful s3 upload
                     boolean fileDeleted = gtfsFile.delete();
                     if (fileDeleted) {

@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager;
 
+import com.conveyal.datatools.editor.controllers.EditorLockController;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 
 import com.conveyal.datatools.manager.controllers.DumpController;
@@ -92,13 +93,29 @@ public class DataManager {
     // TODO: move gtfs-api routes to gtfs path and add auth
     private static final String GTFS_API_PREFIX = API_PREFIX;
     public static final String EDITOR_API_PREFIX = "/api/editor/";
-    public static final String publicPath = "(" + DataManager.API_PREFIX + "|" + DataManager.EDITOR_API_PREFIX + ")public/.*";
+    public static final String publicPath = "(" + API_PREFIX + "|" + EDITOR_API_PREFIX + ")public/.*";
     public static final String DEFAULT_ENV = "configurations/default/env.yml";
     public static final String DEFAULT_CONFIG = "configurations/default/server.yml";
     public static DataSource GTFS_DATA_SOURCE;
 
     public static void main(String[] args) throws IOException {
 
+        initializeApplication(args);
+
+        // initialize map of auto fetched projects
+        for (Project project : Persistence.projects.getAll()) {
+            if (project.autoFetchFeeds) {
+                ScheduledFuture scheduledFuture = ProjectController.scheduleAutoFeedFetch(project, 1);
+                autoFetchMap.put(project.id, scheduledFuture);
+            }
+        }
+
+        registerRoutes();
+
+        registerExternalResources();
+    }
+
+    public static void initializeApplication(String[] args) throws IOException {
         // load config
         loadConfig(args);
 
@@ -126,18 +143,6 @@ public class DataManager {
         LOG.info("Initialized gtfs-api at localhost:port{}", API_PREFIX);
 
         Persistence.initialize();
-
-        // initialize map of auto fetched projects
-        for (Project project : Persistence.projects.getAll()) {
-            if (project.autoFetchFeeds) {
-                ScheduledFuture scheduledFuture = ProjectController.scheduleAutoFeedFetch(project, 1);
-                autoFetchMap.put(project.id, scheduledFuture);
-            }
-        }
-
-        registerRoutes();
-
-        registerExternalResources();
     }
 
     /**
@@ -160,6 +165,7 @@ public class DataManager {
         if (isModuleEnabled("editor")) {
 
             SnapshotController.register(EDITOR_API_PREFIX);
+            EditorLockController.register(EDITOR_API_PREFIX);
 
             String gtfs = IOUtils.toString(DataManager.class.getResourceAsStream("/gtfs/gtfs.yml"));
             gtfsConfig = yamlMapper.readTree(gtfs);
@@ -167,10 +173,9 @@ public class DataManager {
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.CALENDAR, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.FARE_ATTRIBUTES, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.FEED_INFO, DataManager.GTFS_DATA_SOURCE);
-            // FIXME: need scheduleException Tables and Controllers
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.ROUTES, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.PATTERNS, DataManager.GTFS_DATA_SOURCE);
-//            new StopController(EDITOR_API_PREFIX, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.SCHEDULE_EXCEPTIONS, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.STOPS, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.TRIPS, DataManager.GTFS_DATA_SOURCE);
 //            GisController.register(EDITOR_API_PREFIX);
@@ -219,6 +224,11 @@ public class DataManager {
 
         // return "application/json" for all API routes
         after(API_PREFIX + "*", (request, response) -> {
+            //            LOG.info(request.pathInfo());
+            response.type("application/json");
+            response.header("Content-Encoding", "gzip");
+        });
+        before(EDITOR_API_PREFIX + "*", (request, response) -> {
             //            LOG.info(request.pathInfo());
             response.type("application/json");
             response.header("Content-Encoding", "gzip");

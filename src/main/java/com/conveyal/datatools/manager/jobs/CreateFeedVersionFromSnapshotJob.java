@@ -1,9 +1,10 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.editor.models.Snapshot;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.models.Snapshot;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -32,7 +33,7 @@ public class CreateFeedVersionFromSnapshotJob extends MonitorableJob {
     @Override
     public void jobLogic() {
         // Process feed version once GTFS file written.
-        addNextJob(new ProcessSingleFeedJob(feedVersion, owner));
+        addNextJob(new ProcessSingleFeedJob(feedVersion, owner, true));
 
         File file = null;
 
@@ -56,7 +57,8 @@ public class CreateFeedVersionFromSnapshotJob extends MonitorableJob {
         }
 
         feedVersion.retrievalMethod = FeedSource.FeedRetrievalMethod.PRODUCED_IN_HOUSE;
-        feedVersion.setName(Snapshot.get(snapshotId).name + " Snapshot Export");
+        Snapshot snapshot = Persistence.snapshots.getById(snapshotId);
+        feedVersion.setName(snapshot.name + " Snapshot Export");
         feedVersion.hash = HashUtils.hashFile(feedVersion.retrieveGtfsFile());
 
         status.update(false, "Version created successfully.", 100, true);

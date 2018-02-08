@@ -166,7 +166,7 @@ public class FeedVersionController  {
         // TODO newFeedVersion.fileTimestamp still exists
 
         // Must be handled by executor because it takes a long time.
-        ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(newFeedVersion, userProfile.getUser_id());
+        ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(newFeedVersion, userProfile.getUser_id(), true);
         DataManager.heavyExecutor.execute(processSingleFeedJob);
 
         return formatJobMessage(processSingleFeedJob.jobId, "Feed version is processing.");

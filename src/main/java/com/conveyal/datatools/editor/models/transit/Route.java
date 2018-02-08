@@ -1,5 +1,6 @@
 package com.conveyal.datatools.editor.models.transit;
 
+import com.conveyal.gtfs.model.Entity;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.conveyal.datatools.editor.datastore.FeedTx;
@@ -137,7 +138,7 @@ public class Route extends Model implements Cloneable, Serializable {
         ret.route_long_name = routeLongName;
         ret.route_short_name = routeShortName;
         ret.route_text_color = routeTextColor;
-        ret.route_type = gtfsRouteType.toGtfs();
+        ret.route_type = gtfsRouteType != null ? gtfsRouteType.toGtfs() : Entity.INT_MISSING;
         try {
             ret.route_url = routeUrl == null ? null : new URL(routeUrl);
         } catch (MalformedURLException e) {

@@ -19,6 +19,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithError;
+import static org.apache.http.client.methods.RequestBuilder.post;
 import static spark.Spark.delete;
 import static spark.Spark.get;
 
@@ -37,6 +38,10 @@ public class StatusController {
         if (!userProfile.canAdministerApplication()) {
             haltWithError(401, "User not authorized to view all jobs");
         }
+        return getAllJobs();
+    }
+
+    public static Set<MonitorableJob> getAllJobs() {
         return DataManager.userJobsMap.values().stream()
                 .flatMap(Collection::stream)
                 .collect(Collectors.toSet());
@@ -101,14 +106,19 @@ public class StatusController {
             // Any active jobs will still have their status updated, so they need to be retrieved again with any status
             // updates. All completed or errored jobs are in their final state and will not be updated any longer, so we
             // remove them once the client has seen them.
-            ConcurrentHashSet<MonitorableJob> jobsStillActive = new ConcurrentHashSet<>();
-            allJobsForUser.stream()
-                    .filter(job -> !job.status.completed && !job.status.error)
-                    .forEach(jobsStillActive::add);
+            ConcurrentHashSet<MonitorableJob> jobsStillActive = filterActiveJobs(allJobsForUser);
 
             DataManager.userJobsMap.put(userId, jobsStillActive);
         }
         return allJobsForUser;
+    }
+
+    public static ConcurrentHashSet<MonitorableJob> filterActiveJobs(Set<MonitorableJob> jobs) {
+        ConcurrentHashSet<MonitorableJob> jobsStillActive = new ConcurrentHashSet<>();
+        jobs.stream()
+                .filter(job -> !job.status.completed && !job.status.error)
+                .forEach(jobsStillActive::add);
+        return jobsStillActive;
     }
 
     public static void register (String apiPrefix) {

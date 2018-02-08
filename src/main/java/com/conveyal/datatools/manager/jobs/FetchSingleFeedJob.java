@@ -45,7 +45,7 @@ public class FetchSingleFeedJob extends MonitorableJob {
             //
             // The exception (continueThread = true) is provided for FetchProjectFeedsJob, when we want the feeds to
             // fetch and then process in sequence.
-            ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(result, this.owner);
+            ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(result, this.owner, true);
             if (continueThread) {
                 addNextJob(processSingleFeedJob);
             } else {
