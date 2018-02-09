@@ -52,7 +52,7 @@ public class ConvertMain {
             // While there are still active jobs, continue waiting.
             ConcurrentHashSet<MonitorableJob> activeJobs = StatusController.filterActiveJobs(StatusController.getAllJobs());
             System.out.println(String.format("There are %d jobs still active. Checking for completion again in 5 seconds...", activeJobs.size()));
-            System.out.println(String.join(", ", activeJobs.stream().map(job -> job.name).collect(Collectors.toList())));
+//            System.out.println(String.join(", ", activeJobs.stream().map(job -> job.name).collect(Collectors.toList())));
             Thread.sleep(5000);
         }
         long durationInMillis = System.currentTimeMillis() - startTime;
