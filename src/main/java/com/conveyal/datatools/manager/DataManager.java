@@ -149,7 +149,7 @@ public class DataManager {
      * Register API routes with Spark. This register core application routes, any routes associated with optional
      * modules and sets other core routes (e.g., 404 response) and response headers (e.g., API content type is JSON).
      */
-    private static void registerRoutes() throws IOException {
+    protected static void registerRoutes() throws IOException {
         CorsFilter.apply();
 
         // core controllers
