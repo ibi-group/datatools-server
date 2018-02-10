@@ -81,7 +81,7 @@ public class DataManager {
 
     // heavy executor should contain long-lived CPU-intensive tasks (e.g., feed loading/validation)
     // FIXME: temporarily decrease num threads to 2 (from 4) for loading feeds from editor.
-    public static Executor heavyExecutor = Executors.newFixedThreadPool(2); // Runtime.getRuntime().availableProcessors()
+    public static Executor heavyExecutor = Executors.newFixedThreadPool(1); // Runtime.getRuntime().availableProcessors()
     // light executor is for tasks for things that should finish quickly (e.g., email notifications)
     public static Executor lightExecutor = Executors.newSingleThreadExecutor();
 
