@@ -135,6 +135,9 @@ public class FeedVersionController  {
             ByteStreams.copy(inputStream, fileOutputStream);
             fileOutputStream.close();
             inputStream.close();
+            if (newGtfsFile.length() == 0) {
+                throw new IOException("No file found in request body.");
+            }
             // Set last modified based on value of query param. This is determined/supplied by the client
             // request because this data gets lost in the uploadStream otherwise.
             Long lastModified = req.queryParams("lastModified") != null ? Long.valueOf(req.queryParams("lastModified")) : null;

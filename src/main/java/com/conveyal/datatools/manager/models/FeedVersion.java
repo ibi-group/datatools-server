@@ -227,6 +227,9 @@ public class FeedVersion extends Model implements Serializable {
             // Get SQL schema namespace for the feed version. This is needed for reconnecting with feeds
             // in the database.
             gtfsFile = retrieveGtfsFile();
+            if (gtfsFile.length() == 0) {
+                throw new IOException("Empty GTFS file supplied.");
+            }
             String gtfsFilePath = gtfsFile.getPath();
             this.feedLoadResult = GTFS.load(gtfsFilePath, DataManager.GTFS_DATA_SOURCE);
             // FIXME? duplication of namespace (also stored as feedLoadResult.uniqueIdentifier)
