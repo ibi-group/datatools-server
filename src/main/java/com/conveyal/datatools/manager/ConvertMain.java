@@ -136,6 +136,7 @@ public class ConvertMain {
             return true;
         } catch (Exception e) {
             System.out.println("Migrating editor feeds FAILED");
+            e.printStackTrace();
             return false;
         } finally {
             gtx.rollbackIfOpen();
