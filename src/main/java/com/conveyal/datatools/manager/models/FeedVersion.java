@@ -111,11 +111,18 @@ public class FeedVersion extends Model implements Serializable {
         return Persistence.feedSources.getById(feedSourceId);
     }
 
+    /**
+     * Finds the previous version (i.e., the version loaded directly before the current version in time order).
+     * @return the previous feed version or <code>null</code> if this is the first version
+     */
     public FeedVersion previousVersion() {
         return Persistence.feedVersions.getOneFiltered(and(
-                eq("version", this.version - 1), eq("feedSourceId", this.id)), null);
+                eq("version", this.version - 1), eq("feedSourceId", this.feedSourceId)), null);
     }
 
+    /**
+     * JSON view to show the previous version ID.
+     */
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("previousVersionId")
     public String previousVersionId() {
@@ -123,12 +130,18 @@ public class FeedVersion extends Model implements Serializable {
         return p != null ? p.id : null;
     }
 
-    // TODO check that this filter is functional
+    /**
+     * Finds the next version (i.e., the version loaded directly after the current version in time order).
+     * @return the next feed version or <code>null</code> if this is the latest version
+     */
     public FeedVersion nextVersion() {
         return Persistence.feedVersions.getOneFiltered(and(
-                eq("version", this.version + 1), eq("feedSourceId", this.id)), null);
+                eq("version", this.version + 1), eq("feedSourceId", this.feedSourceId)), null);
     }
 
+    /**
+     * JSON view to show the next version ID.
+     */
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("nextVersionId")
     public String nextVersionId() {
@@ -228,7 +241,7 @@ public class FeedVersion extends Model implements Serializable {
             // in the database.
             gtfsFile = retrieveGtfsFile();
             if (gtfsFile.length() == 0) {
-                throw new IOException("Empty GTFS file supplied.");
+                throw new IOException("Empty GTFS file supplied");
             }
             String gtfsFilePath = gtfsFile.getPath();
             this.feedLoadResult = GTFS.load(gtfsFilePath, DataManager.GTFS_DATA_SOURCE);
