@@ -90,7 +90,7 @@ public class EditorLockController {
     private static String maintainLock(Request req, Response res) {
         // FIXME: why is content type not being set in before()/after()?
         res.type("application/json");
-        String sessionId = req.session().id();
+        String sessionId = req.params("id");
         String feedId = req.queryParams("feedId");
         Auth0UserProfile userProfile = req.attribute("user");
         EditorSession currentSession = sessionsForFeedIds.get(feedId);
@@ -107,7 +107,7 @@ public class EditorLockController {
             if (currentSession.userEmail.equals(userProfile.getEmail())) {
                 // If the new current session is held by this user, give them the option to evict the current session /
                 // unlock the feed.
-                LOG.warn("User {} has more than one active editor session for feed {}.", userProfile.getEmail(), currentSession.feedId);
+                LOG.warn("User {} already has an active editor session () for feed {}.", userProfile.getEmail(), currentSession.sessionId, currentSession.feedId);
                 haltWithError(400, "Warning! You have an active editing session for this feed underway in a different browser tab.");
             } else {
                 // FIXME: Is it bad to reveal the user email? No, I don't think so. Users have already been authenticated and
@@ -141,6 +141,9 @@ public class EditorLockController {
                 // If there is a different active session for the current user, allow deletion / overwrite.
                 boolean overwrite = Boolean.valueOf(req.queryParams("overwrite"));
                 if (overwrite) {
+                    req.session().invalidate();
+                    Session session = req.session(true);
+                    sessionId = session.id();
                     EditorSession newEditorSession = new EditorSession(feedId, sessionId, userProfile);
                     sessionsForFeedIds.put(feedId, newEditorSession);
                     LOG.warn("Previously active session {} has been overwritten with new session {}.", currentSession.sessionId, newEditorSession.sessionId);
@@ -167,7 +170,7 @@ public class EditorLockController {
     public static void register(String apiPrefix) {
         post(apiPrefix + "secure/lock", EditorLockController::lockFeed, json::write);
         delete(apiPrefix + "secure/lock/:id", EditorLockController::deleteFeedLock, json::write);
-        put(apiPrefix + "secure/lock", EditorLockController::maintainLock, json::write);
+        put(apiPrefix + "secure/lock/:id", EditorLockController::maintainLock, json::write);
     }
 
     private static String formatJSON(String message, int code, String feedId, String sessionId) {
