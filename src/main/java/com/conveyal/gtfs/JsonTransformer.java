@@ -1,7 +1,7 @@
 package com.conveyal.gtfs;
 
-import com.conveyal.geojson.GeometryDeserializer;
-import com.conveyal.geojson.GeometrySerializer;
+//import com.conveyal.geojson.GeometryDeserializer;
+//import com.conveyal.geojson.GeometrySerializer;
 import com.conveyal.gtfs.model.Frequency;
 import com.conveyal.gtfs.model.Pattern;
 import com.conveyal.gtfs.model.Service;
@@ -51,9 +51,9 @@ public class JsonTransformer implements ResponseTransformer {
     }
 
     public abstract class PatternMixin {
-        @JsonSerialize(using = GeometrySerializer.class)
-        @JsonDeserialize(using = GeometryDeserializer.class)
-        public LineString geometry;
+//        @JsonSerialize(using = GeometrySerializer.class)
+//        @JsonDeserialize(using = GeometryDeserializer.class)
+//        public LineString geometry;
 
         @JsonIgnore
         public Joiner joiner;
