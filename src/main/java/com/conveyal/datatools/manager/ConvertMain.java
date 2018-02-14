@@ -36,7 +36,7 @@ import static com.conveyal.datatools.manager.DataManager.registerRoutes;
  *
  * Run instructions:
  *
- * java -Xmx6G -cp datatools.jar:lib/* com.conveyal.datatools.manager.ConvertMain /path/to/env.yml /path/to/server.yml /path/to/dump.json
+ * java -Xmx6G -cp datatools.jar com.conveyal.datatools.manager.ConvertMain /path/to/env.yml /path/to/server.yml /path/to/dump.json
  *
  * An optional fourth argument can be provided to force the application to reprocess (load/validate) feed versions that
  * have already been processed.
