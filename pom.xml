@@ -106,16 +106,16 @@
                 <updatePolicy>always</updatePolicy>
             </snapshots>
         </repository>
-        <!--FIXME: remove entirely? We are no longer deploying to/retrieving from maven.conveyal.com-->
-        <!--<repository>-->
-            <!--<id>conveyal</id>-->
-            <!--<name>conveyal</name>-->
-            <!--<url>https://maven.conveyal.com</url>-->
-            <!--<snapshots>-->
-                <!--<enabled>true</enabled>-->
-                <!--<updatePolicy>always</updatePolicy>-->
-            <!--</snapshots>-->
-        <!--</repository>-->
+        <!--FIXME: Do not remove entirely yet. R5 is still retrieved from here. We are no longer deploying to/retrieving from maven.conveyal.com-->
+        <repository>
+            <id>conveyal</id>
+            <name>conveyal</name>
+            <url>https://maven.conveyal.com</url>
+            <snapshots>
+                <enabled>true</enabled>
+                <updatePolicy>always</updatePolicy>
+            </snapshots>
+        </repository>
         <repository>
             <id>osgeo</id>
             <name>Open Source Geospatial Foundation Repository</name>
