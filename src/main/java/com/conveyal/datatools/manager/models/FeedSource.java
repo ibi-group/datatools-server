@@ -477,6 +477,20 @@ public class FeedSource extends Model implements Cloneable {
         }
     }
 
+    // TODO don't number the snapshots just timestamp them
+    // FIXME for a brief moment snapshot numbers are incoherent. Do this in a single operation or eliminate snapshot version numbers.
+    public void renumberSnapshots() {
+        int i = 1;
+        FindIterable<Snapshot> orderedSnapshots = Persistence.snapshots.getMongoCollection()
+                .find(eq(Snapshot.FEED_SOURCE_REF, this.id))
+                .sort(Sorts.ascending("snapshotTime"));
+        for (Snapshot snapshot : orderedSnapshots) {
+            // Yes it's ugly to pass in a string, but we need to change the parameter type of update to take a Document.
+            Persistence.snapshots.updateField(snapshot.id, "version", i);
+            i += 1;
+        }
+    }
+
     /**
      * Represents ways feeds can be retrieved
      */
