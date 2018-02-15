@@ -80,15 +80,14 @@ public class SnapshotController {
 //        Document newSnapshotFields = Document.parse(req.body());
         FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, "edit", "feedId");
         if (feedSource == null) haltWithError(400, "No feed source found for ID.");
-        if (feedSource.editorNamespace == null) {
-            haltWithError(400, "Must have feed in database before creating snapshot.");
-        }
+        // If there is no active buffer for feed source, update it.
+        boolean updateBuffer = feedSource.editorNamespace == null;
         // Create new non-buffer snapshot.
         CreateSnapshotJob createSnapshotJob =
-                new CreateSnapshotJob(feedSource, feedSource.editorNamespace, userProfile.getUser_id(), false);
+                new CreateSnapshotJob(feedSource, feedSource.editorNamespace, userProfile.getUser_id(), updateBuffer);
         // Begin asynchronous execution.
         DataManager.heavyExecutor.execute(createSnapshotJob);
-        return SparkUtils.formatJSON("Creating snapshot.", 200);
+        return SparkUtils.formatJobMessage(createSnapshotJob.jobId, "Creating snapshot.");
     }
 
     /**
@@ -208,13 +207,14 @@ public class SnapshotController {
         String id = req.params("id");
         // FIXME Ensure namespace id exists in database.
         // Check feed source permissions.
-        FeedVersionController.requestFeedSourceById(req, "edit", "feedId");
+        FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, "edit", "feedId");
         // Retrieve snapshot
         Snapshot snapshot = Persistence.snapshots.getById(id);
         if (snapshot == null) haltWithError(400, "Must provide valid snapshot ID.");
         try {
+            // Remove the snapshot and then renumber the snapshots
             Persistence.snapshots.removeById(snapshot.id);
-            // FIXME Renumber existing snapshots?
+            feedSource.renumberSnapshots();
             // FIXME Are there references that need to be removed? E.g., what if the active buffer snapshot is deleted?
             // FIXME delete tables from database?
             return snapshot;
