@@ -17,6 +17,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
+import com.mongodb.client.FindIterable;
 import com.mongodb.client.model.Sorts;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -34,7 +35,6 @@ import java.util.Map;
 
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.mongodb.client.model.Filters.eq;
-import static com.mongodb.client.model.Updates.set;
 
 /**
  * Created by demory on 3/22/16.
@@ -397,7 +397,7 @@ public class FeedSource extends Model implements Cloneable {
      */
     @JsonIgnore
     public Collection<Snapshot> retrieveSnapshots() {
-        return Persistence.snapshots.getFiltered(eq("feedSourceId", this.id));
+        return Persistence.snapshots.getFiltered(eq(Snapshot.FEED_SOURCE_REF, this.id));
     }
 
 //    @JsonView(JsonViews.UserInterface.class)
@@ -470,7 +470,10 @@ public class FeedSource extends Model implements Cloneable {
     // FIXME for a brief moment feed version numbers are incoherent. Do this in a single operation or eliminate feed version numbers.
     public void renumberFeedVersions() {
         int i = 1;
-        for (FeedVersion feedVersion : Persistence.feedVersions.getMongoCollection().find(eq("feedSourceId", this.id)).sort(Sorts.ascending("updated"))) {
+        FindIterable<FeedVersion> orderedFeedVersions = Persistence.feedVersions.getMongoCollection()
+                .find(eq("feedSourceId", this.id))
+                .sort(Sorts.ascending("updated"));
+        for (FeedVersion feedVersion : orderedFeedVersions) {
             // Yes it's ugly to pass in a string, but we need to change the parameter type of update to take a Document.
             Persistence.feedVersions.update(feedVersion.id, String.format("{version:%d}", i));
             i += 1;
