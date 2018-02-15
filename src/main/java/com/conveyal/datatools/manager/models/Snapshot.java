@@ -1,14 +1,18 @@
 package com.conveyal.datatools.manager.models;
 
 import com.conveyal.gtfs.loader.FeedLoadResult;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonAlias;
 
 /**
  * Represents a snapshot of an agency database.
  * @author mattwigway
  *
  */
+@JsonIgnoreProperties(ignoreUnknown = true)
 public class Snapshot extends Model {
     public static final long serialVersionUID = 1L;
+    public static final String FEED_SOURCE_REF = "feedSourceId";
 
     /** Is this snapshot the current snapshot - the most recently created or restored (i.e. the most current view of what's in master */
     public boolean current;
@@ -22,7 +26,8 @@ public class Snapshot extends Model {
     /** The comment of this snapshot */
     public String comment;
 
-    /** The feed source associated with this */
+    /** The feed source associated with this. NOTE: this field is NOT named feedSourceId to match legacy editor snapshots. */
+    @JsonAlias({"feedId", "feedSourceId"})
     public String feedSourceId;
 
     /** The feed version this snapshot was generated from or published to, if any */
@@ -48,9 +53,6 @@ public class Snapshot extends Model {
         this.snapshotOf = snapshotOf;
         this.namespace = feedLoadResult.uniqueIdentifier;
         this.feedLoadResult = feedLoadResult;
-    }
-
-    public String generateFileName () {
-        return this.feedSourceId + "_" + this.snapshotTime + ".zip";
+        snapshotTime = System.currentTimeMillis();
     }
 }

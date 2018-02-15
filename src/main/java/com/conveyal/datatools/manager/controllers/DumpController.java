@@ -7,11 +7,11 @@ import com.conveyal.datatools.manager.jobs.ValidateFeedJob;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
-import com.conveyal.datatools.manager.models.FeedValidationResult;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Note;
 import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.models.Snapshot;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.gtfs.validator.ValidationResult;
@@ -29,9 +29,12 @@ import java.net.URL;
 import java.util.Collection;
 import java.util.Date;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithError;
+import static com.mongodb.client.model.Filters.and;
+import static com.mongodb.client.model.Filters.eq;
 import static spark.Spark.*;
 
 /**
@@ -57,6 +60,7 @@ public class DumpController {
         // public Collection<Auth0UserProfile> users;
         public Collection<Deployment> deployments;
         public Collection<ExternalFeedSourceProperty> externalProperties;
+        public Collection<Snapshot> snapshots;
     }
 //
     private static JsonManager<DatabaseState> json =
@@ -77,6 +81,7 @@ public class DumpController {
         db.notes = Persistence.notes.getAll();
         db.deployments = Persistence.deployments.getAll();
         db.externalProperties = Persistence.externalFeedSourceProperties.getAll();
+        db.snapshots = Persistence.snapshots.getAll();
         return db;
     }
     // FIXME: This can now be authenticated because users are stored in Auth0.
@@ -130,8 +135,74 @@ public class DumpController {
             Persistence.externalFeedSourceProperties.create(externalFeedSourceProperty);
         }
 
+        for (Snapshot snapshot : db.snapshots) {
+            LOG.info("loading snapshot {}", snapshot.id);
+            Persistence.snapshots.create(snapshot);
+        }
+
         LOG.info("load completed.");
         return true;
+    }
+
+    /**
+     * Updates snapshots in Mongo database with data from a list of snapshots in a JSON dump file. This is mainly intended
+     * for a one-off import that did not load in the snapshots from a dump file, but rather generated them directly from
+     * an editor mapdb. This method also deletes any duplicate snapshots (i.e., where the feedSourceId and version are
+     * the same), leaving only one snapshot for that feedSourceId/version remaining.
+     * @param jsonString
+     * @return
+     */
+    public static boolean updateSnapshotMetadata (String jsonString) {
+        LOG.info("loading data...");
+        DatabaseState db;
+        try {
+            db = json.read(jsonString);
+            LOG.info("data loaded successfully");
+        } catch (IOException e) {
+            e.printStackTrace();
+            LOG.error("data load error.  check json validity.");
+            return false;
+        }
+
+        if (db.snapshots == null || db.snapshots.size() == 0) {
+            LOG.warn("No snapshots found in JSON!!");
+            return false;
+        }
+        int updateCount = 0;
+        int deleteCount = 0;
+        for (Snapshot snapshotFromJSON : db.snapshots) {
+            List<Snapshot> matchingSnapshots = Persistence.snapshots.getFiltered(and(
+                    eq("version", snapshotFromJSON.version),
+                    eq(Snapshot.FEED_SOURCE_REF, snapshotFromJSON.feedSourceId)));
+
+            Iterator<Snapshot> snapshotIterator = matchingSnapshots.iterator();
+            while (snapshotIterator.hasNext()) {
+                Snapshot nextSnapshot = snapshotIterator.next();
+                if (snapshotIterator.hasNext()) {
+                    // Remove any duplicates that may have been created during import
+                    LOG.warn("Removing duplicate snapshot for {}.{}", snapshotFromJSON.feedSourceId, snapshotFromJSON.version);
+                    Persistence.snapshots.removeById(nextSnapshot.id);
+                    deleteCount++;
+                } else {
+                    // Update snapshot from JSON with single remaining snapshot's id, namespace, and feed load result
+                    LOG.info("updating snapshot {}.{}", snapshotFromJSON.feedSourceId, snapshotFromJSON.version);
+                    snapshotFromJSON.id = nextSnapshot.id;
+                    snapshotFromJSON.namespace = nextSnapshot.namespace;
+                    snapshotFromJSON.feedLoadResult = nextSnapshot.feedLoadResult;
+                    // Replace stored snapshot with snapshot from JSON.
+                    Persistence.snapshots.replace(nextSnapshot.id, snapshotFromJSON);
+                    updateCount++;
+                }
+            }
+        }
+        if (updateCount > 0 || deleteCount > 0) {
+            LOG.info("{} snapshots updated, {} snapshots deleted (duplicates)", updateCount, deleteCount);
+            return true;
+        }
+        else {
+            LOG.warn("No snapshots updated or deleted.");
+            return false;
+        }
     }
 
     /**

@@ -57,8 +57,19 @@ public class ConvertMain {
         long startTime = System.currentTimeMillis();
 
         boolean snapshotsOnly = args.length > 2 && "snapshotsOnly=true".equals(args[2]);
+        boolean updateSnapshotMetadata = args.length > 2 && "updateSnapshotMetadata=true".equals(args[2]);
 
-        if (!snapshotsOnly) {
+        // FIXME remove migrateSingleSnapshot (just for local testing)
+        migrateSingleSnapshot(null);
+        if (updateSnapshotMetadata) {
+            String jsonString = FileUtils.readFileToString(new File(args[3]), Charset.defaultCharset());
+            boolean result = DumpController.updateSnapshotMetadata(jsonString);
+            if (result) {
+                System.out.println("Snapshot metadata update successful!");
+            }
+            // Done.
+            System.exit(0);
+        } else if (!snapshotsOnly) {
             // STEP 1: Load in JSON dump into MongoDB (args 0 and 1 are the config files)
             String jsonString = FileUtils.readFileToString(new File(args[2]), Charset.defaultCharset());
             // FIXME: Do we still need to map certain project fields?
@@ -74,7 +85,6 @@ public class ConvertMain {
         // STEP 3: For each feed source in MongoDB, load all snapshots (and current editor buffer) into Postgres DB.
         // STEP 3A: For each snapshot/editor DB, create a snapshot Mongo object for the feed source with the FeedLoadResult.
         migrateEditorFeeds();
-//        migrateSingleSnapshot(null);
         System.out.println("Done queueing!!!!!!!!");
         int totalJobs = StatusController.getAllJobs().size();
         while (!StatusController.filterActiveJobs(StatusController.getAllJobs()).isEmpty()) {
@@ -144,19 +154,11 @@ public class ConvertMain {
     }
 
     public static boolean migrateSingleSnapshot (Fun.Tuple2<String, Integer> decodedId) {
-        // Open the Editor MapDB and write a snapshot to the SQL database.
-        GlobalTx gtx = VersionedDataStore.getGlobalTx();
-        Snapshot local;
         if (decodedId == null) {
-            // Cortland
-            decodedId = new Fun.Tuple2<>(CORTLAND_FEED_ID, 13);
+            // Use Cortland if no feed provided
+            decodedId = new Fun.Tuple2<>(CORTLAND_FEED_ID, 12);
         }
-        if (!gtx.snapshots.containsKey(decodedId)) {
-            System.out.println("Could not find snapshot in global database");
-            return false;
-        }
-        local = gtx.snapshots.get(decodedId);
-        new ConvertEditorMapDBToSQL(local.id.a, local.id.b).run();
+        new ConvertEditorMapDBToSQL(decodedId.a, decodedId.b).run();
         return true;
     }
 }

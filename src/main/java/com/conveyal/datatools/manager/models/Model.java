@@ -22,7 +22,7 @@ import javax.persistence.MappedSuperclass;
  * @author mattwigway
  */
 
-@MappedSuperclass
+@MappedSuperclass // applies mapping information to the subclassed entities FIXME remove?
 public abstract class Model implements Serializable {
     private static final long serialVersionUID = 1L;
 
