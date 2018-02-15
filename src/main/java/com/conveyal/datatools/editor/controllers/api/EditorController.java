@@ -226,9 +226,11 @@ public abstract class EditorController<T extends Entity> {
             // This session does not match the current active session for the feed.
             Auth0UserProfile userProfile = req.attribute("user");
             if (currentSession.userEmail.equals(userProfile.getEmail())) {
-                haltWithError(400, "You have another edit session open");
+                LOG.warn("User {} already has editor session {} for feed {}. Same user cannot make edits on session {}.", currentSession.userEmail, currentSession.sessionId, req.session().id());
+                haltWithError(400, "You have another editing session open for " + feedSource.name);
             } else {
-                haltWithError(400, "Somebody else is editing this feed.");
+                LOG.warn("User {} already has editor session {} for feed {}. User {} cannot make edits on session {}.", currentSession.userEmail, currentSession.sessionId, userProfile.getEmail(), req.session().id());
+                haltWithError(400, "Somebody else is editing the " + feedSource.name + " feed.");
             }
         } else {
             currentSession.lastEdit = System.currentTimeMillis();
