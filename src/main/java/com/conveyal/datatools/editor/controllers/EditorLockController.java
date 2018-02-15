@@ -42,9 +42,7 @@ public class EditorLockController {
             // If there is no active session for the feed ID, create a new one, which allows only the current user +
             // session to edit.
             // Create new session
-            req.session().invalidate();
-            Session session = req.session(true);
-            String newSessionId = session.id();
+            String newSessionId = invalidateAndCreateNewSession(req);
             EditorSession newEditorSession = new EditorSession(feedId, newSessionId, userProfile);
             sessionsForFeedIds.put(feedId, newEditorSession);
             LOG.info("Locking feed {} for editing session {} by user {}", feedId, newSessionId, userProfile.getEmail());
@@ -62,9 +60,7 @@ public class EditorLockController {
             // the current session in favor of new session.
             // FIXME: Should there be a user action to "boot" the other session lock?
             // Create new session
-            req.session().invalidate();
-            Session session = req.session(true);
-            String newSessionId = session.id();
+            String newSessionId = invalidateAndCreateNewSession(req);
             LOG.info("User {} (session ID: {}) has not maintained lock for {} minutes. Booting.", currentSession.userEmail, currentSession.sessionId, minutesSinceLastCheckIn);
             EditorSession newEditorSession = new EditorSession(feedId, newSessionId, userProfile);
             sessionsForFeedIds.put(feedId, newEditorSession);
@@ -85,6 +81,13 @@ public class EditorLockController {
             haltWithError(400, "Warning! You are editing this feed in another session/browser tab!");
             return null;
         }
+    }
+
+    private static String invalidateAndCreateNewSession(Request req) {
+        req.session().invalidate();
+        Session session = req.session(true);
+        String newSessionId = session.id();
+        return newSessionId;
     }
 
     private static String maintainLock(Request req, Response res) {
@@ -141,9 +144,7 @@ public class EditorLockController {
                 // If there is a different active session for the current user, allow deletion / overwrite.
                 boolean overwrite = Boolean.valueOf(req.queryParams("overwrite"));
                 if (overwrite) {
-                    req.session().invalidate();
-                    Session session = req.session(true);
-                    sessionId = session.id();
+                    sessionId = invalidateAndCreateNewSession(req);
                     EditorSession newEditorSession = new EditorSession(feedId, sessionId, userProfile);
                     sessionsForFeedIds.put(feedId, newEditorSession);
                     LOG.warn("Previously active session {} has been overwritten with new session {}.", currentSession.sessionId, newEditorSession.sessionId);

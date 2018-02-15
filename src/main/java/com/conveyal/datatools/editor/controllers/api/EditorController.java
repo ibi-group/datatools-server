@@ -86,7 +86,7 @@ public abstract class EditorController<T extends Entity> {
      * HTTP endpoint to delete all trips for a given string pattern_id (i.e., not the integer ID field).
      */
     private String deleteTripsForPattern(Request req, Response res) {
-        String namespace = getNamespaceFromRequest(req);
+        String namespace = getNamespaceAndValidateSession(req);
         // NOTE: This is a string pattern ID, not the integer ID that all other HTTP endpoints use.
         String patternId = req.params("id");
         if (patternId == null) {
@@ -108,7 +108,7 @@ public abstract class EditorController<T extends Entity> {
      * parameter. TODO: Implement this for other entity types?
      */
     private String deleteMultipleTrips(Request req, Response res) {
-        String namespace = getNamespaceFromRequest(req);
+        String namespace = getNamespaceAndValidateSession(req);
         JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
         String[] tripIds = req.queryParams("tripIds").split(",");
         try {
@@ -135,7 +135,7 @@ public abstract class EditorController<T extends Entity> {
      * HTTP endpoint to delete one GTFS editor entity specified by the integer ID field.
      */
     private String deleteOne(Request req, Response res) {
-        String namespace = getNamespaceFromRequest(req);
+        String namespace = getNamespaceAndValidateSession(req);
         Integer id = getIdFromRequest(req);
         JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
         try {
@@ -167,7 +167,7 @@ public abstract class EditorController<T extends Entity> {
             haltWithError(400, "Could not upload branding", e);
         }
         // Update URL in GTFS entity using JSON.
-        JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, getNamespaceFromRequest(req));
+        JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, getNamespaceAndValidateSession(req));
         JsonObject jsonObject = new JsonObject();
         jsonObject.addProperty(String.format("%s_branding_url", classToLowercase), url);
         try {
@@ -191,7 +191,7 @@ public abstract class EditorController<T extends Entity> {
             haltWithError(400, "Must provide id");
         }
         final boolean isCreating = req.params("id") == null;
-        String namespace = getNamespaceFromRequest(req);
+        String namespace = getNamespaceAndValidateSession(req);
         Integer id = getIdFromRequest(req);
         // Get the JsonObject
         JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
@@ -209,15 +209,18 @@ public abstract class EditorController<T extends Entity> {
     }
 
     /**
-     * Get the namespace for the feed ID found in the request. And check that the user has an active editing session.
+     * Get the namespace for the feed ID found in the request. Also, check that the user has an active editing session
+     * for the provided feed ID.
      */
-    private String getNamespaceFromRequest(Request req) {
+    private static String getNamespaceAndValidateSession(Request req) {
         String feedId = req.queryParams("feedId");
+        String sessionId = req.queryParams("sessionId");
         FeedSource feedSource = Persistence.feedSources.getById(feedId);
         if (feedSource == null) {
             haltWithError(400, "Feed ID is invalid");
         }
-        String sessionId = req.session().id();
+        // FIXME: Switch to using spark session IDs rather than query parameter?
+//        String sessionId = req.session().id();
         EditorLockController.EditorSession currentSession = sessionsForFeedIds.get(feedId);
         if (currentSession == null) {
             haltWithError(400, "There is no active editing session for user.");
@@ -226,10 +229,10 @@ public abstract class EditorController<T extends Entity> {
             // This session does not match the current active session for the feed.
             Auth0UserProfile userProfile = req.attribute("user");
             if (currentSession.userEmail.equals(userProfile.getEmail())) {
-                LOG.warn("User {} already has editor session {} for feed {}. Same user cannot make edits on session {}.", currentSession.userEmail, currentSession.sessionId, req.session().id());
+                LOG.warn("User {} already has editor session {} for feed {}. Same user cannot make edits on session {}.", currentSession.userEmail, currentSession.sessionId, feedId, req.session().id());
                 haltWithError(400, "You have another editing session open for " + feedSource.name);
             } else {
-                LOG.warn("User {} already has editor session {} for feed {}. User {} cannot make edits on session {}.", currentSession.userEmail, currentSession.sessionId, userProfile.getEmail(), req.session().id());
+                LOG.warn("User {} already has editor session {} for feed {}. User {} cannot make edits on session {}.", currentSession.userEmail, currentSession.sessionId, feedId, userProfile.getEmail(), req.session().id());
                 haltWithError(400, "Somebody else is editing the " + feedSource.name + " feed.");
             }
         } else {
