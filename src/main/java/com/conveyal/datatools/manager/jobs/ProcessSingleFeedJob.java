@@ -1,20 +1,15 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.editor.jobs.ProcessGtfsSnapshotMerge;
-import com.conveyal.datatools.editor.models.Snapshot;
-import com.conveyal.datatools.manager.DataManager;
-import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
-import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Map;
-
 /**
- * Process/validate a single GTFS feed
+ * Process/validate a single GTFS feed. This chains together multiple server jobs. Loading the feed and validating the
+ * feed are chained regardless. However, depending on which modules are enabled (e.g., r5_network), other jobs may be
+ * included here if desired.
  * @author mattwigway
  *
  */
@@ -61,19 +56,11 @@ public class ProcessSingleFeedJob extends MonitorableJob {
         // Next, validate the feed.
         addNextJob(new ValidateFeedJob(feedVersion, owner, isNewVersion));
 
-        // Use this FeedVersion to seed Editor DB (provided no snapshots for feed already exist).
-        // FIXME should this happen for SQL db feeds also?
-//        if(DataManager.isModuleEnabled("editor")) {
-//            // chain snapshot-creation job if no snapshots currently exist for feed
-//            if (Snapshot.getSnapshots(feedVersion.feedSourceId).size() == 0) {
-//                addNextJob(new ProcessGtfsSnapshotMerge(feedVersion, owner));
-//            }
-//        }
-
         // chain on a network builder job, if applicable
-        if(DataManager.isModuleEnabled("r5_network")) {
-            addNextJob(new BuildTransportNetworkJob(feedVersion, owner));
-        }
+        // FIXME: add back in.
+//        if(DataManager.isModuleEnabled("r5_network")) {
+//            addNextJob(new BuildTransportNetworkJob(feedVersion, owner));
+//        }
     }
 
     @Override
