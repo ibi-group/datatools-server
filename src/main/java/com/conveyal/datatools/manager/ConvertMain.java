@@ -60,7 +60,7 @@ public class ConvertMain {
         boolean updateSnapshotMetadata = args.length > 2 && "updateSnapshotMetadata=true".equals(args[2]);
 
         // FIXME remove migrateSingleSnapshot (just for local testing)
-        migrateSingleSnapshot(null);
+//        migrateSingleSnapshot(null);
         if (updateSnapshotMetadata) {
             String jsonString = FileUtils.readFileToString(new File(args[3]), Charset.defaultCharset());
             boolean result = DumpController.updateSnapshotMetadata(jsonString);
