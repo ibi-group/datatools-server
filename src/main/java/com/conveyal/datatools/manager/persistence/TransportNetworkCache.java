@@ -50,15 +50,8 @@ public class TransportNetworkCache {
         this.duration = duration;
         this.timeUnit = timeUnit;
         transportNetworkCache = CacheBuilder.newBuilder()
-                // we use SoftReferenced values because we have the constraint that we don't want more than one
-                // copy of a particular TransportNetwork object around; that would mean multiple MapDBs are pointing
-                // at the same file, which is bad.
-                // TODO: should we be using soft values?
-                .softValues()
                 .expireAfterAccess(10, TimeUnit.MINUTES)
                 // TODO: Use maximumWeight instead of using maximumSize for better resource consumption estimate?
-//                .maximumWeight(100000)
-//                .weigher(weigher)
                 .maximumSize(cacheSize)
                 .removalListener(removalListener)
                 .build(new CacheLoader() {
@@ -66,15 +59,14 @@ public class TransportNetworkCache {
                     public TransportNetwork load(Object key) throws Exception {
                         // Thanks, java, for making me use a cast here. If I put generic arguments to new CacheLoader
                         // due to type erasure it can't be sure I'm using types correctly.
-                        FeedVersion version = FeedVersion.get((String) key);
+                        FeedVersion version = Persistence.feedVersions.getById((String) key);
                         if (version != null) {
-                            return version.buildOrReadTransportNetwork();
+                            return version.readTransportNetwork();
                         } else {
                             LOG.error("Version does not exist for id {}", key);
                             // This throws a CacheLoader$InvalidCacheLoadException
                             return null;
                         }
-//                    return FeedVersionController.buildOrReadTransportNetwork(FeedVersion.get((String) key), null);
                     }
                 });
     }

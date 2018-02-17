@@ -52,7 +52,8 @@ public abstract class MonitorableJob implements Runnable {
         CREATE_SNAPSHOT,
         EXPORT_SNAPSHOT_TO_GTFS,
         CONVERT_EDITOR_MAPDB_TO_SQL,
-        VALIDATE_ALL_FEEDS, MERGE_PROJECT_FEEDS
+        VALIDATE_ALL_FEEDS,
+        MERGE_PROJECT_FEEDS
     }
 
     public MonitorableJob(String owner, String name, JobType type) {

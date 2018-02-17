@@ -16,6 +16,7 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.persistence.TransportNetworkCache;
 import com.conveyal.datatools.manager.utils.CorsFilter;
 import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.GraphQLMain;
@@ -64,12 +65,15 @@ public class DataManager {
     public static JsonNode gtfsConfig;
 
     // Contains the config-enabled ExternalFeedResource objects that define connections to third-party feed indexes
-    public static final Map<String, ExternalFeedResource> feedResources = new HashMap<>();
-    // TODO: define type for ExternalFeedResource Strings
-
     // (e.g., transit.land, TransitFeeds.com)
-    public static Map<String, ConcurrentHashSet<MonitorableJob>> userJobsMap = new ConcurrentHashMap<>();
+    // TODO: define type for ExternalFeedResource Strings
+    public static final Map<String, ExternalFeedResource> feedResources = new HashMap<>();
+
     // Stores jobs underway by user ID.
+    public static Map<String, ConcurrentHashSet<MonitorableJob>> userJobsMap = new ConcurrentHashMap<>();
+
+    // Caches r5 transport networks for use in generating isochrones
+    public static final TransportNetworkCache transportNetworkCache = new TransportNetworkCache();
 
     // Stores ScheduledFuture objects that kick off runnable tasks (e.g., fetch project feeds at 2:00 AM).
     public static Map<String, ScheduledFuture> autoFetchMap = new HashMap<>();

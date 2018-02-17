@@ -11,6 +11,7 @@ import org.slf4j.LoggerFactory;
 import spark.Request;
 import spark.Response;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashSet;
@@ -62,7 +63,7 @@ public class StatusController {
      * Gets a job by user ID and job ID.
      * @param clearCompleted if true, remove requested job if it has completed or errored
      */
-    private static MonitorableJob getJobById(String userId, String jobId, boolean clearCompleted) {
+    public static MonitorableJob getJobById(String userId, String jobId, boolean clearCompleted) {
         // Get jobs set directly from userJobsMap because we may remove an element from it below.
         Set<MonitorableJob> userJobs = DataManager.userJobsMap.get(userId);
         if (userJobs == null) {
@@ -90,6 +91,12 @@ public class StatusController {
         String userId = userProfile.getUser_id();
         // Get a copy of all existing jobs before we purge the completed ones.
         return getJobsByUserId(userId, true);
+    }
+
+    public static Set<MonitorableJob> filterJobsByType (MonitorableJob.JobType ...jobType) {
+        return getAllJobs().stream()
+                .filter(job -> Arrays.asList(jobType).contains(job.type))
+                .collect(Collectors.toSet());
     }
 
     /**

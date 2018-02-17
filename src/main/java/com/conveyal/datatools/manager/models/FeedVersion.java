@@ -102,9 +102,6 @@ public class FeedVersion extends Model implements Serializable {
 
     public FeedSource.FeedRetrievalMethod retrievalMethod;
 
-    @JsonIgnore
-    public transient TransportNetwork transportNetwork;
-
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("feedSource")
     public FeedSource parentFeedSource() {
@@ -340,6 +337,25 @@ public class FeedVersion extends Model implements Serializable {
         this.hash = HashUtils.hashFile(retrieveGtfsFile());
     }
 
+    /**
+     * This reads in
+     * @return
+     */
+    public TransportNetwork readTransportNetwork() {
+        TransportNetwork transportNetwork = null;
+        try {
+            transportNetwork = TransportNetwork.read(transportNetworkPath());
+            // check to see if distance tables are built yet... should be removed once better caching strategy is implemented.
+            if (transportNetwork.transitLayer.stopToVertexDistanceTables == null) {
+                transportNetwork.transitLayer.buildDistanceTables(null);
+            }
+        } catch (Exception e) {
+            LOG.error("Could not read transport network for version {}", id);
+            e.printStackTrace();
+        }
+        return transportNetwork;
+    }
+
     public TransportNetwork buildTransportNetwork(MonitorableJob.Status status) {
         // return null if validation result is null (probably means something went wrong with validation, plus we won't have feed bounds).
         if (this.validationResult == null || validationResult.fatalException != null) {
@@ -406,7 +422,7 @@ public class FeedVersion extends Model implements Serializable {
         File tnFile = transportNetworkPath();
         try {
             tn.write(tnFile);
-            return transportNetwork;
+            return tn;
         } catch (IOException e) {
             e.printStackTrace();
         }

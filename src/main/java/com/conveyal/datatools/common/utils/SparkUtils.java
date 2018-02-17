@@ -1,6 +1,8 @@
 package com.conveyal.datatools.common.utils;
 
-import com.google.gson.JsonObject;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import spark.HaltException;
 import spark.Response;
 
@@ -15,6 +17,8 @@ import static spark.Spark.halt;
  * Created by landon on 12/15/16.
  */
 public class SparkUtils {
+
+    private static final ObjectMapper mapper = new ObjectMapper();
 
     public static Object downloadFile(File file, String filename, Response res) {
         if(file == null) haltWithError(404, "File is null");
@@ -43,12 +47,12 @@ public class SparkUtils {
 
     public static String formatJSON(String message, int code, Exception e) {
         String detail = e != null ? e.getMessage() : null;
-        JsonObject object = new JsonObject();
-        object.addProperty("result", code >= 400 ? "ERR" : "OK");
-        object.addProperty("message", message);
-        object.addProperty("code", code);
+        ObjectNode object = mapper.createObjectNode();
+        object.put("result", code >= 400 ? "ERR" : "OK");
+        object.put("message", message);
+        object.put("code", code);
         if (detail != null) {
-            object.addProperty("detail", detail);
+            object.put("detail", detail);
         }
         return object.toString();
     }
@@ -70,9 +74,16 @@ public class SparkUtils {
     }
 
     public static String formatJobMessage (String jobId, String message) {
-        JsonObject object = new JsonObject();
-        object.addProperty("jobId", jobId);
-        object.addProperty("message", message);
+        ObjectNode object = mapper.createObjectNode();
+        object.put("jobId", jobId);
+        object.put("message", message);
         return object.toString();
+    }
+
+    public static JsonNode formatJobResponse (String jobId, String message) {
+        ObjectNode jNode = mapper.createObjectNode();
+        jNode.put("jobId", jobId);
+        jNode.put("message", message);
+        return jNode;
     }
 }

@@ -10,7 +10,8 @@ import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.gtfs.loader.JdbcTableWriter;
 import com.conveyal.gtfs.loader.Table;
 import com.conveyal.gtfs.model.Entity;
-import com.google.gson.JsonObject;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
@@ -38,6 +39,7 @@ public abstract class EditorController<T extends Entity> {
     private static final Logger LOG = LoggerFactory.getLogger(EditorController.class);
     private DataSource datasource;
     private final String classToLowercase;
+    private static final ObjectMapper mapper = new ObjectMapper();
     public static final JsonManager<Entity> json = new JsonManager<>(Entity.class, JsonViews.UserInterface.class);
     private final Table table;
 
@@ -168,10 +170,10 @@ public abstract class EditorController<T extends Entity> {
         }
         // Update URL in GTFS entity using JSON.
         JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, getNamespaceAndValidateSession(req));
-        JsonObject jsonObject = new JsonObject();
-        jsonObject.addProperty(String.format("%s_branding_url", classToLowercase), url);
+        ObjectNode jsonObject = mapper.createObjectNode();
+        jsonObject.put(String.format("%s_branding_url", classToLowercase), url);
         try {
-            return tableWriter.update(id, jsonObject.getAsString(), true);
+            return tableWriter.update(id, jsonObject.toString(), true);
         } catch (SQLException | IOException e) {
             e.printStackTrace();
             haltWithError(400, "Could not update branding url", e);

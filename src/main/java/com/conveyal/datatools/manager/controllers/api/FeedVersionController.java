@@ -2,13 +2,13 @@ package com.conveyal.datatools.manager.controllers.api;
 
 import com.amazonaws.auth.policy.Statement;
 import com.amazonaws.auth.policy.actions.S3Actions;
+import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.BuildTransportNetworkJob;
 import com.conveyal.datatools.manager.jobs.CreateFeedVersionFromSnapshotJob;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
-import com.conveyal.datatools.manager.jobs.ReadTransportNetworkJob;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -30,7 +30,6 @@ import com.conveyal.r5.streets.LinkedPointSet;
 import com.conveyal.r5.transit.TransportNetwork;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.core.JsonProcessingException;
 
 import java.io.*;
 import java.nio.charset.StandardCharsets;
@@ -38,19 +37,22 @@ import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.ExecutionException;
+import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.io.ByteStreams;
+import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
 import spark.Response;
 
-import javax.servlet.ServletException;
 import javax.servlet.ServletInputStream;
 import javax.servlet.ServletRequestWrapper;
 
+import static com.conveyal.datatools.common.status.MonitorableJob.JobType.BUILD_TRANSPORT_NETWORK;
 import static com.conveyal.datatools.common.utils.S3Utils.getS3Credentials;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
@@ -67,17 +69,13 @@ public class FeedVersionController  {
 
     public static final Logger LOG = LoggerFactory.getLogger(FeedVersionController.class);
     private static ObjectMapper mapper = new ObjectMapper();
-    public static JsonManager<FeedVersion> json =
-            new JsonManager<FeedVersion>(FeedVersion.class, JsonViews.UserInterface.class);
-    private static Set<String> networkBuildInProgress = new HashSet<>();
-    private static Set<String> networkReadInProgress = new HashSet<>();
-    private static Map<String, Long> networkCacheQueue = new HashMap();
+    public static JsonManager<FeedVersion> json = new JsonManager<>(FeedVersion.class, JsonViews.UserInterface.class);
 
     /**
      * Grab the feed version for the ID supplied in the request.
      * If you pass in ?summarized=true, don't include the full tree of validation results, only the counts.
      */
-    public static FeedVersion getFeedVersion (Request req, Response res) throws JsonProcessingException {
+    public static FeedVersion getFeedVersion (Request req, Response res) {
         FeedVersion feedVersion = requestFeedVersion(req, "view");
         return feedVersion;
     }
@@ -85,7 +83,7 @@ public class FeedVersionController  {
     /**
      * Get all feed versions for a given feedSource (whose ID is specified in the request).
      */
-    public static Collection<FeedVersion> getAllFeedVersionsForFeedSource(Request req, Response res) throws JsonProcessingException {
+    public static Collection<FeedVersion> getAllFeedVersionsForFeedSource(Request req, Response res) {
         // Check permissions and get the FeedSource whose FeedVersions we want.
         FeedSource feedSource = requestFeedSourceById(req, "view");
         Collection<FeedVersion> feedVersions = feedSource.retrieveFeedVersions();
@@ -115,7 +113,7 @@ public class FeedVersionController  {
      *
      * @return the job ID that allows monitoring progress of the load process
      */
-    public static String createFeedVersionViaUpload(Request req, Response res) throws IOException, ServletException {
+    public static String createFeedVersionViaUpload(Request req, Response res) {
 
         Auth0UserProfile userProfile = req.attribute("user");
         FeedSource feedSource = requestFeedSourceById(req, "manage");
@@ -187,7 +185,7 @@ public class FeedVersionController  {
      *
      *  OR we could just export the feed to a file and then re-import it per usual. This seems like it's wasting time/energy.
      */
-    public static boolean createFeedVersionFromSnapshot (Request req, Response res) throws IOException, ServletException {
+    public static boolean createFeedVersionFromSnapshot (Request req, Response res) {
 
         Auth0UserProfile userProfile = req.attribute("user");
         // TODO: Should the ability to create a feedVersion from snapshot be controlled by the 'edit-gtfs' privilege?
@@ -220,135 +218,62 @@ public class FeedVersionController  {
         return version;
     }
 
+    /**
+     * This method returns isochrones generated by R5 for the provided request parameters (the actual request is
+     * constructed in {@link #buildProfileRequest}). If a transport network does not exist for the feed version, an async
+     * build job is kicked off. Otherwise, the transport network cache is checked for the network.
+     */
     public static JsonNode getIsochrones(Request req, Response res) {
-        FeedVersion version = requestFeedVersion(req, "view");
-
-        Auth0UserProfile userProfile = req.attribute("user");
-        // if tn is null, check first if it's being built, else try reading in tn
-        if (version.transportNetwork == null) {
-            buildOrReadTransportNetwork(version, userProfile);
+        if (!DataManager.isModuleEnabled("r5_network")) {
+            halt(400, SparkUtils.formatJSON("Isochrone generation not enabled in this application."));
         }
-        else {
-            // remove version from list of reading network
-            if (networkReadInProgress.contains(version.id)) {
-                networkReadInProgress.remove(version.id);
-            }
+        Auth0UserProfile userProfile = req.attribute("user");
+        FeedVersion version = requestFeedVersion(req, "view");
+        // Check server jobs to determine if build or read is in progress.
+        checkForActiveTransportNetworkJob(version);
+        TransportNetwork transportNetwork = null;
+        if (!version.transportNetworkPath().exists()) {
+            // If transport network does not exist, build it in async server job.
+            BuildTransportNetworkJob buildTransportNetworkJob =
+                    new BuildTransportNetworkJob(version, userProfile.getUser_id());
+            DataManager.heavyExecutor.execute(buildTransportNetworkJob);
+            // Set status to Accepted to indicate that the processing is not complete yet.
+            res.status(HttpStatus.ACCEPTED_202);
+            return SparkUtils.formatJobResponse(buildTransportNetworkJob.jobId, "Building transport network");
+        }
+        try {
+            // Get transport network from cache.
+            transportNetwork = DataManager.transportNetworkCache.getTransportNetwork(version.id);
+            // Handle routing request if there is a transport network to route on.
             AnalystClusterRequest clusterRequest = buildProfileRequest(req);
-            return getRouterResult(version.transportNetwork, clusterRequest);
+            return getRouterResult(transportNetwork, clusterRequest);
+        } catch (ExecutionException e) {
+            e.printStackTrace();
+            haltWithError(400, SparkUtils.formatJSON("Error accessing transport network."), e);
         }
         return null;
     }
 
-    private static void buildOrReadTransportNetwork(FeedVersion version, Auth0UserProfile userProfile) {
-        InputStream is = null;
-        try {
-            if (!networkReadInProgress.contains(version.id)) {
-                is = new FileInputStream(version.transportNetworkPath());
-                networkReadInProgress.add(version.id);
-                try {
-//                    version.transportNetwork = TransportNetwork.read(is);
-                    ReadTransportNetworkJob rtnj = new ReadTransportNetworkJob(version, userProfile.getUser_id());
-                    DataManager.heavyExecutor.execute(rtnj);
-                } catch (Exception e) {
-                    LOG.error("Unknown error accessing transport network.", e);
-                    halt(400, SparkUtils.formatJSON("Unknown error accessing transport network."));
-                }
-            } else {
-                // TransportNetwork has not been read before and a cache load has not been triggered.
-                // TODO: add logic that keeps transport networks from being evicted while being used (below code checks load time).
-//                // This check is performed because the loading cache does not evict items even if they have expired.
-//                // This is explained here: https://github.com/google/guava/wiki/CachesExplained#when-does-cleanup-happen
-//                String waitMessage = "Sorry, isochrones for this feed are not available at the moment. Please wait approximately ";
-//                long cacheDurationInMillis = DataManager.transportNetworkCache.timeUnit.toMillis(
-//                        DataManager.transportNetworkCache.duration);
-//                long timeSinceEarliestLoad = DataManager.transportNetworkCache.getTimeSinceEarliestLoad();
-//                if (DataManager.transportNetworkCache.isAtCapacity() &&
-//                        timeSinceEarliestLoad < cacheDurationInMillis) {
-//                    // Only tell the requester that isochrones are unavailable if the cache is at capacity and
-//                    // no cached network has "expired" yet.
-//                    if (networkCacheQueue.containsKey(version.id)) {
-//                        long firstRequestTimestamp = networkCacheQueue.get(version.id);
-//                        long timeSinceFirstRequest = System.currentTimeMillis() - firstRequestTimestamp;
-//                        if (timeSinceFirstRequest > cacheDurationInMillis) {
-//                            // If 10 minutes has passed, remove from queue and pass through to begin loading the version
-//                            // into the cache.
-//                            networkCacheQueue.remove(version.id);
-//                        } else {
-//                            String waitTime = String.join(" ",
-//                                    String.valueOf(((double)cacheDurationInMillis - timeSinceFirstRequest) / 1000 / 60),
-//                                    DataManager.transportNetworkCache.timeUnit.toString());
-//                            halt(202, SparkUtils.formatJSON(waitMessage + waitTime, 202));
-//                        }
-//                    } else {
-//                        // Put feed version in the queue
-//                        String waitTime = String.join(" ",
-//                                String.valueOf(timeSinceEarliestLoad),
-//                                DataManager.transportNetworkCache.timeUnit.toString());
-//                        networkCacheQueue.put(version.id, System.currentTimeMillis());
-//                        halt(202, SparkUtils.formatJSON(waitMessage + waitTime, 202));
-//                    }
-//
-//                }
+    /**
+     * Filters active jobs for any "build transport network" types for the provided version. If there is a match,
+     * a halt is sent to the requester.
+     */
+    private static void checkForActiveTransportNetworkJob(FeedVersion version) {
+        // Get list of jobs that are building transport networks for the feed version (should be at most only one).
+        List<BuildTransportNetworkJob> buildJobs = StatusController.filterJobsByType(BUILD_TRANSPORT_NETWORK).stream()
+                .filter(job -> ((BuildTransportNetworkJob) job).feedVersion.id.equals(version.id))
+                .map(job -> (BuildTransportNetworkJob) job)
+                .collect(Collectors.toList());
 
-                // Here we trigger an inputStream read on transport network file to determine if it exists
-                // (i.e., a network has already been built) and throw an exception if not.
-                if (version.transportNetworkPath().exists()) {
-                    if (networkBuildInProgress.contains(version.id)) {
-                        // A transport network exists, but it was just built. Remove the version from the
-                        // loads in progress list, and return the network.
-                        try {
-                            // If we get to this point, a network was recently built after an API request.
-                            TransportNetwork tn = DataManager.transportNetworkCache.getTransportNetwork(version.id);
-                            networkBuildInProgress.remove(version.id);
-                            return tn;
-                        } catch (Exception e) {
-                            LOG.error("Could not read transport network.", e);
-                            halt(400, SparkUtils.formatJSON("Could not read transport network."));
-                        }
-                    } else {
-                        // A transport network exists, but has not been read yet. Call read network job or wait for read
-                        // to finish.
-                        if (!networkReadInProgress.contains(version.id)) {
-                            networkReadInProgress.add(version.id);
-                            ReadTransportNetworkJob readTransportNetworkJob =
-                                    new ReadTransportNetworkJob(version, userProfile.getUser_id());
-
-                            DataManager.heavyExecutor.execute(readTransportNetworkJob);
-                        }
-                        // Notify user that read is in progress.
-                        halt(202, SparkUtils.formatJSON("Try again later. Reading transport network", 202));
-                    }
-                } else {
-                    // If transport network has not been built yet (i.e., file does not exist), add to builds in
-                    // progress list, and begin build job.
-                    if (!networkBuildInProgress.contains(version.id)) {
-                        LOG.warn("Transport network not found. Beginning build.");
-                        networkBuildInProgress.add(version.id);
-                        BuildTransportNetworkJob buildTransportNetworkJob =
-                                new BuildTransportNetworkJob(version, userProfile.getUser_id());
-                        ReadTransportNetworkJob readTransportNetworkJob =
-                                new ReadTransportNetworkJob(version, userProfile.getUser_id());
-                        buildTransportNetworkJob.addNextJob(readTransportNetworkJob);
-                        DataManager.heavyExecutor.execute(buildTransportNetworkJob);
-                    }
-                    // Notify user that build is in progress.
-                    halt(202, SparkUtils.formatJSON("Try again later. Building transport network", 202));
-                }
-            }
-            halt(202, "Try again later. Reading transport network");
-        }
-        // Catch exception if transport network not built yet
-        catch (Exception e) {
-            if (DataManager.isModuleEnabled("r5_network") && !networkReadInProgress.contains(version.id)) {
-                LOG.warn("Transport network not found. Beginning build.", e);
-                networkReadInProgress.add(version.id);
-                BuildTransportNetworkJob btnj = new BuildTransportNetworkJob(version, userProfile.getUser_id());
-                DataManager.heavyExecutor.execute(btnj);
-            }
-            halt(202, "Try again later. Building transport network");
+        if (buildJobs.size() > 0) {
+            // Halt the request if there are active build jobs.
+            haltWithError(202, "Please wait. Building transport network for version.");
         }
     }
 
+    /**
+     * Routes a profile request on the provided transport network and returns the resulting isochrones.
+     */
     private static JsonNode getRouterResult(TransportNetwork transportNetwork, AnalystClusterRequest clusterRequest) {
         PointSet targets;
         if (transportNetwork.gridPointSet == null) {
@@ -362,11 +287,11 @@ public class FeedVersionController  {
 
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         try {
-            JsonGenerator jgen = new JsonFactory().createGenerator(out);
-            jgen.writeStartObject();
-            result.avgCase.writeIsochrones(jgen);
-            jgen.writeEndObject();
-            jgen.close();
+            JsonGenerator jsonGenerator = new JsonFactory().createGenerator(out);
+            jsonGenerator.writeStartObject();
+            result.avgCase.writeIsochrones(jsonGenerator);
+            jsonGenerator.writeEndObject();
+            jsonGenerator.close();
             out.close();
             String outString = new String( out.toByteArray(), StandardCharsets.UTF_8 );
             return mapper.readTree(outString);
@@ -382,17 +307,26 @@ public class FeedVersionController  {
         Double fromLon = Double.valueOf(req.queryParams("fromLon"));
         Double toLat = Double.valueOf(req.queryParams("toLat"));
         Double toLon = Double.valueOf(req.queryParams("toLon"));
-        LocalDate date = req.queryParams("date") != null ? LocalDate.parse(req.queryParams("date"), DateTimeFormatter.ISO_LOCAL_DATE) : LocalDate.now(); // 2011-12-03
+        // Defaults to today if no date passed in.
+        LocalDate date = req.queryParams("date") != null
+                ? LocalDate.parse(req.queryParams("date"), DateTimeFormatter.ISO_LOCAL_DATE)
+                : LocalDate.now(); // format = 2011-12-30 (YYYY-MM-DD)
 
-        // optional with defaults
-        Integer fromTime = req.queryParams("fromTime") != null ? Integer.valueOf(req.queryParams("fromTime")) : 9 * 3600;
-        Integer toTime = req.queryParams("toTime") != null ? Integer.valueOf(req.queryParams("toTime")) : 10 * 3600;
+        // Optional fields with defaults
+        Integer fromTime = req.queryParams("fromTime") != null
+                ? Integer.valueOf(req.queryParams("fromTime"))
+                : 9 * 3600; // 9am in seconds since midnight
+        Integer toTime = req.queryParams("toTime") != null
+                ? Integer.valueOf(req.queryParams("toTime"))
+                : 10 * 3600; // 10am in seconds since midnight
 
         // build request with transit as default mode
         AnalystClusterRequest clusterRequest = new AnalystClusterRequest();
         clusterRequest.profileRequest = new ProfileRequest();
         clusterRequest.profileRequest.transitModes = EnumSet.of(TransitModes.TRANSIT);
+        // Access and egress restricted to walking.
         clusterRequest.profileRequest.accessModes = EnumSet.of(LegMode.WALK);
+        clusterRequest.profileRequest.egressModes = EnumSet.of(LegMode.WALK);
         clusterRequest.profileRequest.date = date;
         clusterRequest.profileRequest.fromLat = fromLat;
         clusterRequest.profileRequest.fromLon = fromLon;
@@ -400,13 +334,12 @@ public class FeedVersionController  {
         clusterRequest.profileRequest.toLon = toLon;
         clusterRequest.profileRequest.fromTime = fromTime;
         clusterRequest.profileRequest.toTime = toTime;
-        clusterRequest.profileRequest.egressModes = EnumSet.of(LegMode.WALK);
         clusterRequest.profileRequest.zoneId = ZoneId.of("America/New_York");
 
         return clusterRequest;
     }
 
-    public static Boolean renameFeedVersion (Request req, Response res) throws JsonProcessingException {
+    public static Boolean renameFeedVersion (Request req, Response res) {
         FeedVersion v = requestFeedVersion(req, "manage");
 
         String name = req.queryParams("name");
