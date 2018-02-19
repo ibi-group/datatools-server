@@ -119,8 +119,6 @@ public class FeedSource extends Model implements Cloneable {
 
     public String editorNamespace;
 
-    public List<Snapshot> editorSnapshots;
-
     /**
      * Create a new feed.
      */
