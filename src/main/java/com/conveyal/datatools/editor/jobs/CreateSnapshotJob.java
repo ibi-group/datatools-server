@@ -55,45 +55,70 @@ import static com.conveyal.gtfs.GTFS.makeSnapshot;
  */
 public class CreateSnapshotJob extends MonitorableJob {
     private static final Logger LOG = LoggerFactory.getLogger(CreateSnapshotJob.class);
-    private final FeedSource feedSource;
     private final String namespace;
     private final boolean updateBuffer;
+    private final boolean storeSnapshot;
+    private final boolean preserveBuffer;
     private Snapshot snapshot;
+    private FeedSource feedSource;
 
-    public CreateSnapshotJob(FeedSource feedSource, String namespace, String owner, boolean updateBuffer) {
-        super(owner, "Creating snapshot for " + feedSource.name, JobType.CREATE_SNAPSHOT);
-        this.feedSource = feedSource;
-        this.namespace = namespace;
-        this.updateBuffer = updateBuffer;
+    public CreateSnapshotJob(Snapshot snapshot, boolean updateBufferNamespace, boolean storeSnapshot, boolean preserveBufferAsSnapshot) {
+        super(snapshot.userId, "Creating snapshot for " + snapshot.feedSourceId, JobType.CREATE_SNAPSHOT);
+        this.namespace = snapshot.snapshotOf;
+        this.snapshot = snapshot;
+        this.updateBuffer = updateBufferNamespace;
+        this.storeSnapshot = storeSnapshot;
+        this.preserveBuffer = preserveBufferAsSnapshot;
         status.update(false,  "Creating snapshot...", 0);
     }
 
     @JsonProperty
     public String getFeedSourceId () {
-        return feedSource.id;
+        return snapshot.feedSourceId;
     }
 
     @Override
     public void jobLogic() {
         // Get count of snapshots to set new version number.
+        feedSource = Persistence.feedSources.getById(snapshot.feedSourceId);
         Collection<Snapshot> existingSnapshots = feedSource.retrieveSnapshots();
         int version = existingSnapshots.size();
         FeedLoadResult loadResult = makeSnapshot(namespace, DataManager.GTFS_DATA_SOURCE);
-        this.snapshot = new Snapshot(feedSource.id, version, namespace, loadResult);
-        snapshot.name = "New snapshot " + new Date().toString();
+        snapshot.version = version;
+        snapshot.namespace = loadResult.uniqueIdentifier;
+        snapshot.feedLoadResult = loadResult;
+        if (snapshot.name == null) {
+            snapshot.generateName();
+        }
         snapshot.snapshotTime = loadResult.completionTime;
     }
 
     @Override
     public void jobFinished () {
         if (!status.error) {
-            LOG.info("Storing snapshot {}", snapshot.id);
-            Persistence.snapshots.create(snapshot);
+            if (storeSnapshot) {
+                LOG.info("Storing snapshot {} for feed source {}", snapshot.id, feedSource.id);
+                Persistence.snapshots.create(snapshot);
+            }
+            if (preserveBuffer) {
+                // Preserve the existing buffer as a snapshot if requested. This is essentially a shorthand for creating
+                // a snapshot and then separately loading something new into the buffer. It can be thought of as an
+                // autosave. FIXME: the buffer would still exist even if not "preserved" here. Should it be deleted if
+                // requester opts to not preserve it?
+                if (feedSource.editorNamespace == null) {
+                    LOG.error("Cannot preserve snapshot with null namespace for feed source {}", feedSource.id);
+                } else {
+                    LOG.info("Autosaving feed source {} editor state {} as snapshot", feedSource.id, feedSource.editorNamespace);
+                    Snapshot preservedBuffer = new Snapshot("Autosave " + new Date().toString(), feedSource.id, null);
+                    preservedBuffer.namespace = feedSource.editorNamespace;
+                    Persistence.snapshots.create(preservedBuffer);
+                }
+            }
             if (updateBuffer) {
                 // Update working buffer to the newly created namespace. The "old" namespace will become the immutable
                 // snapshot. Restoring the snapshot is a matter of making a new snapshot and updating the buffer pointer
-                // to the new namespace.
-                LOG.info("Updating active snapshot to {}", snapshot.id);
+                // to the new namespace, but we also will preserve the snapshot.
+                LOG.info("Updating feed source {} active snapshot to {}", feedSource.id, snapshot.namespace);
                 // If creating the initial snapshot for the editor buffer, set the editor namespace field to
                 // the new feed's namespace.
                 Persistence.feedSources.updateField(
@@ -101,10 +126,6 @@ public class CreateSnapshotJob extends MonitorableJob {
                         "editorNamespace",
                         snapshot.namespace
                 );
-                // FIXME Add original namespace as origin copy of data in list of snapshots field.
-            } else {
-                // Add to list of non-active snapshots.
-
             }
             status.update(false, "Created snapshot!", 100, true);
         }

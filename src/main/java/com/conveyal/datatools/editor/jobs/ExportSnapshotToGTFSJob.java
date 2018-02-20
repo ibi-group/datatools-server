@@ -20,10 +20,16 @@ public class ExportSnapshotToGTFSJob extends MonitorableJob {
 
     private static final Logger LOG = LoggerFactory.getLogger(ExportSnapshotToGTFSJob.class);
     private final Snapshot snapshot;
+    private final String feedVersionId;
 
-    public ExportSnapshotToGTFSJob(String owner, Snapshot snapshot) {
+    public ExportSnapshotToGTFSJob(String owner, Snapshot snapshot, String feedVersionId) {
         super(owner, "Exporting snapshot " + snapshot.name, JobType.EXPORT_SNAPSHOT_TO_GTFS);
         this.snapshot = snapshot;
+        this.feedVersionId = feedVersionId;
+    }
+
+    public ExportSnapshotToGTFSJob(String owner, Snapshot snapshot) {
+        this(owner, snapshot, null);
     }
 
     @JsonProperty
@@ -41,22 +47,33 @@ public class ExportSnapshotToGTFSJob extends MonitorableJob {
             status.fail("Error creating local file for snapshot.", e);
             return;
         }
-        JdbcGtfsExporter exporter = new JdbcGtfsExporter(snapshot.feedLoadResult.uniqueIdentifier, tempFile.getAbsolutePath(), DataManager.GTFS_DATA_SOURCE, true);
+        JdbcGtfsExporter exporter = new JdbcGtfsExporter(snapshot.namespace, tempFile.getAbsolutePath(), DataManager.GTFS_DATA_SOURCE, true);
         FeedLoadResult result = exporter.exportTables();
+        if (result.fatalException != null) {
+            String message = String.format("Error (%s) encountered while exporting database tables.", result.fatalException);
+            LOG.error(message);
+            status.fail(message);
+        }
 
+        // Override snapshot ID if exporting feed for use as new feed version.
+        String filename = feedVersionId != null ? feedVersionId : snapshot.id + ".zip";
+        String bucketPrefix = feedVersionId != null ? "gtfs" : "snapshots";
         // FIXME: replace with use of refactored FeedStore.
         // Store the project merged zip locally or on s3
         if (DataManager.useS3) {
-            String s3Key = "snapshots/" + snapshot.id + ".zip";
+            String s3Key = String.format("%s/%s", bucketPrefix, filename);
             FeedStore.s3Client.putObject(DataManager.feedBucket, s3Key, tempFile);
-            LOG.info("Storing merged project feed at s3://{}/{}", DataManager.feedBucket, s3Key);
+            LOG.info("Storing snapshot GTFS at s3://{}/{}", DataManager.feedBucket, s3Key);
         } else {
             try {
-                FeedVersion.feedStore.newFeed(snapshot.id + ".zip", new FileInputStream(tempFile), null);
+                FeedVersion.feedStore.newFeed(filename, new FileInputStream(tempFile), null);
             } catch (FileNotFoundException e) {
                 e.printStackTrace();
+                status.fail("Could not export snapshot to GTFS.");
                 LOG.error("Could not store feed for snapshot {}", snapshot.id);
             }
         }
+        // Delete snapshot temp file.
+        tempFile.delete();
     }
 }

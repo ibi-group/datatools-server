@@ -4,6 +4,8 @@ import com.conveyal.gtfs.loader.FeedLoadResult;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonAlias;
 
+import java.util.Date;
+
 /**
  * Represents a snapshot of an agency database.
  * @author mattwigway
@@ -54,5 +56,21 @@ public class Snapshot extends Model {
         this.namespace = feedLoadResult.uniqueIdentifier;
         this.feedLoadResult = feedLoadResult;
         snapshotTime = System.currentTimeMillis();
+    }
+
+    public Snapshot(String name, String feedSourceId, String snapshotOf) {
+        this.name = name;
+        this.feedSourceId = feedSourceId;
+        this.snapshotOf = snapshotOf;
+        snapshotTime = System.currentTimeMillis();
+    }
+
+    public Snapshot(String feedSourceId, String snapshotOf) {
+        this(null, feedSourceId, snapshotOf);
+        generateName();
+    }
+
+    public void generateName() {
+        this.name = "New snapshot " + new Date().toString();
     }
 }

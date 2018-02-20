@@ -21,6 +21,7 @@ import com.conveyal.datatools.manager.utils.json.JsonManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.Collection;
 
 import spark.Request;
@@ -74,17 +75,21 @@ public class SnapshotController {
     /**
      * HTTP endpoint that makes a snapshot copy of the current data loaded in the editor for a given feed source.
      */
-    private static String createSnapshot (Request req, Response res) {
+    private static String createSnapshot (Request req, Response res) throws IOException {
         Auth0UserProfile userProfile = req.attribute("user");
-        // FIXME Take fields from request body for creating snapshot.
-//        Document newSnapshotFields = Document.parse(req.body());
         FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, "edit", "feedId");
-        if (feedSource == null) haltWithError(400, "No feed source found for ID.");
-        // If there is no active buffer for feed source, update it.
-        boolean updateBuffer = feedSource.editorNamespace == null;
+        // Take fields from request body for creating snapshot.
+        Snapshot snapshot = json.read(req.body());
+        // Ensure feed source ID and snapshotOf namespace is correct
+        snapshot.feedSourceId = feedSource.id;
+        snapshot.snapshotOf = feedSource.editorNamespace;
+        snapshot.storeUser(userProfile);
+        // If there is no active buffer for feed source, set boolean to update it to the new snapshot namespace.
+        // Otherwise, creating a snapshot will just create a copy of the tables and leave the buffer untouched.
+        boolean bufferIsEmpty = feedSource.editorNamespace == null;
         // Create new non-buffer snapshot.
         CreateSnapshotJob createSnapshotJob =
-                new CreateSnapshotJob(feedSource, feedSource.editorNamespace, userProfile.getUser_id(), updateBuffer);
+                new CreateSnapshotJob(snapshot, bufferIsEmpty, !bufferIsEmpty, false);
         // Begin asynchronous execution.
         DataManager.heavyExecutor.execute(createSnapshotJob);
         return SparkUtils.formatJobMessage(createSnapshotJob.jobId, "Creating snapshot.");
@@ -93,28 +98,21 @@ public class SnapshotController {
     /**
      * Create snapshot from feedVersion and load/import into editor database.
      */
-    private static String importSnapshot (Request req, Response res) {
-
+    private static String importFeedVersionAsSnapshot(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
-        String feedVersionId = req.queryParams("feedVersionId");
-
-        if(feedVersionId == null) {
-            haltWithError(400, "No FeedVersion ID specified");
-        }
-        // FIXME Replace with feed version controller permissions check
-        FeedVersion feedVersion = Persistence.feedVersions.getById(feedVersionId);
-        if(feedVersion == null) {
-            haltWithError(404, "Could not find FeedVersion with ID " + feedVersionId);
-        }
-
+        // Get feed version from request (and check permissions).
+        FeedVersion feedVersion = FeedVersionController.requestFeedVersion(req, "edit", "feedVersionId");
         FeedSource feedSource = feedVersion.parentFeedSource();
-        // check user's permission to import snapshot
-        FeedSourceController.checkFeedSourcePermissions(req, feedSource, "edit");
         // Create and run snapshot job
+        Snapshot snapshot = new Snapshot("Snapshot of " + feedVersion.name, feedSource.id, feedVersion.namespace);
+        snapshot.storeUser(userProfile);
+        // Only preserve buffer if there is already a namespace associated with the feed source and requester has
+        // explicitly asked for it. Otherwise, let go of the buffer.
+        boolean preserveBuffer = "true".equals(req.queryParams("preserveBuffer")) && feedSource.editorNamespace != null;
         CreateSnapshotJob createSnapshotJob =
-                new CreateSnapshotJob(feedSource, feedVersion.namespace, userProfile.getUser_id(), true);
+                new CreateSnapshotJob(snapshot, true, false, preserveBuffer);
         DataManager.heavyExecutor.execute(createSnapshotJob);
-        return formatJSON("Importing snapshot...", 200);
+        return formatJobMessage(createSnapshotJob.jobId, "Importing version as snapshot.");
     }
 
     // FIXME: Is this method used anywhere? Can we delete?
@@ -132,23 +130,29 @@ public class SnapshotController {
     private static String restoreSnapshot (Request req, Response res) {
         // Get the snapshot ID to restore (set the namespace pointer)
         String id = req.params("id");
-        // FIXME Ensure namespace id exists in database.
+        // FIXME Ensure namespace id exists in database?
         // Retrieve feed source.
         FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, "edit", "feedId");
         Snapshot snapshotToRestore = Persistence.snapshots.getById(id);
-        if (snapshotToRestore == null) haltWithError(400, "Must specify valid snapshot ID");
+        if (snapshotToRestore == null) {
+            haltWithError(400, "Must specify valid snapshot ID");
+        }
         // Update editor namespace pointer.
-        if (snapshotToRestore.feedLoadResult == null) {
+        if (snapshotToRestore.namespace == null) {
             haltWithError(400, "Failed to restore snapshot. No namespace found.");
         }
+        // Preserve existing editor buffer if requested. FIXME: should the request body also contain name and comments?
+        boolean preserveBuffer = "true".equals(req.queryParams("preserveBuffer"));
         // Create and run snapshot job
         Auth0UserProfile userProfile = req.attribute("user");
         // FIXME what if the snapshot has not had any edits made to it? In this case, we would just be making copy upon
         // copy of a feed for no reason.
-        CreateSnapshotJob createSnapshotJob =
-                new CreateSnapshotJob(feedSource, snapshotToRestore.namespace, userProfile.getUser_id(), true);
+        String name = "Restore snapshot " + snapshotToRestore.name;
+        Snapshot snapshot = new Snapshot(name, feedSource.id, snapshotToRestore.namespace);
+        snapshot.storeUser(userProfile);
+        CreateSnapshotJob createSnapshotJob = new CreateSnapshotJob(snapshot, true, false, preserveBuffer);
         DataManager.heavyExecutor.execute(createSnapshotJob);
-        return formatJSON("Restoring snapshot...", 200);
+        return formatJobMessage(createSnapshotJob.jobId, "Restoring snapshot...");
     }
 
     /**
@@ -173,15 +177,14 @@ public class SnapshotController {
     private static Object getSnapshotToken(Request req, Response res) {
         Snapshot snapshot = getSnapshotFromRequest(req);
         FeedDownloadToken token;
-        String filePrefix = snapshot.feedSourceId + "_" + snapshot.snapshotTime;
-        String key = "snapshots/" + filePrefix + ".zip";
+        String key = "snapshots/" + snapshot.id + ".zip";
         // if storing feeds on S3, first write the snapshot to GTFS file and upload to S3
         // this needs to be completed before the credentials are delivered, so that the client has
         // an actual object to download.
         // FIXME: use new FeedStore.
         if (DataManager.useS3) {
             if (!FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, key)) {
-                haltWithError(400, "Error downloading snapshot from S3. Object does not exist.");
+                haltWithError(400, String.format("Error downloading snapshot from S3. Object %s does not exist.", key));
             }
             return getS3Credentials(
                     DataManager.awsRole,
@@ -249,7 +252,7 @@ public class SnapshotController {
         options(apiPrefix + "secure/snapshot", (q, s) -> "");
         get(apiPrefix + "secure/snapshot", SnapshotController::getSnapshots, json::write);
         post(apiPrefix + "secure/snapshot", SnapshotController::createSnapshot, json::write);
-        post(apiPrefix + "secure/snapshot/import", SnapshotController::importSnapshot, json::write);
+        post(apiPrefix + "secure/snapshot/import", SnapshotController::importFeedVersionAsSnapshot, json::write);
         put(apiPrefix + "secure/snapshot/:id", SnapshotController::updateSnapshot, json::write);
         post(apiPrefix + "secure/snapshot/:id/restore", SnapshotController::restoreSnapshot, json::write);
         get(apiPrefix + "secure/snapshot/:id/download", SnapshotController::downloadSnapshotAsGTFS, json::write);

@@ -13,6 +13,7 @@ import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
+import com.conveyal.datatools.manager.models.Snapshot;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
@@ -190,9 +191,13 @@ public class FeedVersionController  {
         Auth0UserProfile userProfile = req.attribute("user");
         // TODO: Should the ability to create a feedVersion from snapshot be controlled by the 'edit-gtfs' privilege?
         FeedSource feedSource = requestFeedSourceById(req, "manage");
+        Snapshot snapshot = Persistence.snapshots.getById(req.queryParams("snapshotId"));
+        if (snapshot == null) {
+            haltWithError(400, "Must provide valid snapshot ID");
+        }
         FeedVersion feedVersion = new FeedVersion(feedSource);
         CreateFeedVersionFromSnapshotJob createFromSnapshotJob =
-                new CreateFeedVersionFromSnapshotJob(feedVersion, req.queryParams("snapshotId"), userProfile.getUser_id());
+                new CreateFeedVersionFromSnapshotJob(feedVersion, snapshot, userProfile.getUser_id());
         DataManager.heavyExecutor.execute(createFromSnapshotJob);
 
         return true;
@@ -208,7 +213,11 @@ public class FeedVersionController  {
     }
 
     public static FeedVersion requestFeedVersion(Request req, String action) {
-        String id = req.params("id");
+        return requestFeedVersion(req, action, "id");
+    }
+
+    public static FeedVersion requestFeedVersion(Request req, String action, String queryParam) {
+        String id = req.params(queryParam);
         FeedVersion version = Persistence.feedVersions.getById(id);
         if (version == null) {
             halt(404, "Version ID does not exist");
