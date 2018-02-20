@@ -225,30 +225,30 @@ public class FeedSourceController {
         return checkFeedSourcePermissions(req, Persistence.feedSources.getById(id), action);
     }
 
-    public static FeedSource checkFeedSourcePermissions(Request req, FeedSource s, String action) {
+    public static FeedSource checkFeedSourcePermissions(Request req, FeedSource feedSource, String action) {
         Auth0UserProfile userProfile = req.attribute("user");
         Boolean publicFilter = Boolean.valueOf(req.queryParams("public")) ||
                 req.url().split("/api/*/")[1].startsWith("public");
 //        System.out.println(req.url().split("/api/manager/")[1].startsWith("public"));
 
         // check for null feedSource
-        if (s == null)
+        if (feedSource == null)
             halt(400, SparkUtils.formatJSON("Feed source ID does not exist", 400));
-        String orgId = s.organizationId();
+        String orgId = feedSource.organizationId();
         boolean authorized;
         switch (action) {
             case "create":
-                authorized = userProfile.canAdministerProject(s.projectId, orgId);
+                authorized = userProfile.canAdministerProject(feedSource.projectId, orgId);
                 break;
             case "manage":
-                authorized = userProfile.canManageFeed(orgId, s.projectId, s.id);
+                authorized = userProfile.canManageFeed(orgId, feedSource.projectId, feedSource.id);
                 break;
             case "edit":
-                authorized = userProfile.canEditGTFS(orgId, s.projectId, s.id);
+                authorized = userProfile.canEditGTFS(orgId, feedSource.projectId, feedSource.id);
                 break;
             case "view":
                 if (!publicFilter) {
-                    authorized = userProfile.canViewFeed(orgId, s.projectId, s.id);
+                    authorized = userProfile.canViewFeed(orgId, feedSource.projectId, feedSource.id);
                 } else {
                     authorized = false;
                 }
@@ -261,10 +261,10 @@ public class FeedSourceController {
         // if requesting public sources
         if (publicFilter){
             // if feed not public and user not authorized, halt
-            if (!s.isPublic && !authorized)
+            if (!feedSource.isPublic && !authorized)
                 halt(403, SparkUtils.formatJSON("User not authorized to perform action on feed source", 403));
                 // if feed is public, but action is managerial, halt (we shouldn't ever retrieveById here, but just in case)
-            else if (s.isPublic && action.equals("manage"))
+            else if (feedSource.isPublic && action.equals("manage"))
                 halt(403, SparkUtils.formatJSON("User not authorized to perform action on feed source", 403));
 
         }
@@ -274,7 +274,7 @@ public class FeedSourceController {
         }
 
         // if we make it here, user has permission and it's a valid feedsource
-        return s;
+        return feedSource;
     }
 
     // FIXME: use generic API controller and return JSON documents via BSON/Mongo
