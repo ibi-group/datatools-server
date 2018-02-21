@@ -85,7 +85,7 @@ public class DeployJob extends MonitorableJob {
             statusMessage = "Could not create temp file for deployment";
             LOG.error(statusMessage);
             e.printStackTrace();
-            status.update(true, statusMessage, 100, true);
+            status.fail(statusMessage);
             return;
         }
 
@@ -100,7 +100,7 @@ public class DeployJob extends MonitorableJob {
             statusMessage = "Error dumping deployment";
             LOG.error(statusMessage);
             e.printStackTrace();
-            status.update(true, statusMessage, 100, true);
+            status.fail(statusMessage);
             return;
         }
 
@@ -139,7 +139,7 @@ public class DeployJob extends MonitorableJob {
                 statusMessage = String.format("Error uploading (or copying) deployment bundle to s3://%s/%s", s3Bucket, key);
                 LOG.error(statusMessage);
                 e.printStackTrace();
-                status.update(true, statusMessage, 100, true);
+                status.fail(statusMessage);
                 return;
             }
 
@@ -203,7 +203,7 @@ public class DeployJob extends MonitorableJob {
                 statusMessage = String.format("Could not open channel to OTP server %s", url);
                 LOG.error(statusMessage);
                 e.printStackTrace();
-                status.update(true, statusMessage, 100, true);
+                status.fail(statusMessage);
                 return;
             }
 
@@ -213,7 +213,7 @@ public class DeployJob extends MonitorableJob {
                 input = new FileInputStream(deploymentTempFile).getChannel();
             } catch (FileNotFoundException e) {
                 LOG.error("Internal error: could not read dumped deployment!");
-                status.update(true, "Internal error: could not read dumped deployment!", 100, true);
+                status.fail("Internal error: could not read dumped deployment!");
                 return;
             }
 
@@ -222,7 +222,7 @@ public class DeployJob extends MonitorableJob {
             } catch (IOException e) {
                 statusMessage = String.format("Unable to open connection to OTP server %s", url);
                 LOG.error(statusMessage);
-                status.update(true, statusMessage, 100, true);
+                status.fail(statusMessage);
                 return;
             }
 
@@ -233,7 +233,7 @@ public class DeployJob extends MonitorableJob {
                 statusMessage = String.format("Unable to transfer deployment to server %s", url);
                 LOG.error(statusMessage);
                 e.printStackTrace();
-                status.update(true, statusMessage, 100, true);
+                status.fail(statusMessage);
                 return;
             }
 
@@ -243,7 +243,7 @@ public class DeployJob extends MonitorableJob {
                 String message = String.format("Error finishing connection to server %s", url);
                 LOG.error(message);
                 e.printStackTrace();
-                status.update(true, message, 100, true);
+                status.fail(message);
                 return;
             }
 
@@ -259,9 +259,10 @@ public class DeployJob extends MonitorableJob {
             // TODO: timeouts?
             try {
                 if (conn.getResponseCode() != HttpURLConnection.HTTP_CREATED) {
+                    LOG.error(conn.getResponseMessage());
                     statusMessage = String.format("Got response code %d from server", conn.getResponseCode());
                     LOG.error(statusMessage);
-                    status.update(true, statusMessage, 100, true);
+                    status.fail(statusMessage);
                     // Skip deploying to any other servers.
                     // There is no reason to take out the rest of the servers, it's going to have the same result.
                     return;
@@ -269,7 +270,7 @@ public class DeployJob extends MonitorableJob {
             } catch (IOException e) {
                 statusMessage = String.format("Could not finish request to server %s", url);
                 LOG.error(statusMessage);
-                status.update(true, statusMessage, 100, true);
+                status.fail(statusMessage);
             }
 
             status.numServersCompleted++;
