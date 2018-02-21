@@ -213,14 +213,13 @@ public class FeedVersionController  {
     }
 
     public static FeedVersion requestFeedVersion(Request req, String action) {
-        return requestFeedVersion(req, action, "id");
+        return requestFeedVersion(req, action, req.params("id"));
     }
 
-    public static FeedVersion requestFeedVersion(Request req, String action, String queryParam) {
-        String id = req.params(queryParam);
-        FeedVersion version = Persistence.feedVersions.getById(id);
+    public static FeedVersion requestFeedVersion(Request req, String action, String feedVersionId) {
+        FeedVersion version = Persistence.feedVersions.getById(feedVersionId);
         if (version == null) {
-            halt(404, "Version ID does not exist");
+            haltWithError(404, "Feed version ID does not exist");
         }
         // Performs permissions checks on the feed source this feed version belongs to, and halts if permission is denied.
         checkFeedSourcePermissions(req, version.parentFeedSource(), action);

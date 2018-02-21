@@ -101,7 +101,8 @@ public class SnapshotController {
     private static String importFeedVersionAsSnapshot(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         // Get feed version from request (and check permissions).
-        FeedVersion feedVersion = FeedVersionController.requestFeedVersion(req, "edit", "feedVersionId");
+        String feedVersionId = req.queryParams("feedVersionId");
+        FeedVersion feedVersion = FeedVersionController.requestFeedVersion(req, "edit", feedVersionId);
         FeedSource feedSource = feedVersion.parentFeedSource();
         // Create and run snapshot job
         Snapshot snapshot = new Snapshot("Snapshot of " + feedVersion.name, feedSource.id, feedVersion.namespace);
