@@ -240,6 +240,8 @@ public class FeedVersion extends Model implements Serializable {
             if (gtfsFile.length() == 0) {
                 throw new IOException("Empty GTFS file supplied");
             }
+            // If feed version has not been hashed, hash it here.
+            if (hash == null) hash = HashUtils.hashFile(gtfsFile);
             String gtfsFilePath = gtfsFile.getPath();
             this.feedLoadResult = GTFS.load(gtfsFilePath, DataManager.GTFS_DATA_SOURCE);
             // FIXME? duplication of namespace (also stored as feedLoadResult.uniqueIdentifier)
