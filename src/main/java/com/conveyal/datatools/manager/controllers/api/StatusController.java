@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.controllers.api;
 
+import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.common.status.MonitorableJob;
@@ -14,12 +15,10 @@ import spark.Response;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithError;
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static org.apache.http.client.methods.RequestBuilder.post;
 import static spark.Spark.delete;
 import static spark.Spark.get;
@@ -37,7 +36,7 @@ public class StatusController {
     private static Set<MonitorableJob> getAllJobsRoute(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         if (!userProfile.canAdministerApplication()) {
-            haltWithError(401, "User not authorized to view all jobs");
+            haltWithMessage(401, "User not authorized to view all jobs");
         }
         return getAllJobs();
     }

@@ -32,7 +32,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithError;
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 import static spark.Spark.*;
@@ -241,7 +241,7 @@ public class DumpController {
             return true;
         } catch (Exception e) {
             e.printStackTrace();
-            haltWithError(400, "Error loading legacy JSON", e);
+            haltWithMessage(400, "Error loading legacy JSON", e);
             return false;
         }
     }

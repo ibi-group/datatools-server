@@ -2,7 +2,6 @@ package com.conveyal.datatools.manager.controllers.api;
 
 import com.amazonaws.auth.policy.Statement;
 import com.amazonaws.auth.policy.actions.S3Actions;
-import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
@@ -57,7 +56,7 @@ import static com.conveyal.datatools.common.status.MonitorableJob.JobType.BUILD_
 import static com.conveyal.datatools.common.utils.S3Utils.getS3Credentials;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithError;
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.manager.controllers.api.FeedSourceController.checkFeedSourcePermissions;
 import static spark.Spark.*;
 
@@ -147,7 +146,7 @@ public class FeedVersionController  {
             LOG.info("Saving feed from upload {}", feedSource);
         } catch (Exception e) {
             LOG.error("Unable to open input stream from uploaded file", e);
-            haltWithError(400, "Unable to read uploaded feed");
+            haltWithMessage(400, "Unable to read uploaded feed");
         }
 
         // TODO: fix FeedVersion.hash() call when called in this context. Nothing gets hashed because the file has not been saved yet.
@@ -163,7 +162,7 @@ public class FeedVersionController  {
             LOG.warn("File deleted");
 
             // There is no need to delete the newFeedVersion because it has not yet been persisted to MongoDB.
-            haltWithError(304, "Uploaded feed is identical to the latest version known to the database.");
+            haltWithMessage(304, "Uploaded feed is identical to the latest version known to the database.");
         }
 
         newFeedVersion.setName(newFeedVersion.formattedTimestamp() + " Upload");
@@ -193,7 +192,7 @@ public class FeedVersionController  {
         FeedSource feedSource = requestFeedSourceById(req, "manage");
         Snapshot snapshot = Persistence.snapshots.getById(req.queryParams("snapshotId"));
         if (snapshot == null) {
-            haltWithError(400, "Must provide valid snapshot ID");
+            haltWithMessage(400, "Must provide valid snapshot ID");
         }
         FeedVersion feedVersion = new FeedVersion(feedSource);
         CreateFeedVersionFromSnapshotJob createFromSnapshotJob =
@@ -219,7 +218,7 @@ public class FeedVersionController  {
     public static FeedVersion requestFeedVersion(Request req, String action, String feedVersionId) {
         FeedVersion version = Persistence.feedVersions.getById(feedVersionId);
         if (version == null) {
-            haltWithError(404, "Feed version ID does not exist");
+            haltWithMessage(404, "Feed version ID does not exist");
         }
         // Performs permissions checks on the feed source this feed version belongs to, and halts if permission is denied.
         checkFeedSourcePermissions(req, version.parentFeedSource(), action);
@@ -257,7 +256,7 @@ public class FeedVersionController  {
             return getRouterResult(transportNetwork, clusterRequest);
         } catch (ExecutionException e) {
             e.printStackTrace();
-            haltWithError(400, SparkUtils.formatJSON("Error accessing transport network."), e);
+            haltWithMessage(400, SparkUtils.formatJSON("Error accessing transport network."), e);
         }
         return null;
     }
@@ -275,7 +274,7 @@ public class FeedVersionController  {
 
         if (buildJobs.size() > 0) {
             // Halt the request if there are active build jobs.
-            haltWithError(202, "Please wait. Building transport network for version.");
+            haltWithMessage(202, "Please wait. Building transport network for version.");
         }
     }
 
@@ -421,7 +420,7 @@ public class FeedVersionController  {
         // Fetch feed version to download.
         FeedVersion version = token.retrieveFeedVersion();
         if (version == null) {
-            haltWithError(400, "Could not retrieve version to download");
+            haltWithMessage(400, "Could not retrieve version to download");
         }
         // Remove token so that it cannot be used again for feed download
         Persistence.tokens.removeById(tokenValue);

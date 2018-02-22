@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager;
 
+import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.editor.controllers.EditorLockController;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 
@@ -45,8 +46,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithError;
-import static com.conveyal.datatools.manager.auth.Auth0Connection.logRequest;
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static spark.Spark.*;
 
 /**
@@ -245,7 +245,7 @@ public class DataManager {
 
         // Return 404 for any API path that is not configured.
         get("/api/" + "*", (request, response) -> {
-            haltWithError(404, "No API route configured for this path.");
+            haltWithMessage(404, "No API route configured for this path.");
             return null;
         });
 

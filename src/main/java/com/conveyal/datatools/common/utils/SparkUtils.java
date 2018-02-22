@@ -21,7 +21,7 @@ public class SparkUtils {
     private static final ObjectMapper mapper = new ObjectMapper();
 
     public static Object downloadFile(File file, String filename, Response res) {
-        if(file == null) haltWithError(404, "File is null");
+        if(file == null) haltWithMessage(404, "File is null");
 
         res.raw().setContentType("application/octet-stream");
         res.raw().setHeader("Content-Disposition", "attachment; filename=" + filename);
@@ -57,12 +57,18 @@ public class SparkUtils {
         return object.toString();
     }
 
-    public static void haltWithError (int errorCode, String message) throws HaltException {
-        halt(errorCode, formatJSON(message, errorCode));
+    /**
+     * Wrapper around Spark halt method that formats message as JSON using {@link SparkUtils#formatJSON}.
+     */
+    public static void haltWithMessage(int statusCode, String message) throws HaltException {
+        halt(statusCode, formatJSON(message, statusCode));
     }
 
-    public static void haltWithError (int errorCode, String message, Exception e) throws HaltException {
-        halt(errorCode, formatJSON(message, errorCode, e));
+    /**
+     * Wrapper around Spark halt method that formats message as JSON using {@link SparkUtils#formatJSON}. Exception
+     */
+    public static void haltWithMessage(int statusCode, String message, Exception e) throws HaltException {
+        halt(statusCode, formatJSON(message, statusCode, e));
     }
 
     public static String formatJSON(String message, int code) {

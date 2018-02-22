@@ -15,7 +15,7 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithError;
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static spark.Spark.delete;
 import static spark.Spark.post;
 import static spark.Spark.put;
@@ -73,12 +73,12 @@ public class EditorLockController {
                             "Their session will expire in %d minutes unless they are actively editing.",
                     currentSession.userEmail,
                     minutesUntilExpiration);
-            haltWithError(400, message);
+            haltWithMessage(400, message);
             return null;
         } else {
             String sessionId = req.session().id();
             LOG.warn("User {} is editing feed {} in another session {}. Cannot create lock for session {}", userProfile.getEmail(), feedId, currentSession.sessionId, sessionId);
-            haltWithError(400, "Warning! You are editing this feed in another session/browser tab!");
+            haltWithMessage(400, "Warning! You are editing this feed in another session/browser tab!");
             return null;
         }
     }
@@ -100,7 +100,7 @@ public class EditorLockController {
         if (currentSession == null) {
             // If there is no current session to maintain, request that user reloads browser.
             LOG.warn("No active editor session to maintain {}.", sessionId);
-            haltWithError(400, "No active session for feedId. Please refresh your browser and try editing later.");
+            haltWithMessage(400, "No active session for feedId. Please refresh your browser and try editing later.");
             return null;
         } else if (!currentSession.sessionId.equals(sessionId)) {
             // If there is an active session but it doesn't match the session, someone else (or the current user) is
@@ -111,12 +111,12 @@ public class EditorLockController {
                 // If the new current session is held by this user, give them the option to evict the current session /
                 // unlock the feed.
                 LOG.warn("User {} already has an active editor session () for feed {}.", userProfile.getEmail(), currentSession.sessionId, currentSession.feedId);
-                haltWithError(400, "Warning! You have an active editing session for this feed underway in a different browser tab.");
+                haltWithMessage(400, "Warning! You have an active editing session for this feed underway in a different browser tab.");
             } else {
                 // FIXME: Is it bad to reveal the user email? No, I don't think so. Users have already been authenticated and
                 // must have permissions on the feed source to even get to this point.
                 LOG.warn("User {} attempted editor session for feed {} while active session underway for user {}.", userProfile.getEmail(), currentSession.feedId, currentSession.userEmail);
-                haltWithError(400, "Warning! There is an editor session underway for this feed. User = " + currentSession.userEmail);
+                haltWithMessage(400, "Warning! There is an editor session underway for this feed. User = " + currentSession.userEmail);
             }
             return null;
         } else {

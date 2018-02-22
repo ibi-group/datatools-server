@@ -15,12 +15,10 @@ import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
 import java.io.IOException;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -30,9 +28,6 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -42,10 +37,9 @@ import spark.Response;
 
 import static com.conveyal.datatools.common.utils.S3Utils.getS3Credentials;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
-import javax.servlet.http.HttpServletResponse;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithError;
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.manager.DataManager.publicPath;
 import static spark.Spark.*;
 
@@ -99,7 +93,7 @@ public class ProjectController {
             Project newlyStoredProject = Persistence.projects.create(req.body());
             return newlyStoredProject;
         } else {
-            haltWithError(403, "Not authorized to create a project on organization " + organizationId);
+            haltWithMessage(403, "Not authorized to create a project on organization " + organizationId);
             return null;
         }
     }

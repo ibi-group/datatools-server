@@ -8,7 +8,6 @@ import com.conveyal.datatools.editor.jobs.CreateSnapshotJob;
 import com.conveyal.datatools.editor.jobs.ExportSnapshotToGTFSJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
-import com.conveyal.datatools.manager.controllers.api.FeedSourceController;
 import com.conveyal.datatools.manager.controllers.api.FeedVersionController;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -53,7 +52,7 @@ public class SnapshotController {
      */
     private static Snapshot getSnapshotFromRequest(Request req) {
         String id = req.params("id");
-        if (id == null) haltWithError(400, "Must provide valid snapshot ID");
+        if (id == null) haltWithMessage(400, "Must provide valid snapshot ID");
         // Check user permissions on feed source.
         FeedVersionController.requestFeedSourceById(req, "view", "feedId");
         return Persistence.snapshots.getById(id);
@@ -119,7 +118,7 @@ public class SnapshotController {
     // FIXME: Is this method used anywhere? Can we delete?
     private static Object updateSnapshot (Request req, Response res) {
         // FIXME
-        haltWithError(400, "Method not implemented");
+        haltWithMessage(400, "Method not implemented");
         return null;
     }
 
@@ -136,11 +135,11 @@ public class SnapshotController {
         FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, "edit", "feedId");
         Snapshot snapshotToRestore = Persistence.snapshots.getById(id);
         if (snapshotToRestore == null) {
-            haltWithError(400, "Must specify valid snapshot ID");
+            haltWithMessage(400, "Must specify valid snapshot ID");
         }
         // Update editor namespace pointer.
         if (snapshotToRestore.namespace == null) {
-            haltWithError(400, "Failed to restore snapshot. No namespace found.");
+            haltWithMessage(400, "Failed to restore snapshot. No namespace found.");
         }
         // Preserve existing editor buffer if requested. FIXME: should the request body also contain name and comments?
         boolean preserveBuffer = "true".equals(req.queryParams("preserveBuffer"));
@@ -185,7 +184,7 @@ public class SnapshotController {
         // FIXME: use new FeedStore.
         if (DataManager.useS3) {
             if (!FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, key)) {
-                haltWithError(400, String.format("Error downloading snapshot from S3. Object %s does not exist.", key));
+                haltWithMessage(400, String.format("Error downloading snapshot from S3. Object %s does not exist.", key));
             }
             return getS3Credentials(
                     DataManager.awsRole,
@@ -214,7 +213,7 @@ public class SnapshotController {
         FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, "edit", "feedId");
         // Retrieve snapshot
         Snapshot snapshot = Persistence.snapshots.getById(id);
-        if (snapshot == null) haltWithError(400, "Must provide valid snapshot ID.");
+        if (snapshot == null) haltWithMessage(400, "Must provide valid snapshot ID.");
         try {
             // Remove the snapshot and then renumber the snapshots
             Persistence.snapshots.removeById(snapshot.id);
@@ -224,7 +223,7 @@ public class SnapshotController {
             return snapshot;
         } catch (Exception e) {
             e.printStackTrace();
-            haltWithError(400, "Unknown error deleting snapshot.", e);
+            haltWithMessage(400, "Unknown error deleting snapshot.", e);
             return null;
         }
     }

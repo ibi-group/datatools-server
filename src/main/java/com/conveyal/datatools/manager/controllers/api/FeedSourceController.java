@@ -23,7 +23,7 @@ import spark.Response;
 import java.io.IOException;
 import java.util.*;
 
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithError;
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
 import static com.conveyal.datatools.manager.models.ExternalFeedSourceProperty.constructId;
 import static com.mongodb.client.model.Filters.eq;
@@ -116,11 +116,11 @@ public class FeedSourceController {
                 return newFeedSource;
             } catch (Exception e) {
                 LOG.error("Unknown error creating feed source", e);
-                haltWithError(400, "Unknown error encountered creating feed source", e);
+                haltWithMessage(400, "Unknown error encountered creating feed source", e);
                 return null;
             }
         } else {
-            haltWithError(400, "Must provide project ID for feed source");
+            haltWithMessage(400, "Must provide project ID for feed source");
             return null;
         }
     }
