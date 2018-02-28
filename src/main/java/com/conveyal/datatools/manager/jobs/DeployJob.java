@@ -11,6 +11,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -18,7 +19,7 @@ import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
 import java.util.List;
-import java.util.Map;
+import java.util.Scanner;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.models.Deployment;
@@ -258,9 +259,18 @@ public class DeployJob extends MonitorableJob {
             // wait for the server to build the graph
             // TODO: timeouts?
             try {
-                if (conn.getResponseCode() != HttpURLConnection.HTTP_CREATED) {
-                    LOG.error(conn.getResponseMessage());
-                    statusMessage = String.format("Got response code %d from server", conn.getResponseCode());
+                int code = conn.getResponseCode();
+                if (code != HttpURLConnection.HTTP_CREATED) {
+                    // Get input/error stream from connection response.
+                    InputStream stream = code < HttpURLConnection.HTTP_BAD_REQUEST
+                            ? conn.getInputStream()
+                            : conn.getErrorStream();
+                    String response;
+                    try (Scanner scanner = new Scanner(stream)) {
+                        scanner.useDelimiter("\\Z");
+                        response = scanner.next();
+                    }
+                    statusMessage = String.format("Got response code %d from server due to %s", code, response);
                     LOG.error(statusMessage);
                     status.fail(statusMessage);
                     // Skip deploying to any other servers.
