@@ -160,6 +160,7 @@ public class DeployJob extends MonitorableJob {
         for (String rawUrl : this.targets) {
             status.message = "Deploying to " + rawUrl;
             status.uploading = true;
+            LOG.info(status.message);
 
             URL url;
             try {
