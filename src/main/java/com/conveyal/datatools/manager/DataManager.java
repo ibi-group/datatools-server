@@ -243,12 +243,6 @@ public class DataManager {
         final String index = IOUtils.toString(stream).replace("${S3BUCKET}", getConfigPropertyAsText("application.assets_bucket"));
         stream.close();
 
-        // Return 404 for any API path that is not configured.
-        get("/api/" + "*", (request, response) -> {
-            haltWithMessage(404, "No API route configured for this path.");
-            return null;
-        });
-
         InputStream auth0Stream = DataManager.class.getResourceAsStream("/public/auth0-silent-callback.html");
         final String auth0html = IOUtils.toString(auth0Stream);
         auth0Stream.close();
@@ -257,6 +251,15 @@ public class DataManager {
         get("/api/auth0-silent-callback", (request, response) -> {
             response.type("text/html");
             return auth0html;
+        });
+
+        /////////////////    Final API routes     /////////////////////
+
+        // Return 404 for any API path that is not configured.
+        // IMPORTANT: Any API paths must be registered before this halt.
+        get("/api/" + "*", (request, response) -> {
+            haltWithMessage(404, "No API route configured for this path.");
+            return null;
         });
 
         // return index.html for any sub-directory
