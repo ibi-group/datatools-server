@@ -31,8 +31,14 @@ public class GraphQLController {
     /**
      * A Spark Controller that responds to a GraphQL query in HTTP GET query parameters.
      */
-    public static Object get (Request request, Response response) {
-        String varsJson = request.queryParams("variables");
+    public static Map<String, Object> get (Request request, Response response) {
+        JsonNode varsJson = null;
+        try {
+            varsJson = mapper.readTree(request.queryParams("variables"));
+        } catch (IOException e) {
+            LOG.warn("Error processing variables", e);
+            halt(400, "Malformed JSON");
+        }
         String queryJson = request.queryParams("query");
         return doQuery(varsJson, queryJson, response);
     }
@@ -40,7 +46,7 @@ public class GraphQLController {
     /**
      * A Spark Controller that responds to a GraphQL query in an HTTP POST body.
      */
-    public static Object post (Request req, Response response) {
+    public static Map<String, Object> post (Request req, Response response) {
         JsonNode node = null;
         try {
             node = mapper.readTree(req.body());
@@ -49,42 +55,30 @@ public class GraphQLController {
             halt(400, "Malformed JSON");
         }
         // FIXME converting String to JSON nodes and back to string, then re-parsing to Map.
-        String vars = node.get("variables").asText();
+        JsonNode vars = node.get("variables");
         String query = node.get("query").asText();
         return doQuery(vars, query, response);
     }
 
-    private static Object doQuery (String varsJson, String queryJson, Response response) {
+
+    private static Map<String, Object> doQuery (JsonNode varsJson, String queryJson, Response response) {
         long startTime = System.currentTimeMillis();
         if (varsJson == null && queryJson == null) {
-            return GTFSGraphQL.getGraphQl().execute(IntrospectionQuery.INTROSPECTION_QUERY).getData();
+            return getSchema(null, null);
         }
-        try {
-            Map<String, Object> variables = mapper.readValue(varsJson, new TypeReference<Map<String, Object>>(){});
-            ExecutionResult result = GTFSGraphQL.getGraphQl().execute(queryJson, null, null, variables);
-            List<GraphQLError> errs = result.getErrors();
-            if (!errs.isEmpty()) {
-                response.status(400);
-                response.type("application/json");
-                return errs;
-            } else {
-                long endTime = System.currentTimeMillis();
-                LOG.info("Query took {} msec", endTime - startTime);
-                return result.getData();
-            }
-        } catch (IOException e) {
-            LOG.warn("Error processing variable JSON", e);
-            halt(404, "Malformed JSON");
-        }
-        return null;
+        Map<String, Object> variables = mapper.convertValue(varsJson, Map.class);
+        ExecutionResult result = GTFSGraphQL.getGraphQl().execute(queryJson, null, null, variables);
+        long endTime = System.currentTimeMillis();
+        LOG.info("Query took {} msec", endTime - startTime);
+        return result.toSpecification();
     }
 
 
     /**
      * A Spark Controller that returns the GraphQL schema.
      */
-    public static Object getSchema (Request req, Response res) {
-        return GTFSGraphQL.getGraphQl().execute(IntrospectionQuery.INTROSPECTION_QUERY).getData();
+    public static Map<String, Object> getSchema (Request req, Response res) {
+        return GTFSGraphQL.getGraphQl().execute(IntrospectionQuery.INTROSPECTION_QUERY).toSpecification();
     }
 
 
