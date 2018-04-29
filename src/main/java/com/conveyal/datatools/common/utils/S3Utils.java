@@ -36,7 +36,7 @@ import static spark.Spark.halt;
  */
 public class S3Utils {
 
-    public static String uploadBranding(Request req, String id) throws IOException, ServletException {
+    public static String uploadBranding(Request req, String key) throws IOException, ServletException {
         String url;
 
         String s3Bucket = DataManager.getConfigPropertyAsText("application.data.gtfs_s3_bucket");
@@ -51,7 +51,7 @@ public class S3Utils {
         }
         Part part = req.raw().getPart("file");
         String extension = "." + part.getContentType().split("/", 0)[1];
-        File tempFile = File.createTempFile(id + "_branding", extension);
+        File tempFile = File.createTempFile(key + "_branding", extension);
         tempFile.deleteOnExit();
 
         InputStream inputStream;
@@ -65,7 +65,7 @@ public class S3Utils {
         }
 
         try {
-            String keyName = "branding/" + id + extension;
+            String keyName = "branding/" + key + extension;
             url = "https://s3.amazonaws.com/" + s3Bucket + "/" + keyName;
             AmazonS3 s3client = AmazonS3ClientBuilder.defaultClient();
             s3client.putObject(new PutObjectRequest(
