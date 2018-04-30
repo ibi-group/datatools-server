@@ -13,6 +13,7 @@ import com.conveyal.gtfs.loader.Table;
 import com.conveyal.gtfs.model.Entity;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import org.apache.commons.dbutils.DbUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
@@ -20,6 +21,8 @@ import spark.Response;
 
 import javax.sql.DataSource;
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJSON;
@@ -89,6 +92,7 @@ public abstract class EditorController<T extends Entity> {
      * HTTP endpoint to delete all trips for a given string pattern_id (i.e., not the integer ID field).
      */
     private String deleteTripsForPattern(Request req, Response res) {
+        long startTime = System.currentTimeMillis();
         String namespace = getNamespaceAndValidateSession(req);
         // NOTE: This is a string pattern ID, not the integer ID that all other HTTP endpoints use.
         String patternId = req.params("id");
@@ -103,6 +107,8 @@ public abstract class EditorController<T extends Entity> {
             e.printStackTrace();
             haltWithMessage(400, "Error deleting entity", e);
             return null;
+        } finally {
+            LOG.info("Delete operation took {} msec", System.currentTimeMillis() - startTime);
         }
     }
 
@@ -111,6 +117,7 @@ public abstract class EditorController<T extends Entity> {
      * parameter. TODO: Implement this for other entity types?
      */
     private String deleteMultipleTrips(Request req, Response res) {
+        long startTime = System.currentTimeMillis();
         String namespace = getNamespaceAndValidateSession(req);
         JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
         String[] tripIds = req.queryParams("tripIds").split(",");
@@ -130,6 +137,8 @@ public abstract class EditorController<T extends Entity> {
         } catch (Exception e) {
             e.printStackTrace();
             haltWithMessage(400, "Error deleting entity", e);
+        } finally {
+            LOG.info("Delete operation took {} msec", System.currentTimeMillis() - startTime);
         }
         return formatJSON(String.format("Deleted %d.", tripIds.length), 200);
     }
@@ -138,6 +147,7 @@ public abstract class EditorController<T extends Entity> {
      * HTTP endpoint to delete one GTFS editor entity specified by the integer ID field.
      */
     private String deleteOne(Request req, Response res) {
+        long startTime = System.currentTimeMillis();
         String namespace = getNamespaceAndValidateSession(req);
         Integer id = getIdFromRequest(req);
         JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
@@ -149,6 +159,8 @@ public abstract class EditorController<T extends Entity> {
         } catch (Exception e) {
             e.printStackTrace();
             haltWithMessage(400, "Error deleting entity", e);
+        } finally {
+            LOG.info("Delete operation took {} msec", System.currentTimeMillis() - startTime);
         }
         return null;
     }
@@ -163,23 +175,34 @@ public abstract class EditorController<T extends Entity> {
         try {
             // FIXME: remove cast to string.
             String idAsString = String.valueOf(id);
-            url = S3Utils.uploadBranding(req, idAsString);
+            url = S3Utils.uploadBranding(req, String.join("_", classToLowercase, idAsString));
         } catch (Exception e) {
             LOG.error("Could not upload branding for {}", id);
             e.printStackTrace();
             haltWithMessage(400, "Could not upload branding", e);
         }
-        // Update URL in GTFS entity using JSON.
-        JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, getNamespaceAndValidateSession(req));
+        String namespace = getNamespaceAndValidateSession(req);
+        // Prepare json object for response. (Note: this is not the full entity object, but just the URL field).
         ObjectNode jsonObject = mapper.createObjectNode();
         jsonObject.put(String.format("%s_branding_url", classToLowercase), url);
+        Connection connection = null;
+        // Update URL in GTFS entity with simple SQL update. Note: the request object only contains an image file, so
+        // the standard JdbcTableWriter update method that requires a complete JSON string cannot be used.
         try {
-            return tableWriter.update(id, jsonObject.toString(), true);
-        } catch (SQLException | IOException e) {
+            connection = datasource.getConnection();
+            String updateSql = String.format("update %s.%s set %s_branding_url = ?", namespace, table.name, classToLowercase);
+            PreparedStatement preparedStatement = connection.prepareStatement(updateSql);
+            preparedStatement.setString(1, url);
+            preparedStatement.executeUpdate();
+            connection.commit();
+            return jsonObject.toString();
+        } catch (SQLException e) {
             e.printStackTrace();
             haltWithMessage(400, "Could not update branding url", e);
+            return null;
+        } finally {
+            DbUtils.closeQuietly(connection);
         }
-        return null;
     }
 
     /**
@@ -188,6 +211,7 @@ public abstract class EditorController<T extends Entity> {
      * be created.
      */
     private String createOrUpdate(Request req, Response res) {
+        long startTime = System.currentTimeMillis();
         // Check if an update or create operation depending on presence of id param
         // This needs to be final because it is used in a lambda operation below.
         if (req.params("id") == null && req.requestMethod().equals("PUT")) {
@@ -207,6 +231,9 @@ public abstract class EditorController<T extends Entity> {
         } catch (Exception e) {
             e.printStackTrace();
             haltWithMessage(400, "Operation failed.", e);
+        } finally {
+            String operation = isCreating ? "Create" : "Update";
+            LOG.info("{} operation took {} msec", operation, System.currentTimeMillis() - startTime);
         }
         return null;
     }
