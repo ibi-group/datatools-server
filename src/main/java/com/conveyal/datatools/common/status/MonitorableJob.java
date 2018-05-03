@@ -20,12 +20,13 @@ public abstract class MonitorableJob implements Runnable {
     protected final String owner;
 
     // Public fields will be serialized over HTTP API and visible to the web client
-    public final String name;
     public final JobType type;
     public String parentJobId;
     public JobType parentJobType;
-    // Not final to allow some jobs to have extra status fields.
+    // Status is not final to allow some jobs to have extra status fields.
     public Status status = new Status();
+    // Name is not final in case it needs to be amended during job processing.
+    public String name;
     public final String jobId = UUID.randomUUID().toString();
 
     /**

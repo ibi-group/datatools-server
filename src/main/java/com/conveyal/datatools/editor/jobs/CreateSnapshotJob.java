@@ -69,7 +69,7 @@ public class CreateSnapshotJob extends MonitorableJob {
         this.updateBuffer = updateBufferNamespace;
         this.storeSnapshot = storeSnapshot;
         this.preserveBuffer = preserveBufferAsSnapshot;
-        status.update(false,  "Creating snapshot...", 0);
+        status.update(false,  "Initializing...", 0);
     }
 
     @JsonProperty
@@ -81,8 +81,11 @@ public class CreateSnapshotJob extends MonitorableJob {
     public void jobLogic() {
         // Get count of snapshots to set new version number.
         feedSource = Persistence.feedSources.getById(snapshot.feedSourceId);
+        // Update job name to use feed source name (rather than ID).
+        this.name = String.format("Creating snapshot for %s", feedSource.name);
         Collection<Snapshot> existingSnapshots = feedSource.retrieveSnapshots();
         int version = existingSnapshots.size();
+        status.update(false,  "Creating snapshot...", 20);
         FeedLoadResult loadResult = makeSnapshot(namespace, DataManager.GTFS_DATA_SOURCE);
         snapshot.version = version;
         snapshot.namespace = loadResult.uniqueIdentifier;
