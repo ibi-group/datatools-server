@@ -16,6 +16,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.commons.dbutils.DbUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import spark.HaltException;
 import spark.Request;
 import spark.Response;
 
@@ -176,10 +177,15 @@ public abstract class EditorController<T extends Entity> {
             // FIXME: remove cast to string.
             String idAsString = String.valueOf(id);
             url = S3Utils.uploadBranding(req, String.join("_", classToLowercase, idAsString));
+        } catch (HaltException e) {
+            // Skip halts for exceptions that have already been caught.
+            LOG.error("Halt encountered", e);
+            throw e;
         } catch (Exception e) {
-            LOG.error("Could not upload branding for {}", id);
+            String message = String.format("Could not upload branding for %s id=%d", classToLowercase, id);
+            LOG.error(message);
             e.printStackTrace();
-            haltWithMessage(400, "Could not upload branding", e);
+            haltWithMessage(400, message, e);
         }
         String namespace = getNamespaceAndValidateSession(req);
         // Prepare json object for response. (Note: this is not the full entity object, but just the URL field).
