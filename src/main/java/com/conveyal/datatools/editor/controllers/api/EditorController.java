@@ -178,7 +178,7 @@ public abstract class EditorController<T extends Entity> {
             String idAsString = String.valueOf(id);
             url = S3Utils.uploadBranding(req, String.join("_", classToLowercase, idAsString));
         } catch (HaltException e) {
-            // Skip halts for exceptions that have already been caught.
+            // Do not re-catch halts thrown for exceptions that have already been caught.
             LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
