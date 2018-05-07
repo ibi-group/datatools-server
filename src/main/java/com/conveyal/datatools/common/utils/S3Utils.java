@@ -58,7 +58,6 @@ public class S3Utils {
         Part part = req.raw().getPart("file");
         String extension = "." + part.getContentType().split("/", 0)[1];
         File tempFile = File.createTempFile(key + "_branding", extension);
-        haltWithMessage(400, "Unable to read uploaded file");
         InputStream inputStream;
         try {
             inputStream = part.getInputStream();
@@ -73,7 +72,6 @@ public class S3Utils {
             String keyName = "branding/" + key + extension;
             url = "https://s3.amazonaws.com/" + s3Bucket + "/" + keyName;
             // FIXME: This may need to change during feed store refactor
-            haltWithMessage(400, "Unable to read uploaded file");
             AmazonS3 s3client = FeedStore.s3Client;
             s3client.putObject(new PutObjectRequest(
                     s3Bucket, keyName, tempFile)
