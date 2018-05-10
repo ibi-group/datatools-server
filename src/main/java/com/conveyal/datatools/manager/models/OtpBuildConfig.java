@@ -10,8 +10,8 @@ public class OtpBuildConfig implements Serializable {
     private static final long serialVersionUID = 1L;
 
     public Boolean fetchElevationUS;
-
-    public S3Bucket elevationBucket;
+    // FIXME: elevation bucket causing NPE issue if missing values when deploying to OTP
+    // public S3Bucket elevationBucket;
 
     public Boolean stationTransfers;
 
