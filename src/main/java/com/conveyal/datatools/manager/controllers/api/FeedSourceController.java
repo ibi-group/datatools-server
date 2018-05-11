@@ -134,13 +134,15 @@ public class FeedSourceController {
 
         FeedSource source = Persistence.feedSources.update(feedSourceId, req.body());
 
-        // notify users after successful save
-        NotifyUsersForSubscriptionJob notifyFeedJob = new NotifyUsersForSubscriptionJob("feed-updated", source.id, "Feed property updated for " + source.name);
-        DataManager.lightExecutor.execute(notifyFeedJob);
-
-        NotifyUsersForSubscriptionJob notifyProjectJob = new NotifyUsersForSubscriptionJob("project-updated", source.projectId, "Project updated (feed source property for " + source.name + ")");
-        DataManager.lightExecutor.execute(notifyProjectJob);
-
+        // Notify feed- and project-subscribed users after successful save
+        NotifyUsersForSubscriptionJob.createNotification(
+                "feed-updated",
+                source.id,
+                String.format("Feed property updated for %s.", source.name));
+        NotifyUsersForSubscriptionJob.createNotification(
+                "project-updated",
+                source.projectId,
+                String.format("Project updated (feed source property changed for %s).", source.name));
         return source;
     }
 

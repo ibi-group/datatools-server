@@ -23,11 +23,27 @@ public class NotifyUsersForSubscriptionJob implements Runnable {
     private String subscriptionType;
     private String target;
     private String message;
+    private static final String DEFAULT_NAME = "Data Tools";
+    private static final String APPLICATION_NAME = DataManager.getConfigPropertyAsText("application.title");
+    private static final String APPLICATION_URL = DataManager.getConfigPropertyAsText("application.public_url");
 
-    public NotifyUsersForSubscriptionJob(String subscriptionType, String target, String message) {
+    private NotifyUsersForSubscriptionJob(String subscriptionType, String target, String message) {
         this.subscriptionType = subscriptionType;
         this.target = target;
         this.message = message;
+    }
+
+    /**
+     * Convenience method to create and schedule a notification job to notify subscribed users.
+     */
+    public static void createNotification(String subscriptionType, String target, String     message) {
+        if (APPLICATION_URL == null || !(APPLICATION_URL.startsWith("https://") || APPLICATION_URL.startsWith("http://"))) {
+            LOG.error("application.public_url (value={}) property must be set to a valid URL in order to send notifications to users.", APPLICATION_URL);
+            return;
+        }
+        NotifyUsersForSubscriptionJob notifyJob = new NotifyUsersForSubscriptionJob(subscriptionType, target, message);
+        DataManager.lightExecutor.execute(notifyJob);
+        LOG.info("Notification job scheduled in light executor");
     }
 
     @Override
@@ -36,7 +52,7 @@ public class NotifyUsersForSubscriptionJob implements Runnable {
     }
 
     // TODO: modify method so that it receives both a feed param and a updateFor param?
-    public void notifyUsersForSubscription() {
+    private void notifyUsersForSubscription() {
         if (DataManager.hasConfigProperty("application.notifications_enabled") && !DataManager.getConfigProperty("application.notifications_enabled").asBoolean()) {
             return;
         }
@@ -47,6 +63,10 @@ public class NotifyUsersForSubscriptionJob implements Runnable {
             subscribedUsers = mapper.readTree(userString);
         } catch (IOException e) {
             e.printStackTrace();
+        }
+        if (subscribedUsers == null) {
+            LOG.error("Subscribed users list for type={}, target={} is null. Skipping notification delivery.", subscriptionType, target);
+            return;
         }
         for (JsonNode user : subscribedUsers) {
             if (!user.has("email")) {
@@ -60,25 +80,40 @@ public class NotifyUsersForSubscriptionJob implements Runnable {
             if (emailVerified) {
                 try {
                     String subject;
-                    String url;
-                    String bodyAction;
+                    String html = String.format("<p>%s</p>", this.message);
+                    String applicationName;
+                    String subscriptionToString = this.subscriptionType.replace("-", " ");
+                    if (APPLICATION_NAME == null) {
+                        LOG.warn("Configuration property \"application.title\" must be set to customize notifications.");
+                        applicationName = DEFAULT_NAME;
+                    } else {
+                        applicationName = APPLICATION_NAME;
+                    }
                     String[] subType = this.subscriptionType.split("-");
                     switch (subType[0]) {
                         case "feed":
                             FeedSource fs = Persistence.feedSources.getById(this.target);
-                            subject = DataManager.getConfigPropertyAsText("application.title")+ " Notification: " + this.subscriptionType.replace("-", " ") + " (" + fs.name + ")";
-                            url = DataManager.getConfigPropertyAsText("application.public_url");
-                            bodyAction = "</p><p>View <a href='" + url + "/feed/" + fs.id + "'>this feed</a>.</p>";
-                            sendNotification(email, subject, "Body", "<p>" + this.message + bodyAction);
+                            // Format subject header
+                            subject = String.format("%s Notification: %s (%s)", applicationName, subscriptionToString, fs.name);
+                            // Add action text.
+                            html += String.format("<p>View <a href='%s/feed/%s'>this feed</a>.</p>", APPLICATION_URL, fs.id);
                             break;
                         case "project":
                             Project p = Persistence.projects.getById(this.target);
-                            subject = "Datatools Notification: " + this.subscriptionType.replace("-", " ") + " (" + p.name + ")";
-                            url = DataManager.getConfigPropertyAsText("application.public_url");
-                            bodyAction = "</p><p>View <a href='" + url + "/project/" + p.id + "'>this project</a>.</p>";
-                            sendNotification(email, subject, "Body", "<p>" + this.message + bodyAction);
+                            // Format subject header
+                            subject = String.format("%s Notification: %s (%s)", applicationName, subscriptionToString, p.name);
+                            // Add action text.
+                            html += String.format("<p>View <a href='%s/project/%s'>this project</a>.</p>", APPLICATION_URL, p.id);
                             break;
+                        default:
+                            LOG.warn("Notifications not supported for subscription type {}", subType[0]);
+                            return;
                     }
+                    // Add manage subscriptions blurb.
+                    html += String.format(
+                            "<p><small>Manage subscriptions <a href='%s/settings/notifications'>here</a>.</small></p>",
+                            APPLICATION_URL);
+                    sendNotification(email, subject, "Body", html);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }

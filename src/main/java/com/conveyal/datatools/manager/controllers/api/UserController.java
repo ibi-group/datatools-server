@@ -2,10 +2,7 @@ package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
-import com.conveyal.datatools.manager.models.FeedSource;
-import com.conveyal.datatools.manager.models.JsonViews;
-import com.conveyal.datatools.manager.models.Note;
-import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.models.*;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.datatools.manager.DataManager;
@@ -25,10 +22,13 @@ import spark.Response;
 
 import java.io.*;
 import java.net.URLEncoder;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
 import java.util.*;
 
 import com.conveyal.datatools.manager.auth.Auth0Users;
 
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
 import static spark.Spark.*;
 
@@ -98,7 +98,7 @@ public class UserController {
             }
             return queryString;
         } else {
-            halt(401, "Must be application or organization admin to view users");
+            haltWithMessage(401, "Must be application or organization admin to view users");
             // Return statement cannot be reached due to halt.
             return null;
         }
@@ -141,7 +141,7 @@ public class UserController {
         HttpResponse response = client.execute(request);
         String result = EntityUtils.toString(response.getEntity());
         int statusCode = response.getStatusLine().getStatusCode();
-        if(statusCode >= 300) halt(statusCode, response.toString());
+        if(statusCode >= 300) haltWithMessage(statusCode, response.toString());
 
         return result;
     }
@@ -174,7 +174,7 @@ public class UserController {
         String result = EntityUtils.toString(response.getEntity());
 
         int statusCode = response.getStatusLine().getStatusCode();
-        if(statusCode >= 300) halt(statusCode, response.toString());
+        if(statusCode >= 300) haltWithMessage(statusCode, response.toString());
 
         System.out.println(result);
 
@@ -232,66 +232,174 @@ public class UserController {
         HttpClient client = HttpClientBuilder.create().build();
         HttpResponse response = client.execute(request);
         int statusCode = response.getStatusLine().getStatusCode();
-        if(statusCode >= 300) halt(statusCode, response.getStatusLine().getReasonPhrase());
+        if(statusCode >= 300) haltWithMessage(statusCode, response.getStatusLine().getReasonPhrase());
 
         return true;
     }
 
     private static Object getRecentActivity(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
-        String from = req.queryParams("from");
-        String to = req.queryParams("to");
-//        if (from == null || to == null) {
-//            halt(400, "Please provide valid from/to dates");
-//        }
-        List<Activity> activity = new ArrayList<>();
+
+        /* TODO: Allow custom from/to range
+        String fromStr = req.queryParams("from");
+        String toStr = req.queryParams("to"); */
+
+        // Default range: past 7 days
+        ZonedDateTime from = ZonedDateTime.now(ZoneOffset.UTC).minusDays(7);
+        ZonedDateTime to = ZonedDateTime.now(ZoneOffset.UTC);
+
+        List<Activity> activityList = new ArrayList<>();
         Auth0UserProfile.DatatoolsInfo datatools = userProfile.getApp_metadata().getDatatoolsInfo();
-        if (datatools != null) {
-            Auth0UserProfile.Subscription[] subscriptions = datatools.getSubscriptions();
-            if (subscriptions != null) {
-                for (Auth0UserProfile.Subscription sub : subscriptions) {
-                    switch (sub.getType()) {
-                        // TODO: add all activity types
-                        case "feed-commented-on":
-                            for (String targetId : sub.getTarget()) {
-                                FeedSource fs = Persistence.feedSources.getById(targetId);
-                                if(fs == null) continue;
-                                for (Note note : fs.retrieveNotes()) {
-                                    // TODO: Check if actually recent
-//                            if (note.date.after(Date.from(Instant.ofEpochSecond(from))) && note.date.before(Date.from(Instant.ofEpochSecond(to)))) {
-                                    Activity act = new Activity();
-                                    act.type = sub.getType();
-                                    act.userId = note.userId;
-                                    act.userName = note.userEmail;
-                                    act.body = note.body;
-                                    act.date = note.date;
-                                    act.targetId = targetId;
-                                    act.targetName = fs.name;
-                                    activity.add(act);
-//                            }
-                                }
-                            }
-                            break;
-                    }
-                }
-            }
-        } else {
+        if (datatools == null) {
             // NOTE: this condition will also occur if DISABLE_AUTH is set to true
-            halt(403, SparkUtils.formatJSON("User does not have permission to access to this application", 403));
+            haltWithMessage(403, "User does not have permission to access to this application");
         }
 
-        return activity;
+        Auth0UserProfile.Subscription[] subscriptions = datatools.getSubscriptions();
+        if (subscriptions == null) return activityList;
+
+        /* NOTE: as of May-08-2018 we decided to limit subscriptions to two types:
+         * 'feed-updated' and 'project-updated'. Comment subscriptions are now always
+         * assumed if the containing 'feed-updated' subscription is active
+         */
+        for (Auth0UserProfile.Subscription sub : subscriptions) {
+            switch (sub.getType()) {
+                case "feed-updated":
+                    for (String targetId : sub.getTarget()) {
+                        FeedSource fs = Persistence.feedSources.getById(targetId);
+                        if (fs == null) continue;
+
+                        // FeedSource comments
+                        for (Note note : fs.retrieveNotes()) {
+                            ZonedDateTime datePosted = toZonedDateTime(note.date);
+                            if (datePosted.isBefore(from) || datePosted.isAfter(to)) continue;
+                            activityList.add(new FeedSourceCommentActivity(note, fs));
+                        }
+
+                        // Iterate through this Feed's FeedVersions
+                        for(FeedVersion version : fs.retrieveFeedVersions()) {
+                            // FeedVersion creation event
+                            ZonedDateTime dateCreated = toZonedDateTime(fs.dateCreated);
+                            if (dateCreated.isAfter(from) && dateCreated.isBefore(to)) {
+                                activityList.add(new FeedVersionCreationActivity(version, fs));
+                            }
+
+                            // FeedVersion comments
+                            for (Note note : version.retrieveNotes()) {
+                                ZonedDateTime datePosted = toZonedDateTime(note.date);
+                                if (datePosted.isBefore(from) || datePosted.isAfter(to)) continue;
+                                activityList.add(new FeedVersionCommentActivity(note, fs, version));
+                            }
+                        }
+                    }
+                    break;
+
+                case "project-updated":
+                    // Iterate through Project IDs, skipping any that don't resolve to actual projects
+                    for (String targetId : sub.getTarget()) {
+                        Project proj = Persistence.projects.getById(targetId);
+                        if (proj == null) continue;
+
+                        // Iterate through Project's FeedSources, creating "Feed created" items as needed
+                        for (FeedSource fs : proj.retrieveProjectFeedSources()) {
+                            ZonedDateTime dateCreated = toZonedDateTime(fs.dateCreated);
+                            if (dateCreated.isBefore(from) || dateCreated.isAfter(to)) continue;
+                            activityList.add(new FeedSourceCreationActivity(fs, proj));
+                        }
+                    }
+                    break;
+            }
+        }
+
+        return activityList;
     }
 
-    static class Activity implements Serializable {
+    private static ZonedDateTime toZonedDateTime (Date date) {
+        return ZonedDateTime.ofInstant(date.toInstant(), ZoneOffset.UTC);
+    }
+
+    static abstract class Activity implements Serializable {
         private static final long serialVersionUID = 1L;
         public String type;
         public String userId;
         public String userName;
-        public String body;
-        public String targetId;
-        public String targetName;
         public Date date;
+    }
+
+    static class FeedSourceCreationActivity extends Activity {
+        private static final long serialVersionUID = 1L;
+        public String feedSourceId;
+        public String feedSourceName;
+        public String projectId;
+        public String projectName;
+
+        public FeedSourceCreationActivity(FeedSource fs, Project proj) {
+            this.type = "feed-created";
+            this.date = fs.dateCreated;
+            this.userId = fs.userId;
+            this.userName = fs.userEmail;
+            this.feedSourceId = fs.id;
+            this.feedSourceName = fs.name;
+            this.projectId = proj.id;
+            this.projectName = proj.name;
+        }
+    }
+
+    static class FeedVersionCreationActivity extends Activity {
+        private static final long serialVersionUID = 1L;
+        public Integer feedVersionIndex;
+        public String feedVersionName;
+        public String feedSourceId;
+        public String feedSourceName;
+
+        public FeedVersionCreationActivity(FeedVersion version, FeedSource fs) {
+            this.type = "version-created";
+            this.date = fs.dateCreated;
+            this.userId = version.userId;
+            this.userName = version.userEmail;
+            this.feedVersionIndex = version.version;
+            this.feedVersionName = version.name;
+            this.feedSourceId = fs.id;
+            this.feedSourceName = fs.name;
+        }
+    }
+
+    static abstract class CommentActivity extends Activity {
+        private static final long serialVersionUID = 1L;
+        public String body;
+
+        public CommentActivity (Note note) {
+            this.date = note.date;
+            this.userId = note.userId;
+            this.userName = note.userEmail;
+            this.body = note.body;
+        }
+    }
+
+    static class FeedSourceCommentActivity extends CommentActivity {
+        private static final long serialVersionUID = 1L;
+        public String feedSourceId;
+        public String feedSourceName;
+
+        public FeedSourceCommentActivity(Note note, FeedSource feedSource) {
+            super(note);
+            this.type = "feed-commented-on";
+            this.feedSourceId = feedSource.id;
+            this.feedSourceName = feedSource.name;
+        }
+    }
+
+    static class FeedVersionCommentActivity extends FeedSourceCommentActivity {
+        private static final long serialVersionUID = 1L;
+        public Integer feedVersionIndex;
+        public String feedVersionName;
+
+        public FeedVersionCommentActivity(Note note, FeedSource feedSource, FeedVersion version) {
+            super(note, feedSource);
+            this.type = "version-commented-on";
+            this.feedVersionIndex = version.version;
+            this.feedVersionName = version.name;
+        }
     }
 
     public static void register (String apiPrefix) {
