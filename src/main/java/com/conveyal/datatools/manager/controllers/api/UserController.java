@@ -28,6 +28,7 @@ import java.util.*;
 
 import com.conveyal.datatools.manager.auth.Auth0Users;
 
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
 import static spark.Spark.*;
 
@@ -97,7 +98,7 @@ public class UserController {
             }
             return queryString;
         } else {
-            halt(401, "Must be application or organization admin to view users");
+            haltWithMessage(401, "Must be application or organization admin to view users");
             // Return statement cannot be reached due to halt.
             return null;
         }
@@ -140,7 +141,7 @@ public class UserController {
         HttpResponse response = client.execute(request);
         String result = EntityUtils.toString(response.getEntity());
         int statusCode = response.getStatusLine().getStatusCode();
-        if(statusCode >= 300) halt(statusCode, response.toString());
+        if(statusCode >= 300) haltWithMessage(statusCode, response.toString());
 
         return result;
     }
@@ -173,7 +174,7 @@ public class UserController {
         String result = EntityUtils.toString(response.getEntity());
 
         int statusCode = response.getStatusLine().getStatusCode();
-        if(statusCode >= 300) halt(statusCode, response.toString());
+        if(statusCode >= 300) haltWithMessage(statusCode, response.toString());
 
         System.out.println(result);
 
@@ -231,7 +232,7 @@ public class UserController {
         HttpClient client = HttpClientBuilder.create().build();
         HttpResponse response = client.execute(request);
         int statusCode = response.getStatusLine().getStatusCode();
-        if(statusCode >= 300) halt(statusCode, response.getStatusLine().getReasonPhrase());
+        if(statusCode >= 300) haltWithMessage(statusCode, response.getStatusLine().getReasonPhrase());
 
         return true;
     }
@@ -251,7 +252,7 @@ public class UserController {
         Auth0UserProfile.DatatoolsInfo datatools = userProfile.getApp_metadata().getDatatoolsInfo();
         if (datatools == null) {
             // NOTE: this condition will also occur if DISABLE_AUTH is set to true
-            halt(403, SparkUtils.formatJSON("User does not have permission to access to this application", 403));
+            haltWithMessage(403, "User does not have permission to access to this application");
         }
 
         Auth0UserProfile.Subscription[] subscriptions = datatools.getSubscriptions();
@@ -326,6 +327,7 @@ public class UserController {
     }
 
     static class FeedSourceCreationActivity extends Activity {
+        private static final long serialVersionUID = 1L;
         public String feedSourceId;
         public String feedSourceName;
         public String projectId;
@@ -344,6 +346,7 @@ public class UserController {
     }
 
     static class FeedVersionCreationActivity extends Activity {
+        private static final long serialVersionUID = 1L;
         public Integer feedVersionIndex;
         public String feedVersionName;
         public String feedSourceId;
@@ -362,6 +365,7 @@ public class UserController {
     }
 
     static abstract class CommentActivity extends Activity {
+        private static final long serialVersionUID = 1L;
         public String body;
 
         public CommentActivity (Note note) {
@@ -373,6 +377,7 @@ public class UserController {
     }
 
     static class FeedSourceCommentActivity extends CommentActivity {
+        private static final long serialVersionUID = 1L;
         public String feedSourceId;
         public String feedSourceName;
 
@@ -385,6 +390,7 @@ public class UserController {
     }
 
     static class FeedVersionCommentActivity extends FeedSourceCommentActivity {
+        private static final long serialVersionUID = 1L;
         public Integer feedVersionIndex;
         public String feedVersionName;
 
