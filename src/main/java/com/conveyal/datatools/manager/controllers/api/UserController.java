@@ -354,7 +354,7 @@ public class UserController {
 
         public FeedVersionCreationActivity(FeedVersion version, FeedSource fs) {
             this.type = "version-created";
-            this.date = fs.dateCreated;
+            this.date = version.dateCreated;
             this.userId = version.userId;
             this.userName = version.userEmail;
             this.feedVersionIndex = version.version;
