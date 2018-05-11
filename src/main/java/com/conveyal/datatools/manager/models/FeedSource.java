@@ -271,9 +271,10 @@ public class FeedSource extends Model implements Cloneable {
 
             // Set file timestamp according to last modified header from connection
             version.fileTimestamp = conn.getLastModified();
-            NotifyUsersForSubscriptionJob notifyFeedJob = new NotifyUsersForSubscriptionJob("feed-updated", this.id, "New feed version created for " + this.name);
-            DataManager.lightExecutor.execute(notifyFeedJob);
-
+            NotifyUsersForSubscriptionJob.createNotification(
+                    "feed-updated",
+                    this.id,
+                    String.format("New feed version created for %s.", this.name));
             String message = String.format("Fetch complete for %s", this.name);
             LOG.info(message);
             status.update(false, message, 100.0);

@@ -140,11 +140,18 @@ public class NoteController {
             } else {
                 Persistence.feedVersions.getMongoCollection().updateOne(eq(objectWithNote.id), push("noteIds", note.id));
             }
-
-            // send notifications
-            NotifyUsersForSubscriptionJob notifyFeedJob = new NotifyUsersForSubscriptionJob("feed-commented-on", feedSource.id, note.userEmail + " commented on " + feedSource.name + " at " + note.date.toString() + ":<blockquote>" + note.body + "</blockquote>");
-            DataManager.lightExecutor.execute(notifyFeedJob);
-
+            String message = String.format(
+                    "%s commented on %s at %s:<blockquote>%s</blockquote>",
+                    note.userEmail,
+                    feedSource.name,
+                    note.date.toString(),
+                    note.body);
+            // Send notifications to comment subscribers.
+            NotifyUsersForSubscriptionJob.createNotification(
+                    "feed-commented-on",
+                    feedSource.id,
+                    message
+            );
             return note;
         }
         else {
