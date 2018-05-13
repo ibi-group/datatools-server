@@ -8,6 +8,7 @@ import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.JsonViews;
+import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
@@ -98,7 +99,10 @@ public class FeedSourceController {
         return sources;
     }
 
-    public static FeedSource createFeedSource(Request req, Response res) throws IOException {
+    /**
+     * HTTP endpoint to create a new feed source.
+     */
+    public static FeedSource createFeedSource(Request req, Response res) {
         // TODO factor out getting user profile, project ID and organization ID and permissions
         Auth0UserProfile userProfile = req.attribute("user");
         Document newFeedSourceFields = Document.parse(req.body());
@@ -113,6 +117,12 @@ public class FeedSourceController {
                 for (String resourceType : DataManager.feedResources.keySet()) {
                     DataManager.feedResources.get(resourceType).feedSourceCreated(newFeedSource, req.headers("Authorization"));
                 }
+                // Notify project subscribers of new feed source creation.
+                Project parentProject = Persistence.projects.getById(projectId);
+                NotifyUsersForSubscriptionJob.createNotification(
+                        "project-updated",
+                        projectId,
+                        String.format("New feed %s created in project %s.", newFeedSource.name, parentProject.name));
                 return newFeedSource;
             } catch (Exception e) {
                 LOG.error("Unknown error creating feed source", e);
