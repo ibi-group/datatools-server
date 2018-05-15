@@ -82,7 +82,7 @@ public class MakePublicJob extends MonitorableJob {
         output = r.toString();
         String fileName = "index.html";
         String folder = "public/";
-        File file = new File(FileUtils.getTempDirectory() + fileName);
+        File file = new File(String.join("/", FileUtils.getTempDirectory().getAbsolutePath(), fileName));
         file.deleteOnExit();
         try {
             FileUtils.writeStringToFile(file, output);
