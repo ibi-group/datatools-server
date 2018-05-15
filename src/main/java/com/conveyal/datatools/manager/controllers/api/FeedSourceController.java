@@ -135,14 +135,22 @@ public class FeedSourceController {
         }
     }
 
-    public static FeedSource updateFeedSource(Request req, Response res) throws IOException {
+    public static FeedSource updateFeedSource(Request req, Response res) {
         String feedSourceId = req.params("id");
 
         // call this method just for null and permissions check
-        // TODO: it's wasteful to request the entire feed source here, need to factor out permissions checks
-        requestFeedSourceById(req, "manage");
-
-        FeedSource source = Persistence.feedSources.update(feedSourceId, req.body());
+        // TODO: it's wasteful to request the entire feed source here, need to factor out permissions checks. However,
+        // we need the URL to see if it has been updated in order to then set the lastFetched value to null.
+        FeedSource formerFeedSource = requestFeedSourceById(req, "manage");
+        Document fieldsToUpdate = Document.parse(req.body());
+        if (fieldsToUpdate.containsKey("url") && formerFeedSource.url != null) {
+            // Reset last fetched timestamp if the URL has been updated.
+            if (!fieldsToUpdate.get("url").toString().equals(formerFeedSource.url.toString())) {
+                LOG.info("Feed source fetch URL has been modified. Resetting lastFetched value from {} to {}", formerFeedSource.lastFetched, null);
+                fieldsToUpdate.put("lastFetched", null);
+            }
+        }
+        FeedSource source = Persistence.feedSources.update(feedSourceId, fieldsToUpdate.toJson());
 
         // Notify feed- and project-subscribed users after successful save
         NotifyUsersForSubscriptionJob.createNotification(
