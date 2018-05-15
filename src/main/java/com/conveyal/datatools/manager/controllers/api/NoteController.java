@@ -147,8 +147,10 @@ public class NoteController {
                     note.date.toString(),
                     note.body);
             // Send notifications to comment subscribers.
+            // TODO: feed-commented-on has been merged into feed-updated subscription type. This should be clarified
+            // in the subject line/URL of the notification email.
             NotifyUsersForSubscriptionJob.createNotification(
-                    "feed-commented-on",
+                    "feed-updated",
                     feedSource.id,
                     message
             );

@@ -74,10 +74,11 @@ public class NotifyUsersForSubscriptionJob implements Runnable {
             }
             String email = user.get("email").asText();
             Boolean emailVerified = user.get("email_verified").asBoolean();
-            LOG.info("sending notification to {}", email);
-
             // only send email if address has been verified
-            if (emailVerified) {
+            if (!emailVerified) {
+                LOG.warn("Skipping notification for user {}. User's email address has not been verified.", email);
+            } else {
+                LOG.info("Sending notification to {}", email);
                 try {
                     String subject;
                     String html = String.format("<p>%s</p>", this.message);
