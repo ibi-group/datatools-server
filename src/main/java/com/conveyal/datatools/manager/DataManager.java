@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager;
 
 import com.conveyal.datatools.common.utils.SparkUtils;
+import com.conveyal.datatools.editor.controllers.EditorLockController;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 
 import com.conveyal.datatools.manager.controllers.DumpController;
@@ -16,9 +17,11 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.persistence.TransportNetworkCache;
 import com.conveyal.datatools.manager.utils.CorsFilter;
 import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.GraphQLMain;
+import com.conveyal.gtfs.loader.Table;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
@@ -43,30 +46,46 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static spark.Spark.*;
 
+/**
+ * This is the singleton where the application is initialized. It currently stores a number of static fields which are
+ * referenced throughout the application.
+ */
 public class DataManager {
+    private static final Logger LOG = LoggerFactory.getLogger(DataManager.class);
 
-    public static final Logger LOG = LoggerFactory.getLogger(DataManager.class);
+    // These fields hold YAML files that represent the server configuration.
+    private static JsonNode config;
+    private static JsonNode serverConfig;
 
-    public static JsonNode config;
-    public static JsonNode serverConfig;
-
+    // These fields hold YAML files that represent the GTFS and GTFS+ specifications.
     public static JsonNode gtfsPlusConfig;
     public static JsonNode gtfsConfig;
 
+    // Contains the config-enabled ExternalFeedResource objects that define connections to third-party feed indexes
+    // (e.g., transit.land, TransitFeeds.com)
     // TODO: define type for ExternalFeedResource Strings
     public static final Map<String, ExternalFeedResource> feedResources = new HashMap<>();
 
+    // Stores jobs underway by user ID.
     public static Map<String, ConcurrentHashSet<MonitorableJob>> userJobsMap = new ConcurrentHashMap<>();
 
+    // Caches r5 transport networks for use in generating isochrones
+    public static final TransportNetworkCache transportNetworkCache = new TransportNetworkCache();
+
+    // Stores ScheduledFuture objects that kick off runnable tasks (e.g., fetch project feeds at 2:00 AM).
     public static Map<String, ScheduledFuture> autoFetchMap = new HashMap<>();
+    // Scheduled executor that handles running scheduled jobs.
     public final static ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+    // ObjectMapper that loads in YAML config files
     private static final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
 
 
     // heavy executor should contain long-lived CPU-intensive tasks (e.g., feed loading/validation)
-    public static Executor heavyExecutor = Executors.newFixedThreadPool(4); // Runtime.getRuntime().availableProcessors()
+    // FIXME: temporarily decrease num threads to 2 (from 4) for loading feeds from editor.
+    public static Executor heavyExecutor = Executors.newFixedThreadPool(1); // Runtime.getRuntime().availableProcessors()
     // light executor is for tasks for things that should finish quickly (e.g., email notifications)
     public static Executor lightExecutor = Executors.newSingleThreadExecutor();
 
@@ -79,13 +98,29 @@ public class DataManager {
     // TODO: move gtfs-api routes to gtfs path and add auth
     private static final String GTFS_API_PREFIX = API_PREFIX;
     public static final String EDITOR_API_PREFIX = "/api/editor/";
-    public static final String publicPath = "(" + DataManager.API_PREFIX + "|" + DataManager.EDITOR_API_PREFIX + ")public/.*";
+    public static final String publicPath = "(" + API_PREFIX + "|" + EDITOR_API_PREFIX + ")public/.*";
     public static final String DEFAULT_ENV = "configurations/default/env.yml";
     public static final String DEFAULT_CONFIG = "configurations/default/server.yml";
     public static DataSource GTFS_DATA_SOURCE;
 
     public static void main(String[] args) throws IOException {
 
+        initializeApplication(args);
+
+        // initialize map of auto fetched projects
+        for (Project project : Persistence.projects.getAll()) {
+            if (project.autoFetchFeeds) {
+                ScheduledFuture scheduledFuture = ProjectController.scheduleAutoFeedFetch(project, 1);
+                autoFetchMap.put(project.id, scheduledFuture);
+            }
+        }
+
+        registerRoutes();
+
+        registerExternalResources();
+    }
+
+    public static void initializeApplication(String[] args) throws IOException {
         // load config
         loadConfig(args);
 
@@ -113,25 +148,13 @@ public class DataManager {
         LOG.info("Initialized gtfs-api at localhost:port{}", API_PREFIX);
 
         Persistence.initialize();
-
-        // initialize map of auto fetched projects
-        for (Project project : Persistence.projects.getAll()) {
-            if (project.autoFetchFeeds) {
-                ScheduledFuture scheduledFuture = ProjectController.scheduleAutoFeedFetch(project, 1);
-                autoFetchMap.put(project.id, scheduledFuture);
-            }
-        }
-
-        registerRoutes();
-
-        registerExternalResources();
     }
 
     /**
      * Register API routes with Spark. This register core application routes, any routes associated with optional
      * modules and sets other core routes (e.g., 404 response) and response headers (e.g., API content type is JSON).
      */
-    private static void registerRoutes() throws IOException {
+    protected static void registerRoutes() throws IOException {
         CorsFilter.apply();
 
         // core controllers
@@ -145,19 +168,21 @@ public class DataManager {
 
         // Editor routes
         if (isModuleEnabled("editor")) {
+
+            SnapshotController.register(EDITOR_API_PREFIX);
+            EditorLockController.register(EDITOR_API_PREFIX);
+
             String gtfs = IOUtils.toString(DataManager.class.getResourceAsStream("/gtfs/gtfs.yml"));
             gtfsConfig = yamlMapper.readTree(gtfs);
-            AgencyController.register(EDITOR_API_PREFIX);
-            CalendarController.register(EDITOR_API_PREFIX);
-            RouteController.register(EDITOR_API_PREFIX);
-            RouteTypeController.register(EDITOR_API_PREFIX);
-            ScheduleExceptionController.register(EDITOR_API_PREFIX);
-            StopController.register(EDITOR_API_PREFIX);
-            TripController.register(EDITOR_API_PREFIX);
-            TripPatternController.register(EDITOR_API_PREFIX);
-            SnapshotController.register(EDITOR_API_PREFIX);
-            FeedInfoController.register(EDITOR_API_PREFIX);
-            FareController.register(EDITOR_API_PREFIX);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.AGENCY, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.CALENDAR, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.FARE_ATTRIBUTES, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.FEED_INFO, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.ROUTES, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.PATTERNS, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.SCHEDULE_EXCEPTIONS, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.STOPS, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.TRIPS, DataManager.GTFS_DATA_SOURCE);
 //            GisController.register(EDITOR_API_PREFIX);
         }
 
@@ -182,11 +207,11 @@ public class DataManager {
         if (isModuleEnabled("dump")) {
             DumpController.register("/");
         }
-
         before(EDITOR_API_PREFIX + "secure/*", ((request, response) -> {
             Auth0Connection.checkUser(request);
             Auth0Connection.checkEditPrivileges(request);
         }));
+
 
         before(API_PREFIX + "secure/*", (request, response) -> {
             if(request.requestMethod().equals("OPTIONS")) return;
@@ -194,14 +219,22 @@ public class DataManager {
         });
 
         // FIXME: add auth check for gtfs-api. Should access to certain feeds be restricted by feedId or namespace?
-//        before(GTFS_API_PREFIX + "*", (request, response) -> {
-//            if(request.requestMethod().equals("OPTIONS")) return;
-//            Auth0Connection.checkUser(request);
-//        });
+        //        before(GTFS_API_PREFIX + "*", (request, response) -> {
+        //            if(request.requestMethod().equals("OPTIONS")) return;
+        //            Auth0Connection.checkUser(request);
+        //        });
+
+//        logRequest(getConfigPropertyAsText("application.public_url"), API_PREFIX);
+//        logRequest(getConfigPropertyAsText("application.public_url"), EDITOR_API_PREFIX);
 
         // return "application/json" for all API routes
         after(API_PREFIX + "*", (request, response) -> {
-//            LOG.info(request.pathInfo());
+            //            LOG.info(request.pathInfo());
+            response.type("application/json");
+            response.header("Content-Encoding", "gzip");
+        });
+        before(EDITOR_API_PREFIX + "*", (request, response) -> {
+            //            LOG.info(request.pathInfo());
             response.type("application/json");
             response.header("Content-Encoding", "gzip");
         });
@@ -209,12 +242,6 @@ public class DataManager {
         InputStream stream = DataManager.class.getResourceAsStream("/public/index.html");
         final String index = IOUtils.toString(stream).replace("${S3BUCKET}", getConfigPropertyAsText("application.assets_bucket"));
         stream.close();
-
-        // return 404 for any api response that's not found
-        get(API_PREFIX + "*", (request, response) -> {
-            halt(404, SparkUtils.formatJSON("Unknown error occurred.", 404));
-            return null;
-        });
 
         InputStream auth0Stream = DataManager.class.getResourceAsStream("/public/auth0-silent-callback.html");
         final String auth0html = IOUtils.toString(auth0Stream);
@@ -224,6 +251,15 @@ public class DataManager {
         get("/api/auth0-silent-callback", (request, response) -> {
             response.type("text/html");
             return auth0html;
+        });
+
+        /////////////////    Final API routes     /////////////////////
+
+        // Return 404 for any API path that is not configured.
+        // IMPORTANT: Any API paths must be registered before this halt.
+        get("/api/" + "*", (request, response) -> {
+            haltWithMessage(404, "No API route configured for this path.");
+            return null;
         });
 
         // return index.html for any sub-directory

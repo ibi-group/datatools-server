@@ -102,20 +102,24 @@ public class FeedVersion extends Model implements Serializable {
 
     public FeedSource.FeedRetrievalMethod retrievalMethod;
 
-    @JsonIgnore
-    public transient TransportNetwork transportNetwork;
-
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("feedSource")
     public FeedSource parentFeedSource() {
         return Persistence.feedSources.getById(feedSourceId);
     }
 
+    /**
+     * Finds the previous version (i.e., the version loaded directly before the current version in time order).
+     * @return the previous feed version or <code>null</code> if this is the first version
+     */
     public FeedVersion previousVersion() {
         return Persistence.feedVersions.getOneFiltered(and(
-                eq("version", this.version - 1), eq("feedSourceId", this.id)), null);
+                eq("version", this.version - 1), eq("feedSourceId", this.feedSourceId)), null);
     }
 
+    /**
+     * JSON view to show the previous version ID.
+     */
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("previousVersionId")
     public String previousVersionId() {
@@ -123,12 +127,18 @@ public class FeedVersion extends Model implements Serializable {
         return p != null ? p.id : null;
     }
 
-    // TODO check that this filter is functional
+    /**
+     * Finds the next version (i.e., the version loaded directly after the current version in time order).
+     * @return the next feed version or <code>null</code> if this is the latest version
+     */
     public FeedVersion nextVersion() {
         return Persistence.feedVersions.getOneFiltered(and(
-                eq("version", this.version + 1), eq("feedSourceId", this.id)), null);
+                eq("version", this.version + 1), eq("feedSourceId", this.feedSourceId)), null);
     }
 
+    /**
+     * JSON view to show the next version ID.
+     */
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("nextVersionId")
     public String nextVersionId() {
@@ -151,7 +161,7 @@ public class FeedVersion extends Model implements Serializable {
         // fileSize field will not be stored until new FeedVersion is stored in MongoDB (usually in
         // the final steps of ValidateFeedJob).
         this.fileSize = file.length();
-        LOG.info("New GTFS file saved: {}", id);
+        LOG.info("New GTFS file saved: {} ({} bytes)", id, this.fileSize);
         return file;
     }
     public File newGtfsFile(InputStream inputStream, Long lastModified) {
@@ -219,7 +229,7 @@ public class FeedVersion extends Model implements Serializable {
         return format.format(this.updated);
     }
 
-    public void load(MonitorableJob.Status status) {
+    public void load(MonitorableJob.Status status, boolean isNewVersion) {
         File gtfsFile;
         // STEP 1. LOAD GTFS feed into relational database
         try {
@@ -227,6 +237,11 @@ public class FeedVersion extends Model implements Serializable {
             // Get SQL schema namespace for the feed version. This is needed for reconnecting with feeds
             // in the database.
             gtfsFile = retrieveGtfsFile();
+            if (gtfsFile.length() == 0) {
+                throw new IOException("Empty GTFS file supplied");
+            }
+            // If feed version has not been hashed, hash it here.
+            if (hash == null) hash = HashUtils.hashFile(gtfsFile);
             String gtfsFilePath = gtfsFile.getPath();
             this.feedLoadResult = GTFS.load(gtfsFilePath, DataManager.GTFS_DATA_SOURCE);
             // FIXME? duplication of namespace (also stored as feedLoadResult.uniqueIdentifier)
@@ -253,8 +268,13 @@ public class FeedVersion extends Model implements Serializable {
         // STEP 2. Upload GTFS to S3 (storage on local machine is done when feed is fetched/uploaded)
         if (DataManager.useS3) {
             try {
-                boolean fileUploaded = FeedVersion.feedStore.uploadToS3(gtfsFile, this.id, this.parentFeedSource());
-                if (fileUploaded) {
+                boolean fileUploaded = false;
+                if (isNewVersion) {
+                    // Only upload file to S3 if it is a new version (otherwise, it would have been downloaded from here.
+                    fileUploaded = FeedVersion.feedStore.uploadToS3(gtfsFile, this.id, this.parentFeedSource());
+                }
+                if (fileUploaded || !isNewVersion) {
+                    // Note: If feed is not a new version, it is presumed to already exist on S3, so uploading is not required.
                     // Delete local copy of feed version after successful s3 upload
                     boolean fileDeleted = gtfsFile.delete();
                     if (fileDeleted) {
@@ -317,6 +337,25 @@ public class FeedVersion extends Model implements Serializable {
 
     public void hash () {
         this.hash = HashUtils.hashFile(retrieveGtfsFile());
+    }
+
+    /**
+     * This reads in
+     * @return
+     */
+    public TransportNetwork readTransportNetwork() {
+        TransportNetwork transportNetwork = null;
+        try {
+            transportNetwork = TransportNetwork.read(transportNetworkPath());
+            // check to see if distance tables are built yet... should be removed once better caching strategy is implemented.
+            if (transportNetwork.transitLayer.stopToVertexDistanceTables == null) {
+                transportNetwork.transitLayer.buildDistanceTables(null);
+            }
+        } catch (Exception e) {
+            LOG.error("Could not read transport network for version {}", id);
+            e.printStackTrace();
+        }
+        return transportNetwork;
     }
 
     public TransportNetwork buildTransportNetwork(MonitorableJob.Status status) {
@@ -385,7 +424,7 @@ public class FeedVersion extends Model implements Serializable {
         File tnFile = transportNetworkPath();
         try {
             tn.write(tnFile);
-            return transportNetwork;
+            return tn;
         } catch (IOException e) {
             e.printStackTrace();
         }

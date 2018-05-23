@@ -15,12 +15,10 @@ import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
 import java.io.IOException;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -30,9 +28,6 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -42,9 +37,9 @@ import spark.Response;
 
 import static com.conveyal.datatools.common.utils.S3Utils.getS3Credentials;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
-import javax.servlet.http.HttpServletResponse;
 
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithError;
+import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.manager.DataManager.publicPath;
 import static spark.Spark.*;
 
@@ -98,7 +93,7 @@ public class ProjectController {
             Project newlyStoredProject = Persistence.projects.create(req.body());
             return newlyStoredProject;
         } else {
-            haltWithError(403, "Not authorized to create a project on organization " + organizationId);
+            haltWithMessage(403, "Not authorized to create a project on organization " + organizationId);
             return null;
         }
     }
@@ -238,14 +233,20 @@ public class ProjectController {
         return project;
     }
 
-    private static boolean downloadMergedFeed(Request req, Response res) throws IOException {
+    /**
+     * HTTP endpoint to initialize a merge project feeds operation. Client should check the job status endpoint for the
+     * completion of merge project feeds job. On successful completion of the job, the client should make a GET request
+     * to getFeedDownloadCredentials with the project ID to obtain either temporary S3 credentials or a download token
+     * (depending on application configuration "application.data.use_s3_storage") to download the zip file.
+     */
+    private static String downloadMergedFeed(Request req, Response res) {
         Project project = requestProjectById(req, "view");
         Auth0UserProfile userProfile = req.attribute("user");
         // TODO: make this an authenticated call?
         MergeProjectFeedsJob mergeProjectFeedsJob = new MergeProjectFeedsJob(project, userProfile.getUser_id());
         DataManager.heavyExecutor.execute(mergeProjectFeedsJob);
-
-        return true;
+        // Return job ID to requester for monitoring job status.
+        return formatJobMessage(mergeProjectFeedsJob.jobId, "Merge operation is processing.");
     }
 
     /**
@@ -257,7 +258,14 @@ public class ProjectController {
 
         // if storing feeds on s3, return temporary s3 credentials for that zip file
         if (DataManager.useS3) {
-            return getS3Credentials(DataManager.awsRole, DataManager.feedBucket, "project/" + project.id + ".zip", Statement.Effect.Allow, S3Actions.GetObject, 900);
+            return getS3Credentials(
+                    DataManager.awsRole,
+                    DataManager.feedBucket,
+                    "project/" + project.id + ".zip",
+                    Statement.Effect.Allow,
+                    S3Actions.GetObject,
+                    900
+            );
         } else {
             // when feeds are stored locally, single-use download token will still be used
             FeedDownloadToken token = new FeedDownloadToken(project);
@@ -397,6 +405,10 @@ public class ProjectController {
         get(apiPrefix + "downloadprojectfeed/:token", ProjectController::downloadMergedFeedWithToken);
     }
 
+    /**
+     * HTTP endpoint that allows the requester to download a merged project feeds file stored locally (it should only
+     * be invoked if the application is not using S3 storage) given that the requester supplies a valid token.
+     */
     private static Object downloadMergedFeedWithToken(Request req, Response res) {
         FeedDownloadToken token = Persistence.tokens.getById(req.params("token"));
 

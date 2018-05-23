@@ -5,6 +5,11 @@ import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonParser;
+import com.google.gson.JsonSyntaxException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
@@ -15,6 +20,9 @@ import java.io.DataOutputStream;
 import java.io.InputStreamReader;
 import java.net.URL;
 
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
+import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
+import static spark.Spark.before;
 import static spark.Spark.halt;
 
 /**
@@ -23,9 +31,12 @@ import static spark.Spark.halt;
 
 public class Auth0Connection {
     private static final Logger LOG = LoggerFactory.getLogger(Auth0Connection.class);
+    private static final Gson gson = new GsonBuilder().setPrettyPrinting().create();
+    private static final JsonParser jsonParser = new JsonParser();
 
     /**
-     * Check API request for user token.
+     * Check API request for user token and assign as the "user" attribute on the incoming request object for use in
+     * downstream controllers.
      * @param req Spark request object
      */
     public static void checkUser(Request req) {
@@ -37,7 +48,7 @@ public class Auth0Connection {
         String token = getToken(req);
 
         if(token == null) {
-            halt(401, SparkUtils.formatJSON("Could not find authorization token", 401));
+            haltWithMessage(401, "Could not find authorization token");
         }
         Auth0UserProfile profile;
         try {
@@ -46,7 +57,7 @@ public class Auth0Connection {
         }
         catch(Exception e) {
             LOG.warn("Could not verify user", e);
-            halt(401, SparkUtils.formatJSON("Could not verify user", 401));
+            haltWithMessage(401, "Could not verify user");
         }
     }
 
@@ -67,9 +78,12 @@ public class Auth0Connection {
         return token;
     }
 
+    /**
+     * Gets the Auth0 user profile for the provided token.
+     */
     public static Auth0UserProfile getUserProfile(String token) throws Exception {
 
-        URL url = new URL("https://" + DataManager.getConfigPropertyAsText("AUTH0_DOMAIN") + "/tokeninfo");
+        URL url = new URL("https://" + getConfigPropertyAsText("AUTH0_DOMAIN") + "/tokeninfo");
         HttpsURLConnection con = (HttpsURLConnection) url.openConnection();
 
         //add request header
@@ -108,6 +122,10 @@ public class Auth0Connection {
         return profile;
     }
 
+    /**
+     * Check that the user has edit privileges for the feed ID specified.
+     * FIXME: Needs an update for SQL editor.
+     */
     public static void checkEditPrivileges(Request request) {
 
         Auth0UserProfile userProfile = request.attribute("user");
@@ -119,7 +137,7 @@ public class Auth0Connection {
         FeedSource feedSource = feedId != null ? Persistence.feedSources.getById(feedId) : null;
         if (feedSource == null) {
             LOG.warn("feedId {} not found", feedId);
-            halt(400, SparkUtils.formatJSON("Must provide feedId parameter", 400));
+            halt(400, SparkUtils.formatJSON("Must provide valid feedId parameter", 400));
         }
 
         if (!request.requestMethod().equals("GET")) {
@@ -130,7 +148,46 @@ public class Auth0Connection {
         }
     }
 
+    /**
+     * Check whether authentication has been disabled via the DISABLE_AUTH config variable.
+     */
     public static boolean authDisabled() {
-        return DataManager.hasConfigProperty("DISABLE_AUTH") && "true".equals(DataManager.getConfigPropertyAsText("DISABLE_AUTH"));
+        return DataManager.hasConfigProperty("DISABLE_AUTH") && "true".equals(getConfigPropertyAsText("DISABLE_AUTH"));
+    }
+
+    /**
+     * Log API requests made to the string prefix provided, e.g. "/api/editor/". This will also attempt to parse and log
+     * the request body if the content type is JSON.
+     */
+    public static void logRequest(String baseUrl, String prefix) {
+        before(prefix + "*", (request, response) -> {
+            Auth0UserProfile userProfile = request.attribute("user");
+            String userEmail = userProfile != null ? userProfile.email : "no-auth";
+            // Log all API requests to the application's Spark server.
+            String bodyString = "";
+            try {
+                if ("application/json".equals(request.contentType()) && !"".equals(request.body())) {
+                    // Only construct body string if ContentType is JSON and body is not empty
+                    JsonElement je = jsonParser.parse(request.body());
+                    // Add new line for legibility when printing to system.out
+                    bodyString = "\n" + gson.toJson(je);
+                }
+            } catch (JsonSyntaxException e) {
+                LOG.warn("Could not parse JSON", e);
+                bodyString = "\nBad JSON:\n" + request.body();
+                // FIXME: Should a halt be applied here to warn about malformed JSON? Or are there special cases where
+                // request body should not be JSON?
+            }
+
+            String queryString = request.queryParams().size() > 0 ? "?" + request.queryString() : "";
+            if (!request.pathInfo().contains(prefix + "secure/status/")) {
+                // Do not log requests made to status controller (status requests are often made once per second)
+                LOG.info("{}: {} {}{}{}{}", userEmail, request.requestMethod(), baseUrl, request.pathInfo(), queryString, bodyString);
+            }
+            // Return "application/json" contentType for all API routes
+            response.type("application/json");
+            // Gzip everything
+            response.header("Content-Encoding", "gzip");
+        });
     }
 }

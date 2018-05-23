@@ -13,7 +13,6 @@ import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.bson.Document;
 import org.slf4j.Logger;
@@ -26,12 +25,10 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithError;
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static spark.Spark.*;
 import static spark.Spark.get;
 
@@ -75,7 +72,7 @@ public class DeploymentController {
             return null;
         }
         if (!userProfile.canAdministerProject(d.projectId, d.organizationId()) && !userProfile.getUser_id().equals(d.user()))
-            haltWithError(401, "User not authorized to delete deployment");
+            haltWithMessage(401, "User not authorized to delete deployment");
         else {
             Persistence.deployments.removeById(id);
             return d;
@@ -91,12 +88,12 @@ public class DeploymentController {
         Deployment d = Persistence.deployments.getById(id);
 
         if (d == null) {
-            haltWithError(400, "Deployment does not exist.");
+            haltWithMessage(400, "Deployment does not exist.");
             return null;
         }
 
         if (!userProfile.canAdministerProject(d.projectId, d.organizationId()) && !userProfile.getUser_id().equals(d.user()))
-            haltWithError(401, "User not authorized to download deployment");
+            haltWithMessage(401, "User not authorized to download deployment");
 
         File temp = File.createTempFile("deployment", ".zip");
         // just include GTFS, not any of the ancillary information
@@ -149,7 +146,7 @@ public class DeploymentController {
             Persistence.deployments.create(newDeployment);
             return Persistence.deployments.update(newDeployment.id, req.body());
         } else {
-            haltWithError(403, "Not authorized to create a deployment for project " + projectId);
+            haltWithMessage(403, "Not authorized to create a deployment for project " + projectId);
             return null;
         }
     }
@@ -211,10 +208,10 @@ public class DeploymentController {
                 try {
                     v = Persistence.feedVersions.getById(version.getString("id"));
                 } catch (Exception e) {
-                    haltWithError(404, "Version not found");
+                    haltWithMessage(404, "Version not found");
                 }
                 if (v == null) {
-                    haltWithError(404, "Version not found");
+                    haltWithMessage(404, "Version not found");
                 }
                 // check that the version belongs to the correct project
                 if (v.parentFeedSource().projectId.equals(deploymentToUpdate.projectId)) {
@@ -235,7 +232,7 @@ public class DeploymentController {
             Deployment updatedDeployment = Persistence.deployments.update(deploymentId, req.body());
             return updatedDeployment;
         } else {
-            haltWithError(403, "Not authorized to update deployment " + deploymentId);
+            haltWithMessage(403, "Not authorized to update deployment " + deploymentId);
             return null;
         }
     }
@@ -299,12 +296,12 @@ public class DeploymentController {
         String deploymentTarget = req.queryParams("target");
 
         if (!deploymentJobsByServer.containsKey(deploymentTarget))
-            haltWithError(404, "Deployment target '" + deploymentTarget + "' not found");
+            haltWithMessage(404, "Deployment target '" + deploymentTarget + "' not found");
 
         DeployJob deployJob = deploymentJobsByServer.get(deploymentTarget);
 
         if (deployJob == null)
-            haltWithError(404, "No active job for " + deploymentTarget + " found");
+            haltWithMessage(404, "No active job for " + deploymentTarget + " found");
 
         return deployJob.status;
     }

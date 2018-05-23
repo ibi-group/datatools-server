@@ -1,6 +1,5 @@
 package com.conveyal.datatools.manager.models;
 
-import java.awt.geom.Rectangle2D;
 import java.io.Serializable;
 import java.time.LocalDate;
 import java.util.Collection;
@@ -54,6 +53,9 @@ public class FeedValidationResultSummary implements Serializable {
                     : LoadStatus.OTHER_FAILURE;
             this.loadFailureReason = validationResult.fatalException;
             if (loadStatus == LoadStatus.SUCCESS) {
+                if (feedLoadResult == null) {
+                    feedLoadResult = new FeedLoadResult(true);
+                }
                 this.errorCount = validationResult.errorCount;
                 this.agencyCount = feedLoadResult.agency.rowCount;
                 this.routeCount = feedLoadResult.routes.rowCount;

@@ -1,9 +1,8 @@
 package com.conveyal.datatools.manager.models;
 
-import com.conveyal.datatools.editor.models.Snapshot;
+import com.conveyal.datatools.manager.models.Snapshot;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import org.bson.codecs.pojo.annotations.BsonProperty;
 import org.mapdb.Fun;
 
 import java.util.Date;
@@ -18,7 +17,7 @@ public class FeedDownloadToken extends Model {
     private static final long serialVersionUID = 1L;
 
     public String feedVersionId;
-    public Fun.Tuple2<String, Integer> snapshotId;
+    public String snapshotId;
 
     public Date timestamp;
 
@@ -47,7 +46,7 @@ public class FeedDownloadToken extends Model {
 
     @JsonProperty("snapshot")
     public Snapshot retrieveSnapshot() {
-        if (snapshotId != null) return Snapshot.get(snapshotId);
+        if (snapshotId != null) return Persistence.snapshots.getById(snapshotId);
         else return null;
     }
 

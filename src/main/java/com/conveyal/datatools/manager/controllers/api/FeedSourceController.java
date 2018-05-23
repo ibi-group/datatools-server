@@ -8,6 +8,7 @@ import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.JsonViews;
+import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
@@ -23,7 +24,7 @@ import spark.Response;
 import java.io.IOException;
 import java.util.*;
 
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithError;
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
 import static com.conveyal.datatools.manager.models.ExternalFeedSourceProperty.constructId;
 import static com.mongodb.client.model.Filters.eq;
@@ -98,7 +99,10 @@ public class FeedSourceController {
         return sources;
     }
 
-    public static FeedSource createFeedSource(Request req, Response res) throws IOException {
+    /**
+     * HTTP endpoint to create a new feed source.
+     */
+    public static FeedSource createFeedSource(Request req, Response res) {
         // TODO factor out getting user profile, project ID and organization ID and permissions
         Auth0UserProfile userProfile = req.attribute("user");
         Document newFeedSourceFields = Document.parse(req.body());
@@ -106,35 +110,57 @@ public class FeedSourceController {
         String organizationId = newFeedSourceFields.getString("organizationId");
         boolean allowedToCreateFeedSource = userProfile.canAdministerProject(projectId, organizationId);
         if (allowedToCreateFeedSource) {
-            FeedSource newFeedSource = Persistence.feedSources.create(req.body());
-            // Communicate to any registered external "resources" (sites / databases) the fact that a feed source has been
-            // created in our database.
-            for (String resourceType : DataManager.feedResources.keySet()) {
-                DataManager.feedResources.get(resourceType).feedSourceCreated(newFeedSource, req.headers("Authorization"));
+            try {
+                FeedSource newFeedSource = Persistence.feedSources.create(req.body());
+                // Communicate to any registered external "resources" (sites / databases) the fact that a feed source has been
+                // created in our database.
+                for (String resourceType : DataManager.feedResources.keySet()) {
+                    DataManager.feedResources.get(resourceType).feedSourceCreated(newFeedSource, req.headers("Authorization"));
+                }
+                // Notify project subscribers of new feed source creation.
+                Project parentProject = Persistence.projects.getById(projectId);
+                NotifyUsersForSubscriptionJob.createNotification(
+                        "project-updated",
+                        projectId,
+                        String.format("New feed %s created in project %s.", newFeedSource.name, parentProject.name));
+                return newFeedSource;
+            } catch (Exception e) {
+                LOG.error("Unknown error creating feed source", e);
+                haltWithMessage(400, "Unknown error encountered creating feed source", e);
+                return null;
             }
-            return newFeedSource;
         } else {
-            haltWithError(400, "Must provide project ID for feed source");
+            haltWithMessage(400, "Must provide project ID for feed source");
             return null;
         }
     }
 
-    public static FeedSource updateFeedSource(Request req, Response res) throws IOException {
+    public static FeedSource updateFeedSource(Request req, Response res) {
         String feedSourceId = req.params("id");
 
         // call this method just for null and permissions check
-        // TODO: it's wasteful to request the entire feed source here, need to factor out permissions checks
-        requestFeedSourceById(req, "manage");
+        // TODO: it's wasteful to request the entire feed source here, need to factor out permissions checks. However,
+        // we need the URL to see if it has been updated in order to then set the lastFetched value to null.
+        FeedSource formerFeedSource = requestFeedSourceById(req, "manage");
+        Document fieldsToUpdate = Document.parse(req.body());
+        if (fieldsToUpdate.containsKey("url") && formerFeedSource.url != null) {
+            // Reset last fetched timestamp if the URL has been updated.
+            if (!fieldsToUpdate.get("url").toString().equals(formerFeedSource.url.toString())) {
+                LOG.info("Feed source fetch URL has been modified. Resetting lastFetched value from {} to {}", formerFeedSource.lastFetched, null);
+                fieldsToUpdate.put("lastFetched", null);
+            }
+        }
+        FeedSource source = Persistence.feedSources.update(feedSourceId, fieldsToUpdate.toJson());
 
-        FeedSource source = Persistence.feedSources.update(feedSourceId, req.body());
-
-        // notify users after successful save
-        NotifyUsersForSubscriptionJob notifyFeedJob = new NotifyUsersForSubscriptionJob("feed-updated", source.id, "Feed property updated for " + source.name);
-        DataManager.lightExecutor.execute(notifyFeedJob);
-
-        NotifyUsersForSubscriptionJob notifyProjectJob = new NotifyUsersForSubscriptionJob("project-updated", source.projectId, "Project updated (feed source property for " + source.name + ")");
-        DataManager.lightExecutor.execute(notifyProjectJob);
-
+        // Notify feed- and project-subscribed users after successful save
+        NotifyUsersForSubscriptionJob.createNotification(
+                "feed-updated",
+                source.id,
+                String.format("Feed property updated for %s.", source.name));
+        NotifyUsersForSubscriptionJob.createNotification(
+                "project-updated",
+                source.projectId,
+                String.format("Project updated (feed source property changed for %s).", source.name));
         return source;
     }
 
@@ -219,30 +245,30 @@ public class FeedSourceController {
         return checkFeedSourcePermissions(req, Persistence.feedSources.getById(id), action);
     }
 
-    public static FeedSource checkFeedSourcePermissions(Request req, FeedSource s, String action) {
+    public static FeedSource checkFeedSourcePermissions(Request req, FeedSource feedSource, String action) {
         Auth0UserProfile userProfile = req.attribute("user");
         Boolean publicFilter = Boolean.valueOf(req.queryParams("public")) ||
                 req.url().split("/api/*/")[1].startsWith("public");
 //        System.out.println(req.url().split("/api/manager/")[1].startsWith("public"));
 
         // check for null feedSource
-        if (s == null)
+        if (feedSource == null)
             halt(400, SparkUtils.formatJSON("Feed source ID does not exist", 400));
-        String orgId = s.organizationId();
+        String orgId = feedSource.organizationId();
         boolean authorized;
         switch (action) {
             case "create":
-                authorized = userProfile.canAdministerProject(s.projectId, orgId);
+                authorized = userProfile.canAdministerProject(feedSource.projectId, orgId);
                 break;
             case "manage":
-                authorized = userProfile.canManageFeed(orgId, s.projectId, s.id);
+                authorized = userProfile.canManageFeed(orgId, feedSource.projectId, feedSource.id);
                 break;
             case "edit":
-                authorized = userProfile.canEditGTFS(orgId, s.projectId, s.id);
+                authorized = userProfile.canEditGTFS(orgId, feedSource.projectId, feedSource.id);
                 break;
             case "view":
                 if (!publicFilter) {
-                    authorized = userProfile.canViewFeed(orgId, s.projectId, s.id);
+                    authorized = userProfile.canViewFeed(orgId, feedSource.projectId, feedSource.id);
                 } else {
                     authorized = false;
                 }
@@ -255,10 +281,10 @@ public class FeedSourceController {
         // if requesting public sources
         if (publicFilter){
             // if feed not public and user not authorized, halt
-            if (!s.isPublic && !authorized)
+            if (!feedSource.isPublic && !authorized)
                 halt(403, SparkUtils.formatJSON("User not authorized to perform action on feed source", 403));
                 // if feed is public, but action is managerial, halt (we shouldn't ever retrieveById here, but just in case)
-            else if (s.isPublic && action.equals("manage"))
+            else if (feedSource.isPublic && action.equals("manage"))
                 halt(403, SparkUtils.formatJSON("User not authorized to perform action on feed source", 403));
 
         }
@@ -268,7 +294,7 @@ public class FeedSourceController {
         }
 
         // if we make it here, user has permission and it's a valid feedsource
-        return s;
+        return feedSource;
     }
 
     // FIXME: use generic API controller and return JSON documents via BSON/Mongo
