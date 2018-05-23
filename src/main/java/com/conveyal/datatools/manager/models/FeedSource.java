@@ -250,7 +250,6 @@ public class FeedSource extends Model implements Cloneable {
         }
 
         // note that anything other than a new feed fetched successfully will have already returned from the function
-//        version.hash();
         version.hash = HashUtils.hashFile(newGtfsFile);
 
 
@@ -259,14 +258,19 @@ public class FeedSource extends Model implements Cloneable {
             // operators should add If-Modified-Since support to avoid wasting bandwidth.
             String message = String.format("Feed %s was fetched but has not changed; server operators should add If-Modified-Since support to avoid wasting bandwidth", this.name);
             LOG.warn(message);
-            newGtfsFile.delete();
+            String filePath = newGtfsFile.getAbsolutePath();
+            if (newGtfsFile.delete()) {
+                LOG.info("Deleting redundant GTFS file: {}", filePath);
+            } else {
+                LOG.warn("Failed to delete unneeded GTFS file at: {}", filePath);
+            }
             status.update(false, message, 100.0, true);
             return null;
         }
         else {
             version.userId = this.userId;
 
-            // FIXME: Does this work?
+            // Update last fetched value for feed source.
             Persistence.feedSources.updateField(this.id, "lastFetched", version.updated);
 
             // Set file timestamp according to last modified header from connection
