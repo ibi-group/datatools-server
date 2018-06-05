@@ -7,7 +7,6 @@ application:
     gtfs: /tmp
     use_s3_storage: false
     s3_region: us-east-1
-    aws_role: arn:aws:iam::${AWS_ACCOUNT_NUMBER}:role/${AWS_ROLE_NAME}
     gtfs_s3_bucket: bucket-name
 modules:
   enterprise:
