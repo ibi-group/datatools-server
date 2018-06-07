@@ -12,6 +12,7 @@ import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -35,7 +36,7 @@ import java.util.stream.Collectors;
 import spark.Request;
 import spark.Response;
 
-import static com.conveyal.datatools.common.utils.S3Utils.getS3Credentials;
+import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
@@ -258,14 +259,9 @@ public class ProjectController {
 
         // if storing feeds on s3, return temporary s3 credentials for that zip file
         if (DataManager.useS3) {
-            return getS3Credentials(
-                    DataManager.awsRole,
-                    DataManager.feedBucket,
-                    "project/" + project.id + ".zip",
-                    Statement.Effect.Allow,
-                    S3Actions.GetObject,
-                    900
-            );
+            // Return presigned download link if using S3.
+            String key = String.format("project/%s.zip", project.id);
+            return downloadFromS3(FeedStore.s3Client, DataManager.feedBucket, key, false, res);
         } else {
             // when feeds are stored locally, single-use download token will still be used
             FeedDownloadToken token = new FeedDownloadToken(project);

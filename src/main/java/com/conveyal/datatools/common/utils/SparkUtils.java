@@ -45,6 +45,12 @@ public class SparkUtils {
         return res.raw();
     }
 
+    public static String formatJSON (String key, String value) {
+        ObjectNode object = mapper.createObjectNode();
+        object.put(key, value);
+        return object.toString();
+    }
+
     public static String formatJSON(String message, int code, Exception e) {
         String detail = e != null ? e.getMessage() : null;
         ObjectNode object = mapper.createObjectNode();

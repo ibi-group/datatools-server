@@ -26,7 +26,7 @@ import java.util.Collection;
 import spark.Request;
 import spark.Response;
 
-import static com.conveyal.datatools.common.utils.S3Utils.getS3Credentials;
+import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
 import static com.conveyal.datatools.common.utils.SparkUtils.*;
 import static spark.Spark.*;
 
@@ -186,16 +186,10 @@ public class SnapshotController {
             if (!FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, key)) {
                 haltWithMessage(400, String.format("Error downloading snapshot from S3. Object %s does not exist.", key));
             }
-            return getS3Credentials(
-                    DataManager.awsRole,
-                    DataManager.feedBucket,
-                    key,
-                    Statement.Effect.Allow,
-                    S3Actions.GetObject,
-                    900
-            );
+            // Return presigned download link if using S3.
+            return downloadFromS3(FeedStore.s3Client, DataManager.feedBucket, key, false, res);
         } else {
-            // if not storing on s3, just use the token download method
+            // If not storing on s3, just use the token download method.
             token = new FeedDownloadToken(snapshot);
             Persistence.tokens.create(token);
             return token;

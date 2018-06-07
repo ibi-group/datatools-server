@@ -53,7 +53,7 @@ import javax.servlet.ServletInputStream;
 import javax.servlet.ServletRequestWrapper;
 
 import static com.conveyal.datatools.common.status.MonitorableJob.JobType.BUILD_TRANSPORT_NETWORK;
-import static com.conveyal.datatools.common.utils.S3Utils.getS3Credentials;
+import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
@@ -370,9 +370,9 @@ public class FeedVersionController  {
     public static Object getFeedDownloadCredentials(Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "view");
 
-        // if storing feeds on s3, return temporary s3 credentials for that zip file
         if (DataManager.useS3) {
-            return getS3Credentials(DataManager.awsRole, DataManager.feedBucket, FeedStore.s3Prefix + version.id, Statement.Effect.Allow, S3Actions.GetObject, 900);
+            // Return presigned download link if using S3.
+            return downloadFromS3(FeedStore.s3Client, DataManager.feedBucket, FeedStore.s3Prefix + version.id, false, res);
         } else {
             // when feeds are stored locally, single-use download token will still be used
             FeedDownloadToken token = new FeedDownloadToken(version);
