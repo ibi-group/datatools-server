@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -105,6 +106,21 @@ public class NotifyUsersForSubscriptionJob implements Runnable {
                             subject = String.format("%s Notification: %s (%s)", applicationName, subscriptionToString, p.name);
                             // Add action text.
                             html += String.format("<p>View <a href='%s/project/%s'>this project</a>.</p>", APPLICATION_URL, p.id);
+                            break;
+                        case "deployment":
+                            Deployment deployment = Persistence.deployments.getById(this.target);
+                            // Format subject header
+                            subject = String.format(
+                                    "%s Notification: %s (%s)",
+                                    applicationName,
+                                    subscriptionToString,
+                                    deployment.name);
+                            // Add action text.
+                            html += String.format(
+                                    "<p>View <a href='%s/project/%s/deployments/%s'>this deployment</a>.</p>",
+                                    APPLICATION_URL,
+                                    deployment.projectId,
+                                    deployment.id);
                             break;
                         default:
                             LOG.warn("Notifications not supported for subscription type {}", subType[0]);
