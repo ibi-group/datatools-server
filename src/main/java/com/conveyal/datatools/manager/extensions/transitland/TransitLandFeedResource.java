@@ -53,7 +53,7 @@ public class TransitLandFeedResource implements ExternalFeedResource {
         boolean nextPage = true;
 
         if (project.bounds != null) {
-            locationFilter = "&bbox=" + project.bounds.toCSVString();
+            locationFilter = "&bbox=" + project.bounds.toTransitLandString();
         }
 
         do {
