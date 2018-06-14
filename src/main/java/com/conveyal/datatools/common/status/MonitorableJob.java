@@ -15,8 +15,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * Created by landon on 6/13/16.
  */
-public abstract class MonitorableJob implements Runnable, Serializable {
-    private static final long serialVersionUID = 1L;
+public abstract class MonitorableJob implements Runnable {
     private static final Logger LOG = LoggerFactory.getLogger(MonitorableJob.class);
     protected final String owner;
 
@@ -205,8 +204,7 @@ public abstract class MonitorableJob implements Runnable, Serializable {
     /**
      * Represents the current status of this job.
      */
-    public static class Status implements Serializable {
-        private static final long serialVersionUID = 1L;
+    public static class Status {
         /** What message (defined in messages.<lang>) should be displayed to the user? */
         public String message;
 
