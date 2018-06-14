@@ -35,8 +35,13 @@ import java.util.Locale;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+import com.mongodb.client.FindIterable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.mongodb.client.model.Filters.and;
+import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Filters.not;
 
 /**
  * A deployment of (a given version of) OTP on a given set of feeds.
@@ -114,6 +119,9 @@ public class Deployment extends Model implements Serializable {
 
     /** The commit of OTP being used on this deployment */
     public String otpCommit;
+
+    /** Date when the deployment was last deployed to a server */
+    public Date lastDeployed;
 
     /**
      * The routerId of this deployment
@@ -395,18 +403,13 @@ public class Deployment extends Model implements Serializable {
     }
 
     /**
-     * Get the deployment currently deployed to a particular server.
+     * Get the deployments currently deployed to a particular server and router combination.
      */
-    public static Deployment retrieveDeploymentForServerAndRouterId(String server, String routerId) {
-        for (Deployment d : Persistence.deployments.getAll()) {
-            if (d.deployedTo != null && d.deployedTo.equals(server)) {
-                if ((routerId != null && routerId.equals(d.routerId)) || d.routerId == routerId) {
-                    return d;
-                }
-            }
-        }
-
-        return null;
+    public static FindIterable<Deployment> retrieveDeploymentForServerAndRouterId(String server, String routerId) {
+        return Persistence.deployments.getMongoCollection().find(and(
+                eq("deployedTo", server),
+                eq("routerId", routerId)
+        ));
     }
 
     @JsonProperty("organizationId")

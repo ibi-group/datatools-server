@@ -4,7 +4,8 @@ import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
-import com.fasterxml.jackson.annotation.JsonProperty;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.stream.Collectors;
@@ -24,6 +25,7 @@ import static com.mongodb.client.model.Filters.eq;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class Project extends Model {
     private static final long serialVersionUID = 1L;
+    private static final Logger LOG = LoggerFactory.getLogger(Project.class);
 
     /** The name of this project, e.g. NYSDOT. */
     public String name;
@@ -38,25 +40,26 @@ public class Project extends Model {
 
     public String organizationId;
 
+    /**
+     * Locate and return an OTP server contained within the project that matches the name argument.
+     */
     public OtpServer retrieveServer(String name) {
+        if (name == null) return null;
         for (OtpServer otpServer : otpServers) {
-            if (otpServer.name.equals(name)) {
+            if (otpServer.name == null) continue;
+            if (name.equals(otpServer.name) || name.equals(otpServer.target())) {
                 return otpServer;
             }
         }
+        LOG.warn("Could not find OTP server with name {}", name);
         return null;
     }
 
     public String defaultTimeZone;
-
-    public String defaultLanguage;
-
-    public transient Collection<FeedSource> feedSources;
-
-    // TODO: remove default location fields (once needed for integration with gtfs-editor)
-    public double defaultLocationLat, defaultLocationLon;
     public boolean autoFetchFeeds;
     public int autoFetchHour, autoFetchMinute;
+
+    public transient Collection<FeedSource> feedSources;
 
     // Bounds is used for either OSM custom deployment bounds (if useCustomOsmBounds is true)
     // and/or for applying a geographic filter when syncing with external feed registries.

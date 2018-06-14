@@ -250,6 +250,11 @@ public class DeploymentController {
             Deployment deployment = checkDeploymentPermissions(req, res);
             Project project = Persistence.projects.getById(deployment.projectId);
             if (project == null) haltWithMessage(400, "Internal reference error. Deployment's project ID is invalid");
+            // FIXME: Currently the otp server to deploy to is determined by the string name field (with special characters
+            // replaced with underscores). This should perhaps be replaced with an immutable server ID so that there is
+            // no risk that these values can overlap. This may be over engineering this system though. The user deploying
+            // a set of feeds would likely not create two deployment targets with the same name (and the name is unlikely
+            // to change often).
             OtpServer otpServer = project.retrieveServer(target);
             if (otpServer == null) haltWithMessage(400, "Must provide valid OTP server target ID.");
             // Check that permissions of user allow them to deploy to target.
@@ -278,19 +283,16 @@ public class DeploymentController {
             if ((targetUrls == null || targetUrls.isEmpty()) && (otpServer.s3Bucket == null || otpServer.s3Bucket.isEmpty())) {
                 haltWithMessage(400, String.format("OTP server %s has no internal URL or s3 bucket specified.", otpServer.name));
             }
-            Deployment oldDeployment = Deployment.retrieveDeploymentForServerAndRouterId(target, deployment.routerId);
-
-            if (oldDeployment != null) {
-                // If there was a previous deployment sent to the server/router combination, set that to null because
-                // this new one will overwrite it.
+            // For any previous deployments sent to the server/router combination, set deployedTo to null because
+            // this new one will overwrite it. NOTE: deployedTo for the current deployment will only be updated after the
+            // successful completion of the deploy job.
+            for (Deployment oldDeployment : Deployment.retrieveDeploymentForServerAndRouterId(target, deployment.routerId)) {
+                LOG.info("Setting deployment target to null id={}", oldDeployment.id);
                 Persistence.deployments.updateField(oldDeployment.id, "deployedTo", null);
             }
 
-            // Store the target server in the deployedTo field.
-            Persistence.deployments.updateField(deployment.id, "deployedTo", target);
-
             // Execute the deployment job and keep track of it in the jobs for server map.
-            DeployJob job = new DeployJob(deployment, userProfile.getUser_id(), targetUrls, otpServer.publicUrl, otpServer.s3Bucket, otpServer.s3Credentials);
+            DeployJob job = new DeployJob(deployment, userProfile.getUser_id(), otpServer);
             DataManager.heavyExecutor.execute(job);
             deploymentJobsByServer.put(target, job);
 
