@@ -25,6 +25,7 @@ import java.io.Serializable;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -127,6 +128,9 @@ public class Deployment extends Model implements Serializable {
      * The routerId of this deployment
      */
     public String routerId;
+
+    public String customBuildConfig;
+    public String customRouterConfig;
 
     /**
      * If this deployment is for a single feed source, the feed source this deployment is for.
@@ -294,20 +298,32 @@ public class Deployment extends Model implements Serializable {
             // Write build-config.json and router-config.json
             Project project = this.parentProject();
             ObjectMapper mapper = new ObjectMapper();
-            if (project.buildConfig != null) {
+            // Use custom build config if it is not null, otherwise default to project build config.
+            byte[] buildConfigAsBytes = customBuildConfig != null
+                ? customBuildConfig.getBytes(StandardCharsets.UTF_8)
+                : project.buildConfig != null
+                    ? mapper.writer().writeValueAsBytes(project.buildConfig)
+                    : null;
+            if (buildConfigAsBytes != null) {
                 // Include build config if not null.
                 ZipEntry buildConfigEntry = new ZipEntry("build-config.json");
                 out.putNextEntry(buildConfigEntry);
                 mapper.setSerializationInclusion(Include.NON_NULL);
-                out.write(mapper.writer().writeValueAsBytes(project.buildConfig));
+                out.write(buildConfigAsBytes);
                 out.closeEntry();
             }
-            if (project.routerConfig != null) {
+            // Use custom router config if it is not null, otherwise default to project router config.
+            byte[] routerConfigAsBytes = customRouterConfig != null
+                ? customRouterConfig.getBytes(StandardCharsets.UTF_8)
+                : project.routerConfig != null
+                    ? mapper.writer().writeValueAsBytes(project.routerConfig)
+                    : null;
+            if (routerConfigAsBytes != null) {
                 // Include router config if not null.
                 ZipEntry routerConfigEntry = new ZipEntry("router-config.json");
                 out.putNextEntry(routerConfigEntry);
                 mapper.setSerializationInclusion(Include.NON_NULL);
-                out.write(mapper.writer().writeValueAsBytes(project.routerConfig));
+                out.write(routerConfigAsBytes);
                 out.closeEntry();
             }
         }
