@@ -237,6 +237,7 @@ public class ConvertEditorMapDBToSQL extends MonitorableJob {
                     }
                     insertPatternStopStatement.addBatch();
                     batchSize += 1;
+                    stopSequence += 1;
                     // If we've accumulated a lot of prepared statement calls, pass them on to the database backend.
                     batchSize = handleBatchExecution(batchSize, insertPatternStatement, insertPatternStopStatement);
                 }
