@@ -131,23 +131,27 @@ public class ConvertEditorMapDBToSQL extends MonitorableJob {
         String tableName = String.join(".", namespace, Table.ROUTES.name);
         String updateSql = String.format("update %s set status=?, publicly_visible=? where route_id = ?", tableName);
         PreparedStatement updateRouteStatement = connection.prepareStatement(updateSql);
-        LOG.info("Updating status, publicly_visible for {} routes", feedTx.routes.size()); // FIXME NPE if (feedTx.routes != null)
-        for (com.conveyal.datatools.editor.models.transit.Route route : feedTx.routes.values()) {
-            // FIXME: Maybe it's risky to update on gtfs route ID (which may not be unique for some feeds).
-            // Could we alternatively update on ID field (not sure what the value for each route will be after
-            // insertion)?
-            updateRouteStatement.setInt(1, route.status == null ? 0 :route.status.toInt());
-            int publiclyVisible = route.publiclyVisible == null ? 0 : route.publiclyVisible ? 1 : 0;
-            updateRouteStatement.setInt(2, publiclyVisible);
-            updateRouteStatement.setString(3, route.gtfsRouteId);
-            // FIXME: Do something with the return value?  E.g., rollback if it hits more than one route.
-            // FIXME: Do this in batches?
-            updateRouteStatement.addBatch();
-            batchSize += 1;
-            batchSize = handleBatchExecution(batchSize, updateRouteStatement);
+        if (feedTx.routes != null) {
+            LOG.info("Updating status, publicly_visible for {} routes", feedTx.routes.size()); // FIXME NPE if (feedTx.routes != null)
+            for (com.conveyal.datatools.editor.models.transit.Route route : feedTx.routes.values()) {
+                // FIXME: Maybe it's risky to update on gtfs route ID (which may not be unique for some feeds).
+                // Could we alternatively update on ID field (not sure what the value for each route will be after
+                // insertion)?
+                updateRouteStatement.setInt(1, route.status == null ? 0 : route.status.toInt());
+                int publiclyVisible = route.publiclyVisible == null ? 0 : route.publiclyVisible ? 1 : 0;
+                updateRouteStatement.setInt(2, publiclyVisible);
+                updateRouteStatement.setString(3, route.gtfsRouteId);
+                // FIXME: Do something with the return value?  E.g., rollback if it hits more than one route.
+                // FIXME: Do this in batches?
+                updateRouteStatement.addBatch();
+                batchSize += 1;
+                batchSize = handleBatchExecution(batchSize, updateRouteStatement);
+            }
+            // Handle any remaining updates.
+            updateRouteStatement.executeBatch();
+        } else {
+            LOG.warn("Skipping routes conversion (feedTx.routes is null)");
         }
-        // Handle any remaining updates.
-        updateRouteStatement.executeBatch();
 
         // Annoyingly, a number of fields on the Editor Trip class differ from the gtfs-lib Trip class (e.g.,
         // patternId and calendarId refer to the editor Model#ID field not the GTFS key field). So we first
@@ -237,6 +241,7 @@ public class ConvertEditorMapDBToSQL extends MonitorableJob {
                     }
                     insertPatternStopStatement.addBatch();
                     batchSize += 1;
+                    stopSequence += 1;
                     // If we've accumulated a lot of prepared statement calls, pass them on to the database backend.
                     batchSize = handleBatchExecution(batchSize, insertPatternStatement, insertPatternStopStatement);
                 }

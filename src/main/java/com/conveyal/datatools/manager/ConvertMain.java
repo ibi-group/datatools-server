@@ -40,6 +40,14 @@ import static com.conveyal.datatools.manager.DataManager.registerRoutes;
  *
  * An optional fourth argument can be provided to force the application to reprocess (load/validate) feed versions that
  * have already been processed.
+ *
+ * The primary method to run this migration is:
+ * 1. First run the above java command to migrate the JSON dump and convert the editor mapdb to new snapshots.
+ * 2. Next run the following java command to clean up the snapshots (the snapshots imported from the JSON dump are not
+ *    updated during the editor MapDB conversion. Rather, MongoDB records are created separately, so the JSON-sourced
+ *    duplicate records need to be deleted and the newly generate records updated with the JSON data):
+ *      java -Xmx6G -cp datatools.jar com.conveyal.datatools.manager.ConvertMain /path/to/env.yml /path/to/server.yml updateSnapshotMetadata=true /path/to/dump.json
+ *
  */
 public class ConvertMain {
     // Feed ID constants for testing.
@@ -117,13 +125,14 @@ public class ConvertMain {
             for (Map.Entry<Fun.Tuple2<String, Integer>, Snapshot> entry : gtx.snapshots.entrySet()) {
                 Snapshot snapshot = entry.getValue();
                 Fun.Tuple2<String, Integer> key = entry.getKey();
+                String feedSourceId = key.a;
                 // Get feed source from MongoDB.
-                FeedSource feedSource = Persistence.feedSources.getById(key.a);
+                FeedSource feedSource = Persistence.feedSources.getById(feedSourceId);
                 if (feedSource != null) {
                     // Only migrate the feeds that have a feed source record in the MongoDB.
-                    if (feedIdsToSkip != null && Arrays.asList(feedIdsToSkip).contains(key.a)) {
+                    if (feedIdsToSkip != null && Arrays.asList(feedIdsToSkip).contains(feedSourceId)) {
                         // If list of feed IDs to skip is provided and the current feed ID matches, skip it.
-                        System.out.println("Skipping feed. ID found in list to skip. id: " + key.a);
+                        System.out.println("Skipping feed. ID found in list to skip. id: " + feedSourceId);
                         continue;
                     }
                     if (!feedSourcesEncountered.contains(feedSource.id)) {
@@ -138,7 +147,7 @@ public class ConvertMain {
                     feedSourcesEncountered.add(feedSource.id);
                     count++;
                 } else {
-                    System.out.println("Not converting snapshot. Feed source Id does not exist in application data" + key.a);
+                    System.out.println("Not converting snapshot. Feed source Id does not exist in application data" + feedSourceId);
                 }
             }
 //            long duration = System.currentTimeMillis() - startTime;

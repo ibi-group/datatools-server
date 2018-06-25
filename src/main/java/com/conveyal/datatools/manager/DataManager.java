@@ -1,6 +1,5 @@
 package com.conveyal.datatools.manager;
 
-import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.editor.controllers.EditorLockController;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 
@@ -18,7 +17,7 @@ import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.persistence.TransportNetworkCache;
-import com.conveyal.datatools.manager.utils.CorsFilter;
+import com.conveyal.datatools.common.utils.CorsFilter;
 import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.GraphQLMain;
 import com.conveyal.gtfs.loader.Table;
@@ -89,13 +88,11 @@ public class DataManager {
     public static Executor lightExecutor = Executors.newSingleThreadExecutor();
 
     public static String feedBucket;
-    public static String awsRole;
     public static String bucketFolder;
 
     public static boolean useS3;
     public static final String API_PREFIX = "/api/manager/";
-    // TODO: move gtfs-api routes to gtfs path and add auth
-    private static final String GTFS_API_PREFIX = API_PREFIX;
+    private static final String GTFS_API_PREFIX = API_PREFIX + "secure/gtfs/";
     public static final String EDITOR_API_PREFIX = "/api/editor/";
     public static final String publicPath = "(" + API_PREFIX + "|" + EDITOR_API_PREFIX + ")public/.*";
     public static final String DEFAULT_ENV = "configurations/default/env.yml";
@@ -120,13 +117,13 @@ public class DataManager {
     }
 
     public static void initializeApplication(String[] args) throws IOException {
-        // load config
+        // Load configuration files (env.yml and server.yml).
         loadConfig(args);
 
         // FIXME: hack to statically load FeedStore
         LOG.info(FeedStore.class.getSimpleName());
 
-        // Optionally set port for server. Otherwise, Spark defaults to 4000.
+        // Optionally set port for server. Otherwise, Spark defaults to 4567.
         if (getConfigProperty("application.port") != null) {
             port(Integer.parseInt(getConfigPropertyAsText("application.port")));
         }
@@ -139,13 +136,9 @@ public class DataManager {
         );
 
         feedBucket = getConfigPropertyAsText("application.data.gtfs_s3_bucket");
-        awsRole = getConfigPropertyAsText("application.data.aws_role");
         bucketFolder = FeedStore.s3Prefix;
 
-        // Initialize GTFS GraphQL API service
-        GraphQLMain.initialize(GTFS_DATA_SOURCE, API_PREFIX);
-        LOG.info("Initialized gtfs-api at localhost:port{}", API_PREFIX);
-
+        // Initialize MongoDB storage
         Persistence.initialize();
     }
 
@@ -155,8 +148,10 @@ public class DataManager {
      */
     protected static void registerRoutes() throws IOException {
         CorsFilter.apply();
-
-        // core controllers
+        // Initialize GTFS GraphQL API service
+        // FIXME: Add user permissions check to ensure user has access to feeds.
+        GraphQLMain.initialize(GTFS_DATA_SOURCE, GTFS_API_PREFIX);
+        // Register core API routes
         ProjectController.register(API_PREFIX);
         FeedSourceController.register(API_PREFIX);
         FeedVersionController.register(API_PREFIX);
@@ -165,7 +160,7 @@ public class DataManager {
         StatusController.register(API_PREFIX);
         OrganizationController.register(API_PREFIX);
 
-        // Editor routes
+        // Register editor API routes
         if (isModuleEnabled("editor")) {
 
             SnapshotController.register(EDITOR_API_PREFIX);
@@ -178,10 +173,12 @@ public class DataManager {
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.FARE_ATTRIBUTES, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.FEED_INFO, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.ROUTES, DataManager.GTFS_DATA_SOURCE);
+            // NOTE: Patterns controller handles updates to nested tables shapes, pattern stops, and frequencies.
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.PATTERNS, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.SCHEDULE_EXCEPTIONS, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.STOPS, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.TRIPS, DataManager.GTFS_DATA_SOURCE);
+            // TODO: Add transfers.txt controller?
 //            GisController.register(EDITOR_API_PREFIX);
         }
 
