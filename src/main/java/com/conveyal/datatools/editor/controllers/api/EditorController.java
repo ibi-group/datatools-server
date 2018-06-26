@@ -1,7 +1,6 @@
 package com.conveyal.datatools.editor.controllers.api;
 
 import com.conveyal.datatools.common.utils.S3Utils;
-import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.editor.controllers.EditorLockController;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -21,7 +20,6 @@ import spark.Request;
 import spark.Response;
 
 import javax.sql.DataSource;
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -29,9 +27,10 @@ import java.sql.SQLException;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJSON;
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.editor.controllers.EditorLockController.sessionsForFeedIds;
-import static spark.Spark.*;
 import static spark.Spark.delete;
+import static spark.Spark.options;
 import static spark.Spark.post;
+import static spark.Spark.put;
 
 /**
  * Abstract controller that sets HTTP endpoints for editing GTFS entities. This class contains methods that can be
@@ -100,11 +99,11 @@ public abstract class EditorController<T extends Entity> {
         if (patternId == null) {
             haltWithMessage(400, "Must provide valid pattern_id");
         }
-        JdbcTableWriter tableWriter = new JdbcTableWriter(Table.TRIPS, datasource, namespace);
         try {
+            JdbcTableWriter tableWriter = new JdbcTableWriter(Table.TRIPS, datasource, namespace);
             int deletedCount = tableWriter.deleteWhere("pattern_id", patternId, true);
             return formatJSON(String.format("Deleted %d.", deletedCount), 200);
-        } catch (SQLException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             haltWithMessage(400, "Error deleting entity", e);
             return null;
@@ -120,9 +119,9 @@ public abstract class EditorController<T extends Entity> {
     private String deleteMultipleTrips(Request req, Response res) {
         long startTime = System.currentTimeMillis();
         String namespace = getNamespaceAndValidateSession(req);
-        JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
         String[] tripIds = req.queryParams("tripIds").split(",");
         try {
+            JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
             for (String tripId: tripIds) {
                 // Delete each trip ID found in query param WITHOUT auto-committing.
                 int result = tableWriter.delete(Integer.parseInt(tripId), false);
@@ -151,8 +150,8 @@ public abstract class EditorController<T extends Entity> {
         long startTime = System.currentTimeMillis();
         String namespace = getNamespaceAndValidateSession(req);
         Integer id = getIdFromRequest(req);
-        JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
         try {
+            JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
             if (tableWriter.delete(id, true) == 1) {
                 // FIXME: change return message based on result value
                 return formatJSON(String.valueOf("Deleted one."), 200);
@@ -227,8 +226,8 @@ public abstract class EditorController<T extends Entity> {
         String namespace = getNamespaceAndValidateSession(req);
         Integer id = getIdFromRequest(req);
         // Get the JsonObject
-        JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
         try {
+            JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
             if (isCreating) {
                 return tableWriter.create(req.body(), true);
             } else {
