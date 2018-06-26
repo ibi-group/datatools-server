@@ -10,7 +10,6 @@ import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.gtfs.loader.JdbcTableWriter;
 import com.conveyal.gtfs.loader.Table;
 import com.conveyal.gtfs.model.Entity;
-import com.conveyal.gtfs.util.InvalidNamespaceException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.commons.dbutils.DbUtils;
@@ -100,17 +99,11 @@ public abstract class EditorController<T extends Entity> {
         if (patternId == null) {
             haltWithMessage(400, "Must provide valid pattern_id");
         }
-        JdbcTableWriter tableWriter = null;
         try {
-            tableWriter = new JdbcTableWriter(Table.TRIPS, datasource, namespace);
-        } catch (InvalidNamespaceException e) {
-            haltWithMessage(400, "requested namespace is invalid", null);
-            return null;
-        }
-        try {
+            JdbcTableWriter tableWriter = new JdbcTableWriter(Table.TRIPS, datasource, namespace);
             int deletedCount = tableWriter.deleteWhere("pattern_id", patternId, true);
             return formatJSON(String.format("Deleted %d.", deletedCount), 200);
-        } catch (SQLException e) {
+        } catch (Exception e) {
             e.printStackTrace();
             haltWithMessage(400, "Error deleting entity", e);
             return null;
@@ -126,15 +119,9 @@ public abstract class EditorController<T extends Entity> {
     private String deleteMultipleTrips(Request req, Response res) {
         long startTime = System.currentTimeMillis();
         String namespace = getNamespaceAndValidateSession(req);
-        JdbcTableWriter tableWriter = null;
-        try {
-            tableWriter = new JdbcTableWriter(table, datasource, namespace);
-        } catch (InvalidNamespaceException e) {
-            haltWithMessage(400, "requested namespace is invalid", null);
-            return null;
-        }
         String[] tripIds = req.queryParams("tripIds").split(",");
         try {
+            JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
             for (String tripId: tripIds) {
                 // Delete each trip ID found in query param WITHOUT auto-committing.
                 int result = tableWriter.delete(Integer.parseInt(tripId), false);
@@ -163,14 +150,8 @@ public abstract class EditorController<T extends Entity> {
         long startTime = System.currentTimeMillis();
         String namespace = getNamespaceAndValidateSession(req);
         Integer id = getIdFromRequest(req);
-        JdbcTableWriter tableWriter = null;
         try {
-            tableWriter = new JdbcTableWriter(table, datasource, namespace);
-        } catch (InvalidNamespaceException e) {
-            haltWithMessage(400, "requested namespace is invalid", null);
-            return null;
-        }
-        try {
+            JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
             if (tableWriter.delete(id, true) == 1) {
                 // FIXME: change return message based on result value
                 return formatJSON(String.valueOf("Deleted one."), 200);
@@ -245,14 +226,8 @@ public abstract class EditorController<T extends Entity> {
         String namespace = getNamespaceAndValidateSession(req);
         Integer id = getIdFromRequest(req);
         // Get the JsonObject
-        JdbcTableWriter tableWriter = null;
         try {
-            tableWriter = new JdbcTableWriter(table, datasource, namespace);
-        } catch (InvalidNamespaceException e) {
-            haltWithMessage(400, "requested namespace is invalid", null);
-            return null;
-        }
-        try {
+            JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
             if (isCreating) {
                 return tableWriter.create(req.body(), true);
             } else {
