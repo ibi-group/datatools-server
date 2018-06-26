@@ -1,7 +1,6 @@
 package com.conveyal.datatools.editor.controllers.api;
 
 import com.conveyal.datatools.common.utils.S3Utils;
-import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.editor.controllers.EditorLockController;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -11,6 +10,7 @@ import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.gtfs.loader.JdbcTableWriter;
 import com.conveyal.gtfs.loader.Table;
 import com.conveyal.gtfs.model.Entity;
+import com.conveyal.gtfs.util.InvalidNamespaceException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.commons.dbutils.DbUtils;
@@ -21,7 +21,6 @@ import spark.Request;
 import spark.Response;
 
 import javax.sql.DataSource;
-import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -29,9 +28,10 @@ import java.sql.SQLException;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJSON;
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.editor.controllers.EditorLockController.sessionsForFeedIds;
-import static spark.Spark.*;
 import static spark.Spark.delete;
+import static spark.Spark.options;
 import static spark.Spark.post;
+import static spark.Spark.put;
 
 /**
  * Abstract controller that sets HTTP endpoints for editing GTFS entities. This class contains methods that can be
@@ -100,7 +100,13 @@ public abstract class EditorController<T extends Entity> {
         if (patternId == null) {
             haltWithMessage(400, "Must provide valid pattern_id");
         }
-        JdbcTableWriter tableWriter = new JdbcTableWriter(Table.TRIPS, datasource, namespace);
+        JdbcTableWriter tableWriter = null;
+        try {
+            tableWriter = new JdbcTableWriter(Table.TRIPS, datasource, namespace);
+        } catch (InvalidNamespaceException e) {
+            haltWithMessage(400, "requested namespace is invalid", null);
+            return null;
+        }
         try {
             int deletedCount = tableWriter.deleteWhere("pattern_id", patternId, true);
             return formatJSON(String.format("Deleted %d.", deletedCount), 200);
@@ -120,7 +126,13 @@ public abstract class EditorController<T extends Entity> {
     private String deleteMultipleTrips(Request req, Response res) {
         long startTime = System.currentTimeMillis();
         String namespace = getNamespaceAndValidateSession(req);
-        JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
+        JdbcTableWriter tableWriter = null;
+        try {
+            tableWriter = new JdbcTableWriter(table, datasource, namespace);
+        } catch (InvalidNamespaceException e) {
+            haltWithMessage(400, "requested namespace is invalid", null);
+            return null;
+        }
         String[] tripIds = req.queryParams("tripIds").split(",");
         try {
             for (String tripId: tripIds) {
@@ -151,7 +163,13 @@ public abstract class EditorController<T extends Entity> {
         long startTime = System.currentTimeMillis();
         String namespace = getNamespaceAndValidateSession(req);
         Integer id = getIdFromRequest(req);
-        JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
+        JdbcTableWriter tableWriter = null;
+        try {
+            tableWriter = new JdbcTableWriter(table, datasource, namespace);
+        } catch (InvalidNamespaceException e) {
+            haltWithMessage(400, "requested namespace is invalid", null);
+            return null;
+        }
         try {
             if (tableWriter.delete(id, true) == 1) {
                 // FIXME: change return message based on result value
@@ -227,7 +245,13 @@ public abstract class EditorController<T extends Entity> {
         String namespace = getNamespaceAndValidateSession(req);
         Integer id = getIdFromRequest(req);
         // Get the JsonObject
-        JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
+        JdbcTableWriter tableWriter = null;
+        try {
+            tableWriter = new JdbcTableWriter(table, datasource, namespace);
+        } catch (InvalidNamespaceException e) {
+            haltWithMessage(400, "requested namespace is invalid", null);
+            return null;
+        }
         try {
             if (isCreating) {
                 return tableWriter.create(req.body(), true);
