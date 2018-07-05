@@ -211,6 +211,7 @@ public class Auth0Connection {
     }
 
     private static String trimLines(String str) {
+        if (str == null) return "";
         String[] lines = str.split("\n");
         if (lines.length <= DEFAULT_LINES_TO_PRINT) return str;
         return String.format(
