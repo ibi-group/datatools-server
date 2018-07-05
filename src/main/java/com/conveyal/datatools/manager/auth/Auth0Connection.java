@@ -4,25 +4,22 @@ import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.google.gson.Gson;
-import com.google.gson.GsonBuilder;
-import com.google.gson.JsonElement;
-import com.google.gson.JsonParser;
-import com.google.gson.JsonSyntaxException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
+import spark.Response;
 
 import javax.net.ssl.HttpsURLConnection;
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URL;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
-import static spark.Spark.before;
 import static spark.Spark.halt;
 
 /**
@@ -30,9 +27,9 @@ import static spark.Spark.halt;
  */
 
 public class Auth0Connection {
+    private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final Logger LOG = LoggerFactory.getLogger(Auth0Connection.class);
-    private static final Gson gson = new GsonBuilder().setPrettyPrinting().create();
-    private static final JsonParser jsonParser = new JsonParser();
+    private static final String BASE_URL = getConfigPropertyAsText("application.public_url");
 
     /**
      * Check API request for user token and assign as the "user" attribute on the incoming request object for use in
@@ -40,7 +37,7 @@ public class Auth0Connection {
      * @param req Spark request object
      */
     public static void checkUser(Request req) {
-        // if in a development environment, assign a mock profile to request attribute
+        // If in a development environment, assign a mock profile to request attribute
         if (authDisabled()) {
             req.attribute("user", new Auth0UserProfile("mock@example.com", "user_id:string"));
             return;
@@ -61,7 +58,7 @@ public class Auth0Connection {
         }
     }
 
-    public static String getToken(Request req) {
+    private static String getToken(Request req) {
         String token = null;
 
         final String authorizationHeader = req.headers("Authorization");
@@ -81,7 +78,7 @@ public class Auth0Connection {
     /**
      * Gets the Auth0 user profile for the provided token.
      */
-    public static Auth0UserProfile getUserProfile(String token) throws Exception {
+    private static Auth0UserProfile getUserProfile(String token) throws Exception {
 
         URL url = new URL("https://" + getConfigPropertyAsText("AUTH0_DOMAIN") + "/tokeninfo");
         HttpsURLConnection con = (HttpsURLConnection) url.openConnection();
@@ -115,7 +112,7 @@ public class Auth0Connection {
         }
         catch(Exception e) {
             Object json = m.readValue(userString, Object.class);
-            System.out.println(m.writerWithDefaultPrettyPrinter().writeValueAsString(json));
+            LOG.warn(m.writerWithDefaultPrettyPrinter().writeValueAsString(json));
             LOG.warn("Could not verify user", e);
             halt(401, SparkUtils.formatJSON("Could not verify user", 401));
         }
@@ -127,7 +124,11 @@ public class Auth0Connection {
      * FIXME: Needs an update for SQL editor.
      */
     public static void checkEditPrivileges(Request request) {
-
+        // If in a development environment, assign a mock profile to request attribute
+        if (authDisabled()) {
+            request.attribute("user", new Auth0UserProfile("mock@example.com", "user_id:string"));
+            return;
+        }
         Auth0UserProfile userProfile = request.attribute("user");
         String feedId = request.queryParams("feedId");
         if (feedId == null) {
@@ -156,38 +157,56 @@ public class Auth0Connection {
     }
 
     /**
-     * Log API requests made to the string prefix provided, e.g. "/api/editor/". This will also attempt to parse and log
+     * Log Spark requests in the format user@email.com: GET http://localhost/path/info. This will also attempt to parse and log
      * the request body if the content type is JSON.
      */
-    public static void logRequest(String baseUrl, String prefix) {
-        before(prefix + "*", (request, response) -> {
-            Auth0UserProfile userProfile = request.attribute("user");
-            String userEmail = userProfile != null ? userProfile.email : "no-auth";
-            // Log all API requests to the application's Spark server.
-            String bodyString = "";
-            try {
-                if ("application/json".equals(request.contentType()) && !"".equals(request.body())) {
-                    // Only construct body string if ContentType is JSON and body is not empty
-                    JsonElement je = jsonParser.parse(request.body());
-                    // Add new line for legibility when printing to system.out
-                    bodyString = "\n" + gson.toJson(je);
-                }
-            } catch (JsonSyntaxException e) {
-                LOG.warn("Could not parse JSON", e);
-                bodyString = "\nBad JSON:\n" + request.body();
-                // FIXME: Should a halt be applied here to warn about malformed JSON? Or are there special cases where
-                // request body should not be JSON?
+    public static void logRequest(Request request, Response response) {
+        Auth0UserProfile userProfile = request.attribute("user");
+        String userEmail = userProfile != null ? userProfile.email : "no-auth";
+        // Log all API requests to the application's Spark server.
+        String bodyString = "";
+        try {
+            if ("application/json".equals(request.contentType()) && !"".equals(request.body())) {
+                // Only construct body string if ContentType is JSON and body is not empty
+                JsonNode jsonNode = MAPPER.readTree(request.body());
+                // Add new line for legibility when printing to system.out
+                bodyString = "\n" + MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(jsonNode);
             }
+        } catch (IOException e) {
+            LOG.warn("Could not parse JSON", e);
+            bodyString = "\nBad JSON:\n" + request.body();
+            // FIXME: Should a halt be applied here to warn about malformed JSON? Or are there special cases where
+            // request body should not be JSON?
+        }
 
-            String queryString = request.queryParams().size() > 0 ? "?" + request.queryString() : "";
-            if (!request.pathInfo().contains(prefix + "secure/status/")) {
-                // Do not log requests made to status controller (status requests are often made once per second)
-                LOG.info("{}: {} {}{}{}{}", userEmail, request.requestMethod(), baseUrl, request.pathInfo(), queryString, bodyString);
+        String queryString = request.queryParams().size() > 0 ? "?" + request.queryString() : "";
+        if (!request.pathInfo().contains("secure/status/") && !request.pathInfo().contains("secure/lock/")) {
+            // Do not log requests made to lock or status controller (requests are made many times in succession).
+            LOG.info("{}: {} {}{}{}{}", userEmail, request.requestMethod(), BASE_URL, request.pathInfo(), queryString, bodyString);
+        }
+    }
+
+    /**
+     * TODO: Check that user has access to query namespace provided in GraphQL query (see https://github.com/catalogueglobal/datatools-server/issues/94).
+     */
+    public static void checkGTFSPrivileges(Request request) {
+        Auth0UserProfile userProfile = request.attribute("user");
+        String feedId = request.queryParams("feedId");
+        if (feedId == null) {
+            String[] parts = request.pathInfo().split("/");
+            feedId = parts[parts.length - 1];
+        }
+        FeedSource feedSource = feedId != null ? Persistence.feedSources.getById(feedId) : null;
+        if (feedSource == null) {
+            LOG.warn("feedId {} not found", feedId);
+            halt(400, SparkUtils.formatJSON("Must provide valid feedId parameter", 400));
+        }
+
+        if (!request.requestMethod().equals("GET")) {
+            if (!userProfile.canEditGTFS(feedSource.organizationId(), feedSource.projectId, feedSource.id)) {
+                LOG.warn("User {} cannot edit GTFS for {}", userProfile.email, feedId);
+                halt(403, SparkUtils.formatJSON("User does not have permission to edit GTFS for feedId", 403));
             }
-            // Return "application/json" contentType for all API routes
-            response.type("application/json");
-            // Gzip everything
-            response.header("Content-Encoding", "gzip");
-        });
+        }
     }
 }
