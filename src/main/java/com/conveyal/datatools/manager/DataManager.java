@@ -29,13 +29,17 @@ import org.apache.commons.io.Charsets;
 import org.eclipse.jetty.util.ConcurrentHashSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import spark.Request;
+import spark.Response;
 import spark.utils.IOUtils;
 
+import javax.servlet.http.HttpServletResponse;
 import javax.sql.DataSource;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.UnsupportedEncodingException;
 import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
@@ -130,9 +134,9 @@ public class DataManager {
         useS3 = "true".equals(getConfigPropertyAsText("application.data.use_s3_storage"));
 
         GTFS_DATA_SOURCE = GTFS.createDataSource(
-                getConfigPropertyAsText("GTFS_DATABASE_URL"),
-                getConfigPropertyAsText("GTFS_DATABASE_USER"),
-                getConfigPropertyAsText("GTFS_DATABASE_PASSWORD")
+            getConfigPropertyAsText("GTFS_DATABASE_URL"),
+            getConfigPropertyAsText("GTFS_DATABASE_USER"),
+            getConfigPropertyAsText("GTFS_DATABASE_PASSWORD")
         );
 
         feedBucket = getConfigPropertyAsText("application.data.gtfs_s3_bucket");
@@ -263,6 +267,40 @@ public class DataManager {
             response.type("text/html");
             return index;
         });
+
+        // add logger
+        before((request, response) -> {
+            LOG.info(requestInfoToString(request));
+        });
+
+        // add logger
+        after((request, response) -> {
+            LOG.info(requestAndResponseInfoToString(request, response));
+        });
+    }
+
+    private static String requestInfoToString(Request request) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(request.requestMethod());
+        sb.append(" " + request.url());
+        sb.append(" " + request.body());
+        return sb.toString();
+    }
+
+    private static String requestAndResponseInfoToString(Request request, Response response) {
+        StringBuilder sb = new StringBuilder();
+        sb.append(request.requestMethod());
+        sb.append(" " + request.url());
+        sb.append(" " + request.body());
+        HttpServletResponse raw = response.raw();
+        sb.append(" Reponse: " + raw.getStatus());
+        sb.append(" " + raw.getHeader("content-type"));
+        try {
+            sb.append(" body size in bytes: " + response.body().getBytes(raw.getCharacterEncoding()).length);
+        } catch (UnsupportedEncodingException e) {
+            e.printStackTrace();
+        }
+        return sb.toString();
     }
 
     /**
