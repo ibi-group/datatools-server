@@ -249,11 +249,10 @@ public class FeedSourceController {
         Auth0UserProfile userProfile = req.attribute("user");
         Boolean publicFilter = Boolean.valueOf(req.queryParams("public")) ||
                 req.url().split("/api/*/")[1].startsWith("public");
-//        System.out.println(req.url().split("/api/manager/")[1].startsWith("public"));
 
         // check for null feedSource
         if (feedSource == null)
-            halt(400, SparkUtils.formatJSON("Feed source ID does not exist", 400));
+            haltWithMessage(400, "Feed source ID does not exist");
         String orgId = feedSource.organizationId();
         boolean authorized;
         switch (action) {
@@ -282,15 +281,15 @@ public class FeedSourceController {
         if (publicFilter){
             // if feed not public and user not authorized, halt
             if (!feedSource.isPublic && !authorized)
-                halt(403, SparkUtils.formatJSON("User not authorized to perform action on feed source", 403));
+                haltWithMessage(403, "User not authorized to perform action on feed source");
                 // if feed is public, but action is managerial, halt (we shouldn't ever retrieveById here, but just in case)
             else if (feedSource.isPublic && action.equals("manage"))
-                halt(403, SparkUtils.formatJSON("User not authorized to perform action on feed source", 403));
+                haltWithMessage(403, "User not authorized to perform action on feed source");
 
         }
         else {
             if (!authorized)
-                halt(403, SparkUtils.formatJSON("User not authorized to perform action on feed source", 403));
+                haltWithMessage(403, "User not authorized to perform action on feed source");
         }
 
         // if we make it here, user has permission and it's a valid feedsource
