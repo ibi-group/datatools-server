@@ -12,11 +12,13 @@ import spark.Request;
 import spark.Response;
 
 import javax.net.ssl.HttpsURLConnection;
+import javax.servlet.http.HttpServletResponse;
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URL;
+import java.util.Arrays;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
@@ -30,6 +32,7 @@ public class Auth0Connection {
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final Logger LOG = LoggerFactory.getLogger(Auth0Connection.class);
     private static final String BASE_URL = getConfigPropertyAsText("application.public_url");
+    private static final int DEFAULT_LINES_TO_PRINT = 10;
 
     /**
      * Check API request for user token and assign as the "user" attribute on the incoming request object for use in
@@ -157,33 +160,64 @@ public class Auth0Connection {
     }
 
     /**
-     * Log Spark requests in the format user@email.com: GET http://localhost/path/info. This will also attempt to parse and log
-     * the request body if the content type is JSON.
+     * Log Spark requests.
      */
     public static void logRequest(Request request, Response response) {
+        logRequestOrResponse(true, request, response);
+    }
+
+    /**
+     * Log Spark responses.
+     */
+    public static void logResponse(Request request, Response response) {
+        logRequestOrResponse(false, request, response);
+    }
+
+    // Log request/response.  Pretty print JSON if the content-type is JSON.
+    public static void logRequestOrResponse(boolean logRequest, Request request, Response response) {
         Auth0UserProfile userProfile = request.attribute("user");
         String userEmail = userProfile != null ? userProfile.email : "no-auth";
-        // Log all API requests to the application's Spark server.
-        String bodyString = "";
+        String bodyString = logRequest ? request.body() : response.body();
+        HttpServletResponse raw = response.raw();
         try {
-            if ("application/json".equals(request.contentType()) && !"".equals(request.body())) {
-                // Only construct body string if ContentType is JSON and body is not empty
-                JsonNode jsonNode = MAPPER.readTree(request.body());
-                // Add new line for legibility when printing to system.out
+            String contentType;
+            if (logRequest) {
+                contentType = request.contentType();
+            } else {
+                contentType = raw.getHeader("content-type");
+            }
+            if ("application/json".equals(contentType) && !"".equals(bodyString)) {
+                // Pretty print JSON if ContentType is JSON and body is not empty
+                JsonNode jsonNode = MAPPER.readTree(bodyString);
+                // Add new line for legibility when printing
                 bodyString = "\n" + MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(jsonNode);
             }
         } catch (IOException e) {
             LOG.warn("Could not parse JSON", e);
-            bodyString = "\nBad JSON:\n" + request.body();
-            // FIXME: Should a halt be applied here to warn about malformed JSON? Or are there special cases where
-            // request body should not be JSON?
+            bodyString = "\nBad JSON:\n" + bodyString;
         }
 
         String queryString = request.queryParams().size() > 0 ? "?" + request.queryString() : "";
-        if (!request.pathInfo().contains("secure/status/") && !request.pathInfo().contains("secure/lock/")) {
-            // Do not log requests made to lock or status controller (requests are made many times in succession).
-            LOG.info("{}: {} {}{}{}{}", userEmail, request.requestMethod(), BASE_URL, request.pathInfo(), queryString, bodyString);
-        }
+        LOG.info(
+            "{} {} {}: {}{}{}{}",
+            logRequest ? "req" : String.format("res (%s)", raw.getStatus()),
+            userEmail,
+            request.requestMethod(),
+            BASE_URL,
+            request.pathInfo(),
+            queryString,
+            trimLines(bodyString)
+        );
+    }
+
+    private static String trimLines(String str) {
+        String[] lines = str.split("\n");
+        if (lines.length <= DEFAULT_LINES_TO_PRINT) return str;
+        return String.format(
+            "%s \n...and %d more lines",
+            String.join("\n", Arrays.copyOfRange(lines, 0, DEFAULT_LINES_TO_PRINT - 1)),
+            lines.length - DEFAULT_LINES_TO_PRINT
+        );
     }
 
     /**

@@ -1,23 +1,31 @@
 package com.conveyal.datatools.manager;
 
+import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.utils.CorsFilter;
 import com.conveyal.datatools.editor.controllers.EditorLockController;
+import com.conveyal.datatools.editor.controllers.api.EditorControllerImpl;
+import com.conveyal.datatools.editor.controllers.api.SnapshotController;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
-
 import com.conveyal.datatools.manager.controllers.DumpController;
-import com.conveyal.datatools.manager.controllers.api.*;
-import com.conveyal.datatools.editor.controllers.api.*;
-
+import com.conveyal.datatools.manager.controllers.api.DeploymentController;
+import com.conveyal.datatools.manager.controllers.api.FeedSourceController;
+import com.conveyal.datatools.manager.controllers.api.FeedVersionController;
+import com.conveyal.datatools.manager.controllers.api.GtfsApiController;
+import com.conveyal.datatools.manager.controllers.api.GtfsPlusController;
+import com.conveyal.datatools.manager.controllers.api.NoteController;
+import com.conveyal.datatools.manager.controllers.api.OrganizationController;
+import com.conveyal.datatools.manager.controllers.api.ProjectController;
+import com.conveyal.datatools.manager.controllers.api.RegionController;
+import com.conveyal.datatools.manager.controllers.api.StatusController;
+import com.conveyal.datatools.manager.controllers.api.UserController;
 import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
 import com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource;
 import com.conveyal.datatools.manager.extensions.transitfeeds.TransitFeedsFeedResource;
 import com.conveyal.datatools.manager.extensions.transitland.TransitLandFeedResource;
-
-import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.persistence.TransportNetworkCache;
-import com.conveyal.datatools.common.utils.CorsFilter;
 import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.GraphQLMain;
 import com.conveyal.gtfs.loader.Table;
@@ -29,17 +37,13 @@ import org.apache.commons.io.Charsets;
 import org.eclipse.jetty.util.ConcurrentHashSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import spark.Request;
-import spark.Response;
 import spark.utils.IOUtils;
 
-import javax.servlet.http.HttpServletResponse;
 import javax.sql.DataSource;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.UnsupportedEncodingException;
 import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
@@ -51,7 +55,12 @@ import java.util.concurrent.ScheduledFuture;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.manager.auth.Auth0Connection.logRequest;
-import static spark.Spark.*;
+import static com.conveyal.datatools.manager.auth.Auth0Connection.logResponse;
+import static spark.Spark.after;
+import static spark.Spark.before;
+import static spark.Spark.exception;
+import static spark.Spark.get;
+import static spark.Spark.port;
 
 /**
  * This is the singleton where the application is initialized. It currently stores a number of static fields which are
@@ -229,12 +238,10 @@ public class DataManager {
 
         // return "application/json" for all API routes
         before(API_PREFIX + "*", (request, response) -> {
-            logRequest(request, response);
             response.type("application/json");
             response.header("Content-Encoding", "gzip");
         });
         before(EDITOR_API_PREFIX + "*", (request, response) -> {
-            logRequest(request, response);
             response.type("application/json");
             response.header("Content-Encoding", "gzip");
         });
@@ -266,37 +273,13 @@ public class DataManager {
 
         // add logger
         before((request, response) -> {
-            LOG.info(requestInfoToString(request));
+            logRequest(request, response);
         });
 
         // add logger
         after((request, response) -> {
-            LOG.info(requestAndResponseInfoToString(request, response));
+            logResponse(request, response);
         });
-    }
-
-    private static String requestInfoToString(Request request) {
-        StringBuilder sb = new StringBuilder();
-        sb.append(request.requestMethod());
-        sb.append(" " + request.url());
-        sb.append(" " + request.body());
-        return sb.toString();
-    }
-
-    private static String requestAndResponseInfoToString(Request request, Response response) {
-        StringBuilder sb = new StringBuilder();
-        sb.append(request.requestMethod());
-        sb.append(" " + request.url());
-        sb.append(" " + request.body());
-        HttpServletResponse raw = response.raw();
-        sb.append(" Reponse: " + raw.getStatus());
-        sb.append(" " + raw.getHeader("content-type"));
-        try {
-            sb.append(" body size in bytes: " + response.body().getBytes(raw.getCharacterEncoding()).length);
-        } catch (UnsupportedEncodingException e) {
-            e.printStackTrace();
-        }
-        return sb.toString();
     }
 
     /**
