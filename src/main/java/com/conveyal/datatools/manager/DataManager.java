@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager;
 
+import com.bugsnag.Bugsnag;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.CorsFilter;
 import com.conveyal.datatools.editor.controllers.EditorLockController;
@@ -133,6 +134,11 @@ public class DataManager {
     static void initializeApplication(String[] args) throws IOException {
         // Load configuration files (env.yml and server.yml).
         loadConfig(args);
+
+        String bugsnagKey = getConfigPropertyAsText("BUGSNAG_KEY");
+        if (bugsnagKey != null) {
+            new Bugsnag(bugsnagKey);
+        }
 
         // FIXME: hack to statically load FeedStore
         LOG.info(FeedStore.class.getSimpleName());
