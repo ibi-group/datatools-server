@@ -1,23 +1,32 @@
 package com.conveyal.datatools.manager;
 
+import com.bugsnag.Bugsnag;
+import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.utils.CorsFilter;
 import com.conveyal.datatools.editor.controllers.EditorLockController;
+import com.conveyal.datatools.editor.controllers.api.EditorControllerImpl;
+import com.conveyal.datatools.editor.controllers.api.SnapshotController;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
-
 import com.conveyal.datatools.manager.controllers.DumpController;
-import com.conveyal.datatools.manager.controllers.api.*;
-import com.conveyal.datatools.editor.controllers.api.*;
-
+import com.conveyal.datatools.manager.controllers.api.DeploymentController;
+import com.conveyal.datatools.manager.controllers.api.FeedSourceController;
+import com.conveyal.datatools.manager.controllers.api.FeedVersionController;
+import com.conveyal.datatools.manager.controllers.api.GtfsApiController;
+import com.conveyal.datatools.manager.controllers.api.GtfsPlusController;
+import com.conveyal.datatools.manager.controllers.api.NoteController;
+import com.conveyal.datatools.manager.controllers.api.OrganizationController;
+import com.conveyal.datatools.manager.controllers.api.ProjectController;
+import com.conveyal.datatools.manager.controllers.api.RegionController;
+import com.conveyal.datatools.manager.controllers.api.StatusController;
+import com.conveyal.datatools.manager.controllers.api.UserController;
 import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
 import com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource;
 import com.conveyal.datatools.manager.extensions.transitfeeds.TransitFeedsFeedResource;
 import com.conveyal.datatools.manager.extensions.transitland.TransitLandFeedResource;
-
-import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.persistence.TransportNetworkCache;
-import com.conveyal.datatools.common.utils.CorsFilter;
 import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.GraphQLMain;
 import com.conveyal.gtfs.loader.Table;
@@ -46,7 +55,13 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
-import static spark.Spark.*;
+import static com.conveyal.datatools.manager.auth.Auth0Connection.logRequest;
+import static com.conveyal.datatools.manager.auth.Auth0Connection.logResponse;
+import static spark.Spark.after;
+import static spark.Spark.before;
+import static spark.Spark.exception;
+import static spark.Spark.get;
+import static spark.Spark.port;
 
 /**
  * This is the singleton where the application is initialized. It currently stores a number of static fields which are
@@ -56,7 +71,7 @@ public class DataManager {
     private static final Logger LOG = LoggerFactory.getLogger(DataManager.class);
 
     // These fields hold YAML files that represent the server configuration.
-    private static JsonNode config;
+    private static JsonNode envConfig;
     private static JsonNode serverConfig;
 
     // These fields hold YAML files that represent the GTFS and GTFS+ specifications.
@@ -91,12 +106,12 @@ public class DataManager {
     public static String bucketFolder;
 
     public static boolean useS3;
-    public static final String API_PREFIX = "/api/manager/";
+    private static final String API_PREFIX = "/api/manager/";
     private static final String GTFS_API_PREFIX = API_PREFIX + "secure/gtfs/";
-    public static final String EDITOR_API_PREFIX = "/api/editor/";
+    private static final String EDITOR_API_PREFIX = "/api/editor/";
     public static final String publicPath = "(" + API_PREFIX + "|" + EDITOR_API_PREFIX + ")public/.*";
-    public static final String DEFAULT_ENV = "configurations/default/env.yml";
-    public static final String DEFAULT_CONFIG = "configurations/default/server.yml";
+    private static final String DEFAULT_ENV = "configurations/default/env.yml";
+    private static final String DEFAULT_CONFIG = "configurations/default/server.yml";
     public static DataSource GTFS_DATA_SOURCE;
 
     public static void main(String[] args) throws IOException {
@@ -116,9 +131,14 @@ public class DataManager {
         registerExternalResources();
     }
 
-    public static void initializeApplication(String[] args) throws IOException {
+    static void initializeApplication(String[] args) throws IOException {
         // Load configuration files (env.yml and server.yml).
         loadConfig(args);
+
+        String bugsnagKey = getConfigPropertyAsText("BUGSNAG_KEY");
+        if (bugsnagKey != null) {
+            new Bugsnag(bugsnagKey);
+        }
 
         // FIXME: hack to statically load FeedStore
         LOG.info(FeedStore.class.getSimpleName());
@@ -130,9 +150,9 @@ public class DataManager {
         useS3 = "true".equals(getConfigPropertyAsText("application.data.use_s3_storage"));
 
         GTFS_DATA_SOURCE = GTFS.createDataSource(
-                getConfigPropertyAsText("GTFS_DATABASE_URL"),
-                getConfigPropertyAsText("GTFS_DATABASE_USER"),
-                getConfigPropertyAsText("GTFS_DATABASE_PASSWORD")
+            getConfigPropertyAsText("GTFS_DATABASE_URL"),
+            getConfigPropertyAsText("GTFS_DATABASE_USER"),
+            getConfigPropertyAsText("GTFS_DATABASE_PASSWORD")
         );
 
         feedBucket = getConfigPropertyAsText("application.data.gtfs_s3_bucket");
@@ -146,7 +166,7 @@ public class DataManager {
      * Register API routes with Spark. This register core application routes, any routes associated with optional
      * modules and sets other core routes (e.g., 404 response) and response headers (e.g., API content type is JSON).
      */
-    protected static void registerRoutes() throws IOException {
+    static void registerRoutes() throws IOException {
         CorsFilter.apply();
         // Initialize GTFS GraphQL API service
         // FIXME: Add user permissions check to ensure user has access to feeds.
@@ -214,34 +234,27 @@ public class DataManager {
             Auth0Connection.checkUser(request);
         });
 
-        // FIXME: add auth check for gtfs-api. Should access to certain feeds be restricted by feedId or namespace?
-        //        before(GTFS_API_PREFIX + "*", (request, response) -> {
-        //            if(request.requestMethod().equals("OPTIONS")) return;
-        //            Auth0Connection.checkUser(request);
-        //        });
-
-//        logRequest(getConfigPropertyAsText("application.public_url"), API_PREFIX);
-//        logRequest(getConfigPropertyAsText("application.public_url"), EDITOR_API_PREFIX);
+        // FIXME: Add auth check for gtfs-api. This is tricky because it requires extracting the namespace argument from
+        // the GraphQL query, which could be embedded in the query itself or in the variables JSON. We would then need
+        // to check against both the snapshots and feed versions collections for the feed source ID to use in the
+        // permissions check.
+//        before(GTFS_API_PREFIX + "*", (request, response) -> {
+//            Auth0Connection.checkGTFSPrivileges(request);
+//        });
 
         // return "application/json" for all API routes
-        after(API_PREFIX + "*", (request, response) -> {
-            //            LOG.info(request.pathInfo());
+        before(API_PREFIX + "*", (request, response) -> {
             response.type("application/json");
             response.header("Content-Encoding", "gzip");
         });
         before(EDITOR_API_PREFIX + "*", (request, response) -> {
-            //            LOG.info(request.pathInfo());
             response.type("application/json");
             response.header("Content-Encoding", "gzip");
         });
         // load index.html
-        InputStream stream = DataManager.class.getResourceAsStream("/public/index.html");
-        final String index = IOUtils.toString(stream).replace("${S3BUCKET}", getConfigPropertyAsText("application.assets_bucket"));
-        stream.close();
-
-        InputStream auth0Stream = DataManager.class.getResourceAsStream("/public/auth0-silent-callback.html");
-        final String auth0html = IOUtils.toString(auth0Stream);
-        auth0Stream.close();
+        final String index = resourceToString("/public/index.html")
+                .replace("${S3BUCKET}", getConfigPropertyAsText("application.assets_bucket"));
+        final String auth0html = resourceToString("/public/auth0-silent-callback.html");
 
         // auth0 silent callback
         get("/api/auth0-silent-callback", (request, response) -> {
@@ -263,6 +276,16 @@ public class DataManager {
             response.type("text/html");
             return index;
         });
+
+        // add logger
+        before((request, response) -> {
+            logRequest(request, response);
+        });
+
+        // add logger
+        after((request, response) -> {
+            logResponse(request, response);
+        });
     }
 
     /**
@@ -271,16 +294,22 @@ public class DataManager {
      */
     public static boolean hasConfigProperty(String name) {
         // try the server config first, then the main config
-        boolean fromServerConfig = hasConfigProperty(serverConfig, name);
-        if(fromServerConfig) return fromServerConfig;
+        return hasConfigProperty(serverConfig, name) || hasConfigProperty(envConfig, name);
+    }
 
-        return hasConfigProperty(config, name);
+    private static String resourceToString (String resourceName) {
+        try (InputStream stream = DataManager.class.getResourceAsStream(resourceName)) {
+            return IOUtils.toString(stream);
+        } catch (IOException e) {
+            e.printStackTrace();
+            throw new RuntimeException("Could not find resource.");
+        }
     }
 
     private static boolean hasConfigProperty(JsonNode config, String name) {
         String parts[] = name.split("\\.");
         JsonNode node = config;
-        for(int i = 0; i < parts.length; i++) {
+        for (int i = 0; i < parts.length; i++) {
             if(node == null) return false;
             node = node.get(parts[i]);
         }
@@ -296,7 +325,7 @@ public class DataManager {
         JsonNode fromServerConfig = getConfigProperty(serverConfig, name);
         if(fromServerConfig != null) return fromServerConfig;
 
-        return getConfigProperty(config, name);
+        return getConfigProperty(envConfig, name);
     }
 
     private static JsonNode getConfigProperty(JsonNode config, String name) {
@@ -366,24 +395,24 @@ public class DataManager {
      * Load config files from either program arguments or (if no args specified) from
      * default configuration file locations. Config fields are retrieved with getConfigProperty.
      */
-    public static void loadConfig (String[] args) throws IOException {
-        FileInputStream configStream;
+    private static void loadConfig(String[] args) throws IOException {
+        FileInputStream envConfigStream;
         FileInputStream serverConfigStream;
 
         if (args.length == 0) {
             LOG.warn("Using default env.yml: {}", DEFAULT_ENV);
             LOG.warn("Using default server.yml: {}", DEFAULT_CONFIG);
-            configStream = new FileInputStream(new File(DEFAULT_ENV));
+            envConfigStream = new FileInputStream(new File(DEFAULT_ENV));
             serverConfigStream = new FileInputStream(new File(DEFAULT_CONFIG));
         }
         else {
             LOG.info("Loading env.yml: {}", args[0]);
             LOG.info("Loading server.yml: {}", args[1]);
-            configStream = new FileInputStream(new File(args[0]));
+            envConfigStream = new FileInputStream(new File(args[0]));
             serverConfigStream = new FileInputStream(new File(args[1]));
         }
 
-        config = yamlMapper.readTree(configStream);
+        envConfig = yamlMapper.readTree(envConfigStream);
         serverConfig = yamlMapper.readTree(serverConfigStream);
     }
 

@@ -12,20 +12,31 @@ import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.Serializable;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.channels.Channels;
 import java.nio.channels.FileChannel;
 import java.nio.channels.WritableByteChannel;
+import java.util.Date;
 import java.util.List;
 import java.util.Scanner;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.models.Deployment;
+import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.persistence.FeedStore;
+import com.conveyal.datatools.manager.persistence.Persistence;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.mongodb.client.model.Filters.and;
+import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Filters.not;
+import static com.mongodb.client.model.Updates.pull;
+import static com.mongodb.client.model.Updates.set;
 
 /**
  * Deploy the given deployment to the OTP servers specified by targets.
@@ -37,20 +48,11 @@ public class DeployJob extends MonitorableJob {
     private static final Logger LOG = LoggerFactory.getLogger(DeployJob.class);
     private static final String bundlePrefix = "bundles/";
 
-    /** The URLs to deploy to */
-    private List<String> targets;
-
-    /** The base URL to otp.js on these targets */
-    private String publicUrl;
-
-    /** An optional AWS S3 bucket to copy the bundle to */
-    private String s3Bucket;
-
-    /** An AWS credentials file to use when uploading to S3 */
-    private String s3CredentialsFilename;
-
     /** The deployment to deploy */
     private Deployment deployment;
+
+    /** The OTP server to deploy to (also contains S3 information). */
+    private final OtpServer otpServer;
 
     /** Temporary file that contains the deployment data */
     private File deploymentTempFile;
@@ -58,24 +60,26 @@ public class DeployJob extends MonitorableJob {
     /** This hides the status field on the parent class, providing additional fields. */
     public DeployStatus status;
 
-    public DeployJob(Deployment deployment, String owner, List<String> targets, String publicUrl, String s3Bucket, String s3CredentialsFilename) {
+    @JsonProperty
+    public String getDeploymentId () {
+        return deployment.id;
+    }
+
+    public DeployJob(Deployment deployment, String owner, OtpServer otpServer) {
         // TODO add new job type or get rid of enum in favor of just using class names
         super(owner, "Deploying " + deployment.name, JobType.DEPLOY_TO_OTP);
         this.deployment = deployment;
-        this.targets = targets;
-        this.publicUrl = publicUrl;
-        this.s3Bucket = s3Bucket;
-        this.s3CredentialsFilename = s3CredentialsFilename;
+        this.otpServer = otpServer;
         // Use a special subclass of status here that has additional fields
         this.status = new DeployStatus();
         status.message = "Initializing...";
         status.built = false;
         status.numServersCompleted = 0;
-        status.totalServers = targets == null ? 0 : targets.size();
+        status.totalServers = otpServer.internalUrl == null ? 0 : otpServer.internalUrl.size();
     }
 
     public void jobLogic () {
-        int targetCount = targets != null ? targets.size() : 0;
+        int targetCount = otpServer.internalUrl != null ? otpServer.internalUrl.size() : 0;
         int totalTasks = 1 + targetCount;
         int tasksCompleted = 0;
         String statusMessage;
@@ -92,7 +96,7 @@ public class DeployJob extends MonitorableJob {
 
         LOG.info("Created deployment bundle file: " + deploymentTempFile.getAbsolutePath());
 
-        // dump the deployment bundle
+        // Dump the deployment bundle to the temp file.
         try {
             status.message = "Creating OTP Bundle";
             this.deployment.dump(deploymentTempFile, true, true, true);
@@ -106,11 +110,11 @@ public class DeployJob extends MonitorableJob {
         }
 
         status.percentComplete = 100.0 * (double) tasksCompleted / totalTasks;
-        System.out.println("pctComplete = " + status.percentComplete);
+        LOG.info("Deployment pctComplete = {}", status.percentComplete);
         status.built = true;
 
-        // upload to S3, if applicable
-        if(this.s3Bucket != null) {
+        // Upload to S3, if applicable
+        if(otpServer.s3Bucket != null) {
             status.message = "Uploading to S3";
             status.uploadingS3 = true;
             LOG.info("Uploading deployment {} to s3", deployment.name);
@@ -118,7 +122,7 @@ public class DeployJob extends MonitorableJob {
             try {
                 TransferManager tx = TransferManagerBuilder.standard().withS3Client(FeedStore.s3Client).build();
                 key = bundlePrefix + deployment.parentProject().id + "/" + deployment.name + ".zip";
-                final Upload upload = tx.upload(this.s3Bucket, key, deploymentTempFile);
+                final Upload upload = tx.upload(otpServer.s3Bucket, key, deploymentTempFile);
 
                 upload.addProgressListener((ProgressListener) progressEvent -> {
                     status.percentUploaded = upload.getProgress().getPercentTransferred();
@@ -134,10 +138,10 @@ public class DeployJob extends MonitorableJob {
                 // copy to [name]-latest.zip
                 String copyKey = bundlePrefix + deployment.parentProject().id + "/" + deployment.parentProject().name.toLowerCase() + "-latest.zip";
                 CopyObjectRequest copyObjRequest = new CopyObjectRequest(
-                    this.s3Bucket, key, this.s3Bucket, copyKey);
+                    otpServer.s3Bucket, key, otpServer.s3Bucket, copyKey);
                 FeedStore.s3Client.copyObject(copyObjRequest);
             } catch (AmazonClientException|InterruptedException e) {
-                statusMessage = String.format("Error uploading (or copying) deployment bundle to s3://%s/%s", s3Bucket, key);
+                statusMessage = String.format("Error uploading (or copying) deployment bundle to s3://%s/%s", otpServer.s3Bucket, key);
                 LOG.error(statusMessage);
                 e.printStackTrace();
                 status.fail(statusMessage);
@@ -147,8 +151,8 @@ public class DeployJob extends MonitorableJob {
             status.uploadingS3 = false;
         }
 
-        // if no OTP targets (i.e. we're only deploying to S3), we're done
-        if(this.targets == null) {
+        // If there are no OTP targets (i.e. we're only deploying to S3), we're done.
+        if(otpServer.internalUrl == null) {
             status.completed = true;
             return;
         }
@@ -156,8 +160,8 @@ public class DeployJob extends MonitorableJob {
         // figure out what router we're using
         String router = deployment.routerId != null ? deployment.routerId : "default";
 
-        // load it to OTP
-        for (String rawUrl : this.targets) {
+        // Send the deployment file over the wire to each OTP server.
+        for (String rawUrl : otpServer.internalUrl) {
             status.message = "Deploying to " + rawUrl;
             status.uploading = true;
             LOG.info(status.message);
@@ -253,6 +257,7 @@ public class DeployJob extends MonitorableJob {
                 input.close();
             } catch (IOException e) {
                 // do nothing
+                LOG.warn("Could not close input stream for deployment file.");
             }
 
             status.uploading = false;
@@ -290,7 +295,7 @@ public class DeployJob extends MonitorableJob {
         }
 
         status.completed = true;
-        status.baseUrl = this.publicUrl;
+        status.baseUrl = otpServer.publicUrl;
     }
 
     @Override
@@ -301,31 +306,30 @@ public class DeployJob extends MonitorableJob {
         if (!deleted) {
             LOG.error("Deployment {} not deleted! Disk space in danger of filling up.", deployment.id);
         }
-
+        String message;
         if (!status.error) {
             // Update status with successful completion state only if no error was encountered.
             status.update(false, "Deployment complete!", 100, true);
+            // Store the target server in the deployedTo field.
+            LOG.info("Updating deployment target to {} id={}", otpServer.target(), deployment.id);
+            Persistence.deployments.updateField(deployment.id, "deployedTo", otpServer.target());
+            // Update last deployed field.
+            Persistence.deployments.updateField(deployment.id, "lastDeployed", new Date());
+            message = String.format("Deployment %s successfully deployed to %s", deployment.name, otpServer.publicUrl);
+        } else {
+            message = String.format("WARNING: Deployment %s failed to deploy to %s", deployment.name, otpServer.publicUrl);
         }
+        // Send notification to those subscribed to updates for the deployment.
+        NotifyUsersForSubscriptionJob.createNotification("deployment-updated", deployment.id, message);
     }
 
     /**
      * Represents the current status of this job.
      */
     public static class DeployStatus extends Status {
-//        /** What error message (defined in messages.<lang>) should be displayed to the user? */
-//        public String message;
-//
-//        /** Is this deployment completed (successfully or unsuccessfully) */
-//        public boolean completed;
-
-//        /** Was there an error? */
-//        public boolean error;
-
+        private static final long serialVersionUID = 1L;
         /** Did the manager build the bundle successfully */
         public boolean built;
-
-//        /** Is the bundle currently being uploaded to the server? */
-//        public boolean uploading;
 
         /** Is the bundle currently being uploaded to an S3 bucket? */
         public boolean uploadingS3;

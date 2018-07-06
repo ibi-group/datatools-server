@@ -3,8 +3,6 @@ package com.conveyal.datatools.manager.models;
 
 import java.awt.geom.Rectangle2D;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -358,7 +356,7 @@ public class FeedVersion extends Model implements Serializable {
         return transportNetwork;
     }
 
-    public TransportNetwork buildTransportNetwork(MonitorableJob.Status status) {
+    public TransportNetwork buildTransportNetwork(MonitorableJob.Status status) throws IOException {
         // return null if validation result is null (probably means something went wrong with validation, plus we won't have feed bounds).
         if (this.validationResult == null || validationResult.fatalException != null) {
             return null;
@@ -379,8 +377,8 @@ public class FeedVersion extends Model implements Serializable {
             status.update(true, message, 10);
             return null;
         }
-
-        File osmExtract = downloadOSMFile(bounds);
+        // Check for OSM extract on disk.
+        File osmExtract = retrieveCachedOSMFile(bounds);
         if (!osmExtract.exists()) {
             InputStream is = downloadOsmExtract(bounds);
             OutputStream out;
@@ -431,8 +429,12 @@ public class FeedVersion extends Model implements Serializable {
         return null;
     }
 
-    @JsonIgnore
-    private static File downloadOSMFile(Rectangle2D bounds) {
+    /**
+     * Get the OSM file for the given bounds if it exists on disk.
+     *
+     * FIXME: Use osm-lib to handle caching OSM data.
+     */
+    private static File retrieveCachedOSMFile(Rectangle2D bounds) {
         if (bounds != null) {
             String baseDir = FeedStore.basePath.getAbsolutePath() + File.separator + "osm";
             File osmPath = new File(String.format("%s/%.6f_%.6f_%.6f_%.6f", baseDir, bounds.getMaxX(), bounds.getMaxY(), bounds.getMinX(), bounds.getMinY()));
@@ -445,11 +447,6 @@ public class FeedVersion extends Model implements Serializable {
             return null;
         }
     }
-
-    public TransportNetwork buildTransportNetwork() {
-        return buildTransportNetwork(null);
-    }
-
 
     /**
      * Does this feed version have any critical errors that would prevent it being loaded to OTP?
@@ -470,6 +467,7 @@ public class FeedVersion extends Model implements Serializable {
             return true;
 
         return validationResult.fatalException != null ||
+            !validationSummary().bounds.areValid() ||
             feedLoadResult.stopTimes.rowCount == 0 ||
             feedLoadResult.trips.rowCount == 0 ||
             feedLoadResult.agency.rowCount == 0;

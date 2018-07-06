@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.Date;
 
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.mongodb.client.model.Filters.eq;
 import static com.mongodb.client.model.Updates.push;
 import static spark.Spark.*;
@@ -30,22 +31,22 @@ public class NoteController {
     private static JsonManager<Note> json =
             new JsonManager<Note>(Note.class, JsonViews.UserInterface.class);
 
-    public static Collection<Note> getAllNotes (Request req, Response res) throws JsonProcessingException {
+    public static Collection<Note> getAllNotes (Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
-        if(userProfile == null) halt(401);
+        if (userProfile == null) halt(401);
 
         String typeStr = req.queryParams("type");
         String objectId = req.queryParams("objectId");
 
         if (typeStr == null || objectId == null) {
-            halt(400, "Please specify objectId and type");
+            haltWithMessage(400, "Please specify objectId and type");
         }
 
         Note.NoteType type = null;
         try {
             type = Note.NoteType.valueOf(typeStr);
         } catch (IllegalArgumentException e) {
-            halt(400, "Please specify a valid type");
+            haltWithMessage(400, "Please specify a valid type");
         }
 
         Model model = null;
@@ -59,7 +60,7 @@ public class NoteController {
                 break;
             default:
                 // this shouldn't ever happen, but Java requires that every case be covered somehow so model can't be used uninitialized
-                halt(400, "Unsupported type for notes");
+                haltWithMessage(400, "Unsupported type for notes");
         }
 
         FeedSource s;
