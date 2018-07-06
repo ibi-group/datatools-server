@@ -135,7 +135,10 @@ public class DataManager {
         // Load configuration files (env.yml and server.yml).
         loadConfig(args);
 
-        Bugsnag bugsnag = new Bugsnag(getConfigPropertyAsText("BUGSNAG_KEY"));
+        String bugsnagKey = getConfigPropertyAsText("BUGSNAG_KEY");
+        if (bugsnagKey != null) {
+            new Bugsnag(bugsnagKey);
+        }
 
         // FIXME: hack to statically load FeedStore
         LOG.info(FeedStore.class.getSimpleName());
