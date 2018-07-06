@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Constructor;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 import static com.mongodb.client.model.Filters.eq;
@@ -93,16 +94,27 @@ public class TypedPersistence<T extends Model> {
         mongoCollection.replaceOne(eq(id), replaceObject);
     }
 
-    public T update (String id, String updateJson) {
-        Document updateDocument = Document.parse(updateJson);
-
-        // TODO set lastUpdated when update is called?
+    /**
+     * Primary method to update Mongo object with provided document. This sets the lastUpdated field to the current time.
+     */
+    public T update (String id, Document updateDocument) {
+        // Set last updated.
+        updateDocument.put("lastUpdated", new Date());
         return mongoCollection.findOneAndUpdate(eq(id), new Document("$set", updateDocument), findOneAndUpdateOptions);
     }
 
+    /**
+     * Update Mongo object by ID with the provided JSON string.
+     */
+    public T update (String id, String updateJson) {
+        return update(id, Document.parse(updateJson));
+    }
+
+    /**
+     * Update the field with the provided value for the Mongo object referenced by ID.
+     */
     public T updateField (String id, String fieldName, Object value) {
-        // TODO set lastUpdated when update is called?
-        return mongoCollection.findOneAndUpdate(eq(id), set(fieldName, value), findOneAndUpdateOptions);
+        return update(id, new Document(fieldName, value));
     }
 
     public T updateUser (String id, Auth0UserProfile profile) {
