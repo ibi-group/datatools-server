@@ -173,12 +173,16 @@ public class Auth0Connection {
         logRequestOrResponse(false, request, response);
     }
 
-    // Log request/response.  Pretty print JSON if the content-type is JSON.
+    /**
+     * Log request/response.  Pretty print JSON if the content-type is JSON.
+     */
     public static void logRequestOrResponse(boolean logRequest, Request request, Response response) {
         Auth0UserProfile userProfile = request.attribute("user");
         String userEmail = userProfile != null ? userProfile.email : "no-auth";
-        String bodyString = logRequest ? request.body() : response.body();
         HttpServletResponse raw = response.raw();
+        // NOTE: Do not attempt to read the body into a string until it has been determined that the content-type is
+        // JSON.
+        String bodyString = "";
         try {
             String contentType;
             if (logRequest) {
@@ -186,7 +190,9 @@ public class Auth0Connection {
             } else {
                 contentType = raw.getHeader("content-type");
             }
-            if ("application/json".equals(contentType) && !"".equals(bodyString)) {
+            if ("application/json".equals(contentType)) {
+                bodyString = logRequest ? request.body() : response.body();
+                if (bodyString == null) return;
                 // Pretty print JSON if ContentType is JSON and body is not empty
                 JsonNode jsonNode = MAPPER.readTree(bodyString);
                 // Add new line for legibility when printing
