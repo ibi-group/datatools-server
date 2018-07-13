@@ -192,11 +192,14 @@ public class Auth0Connection {
             }
             if ("application/json".equals(contentType)) {
                 bodyString = logRequest ? request.body() : response.body();
-                if (bodyString == null) return;
-                // Pretty print JSON if ContentType is JSON and body is not empty
-                JsonNode jsonNode = MAPPER.readTree(bodyString);
-                // Add new line for legibility when printing
-                bodyString = "\n" + MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(jsonNode);
+                if (bodyString != null) {
+                    // Pretty print JSON if ContentType is JSON and body is not empty
+                    JsonNode jsonNode = MAPPER.readTree(bodyString);
+                    // Add new line for legibility when printing
+                    bodyString = "\n" + MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(jsonNode);
+                } else {
+                    bodyString = "{body content is null}";
+                }
             }
         } catch (IOException e) {
             LOG.warn("Could not parse JSON", e);
