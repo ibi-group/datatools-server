@@ -24,9 +24,6 @@ import java.util.concurrent.TimeUnit;
  */
 public class TransportNetworkCache {
     private static final Logger LOG = LoggerFactory.getLogger(TransportNetworkCache.class);
-
-//    private final Weigher<String, TransportNetwork> weigher = (k, transportNetwork) ->
-//            transportNetwork.gridPointSet.featureCount();
     private final LoadingCache<String, TransportNetwork> transportNetworkCache;
     private final Map<String, Long> loadedTransportNetworks = new HashMap<>();
     private static final int DEFAULT_CACHE_SIZE = 3;

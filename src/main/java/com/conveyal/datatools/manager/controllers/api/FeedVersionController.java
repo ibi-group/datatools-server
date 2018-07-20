@@ -140,8 +140,13 @@ public class FeedVersionController  {
             }
             // Set last modified based on value of query param. This is determined/supplied by the client
             // request because this data gets lost in the uploadStream otherwise.
-            Long lastModified = req.queryParams("lastModified") != null ? Long.valueOf(req.queryParams("lastModified")) : null;
-            if (lastModified != null) newGtfsFile.setLastModified(lastModified);
+            Long lastModified = req.queryParams("lastModified") != null
+                    ? Long.valueOf(req.queryParams("lastModified"))
+                    : null;
+            if (lastModified != null) {
+                newGtfsFile.setLastModified(lastModified);
+                newFeedVersion.fileTimestamp = lastModified;
+            }
             LOG.info("Last modified: {}", new Date(newGtfsFile.lastModified()));
             LOG.info("Saving feed from upload {}", feedSource);
         } catch (Exception e) {
@@ -151,6 +156,7 @@ public class FeedVersionController  {
 
         // TODO: fix FeedVersion.hash() call when called in this context. Nothing gets hashed because the file has not been saved yet.
         // newFeedVersion.hash();
+        newFeedVersion.fileSize = newGtfsFile.length();
         newFeedVersion.hash = HashUtils.hashFile(newGtfsFile);
 
         // Check that the hashes of the feeds don't match, i.e. that the feed has changed since the last version.
@@ -165,7 +171,7 @@ public class FeedVersionController  {
             haltWithMessage(304, "Uploaded feed is identical to the latest version known to the database.");
         }
 
-        newFeedVersion.setName(newFeedVersion.formattedTimestamp() + " Upload");
+        newFeedVersion.name = newFeedVersion.formattedTimestamp() + " Upload";
         // TODO newFeedVersion.fileTimestamp still exists
 
         // Must be handled by executor because it takes a long time.
@@ -401,7 +407,7 @@ public class FeedVersionController  {
             DataManager.feedResources.get(resourceType).feedVersionCreated(version, null);
         }
         // update published version ID on feed source
-        Persistence.feedSources.update(version.feedSourceId, String.format("{publishedVersionId: %s}", version.id));
+        Persistence.feedSources.updateField(version.feedSourceId, "publishedVersionId", version.namespace);
         return version;
     }
 
@@ -429,10 +435,14 @@ public class FeedVersionController  {
     }
 
     public static void register (String apiPrefix) {
+        // TODO: Might it be easier down the road to create a separate JSON view to request a "detailed" feed version
+        // which would contain the full validationResult, so that a request for all versions does not become too large?
+        // This might not be an issue because validation issues are queried separately.
+        // TODO: We might need an endpoint to download a csv of all validation issues. This was supported in the
+        // previous version of data tools.
         get(apiPrefix + "secure/feedversion/:id", FeedVersionController::getFeedVersion, json::write);
         get(apiPrefix + "secure/feedversion/:id/download", FeedVersionController::downloadFeedVersionDirectly);
         get(apiPrefix + "secure/feedversion/:id/downloadtoken", FeedVersionController::getFeedDownloadCredentials, json::write);
-//        get(apiPrefix + "secure/feedversion/:id/validation", FeedVersionController::getValidationResult, json::write);
         post(apiPrefix + "secure/feedversion/:id/validate", FeedVersionController::validate, json::write);
         get(apiPrefix + "secure/feedversion/:id/isochrones", FeedVersionController::getIsochrones, json::write);
         get(apiPrefix + "secure/feedversion", FeedVersionController::getAllFeedVersionsForFeedSource, json::write);
@@ -443,7 +453,6 @@ public class FeedVersionController  {
         delete(apiPrefix + "secure/feedversion/:id", FeedVersionController::deleteFeedVersion, json::write);
 
         get(apiPrefix + "public/feedversion", FeedVersionController::getAllFeedVersionsForFeedSource, json::write);
-//        get(apiPrefix + "public/feedversion/:id/validation", FeedVersionController::getPublicValidationResult, json::write);
         get(apiPrefix + "public/feedversion/:id/downloadtoken", FeedVersionController::getFeedDownloadCredentials, json::write);
 
         get(apiPrefix + "downloadfeed/:token", FeedVersionController::downloadFeedVersionWithToken);

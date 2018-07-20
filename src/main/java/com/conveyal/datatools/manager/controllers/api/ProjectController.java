@@ -1,7 +1,5 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.amazonaws.auth.policy.Statement;
-import com.amazonaws.auth.policy.actions.S3Actions;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
@@ -118,10 +116,10 @@ public class ProjectController {
                     || updateDocument.containsKey("autoFetchFeeds")
                     || updateDocument.containsKey("defaultTimeZone")) {
                 // If auto fetch flag is turned on
-                if (updatedProject.autoFetchFeeds){
+                if (updatedProject.autoFetchFeeds) {
                     ScheduledFuture fetchAction = scheduleAutoFeedFetch(updatedProject, 1);
                     DataManager.autoFetchMap.put(updatedProject.id, fetchAction);
-                } else{
+                } else {
                     // otherwise, cancel any existing task for this id
                     cancelAutoFetch(updatedProject.id);
                 }
@@ -295,7 +293,7 @@ public class ProjectController {
      * index of GTFS data. This action is triggered manually by a UI button and for now never happens automatically.
      * An ExternalFeedResource of the specified type must be present in DataManager.feedResources
      */
-    private static Project thirdPartySync(Request req, Response res) throws Exception {
+    private static Project thirdPartySync(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         String id = req.params("id");
         Project proj = Persistence.projects.getById(id);
@@ -303,7 +301,7 @@ public class ProjectController {
         String syncType = req.params("type");
 
         if (!userProfile.canAdministerProject(proj.id, proj.organizationId)) {
-            halt(403);
+            haltWithMessage(403, "Third-party sync not permitted for user.");
         }
 
         LOG.info("syncing with third party " + syncType);
@@ -312,7 +310,7 @@ public class ProjectController {
             return proj;
         }
 
-        halt(404);
+        haltWithMessage(404, syncType + " sync type not enabled for application.");
         return null;
     }
 
