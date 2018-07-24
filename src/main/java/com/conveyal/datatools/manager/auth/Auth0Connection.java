@@ -1,5 +1,7 @@
 package com.conveyal.datatools.manager.auth;
 
+import com.auth0.jwt.JWTVerifier;
+import com.auth0.jwt.internal.org.apache.commons.codec.binary.Base64;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -11,14 +13,10 @@ import org.slf4j.LoggerFactory;
 import spark.Request;
 import spark.Response;
 
-import javax.net.ssl.HttpsURLConnection;
 import javax.servlet.http.HttpServletResponse;
-import java.io.BufferedReader;
-import java.io.DataOutputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.net.URL;
 import java.util.Arrays;
+import java.util.Map;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
@@ -35,119 +33,72 @@ public class Auth0Connection {
     private static final int DEFAULT_LINES_TO_PRINT = 10;
 
     /**
-     * Check API request for user token and assign as the "user" attribute on the incoming request object for use in
-     * downstream controllers.
+     * Check the incoming API request for the user token (and verify it) and assign as the "user" attribute on the
+     * incoming request object for use in downstream controllers.
      * @param req Spark request object
      */
     public static void checkUser(Request req) {
-        // If in a development environment, assign a mock profile to request attribute
         if (authDisabled()) {
+            // If in a development environment, assign a mock profile to request attribute and skip authentication.
             req.attribute("user", new Auth0UserProfile("mock@example.com", "user_id:string"));
             return;
         }
-        String token = getToken(req);
-
-        if(token == null) {
+        // Check that auth header is present and formatted correctly (Authorization: Bearer [token]).
+        final String authHeader = req.headers("Authorization");
+        if (authHeader == null) {
+            haltWithMessage(401, "Authorization header is missing.");
+        }
+        String[] parts = authHeader.split(" ");
+        if (parts.length != 2 || !"bearer".equals(parts[0].toLowerCase())) {
+            haltWithMessage(401, String.format("Authorization header is malformed: %s", authHeader));
+        }
+        // Retrieve token from auth header.
+        String token = parts[1];
+        if (token == null) {
             haltWithMessage(401, "Could not find authorization token");
         }
-        Auth0UserProfile profile;
+        // Validate the JWT and cast into the user profile, which will be attached as an attribute on the request object
+        // for downstream controllers to check permissions.
         try {
-            profile = getUserProfile(token);
+            byte[] decodedSecret = new Base64().decode(getConfigPropertyAsText("AUTH0_SECRET"));
+            JWTVerifier verifier = new JWTVerifier(decodedSecret);
+            Map<String, Object> jwt = verifier.verify(token);
+            Auth0UserProfile profile = MAPPER.convertValue(jwt, Auth0UserProfile.class);
             req.attribute("user", profile);
+        } catch (Exception e) {
+            LOG.warn("Login failed to verify with our authorization provider.", e);
+            haltWithMessage(401, "Could not verify user's token");
         }
-        catch(Exception e) {
-            LOG.warn("Could not verify user", e);
-            haltWithMessage(401, "Could not verify user");
-        }
-    }
-
-    private static String getToken(Request req) {
-        String token = null;
-
-        final String authorizationHeader = req.headers("Authorization");
-        if (authorizationHeader == null) return null;
-
-        // check format (Authorization: Bearer [token])
-        String[] parts = authorizationHeader.split(" ");
-        if (parts.length != 2) return null;
-
-        String scheme = parts[0];
-        String credentials = parts[1];
-
-        if (scheme.equals("Bearer")) token = credentials;
-        return token;
     }
 
     /**
-     * Gets the Auth0 user profile for the provided token.
-     */
-    private static Auth0UserProfile getUserProfile(String token) throws Exception {
-
-        URL url = new URL("https://" + getConfigPropertyAsText("AUTH0_DOMAIN") + "/tokeninfo");
-        HttpsURLConnection con = (HttpsURLConnection) url.openConnection();
-
-        //add request header
-        con.setRequestMethod("POST");
-
-        String urlParameters = "id_token=" + token;
-
-        // Send post request
-        con.setDoOutput(true);
-        DataOutputStream wr = new DataOutputStream(con.getOutputStream());
-        wr.writeBytes(urlParameters);
-        wr.flush();
-        wr.close();
-
-        BufferedReader in = new BufferedReader(new InputStreamReader(con.getInputStream()));
-        String inputLine;
-        StringBuffer response = new StringBuffer();
-
-        while ((inputLine = in.readLine()) != null) {
-            response.append(inputLine);
-        }
-        in.close();
-
-        ObjectMapper m = new ObjectMapper();
-        Auth0UserProfile profile = null;
-        String userString = response.toString();
-        try {
-            profile = m.readValue(userString, Auth0UserProfile.class);
-        }
-        catch(Exception e) {
-            Object json = m.readValue(userString, Object.class);
-            LOG.warn(m.writerWithDefaultPrettyPrinter().writeValueAsString(json));
-            LOG.warn("Could not verify user", e);
-            halt(401, SparkUtils.formatJSON("Could not verify user", 401));
-        }
-        return profile;
-    }
-
-    /**
-     * Check that the user has edit privileges for the feed ID specified.
-     * FIXME: Needs an update for SQL editor.
+     * Check that the user has edit privileges for the feed ID specified. NOTE: the feed ID provided in the request will
+     * represent a feed source, not a specific SQL namespace that corresponds to a feed version or specific set of GTFS
+     * tables in the database.
      */
     public static void checkEditPrivileges(Request request) {
-        // If in a development environment, assign a mock profile to request attribute
         if (authDisabled()) {
-            request.attribute("user", new Auth0UserProfile("mock@example.com", "user_id:string"));
+            // If in a development environment, skip privileges check.
             return;
         }
         Auth0UserProfile userProfile = request.attribute("user");
         String feedId = request.queryParams("feedId");
         if (feedId == null) {
+            // Some editor requests (e.g., update snapshot) specify the feedId as a parameters in the request (not a
+            // query parameter).
             String[] parts = request.pathInfo().split("/");
             feedId = parts[parts.length - 1];
         }
         FeedSource feedSource = feedId != null ? Persistence.feedSources.getById(feedId) : null;
         if (feedSource == null) {
             LOG.warn("feedId {} not found", feedId);
-            halt(400, SparkUtils.formatJSON("Must provide valid feedId parameter", 400));
+            haltWithMessage(400, "Must provide valid feedId parameter");
         }
 
         if (!request.requestMethod().equals("GET")) {
             if (!userProfile.canEditGTFS(feedSource.organizationId(), feedSource.projectId, feedSource.id)) {
                 LOG.warn("User {} cannot edit GTFS for {}", userProfile.email, feedId);
-                halt(403, SparkUtils.formatJSON("User does not have permission to edit GTFS for feedId", 403));
+                haltWithMessage(403, "User does not have permission to edit GTFS for feedId");
             }
         }
     }
