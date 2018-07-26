@@ -55,7 +55,7 @@ public class MtcFeedResource implements ExternalFeedResource {
         try {
             url = new URL(rtdApi + "/Carrier");
         } catch(MalformedURLException ex) {
-            LOG.error("Could not construct URL for RTD API: " + rtdApi);
+            LOG.error("Could not construct URL for RTD API: {}", rtdApi);
             return;
         }
 
@@ -73,7 +73,7 @@ public class MtcFeedResource implements ExternalFeedResource {
             con.setRequestProperty("Authorization", authHeader);
 
             int responseCode = con.getResponseCode();
-            LOG.info("\nSending 'GET' request to URL : " + url);
+            LOG.info("Sending 'GET' request to URL : " + url);
             LOG.info("Response Code : " + responseCode);
 
             BufferedReader in = new BufferedReader(
@@ -137,34 +137,24 @@ public class MtcFeedResource implements ExternalFeedResource {
                     }
                 }
             }
-//            Persistence.projects.updateField(project.id, "thirdPartySync", RESOURCE_TYPE);
         } catch(Exception ex) {
             LOG.error("Could not read feeds from MTC RTD API");
             ex.printStackTrace();
         }
     }
 
+    /**
+     * Do nothing for now. Creating a new agency for RTD requires adding the AgencyId property (when it was previously
+     * null. See {@link #propertyUpdated(ExternalFeedSourceProperty, String, String)}.
+     */
     @Override
     public void feedSourceCreated(FeedSource source, String authHeader) {
-        LOG.info("Processing new FeedSource " + source.name + " for RTD");
-
-        RtdCarrier carrier = new RtdCarrier();
-        carrier.AgencyName = source.name;
-
-        try {
-            for (Field carrierField : carrier.getClass().getDeclaredFields()) {
-                String fieldName = carrierField.getName();
-                String fieldValue = carrierField.get(carrier) != null ? carrierField.get(carrier).toString() : null;
-                // FIXME
-//                ExternalFeedSourceProperty.updateOrCreate(source, this.getResourceType(), fieldName, fieldValue);
-            }
-        } catch (Exception e) {
-            LOG.error("Error creating external properties for new FeedSource");
-        }
+        LOG.info("Processing new FeedSource {} for RTD. (No action taken.)", source.name);
     }
 
     /**
-     * Sync an updated property with the RTD database.
+     * Sync an updated property with the RTD database. Note: if the property is AgencyId and the value was previously
+     * null create/register a new carrier with RTD.
      */
     @Override
     public void propertyUpdated(ExternalFeedSourceProperty updatedProperty, String previousValue, String authHeader) {
@@ -183,29 +173,35 @@ public class MtcFeedResource implements ExternalFeedResource {
         }
     }
 
+    /**
+     * When feed version is created/published, write the feed to the shared S3 bucket.
+     */
     @Override
     public void feedVersionCreated(FeedVersion feedVersion, String authHeader) {
 
-        LOG.info("Pushing to MTC S3 Bucket " + s3Bucket);
+        if(s3Bucket == null) {
+            LOG.error("Cannot push {} to S3 bucket. No bucket name specified.", feedVersion.id);
+            return;
+        }
+        // Construct agency ID from feed source and retrieve from MongoDB.
+        ExternalFeedSourceProperty agencyIdProp = Persistence.externalFeedSourceProperties.getById(
+                constructId(feedVersion.parentFeedSource(), this.getResourceType(), AGENCY_ID)
+        );
 
-        if(s3Bucket == null) return;
-
-        String agencyPropId = constructId(feedVersion.parentFeedSource(), this.getResourceType(), AGENCY_ID);
-        ExternalFeedSourceProperty agencyIdProp = Persistence.externalFeedSourceProperties.getById(agencyPropId);
-
-        if(agencyIdProp == null || agencyIdProp.equals("null")) {
-            LOG.error(String.format("Could not read %s for FeedSource %s", AGENCY_ID, feedVersion.feedSourceId));
+        if(agencyIdProp == null || agencyIdProp.value.equals("null")) {
+            LOG.error("Could not read {} for FeedSource {}", AGENCY_ID, feedVersion.feedSourceId);
             return;
         }
 
-        String keyName = this.s3Prefix + agencyIdProp.value + ".zip";
+        String keyName = String.format("%s%s.zip", this.s3Prefix, agencyIdProp.value);
         LOG.info("Pushing to MTC S3 Bucket: " + keyName);
-
         File file = feedVersion.retrieveGtfsFile();
-
         FeedStore.s3Client.putObject(new PutObjectRequest(s3Bucket, keyName, file));
     }
 
+    /**
+     * Update or create a carrier and its properties with an HTTP request to the RTD.
+     */
     private void writeCarrierToRtd(RtdCarrier carrier, boolean createNew, String authHeader) {
 
         try {
@@ -214,7 +210,7 @@ public class MtcFeedResource implements ExternalFeedResource {
             String carrierJson = mapper.writeValueAsString(carrier);
 
             URL rtdUrl = new URL(rtdApi + "/Carrier/" + (createNew ? "" : carrier.AgencyId));
-            LOG.info("Writing to RTD URL: " + rtdUrl);
+            LOG.info("Writing to RTD URL: {}", rtdUrl);
             HttpURLConnection connection = (HttpURLConnection) rtdUrl.openConnection();
 
             connection.setRequestMethod(createNew ? "POST" : "PUT");
@@ -227,10 +223,9 @@ public class MtcFeedResource implements ExternalFeedResource {
             osw.write(carrierJson);
             osw.flush();
             osw.close();
-            LOG.info("RTD API response: " + connection.getResponseCode() + " / " + connection.getResponseMessage());
+            LOG.info("RTD API response: {}/{}", connection.getResponseCode(), connection.getResponseMessage());
         } catch (Exception e) {
-            LOG.error("error writing to RTD");
-            e.printStackTrace();
+            LOG.error("Error writing to RTD", e);
         }
     }
 }
