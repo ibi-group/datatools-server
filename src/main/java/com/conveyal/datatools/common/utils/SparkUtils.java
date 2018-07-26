@@ -91,11 +91,4 @@ public class SparkUtils {
         object.put("message", message);
         return object.toString();
     }
-
-    public static JsonNode formatJobResponse (String jobId, String message) {
-        ObjectNode jNode = mapper.createObjectNode();
-        jNode.put("jobId", jobId);
-        jNode.put("message", message);
-        return jNode;
-    }
 }

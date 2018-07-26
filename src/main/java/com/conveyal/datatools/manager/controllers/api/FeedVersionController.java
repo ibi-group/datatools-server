@@ -1,7 +1,5 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.amazonaws.auth.policy.Statement;
-import com.amazonaws.auth.policy.actions.S3Actions;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
@@ -31,17 +29,22 @@ import com.conveyal.r5.transit.TransportNetwork;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonGenerator;
 
-import java.io.*;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.Collection;
+import java.util.Date;
+import java.util.EnumSet;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.io.ByteStreams;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
@@ -58,7 +61,10 @@ import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.manager.controllers.api.FeedSourceController.checkFeedSourcePermissions;
-import static spark.Spark.*;
+import static spark.Spark.delete;
+import static spark.Spark.get;
+import static spark.Spark.post;
+import static spark.Spark.put;
 
 public class FeedVersionController  {
 
@@ -68,7 +74,6 @@ public class FeedVersionController  {
     }
 
     public static final Logger LOG = LoggerFactory.getLogger(FeedVersionController.class);
-    private static ObjectMapper mapper = new ObjectMapper();
     public static JsonManager<FeedVersion> json = new JsonManager<>(FeedVersion.class, JsonViews.UserInterface.class);
 
     /**
@@ -93,7 +98,7 @@ public class FeedVersionController  {
     public static FeedSource requestFeedSourceById(Request req, String action, String paramName) {
         String id = req.queryParams(paramName);
         if (id == null) {
-            halt(SparkUtils.formatJSON("Please specify feedSourceId param", 400));
+            haltWithMessage(400, "Please specify feedSourceId param");
         }
         return checkFeedSourcePermissions(req, Persistence.feedSources.getById(id), action);
     }
@@ -236,9 +241,9 @@ public class FeedVersionController  {
      * constructed in {@link #buildProfileRequest}). If a transport network does not exist for the feed version, an async
      * build job is kicked off. Otherwise, the transport network cache is checked for the network.
      */
-    public static JsonNode getIsochrones(Request req, Response res) {
+    public static String getIsochrones(Request req, Response res) {
         if (!DataManager.isModuleEnabled("r5_network")) {
-            halt(400, SparkUtils.formatJSON("Isochrone generation not enabled in this application."));
+            haltWithMessage(400, "Isochrone generation not enabled in this application.");
         }
         Auth0UserProfile userProfile = req.attribute("user");
         FeedVersion version = requestFeedVersion(req, "view");
@@ -252,7 +257,7 @@ public class FeedVersionController  {
             DataManager.heavyExecutor.execute(buildTransportNetworkJob);
             // Set status to Accepted to indicate that the processing is not complete yet.
             res.status(HttpStatus.ACCEPTED_202);
-            return SparkUtils.formatJobResponse(buildTransportNetworkJob.jobId, "Building transport network");
+            return SparkUtils.formatJobMessage(buildTransportNetworkJob.jobId, "Building transport network");
         }
         try {
             // Get transport network from cache.
@@ -287,7 +292,7 @@ public class FeedVersionController  {
     /**
      * Routes a profile request on the provided transport network and returns the resulting isochrones.
      */
-    private static JsonNode getRouterResult(TransportNetwork transportNetwork, AnalystClusterRequest clusterRequest) {
+    private static String getRouterResult(TransportNetwork transportNetwork, AnalystClusterRequest clusterRequest) {
         PointSet targets;
         if (transportNetwork.gridPointSet == null) {
             transportNetwork.rebuildLinkedGridPointSet();
@@ -307,7 +312,7 @@ public class FeedVersionController  {
             jsonGenerator.close();
             out.close();
             String outString = new String( out.toByteArray(), StandardCharsets.UTF_8 );
-            return mapper.readTree(outString);
+            return outString;
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -357,7 +362,7 @@ public class FeedVersionController  {
 
         String name = req.queryParams("name");
         if (name == null) {
-            halt(400, "Name parameter not specified");
+            haltWithMessage(400, "Name parameter not specified");
         }
 
         Persistence.feedVersions.updateField(v.id, "name", name);
@@ -406,8 +411,13 @@ public class FeedVersionController  {
         for(String resourceType : DataManager.feedResources.keySet()) {
             DataManager.feedResources.get(resourceType).feedVersionCreated(version, null);
         }
-        // update published version ID on feed source
-        Persistence.feedSources.updateField(version.feedSourceId, "publishedVersionId", version.namespace);
+        // NOTE: If the MTC extension is enabled, the parent feed source's publishedVersionId will not be updated to the
+        // version's namespace until the FeedUpdater has successfully downloaded the feed from the share S3 bucket.
+        if (!DataManager.isExtensionEnabled("mtc")) {
+            // update published version ID on feed source
+            Persistence.feedSources.updateField(version.feedSourceId, "publishedVersionId", version.namespace);
+        }
+
         return version;
     }
 
@@ -420,7 +430,7 @@ public class FeedVersionController  {
         FeedDownloadToken token = Persistence.tokens.getById(tokenValue);
 
         if(token == null || !token.isValid()) {
-            halt(400, "Feed download token not valid");
+            haltWithMessage(400, "Feed download token not valid");
         }
 
         // Fetch feed version to download.

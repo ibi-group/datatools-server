@@ -11,7 +11,6 @@ import com.conveyal.datatools.manager.controllers.DumpController;
 import com.conveyal.datatools.manager.controllers.api.DeploymentController;
 import com.conveyal.datatools.manager.controllers.api.FeedSourceController;
 import com.conveyal.datatools.manager.controllers.api.FeedVersionController;
-import com.conveyal.datatools.manager.controllers.api.GtfsApiController;
 import com.conveyal.datatools.manager.controllers.api.GtfsPlusController;
 import com.conveyal.datatools.manager.controllers.api.NoteController;
 import com.conveyal.datatools.manager.controllers.api.OrganizationController;
@@ -23,6 +22,7 @@ import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
 import com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource;
 import com.conveyal.datatools.manager.extensions.transitfeeds.TransitFeedsFeedResource;
 import com.conveyal.datatools.manager.extensions.transitland.TransitLandFeedResource;
+import com.conveyal.datatools.manager.jobs.FeedUpdater;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -210,7 +210,15 @@ public class DataManager {
             DeploymentController.register(API_PREFIX);
         }
         if (isModuleEnabled("gtfsapi")) {
-            GtfsApiController.register(GTFS_API_PREFIX);
+            // Check that update interval (in seconds) and use_extension are specified and initialize feedUpdater.
+            if (hasConfigProperty("modules.gtfsapi.update_frequency") && hasConfigProperty("modules.gtfsapi.use_extension")) {
+                String extensionType = getConfigPropertyAsText("modules.gtfsapi.use_extension");
+                String extensionFeedBucket = getExtensionPropertyAsText(extensionType, "s3_bucket");
+                String extensionBucketFolder = getExtensionPropertyAsText(extensionType, "s3_download_prefix");
+                int updateFrequency = getConfigProperty("modules.gtfsapi.update_frequency").asInt();
+                if (feedBucket != null && extensionBucketFolder != null) FeedUpdater.schedule(updateFrequency, extensionFeedBucket, extensionBucketFolder);
+                else LOG.warn("FeedUpdater not initialized. S3 bucket and folder not provided.");
+            }
         }
         if (isModuleEnabled("gtfsplus")) {
             GtfsPlusController.register(API_PREFIX);
@@ -353,6 +361,9 @@ public class DataManager {
             return null;
         }
     }
+    public static String getExtensionPropertyAsText (String extensionType, String name) {
+        return getConfigPropertyAsText(String.join(".", "extensions", extensionType.toLowerCase(), name));
+    }
 
     /**
      * Checks if an application module (e.g., editor, GTFS+) has been enabled. The UI must also have the module
@@ -367,7 +378,7 @@ public class DataManager {
      * the application can sync with. The UI config must also have the extension enabled in order to use.
      */
     public static boolean isExtensionEnabled(String extensionName) {
-        return hasConfigProperty("extensions." + extensionName) && "true".equals(getConfigPropertyAsText("extensions." + extensionName + ".enabled"));
+        return hasConfigProperty("extensions." + extensionName) && "true".equals(getExtensionPropertyAsText(extensionName, "enabled"));
     }
 
     /**

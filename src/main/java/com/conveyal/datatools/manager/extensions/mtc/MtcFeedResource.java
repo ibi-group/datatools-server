@@ -36,9 +36,9 @@ public class MtcFeedResource implements ExternalFeedResource {
     public static final String AGENCY_ID = "AgencyId";
     public static final String RESOURCE_TYPE = "MTC";
     public MtcFeedResource() {
-        rtdApi = DataManager.getConfigPropertyAsText("extensions.mtc.rtd_api");
-        s3Bucket = DataManager.getConfigPropertyAsText("extensions.mtc.s3_bucket");
-        s3Prefix = DataManager.getConfigPropertyAsText("extensions.mtc.s3_prefix");
+        rtdApi = DataManager.getExtensionPropertyAsText(RESOURCE_TYPE, "rtd_api");
+        s3Bucket = DataManager.getExtensionPropertyAsText(RESOURCE_TYPE, "s3_bucket");
+        s3Prefix = DataManager.getExtensionPropertyAsText(RESOURCE_TYPE, "s3_prefix");
         //s3CredentialsFilename = DataManager.config.retrieveById("extensions").retrieveById("mtc").retrieveById("s3_credentials_file").asText();
     }
 
