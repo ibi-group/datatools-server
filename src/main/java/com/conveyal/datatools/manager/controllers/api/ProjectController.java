@@ -1,7 +1,5 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.amazonaws.auth.policy.Statement;
-import com.amazonaws.auth.policy.actions.S3Actions;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
@@ -9,6 +7,7 @@ import com.conveyal.datatools.manager.jobs.FetchProjectFeedsJob;
 import com.conveyal.datatools.manager.jobs.MakePublicJob;
 import com.conveyal.datatools.manager.jobs.MergeProjectFeedsJob;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
+import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Project;
@@ -118,10 +117,10 @@ public class ProjectController {
                     || updateDocument.containsKey("autoFetchFeeds")
                     || updateDocument.containsKey("defaultTimeZone")) {
                 // If auto fetch flag is turned on
-                if (updatedProject.autoFetchFeeds){
+                if (updatedProject.autoFetchFeeds) {
                     ScheduledFuture fetchAction = scheduleAutoFeedFetch(updatedProject, 1);
                     DataManager.autoFetchMap.put(updatedProject.id, fetchAction);
-                } else{
+                } else {
                     // otherwise, cancel any existing task for this id
                     cancelAutoFetch(updatedProject.id);
                 }
@@ -129,7 +128,7 @@ public class ProjectController {
             return updatedProject;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400, SparkUtils.formatJSON("Error updating project"));
+            haltWithMessage(400, "Error updating project");
             return null;
         }
     }
@@ -137,12 +136,12 @@ public class ProjectController {
     /**
      * Delete the project for the UUID given in the request.
      */
-    private static Project deleteProject(Request req, Response res) throws IOException {
+    private static Project deleteProject(Request req, Response res) {
         // Fetch project first to check permissions, and so we can return the deleted project after deletion.
         Project project = requestProjectById(req, "manage");
-        boolean successfullyDeleted = Persistence.projects.removeById(req.params("id"));
+        boolean successfullyDeleted = project.delete();
         if (!successfullyDeleted) {
-            halt(400, SparkUtils.formatJSON("Did not delete project."));
+            haltWithMessage(400, "Did not delete project.");
         }
         return project;
     }
@@ -295,7 +294,7 @@ public class ProjectController {
      * index of GTFS data. This action is triggered manually by a UI button and for now never happens automatically.
      * An ExternalFeedResource of the specified type must be present in DataManager.feedResources
      */
-    private static Project thirdPartySync(Request req, Response res) throws Exception {
+    private static Project thirdPartySync(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         String id = req.params("id");
         Project proj = Persistence.projects.getById(id);
@@ -303,7 +302,7 @@ public class ProjectController {
         String syncType = req.params("type");
 
         if (!userProfile.canAdministerProject(proj.id, proj.organizationId)) {
-            halt(403);
+            haltWithMessage(403, "Third-party sync not permitted for user.");
         }
 
         LOG.info("syncing with third party " + syncType);
@@ -312,7 +311,7 @@ public class ProjectController {
             return proj;
         }
 
-        halt(404);
+        haltWithMessage(404, syncType + " sync type not enabled for application.");
         return null;
     }
 

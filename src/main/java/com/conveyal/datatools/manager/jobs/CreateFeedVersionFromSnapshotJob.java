@@ -29,14 +29,14 @@ public class CreateFeedVersionFromSnapshotJob extends MonitorableJob {
     public void jobLogic() {
         // Set feed version properties.
         feedVersion.retrievalMethod = FeedSource.FeedRetrievalMethod.PRODUCED_IN_HOUSE;
-        feedVersion.setName(snapshot.name + " Snapshot Export");
-
+        feedVersion.name = snapshot.name + " Snapshot Export";
         // FIXME: This should probably just create a new snapshot, and then validate those tables.
         // First export the snapshot to GTFS.
         ExportSnapshotToGTFSJob exportSnapshotToGTFSJob = new ExportSnapshotToGTFSJob(owner, snapshot, feedVersion.id);
         // Process feed version once GTFS file written.
         ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(feedVersion, owner, true);
         addNextJob(exportSnapshotToGTFSJob, processSingleFeedJob);
+        status.update("Beginning export...", 10);
     }
 
     @JsonProperty

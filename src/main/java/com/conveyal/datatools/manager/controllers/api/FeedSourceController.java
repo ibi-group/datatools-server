@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.controllers.api;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
 import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
@@ -45,7 +46,7 @@ public class FeedSourceController {
     }
 
     public static Collection<FeedSource> getAllFeedSources(Request req, Response res) {
-        Collection<FeedSource> sources = new ArrayList<>();
+        Collection<FeedSource> feedSourcesToReturn = new ArrayList<>();
         Auth0UserProfile requestingUser = req.attribute("user");
         String projectId = req.queryParams("projectId");
         Boolean publicFilter = req.pathInfo().contains("public");
@@ -61,14 +62,13 @@ public class FeedSourceController {
                     // if requesting public sources and source is not public; skip source
                     if (publicFilter && !source.isPublic)
                         continue;
-                    sources.add(source);
+                    feedSourcesToReturn.add(source);
                 }
             }
-        }
-        // request feed sources a specified user has permissions for
-        else if (userId != null) {
+        } else if (userId != null) {
+            // request feed sources a specified user has permissions for
             Auth0UserProfile user = getUserById(userId);
-            if (user == null) return sources;
+            if (user == null) return feedSourcesToReturn;
 
             for (FeedSource source: Persistence.feedSources.getAll()) {
                 String orgId = source.organizationId();
@@ -77,12 +77,11 @@ public class FeedSourceController {
                     (user.canManageFeed(orgId, source.projectId, source.id) || user.canViewFeed(orgId, source.projectId, source.id))
                 ) {
 
-                    sources.add(source);
+                    feedSourcesToReturn.add(source);
                 }
             }
-        }
-        // request feed sources that are public
-        else {
+        } else {
+            // request feed sources that are public
             for (FeedSource source: Persistence.feedSources.getAll()) {
                 String orgId = source.organizationId();
                 // if user is logged in and cannot view feed; skip source
@@ -92,11 +91,11 @@ public class FeedSourceController {
                 // if requesting public sources and source is not public; skip source
                 if (publicFilter && !source.isPublic)
                     continue;
-                sources.add(source);
+                feedSourcesToReturn.add(source);
             }
         }
 
-        return sources;
+        return feedSourcesToReturn;
     }
 
     /**
@@ -165,57 +164,66 @@ public class FeedSourceController {
     }
 
     /**
-     * FIXME: We should reconsider how we store external feed source properties now that we are using Mongo document
-     * storage
+     * Update a set of properties for an external feed resource. This updates the local copy of the properties in the
+     * Mongo database and then triggers the {@link ExternalFeedResource#propertyUpdated} method to update the external
+     * resource.
+     *
+     * FIXME: Should we reconsider how we store external feed source properties now that we are using Mongo document
+     * storage? This might should be refactored in the future, but it isn't really hurting anything at the moment.
      */
     public static FeedSource updateExternalFeedResource(Request req, Response res) throws IOException {
         FeedSource source = requestFeedSourceById(req, "manage");
         String resourceType = req.queryParams("resourceType");
         JsonNode node = mapper.readTree(req.body());
-        Iterator<Map.Entry<String, JsonNode>> fieldsIter = node.fields();
-
-        while (fieldsIter.hasNext()) {
-            Map.Entry<String, JsonNode> entry = fieldsIter.next();
-            ExternalFeedSourceProperty prop =
-                    Persistence.externalFeedSourceProperties.getById(constructId(source, resourceType, entry.getKey()));
-
-            if (prop != null) {
-                // update the property in our DB
-                String previousValue = prop.value;
-                prop.value = entry.getValue().asText();
-                // FIXME: add back storage of external feed source properties.
-//                prop.save();
-
-                // trigger an event on the external resource
-                if(DataManager.feedResources.containsKey(resourceType)) {
-                    DataManager.feedResources.get(resourceType).propertyUpdated(prop, previousValue, req.headers("Authorization"));
-                }
-
-            }
-
+        Iterator<Map.Entry<String, JsonNode>> fieldsIterator = node.fields();
+        ExternalFeedResource externalFeedResource = DataManager.feedResources.get(resourceType);
+        if (externalFeedResource == null) {
+            haltWithMessage(400, String.format("Resource '%s' not registered with server.", resourceType));
         }
+        // Iterate over fields found in body and update external properties accordingly.
+        while (fieldsIterator.hasNext()) {
+            Map.Entry<String, JsonNode> entry = fieldsIterator.next();
+            String propertyId = constructId(source, resourceType, entry.getKey());
+            ExternalFeedSourceProperty prop = Persistence.externalFeedSourceProperties.getById(propertyId);
 
+            if (prop == null) {
+                haltWithMessage(400, String.format("Property '%s' does not exist!", propertyId));
+            }
+            // Hold previous value for use when updating third-party resource
+            String previousValue = prop.value;
+            // Update the property in our database.
+            ExternalFeedSourceProperty updatedProp = Persistence.externalFeedSourceProperties.updateField(
+                    propertyId, "value", entry.getValue().asText());
+
+            // Trigger an event on the external resource
+            externalFeedResource.propertyUpdated(updatedProp, previousValue, req.headers("Authorization"));
+        }
+        // Updated external properties will be included in JSON (FeedSource#externalProperties)
         return source;
     }
 
-    public static FeedSource deleteFeedSource(Request req, Response res) {
+    /**
+     * HTTP endpoint to delete a feed source.
+     *
+     * FIXME: Should this just set a "deleted" flag instead of removing from the database entirely?
+     */
+    private static FeedSource deleteFeedSource(Request req, Response res) {
         FeedSource source = requestFeedSourceById(req, "manage");
 
         try {
-            Persistence.feedSources.removeById(source.id);
+            source.delete();
             return source;
         } catch (Exception e) {
-            e.printStackTrace();
-            halt(400, "Unknown error deleting feed source.");
+            LOG.error("Could not delete feed source", e);
+            haltWithMessage(400, "Unknown error deleting feed source.");
             return null;
         }
     }
 
     /**
-     * Refetch this feed
-     * @throws JsonProcessingException
+     * Re-fetch this feed from the feed source URL.
      */
-    public static String fetch (Request req, Response res) throws JsonProcessingException {
+    public static String fetch (Request req, Response res) {
         FeedSource s = requestFeedSourceById(req, "manage");
 
         LOG.info("Fetching feed for source {}", s.name);
@@ -228,7 +236,7 @@ public class FeedSourceController {
         // WARNING: infinite 2D bounds Jackson error when returning job.result, so this method now returns true
         // because we don't need to return the feed immediately anyways.
         // return job.result;
-        return SparkUtils.formatJSON("ok", 200);
+        return SparkUtils.formatJobMessage(job.jobId, "Fetching feed...");
     }
 
     /**

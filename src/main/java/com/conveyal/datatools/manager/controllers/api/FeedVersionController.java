@@ -1,7 +1,5 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.amazonaws.auth.policy.Statement;
-import com.amazonaws.auth.policy.actions.S3Actions;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
@@ -31,17 +29,22 @@ import com.conveyal.r5.transit.TransportNetwork;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonGenerator;
 
-import java.io.*;
+import java.io.ByteArrayOutputStream;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.time.format.DateTimeFormatter;
-import java.util.*;
+import java.util.Collection;
+import java.util.Date;
+import java.util.EnumSet;
+import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.io.ByteStreams;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
@@ -51,6 +54,7 @@ import spark.Response;
 
 import javax.servlet.ServletInputStream;
 import javax.servlet.ServletRequestWrapper;
+import javax.servlet.http.HttpServletResponse;
 
 import static com.conveyal.datatools.common.status.MonitorableJob.JobType.BUILD_TRANSPORT_NETWORK;
 import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
@@ -58,7 +62,10 @@ import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.manager.controllers.api.FeedSourceController.checkFeedSourcePermissions;
-import static spark.Spark.*;
+import static spark.Spark.delete;
+import static spark.Spark.get;
+import static spark.Spark.post;
+import static spark.Spark.put;
 
 public class FeedVersionController  {
 
@@ -68,37 +75,34 @@ public class FeedVersionController  {
     }
 
     public static final Logger LOG = LoggerFactory.getLogger(FeedVersionController.class);
-    private static ObjectMapper mapper = new ObjectMapper();
     public static JsonManager<FeedVersion> json = new JsonManager<>(FeedVersion.class, JsonViews.UserInterface.class);
 
     /**
      * Grab the feed version for the ID supplied in the request.
      * If you pass in ?summarized=true, don't include the full tree of validation results, only the counts.
      */
-    public static FeedVersion getFeedVersion (Request req, Response res) {
-        FeedVersion feedVersion = requestFeedVersion(req, "view");
-        return feedVersion;
+    private static FeedVersion getFeedVersion (Request req, Response res) {
+        return requestFeedVersion(req, "view");
     }
 
     /**
      * Get all feed versions for a given feedSource (whose ID is specified in the request).
      */
-    public static Collection<FeedVersion> getAllFeedVersionsForFeedSource(Request req, Response res) {
+    private static Collection<FeedVersion> getAllFeedVersionsForFeedSource(Request req, Response res) {
         // Check permissions and get the FeedSource whose FeedVersions we want.
         FeedSource feedSource = requestFeedSourceById(req, "view");
-        Collection<FeedVersion> feedVersions = feedSource.retrieveFeedVersions();
-        return feedVersions;
+        return feedSource.retrieveFeedVersions();
     }
 
     public static FeedSource requestFeedSourceById(Request req, String action, String paramName) {
         String id = req.queryParams(paramName);
         if (id == null) {
-            halt(SparkUtils.formatJSON("Please specify feedSourceId param", 400));
+            haltWithMessage(400, "Please specify feedSourceId param");
         }
         return checkFeedSourcePermissions(req, Persistence.feedSources.getById(id), action);
     }
 
-    public static FeedSource requestFeedSourceById(Request req, String action) {
+    private static FeedSource requestFeedSourceById(Request req, String action) {
         return requestFeedSourceById(req, action, "feedSourceId");
     }
 
@@ -140,8 +144,13 @@ public class FeedVersionController  {
             }
             // Set last modified based on value of query param. This is determined/supplied by the client
             // request because this data gets lost in the uploadStream otherwise.
-            Long lastModified = req.queryParams("lastModified") != null ? Long.valueOf(req.queryParams("lastModified")) : null;
-            if (lastModified != null) newGtfsFile.setLastModified(lastModified);
+            Long lastModified = req.queryParams("lastModified") != null
+                    ? Long.valueOf(req.queryParams("lastModified"))
+                    : null;
+            if (lastModified != null) {
+                newGtfsFile.setLastModified(lastModified);
+                newFeedVersion.fileTimestamp = lastModified;
+            }
             LOG.info("Last modified: {}", new Date(newGtfsFile.lastModified()));
             LOG.info("Saving feed from upload {}", feedSource);
         } catch (Exception e) {
@@ -151,6 +160,7 @@ public class FeedVersionController  {
 
         // TODO: fix FeedVersion.hash() call when called in this context. Nothing gets hashed because the file has not been saved yet.
         // newFeedVersion.hash();
+        newFeedVersion.fileSize = newGtfsFile.length();
         newFeedVersion.hash = HashUtils.hashFile(newGtfsFile);
 
         // Check that the hashes of the feeds don't match, i.e. that the feed has changed since the last version.
@@ -165,7 +175,7 @@ public class FeedVersionController  {
             haltWithMessage(304, "Uploaded feed is identical to the latest version known to the database.");
         }
 
-        newFeedVersion.setName(newFeedVersion.formattedTimestamp() + " Upload");
+        newFeedVersion.name = newFeedVersion.formattedTimestamp() + " Upload";
         // TODO newFeedVersion.fileTimestamp still exists
 
         // Must be handled by executor because it takes a long time.
@@ -185,7 +195,7 @@ public class FeedVersionController  {
      *
      *  OR we could just export the feed to a file and then re-import it per usual. This seems like it's wasting time/energy.
      */
-    public static boolean createFeedVersionFromSnapshot (Request req, Response res) {
+    private static boolean createFeedVersionFromSnapshot (Request req, Response res) {
 
         Auth0UserProfile userProfile = req.attribute("user");
         // TODO: Should the ability to create a feedVersion from snapshot be controlled by the 'edit-gtfs' privilege?
@@ -205,13 +215,13 @@ public class FeedVersionController  {
     /**
      * Spark HTTP API handler that deletes a single feed version based on the ID in the request.
      */
-    public static FeedVersion deleteFeedVersion(Request req, Response res) {
+    private static FeedVersion deleteFeedVersion(Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "manage");
         version.delete();
         return version;
     }
 
-    public static FeedVersion requestFeedVersion(Request req, String action) {
+    private static FeedVersion requestFeedVersion(Request req, String action) {
         return requestFeedVersion(req, action, req.params("id"));
     }
 
@@ -230,9 +240,9 @@ public class FeedVersionController  {
      * constructed in {@link #buildProfileRequest}). If a transport network does not exist for the feed version, an async
      * build job is kicked off. Otherwise, the transport network cache is checked for the network.
      */
-    public static JsonNode getIsochrones(Request req, Response res) {
+    private static String getIsochrones(Request req, Response res) {
         if (!DataManager.isModuleEnabled("r5_network")) {
-            halt(400, SparkUtils.formatJSON("Isochrone generation not enabled in this application."));
+            haltWithMessage(400, "Isochrone generation not enabled in this application.");
         }
         Auth0UserProfile userProfile = req.attribute("user");
         FeedVersion version = requestFeedVersion(req, "view");
@@ -246,7 +256,7 @@ public class FeedVersionController  {
             DataManager.heavyExecutor.execute(buildTransportNetworkJob);
             // Set status to Accepted to indicate that the processing is not complete yet.
             res.status(HttpStatus.ACCEPTED_202);
-            return SparkUtils.formatJobResponse(buildTransportNetworkJob.jobId, "Building transport network");
+            return SparkUtils.formatJobMessage(buildTransportNetworkJob.jobId, "Building transport network");
         }
         try {
             // Get transport network from cache.
@@ -256,7 +266,7 @@ public class FeedVersionController  {
             return getRouterResult(transportNetwork, clusterRequest);
         } catch (ExecutionException e) {
             e.printStackTrace();
-            haltWithMessage(400, SparkUtils.formatJSON("Error accessing transport network."), e);
+            haltWithMessage(400, "Error accessing transport network.", e);
         }
         return null;
     }
@@ -281,7 +291,7 @@ public class FeedVersionController  {
     /**
      * Routes a profile request on the provided transport network and returns the resulting isochrones.
      */
-    private static JsonNode getRouterResult(TransportNetwork transportNetwork, AnalystClusterRequest clusterRequest) {
+    private static String getRouterResult(TransportNetwork transportNetwork, AnalystClusterRequest clusterRequest) {
         PointSet targets;
         if (transportNetwork.gridPointSet == null) {
             transportNetwork.rebuildLinkedGridPointSet();
@@ -301,7 +311,7 @@ public class FeedVersionController  {
             jsonGenerator.close();
             out.close();
             String outString = new String( out.toByteArray(), StandardCharsets.UTF_8 );
-            return mapper.readTree(outString);
+            return outString;
         } catch (IOException e) {
             e.printStackTrace();
         }
@@ -346,12 +356,12 @@ public class FeedVersionController  {
         return clusterRequest;
     }
 
-    public static Boolean renameFeedVersion (Request req, Response res) {
+    private static boolean renameFeedVersion (Request req, Response res) {
         FeedVersion v = requestFeedVersion(req, "manage");
 
         String name = req.queryParams("name");
         if (name == null) {
-            halt(400, "Name parameter not specified");
+            haltWithMessage(400, "Name parameter not specified");
         }
 
         Persistence.feedVersions.updateField(v.id, "name", name);
@@ -367,7 +377,7 @@ public class FeedVersionController  {
      * Returns credentials that a client may use to then download a feed version. Functionality
      * changes depending on whether application.data.use_s3_storage config property is true.
      */
-    public static Object getFeedDownloadCredentials(Request req, Response res) {
+    private static Object getFeedDownloadCredentials(Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "view");
 
         if (DataManager.useS3) {
@@ -387,7 +397,7 @@ public class FeedVersionController  {
      */
     private static JsonNode validate (Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "manage");
-
+        haltWithMessage(400, "Validate endpoint not currently configured!");
         // FIXME: Update for sql-loader validation process?
         return null;
 //        return version.retrieveValidationResult(true);
@@ -400,28 +410,35 @@ public class FeedVersionController  {
         for(String resourceType : DataManager.feedResources.keySet()) {
             DataManager.feedResources.get(resourceType).feedVersionCreated(version, null);
         }
-        // update published version ID on feed source
-        Persistence.feedSources.update(version.feedSourceId, String.format("{publishedVersionId: %s}", version.id));
-        return version;
+        if (!DataManager.isExtensionEnabled("mtc")) {
+            // update published version ID on feed source
+            Persistence.feedSources.updateField(version.feedSourceId, "publishedVersionId", version.namespace);
+            return version;
+        } else {
+            // NOTE: If the MTC extension is enabled, the parent feed source's publishedVersionId will not be updated to the
+            // version's namespace until the FeedUpdater has successfully downloaded the feed from the share S3 bucket.
+            return Persistence.feedVersions.updateField(version.id, "processing", true);
+        }
     }
 
     /**
      * Download locally stored feed version with token supplied by this application. This method is only used when
      * useS3 is set to false. Otherwise, a direct download from s3 should be used.
      */
-    private static Object downloadFeedVersionWithToken (Request req, Response res) {
+    private static HttpServletResponse downloadFeedVersionWithToken (Request req, Response res) {
         String tokenValue = req.params("token");
         FeedDownloadToken token = Persistence.tokens.getById(tokenValue);
 
         if(token == null || !token.isValid()) {
-            halt(400, "Feed download token not valid");
+            LOG.error("Feed download token is invalid: {}", token);
+            haltWithMessage(400, "Feed download token not valid");
         }
-
         // Fetch feed version to download.
         FeedVersion version = token.retrieveFeedVersion();
         if (version == null) {
             haltWithMessage(400, "Could not retrieve version to download");
         }
+        LOG.info("Using token {} to download feed version {}", token.id, version.id);
         // Remove token so that it cannot be used again for feed download
         Persistence.tokens.removeById(tokenValue);
         File file = version.retrieveGtfsFile();
@@ -429,10 +446,14 @@ public class FeedVersionController  {
     }
 
     public static void register (String apiPrefix) {
+        // TODO: Might it be easier down the road to create a separate JSON view to request a "detailed" feed version
+        // which would contain the full validationResult, so that a request for all versions does not become too large?
+        // This might not be an issue because validation issues are queried separately.
+        // TODO: We might need an endpoint to download a csv of all validation issues. This was supported in the
+        // previous version of data tools.
         get(apiPrefix + "secure/feedversion/:id", FeedVersionController::getFeedVersion, json::write);
         get(apiPrefix + "secure/feedversion/:id/download", FeedVersionController::downloadFeedVersionDirectly);
         get(apiPrefix + "secure/feedversion/:id/downloadtoken", FeedVersionController::getFeedDownloadCredentials, json::write);
-//        get(apiPrefix + "secure/feedversion/:id/validation", FeedVersionController::getValidationResult, json::write);
         post(apiPrefix + "secure/feedversion/:id/validate", FeedVersionController::validate, json::write);
         get(apiPrefix + "secure/feedversion/:id/isochrones", FeedVersionController::getIsochrones, json::write);
         get(apiPrefix + "secure/feedversion", FeedVersionController::getAllFeedVersionsForFeedSource, json::write);
@@ -443,7 +464,6 @@ public class FeedVersionController  {
         delete(apiPrefix + "secure/feedversion/:id", FeedVersionController::deleteFeedVersion, json::write);
 
         get(apiPrefix + "public/feedversion", FeedVersionController::getAllFeedVersionsForFeedSource, json::write);
-//        get(apiPrefix + "public/feedversion/:id/validation", FeedVersionController::getPublicValidationResult, json::write);
         get(apiPrefix + "public/feedversion/:id/downloadtoken", FeedVersionController::getFeedDownloadCredentials, json::write);
 
         get(apiPrefix + "downloadfeed/:token", FeedVersionController::downloadFeedVersionWithToken);

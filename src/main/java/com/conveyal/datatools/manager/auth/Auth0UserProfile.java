@@ -259,8 +259,9 @@ public class Auth0UserProfile {
     }
 
     public boolean canAdministerOrganization() {
-        if(app_metadata.getDatatoolsInfo() != null && app_metadata.getDatatoolsInfo().organizations != null) {
-            Organization org = app_metadata.getDatatoolsInfo().organizations[0];
+        if (canAdministerApplication()) return true;
+        Organization org = getAuth0Organization();
+        if(app_metadata.getDatatoolsInfo() != null && org != null) {
             for(Permission permission : org.permissions) {
                 if(permission.type.equals("administer-organization")) {
                     return true;

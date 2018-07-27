@@ -375,16 +375,6 @@ public class FeedSource extends Model implements Cloneable {
         return resourceTable;
     }
 
-    public static FeedSource retrieve(String id) {
-//        return sourceStore.getById(id);
-        return null;
-    }
-
-    public static Collection<FeedSource> retrieveAll() {
-//        return sourceStore.getAll();
-        return null;
-    }
-
     /**
      * Get all of the feed versions for this source
      * @return collection of feed versions
@@ -517,35 +507,33 @@ public class FeedSource extends Model implements Cloneable {
 
     /**
      * Delete this feed source and everything that it contains.
+     *
+     * FIXME: Use a Mongo transaction to handle the deletion of these related objects.
      */
-    public void delete() {
-        retrieveFeedVersions().forEach(FeedVersion::delete);
+    public boolean delete() {
+        try {
+            retrieveFeedVersions().forEach(FeedVersion::delete);
 
-        // delete latest copy of feed source
-        if (DataManager.useS3) {
-            DeleteObjectsRequest delete = new DeleteObjectsRequest(DataManager.feedBucket);
-            delete.withKeys("public/" + this.name + ".zip", FeedStore.s3Prefix + this.id + ".zip");
-            FeedStore.s3Client.deleteObjects(delete);
+            // Delete latest copy of feed source on S3.
+            if (DataManager.useS3) {
+                DeleteObjectsRequest delete = new DeleteObjectsRequest(DataManager.feedBucket);
+                delete.withKeys("public/" + this.name + ".zip", FeedStore.s3Prefix + this.id + ".zip");
+                FeedStore.s3Client.deleteObjects(delete);
+            }
+            // Remove all external properties for this feed source.
+            Persistence.externalFeedSourceProperties.removeFiltered(eq("feedSourceId", this.id));
+
+            // TODO: add delete for osm extract and r5 network (maybe that goes with version)
+
+            // FIXME: Should this delete related feed versions from the SQL database (for both published versions and
+            // editor snapshots)?
+
+            // Finally, delete the feed source mongo document.
+            return Persistence.feedSources.removeById(this.id);
+        } catch (Exception e) {
+            LOG.error("Could not delete feed source", e);
+            return false;
         }
-
-        // Delete editor feed mapdb
-        // TODO: does the mapdb folder need to be deleted separately?
-        GlobalTx gtx = VersionedDataStore.getGlobalTx();
-        if (!gtx.feeds.containsKey(id)) {
-            gtx.rollback();
-        }
-        else {
-            gtx.feeds.remove(id);
-            gtx.commit();
-        }
-
-        // FIXME use Mongo filters instead
-        Persistence.externalFeedSourceProperties.getAll().stream()
-                .filter(prop -> prop.feedSourceId.equals(this.id))
-                .forEach(prop -> Persistence.externalFeedSourceProperties.removeById(prop.id));
-
-        // TODO: add delete for osm extract and r5 network (maybe that goes with version)
-        Persistence.feedSources.removeById(this.id);
     }
 
     public FeedSource clone () throws CloneNotSupportedException {

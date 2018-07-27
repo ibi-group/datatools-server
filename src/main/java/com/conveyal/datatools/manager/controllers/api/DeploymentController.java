@@ -68,7 +68,7 @@ public class DeploymentController {
 
     private static Deployment deleteDeployment (Request req, Response res) {
         Deployment deployment = checkDeploymentPermissions(req, res);
-        Persistence.deployments.removeById(deployment.id);
+        deployment.delete();
         return deployment;
     }
 
@@ -206,7 +206,7 @@ public class DeploymentController {
             ArrayList<FeedVersion> versionsToInsert = new ArrayList<>(versions.size());
             for (Document version : versions) {
                 if (!version.containsKey("id")) {
-                    halt(400, SparkUtils.formatJSON("Version not supplied"));
+                    haltWithMessage(400, "Version not supplied");
                 }
                 FeedVersion feedVersion = null;
                 try {

@@ -105,7 +105,7 @@ public class S3Utils {
      * @param res
      * @return
      */
-    public static Object downloadFromS3(AmazonS3 s3, String bucket, String filename, boolean redirect, Response res){
+    public static String downloadFromS3(AmazonS3 s3, String bucket, String filename, boolean redirect, Response res){
         Date expiration = new Date();
         expiration.setTime(expiration.getTime() + REQUEST_TIMEOUT_MSEC);
 

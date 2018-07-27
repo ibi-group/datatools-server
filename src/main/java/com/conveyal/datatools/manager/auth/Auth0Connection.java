@@ -151,6 +151,8 @@ public class Auth0Connection {
                 } else {
                     bodyString = "{body content is null}";
                 }
+            } else if (contentType != null) {
+                bodyString = String.format("\nnon-JSON body type: %s", contentType);
             }
         } catch (IOException e) {
             LOG.warn("Could not parse JSON", e);

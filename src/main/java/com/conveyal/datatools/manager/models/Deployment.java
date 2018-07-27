@@ -264,7 +264,7 @@ public class Deployment extends Model implements Serializable {
             try {
                 in = new FileInputStream(gtfsFile);
             } catch (FileNotFoundException e1) {
-                LOG.error("Could not retrieve file for {}", v.getName());
+                LOG.error("Could not retrieve file for {}", v.name);
                 throw new RuntimeException(e1);
             }
             ZipEntry e = new ZipEntry(gtfsFile.getName());
@@ -432,6 +432,10 @@ public class Deployment extends Model implements Serializable {
     public String organizationId() {
         Project project = parentProject();
         return project == null ? null : project.organizationId;
+    }
+
+    public boolean delete() {
+        return Persistence.deployments.removeById(this.id);
     }
 
     /**
