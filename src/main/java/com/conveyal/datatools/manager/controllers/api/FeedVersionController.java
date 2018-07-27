@@ -441,7 +441,7 @@ public class FeedVersionController  {
         }
         LOG.info("Using token {} to download feed version {}", token.id, version.id);
         // Remove token so that it cannot be used again for feed download
-//        Persistence.tokens.removeById(tokenValue);
+        Persistence.tokens.removeById(tokenValue);
         File file = version.retrieveGtfsFile();
         return downloadFile(file, version.id, res);
     }
