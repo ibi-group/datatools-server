@@ -207,15 +207,15 @@ public class FeedSourceController {
      *
      * FIXME: Should this just set a "deleted" flag instead of removing from the database entirely?
      */
-    public static FeedSource deleteFeedSource(Request req, Response res) {
+    private static FeedSource deleteFeedSource(Request req, Response res) {
         FeedSource source = requestFeedSourceById(req, "manage");
 
         try {
-            Persistence.feedSources.removeById(source.id);
+            source.delete();
             return source;
         } catch (Exception e) {
-            e.printStackTrace();
-            halt(400, "Unknown error deleting feed source.");
+            LOG.error("Could not delete feed source", e);
+            haltWithMessage(400, "Unknown error deleting feed source.");
             return null;
         }
     }

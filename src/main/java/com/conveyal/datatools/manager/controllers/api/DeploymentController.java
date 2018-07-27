@@ -68,7 +68,7 @@ public class DeploymentController {
 
     private static Deployment deleteDeployment (Request req, Response res) {
         Deployment deployment = checkDeploymentPermissions(req, res);
-        Persistence.deployments.removeById(deployment.id);
+        deployment.delete();
         return deployment;
     }
 

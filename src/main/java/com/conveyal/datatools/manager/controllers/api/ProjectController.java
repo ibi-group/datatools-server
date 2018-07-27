@@ -7,6 +7,7 @@ import com.conveyal.datatools.manager.jobs.FetchProjectFeedsJob;
 import com.conveyal.datatools.manager.jobs.MakePublicJob;
 import com.conveyal.datatools.manager.jobs.MergeProjectFeedsJob;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
+import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Project;
@@ -135,10 +136,10 @@ public class ProjectController {
     /**
      * Delete the project for the UUID given in the request.
      */
-    private static Project deleteProject(Request req, Response res) throws IOException {
+    private static Project deleteProject(Request req, Response res) {
         // Fetch project first to check permissions, and so we can return the deleted project after deletion.
         Project project = requestProjectById(req, "manage");
-        boolean successfullyDeleted = Persistence.projects.removeById(req.params("id"));
+        boolean successfullyDeleted = project.delete();
         if (!successfullyDeleted) {
             haltWithMessage(400, "Did not delete project.");
         }

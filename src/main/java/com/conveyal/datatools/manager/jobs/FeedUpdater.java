@@ -125,7 +125,9 @@ public class FeedUpdater {
                                 properties.stream().map(p -> p.feedSourceId).collect(Collectors.joining(",")));
                     }
                     for (ExternalFeedSourceProperty prop : properties) {
-                        // FIXME: What if there are multiple props found for different feed sources.
+                        // FIXME: What if there are multiple props found for different feed sources. This could happen if
+                        // multiple projects have been synced with MTC or if the ExternalFeedSourceProperty for a feed
+                        // source is not deleted properly when the feed source is deleted.
                         feedSource = Persistence.feedSources.getById(prop.feedSourceId);
                     }
                     if (feedSource == null) {

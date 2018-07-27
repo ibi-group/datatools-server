@@ -54,6 +54,7 @@ import spark.Response;
 
 import javax.servlet.ServletInputStream;
 import javax.servlet.ServletRequestWrapper;
+import javax.servlet.http.HttpServletResponse;
 
 import static com.conveyal.datatools.common.status.MonitorableJob.JobType.BUILD_TRANSPORT_NETWORK;
 import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
@@ -80,19 +81,17 @@ public class FeedVersionController  {
      * Grab the feed version for the ID supplied in the request.
      * If you pass in ?summarized=true, don't include the full tree of validation results, only the counts.
      */
-    public static FeedVersion getFeedVersion (Request req, Response res) {
-        FeedVersion feedVersion = requestFeedVersion(req, "view");
-        return feedVersion;
+    private static FeedVersion getFeedVersion (Request req, Response res) {
+        return requestFeedVersion(req, "view");
     }
 
     /**
      * Get all feed versions for a given feedSource (whose ID is specified in the request).
      */
-    public static Collection<FeedVersion> getAllFeedVersionsForFeedSource(Request req, Response res) {
+    private static Collection<FeedVersion> getAllFeedVersionsForFeedSource(Request req, Response res) {
         // Check permissions and get the FeedSource whose FeedVersions we want.
         FeedSource feedSource = requestFeedSourceById(req, "view");
-        Collection<FeedVersion> feedVersions = feedSource.retrieveFeedVersions();
-        return feedVersions;
+        return feedSource.retrieveFeedVersions();
     }
 
     public static FeedSource requestFeedSourceById(Request req, String action, String paramName) {
@@ -103,7 +102,7 @@ public class FeedVersionController  {
         return checkFeedSourcePermissions(req, Persistence.feedSources.getById(id), action);
     }
 
-    public static FeedSource requestFeedSourceById(Request req, String action) {
+    private static FeedSource requestFeedSourceById(Request req, String action) {
         return requestFeedSourceById(req, action, "feedSourceId");
     }
 
@@ -196,7 +195,7 @@ public class FeedVersionController  {
      *
      *  OR we could just export the feed to a file and then re-import it per usual. This seems like it's wasting time/energy.
      */
-    public static boolean createFeedVersionFromSnapshot (Request req, Response res) {
+    private static boolean createFeedVersionFromSnapshot (Request req, Response res) {
 
         Auth0UserProfile userProfile = req.attribute("user");
         // TODO: Should the ability to create a feedVersion from snapshot be controlled by the 'edit-gtfs' privilege?
@@ -216,13 +215,13 @@ public class FeedVersionController  {
     /**
      * Spark HTTP API handler that deletes a single feed version based on the ID in the request.
      */
-    public static FeedVersion deleteFeedVersion(Request req, Response res) {
+    private static FeedVersion deleteFeedVersion(Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "manage");
         version.delete();
         return version;
     }
 
-    public static FeedVersion requestFeedVersion(Request req, String action) {
+    private static FeedVersion requestFeedVersion(Request req, String action) {
         return requestFeedVersion(req, action, req.params("id"));
     }
 
@@ -241,7 +240,7 @@ public class FeedVersionController  {
      * constructed in {@link #buildProfileRequest}). If a transport network does not exist for the feed version, an async
      * build job is kicked off. Otherwise, the transport network cache is checked for the network.
      */
-    public static String getIsochrones(Request req, Response res) {
+    private static String getIsochrones(Request req, Response res) {
         if (!DataManager.isModuleEnabled("r5_network")) {
             haltWithMessage(400, "Isochrone generation not enabled in this application.");
         }
@@ -357,7 +356,7 @@ public class FeedVersionController  {
         return clusterRequest;
     }
 
-    public static Boolean renameFeedVersion (Request req, Response res) {
+    private static boolean renameFeedVersion (Request req, Response res) {
         FeedVersion v = requestFeedVersion(req, "manage");
 
         String name = req.queryParams("name");
@@ -378,7 +377,7 @@ public class FeedVersionController  {
      * Returns credentials that a client may use to then download a feed version. Functionality
      * changes depending on whether application.data.use_s3_storage config property is true.
      */
-    public static Object getFeedDownloadCredentials(Request req, Response res) {
+    private static Object getFeedDownloadCredentials(Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "view");
 
         if (DataManager.useS3) {
@@ -398,7 +397,7 @@ public class FeedVersionController  {
      */
     private static JsonNode validate (Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "manage");
-
+        haltWithMessage(400, "Validate endpoint not currently configured!");
         // FIXME: Update for sql-loader validation process?
         return null;
 //        return version.retrieveValidationResult(true);
@@ -426,7 +425,7 @@ public class FeedVersionController  {
      * Download locally stored feed version with token supplied by this application. This method is only used when
      * useS3 is set to false. Otherwise, a direct download from s3 should be used.
      */
-    private static Object downloadFeedVersionWithToken (Request req, Response res) {
+    private static HttpServletResponse downloadFeedVersionWithToken (Request req, Response res) {
         String tokenValue = req.params("token");
         FeedDownloadToken token = Persistence.tokens.getById(tokenValue);
 

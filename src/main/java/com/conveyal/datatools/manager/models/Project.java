@@ -2,12 +2,11 @@ package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.*;
+import java.util.Collection;
+import java.util.List;
 import java.util.stream.Collectors;
 
 import static com.mongodb.client.model.Filters.eq;
@@ -15,13 +14,12 @@ import static com.mongodb.client.model.Filters.eq;
 /**
  * Represents a collection of feed sources that can be made into a deployment.
  * Generally, this would represent one agency that is managing the data.
- * For now, there is one FeedCollection per instance of GTFS data manager, but
+ * For now, there is one Project per instance of GTFS data manager, but
  * we're trying to write the code in such a way that this is not necessary.
  *
  * @author mattwigway
  *
  */
-@JsonInclude(Include.ALWAYS)
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class Project extends Model {
     private static final long serialVersionUID = 1L;
@@ -100,5 +98,18 @@ public class Project extends Model {
         } else {
             return null;
         }
+    }
+
+    public boolean delete() {
+        // FIXME: Handle this in a Mongo transaction. See https://docs.mongodb.com/master/core/transactions/#transactions-and-mongodb-drivers
+//        ClientSession clientSession = Persistence.startSession();
+//        clientSession.startTransaction();
+
+        // Delete each feed source in the project (which in turn deletes each feed version).
+        retrieveProjectFeedSources().forEach(FeedSource::delete);
+        // Delete each deployment in the project.
+        retrieveDeployments().forEach(Deployment::delete);
+        // Finally, delete the project.
+        return Persistence.projects.removeById(this.id);
     }
 }

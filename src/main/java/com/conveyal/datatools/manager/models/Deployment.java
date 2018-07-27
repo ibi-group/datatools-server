@@ -434,6 +434,10 @@ public class Deployment extends Model implements Serializable {
         return project == null ? null : project.organizationId;
     }
 
+    public boolean delete() {
+        return Persistence.deployments.removeById(this.id);
+    }
+
     /**
      * A summary of a FeedVersion, leaving out all of the individual validation errors.
      */
