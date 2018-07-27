@@ -26,23 +26,24 @@ public class SparkUtils {
      */
     public static HttpServletResponse downloadFile(File file, String filename, Response res) {
         if (file == null) haltWithMessage(404, "File is null");
-        HttpServletResponse rawResponse = res.raw();
-        rawResponse.setContentType("application/octet-stream");
-        rawResponse.setHeader("Content-Disposition", "attachment; filename=" + filename);
+        HttpServletResponse raw = res.raw();
+        raw.setContentType("application/octet-stream");
+        raw.setHeader("Content-Disposition", "attachment; filename=" + filename);
         // Override the gzip content encoding applied to standard API responses.
         res.header("Content-Encoding", "identity");
-        try {
-            ServletOutputStream outputStream = rawResponse.getOutputStream();
-            ByteStreams.copy(new FileInputStream(file), outputStream);
-            // TODO: Is flushing/closing the stream necessary?
+        try (
+            FileInputStream fileInputStream = new FileInputStream(file);
+            ServletOutputStream outputStream = raw.getOutputStream()
+        ) {
+            // Write the file input stream to the response's output stream.
+            ByteStreams.copy(fileInputStream, outputStream);
+            // TODO: Is flushing the stream necessary?
             outputStream.flush();
-            outputStream.close();
         } catch (Exception e) {
             LOG.error("Could not write file to output stream", e);
             haltWithMessage(500, "Error serving GTFS file");
         }
-
-        return rawResponse;
+        return raw;
     }
 
     /**
