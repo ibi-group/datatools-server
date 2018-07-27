@@ -140,7 +140,7 @@ public class ProjectController {
         Project project = requestProjectById(req, "manage");
         boolean successfullyDeleted = Persistence.projects.removeById(req.params("id"));
         if (!successfullyDeleted) {
-            halt(400, SparkUtils.formatJSON("Did not delete project."));
+            haltWithMessage(400, "Did not delete project.");
         }
         return project;
     }
