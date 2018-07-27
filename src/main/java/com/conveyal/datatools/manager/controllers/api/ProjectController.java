@@ -127,7 +127,7 @@ public class ProjectController {
             return updatedProject;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400, SparkUtils.formatJSON("Error updating project"));
+            haltWithMessage(400, "Error updating project");
             return null;
         }
     }

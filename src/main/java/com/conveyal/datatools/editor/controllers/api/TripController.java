@@ -24,6 +24,7 @@ import spark.HaltException;
 import spark.Request;
 import spark.Response;
 
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static spark.Spark.*;
 
 
@@ -110,7 +111,7 @@ public class TripController {
                 if (tx.trips.containsKey(trip.id)) {
                     errorMessage = "Trip ID " + trip.id + " already exists.";
                     LOG.error(errorMessage);
-                    halt(400, SparkUtils.formatJSON(errorMessage));
+                    haltWithMessage(400, errorMessage);
 
                 }
                 validateTrip(tx, trip);
@@ -152,13 +153,13 @@ public class TripController {
             return trip;
         } catch (IOException e) {
             e.printStackTrace();
-            halt(400, SparkUtils.formatJSON("Unknown IO error occurred saving trip"));
+            haltWithMessage(400, "Unknown IO error occurred saving trip");
         } catch (HaltException e) {
             LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400, SparkUtils.formatJSON("Unknown error occurred saving trip"));
+            haltWithMessage(400, "Unknown error occurred saving trip");
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }
@@ -176,7 +177,7 @@ public class TripController {
         if (!tx.tripPatterns.containsKey(trip.patternId)) {
             errorMessage = "Pattern ID " + trip.patternId + " does not exist.";
             LOG.error(errorMessage);
-            halt(400, SparkUtils.formatJSON(errorMessage));
+            haltWithMessage(400, errorMessage);
             throw new IllegalStateException("Cannot create/update trip for pattern that does not exist");
         } else {
             patt = tx.tripPatterns.get(trip.patternId);
@@ -189,7 +190,7 @@ public class TripController {
                     patt.patternStops.size()
             );
             LOG.error(errorMessage);
-            halt(400, SparkUtils.formatJSON(errorMessage));
+            haltWithMessage(400, errorMessage);
         }
         // Confirm that each stop ID in the trip matches the stop ID in the pattern.
         for (int i = 0; i < trip.stopTimes.size(); i++) {
@@ -208,7 +209,7 @@ public class TripController {
                         st.stopId
                 );
                 LOG.error(errorMessage);
-                halt(400, SparkUtils.formatJSON(errorMessage));
+                haltWithMessage(400, errorMessage);
             }
         }
     }
@@ -219,7 +220,7 @@ public class TripController {
         String[] idList = req.queryParams("tripIds").split(",");
 
         if (feedId == null) {
-            halt(400, SparkUtils.formatJSON("Must provide feedId"));
+            haltWithMessage(400, "Must provide feedId");
         }
 
         FeedTx tx = null;

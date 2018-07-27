@@ -16,6 +16,7 @@ import spark.Response;
 
 import java.io.IOException;
 
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static spark.Spark.*;
 import static spark.Spark.delete;
 import static spark.Spark.put;
@@ -124,14 +125,14 @@ public class FeedInfoController {
     public static Object deleteFeedInfoAndEntireFeedEntryInEditor(Request req, Response res) {
         String id = req.params("id");
         if (!VersionedDataStore.feedExists(id)) {
-            halt(400, SparkUtils.formatJSON("Feed ID does not exist"));
+            haltWithMessage(400, "Feed ID does not exist");
         }
         try {
             VersionedDataStore.wipeFeedDB(id);
             return true;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400, SparkUtils.formatJSON("Error deleting feed", 400, e));
+            haltWithMessage(400, "Error deleting feed", e);
         }
         return false;
     }

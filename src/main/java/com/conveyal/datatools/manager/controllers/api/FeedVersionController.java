@@ -267,7 +267,7 @@ public class FeedVersionController  {
             return getRouterResult(transportNetwork, clusterRequest);
         } catch (ExecutionException e) {
             e.printStackTrace();
-            haltWithMessage(400, SparkUtils.formatJSON("Error accessing transport network."), e);
+            haltWithMessage(400, "Error accessing transport network.", e);
         }
         return null;
     }
@@ -411,14 +411,15 @@ public class FeedVersionController  {
         for(String resourceType : DataManager.feedResources.keySet()) {
             DataManager.feedResources.get(resourceType).feedVersionCreated(version, null);
         }
-        // NOTE: If the MTC extension is enabled, the parent feed source's publishedVersionId will not be updated to the
-        // version's namespace until the FeedUpdater has successfully downloaded the feed from the share S3 bucket.
         if (!DataManager.isExtensionEnabled("mtc")) {
             // update published version ID on feed source
             Persistence.feedSources.updateField(version.feedSourceId, "publishedVersionId", version.namespace);
+            return version;
+        } else {
+            // NOTE: If the MTC extension is enabled, the parent feed source's publishedVersionId will not be updated to the
+            // version's namespace until the FeedUpdater has successfully downloaded the feed from the share S3 bucket.
+            return Persistence.feedVersions.updateField(version.id, "processing", true);
         }
-
-        return version;
     }
 
     /**
@@ -430,16 +431,17 @@ public class FeedVersionController  {
         FeedDownloadToken token = Persistence.tokens.getById(tokenValue);
 
         if(token == null || !token.isValid()) {
+            LOG.error("Feed download token is invalid: {}", token);
             haltWithMessage(400, "Feed download token not valid");
         }
-
         // Fetch feed version to download.
         FeedVersion version = token.retrieveFeedVersion();
         if (version == null) {
             haltWithMessage(400, "Could not retrieve version to download");
         }
+        LOG.info("Using token {} to download feed version {}", token.id, version.id);
         // Remove token so that it cannot be used again for feed download
-        Persistence.tokens.removeById(tokenValue);
+//        Persistence.tokens.removeById(tokenValue);
         File file = version.retrieveGtfsFile();
         return downloadFile(file, version.id, res);
     }

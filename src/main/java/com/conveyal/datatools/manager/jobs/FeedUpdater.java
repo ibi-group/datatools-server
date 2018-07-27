@@ -53,8 +53,16 @@ public class FeedUpdater {
         this.bucketFolder = bucketFolder;
     }
 
-    public static FeedUpdater schedule(int updateFrequencySeconds, String feedBucket, String bucketFolder) {
-        return new FeedUpdater(updateFrequencySeconds, feedBucket, bucketFolder);
+    /**
+     * Create a {@link FeedUpdater} to poll the provided S3 bucket/prefix at the specified interval (in seconds) for
+     * updated files. The updater's task is run using the {@link DataManager#scheduler}.
+     * @param updateFrequencySeconds
+     * @param s3Bucket
+     * @param s3Prefix
+     * @return
+     */
+    public static FeedUpdater schedule(int updateFrequencySeconds, String s3Bucket, String s3Prefix) {
+        return new FeedUpdater(updateFrequencySeconds, s3Bucket, s3Prefix);
     }
 
     class UpdateFeedsTask implements Runnable {
@@ -79,6 +87,8 @@ public class FeedUpdater {
      */
     private Map<String, String> checkForUpdatedFeeds() {
         if (eTagForFeed == null) {
+            // If running the check for the first time, instantiate the eTag map.
+            LOG.info("Running initial check for feeds on S3.");
             eTagForFeed = new HashMap<>();
         }
         Map<String, String> newTags = new HashMap<>();
@@ -130,12 +140,13 @@ public class FeedUpdater {
                         LOG.info("version {} md5: {}", count++, feedVersion.hash);
                         if (feedVersion.hash.equals(md5)) {
                             foundMatchingVersion = true;
-                            LOG.info("Found version that matches latest eTag on S3  (SQL namespace={})", feedVersion.namespace);
+                            LOG.info("Found local version that matches latest file on S3  (SQL namespace={})", feedVersion.namespace);
                             if (!feedVersion.namespace.equals(feedSource.publishedVersionId)) {
                                 LOG.info("Updating published version for feed {} to latest s3 published feed.", feedId);
                                 Persistence.feedSources.updateField(feedSource.id, "publishedVersionId", feedVersion.namespace);
+                                Persistence.feedVersions.updateField(feedVersion.id, "processing", false);
                             } else {
-                                LOG.info("No need to update published version (published s3 feed already matches feed source's published namespace)", feedVersion.namespace);
+                                LOG.info("No need to update published version (published s3 feed already matches feed source's published namespace).");
                             }
                         }
                     }

@@ -205,6 +205,12 @@ public class FeedVersion extends Model implements Serializable {
     /** SQL namespace for GTFS data */
     public String namespace;
 
+    /**
+     * Indicates whether a feed version is pending published status, a check that is currently performed in
+     * {@link com.conveyal.datatools.manager.jobs.FeedUpdater}. This field is currently in use only for the MTC extension.
+     * */
+    public boolean processing;
+
     public String formattedTimestamp() {
         SimpleDateFormat format = new SimpleDateFormat(HUMAN_READABLE_TIMESTAMP_FORMAT);
         return format.format(this.updated);
