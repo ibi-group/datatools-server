@@ -22,9 +22,11 @@ import static com.conveyal.datatools.manager.DataManager.registerRoutes;
  * Argument descriptions:
  * 1. path to env.yml
  * 2. path to server.yml
- * 3. update sql statement to apply to optionally filtered feeds
- * 4. field to filter feeds on
- * 5. value (corresponding to field in arg 3) to filter feeds on (omit to use NULL as value)
+ * 3. string update sql statement to apply to optionally filtered feeds (this should contain a {@link java.util.Formatter}
+ *    compatible string substitution for the namespace argument).
+ * 4. string field to filter feeds on
+ * 5. string value (corresponding to field in arg 3) to filter feeds on (omit to use NULL as value)
+ * 6. boolean
  *
  * Sample arguments:
  *
@@ -46,7 +48,9 @@ public class UpdateSQLFeedsMain {
         // The next arguments will apply a where clause to conditionally to apply the updates.
         String field = args.length > 3 ? args[3] : null;
         String value = args.length > 4 ? args[4] : null;
-        List<String> failedNamespace = updateFeedsWhere(updateSql, field, value);
+        // If test run arg is not included, default to true. Else, only set to false if value equals false.
+        boolean testRun = args.length <= 5 || !"false".equals(args[5]);
+        List<String> failedNamespace = updateFeedsWhere(updateSql, field, value, testRun);
         System.out.println("Finished!");
         System.out.println("Failed namespaces: " + String.join(", ", failedNamespace));
         System.exit(0);
@@ -60,7 +64,7 @@ public class UpdateSQLFeedsMain {
      * @return
      * @throws SQLException
      */
-    private static List<String> updateFeedsWhere(String updateSql, String field, String value)throws SQLException {
+    private static List<String> updateFeedsWhere(String updateSql, String field, String value, boolean testRun)throws SQLException {
         if (updateSql == null) throw new RuntimeException("Update SQL must not be null!");
         // Keep track of failed namespaces for convenient printing at end of method.
         List<String> failedNamespace = new ArrayList<>();
@@ -73,8 +77,13 @@ public class UpdateSQLFeedsMain {
             selectFeedsSql = String.format("%s where %s %s", selectFeedsSql, field, operator);
         }
         Connection connection = DataManager.GTFS_DATA_SOURCE.getConnection();
-        // Set auto-commit to true.
-        connection.setAutoCommit(true);
+        if (!testRun) {
+            System.out.println("Auto-committing each statement");
+            // Set auto-commit to true.
+            connection.setAutoCommit(true);
+        } else {
+            System.out.println("TEST RUN. Changes will NOT be committed (a rollback occurs at the end of method).");
+        }
         PreparedStatement selectStatement = connection.prepareStatement(selectFeedsSql);
         // Set filter value if not null (otherwise, IS NULL has already been populated).
         if (value != null) {
@@ -84,12 +93,13 @@ public class UpdateSQLFeedsMain {
         ResultSet resultSet = selectStatement.executeQuery();
         int successCount = 0;
         while (resultSet.next()) {
+            // Use the string found in the result as the table prefix for the following update query.
             String namespace = resultSet.getString(1);
-            String updateLocationSql = String.format(updateSql, namespace);
+            String updateTableSql = String.format(updateSql, namespace);
             Statement statement = connection.createStatement();
             try {
-                int updated = statement.executeUpdate(updateLocationSql);
-                System.out.println(updateLocationSql);
+                System.out.println(updateTableSql);
+                int updated = statement.executeUpdate(updateTableSql);
                 System.out.println(String.format("Updated rows: %d", updated));
                 successCount++;
             } catch (SQLException e) {
@@ -99,7 +109,13 @@ public class UpdateSQLFeedsMain {
             }
         }
         System.out.println(String.format("Updated %d tables.", successCount));
-        // No need to commit the transaction because of auto-commit
+        // No need to commit the transaction because of auto-commit above (in fact, "manually" committing is not
+        // permitted with auto-commit enabled.
+        if (testRun) {
+            // Rollback changes if performing a test run.
+            System.out.println("Rolling back changes...");
+            connection.rollback();
+        }
         connection.close();
         return failedNamespace;
     }
