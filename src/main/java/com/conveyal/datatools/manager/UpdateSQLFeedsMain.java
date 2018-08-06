@@ -48,6 +48,8 @@ public class UpdateSQLFeedsMain {
         // The next arguments will apply a where clause to conditionally to apply the updates.
         String field = args.length > 3 ? args[3] : null;
         String value = args.length > 4 ? args[4] : null;
+        // Set value to null if the string value = "null".
+        if ("null".equals(value)) value = null;
         // If test run arg is not included, default to true. Else, only set to false if value equals false.
         boolean testRun = args.length <= 5 || !"false".equals(args[5]);
         List<String> failedNamespace = updateFeedsWhere(updateSql, field, value, testRun);
