@@ -1,6 +1,5 @@
 package com.conveyal.datatools.editor.controllers.api;
 
-import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.editor.controllers.Base;
 import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
@@ -17,8 +16,10 @@ import spark.Response;
 import java.io.IOException;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
-import static spark.Spark.*;
 import static spark.Spark.delete;
+import static spark.Spark.get;
+import static spark.Spark.options;
+import static spark.Spark.post;
 import static spark.Spark.put;
 
 /**
@@ -48,7 +49,7 @@ public class FeedInfoController {
                     return fs;
                 }
                 else {
-                    halt(404, "Feed id does not exist");
+                    haltWithMessage(req, 404, "Feed id does not exist");
                     return null;
                 }
             }
@@ -67,7 +68,7 @@ public class FeedInfoController {
             fs = Base.mapper.readValue(req.body(), EditorFeed.class);
 
             if (gtx.feeds.containsKey(fs.id)) {
-                halt(404, "Feed id already exists in editor database");
+                haltWithMessage(req, 400, "Feed id already exists in editor database");
             }
 
             gtx.feeds.put(fs.id, fs);
@@ -79,7 +80,7 @@ public class FeedInfoController {
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(404);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         } finally {
             if (gtx != null) gtx.rollbackIfOpen();
         }
@@ -97,7 +98,7 @@ public class FeedInfoController {
             gtx = VersionedDataStore.getGlobalTx();
 
             if(!gtx.feeds.containsKey(feed.id)) {
-                halt(400);
+                haltWithMessage(req, 400, "feed not found in database");
             }
 
             gtx.feeds.put(feed.id, feed);
@@ -109,7 +110,7 @@ public class FeedInfoController {
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         } finally {
             if (gtx != null) gtx.rollbackIfOpen();
         }
@@ -125,14 +126,14 @@ public class FeedInfoController {
     public static Object deleteFeedInfoAndEntireFeedEntryInEditor(Request req, Response res) {
         String id = req.params("id");
         if (!VersionedDataStore.feedExists(id)) {
-            haltWithMessage(400, "Feed ID does not exist");
+            haltWithMessage(req, 400, "Feed ID does not exist");
         }
         try {
             VersionedDataStore.wipeFeedDB(id);
             return true;
         } catch (Exception e) {
             e.printStackTrace();
-            haltWithMessage(400, "Error deleting feed", e);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         }
         return false;
     }

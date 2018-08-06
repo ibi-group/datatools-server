@@ -64,7 +64,7 @@ public class MergeProjectFeedsJob extends MonitorableJob {
         } catch (IOException e) {
             LOG.error("Could not create temp file");
             e.printStackTrace();
-            halt(400, SparkUtils.formatJSON("Unknown error while merging feeds.", 400));
+            halt(400, SparkUtils.formatJSON("Unknown error while merging feeds.", 400, e));
         }
 
         // create the zipfile

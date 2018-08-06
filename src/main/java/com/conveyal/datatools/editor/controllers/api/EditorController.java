@@ -97,7 +97,7 @@ public abstract class EditorController<T extends Entity> {
         // NOTE: This is a string pattern ID, not the integer ID that all other HTTP endpoints use.
         String patternId = req.params("id");
         if (patternId == null) {
-            haltWithMessage(400, "Must provide valid pattern_id");
+            haltWithMessage(req, 400, "Must provide valid pattern_id");
         }
         try {
             JdbcTableWriter tableWriter = new JdbcTableWriter(Table.TRIPS, datasource, namespace);
@@ -105,7 +105,7 @@ public abstract class EditorController<T extends Entity> {
             return formatJSON(String.format("Deleted %d.", deletedCount), 200);
         } catch (Exception e) {
             e.printStackTrace();
-            haltWithMessage(400, "Error deleting entity", e);
+            haltWithMessage(req, 400, "Error deleting entity", e);
             return null;
         } finally {
             LOG.info("Delete operation took {} msec", System.currentTimeMillis() - startTime);
@@ -136,7 +136,7 @@ public abstract class EditorController<T extends Entity> {
             LOG.info("Deleted {} trips", tripIds.length);
         } catch (Exception e) {
             e.printStackTrace();
-            haltWithMessage(400, "Error deleting entity", e);
+            haltWithMessage(req, 400, "Error deleting entity", e);
         } finally {
             LOG.info("Delete operation took {} msec", System.currentTimeMillis() - startTime);
         }
@@ -158,7 +158,7 @@ public abstract class EditorController<T extends Entity> {
             }
         } catch (Exception e) {
             e.printStackTrace();
-            haltWithMessage(400, "Error deleting entity", e);
+            haltWithMessage(req, 400, "Error deleting entity", e);
         } finally {
             LOG.info("Delete operation took {} msec", System.currentTimeMillis() - startTime);
         }
@@ -184,7 +184,7 @@ public abstract class EditorController<T extends Entity> {
             String message = String.format("Could not upload branding for %s id=%d", classToLowercase, id);
             LOG.error(message);
             e.printStackTrace();
-            haltWithMessage(400, message, e);
+            haltWithMessage(req, 400, message, e);
         }
         String namespace = getNamespaceAndValidateSession(req);
         // Prepare json object for response. (Note: this is not the full entity object, but just the URL field).
@@ -203,7 +203,7 @@ public abstract class EditorController<T extends Entity> {
             return jsonObject.toString();
         } catch (SQLException e) {
             e.printStackTrace();
-            haltWithMessage(400, "Could not update branding url", e);
+            haltWithMessage(req, 400, "Could not update branding url", e);
             return null;
         } finally {
             DbUtils.closeQuietly(connection);
@@ -220,7 +220,7 @@ public abstract class EditorController<T extends Entity> {
         // Check if an update or create operation depending on presence of id param
         // This needs to be final because it is used in a lambda operation below.
         if (req.params("id") == null && req.requestMethod().equals("PUT")) {
-            haltWithMessage(400, "Must provide id");
+            haltWithMessage(req, 400, "Must provide id");
         }
         final boolean isCreating = req.params("id") == null;
         String namespace = getNamespaceAndValidateSession(req);
@@ -235,7 +235,7 @@ public abstract class EditorController<T extends Entity> {
             }
         } catch (Exception e) {
             e.printStackTrace();
-            haltWithMessage(400, "Operation failed.", e);
+            haltWithMessage(req, 400, "Operation failed.", e);
         } finally {
             String operation = isCreating ? "Create" : "Update";
             LOG.info("{} operation took {} msec", operation, System.currentTimeMillis() - startTime);
@@ -252,23 +252,23 @@ public abstract class EditorController<T extends Entity> {
         String sessionId = req.queryParams("sessionId");
         FeedSource feedSource = Persistence.feedSources.getById(feedId);
         if (feedSource == null) {
-            haltWithMessage(400, "Feed ID is invalid");
+            haltWithMessage(req, 400, "Feed ID is invalid");
         }
         // FIXME: Switch to using spark session IDs rather than query parameter?
 //        String sessionId = req.session().id();
         EditorLockController.EditorSession currentSession = sessionsForFeedIds.get(feedId);
         if (currentSession == null) {
-            haltWithMessage(400, "There is no active editing session for user.");
+            haltWithMessage(req, 400, "There is no active editing session for user.");
         }
         if (!currentSession.sessionId.equals(sessionId)) {
             // This session does not match the current active session for the feed.
             Auth0UserProfile userProfile = req.attribute("user");
             if (currentSession.userEmail.equals(userProfile.getEmail())) {
                 LOG.warn("User {} already has editor session {} for feed {}. Same user cannot make edits on session {}.", currentSession.userEmail, currentSession.sessionId, feedId, req.session().id());
-                haltWithMessage(400, "You have another editing session open for " + feedSource.name);
+                haltWithMessage(req, 400, "You have another editing session open for " + feedSource.name);
             } else {
                 LOG.warn("User {} already has editor session {} for feed {}. User {} cannot make edits on session {}.", currentSession.userEmail, currentSession.sessionId, feedId, userProfile.getEmail(), req.session().id());
-                haltWithMessage(400, "Somebody else is editing the " + feedSource.name + " feed.");
+                haltWithMessage(req, 400, "Somebody else is editing the " + feedSource.name + " feed.");
             }
         } else {
             currentSession.lastEdit = System.currentTimeMillis();
@@ -276,7 +276,7 @@ public abstract class EditorController<T extends Entity> {
         }
         String namespace = feedSource.editorNamespace;
         if (namespace == null) {
-            haltWithMessage(400, "Cannot edit feed that has not been snapshotted (namespace is null).");
+            haltWithMessage(req, 400, "Cannot edit feed that has not been snapshotted (namespace is null).");
         }
         return namespace;
     }
@@ -294,7 +294,7 @@ public abstract class EditorController<T extends Entity> {
                 id = Integer.valueOf(req.params("id"));
             } catch (NumberFormatException e) {
                 LOG.error("ID provided must be an integer", e);
-                haltWithMessage(400, "ID provided is not a number");
+                haltWithMessage(req, 400, "ID provided is not a number");
             }
         }
         return id;

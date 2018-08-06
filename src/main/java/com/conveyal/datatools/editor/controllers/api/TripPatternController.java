@@ -1,27 +1,30 @@
 package com.conveyal.datatools.editor.controllers.api;
 
-import com.conveyal.datatools.manager.models.JsonViews;
-import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.datatools.editor.controllers.Base;
 import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.Trip;
 import com.conveyal.datatools.editor.models.transit.TripPattern;
+import com.conveyal.datatools.manager.models.JsonViews;
+import com.conveyal.datatools.manager.utils.json.JsonManager;
 import org.mapdb.Fun;
 import org.mapdb.Fun.Tuple2;
-
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Set;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.HaltException;
 import spark.Request;
 import spark.Response;
 
-import static spark.Spark.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Set;
+
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
+import static spark.Spark.delete;
+import static spark.Spark.get;
+import static spark.Spark.post;
+import static spark.Spark.put;
 
 
 public class TripPatternController {
@@ -35,7 +38,7 @@ public class TripPatternController {
         String feedId = req.queryParams("feedId");
 
         if (feedId == null) {
-            halt(400);
+            haltWithMessage(req, 400, "feedId is required");
         }
 
         FeedTx tx = null;
@@ -44,7 +47,7 @@ public class TripPatternController {
             tx = VersionedDataStore.getFeedTx(feedId);
             if(id != null) {
                if (!tx.tripPatterns.containsKey(id))
-                   halt(404);
+                   haltWithMessage(req, 404, "pattern not found in database");
                else {
                    TripPattern tp = tx.tripPatterns.get(id);
                    tp.addDerivedInfo(tx);
@@ -54,7 +57,7 @@ public class TripPatternController {
             else if (routeId != null) {
 
                 if (!tx.routes.containsKey(routeId))
-                    halt(404, "routeId '" + routeId + "' does not exist");
+                    haltWithMessage(req,404, "routeId '" + routeId + "' does not exist");
                 else {
                     Set<Tuple2<String, String>> tpKeys = tx.tripPatternsByRoute.subSet(new Tuple2(routeId, null), new Tuple2(routeId, Fun.HI));
                     Set<TripPattern> patts = new HashSet<>();
@@ -78,7 +81,7 @@ public class TripPatternController {
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }
@@ -93,16 +96,16 @@ public class TripPatternController {
             tripPattern = Base.mapper.readValue(req.body(), TripPattern.class);
             
             if (feedId == null)
-                halt(400);
+                haltWithMessage(req, 400, "feedId is required");
             
             if (!VersionedDataStore.feedExists(tripPattern.feedId)) {
-                halt(400);
+                haltWithMessage(req, 400, "feed does not exist");
             }
             
             tx = VersionedDataStore.getFeedTx(tripPattern.feedId);
             
             if (tx.tripPatterns.containsKey(tripPattern.id)) {
-                halt(400);
+                haltWithMessage(req, 400, "pattern with this id already exists in database");
             }
             
             tripPattern.calcShapeDistTraveled(tx);
@@ -116,7 +119,7 @@ public class TripPatternController {
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }
@@ -137,14 +140,14 @@ public class TripPatternController {
             tripPattern = Base.mapper.readValue(req.body(), TripPattern.class);
             
             if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(tripPattern.feedId))
-                halt(400);
+                haltWithMessage(req, 400, "feedId does not match");
             
             if (!VersionedDataStore.feedExists(tripPattern.feedId)) {
-                halt(400);
+                haltWithMessage(req, 400, "feed does not exist");
             }
             
             if (tripPattern.id == null) {
-                halt(400);
+                haltWithMessage(req, 400, "pattern Id is required");
             }
             
             tx = VersionedDataStore.getFeedTx(tripPattern.feedId);
@@ -152,7 +155,7 @@ public class TripPatternController {
             TripPattern originalTripPattern = tx.tripPatterns.get(tripPattern.id);
             
             if(originalTripPattern == null) {
-                halt(400);
+                haltWithMessage(req, 404, "pattern not found in database");
             }
 
             // check if frequency value has changed for pattern and nuke trips created for old value
@@ -171,7 +174,12 @@ public class TripPatternController {
                 TripPattern.reconcilePatternStops(originalTripPattern, tripPattern, tx);
             } catch (IllegalStateException e) {
                 LOG.info("Could not save trip pattern", e);
-                halt(400);
+                haltWithMessage(
+                    req,
+                    400,
+                    "an error occurred while trying to reconcile pattern stops",
+                    e
+                );
             }
             
             tripPattern.calcShapeDistTraveled(tx);
@@ -189,7 +197,7 @@ public class TripPatternController {
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }
@@ -204,7 +212,7 @@ public class TripPatternController {
             feedId = req.session().attribute("feedId");
 
         if(id == null || feedId == null) {
-            halt(400);
+            haltWithMessage(req, 400, "id and feedId are required");
         }
 
         FeedTx tx = null;
@@ -213,7 +221,7 @@ public class TripPatternController {
             tx = VersionedDataStore.getFeedTx(feedId);
 
             if (!tx.tripPatterns.containsKey(id)) {
-                halt(404);
+                haltWithMessage(req, 404, "trip pattern not found");
             }
 
             // first zap all trips on this trip pattern
@@ -229,7 +237,7 @@ public class TripPatternController {
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }

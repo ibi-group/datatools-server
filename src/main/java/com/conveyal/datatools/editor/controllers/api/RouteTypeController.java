@@ -10,6 +10,7 @@ import com.conveyal.datatools.manager.utils.json.JsonManager;
 import spark.Request;
 import spark.Response;
 
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static spark.Spark.*;
 
 
@@ -26,7 +27,7 @@ public class RouteTypeController {
                 if(tx.routeTypes.containsKey(id))
                     json = Base.toJson(tx.routeTypes.get(id), false);
                 else
-                    halt(404);
+                    haltWithMessage(req, 404, "route type not found in database");
 
                 tx.rollback();
             }
@@ -36,7 +37,7 @@ public class RouteTypeController {
             }
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         }
         return json;
     }
@@ -51,7 +52,7 @@ public class RouteTypeController {
 
             if (tx.routeTypes.containsKey(routeType.id)) {
                 tx.rollback();
-                halt(400);
+                haltWithMessage(req, 400, "a route type with this id already exists in the database");
             }
 
             tx.routeTypes.put(routeType.id, routeType);
@@ -60,7 +61,7 @@ public class RouteTypeController {
             return routeType;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         }
         return null;
     }
@@ -73,13 +74,13 @@ public class RouteTypeController {
             routeType = Base.mapper.readValue(req.body(), RouteType.class);
 
             if(routeType.id == null) {
-                halt(400);
+                haltWithMessage(req, 400, "id is required in route type");
             }
 
             GlobalTx tx = VersionedDataStore.getGlobalTx();
             if (!tx.routeTypes.containsKey(routeType.id)) {
                 tx.rollback();
-                halt(404);
+                haltWithMessage(req, 404, "route type not found in database");
             }
 
             tx.routeTypes.put(routeType.id, routeType);
@@ -88,7 +89,7 @@ public class RouteTypeController {
             return routeType;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         }
         return null;
     }
@@ -97,13 +98,13 @@ public class RouteTypeController {
     public static Object deleteRouteType(Request req, Response res) {
         String id = req.params("id");
         if (id == null)
-            halt(400);
+            haltWithMessage(req, 400, "id is required");
 
         GlobalTx tx = VersionedDataStore.getGlobalTx();
 
         if (!tx.routeTypes.containsKey(id)) {
             tx.rollback();
-            halt(400);
+            haltWithMessage(req, 400, "route type not found in database");
         }
 
         tx.routeTypes.remove(id);

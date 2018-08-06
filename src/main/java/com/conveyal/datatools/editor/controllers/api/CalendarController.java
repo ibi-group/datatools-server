@@ -1,14 +1,14 @@
 package com.conveyal.datatools.editor.controllers.api;
 
-import com.conveyal.datatools.editor.datastore.FeedTx;
-import com.conveyal.datatools.manager.models.JsonViews;
-import com.conveyal.datatools.manager.utils.json.JsonManager;
-import com.google.common.collect.Sets;
 import com.conveyal.datatools.editor.controllers.Base;
+import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.ScheduleException;
 import com.conveyal.datatools.editor.models.transit.ServiceCalendar;
 import com.conveyal.datatools.editor.models.transit.ServiceCalendar.ServiceCalendarForPattern;
+import com.conveyal.datatools.manager.models.JsonViews;
+import com.conveyal.datatools.manager.utils.json.JsonManager;
+import com.google.common.collect.Sets;
 import org.mapdb.Fun;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,15 +16,19 @@ import spark.HaltException;
 import spark.Request;
 import spark.Response;
 
-import static com.conveyal.datatools.common.utils.SparkUtils.formatJSON;
-import static spark.Spark.*;
-
 import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
+
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
+import static spark.Spark.delete;
+import static spark.Spark.get;
+import static spark.Spark.options;
+import static spark.Spark.post;
+import static spark.Spark.put;
 
 
 public class CalendarController {
@@ -38,7 +42,7 @@ public class CalendarController {
         String patternId = req.queryParams("patternId");
 
         if (feedId == null) {
-            halt(400);
+            haltWithMessage(req, 400, "feedId is required");
         }
 
         FeedTx tx = null;
@@ -47,7 +51,7 @@ public class CalendarController {
             tx = VersionedDataStore.getFeedTx(feedId);
             if (id != null) {
                 if (!tx.calendars.containsKey(id)) {
-                    halt(404);
+                    haltWithMessage(req, 404, "calendar not found in database");
                 }
 
                 else {
@@ -58,7 +62,7 @@ public class CalendarController {
             }
             else if (patternId != null) {
                 if (!tx.tripPatterns.containsKey(patternId)) {
-                    halt(404);
+                    haltWithMessage(req, 404, "pattern not found in database");
                 }
 
                 Set<String> serviceCalendarIds = Sets.newHashSet();
@@ -90,7 +94,7 @@ public class CalendarController {
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }
@@ -105,16 +109,16 @@ public class CalendarController {
             cal = Base.mapper.readValue(req.body(), ServiceCalendar.class);
 
             if (!VersionedDataStore.feedExists(cal.feedId)) {
-                halt(400);
+                haltWithMessage(req, 400, "feed does not exist");
             }
 
             if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(cal.feedId))
-                halt(400);
+                haltWithMessage(req, 400, "feed does not match");
 
             tx = VersionedDataStore.getFeedTx(cal.feedId);
 
             if (tx.calendars.containsKey(cal.id)) {
-                halt(400);
+                haltWithMessage(req, 404, "calendar with this id already exists in database");
             }
 
             // check if gtfsServiceId is specified, if not create from DB id
@@ -133,7 +137,7 @@ public class CalendarController {
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }
@@ -148,13 +152,13 @@ public class CalendarController {
             cal = Base.mapper.readValue(req.body(), ServiceCalendar.class);
 
             if (!VersionedDataStore.feedExists(cal.feedId)) {
-                halt(400);
+                haltWithMessage(req, 400, "feed does not exist");
             }
 
             tx = VersionedDataStore.getFeedTx(cal.feedId);
 
             if (!tx.calendars.containsKey(cal.id)) {
-                halt(400);
+                haltWithMessage(req, 400, "calendar does not exist in database");
             }
 
             // check if gtfsServiceId is specified, if not create from DB id
@@ -172,7 +176,7 @@ public class CalendarController {
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }
@@ -189,13 +193,13 @@ public class CalendarController {
             tx = VersionedDataStore.getFeedTx(feedId);
 
             if (id == null || !tx.calendars.containsKey(id)) {
-                halt(404);
+                haltWithMessage(req, 404, "calendar not found in database");
             }
 
             // we just don't let you delete calendars unless there are no trips on them
             Long count = tx.tripCountByCalendar.get(id);
             if (count != null && count > 0) {
-                halt(400, formatJSON("Cannot delete calendar that is referenced by trips.", 400));
+                haltWithMessage(req, 400, "Cannot delete calendar that is referenced by trips.");
             }
 
             // drop this calendar from any schedule exceptions
@@ -215,7 +219,7 @@ public class CalendarController {
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }

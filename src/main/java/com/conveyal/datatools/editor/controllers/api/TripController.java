@@ -1,6 +1,5 @@
 package com.conveyal.datatools.editor.controllers.api;
 
-import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.editor.controllers.Base;
 import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
@@ -13,6 +12,9 @@ import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.fasterxml.jackson.core.type.TypeReference;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import spark.HaltException;
+import spark.Request;
+import spark.Response;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -20,12 +22,12 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 
-import spark.HaltException;
-import spark.Request;
-import spark.Response;
-
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
-import static spark.Spark.*;
+import static spark.Spark.delete;
+import static spark.Spark.get;
+import static spark.Spark.options;
+import static spark.Spark.post;
+import static spark.Spark.put;
 
 
 public class TripController {
@@ -41,7 +43,7 @@ public class TripController {
         String calendarId = req.queryParams("calendarId");
 
         if (feedId == null) {
-            halt(400);
+            haltWithMessage(req, 400, "feedId is required");
         }
 
         FeedTx tx = null;
@@ -52,11 +54,11 @@ public class TripController {
                 if (tx.trips.containsKey(id))
                     return Base.toJson(tx.trips.get(id), false);
                 else
-                    halt(404);
+                    haltWithMessage(req,404, "trip not found in database");
             }
             else if (patternId != null && calendarId != null) {
                 if (!tx.tripPatterns.containsKey(patternId) || !tx.calendars.containsKey(calendarId)) {
-                    halt(404);
+                    haltWithMessage(req, 404, "pattern or calendar not found in database");
                 }
                 else {
                     LOG.info("requesting trips for pattern/cal");
@@ -73,13 +75,13 @@ public class TripController {
                 
         } catch (IOException e) {
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 400, "an io exception happened", e);
         } catch (HaltException e) {
             LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }
@@ -99,10 +101,10 @@ public class TripController {
             }
             for (Trip trip : trips) {
                 if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(trip.feedId))
-                    halt(400);
+                    haltWithMessage(req, 400, "feedId does not match");
 
                 if (!VersionedDataStore.feedExists(trip.feedId)) {
-                    halt(400);
+                    haltWithMessage(req, 400, "feed does not exist");
                 }
 
                 tx = VersionedDataStore.getFeedTx(trip.feedId);
@@ -111,10 +113,10 @@ public class TripController {
                 if (tx.trips.containsKey(trip.id)) {
                     errorMessage = "Trip ID " + trip.id + " already exists.";
                     LOG.error(errorMessage);
-                    haltWithMessage(400, errorMessage);
+                    haltWithMessage(req, 400, errorMessage);
 
                 }
-                validateTrip(tx, trip);
+                validateTrip(req, tx, trip);
                 tx.trips.put(trip.id, trip);
             }
             tx.commit();
@@ -122,13 +124,13 @@ public class TripController {
             return trips;
         } catch (IOException e) {
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 400, "an io exception happened", e);
         } catch (HaltException e) {
             LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }
@@ -142,24 +144,24 @@ public class TripController {
             Trip trip = Base.mapper.readValue(req.body(), Trip.class);
 
             if (!VersionedDataStore.feedExists(trip.feedId)) {
-                halt(400);
+                haltWithMessage(req, 400, "feed does not exist");
             }
 
             tx = VersionedDataStore.getFeedTx(trip.feedId);
-            validateTrip(tx, trip);
+            validateTrip(req, tx, trip);
             tx.trips.put(trip.id, trip);
             tx.commit();
 
             return trip;
         } catch (IOException e) {
             e.printStackTrace();
-            haltWithMessage(400, "Unknown IO error occurred saving trip");
+            haltWithMessage(req, 400, "Unknown IO error occurred saving trip");
         } catch (HaltException e) {
             LOG.error("Halt encountered", e);
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            haltWithMessage(400, "Unknown error occurred saving trip");
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }
@@ -170,14 +172,14 @@ public class TripController {
      * Validates that a saved trip will not cause issues with referenced pattern primarily due to
      * mismatched stops.
      */
-    private static void validateTrip(FeedTx tx, Trip trip) {
+    private static void validateTrip(Request req, FeedTx tx, Trip trip) {
         TripPattern patt;
         String errorMessage;
         // Confirm that referenced pattern ID exists
         if (!tx.tripPatterns.containsKey(trip.patternId)) {
             errorMessage = "Pattern ID " + trip.patternId + " does not exist.";
             LOG.error(errorMessage);
-            haltWithMessage(400, errorMessage);
+            haltWithMessage(req, 400, errorMessage);
             throw new IllegalStateException("Cannot create/update trip for pattern that does not exist");
         } else {
             patt = tx.tripPatterns.get(trip.patternId);
@@ -190,7 +192,7 @@ public class TripController {
                     patt.patternStops.size()
             );
             LOG.error(errorMessage);
-            haltWithMessage(400, errorMessage);
+            haltWithMessage(req, 400, errorMessage);
         }
         // Confirm that each stop ID in the trip matches the stop ID in the pattern.
         for (int i = 0; i < trip.stopTimes.size(); i++) {
@@ -209,7 +211,7 @@ public class TripController {
                         st.stopId
                 );
                 LOG.error(errorMessage);
-                haltWithMessage(400, errorMessage);
+                haltWithMessage(req, 400, errorMessage);
             }
         }
     }
@@ -220,7 +222,7 @@ public class TripController {
         String[] idList = req.queryParams("tripIds").split(",");
 
         if (feedId == null) {
-            haltWithMessage(400, "Must provide feedId");
+            haltWithMessage(req, 400, "Must provide feedId");
         }
 
         FeedTx tx = null;
@@ -247,7 +249,7 @@ public class TripController {
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }

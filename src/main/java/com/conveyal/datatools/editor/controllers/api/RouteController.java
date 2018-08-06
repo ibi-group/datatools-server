@@ -1,9 +1,13 @@
 package com.conveyal.datatools.editor.controllers.api;
 
-import com.conveyal.datatools.common.utils.SparkUtils;
-import com.conveyal.datatools.editor.models.transit.StatusType;
 import com.conveyal.datatools.common.utils.S3Utils;
+import com.conveyal.datatools.editor.controllers.Base;
 import com.conveyal.datatools.editor.datastore.FeedTx;
+import com.conveyal.datatools.editor.datastore.VersionedDataStore;
+import com.conveyal.datatools.editor.models.transit.Route;
+import com.conveyal.datatools.editor.models.transit.StatusType;
+import com.conveyal.datatools.editor.models.transit.Trip;
+import com.conveyal.datatools.editor.models.transit.TripPattern;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.JsonViews;
@@ -11,25 +15,24 @@ import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.google.common.base.Function;
 import com.google.common.collect.Collections2;
-import com.conveyal.datatools.editor.controllers.Base;
-import com.conveyal.datatools.editor.datastore.VersionedDataStore;
-import com.conveyal.datatools.editor.models.transit.Route;
-import com.conveyal.datatools.editor.models.transit.Trip;
-import com.conveyal.datatools.editor.models.transit.TripPattern;
 import org.mapdb.Fun;
 import org.mapdb.Fun.Tuple2;
-
-import java.util.Collection;
-import java.util.HashSet;
-import java.util.Set;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.HaltException;
 import spark.Request;
 import spark.Response;
 
-import static spark.Spark.*;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Set;
+
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
+import static spark.Spark.delete;
+import static spark.Spark.get;
+import static spark.Spark.options;
+import static spark.Spark.post;
+import static spark.Spark.put;
 
 
 public class RouteController {
@@ -42,7 +45,7 @@ public class RouteController {
         String feedId = req.queryParams("feedId");
 
         if (feedId == null) {
-            halt(400);
+            haltWithMessage(req, 400, "feedId is required");
         }
 
         FeedTx tx = null;
@@ -51,7 +54,7 @@ public class RouteController {
             tx = VersionedDataStore.getFeedTx(feedId);
             if (id != null) {
                 if (!tx.routes.containsKey(id)) {
-                    halt(400);
+                    haltWithMessage(req, 404, "route does not found in database");
                 }
 
                 Route route = tx.routes.get(id);
@@ -74,7 +77,7 @@ public class RouteController {
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }
@@ -87,19 +90,19 @@ public class RouteController {
         String feedId = req.queryParams("feedId");
 
         if (feedId == null) {
-            halt(400);
+            haltWithMessage(req, 400, "feedId is required");
         }
 
         try {
             route = Base.mapper.readValue(req.body(), Route.class);
             
             if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(route.feedId))
-                halt(400);
+                haltWithMessage(req, 400, "feedId does not match");
    
             tx = VersionedDataStore.getFeedTx(feedId);
             
             if (tx.routes.containsKey(route.id)) {
-                halt(400, "Failed to create route with duplicate id");
+                haltWithMessage(req, 400, "Failed to create route with duplicate id");
             }
 
             // check if gtfsRouteId is specified, if not create from DB id
@@ -116,7 +119,7 @@ public class RouteController {
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }
@@ -132,12 +135,12 @@ public class RouteController {
         try {
             route = Base.mapper.readValue(req.body(), Route.class);
             if (feedId == null) {
-                halt(400);
+                haltWithMessage(req, 400, "feedId is required");
             }
             tx = VersionedDataStore.getFeedTx(feedId);
             
             if (!tx.routes.containsKey(id)) {
-                halt(404);
+                haltWithMessage(req, 404, "route not found in database");
             }
 
             Route oldRoute = tx.routes.get(id);
@@ -153,7 +156,11 @@ public class RouteController {
                 Auth0UserProfile userProfile = req.attribute("user");
 
                 if (!userProfile.canApproveGTFS(feedSource.organizationId(), feedSource.projectId, feedId)) {
-                    halt(403, SparkUtils.formatJSON("User does not have permission to change status of route", 403));
+                    haltWithMessage(
+                        req,
+                        403,
+                        "User does not have permission to change status of route"
+                    );
                 }
             }
 
@@ -171,7 +178,7 @@ public class RouteController {
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }
@@ -187,13 +194,13 @@ public class RouteController {
 
         try {
             if (feedId == null) {
-                halt(400);
+                haltWithMessage(req, 400, "feedId is required");
             }
 
             tx = VersionedDataStore.getFeedTx(feedId);
 
             if (!tx.routes.containsKey(id)) {
-                halt(404);
+                haltWithMessage(req, 404, "route not found in database");
             }
 
             route = tx.routes.get(id);
@@ -212,7 +219,7 @@ public class RouteController {
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }
@@ -227,7 +234,7 @@ public class RouteController {
             feedId = req.session().attribute("feedId");
 
         if(id == null || feedId == null)
-            halt(400);
+            haltWithMessage(req, 400, "id and feedId params are required");
 
         FeedTx tx = null;
         
@@ -235,7 +242,7 @@ public class RouteController {
             tx = VersionedDataStore.getFeedTx(feedId);
 
             if (!tx.routes.containsKey(id)) {
-                halt(404);
+                haltWithMessage(req, 404, "route not found in database");
             }
             
             Route r = tx.routes.get(id);
@@ -261,7 +268,7 @@ public class RouteController {
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(404, e.getMessage());
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }
@@ -279,14 +286,14 @@ public class RouteController {
             feedId = req.session().attribute("feedId");
 
         if (feedId == null || from == null || into == null)
-            halt(400);
+            haltWithMessage(req, 400, "feedId, from and into params are required");
 
         final FeedTx tx = VersionedDataStore.getFeedTx(feedId);
 
         try {
             // ensure the routes exist
             if (!tx.routes.containsKey(from) || !tx.routes.containsKey(into)) {
-                halt(400);
+                haltWithMessage(req, 400, "from or into route not found in database");
             }
 
             // retrieveById all the trip patterns for route from

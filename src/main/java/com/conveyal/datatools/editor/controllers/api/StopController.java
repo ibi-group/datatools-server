@@ -1,12 +1,19 @@
 package com.conveyal.datatools.editor.controllers.api;
 
+import com.conveyal.datatools.editor.controllers.Base;
 import com.conveyal.datatools.editor.datastore.FeedTx;
+import com.conveyal.datatools.editor.datastore.VersionedDataStore;
+import com.conveyal.datatools.editor.models.transit.Stop;
+import com.conveyal.datatools.editor.models.transit.TripPattern;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
-import com.conveyal.datatools.editor.controllers.Base;
-import com.conveyal.datatools.editor.datastore.VersionedDataStore;
-import com.conveyal.datatools.editor.models.transit.*;
 import org.geotools.referencing.GeodeticCalculator;
+import org.json.simple.JSONObject;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import spark.HaltException;
+import spark.Request;
+import spark.Response;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -16,14 +23,12 @@ import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import org.json.simple.JSONObject;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import spark.HaltException;
-import spark.Request;
-import spark.Response;
-
-import static spark.Spark.*;
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
+import static spark.Spark.delete;
+import static spark.Spark.get;
+import static spark.Spark.options;
+import static spark.Spark.post;
+import static spark.Spark.put;
 
 
 public class StopController {
@@ -51,7 +56,7 @@ public class StopController {
             south = Double.valueOf(req.queryParams("south"));
 
         if (feedId == null) {
-            halt(400);
+            haltWithMessage(req, 400, "feedId is required");
         }
 
         final FeedTx tx = VersionedDataStore.getFeedTx(feedId);
@@ -59,7 +64,7 @@ public class StopController {
         try {
               if (id != null) {
                 if (!tx.stops.containsKey(id)) {
-                    halt(404);
+                    haltWithMessage(req, 404, "stop not found in database");
                 }
 
                 return tx.stops.get(id);
@@ -78,7 +83,7 @@ public class StopController {
             }
             else if (patternId != null) {
                 if (!tx.tripPatterns.containsKey(patternId)) {
-                    halt(404);
+                    haltWithMessage(req, 404, "pattern not found in database");
                 }
 
                 TripPattern p = tx.tripPatterns.get(patternId);
@@ -100,7 +105,7 @@ public class StopController {
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }
@@ -113,16 +118,16 @@ public class StopController {
             Stop stop = Base.mapper.readValue(req.body(), Stop.class);
             
             if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(stop.feedId))
-                halt(400);
+                haltWithMessage(req, 400, "session feedId does not match stop feedId");
             
             if (!VersionedDataStore.feedExists(stop.feedId)) {
-                halt(400, "Stop must reference feed source ID");
+                haltWithMessage(req, 400, "Stop must reference feed source ID");
             }
             
             tx = VersionedDataStore.getFeedTx(stop.feedId);
             
             if (tx.stops.containsKey(stop.id)) {
-                halt(400);
+                haltWithMessage(req, 400, "stop with this id already exists in database");
             }
             
             tx.stops.put(stop.id, stop);
@@ -130,7 +135,7 @@ public class StopController {
             return stop;
         } catch (IOException e) {
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 400, "could not parse stop", e);
         } catch (HaltException e) {
             LOG.error("Halt encountered", e);
             throw e;
@@ -150,14 +155,14 @@ public class StopController {
             feedId = req.session().attribute("feedId");
 
         if (feedId == null) {
-            halt(400);
+            haltWithMessage(req, 400, "feedId is required");
         }
 
         FeedTx tx = null;
         try {
             tx = VersionedDataStore.getFeedTx(feedId);
             if (!tx.stops.containsKey(id)) {
-                halt(404);
+                haltWithMessage(req, 404, "stop not found in database");
             }
             return tx.getTripPatternsByStop(id);
         } catch (HaltException e) {
@@ -177,17 +182,17 @@ public class StopController {
         Stop stop = Base.mapper.readValue(req.body(), Stop.class);
         String feedId = req.queryParams("feedId");
         if (feedId == null) {
-            halt(400, "Must provide feed ID");
+            haltWithMessage(req, 400, "Must provide feed ID");
         }
 
         if (!VersionedDataStore.feedExists(feedId)) {
-            halt(400, "Feed ID ("+feedId+") does not exist");
+            haltWithMessage(req, 400, "Feed ID ("+feedId+") does not exist");
         }
         try {
             tx = VersionedDataStore.getFeedTx(feedId);
 
             if (!tx.stops.containsKey(stop.id)) {
-                halt(400);
+                haltWithMessage(req, 404, "stop not found in database");
             }
 
             tx.stops.put(stop.id, stop);
@@ -209,14 +214,14 @@ public class StopController {
         String feedId = req.queryParams("feedId");
 
         if (feedId == null) {
-            halt(400);
+            haltWithMessage(req, 400, "feedId is required");
         }
 
         FeedTx tx = null;
         try {
             tx = VersionedDataStore.getFeedTx(feedId);
             if (!tx.stops.containsKey(id)) {
-                halt(404);
+                haltWithMessage(req, 404, "stop not found in database");
             }
 
             if (!tx.getTripPatternsByStop(id).isEmpty()) {
@@ -226,7 +231,16 @@ public class StopController {
                 Set<String> routes = tx.getTripPatternsByStop(id).stream()
                         .map(tripPattern -> tripPattern.routeId)
                         .collect(Collectors.toSet());
-                halt(400, errorMessage("Trip patterns ("+patterns.toString()+") for routes "+routes.toString()+" reference stop ID" + id));
+                haltWithMessage(
+                    req,
+                    400,
+                    "Trip patterns (" +
+                        patterns.toString() +
+                        ") for routes " +
+                        routes.toString() +
+                        " reference stop ID" +
+                        id
+                );
             }
 
             Stop s = tx.stops.remove(id);
@@ -255,7 +269,7 @@ public class StopController {
         String feedId = req.queryParams("feedId");
 
         if (feedId == null) {
-            halt(400);
+            haltWithMessage(req, 400, "feedId is required");
         }
 
         FeedTx tx = null;
@@ -303,7 +317,7 @@ public class StopController {
             throw e;
         } catch (Exception e) {
              e.printStackTrace();
-             halt(400);
+             haltWithMessage(req, 500, "an unexpected error occurred", e);
          }
         finally {
             if (tx != null) tx.rollbackIfOpen();
@@ -316,11 +330,11 @@ public class StopController {
         String feedId = req.queryParams("feedId");
 
         if (mergedStopIds.size() <= 1) {
-            halt(400);
+            haltWithMessage(req, 400, "at least 2 stops must be provided to merge");
         }
 
         if (feedId == null) {
-            halt(400);
+            haltWithMessage(req, 400, "feedId is required");
         }
 
         FeedTx tx = null;

@@ -4,9 +4,6 @@ import com.conveyal.datatools.editor.controllers.Base;
 import com.conveyal.datatools.editor.datastore.FeedTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.models.transit.ScheduleException;
-import java.time.LocalDate;
-import java.util.ArrayList;
-
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import org.slf4j.Logger;
@@ -15,7 +12,15 @@ import spark.HaltException;
 import spark.Request;
 import spark.Response;
 
-import static spark.Spark.*;
+import java.time.LocalDate;
+import java.util.ArrayList;
+
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
+import static spark.Spark.delete;
+import static spark.Spark.get;
+import static spark.Spark.options;
+import static spark.Spark.post;
+import static spark.Spark.put;
 
 
 public class ScheduleExceptionController {
@@ -31,7 +36,7 @@ public class ScheduleExceptionController {
             feedId = req.session().attribute("feedId");
 
         if (feedId == null) {
-            halt(400);
+            haltWithMessage(req, 400, "feedId is required");
         }
 
         FeedTx tx = null;
@@ -41,7 +46,7 @@ public class ScheduleExceptionController {
 
             if (exceptionId != null) {
                 if (!tx.exceptions.containsKey(exceptionId))
-                    halt(400);
+                    haltWithMessage(req, 404, "exception not found in database");
                 else
                     return tx.exceptions.get(exceptionId);
             }
@@ -53,7 +58,7 @@ public class ScheduleExceptionController {
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }
@@ -66,43 +71,56 @@ public class ScheduleExceptionController {
             ScheduleException ex = Base.mapper.readValue(req.body(), ScheduleException.class);
 
             if (!VersionedDataStore.feedExists(ex.feedId)) {
-                halt(400);
+                haltWithMessage(req, 400, "feed does not exist");
             }
 
             if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(ex.feedId))
-                halt(400);
+                haltWithMessage(req, 400, "feed ids do not match");
 
             tx = VersionedDataStore.getFeedTx(ex.feedId);
 
             if (ex.customSchedule != null) {
                 for (String cal : ex.customSchedule) {
                     if (!tx.calendars.containsKey(cal)) {
-                        halt(400);
+                        haltWithMessage(
+                            req,
+                            400,
+                            "calendar referenced by custom schedule not found in database"
+                        );
                     }
                 }
             }
             if (ex.addedService != null) {
                 for (String cal : ex.addedService) {
                     if (!tx.calendars.containsKey(cal)) {
-                        halt(400);
+                        haltWithMessage(
+                            req,
+                            400,
+                            "calendar referenced by added service not found in database"
+                        );
                     }
                 }
             }
             if (ex.removedService != null) {
                 for (String cal : ex.removedService) {
                     if (!tx.calendars.containsKey(cal)) {
-                        halt(400);
+                        haltWithMessage(
+                            req,
+                            400,
+                            "calendar referenced by removed service not found in database"
+                        );
                     }
                 }
             }
 
             if (tx.exceptions.containsKey(ex.id)) {
-                halt(400);
+                haltWithMessage(req, 400, "exception with this id already exists in database");
             }
             if (ex.dates != null) {
                 for (LocalDate date : ex.dates) {
                     if (tx.scheduleExceptionCountByDate.containsKey(date) && tx.scheduleExceptionCountByDate.get(date) > 0) {
-                        halt(400);
+                        // TODO in PR review, confirm that this message correctly describes this error
+                        haltWithMessage(req, 400, "an exception already exisits for this date");
                     }
                 }
             }
@@ -117,7 +135,7 @@ public class ScheduleExceptionController {
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }
@@ -130,10 +148,10 @@ public class ScheduleExceptionController {
             ScheduleException ex = Base.mapper.readValue(req.body(), ScheduleException.class);
 
             if (req.session().attribute("feedId") != null && !req.session().attribute("feedId").equals(ex.feedId))
-                halt(400);
+                haltWithMessage(req, 400, "feed ids do not match");
 
             if (!VersionedDataStore.feedExists(ex.feedId)) {
-                halt(400);
+                haltWithMessage(req, 400, "feed does not exist");
             }
 
             tx = VersionedDataStore.getFeedTx(ex.feedId);
@@ -141,27 +159,39 @@ public class ScheduleExceptionController {
             if (ex.customSchedule != null) {
                 for (String cal : ex.customSchedule) {
                     if (!tx.calendars.containsKey(cal)) {
-                        halt(400);
+                        haltWithMessage(
+                            req,
+                            400,
+                            "calendar referenced by custom schedule not found in database"
+                        );
                     }
                 }
             }
             if (ex.addedService != null) {
                 for (String cal : ex.addedService) {
                     if (!tx.calendars.containsKey(cal)) {
-                        halt(400);
+                        haltWithMessage(
+                            req,
+                            400,
+                            "calendar referenced by added service not found in database"
+                        );
                     }
                 }
             }
             if (ex.removedService != null) {
                 for (String cal : ex.removedService) {
                     if (!tx.calendars.containsKey(cal)) {
-                        halt(400);
+                        haltWithMessage(
+                            req,
+                            400,
+                            "calendar referenced by removed service not found in database"
+                        );
                     }
                 }
             }
 
             if (!tx.exceptions.containsKey(ex.id)) {
-                halt(400);
+                haltWithMessage(req, 404, "exception not found in database");
             }
 
             tx.exceptions.put(ex.id, ex);
@@ -174,7 +204,7 @@ public class ScheduleExceptionController {
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }
@@ -189,7 +219,7 @@ public class ScheduleExceptionController {
             feedId = req.session().attribute("feedId");
 
         if (feedId == null) {
-            halt(400);
+            haltWithMessage(req, 400, "feedId is required");
         }
         FeedTx tx = null;
         try {
@@ -204,7 +234,7 @@ public class ScheduleExceptionController {
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }

@@ -207,12 +207,13 @@ public class DumpController {
 
     /**
      * Load a v2 JSON dump (i.e., objects with the class structure immediately before the MongoDB migration).
+     * @param req
      */
-    private static boolean loadLegacy(String jsonString) {
+    private static boolean loadLegacy(Request req) {
         ObjectMapper mapper = new ObjectMapper();
         JsonNode node;
         try {
-            node = mapper.readTree(jsonString);
+            node = mapper.readTree(req.body());
             Iterator<Map.Entry<String, JsonNode>> fieldsIter = node.fields();
             while (fieldsIter.hasNext()) {
                 Map.Entry<String, JsonNode> entry = fieldsIter.next();
@@ -241,7 +242,7 @@ public class DumpController {
             return true;
         } catch (Exception e) {
             e.printStackTrace();
-            haltWithMessage(400, "Error loading legacy JSON", e);
+            haltWithMessage(req, 400, "Error loading legacy JSON", e);
             return false;
         }
     }
@@ -364,7 +365,7 @@ public class DumpController {
      * Enables the HTTP controllers at the specified prefix.
      */
     public static void register (String apiPrefix) {
-        post(apiPrefix + "loadLegacy", (request, response) -> loadLegacy(request.body()), json::write);
+        post(apiPrefix + "loadLegacy", (request, response) -> loadLegacy(request), json::write);
         post(apiPrefix + "load", (request, response) -> load(request.body()), json::write);
         post(apiPrefix + "validateAll", (request, response) -> {
             boolean force = request.queryParams("force") != null && request.queryParams("force").equals("true");

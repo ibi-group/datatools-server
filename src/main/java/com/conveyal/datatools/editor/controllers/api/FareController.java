@@ -13,11 +13,14 @@ import spark.Request;
 import spark.Response;
 
 import java.util.ArrayList;
-import java.util.Calendar;
 import java.util.Collection;
 
-import static spark.Spark.*;
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static spark.Spark.delete;
+import static spark.Spark.get;
+import static spark.Spark.options;
+import static spark.Spark.post;
+import static spark.Spark.put;
 
 /**
  * Created by landon on 6/22/16.
@@ -36,7 +39,7 @@ public class FareController {
         }
 
         if (feedId == null) {
-            halt(400);
+            haltWithMessage(req, 400, "feedId is required");
         }
 
         FeedTx tx = null;
@@ -45,7 +48,7 @@ public class FareController {
             tx = VersionedDataStore.getFeedTx(feedId);
             if (id != null) {
                 if (!tx.fares.containsKey(id)) {
-                    halt(404);
+                    haltWithMessage(req, 404, "fare not found in database");
                 }
 
                 else {
@@ -64,7 +67,7 @@ public class FareController {
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }
@@ -79,13 +82,13 @@ public class FareController {
             fare = Base.mapper.readValue(req.body(), Fare.class);
 
             if (!VersionedDataStore.feedExists(fare.feedId)) {
-                halt(400);
+                haltWithMessage(req, 400, "feed does not exist");
             }
 
             tx = VersionedDataStore.getFeedTx(fare.feedId);
 
             if (tx.fares.containsKey(fare.id)) {
-                halt(400);
+                haltWithMessage(req, 400, "a fare with this id already exists in the database");
             }
 
             // check if gtfsFareId is specified, if not create from DB id
@@ -116,12 +119,12 @@ public class FareController {
             fare = Base.mapper.readValue(req.body(), Fare.class);
 
             if (!VersionedDataStore.feedExists(fare.feedId)) {
-                halt(400);
+                haltWithMessage(req, 400, "feed does not exist");
             }
 
             tx = VersionedDataStore.getFeedTx(fare.feedId);
             if (!tx.fares.containsKey(fare.id)) {
-                halt(400);
+                haltWithMessage(req, 404, "fare not found in database");
             }
 
             // check if gtfsFareId is specified, if not create from DB id
@@ -137,7 +140,7 @@ public class FareController {
             throw e;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }
@@ -156,7 +159,7 @@ public class FareController {
 
             if (id == null || !tx.fares.containsKey(id)) {
                 tx.rollback();
-                halt(404);
+                haltWithMessage(req, 404, "fare not found in database");
             }
             fare = tx.fares.get(id);
             tx.fares.remove(id);
@@ -169,7 +172,7 @@ public class FareController {
         } catch (Exception e) {
             if (tx != null) tx.rollbackIfOpen();
             e.printStackTrace();
-            halt(400);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         } finally {
             if (tx != null) tx.rollbackIfOpen();
         }
