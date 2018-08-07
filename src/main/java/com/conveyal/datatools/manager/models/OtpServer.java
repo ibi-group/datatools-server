@@ -14,6 +14,7 @@ public class OtpServer implements Serializable {
     public Boolean admin;
     public String s3Bucket;
     public String s3Credentials;
+    public boolean createServer;
 
     /**
      * Convert the name field into a string with no special characters.

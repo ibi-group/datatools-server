@@ -2,6 +2,13 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.event.ProgressListener;
+import com.amazonaws.services.ec2.AmazonEC2;
+import com.amazonaws.services.ec2.AmazonEC2Client;
+import com.amazonaws.services.ec2.model.CreateTagsRequest;
+import com.amazonaws.services.ec2.model.Instance;
+import com.amazonaws.services.ec2.model.RunInstancesRequest;
+import com.amazonaws.services.ec2.model.RunInstancesResult;
+import com.amazonaws.services.ec2.model.Tag;
 import com.amazonaws.services.s3.model.CopyObjectRequest;
 import com.amazonaws.services.s3.transfer.TransferManager;
 import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
@@ -24,11 +31,13 @@ import java.util.List;
 import java.util.Scanner;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import org.apache.commons.codec.binary.Base64;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -149,6 +158,19 @@ public class DeployJob extends MonitorableJob {
             }
 
             status.uploadingS3 = false;
+        }
+
+        if (otpServer.createServer) {
+            if ("true".equals(DataManager.getConfigPropertyAsText("modules.deployment.ec2.enabled"))) {
+                createServer();
+                // If creating a new server, there is no need to deploy to an existing one.
+                return;
+            } else {
+                String message = "Cannot complete deployment. EC2 deployment disabled in server configuration.";
+                LOG.error(message);
+                status.fail(message);
+                return;
+            }
         }
 
         // If there are no OTP targets (i.e. we're only deploying to S3), we're done.
@@ -321,6 +343,47 @@ public class DeployJob extends MonitorableJob {
         }
         // Send notification to those subscribed to updates for the deployment.
         NotifyUsersForSubscriptionJob.createNotification("deployment-updated", deployment.id, message);
+    }
+
+    public void createServer () {
+        try {
+            // CONNECT TO EC2
+            AmazonEC2 ec2 = new AmazonEC2Client();
+            ec2.setEndpoint("ec2.us-east-1.amazonaws.com");
+            // User data should contain info about:
+            // 1. Downloading GTFS/OSM info (s3)
+            // 2. Time to live until shutdown/termination (for test servers)
+            // 3. Hosting / nginx
+            String myUserData = "hello";
+            // CREATE EC2 INSTANCES
+            RunInstancesRequest runInstancesRequest = new RunInstancesRequest()
+                    .withInstanceType("t1.micro")
+                    .withMinCount(1)
+                    .withSubnetId(DataManager.getConfigPropertyAsText("modules.deployment.ec2.subnet"))
+                    .withImageId(DataManager.getConfigPropertyAsText("modules.deployment.ec2.ami"))
+                    .withKeyName(DataManager.getConfigPropertyAsText("modules.deployment.ec2.keyName"))
+                    .withInstanceInitiatedShutdownBehavior("terminate")
+                    .withMaxCount(1)
+                    .withSecurityGroupIds(DataManager.getConfigPropertyAsText("modules.deployment.ec2.securityGroup"))
+                    .withUserData(Base64.encodeBase64String(myUserData.getBytes()));
+
+            RunInstancesResult runInstances = ec2.runInstances(runInstancesRequest);
+
+            // TAG EC2 INSTANCES
+            List<Instance> instances = runInstances.getReservation().getInstances();
+            int idx = 1;
+            for (Instance instance : instances) {
+                CreateTagsRequest createTagsRequest = new CreateTagsRequest();
+                createTagsRequest.withResources(instance.getInstanceId()) //
+                        .withTags(new Tag("Name", "otp-" + idx));
+                ec2.createTags(createTagsRequest);
+
+                idx++;
+            }
+        } catch (Exception e) {
+            LOG.error("Could not deploy to EC2 server", e);
+            status.fail("Could not deploy to EC2 server", e);
+        }
     }
 
     /**
