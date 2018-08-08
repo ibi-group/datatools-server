@@ -414,12 +414,7 @@ public class ProjectController {
 
         Persistence.tokens.removeById(token.id);
         String fileName = project.id + ".zip";
-        try {
-            return downloadFile(FeedVersion.feedStore.getFeed(fileName), fileName, res);
-        } catch (IOException e) {
-            haltWithMessage(req, e.getMessage().equals("File is null") ? 404 : 400, e.getMessage(), e);
-            return null;
-        }
+        return downloadFile(FeedVersion.feedStore.getFeed(fileName), fileName, req, res);
     }
 
 }

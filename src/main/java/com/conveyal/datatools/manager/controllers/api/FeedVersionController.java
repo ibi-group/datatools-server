@@ -363,12 +363,7 @@ public class FeedVersionController  {
 
     private static Object downloadFeedVersionDirectly(Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "view");
-        try {
-            return downloadFile(version.retrieveGtfsFile(), version.id, res);
-        } catch (IOException e) {
-            haltWithMessage(req, e.getMessage().equals("File is null") ? 404 : 400, e.getMessage(), e);
-            return null;
-        }
+        return downloadFile(version.retrieveGtfsFile(), version.id, req, res);
     }
 
     /**
@@ -440,12 +435,7 @@ public class FeedVersionController  {
         // Remove token so that it cannot be used again for feed download
         Persistence.tokens.removeById(tokenValue);
         File file = version.retrieveGtfsFile();
-        try {
-            return downloadFile(file, version.id, res);
-        } catch (IOException e) {
-            haltWithMessage(req, e.getMessage().equals("File is null") ? 404 : 400, e.getMessage(), e);
-            return null;
-        }
+        return downloadFile(file, version.id, req, res);
     }
 
     public static void register (String apiPrefix) {
