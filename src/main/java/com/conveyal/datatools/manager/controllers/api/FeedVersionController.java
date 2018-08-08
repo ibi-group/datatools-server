@@ -244,20 +244,20 @@ public class FeedVersionController  {
         }
         Auth0UserProfile userProfile = req.attribute("user");
         FeedVersion version = requestFeedVersion(req, "view");
+
         // Check server jobs to determine if build or read is in progress.
-        /**
-         * Filters active jobs for any "build transport network" types for the provided version. If there is a match,
-         * a halt is sent to the requester.
-         */
+        // Filter active jobs for any "build transport network" types for the provided version.
         List<BuildTransportNetworkJob> buildJobs = StatusController.filterJobsByType(BUILD_TRANSPORT_NETWORK).stream()
             .filter(job -> ((BuildTransportNetworkJob) job).feedVersion.id.equals(version.id))
             .map(job -> (BuildTransportNetworkJob) job)
             .collect(Collectors.toList());
 
+        // If there are any matching build jobs, halt
         if (buildJobs.size() > 0) {
             // Halt the request if there are active build jobs.
             haltWithMessage(req, 202, "Please wait. Building transport network for version.");
         }
+
         TransportNetwork transportNetwork = null;
         if (!version.transportNetworkPath().exists()) {
             // If transport network does not exist, build it in async server job.
@@ -363,7 +363,12 @@ public class FeedVersionController  {
 
     private static Object downloadFeedVersionDirectly(Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "view");
-        return downloadFile(version.retrieveGtfsFile(), version.id, req, res);
+        try {
+            return downloadFile(version.retrieveGtfsFile(), version.id, res);
+        } catch (IOException e) {
+            haltWithMessage(req, e.getMessage().equals("File is null") ? 404 : 400, e.getMessage(), e);
+            return null;
+        }
     }
 
     /**
@@ -435,7 +440,12 @@ public class FeedVersionController  {
         // Remove token so that it cannot be used again for feed download
         Persistence.tokens.removeById(tokenValue);
         File file = version.retrieveGtfsFile();
-        return downloadFile(file, version.id, req, res);
+        try {
+            return downloadFile(file, version.id, res);
+        } catch (IOException e) {
+            haltWithMessage(req, e.getMessage().equals("File is null") ? 404 : 400, e.getMessage(), e);
+            return null;
+        }
     }
 
     public static void register (String apiPrefix) {

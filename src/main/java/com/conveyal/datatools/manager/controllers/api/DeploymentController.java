@@ -178,7 +178,7 @@ public class DeploymentController {
                 !userProfile.canAdministerProject(feedSource.projectId, feedSource.organizationId()) &&
                 !userProfile.getUser_id().equals(feedSource.user())
             )
-            haltWithMessage(req, 401, "user not authorized to perform this action");
+            haltWithMessage(req, 401, "User not authorized to perform this action");
 
         if (feedSource.latestVersionId() == null)
             haltWithMessage(req, 400, "Cannot create a deployment from a feed source with no versions.");

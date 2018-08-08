@@ -34,7 +34,7 @@ public class NoteController {
 
     public static Collection<Note> getAllNotes (Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
-        if (userProfile == null) haltWithMessage(req, 401, "user not authorized to perform this action");
+        if (userProfile == null) haltWithMessage(req, 401, "User not authorized to perform this action");
 
         String typeStr = req.queryParams("type");
         String objectId = req.queryParams("objectId");
@@ -78,7 +78,7 @@ public class NoteController {
             return model.retrieveNotes();
         }
         else {
-            haltWithMessage(req, 401, "user not authorized to perform this action");
+            haltWithMessage(req, 401, "User not authorized to perform this action");
         }
 
         return null;
@@ -86,7 +86,7 @@ public class NoteController {
 
     public static Note createNote (Request req, Response res) throws IOException {
         Auth0UserProfile userProfile = req.attribute("user");
-        if(userProfile == null) haltWithMessage(req, 401, "user not authorized to perform this action");
+        if(userProfile == null) haltWithMessage(req, 401, "User not authorized to perform this action");
 
         String typeStr = req.queryParams("type");
         String objectId = req.queryParams("objectId");
@@ -159,7 +159,7 @@ public class NoteController {
             return note;
         }
         else {
-            haltWithMessage(req, 401, "user not authorized to perform this action");
+            haltWithMessage(req, 401, "User not authorized to perform this action");
         }
 
         return null;

@@ -33,8 +33,8 @@ public class SparkUtils {
     /**
      * Write out the supplied file to the Spark response as an octet-stream.
      */
-    public static HttpServletResponse downloadFile(File file, String filename, Request req, Response res) {
-        if (file == null) haltWithMessage(req, 404, "File is null");
+    public static HttpServletResponse downloadFile(File file, String filename, Response res) throws IOException {
+        if (file == null) throw new IllegalArgumentException("File is null");
         HttpServletResponse raw = res.raw();
         raw.setContentType("application/octet-stream");
         raw.setHeader("Content-Disposition", "attachment; filename=" + filename);
@@ -50,7 +50,8 @@ public class SparkUtils {
             outputStream.flush();
         } catch (Exception e) {
             LOG.error("Could not write file to output stream", e);
-            haltWithMessage(req, 500, "Error serving GTFS file", e);
+            e.printStackTrace();
+            throw new IOException("Could not write file to output stream");
         }
         return raw;
     }
