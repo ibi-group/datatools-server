@@ -241,7 +241,12 @@ public class SnapshotController {
         Snapshot snapshot = token.retrieveSnapshot();
         Persistence.tokens.removeById(token.id);
         String fileName = snapshot.id + ".zip";
-        return downloadFile(FeedVersion.feedStore.getFeed(fileName), fileName, req, res);
+        try {
+            return downloadFile(FeedVersion.feedStore.getFeed(fileName), fileName, res);
+        } catch (IOException e) {
+            haltWithMessage(req, e.getMessage().equals("File is null") ? 404 : 400, e.getMessage(), e);
+            return null;
+        }
     }
 
     public static void register (String apiPrefix) {
