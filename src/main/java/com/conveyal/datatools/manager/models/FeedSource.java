@@ -4,8 +4,6 @@ import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.DeleteObjectsRequest;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.editor.datastore.GlobalTx;
-import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.persistence.FeedStore;
@@ -30,7 +28,6 @@ import java.net.URL;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
@@ -180,7 +177,7 @@ public class FeedSource extends Model implements Cloneable {
                     "User-Agent",
                     "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.95 Safari/537.11"
             );
-        } catch (Exception e) {
+        } catch (IOException e) {
             String message = String.format("Unable to open connection to %s; not fetching feed %s", url, this.name);
             LOG.error(message);
             // TODO use this update function throughout this class

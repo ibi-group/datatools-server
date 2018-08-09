@@ -1,21 +1,6 @@
 package com.conveyal.datatools.manager.models;
 
 
-import java.awt.geom.Rectangle2D;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.Serializable;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
-import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-import java.util.concurrent.ExecutionException;
-
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.persistence.FeedStore;
@@ -31,18 +16,30 @@ import com.conveyal.r5.common.R5Version;
 import com.conveyal.r5.point_to_point.builder.TNBuilderConfig;
 import com.conveyal.r5.transit.TransportNetwork;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonView;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.bson.codecs.pojo.annotations.BsonProperty;
-
-import com.fasterxml.jackson.annotation.JsonIgnore;
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.annotation.JsonInclude.Include;
-import com.fasterxml.jackson.annotation.JsonView;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.awt.geom.Rectangle2D;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.Serializable;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.List;
 
 import static com.conveyal.datatools.manager.models.Deployment.downloadOsmExtract;
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
@@ -155,7 +152,7 @@ public class FeedVersion extends Model implements Serializable {
         return feedStore.getFeed(id);
     }
 
-    public File newGtfsFile(InputStream inputStream) {
+    public File newGtfsFile(InputStream inputStream) throws IOException {
         File file = feedStore.newFeed(id, inputStream, parentFeedSource());
         // fileSize field will not be stored until new FeedVersion is stored in MongoDB (usually in
         // the final steps of ValidateFeedJob).

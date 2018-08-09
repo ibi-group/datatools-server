@@ -27,6 +27,7 @@ import java.util.Collection;
 import java.util.Iterator;
 import java.util.Map;
 
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWith500;
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
 import static com.conveyal.datatools.manager.models.ExternalFeedSourceProperty.constructId;
@@ -128,12 +129,11 @@ public class FeedSourceController {
                         String.format("New feed %s created in project %s.", newFeedSource.name, parentProject.name));
                 return newFeedSource;
             } catch (Exception e) {
-                LOG.error("Unknown error creating feed source", e);
-                haltWithMessage(req, 400, "Unknown error encountered creating feed source", e);
+                haltWith500(req, "Unknown error encountered creating feed source", e);
                 return null;
             }
         } else {
-            haltWithMessage(req, 400, "Must provide project ID for feed source");
+            haltWithMessage(req, 403, "User not allowed to create feed source");
             return null;
         }
     }
@@ -175,10 +175,15 @@ public class FeedSourceController {
      * FIXME: Should we reconsider how we store external feed source properties now that we are using Mongo document
      * storage? This might should be refactored in the future, but it isn't really hurting anything at the moment.
      */
-    public static FeedSource updateExternalFeedResource(Request req, Response res) throws IOException {
+    public static FeedSource updateExternalFeedResource(Request req, Response res) {
         FeedSource source = requestFeedSourceById(req, "manage");
         String resourceType = req.queryParams("resourceType");
-        JsonNode node = mapper.readTree(req.body());
+        JsonNode node = null;
+        try {
+            node = mapper.readTree(req.body());
+        } catch (IOException e) {
+            haltWithMessage(req, 400, "Unable to parse request body", e);
+        }
         Iterator<Map.Entry<String, JsonNode>> fieldsIterator = node.fields();
         ExternalFeedResource externalFeedResource = DataManager.feedResources.get(resourceType);
         if (externalFeedResource == null) {
@@ -200,7 +205,11 @@ public class FeedSourceController {
                     propertyId, "value", entry.getValue().asText());
 
             // Trigger an event on the external resource
-            externalFeedResource.propertyUpdated(updatedProp, previousValue, req.headers("Authorization"));
+            try {
+                externalFeedResource.propertyUpdated(updatedProp, previousValue, req.headers("Authorization"));
+            } catch (IOException e) {
+                haltWith500(req, "Could not update external feed source", e);
+            }
         }
         // Updated external properties will be included in JSON (FeedSource#externalProperties)
         return source;
@@ -218,8 +227,7 @@ public class FeedSourceController {
             source.delete();
             return source;
         } catch (Exception e) {
-            LOG.error("Could not delete feed source", e);
-            haltWithMessage(req, 400, "Unknown error deleting feed source.");
+            haltWith500(req, "Unknown error occurred while deleting feed source.", e);
             return null;
         }
     }

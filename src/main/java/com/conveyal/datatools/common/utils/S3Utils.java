@@ -24,6 +24,7 @@ import java.io.InputStream;
 import java.net.URL;
 import java.util.Date;
 
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWith500;
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 
 /**
@@ -34,12 +35,16 @@ public class S3Utils {
     private static final Logger LOG = LoggerFactory.getLogger(S3Utils.class);
     private static final int REQUEST_TIMEOUT_MSEC = 30 * 1000;
 
-    public static String uploadBranding(Request req, String key) throws IOException, ServletException {
+    public static String uploadBranding(Request req, String key) {
         String url;
 
         String s3Bucket = DataManager.getConfigPropertyAsText("application.data.gtfs_s3_bucket");
         if (s3Bucket == null) {
-            haltWithMessage(req, 400, "s3bucket is incorrectly configured on server");
+            haltWith500(
+                req,
+                "s3bucket is incorrectly configured on server",
+                new Exception("s3bucket is incorrectly configured on server")
+            );
         }
 
         // Get file from request
@@ -47,15 +52,20 @@ public class S3Utils {
             MultipartConfigElement multipartConfigElement = new MultipartConfigElement(System.getProperty("java.io.tmpdir"));
             req.raw().setAttribute("org.eclipse.jetty.multipartConfig", multipartConfigElement);
         }
-        Part part = req.raw().getPart("file");
-        String extension = "." + part.getContentType().split("/", 0)[1];
-        File tempFile = File.createTempFile(key + "_branding", extension);
-        InputStream inputStream;
+        String extension = null;
+        File tempFile = null;
         try {
+            Part part = req.raw().getPart("file");
+            extension = "." + part.getContentType().split("/", 0)[1];
+            tempFile = File.createTempFile(key + "_branding", extension);
+            InputStream inputStream;
             inputStream = part.getInputStream();
             FileOutputStream out = new FileOutputStream(tempFile);
             IOUtils.copy(inputStream, out);
-        } catch (Exception e) {
+        } catch (IOException e) {
+            e.printStackTrace();
+            haltWithMessage(req, 400, "Unable to read uploaded file");
+        } catch (ServletException e) {
             e.printStackTrace();
             haltWithMessage(req, 400, "Unable to read uploaded file");
         }
@@ -71,8 +81,7 @@ public class S3Utils {
                     .withCannedAcl(CannedAccessControlList.PublicRead));
             return url;
         } catch (AmazonServiceException ase) {
-            ase.printStackTrace();
-            haltWithMessage(req, 400, "Error uploading file to S3");
+            haltWith500(req, "Error uploading file to S3", ase);
             return null;
         } finally {
             boolean deleted = tempFile.delete();

@@ -40,6 +40,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWith500;
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static spark.Spark.get;
 import static spark.Spark.post;
@@ -73,9 +74,9 @@ public class GtfsPlusController {
         try {
             uploadStream = part.getInputStream();
             gtfsPlusStore.newFeed(feedVersionId, uploadStream, null);
-        } catch (Exception e) {
+        } catch (IOException e) {
             LOG.error("Unable to open input stream from upload");
-            haltWithMessage(req, 500, "an unexpected error occurred", e);
+            haltWithMessage(req, 400, "Unable to open input stream from upload", e);
         }
 
         return true;
@@ -108,7 +109,6 @@ public class GtfsPlusController {
         }
 
         try {
-
             // create a new zip file to only contain the GTFS+ tables
             gtfsPlusFile = File.createTempFile(version.id + "_gtfsplus", ".zip");
             ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(gtfsPlusFile));
@@ -133,9 +133,8 @@ public class GtfsPlusController {
                 zos.closeEntry();
             }
             zos.close();
-
-        } catch (Exception e) {
-            haltWithMessage(req, 500, "an unexpected error occurred", e);
+        } catch (IOException e) {
+            haltWith500(req, "An error occurred while trying to create a gtfs file", e);
         }
 
         return downloadGtfsPlusFile(gtfsPlusFile, req, res);
@@ -157,8 +156,8 @@ public class GtfsPlusController {
 
             bufferedOutputStream.flush();
             bufferedOutputStream.close();
-        } catch (Exception e) {
-            haltWithMessage(req, 500, "an unexpected error occurred", e);
+        } catch (IOException e) {
+            haltWith500(req, "could not download gtfs plus file", e);
         }
 
         return res.raw();
@@ -248,21 +247,17 @@ public class GtfsPlusController {
                 in.close();
                 zos.closeEntry();
             }
-
             zos.close();
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            haltWithMessage(req, 500, "an unexpected error occurred", e);
+        } catch (IOException e) {
+            haltWith500(req, "Error creating combined GTFS/GTFS+ file", e);
         }
 
         FeedVersion newFeedVersion = new FeedVersion(feedVersion.parentFeedSource());
 
         try {
             newFeedVersion.newGtfsFile(new FileInputStream(newFeed));
-        } catch (Exception e) {
-            e.printStackTrace();
-            haltWithMessage(req, 500, "Error creating new FeedVersion from combined GTFS/GTFS+", e);
+        } catch (IOException e) {
+            haltWith500(req, "Error creating new FeedVersion from combined GTFS/GTFS+", e);
         }
 
         newFeedVersion.hash();
@@ -308,27 +303,25 @@ public class GtfsPlusController {
                 }
             }
 
-        } catch(Exception e) {
-            e.printStackTrace();
-            haltWithMessage(req, 500, "an unexpected error occurred", e);
+        } catch(IOException e) {
+            haltWith500(req, "Could not read GTFS+ zip file", e);
         }
         LOG.info("GTFS+ tables found: {}/{}", gtfsPlusTableCount, DataManager.gtfsPlusConfig.size());
         return issues;
     }
 
-    private static void validateTable(Collection<ValidationIssue> issues, JsonNode tableNode, InputStream inputStream, GTFSFeed gtfsFeed) throws IOException {
-
+    private static void validateTable(
+        Collection<ValidationIssue> issues,
+        JsonNode tableNode,
+        InputStream inputStream,
+        GTFSFeed gtfsFeed
+    ) throws IOException {
         String tableId = tableNode.get("id").asText();
         BufferedReader in = new BufferedReader(new InputStreamReader(inputStream));
         String line = in.readLine();
         String[] fields = line.split(",");
         List<String> fieldList = Arrays.asList(fields);
-        for (String field : fieldList) {
-            field = field.toLowerCase();
-        }
-
         JsonNode[] fieldNodes = new JsonNode[fields.length];
-
         JsonNode fieldsNode = tableNode.get("fields");
         for(int i = 0; i < fieldsNode.size(); i++) {
             JsonNode fieldNode = fieldsNode.get(i);

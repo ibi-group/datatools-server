@@ -1,7 +1,9 @@
 package com.conveyal.datatools.manager.utils;
 
+import com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource;
 import org.apache.commons.codec.binary.Hex;
-import org.apache.commons.codec.digest.DigestUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -12,20 +14,7 @@ import java.security.MessageDigest;
 
 public class HashUtils {
 
-    public static String hashString(String input)  {
-
-        try {
-
-            byte[] bytesOfMessage = input.getBytes("UTF-8");
-
-            return DigestUtils.md5Hex(bytesOfMessage);
-
-        }
-        catch(Exception e) {
-
-            return "";
-        }
-    }
+    public static final Logger LOG = LoggerFactory.getLogger(MtcFeedResource.class);
 
     /**
      * Get MD5 hash for the specified file.
@@ -55,10 +44,10 @@ public class HashUtils {
             }
             dis.close();
             return new String(Hex.encodeHex(md.digest()));
-        }
-        catch(Exception e) {
+        } catch(Exception e) {
+            LOG.warn("Failed to hash file, returning empty string instead");
+            e.printStackTrace();
             return "";
         }
     }
-
 }

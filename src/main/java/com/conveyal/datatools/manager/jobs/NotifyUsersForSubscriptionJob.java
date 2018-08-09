@@ -132,6 +132,7 @@ public class NotifyUsersForSubscriptionJob implements Runnable {
                             APPLICATION_URL);
                     sendNotification(email, subject, "Body", html);
                 } catch (Exception e) {
+                    LOG.error("Failed to notify user");
                     e.printStackTrace();
                 }
             }

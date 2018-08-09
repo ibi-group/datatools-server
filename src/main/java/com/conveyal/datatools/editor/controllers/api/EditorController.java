@@ -10,6 +10,7 @@ import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.gtfs.loader.JdbcTableWriter;
 import com.conveyal.gtfs.loader.Table;
 import com.conveyal.gtfs.model.Entity;
+import com.conveyal.gtfs.util.InvalidNamespaceException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.commons.dbutils.DbUtils;
@@ -20,11 +21,13 @@ import spark.Request;
 import spark.Response;
 
 import javax.sql.DataSource;
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJSON;
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWith500;
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.editor.controllers.EditorLockController.sessionsForFeedIds;
 import static spark.Spark.delete;
@@ -103,9 +106,11 @@ public abstract class EditorController<T extends Entity> {
             JdbcTableWriter tableWriter = new JdbcTableWriter(Table.TRIPS, datasource, namespace);
             int deletedCount = tableWriter.deleteWhere("pattern_id", patternId, true);
             return formatJSON(String.format("Deleted %d.", deletedCount), 200);
-        } catch (Exception e) {
-            e.printStackTrace();
-            haltWithMessage(req, 400, "Error deleting entity", e);
+        } catch (InvalidNamespaceException e) {
+            haltWithMessage(req, 400, "Invalid namespace");
+            return null;
+        } catch (SQLException e) {
+            haltWith500(req, "Error deleting entity", e);
             return null;
         } finally {
             LOG.info("Delete operation took {} msec", System.currentTimeMillis() - startTime);
@@ -134,9 +139,10 @@ public abstract class EditorController<T extends Entity> {
             // Commit the transaction after iterating over trip IDs (because the deletes where made without autocommit).
             tableWriter.commit();
             LOG.info("Deleted {} trips", tripIds.length);
-        } catch (Exception e) {
-            e.printStackTrace();
-            haltWithMessage(req, 400, "Error deleting entity", e);
+        } catch (InvalidNamespaceException e) {
+            haltWithMessage(req, 400, "Invalid namespace");
+        } catch (SQLException e) {
+            haltWith500(req, "Error deleting entity", e);
         } finally {
             LOG.info("Delete operation took {} msec", System.currentTimeMillis() - startTime);
         }
@@ -178,13 +184,7 @@ public abstract class EditorController<T extends Entity> {
             url = S3Utils.uploadBranding(req, String.join("_", classToLowercase, idAsString));
         } catch (HaltException e) {
             // Do not re-catch halts thrown for exceptions that have already been caught.
-            LOG.error("Halt encountered", e);
             throw e;
-        } catch (Exception e) {
-            String message = String.format("Could not upload branding for %s id=%d", classToLowercase, id);
-            LOG.error(message);
-            e.printStackTrace();
-            haltWithMessage(req, 400, message, e);
         }
         String namespace = getNamespaceAndValidateSession(req);
         // Prepare json object for response. (Note: this is not the full entity object, but just the URL field).
@@ -202,8 +202,7 @@ public abstract class EditorController<T extends Entity> {
             connection.commit();
             return jsonObject.toString();
         } catch (SQLException e) {
-            e.printStackTrace();
-            haltWithMessage(req, 400, "Could not update branding url", e);
+            haltWith500(req, "Could not update branding url", e);
             return null;
         } finally {
             DbUtils.closeQuietly(connection);
@@ -225,17 +224,21 @@ public abstract class EditorController<T extends Entity> {
         final boolean isCreating = req.params("id") == null;
         String namespace = getNamespaceAndValidateSession(req);
         Integer id = getIdFromRequest(req);
-        // Get the JsonObject
+        // Save or update to database
         try {
             JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
+            String jsonBody = req.body();
             if (isCreating) {
-                return tableWriter.create(req.body(), true);
+                return tableWriter.create(jsonBody, true);
             } else {
-                return tableWriter.update(id, req.body(), true);
+                return tableWriter.update(id, jsonBody, true);
             }
-        } catch (Exception e) {
-            e.printStackTrace();
-            haltWithMessage(req, 400, "Operation failed.", e);
+        } catch (InvalidNamespaceException e) {
+            haltWithMessage(req, 400, "Invalid namespace");
+        } catch (IOException e) {
+            haltWithMessage(req, 400, "Invalid json", e);
+        } catch (SQLException e) {
+            haltWith500(req, "An error was encountered while trying to save to the database", e);
         } finally {
             String operation = isCreating ? "Create" : "Update";
             LOG.info("{} operation took {} msec", operation, System.currentTimeMillis() - startTime);

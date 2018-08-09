@@ -32,10 +32,11 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWith500;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
-import static spark.Spark.*;
+import static spark.Spark.get;
+import static spark.Spark.post;
 
 /**
  * This class contains HTTP endpoints that should ONLY be used in controlled environments (i.e., when the application is
@@ -241,8 +242,7 @@ public class DumpController {
             }
             return true;
         } catch (Exception e) {
-            e.printStackTrace();
-            haltWithMessage(req, 400, "Error loading legacy JSON", e);
+            haltWith500(req, "Error loading legacy JSON", e);
             return false;
         }
     }
@@ -293,6 +293,7 @@ public class DumpController {
             try {
                 feedSource.url = url != null && !url.equals("null") ? new URL(url.toString()) : null;
             } catch (MalformedURLException e) {
+                LOG.error("Failed to create feedsource url");
                 e.printStackTrace();
             }
 

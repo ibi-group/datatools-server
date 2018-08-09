@@ -15,6 +15,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.File;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.lang.reflect.Field;
@@ -48,7 +49,7 @@ public class MtcFeedResource implements ExternalFeedResource {
     }
 
     @Override
-    public void importFeedsForProject(Project project, String authHeader) {
+    public void importFeedsForProject(Project project, String authHeader) throws IOException, IllegalAccessException {
         URL url;
         ObjectMapper mapper = new ObjectMapper();
         // single list from MTC
@@ -56,7 +57,7 @@ public class MtcFeedResource implements ExternalFeedResource {
             url = new URL(rtdApi + "/Carrier");
         } catch(MalformedURLException ex) {
             LOG.error("Could not construct URL for RTD API: {}", rtdApi);
-            return;
+            throw ex;
         }
 
         try {
@@ -139,7 +140,7 @@ public class MtcFeedResource implements ExternalFeedResource {
             }
         } catch(Exception ex) {
             LOG.error("Could not read feeds from MTC RTD API");
-            ex.printStackTrace();
+            throw ex;
         }
     }
 
@@ -157,7 +158,11 @@ public class MtcFeedResource implements ExternalFeedResource {
      * null create/register a new carrier with RTD.
      */
     @Override
-    public void propertyUpdated(ExternalFeedSourceProperty updatedProperty, String previousValue, String authHeader) {
+    public void propertyUpdated(
+        ExternalFeedSourceProperty updatedProperty,
+        String previousValue,
+        String authHeader
+    ) throws IOException {
         LOG.info("Update property in MTC carrier table: " + updatedProperty.name);
         String feedSourceId = updatedProperty.feedSourceId;
         FeedSource source = Persistence.feedSources.getById(feedSourceId);
@@ -202,7 +207,7 @@ public class MtcFeedResource implements ExternalFeedResource {
     /**
      * Update or create a carrier and its properties with an HTTP request to the RTD.
      */
-    private void writeCarrierToRtd(RtdCarrier carrier, boolean createNew, String authHeader) {
+    private void writeCarrierToRtd(RtdCarrier carrier, boolean createNew, String authHeader) throws IOException {
 
         try {
             ObjectMapper mapper = new ObjectMapper();
@@ -226,6 +231,7 @@ public class MtcFeedResource implements ExternalFeedResource {
             LOG.info("RTD API response: {}/{}", connection.getResponseCode(), connection.getResponseMessage());
         } catch (Exception e) {
             LOG.error("Error writing to RTD", e);
+            throw e;
         }
     }
 }

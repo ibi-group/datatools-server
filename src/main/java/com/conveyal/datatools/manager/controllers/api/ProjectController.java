@@ -12,14 +12,13 @@ import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
 import spark.Response;
 
-import java.io.IOException;
+import java.time.DateTimeException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -35,6 +34,7 @@ import java.util.stream.Collectors;
 import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWith500;
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.manager.DataManager.publicPath;
 import static spark.Spark.delete;
@@ -59,7 +59,7 @@ public class ProjectController {
     /**
      * @return a list of all projects that are public or visible given the current user and organization.
      */
-    private static Collection<Project> getAllProjects(Request req, Response res) throws JsonProcessingException {
+    private static Collection<Project> getAllProjects(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         // TODO: move this filtering into database query to reduce traffic / memory
         return Persistence.projects.getAll().stream()
@@ -102,7 +102,7 @@ public class ProjectController {
      * body.
      * @return the Project as it appears in the database after the update.
      */
-    private static Project updateProject(Request req, Response res) throws IOException {
+    private static Project updateProject(Request req, Response res) {
         // Fetch the project once to check permissions
         requestProjectById(req, "manage");
         try {
@@ -126,8 +126,7 @@ public class ProjectController {
             }
             return updatedProject;
         } catch (Exception e) {
-            e.printStackTrace();
-            haltWithMessage(req, 400, "Error updating project");
+            haltWith500(req, "Error updating project", e);
             return null;
         }
     }
@@ -140,7 +139,7 @@ public class ProjectController {
         Project project = requestProjectById(req, "manage");
         boolean successfullyDeleted = project.delete();
         if (!successfullyDeleted) {
-            haltWithMessage(req, 400, "Did not delete project.");
+            haltWith500(req, "Did not delete project.", new Exception("Delete unsuccessful"));
         }
         return project;
     }
@@ -306,7 +305,11 @@ public class ProjectController {
 
         LOG.info("syncing with third party " + syncType);
         if(DataManager.feedResources.containsKey(syncType)) {
-            DataManager.feedResources.get(syncType).importFeedsForProject(proj, req.headers("Authorization"));
+            try {
+                DataManager.feedResources.get(syncType).importFeedsForProject(proj, req.headers("Authorization"));
+            } catch (Exception e) {
+                haltWith500(req, "An error occurred while trying to sync", e);
+            }
             return proj;
         }
 
@@ -329,7 +332,10 @@ public class ProjectController {
             ZoneId timezone;
             try {
                 timezone = ZoneId.of(project.defaultTimeZone);
-            }catch(Exception e){
+            } catch (DateTimeException e) {
+                LOG.warn(
+                    String.format("Project's default timezone of %s is not a valid timezone", project.defaultTimeZone)
+                );
                 timezone = ZoneId.of("America/New_York");
             }
             LOG.info("Scheduling auto-fetch for projectID: {}", project.id);
@@ -360,6 +366,7 @@ public class ProjectController {
             return DataManager.scheduler.scheduleAtFixedRate(fetchProjectFeedsJob,
                     delayInMinutes, TimeUnit.DAYS.toMinutes(intervalInDays), minutes);
         } catch (Exception e) {
+            LOG.error("Failed to schedule auto feed fetch");
             e.printStackTrace();
             return null;
         }

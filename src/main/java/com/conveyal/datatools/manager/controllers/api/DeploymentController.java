@@ -1,7 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.common.utils.SparkUtils;
+import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.DeployJob;
 import com.conveyal.datatools.manager.models.Deployment;
@@ -16,7 +16,6 @@ import org.bson.Document;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import spark.HaltException;
 import spark.Request;
 import spark.Response;
 
@@ -31,8 +30,11 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
-import static spark.Spark.*;
+import static spark.Spark.delete;
 import static spark.Spark.get;
+import static spark.Spark.options;
+import static spark.Spark.post;
+import static spark.Spark.put;
 
 /**
  * Handlers for HTTP API requests that affect Deployments.
@@ -243,67 +245,69 @@ public class DeploymentController {
      * Create a deployment bundle, and send it to the specified OTP target servers (or the specified s3 bucket).
      */
     private static String deploy (Request req, Response res) {
-        try {
-            // Check parameters supplied in request for validity.
-            Auth0UserProfile userProfile = req.attribute("user");
-            String target = req.params("target");
-            Deployment deployment = checkDeploymentPermissions(req, res);
-            Project project = Persistence.projects.getById(deployment.projectId);
-            if (project == null) haltWithMessage(req, 400, "Internal reference error. Deployment's project ID is invalid");
-            // FIXME: Currently the otp server to deploy to is determined by the string name field (with special characters
-            // replaced with underscores). This should perhaps be replaced with an immutable server ID so that there is
-            // no risk that these values can overlap. This may be over engineering this system though. The user deploying
-            // a set of feeds would likely not create two deployment targets with the same name (and the name is unlikely
-            // to change often).
-            OtpServer otpServer = project.retrieveServer(target);
-            if (otpServer == null) haltWithMessage(req, 400, "Must provide valid OTP server target ID.");
-            // Check that permissions of user allow them to deploy to target.
-            boolean isProjectAdmin = userProfile.canAdministerProject(deployment.projectId, deployment.organizationId());
-            if (!isProjectAdmin && otpServer.admin) {
-                haltWithMessage(req, 401, "User not authorized to deploy to admin-only target OTP server.");
-            }
-            // Check that we can deploy to the specified target. (Any deploy job for the target that is presently active will
-            // cause a halt.)
-            if (deploymentJobsByServer.containsKey(target)) {
-                // There is a deploy job for the server. Check if it is active.
-                DeployJob deployJob = deploymentJobsByServer.get(target);
-                if (deployJob != null && !deployJob.status.completed) {
-                    // Job for the target is still active! Send a 202 to the requester to indicate that it is not possible
-                    // to deploy to this target right now because someone else is deploying.
-                    String message = String.format(
-                            "Will not process request to deploy %s. Deployment currently in progress for target: %s",
-                            deployment.name,
-                            target);
-                    LOG.warn(message);
-                    haltWithMessage(req, HttpStatus.ACCEPTED_202, message);
-                }
-            }
-            // Get the URLs to deploy to.
-            List<String> targetUrls = otpServer.internalUrl;
-            if ((targetUrls == null || targetUrls.isEmpty()) && (otpServer.s3Bucket == null || otpServer.s3Bucket.isEmpty())) {
-                haltWithMessage(req, 400, String.format("OTP server %s has no internal URL or s3 bucket specified.", otpServer.name));
-            }
-            // For any previous deployments sent to the server/router combination, set deployedTo to null because
-            // this new one will overwrite it. NOTE: deployedTo for the current deployment will only be updated after the
-            // successful completion of the deploy job.
-            for (Deployment oldDeployment : Deployment.retrieveDeploymentForServerAndRouterId(target, deployment.routerId)) {
-                LOG.info("Setting deployment target to null id={}", oldDeployment.id);
-                Persistence.deployments.updateField(oldDeployment.id, "deployedTo", null);
-            }
+        // Check parameters supplied in request for validity.
+        Auth0UserProfile userProfile = req.attribute("user");
+        String target = req.params("target");
+        Deployment deployment = checkDeploymentPermissions(req, res);
+        Project project = Persistence.projects.getById(deployment.projectId);
+        if (project == null)
+            haltWithMessage(req, 400, "Internal reference error. Deployment's project ID is invalid");
 
-            // Execute the deployment job and keep track of it in the jobs for server map.
-            DeployJob job = new DeployJob(deployment, userProfile.getUser_id(), otpServer);
-            DataManager.heavyExecutor.execute(job);
-            deploymentJobsByServer.put(target, job);
+        // FIXME: Currently the otp server to deploy to is determined by the string name field (with special characters
+        // replaced with underscores). This should perhaps be replaced with an immutable server ID so that there is
+        // no risk that these values can overlap. This may be over engineering this system though. The user deploying
+        // a set of feeds would likely not create two deployment targets with the same name (and the name is unlikely
+        // to change often).
+        OtpServer otpServer = project.retrieveServer(target);
+        if (otpServer == null) haltWithMessage(req, 400, "Must provide valid OTP server target ID.");
 
-            return SparkUtils.formatJobMessage(job.jobId, "Deployment initiating.");
-        } catch (HaltException e) {
-            throw e;
-        } catch (Exception e) {
-            e.printStackTrace();
-            haltWithMessage(req, 400, "Could not process deployment request. Please check request parameters and OTP server target fields.");
-            return null;
+        // Check that permissions of user allow them to deploy to target.
+        boolean isProjectAdmin = userProfile.canAdministerProject(deployment.projectId, deployment.organizationId());
+        if (!isProjectAdmin && otpServer.admin) {
+            haltWithMessage(req, 401, "User not authorized to deploy to admin-only target OTP server.");
         }
+
+        // Check that we can deploy to the specified target. (Any deploy job for the target that is presently active will
+        // cause a halt.)
+        if (deploymentJobsByServer.containsKey(target)) {
+            // There is a deploy job for the server. Check if it is active.
+            DeployJob deployJob = deploymentJobsByServer.get(target);
+            if (deployJob != null && !deployJob.status.completed) {
+                // Job for the target is still active! Send a 202 to the requester to indicate that it is not possible
+                // to deploy to this target right now because someone else is deploying.
+                String message = String.format(
+                        "Will not process request to deploy %s. Deployment currently in progress for target: %s",
+                        deployment.name,
+                        target);
+                LOG.warn(message);
+                haltWithMessage(req, HttpStatus.ACCEPTED_202, message);
+            }
+        }
+
+        // Get the URLs to deploy to.
+        List<String> targetUrls = otpServer.internalUrl;
+        if ((targetUrls == null || targetUrls.isEmpty()) && (otpServer.s3Bucket == null || otpServer.s3Bucket.isEmpty())) {
+            haltWithMessage(
+                req,
+                400,
+                String.format("OTP server %s has no internal URL or s3 bucket specified.", otpServer.name)
+            );
+        }
+
+        // For any previous deployments sent to the server/router combination, set deployedTo to null because
+        // this new one will overwrite it. NOTE: deployedTo for the current deployment will only be updated after the
+        // successful completion of the deploy job.
+        for (Deployment oldDeployment : Deployment.retrieveDeploymentForServerAndRouterId(target, deployment.routerId)) {
+            LOG.info("Setting deployment target to null id={}", oldDeployment.id);
+            Persistence.deployments.updateField(oldDeployment.id, "deployedTo", null);
+        }
+
+        // Execute the deployment job and keep track of it in the jobs for server map.
+        DeployJob job = new DeployJob(deployment, userProfile.getUser_id(), otpServer);
+        DataManager.heavyExecutor.execute(job);
+        deploymentJobsByServer.put(target, job);
+
+        return SparkUtils.formatJobMessage(job.jobId, "Deployment initiating.");
     }
 
     public static void register (String apiPrefix) {

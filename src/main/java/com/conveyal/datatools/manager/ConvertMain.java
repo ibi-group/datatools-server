@@ -12,6 +12,8 @@ import com.conveyal.datatools.manager.persistence.Persistence;
 import org.apache.commons.io.FileUtils;
 import org.eclipse.jetty.util.ConcurrentHashSet;
 import org.mapdb.Fun;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.nio.charset.Charset;
@@ -50,6 +52,8 @@ import static com.conveyal.datatools.manager.DataManager.registerRoutes;
  *
  */
 public class ConvertMain {
+    public static final Logger LOG = LoggerFactory.getLogger(ConvertMain.class);
+
     // Feed ID constants for testing.
     private static final String CORTLAND_FEED_ID = "c5bdff54-82fa-47ce-ad6e-3c6517563992";
     public static final String AMTRAK_FEED_ID = "be5b775b-6811-4522-bbf6-1a408e7cf3f8";
@@ -73,7 +77,7 @@ public class ConvertMain {
             String jsonString = FileUtils.readFileToString(new File(args[3]), Charset.defaultCharset());
             boolean result = DumpController.updateSnapshotMetadata(jsonString);
             if (result) {
-                System.out.println("Snapshot metadata update successful!");
+                LOG.info("Snapshot metadata update successful!");
             }
             // Done.
             System.exit(0);
@@ -87,26 +91,26 @@ public class ConvertMain {
             boolean force = args.length > 3 && "true".equals(args[3]);
             DumpController.validateAll(true, force, null);
         } else {
-            System.out.println("Skipping JSON load and feed version load/validation due to snapshotsOnly flag");
+            LOG.info("Skipping JSON load and feed version load/validation due to snapshotsOnly flag");
         }
 
         // STEP 3: For each feed source in MongoDB, load all snapshots (and current editor buffer) into Postgres DB.
         // STEP 3A: For each snapshot/editor DB, create a snapshot Mongo object for the feed source with the FeedLoadResult.
         migrateEditorFeeds();
-        System.out.println("Done queueing!!!!!!!!");
+        LOG.info("Done queueing!!!!!!!!");
         int totalJobs = StatusController.getAllJobs().size();
         while (!StatusController.filterActiveJobs(StatusController.getAllJobs()).isEmpty()) {
             // While there are still active jobs, continue waiting.
             ConcurrentHashSet<MonitorableJob> activeJobs = StatusController.filterActiveJobs(StatusController.getAllJobs());
-            System.out.println(String.format("%d/%d jobs still active. Checking for completion again in 5 seconds...", activeJobs.size(), totalJobs));
-//            System.out.println(String.join(", ", activeJobs.stream().map(job -> job.name).collect(Collectors.toList())));
+            LOG.info(String.format("%d/%d jobs still active. Checking for completion again in 5 seconds...", activeJobs.size(), totalJobs));
+//            LOG.info(String.join(", ", activeJobs.stream().map(job -> job.name).collect(Collectors.toList())));
             int jobsInExecutor = ((ThreadPoolExecutor) DataManager.heavyExecutor).getActiveCount();
-            System.out.println(String.format("Jobs in thread pool executor: %d", jobsInExecutor));
-            System.out.println(String.format("Jobs completed by executor: %d", ((ThreadPoolExecutor) DataManager.heavyExecutor).getCompletedTaskCount()));
+            LOG.info(String.format("Jobs in thread pool executor: %d", jobsInExecutor));
+            LOG.info(String.format("Jobs completed by executor: %d", ((ThreadPoolExecutor) DataManager.heavyExecutor).getCompletedTaskCount()));
             Thread.sleep(5000);
         }
         long durationInMillis = System.currentTimeMillis() - startTime;
-        System.out.println(String.format("MIGRATION COMPLETED IN %d SECONDS.", TimeUnit.MILLISECONDS.toSeconds(durationInMillis)));
+        LOG.info(String.format("MIGRATION COMPLETED IN %d SECONDS.", TimeUnit.MILLISECONDS.toSeconds(durationInMillis)));
         System.exit(0);
     }
 
@@ -117,7 +121,7 @@ public class ConvertMain {
             long startTime = System.currentTimeMillis();
             int count = 0;
             int snapshotCount = gtx.snapshots.values().size();
-            System.out.println(snapshotCount + " snapshots to convert");
+            LOG.info(snapshotCount + " snapshots to convert");
 
             Set<String> feedSourcesEncountered = new HashSet<>();
             // Iterate over the provided snapshots and convert each one. Note: this will skip snapshots for feed IDs that
@@ -132,7 +136,7 @@ public class ConvertMain {
                     // Only migrate the feeds that have a feed source record in the MongoDB.
                     if (feedIdsToSkip != null && Arrays.asList(feedIdsToSkip).contains(feedSourceId)) {
                         // If list of feed IDs to skip is provided and the current feed ID matches, skip it.
-                        System.out.println("Skipping feed. ID found in list to skip. id: " + feedSourceId);
+                        LOG.info("Skipping feed. ID found in list to skip. id: " + feedSourceId);
                         continue;
                     }
                     if (!feedSourcesEncountered.contains(feedSource.id)) {
@@ -143,18 +147,18 @@ public class ConvertMain {
                     }
                     ConvertEditorMapDBToSQL convertEditorMapDBToSQL = new ConvertEditorMapDBToSQL(snapshot.id.a, snapshot.id.b);
                     DataManager.heavyExecutor.execute(convertEditorMapDBToSQL);
-                    System.out.println(count + "/" + snapshotCount + " snapshot conversion queued");
+                    LOG.info(count + "/" + snapshotCount + " snapshot conversion queued");
                     feedSourcesEncountered.add(feedSource.id);
                     count++;
                 } else {
-                    System.out.println("Not converting snapshot. Feed source Id does not exist in application data" + feedSourceId);
+                    LOG.info("Not converting snapshot. Feed source Id does not exist in application data" + feedSourceId);
                 }
             }
 //            long duration = System.currentTimeMillis() - startTime;
-//            System.out.println("Converting " + snapshotCount + " snapshots took " + TimeUnit.MILLISECONDS.toMinutes(duration) + " minutes");
+//            LOG.info("Converting " + snapshotCount + " snapshots took " + TimeUnit.MILLISECONDS.toMinutes(duration) + " minutes");
             return true;
         } catch (Exception e) {
-            System.out.println("Migrating editor feeds FAILED");
+            LOG.error("Migrating editor feeds FAILED");
             e.printStackTrace();
             return false;
         } finally {
