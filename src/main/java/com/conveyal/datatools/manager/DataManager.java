@@ -135,10 +135,7 @@ public class DataManager {
         // Load configuration files (env.yml and server.yml).
         loadConfig(args);
 
-        String bugsnagKey = getConfigPropertyAsText("BUGSNAG_KEY");
-        if (bugsnagKey != null) {
-            new Bugsnag(bugsnagKey);
-        }
+        getBugsnag();
 
         // FIXME: hack to statically load FeedStore
         LOG.info(FeedStore.class.getSimpleName());
@@ -160,6 +157,17 @@ public class DataManager {
 
         // Initialize MongoDB storage
         Persistence.initialize();
+    }
+
+    /**
+     * Convenience method to
+     */
+    public static Bugsnag getBugsnag() {
+        String bugsnagKey = getConfigPropertyAsText("BUGSNAG_KEY");
+        if (bugsnagKey != null) {
+            return new Bugsnag(bugsnagKey);
+        }
+        return null;
     }
 
     /**

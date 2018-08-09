@@ -1,5 +1,7 @@
 package com.conveyal.datatools.common.utils;
 
+import com.bugsnag.Bugsnag;
+import com.bugsnag.Report;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -18,6 +20,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.Arrays;
 
+import static com.conveyal.datatools.manager.DataManager.getBugsnag;
 import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
 import static spark.Spark.halt;
 
@@ -48,10 +51,8 @@ public class SparkUtils {
             ByteStreams.copy(fileInputStream, outputStream);
             // TODO: Is flushing the stream necessary?
             outputStream.flush();
-        } catch (Exception e) {
-            LOG.error("Could not write file to output stream", e);
-            e.printStackTrace();
-            haltWithMessage(req, 500, "Error serving GTFS file", e);
+        } catch (IOException e) {
+            haltWith500(req, "Could not write file to output stream", e);
         }
         return raw;
     }
@@ -84,6 +85,28 @@ public class SparkUtils {
      */
     public static String formatJSON(String message, int code, Exception e) {
         return getObjectNode(message, code, e).toString();
+    }
+
+    /**
+     * Wrapper around haltWithMessage for HTTP 500 errors that should be logged and sent to bugsnag
+     */
+    public static void haltWith500(Request request, String message, Exception e) throws HaltException {
+        // log error into datatools log
+        LOG.error(message);
+        e.printStackTrace();
+
+        // create report to notify bugsnag if configured
+        Bugsnag bugsnag = getBugsnag();
+        if (bugsnag != null) {
+            Report report = bugsnag.buildReport(e);
+            Auth0UserProfile userProfile = request.attribute("user");
+            String userEmail = userProfile != null ? userProfile.getEmail() : "no-auth";
+            report.setUserEmail(userEmail);
+            bugsnag.notify(report);
+        }
+
+        // respond to user
+        haltWithMessage(request, 500, message, e);
     }
 
     /**
