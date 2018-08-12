@@ -157,8 +157,10 @@ public class GtfsPlusController {
 
             bufferedOutputStream.flush();
             bufferedOutputStream.close();
-        } catch (Exception e) {
-            haltWithMessage(req, 500, "an unexpected error occurred", e);
+        } catch (IOException e) {
+            LOG.error("An error occurred while trying to download a gtfs plus file");
+            e.printStackTrace();
+            haltWithMessage(req, 500, "An error occurred while trying to download a gtfs plus file", e);
         }
 
         return res.raw();
