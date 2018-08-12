@@ -71,6 +71,36 @@ public class OrganizationController {
         requestOrganizationById(req);
         Organization organization = Persistence.organizations.update(organizationId, req.body());
 
+        // FIXME: Add back in hook after organization is updated.
+        // See https://github.com/catalogueglobal/datatools-server/issues/111
+//        JsonNode projects = entry.getValue();
+//        Collection<Project> projectsToInsert = new ArrayList<>(projects.size());
+//        Collection<Project> existingProjects = org.projects();
+//
+//        // set projects orgId for all valid projects in list
+//        for (JsonNode project : projects) {
+//            if (!project.has("id")) {
+//                halt(400, "Project not supplied");
+//            }
+//            Project p = Project.retrieve(project.get("id").asText());
+//            if (p == null) {
+//                halt(404, "Project not found");
+//            }
+//            Organization previousOrg = p.retrieveOrganization();
+//            if (previousOrg != null && !previousOrg.id.equals(org.id)) {
+//                halt(400, SparkUtils.formatJSON(String.format("Project %s cannot be reassigned while belonging to org %s", p.id, previousOrg.id), 400));
+//            }
+//            projectsToInsert.add(p);
+//            p.organizationId = org.id;
+//            p.save();
+//        }
+//        // assign remaining previously assigned projects to null
+//        existingProjects.removeAll(projectsToInsert);
+//        for (Project p : existingProjects) {
+//            p.organizationId = null;
+//            p.save();
+//        }
+
         return organization;
     }
 
