@@ -46,6 +46,14 @@ public class UserController {
             new JsonManager<>(Project.class, JsonViews.UserInterface.class);
 
     /**
+     * HTTP endpoint to get the requesting user's profile from the Auth0 idToken passed in the Auth bearer header of the
+     * request.
+     */
+    private static String getUserProfileFromToken(Request req, Response res) throws IOException {
+        return req.attribute("raw_user");
+    }
+
+    /**
      * HTTP endpoint to get a single Auth0 user for the application (by specified ID param). Note, this uses a different
      * Auth0 API (get user) than the other get methods (user search query).
      */
@@ -403,6 +411,7 @@ public class UserController {
     }
 
     public static void register (String apiPrefix) {
+        get(apiPrefix + "secure/user", UserController::getUserProfileFromToken, json::write);
         get(apiPrefix + "secure/user/:id", UserController::getUser, json::write);
         get(apiPrefix + "secure/user/:id/recentactivity", UserController::getRecentActivity, json::write);
         get(apiPrefix + "secure/user", UserController::getAllUsers, json::write);
