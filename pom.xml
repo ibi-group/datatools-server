@@ -8,6 +8,42 @@
     <artifactId>datatools-server</artifactId>
     <version>3.2.0-SNAPSHOT</version>
 
+    <licenses>
+        <license>
+            <name>MIT License</name>
+            <url>https://opensource.org/licenses/MIT</url>
+        </license>
+    </licenses>
+
+    <!-- Developer entries are provided for primary developers.
+   For other contributors, see https://github.com/conveyal/gtfs-lib/graphs/contributors -->
+    <developers>
+        <developer>
+            <name>Landon Reed</name>
+            <email>lreed@conveyal.com</email>
+            <organization>Conveyal</organization>
+            <organizationUrl>http://conveyal.com/</organizationUrl>
+        </developer>
+        <developer>
+            <name>Andrew Byrd</name>
+            <email>abyrd@conveyal.com</email>
+            <organization>Conveyal</organization>
+            <organizationUrl>http://conveyal.com/</organizationUrl>
+        </developer>
+        <developer>
+            <name>David Emory</name>
+            <email>demory@conveyal.com</email>
+            <organization>Conveyal</organization>
+            <organizationUrl>http://conveyal.com/</organizationUrl>
+        </developer>
+        <developer>
+            <name>Evan Siroky</name>
+            <email>esiroky@conveyal.com</email>
+            <organization>Conveyal</organization>
+            <organizationUrl>http://conveyal.com/</organizationUrl>
+        </developer>
+    </developers>
+
     <!-- Define where the source code for project lives -->
     <scm>
         <connection>scm:git:https://github.com/conveyal/datatools-server.git</connection>
