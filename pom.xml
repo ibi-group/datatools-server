@@ -16,7 +16,7 @@
     </licenses>
 
     <!-- Developer entries are provided for primary developers.
-   For other contributors, see https://github.com/conveyal/gtfs-lib/graphs/contributors -->
+   For other contributors, see https://github.com/catalogueglobal/datatools-server/graphs/contributors -->
     <developers>
         <developer>
             <name>Landon Reed</name>
