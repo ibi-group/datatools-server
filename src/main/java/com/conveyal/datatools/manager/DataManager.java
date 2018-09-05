@@ -16,6 +16,7 @@ import com.conveyal.datatools.manager.controllers.api.NoteController;
 import com.conveyal.datatools.manager.controllers.api.OrganizationController;
 import com.conveyal.datatools.manager.controllers.api.ProjectController;
 import com.conveyal.datatools.manager.controllers.api.RegionController;
+import com.conveyal.datatools.manager.controllers.api.ServerController;
 import com.conveyal.datatools.manager.controllers.api.StatusController;
 import com.conveyal.datatools.manager.controllers.api.UserController;
 import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
@@ -48,6 +49,7 @@ import java.io.InputStream;
 import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -105,6 +107,9 @@ public class DataManager {
     public static String feedBucket;
     public static String bucketFolder;
 
+    public static String repoUrl;
+    public static String commit = "";
+
     public static boolean useS3;
     private static final String API_PREFIX = "/api/manager/";
     private static final String GTFS_API_PREFIX = API_PREFIX + "secure/gtfs/";
@@ -134,6 +139,7 @@ public class DataManager {
     static void initializeApplication(String[] args) throws IOException {
         // Load configuration files (env.yml and server.yml).
         loadConfig(args);
+        loadProperties();
 
         String bugsnagKey = getConfigPropertyAsText("BUGSNAG_KEY");
         if (bugsnagKey != null) {
@@ -162,6 +168,30 @@ public class DataManager {
         Persistence.initialize();
     }
 
+    private static void loadProperties() {
+        final Properties projectProperties = new Properties();
+        InputStream projectPropertiesInputStream =
+            DataManager.class.getClassLoader().getResourceAsStream(".properties");
+        try {
+            projectProperties.load(projectPropertiesInputStream);
+            repoUrl = projectProperties.getProperty("repo_url");
+        } catch (IOException e) {
+            LOG.info("could not read .properties file");
+            e.printStackTrace();
+        }
+
+        final Properties gitProperties = new Properties();
+        try {
+            InputStream gitPropertiesInputStream =
+                DataManager.class.getClassLoader().getResourceAsStream("git.properties");
+            gitProperties.load(gitPropertiesInputStream);
+            commit = gitProperties.getProperty("git.commit.id");
+        } catch (Exception e) {
+            LOG.info("could not read git.properties file");
+            e.printStackTrace();
+        }
+    }
+
     /**
      * Register API routes with Spark. This register core application routes, any routes associated with optional
      * modules and sets other core routes (e.g., 404 response) and response headers (e.g., API content type is JSON).
@@ -172,6 +202,7 @@ public class DataManager {
         // FIXME: Add user permissions check to ensure user has access to feeds.
         GraphQLMain.initialize(GTFS_DATA_SOURCE, GTFS_API_PREFIX);
         // Register core API routes
+        ServerController.register(API_PREFIX);
         ProjectController.register(API_PREFIX);
         FeedSourceController.register(API_PREFIX);
         FeedVersionController.register(API_PREFIX);

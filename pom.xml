@@ -10,9 +10,9 @@
 
     <!-- Define where the source code for project lives -->
     <scm>
-        <connection>scm:git:https://github.com/conveyal/datatools-server.git</connection>
-        <developerConnection>scm:git:ssh://git@github.com/conveyal/datatools-server.git</developerConnection>
-        <url>https://github.com/conveyal/datatools-server.git</url>
+        <connection>scm:git:https://github.com/catalogueglobal/datatools-server.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/catalogueglobal/datatools-server.git</developerConnection>
+        <url>https://github.com/catalogueglobal/datatools-server.git</url>
     </scm>
 
     <!-- Define where the artifacts produced by this build will be deployed -->
@@ -28,6 +28,17 @@
         <jackson.version>2.9.0</jackson.version>
     </properties>
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+                <includes>
+                    <include>**/*.properties</include>
+                    <include>gtfs/*</include>
+                    <include>public/*</include>
+                </includes>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -82,6 +93,8 @@
                 </executions>
                 <configuration>
                     <dotGitDirectory>${project.basedir}/.git</dotGitDirectory>
+                    <generateGitPropertiesFile>true</generateGitPropertiesFile>
+                    <injectAllReactorProjects>true</injectAllReactorProjects>
                 </configuration>
             </plugin>
             <plugin>
