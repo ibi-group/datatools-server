@@ -1,40 +1,28 @@
 package com.conveyal.datatools.manager.persistence;
 
 import com.conveyal.datatools.DatatoolsTest;
-import com.conveyal.datatools.manager.DataManager;
-import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.FeedSource;
-import com.conveyal.datatools.manager.models.FeedVersion;
-import com.conveyal.datatools.manager.models.Note;
-import com.conveyal.datatools.manager.models.Organization;
 import com.conveyal.datatools.manager.models.Project;
-import com.mongodb.client.result.DeleteResult;
-import com.mongodb.client.result.UpdateResult;
-import org.junit.Before;
+import org.junit.BeforeClass;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.IOException;
-import java.util.Date;
-
-import static com.mongodb.client.model.Filters.eq;
-import static com.mongodb.client.model.Updates.set;
 import static org.junit.Assert.assertEquals;
 
 /**
  * Created by landon on 9/6/17.
  */
-public class PersistenceTest extends DatatoolsTest {
+public class PersistenceTest {
     private static final Logger LOG = LoggerFactory.getLogger(PersistenceTest.class);
     private static boolean setUpIsDone = false;
 
-    @Before
-    public void setUp() {
+    @BeforeClass
+    public static void setUp() {
         if (setUpIsDone) {
             return;
         }
-        super.setUp();
+        DatatoolsTest.setUp();
         LOG.info("{} setup", PersistenceTest.class.getSimpleName());
 
         Persistence.initialize();
