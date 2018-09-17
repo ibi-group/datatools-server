@@ -93,6 +93,9 @@
                 </executions>
                 <configuration>
                     <dotGitDirectory>${project.basedir}/.git</dotGitDirectory>
+                    <!-- the below line will automatically generate the git properties file which is needed for the
+                     SeverController to fully function.
+                    -->
                     <generateGitPropertiesFile>true</generateGitPropertiesFile>
                     <injectAllReactorProjects>true</injectAllReactorProjects>
                 </configuration>

@@ -17,7 +17,8 @@ public class ServerController {
     public static final Logger LOG = LoggerFactory.getLogger(ServerController.class);
 
     public static Map<String, String> getInfo(Request req, Response res) {
-        HashMap<String, String> json = new HashMap<>();
+        // TODO: convert into a POJO if more stuff is needed here
+        Map<String, String> json = new HashMap<>();
         json.put("repoUrl", repoUrl);
         json.put("commit", commit);
         return json;
