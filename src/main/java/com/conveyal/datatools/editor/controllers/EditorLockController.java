@@ -11,6 +11,8 @@ import spark.Request;
 import spark.Response;
 import spark.Session;
 
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -29,7 +31,7 @@ public class EditorLockController {
     private static final JsonManager<EditorLockController> json = new JsonManager<>(EditorLockController.class, JsonViews.UserInterface.class);
     private static final Logger LOG = LoggerFactory.getLogger(EditorLockController.class);
     public static final Map<String, EditorSession> sessionsForFeedIds = new HashMap<>();
-    private static final long SESSION_LENGTH_IN_SECONDS = 60 * 60; // One hour
+    private static final long SESSION_LENGTH_IN_SECONDS = 10 * 60; // Ten minutes
 
 
     private static String lockFeed (Request req, Response res) {
@@ -58,7 +60,6 @@ public class EditorLockController {
         if (secondsSinceLastCheckIn > SESSION_LENGTH_IN_SECONDS) {
             // There is an active session, but the user with active session has not checked in for some time. Booting
             // the current session in favor of new session.
-            // FIXME: Should there be a user action to "boot" the other session lock?
             // Create new session
             String newSessionId = invalidateAndCreateNewSession(req);
             LOG.info("User {} (session ID: {}) has not maintained lock for {} minutes. Booting.", currentSession.userEmail, currentSession.sessionId, minutesSinceLastCheckIn);
@@ -68,12 +69,7 @@ public class EditorLockController {
         } else if (!currentSession.userId.equals(userProfile.getUser_id())) {
             // If the session has not expired, and another user has the active session.
             LOG.warn("Edit session {} for user {} in progress for feed {}. User {} not permitted to lock feed for {} minutes.", currentSession.sessionId, currentSession.userEmail, currentSession.feedId, userProfile.getEmail(), minutesUntilExpiration);
-            String message = String.format(
-                    "Warning! There is an editor session already in progress for user %s. " +
-                            "Their session will expire in %d minutes unless they are actively editing.",
-                    currentSession.userEmail,
-                    minutesUntilExpiration);
-            haltWithMessage(400, message);
+            haltWithMessage(400, getLockedFeedMessage(currentSession, minutesUntilExpiration));
             return null;
         } else {
             String sessionId = req.session().id();
@@ -81,6 +77,19 @@ public class EditorLockController {
             haltWithMessage(400, "Warning! You are editing this feed in another session/browser tab!");
             return null;
         }
+    }
+
+    private static String getLockedFeedMessage(EditorSession session, long minutesUntilExpiration) {
+        String timestamp = session.lastEdit > 0
+                ? SimpleDateFormat.getInstance().format(new Date(session.lastEdit))
+                : null;
+        String lastEditMessage = timestamp == null ? "no edits since session began" : "last edit was " + timestamp;
+        return String.format(
+                "Warning! There is an editor session already in progress for user %s. " +
+                        "Their session will expire after %d minutes of inactivity (%s).",
+                session.userEmail,
+                minutesUntilExpiration,
+                lastEditMessage);
     }
 
     private static String invalidateAndCreateNewSession(Request req) {
@@ -103,6 +112,8 @@ public class EditorLockController {
             haltWithMessage(400, "No active session for feedId. Please refresh your browser and try editing later.");
             return null;
         } else if (!currentSession.sessionId.equals(sessionId)) {
+            long secondsSinceLastCheckIn = TimeUnit.MILLISECONDS.toSeconds  (System.currentTimeMillis() - currentSession.lastCheckIn);
+            long minutesUntilExpiration = TimeUnit.SECONDS.toMinutes(SESSION_LENGTH_IN_SECONDS - secondsSinceLastCheckIn);
             // If there is an active session but it doesn't match the session, someone else (or the current user) is
             // editing elsewhere. A user should only be trying to maintain a lock if it had an active session at one
             // point. If we get to this point, it is because the user's session has expired and some other session took
@@ -113,10 +124,8 @@ public class EditorLockController {
                 LOG.warn("User {} already has an active editor session () for feed {}.", userProfile.getEmail(), currentSession.sessionId, currentSession.feedId);
                 haltWithMessage(400, "Warning! You have an active editing session for this feed underway in a different browser tab.");
             } else {
-                // FIXME: Is it bad to reveal the user email? No, I don't think so. Users have already been authenticated and
-                // must have permissions on the feed source to even get to this point.
                 LOG.warn("User {} attempted editor session for feed {} while active session underway for user {}.", userProfile.getEmail(), currentSession.feedId, currentSession.userEmail);
-                haltWithMessage(400, "Warning! There is an editor session underway for this feed. User = " + currentSession.userEmail);
+                haltWithMessage(400, getLockedFeedMessage(currentSession, minutesUntilExpiration));
             }
             return null;
         } else {
@@ -140,23 +149,20 @@ public class EditorLockController {
             LOG.warn("No active session to overwrite/delete.");
             return SparkUtils.formatJSON("No active session to take over. Please refresh your browser and try editing later.", 202);
         } else if (!currentSession.sessionId.equals(sessionId)) {
-            if (currentSession.userEmail.equals(userProfile.getEmail())) {
-                // If there is a different active session for the current user, allow deletion / overwrite.
-                boolean overwrite = Boolean.valueOf(req.queryParams("overwrite"));
-                if (overwrite) {
-                    sessionId = invalidateAndCreateNewSession(req);
-                    EditorSession newEditorSession = new EditorSession(feedId, sessionId, userProfile);
-                    sessionsForFeedIds.put(feedId, newEditorSession);
-                    LOG.warn("Previously active session {} has been overwritten with new session {}.", currentSession.sessionId, newEditorSession.sessionId);
-                    return formatJSON("Previous session lock has been overwritten with new session.", 200, feedId, sessionId);
-                } else {
-                    LOG.warn("Not overwriting session {} for user {}.", currentSession.sessionId, currentSession.userEmail);
-                    return SparkUtils.formatJSON("Not processing request to delete lock. There is already an active session for user " + currentSession.userEmail, 202);
-                }
+            // If there is a different active session for some user, allow deletion / overwrite.
+            // Note: There used to be a check here that the requesting user was the same as the user with an open
+            // session; however, this has been removed because in practice it became a nuisance. Respectful users with
+            // shared access to a feed can generally be trusted not to boot one another out in a combative manner.
+            boolean overwrite = Boolean.valueOf(req.queryParams("overwrite"));
+            if (overwrite) {
+                sessionId = invalidateAndCreateNewSession(req);
+                EditorSession newEditorSession = new EditorSession(feedId, sessionId, userProfile);
+                sessionsForFeedIds.put(feedId, newEditorSession);
+                LOG.warn("Previously active session {} has been overwritten with new session {}.", currentSession.sessionId, newEditorSession.sessionId);
+                return formatJSON("Previous session lock has been overwritten with new session.", 200, feedId, sessionId);
             } else {
-                // If there is a different active session for some other user, prevent deletion.
-                LOG.warn("User {} not permitted to overwrite active session {} for user {}", userProfile.getEmail(), currentSession.sessionId, currentSession.userEmail);
-                return SparkUtils.formatJSON("Cannot overwrite session for user " + currentSession.userEmail, 202);
+                LOG.warn("Not overwriting session {} for user {}.", currentSession.sessionId, currentSession.userEmail);
+                return SparkUtils.formatJSON("Not processing request to delete lock. There is already an active session for user " + currentSession.userEmail, 202);
             }
         } else {
             LOG.info("Current session: {} {}; User session: {} {}", currentSession.userEmail, currentSession.sessionId, userProfile.getEmail(), sessionId);
