@@ -15,7 +15,6 @@ import com.conveyal.datatools.manager.controllers.api.GtfsPlusController;
 import com.conveyal.datatools.manager.controllers.api.NoteController;
 import com.conveyal.datatools.manager.controllers.api.OrganizationController;
 import com.conveyal.datatools.manager.controllers.api.ProjectController;
-import com.conveyal.datatools.manager.controllers.api.RegionController;
 import com.conveyal.datatools.manager.controllers.api.StatusController;
 import com.conveyal.datatools.manager.controllers.api.UserController;
 import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
@@ -171,7 +170,6 @@ public class DataManager {
         ProjectController.register(API_PREFIX);
         FeedSourceController.register(API_PREFIX);
         FeedVersionController.register(API_PREFIX);
-        RegionController.register(API_PREFIX);
         NoteController.register(API_PREFIX);
         StatusController.register(API_PREFIX);
         OrganizationController.register(API_PREFIX);

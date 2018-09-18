@@ -185,7 +185,7 @@
             <version>2.1.0</version>
         </dependency>
 
-        <!-- Used for loading/fetching/writing GTFS entities -->
+        <!-- Used for loading/fetching/writing GTFS entities (also provides access to commons-io) -->
         <dependency>
             <groupId>com.conveyal</groupId>
             <artifactId>gtfs-lib</artifactId>
@@ -206,11 +206,11 @@
             <version>18.0</version>
         </dependency>
         <!-- Used to interface with AWS (S3, EC2, etc.) -->
-        <dependency>
-            <groupId>com.amazonaws</groupId>
-            <artifactId>aws-java-sdk</artifactId>
-            <version>1.11.172</version>
-        </dependency>
+        <!--<dependency>-->
+            <!--<groupId>com.amazonaws</groupId>-->
+            <!--<artifactId>aws-java-sdk</artifactId>-->
+            <!--<version>1.11.410</version>-->
+        <!--</dependency>-->
 
         <!-- Note: Unless we are explicit with the jackson dependencies listed below, other versions included in other
         dependencies may cause conflicts. Specifically, there is an issue with the JsonAlias annotation (used in
@@ -239,13 +239,8 @@
             <version>${jackson.version}</version>
         </dependency>
 
-        <dependency>
-            <groupId>org.geotools</groupId>
-            <artifactId>gt-geojson</artifactId>
-            <version>14.3</version>
-        </dependency>
-
-        <!-- Used to send email notifications to subscribing users -->
+        <!-- Used to send email notifications to subscribing users. Note: datatools-server also depends on this library
+         for commons lang3 from org.apache.commons. -->
         <dependency>
             <groupId>com.sparkpost</groupId>
             <artifactId>sparkpost-lib</artifactId>
@@ -263,13 +258,7 @@
         <dependency>
             <groupId>org.geotools</groupId>
             <artifactId>gt-shapefile</artifactId>
-            <version>14.0</version>
-        </dependency>
-
-        <dependency>
-            <groupId>commons-io</groupId>
-            <artifactId>commons-io</artifactId>
-            <version>2.4</version>
+            <version>19.2</version>
         </dependency>
 
         <!-- Unit testing -->
@@ -286,6 +275,8 @@
             <version>[3.0,4.0)</version>
             <artifactId>bugsnag</artifactId>
         </dependency>
+
+        <!-- JWT verification for Auth0 -->
         <dependency>
             <groupId>com.auth0</groupId>
             <artifactId>java-jwt</artifactId>
