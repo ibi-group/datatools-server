@@ -16,6 +16,9 @@ before_install:
 script:
 # package jar
 - mvn package
+after_success:
+# Upload coverage reports to codecov.io
+- bash <(curl -s https://codecov.io/bash)
 # notify slack channel of build status
 notifications:
   slack: conveyal:WQxmWiu8PdmujwLw4ziW72Gc

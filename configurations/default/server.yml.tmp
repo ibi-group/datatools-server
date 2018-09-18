@@ -15,8 +15,6 @@ modules:
     enabled: false
   user_admin:
     enabled: true
-  r5_network:
-    enabled: false
   gtfsapi:
     enabled: true
     load_on_fetch: false

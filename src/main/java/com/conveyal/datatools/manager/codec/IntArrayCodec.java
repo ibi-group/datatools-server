@@ -2,20 +2,12 @@ package com.conveyal.datatools.manager.codec;
 
 import gnu.trove.list.TIntList;
 import gnu.trove.list.array.TIntArrayList;
-import org.apache.commons.lang.ArrayUtils;
-import org.bson.BsonArray;
 import org.bson.BsonReader;
 import org.bson.BsonType;
-import org.bson.BsonValue;
 import org.bson.BsonWriter;
 import org.bson.codecs.Codec;
 import org.bson.codecs.DecoderContext;
 import org.bson.codecs.EncoderContext;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import java.util.ArrayList;
-import java.util.List;
 
 public class IntArrayCodec implements Codec<int[]> {
 

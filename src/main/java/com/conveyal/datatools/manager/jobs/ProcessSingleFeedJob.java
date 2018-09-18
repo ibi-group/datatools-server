@@ -8,7 +8,7 @@ import org.slf4j.LoggerFactory;
 
 /**
  * Process/validate a single GTFS feed. This chains together multiple server jobs. Loading the feed and validating the
- * feed are chained regardless. However, depending on which modules are enabled (e.g., r5_network), other jobs may be
+ * feed are chained regardless. However, depending on which modules are enabled, other jobs may be
  * included here if desired.
  * @author mattwigway
  *
@@ -56,11 +56,7 @@ public class ProcessSingleFeedJob extends MonitorableJob {
         // Next, validate the feed.
         addNextJob(new ValidateFeedJob(feedVersion, owner, isNewVersion));
 
-        // chain on a network builder job, if applicable
-        // FIXME: add back in.
-//        if(DataManager.isModuleEnabled("r5_network")) {
-//            addNextJob(new BuildTransportNetworkJob(feedVersion, owner));
-//        }
+        // TODO: Any other activities that need to be run (e.g., module-specific activities).
     }
 
     @Override
@@ -70,9 +66,7 @@ public class ProcessSingleFeedJob extends MonitorableJob {
             status.update(false, "New version saved.", 100, true);
         } else {
             // Processing did not complete. Depending on which sub-task this occurred in,
-            // there may or may not have been a successful load/validation of the feed. For instance,
-            // if an error occurred while building a TransportNetwork, the only impact is that there will
-            // be no r5 network to use for generating isochrones.
+            // there may or may not have been a successful load/validation of the feed.
             String errorReason = status.exceptionType != null ? String.format("error due to %s", status.exceptionType) : "unknown error";
             LOG.warn("Error processing version {} because of {}.", feedVersion.id, errorReason);
         }

@@ -1,7 +1,5 @@
 package com.conveyal.gtfs;
 
-//import com.conveyal.geojson.GeometryDeserializer;
-//import com.conveyal.geojson.GeometrySerializer;
 import com.conveyal.gtfs.model.Frequency;
 import com.conveyal.gtfs.model.Pattern;
 import com.conveyal.gtfs.model.Service;
@@ -9,10 +7,7 @@ import com.conveyal.gtfs.model.Shape;
 import com.conveyal.gtfs.model.Trip;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.google.common.base.Joiner;
-import com.vividsolutions.jts.geom.LineString;
 import spark.Request;
 import spark.Response;
 import spark.ResponseTransformer;
@@ -28,8 +23,6 @@ public class JsonTransformer implements ResponseTransformer {
 
     @Override
     public String render(Object o) throws Exception {
-//        objectMapper.getSerializationConfig().addMixInAnnotations(Trip.class, TripMixIn.class);
-//        objectMapper.getDeserializationConfig().addMixInAnnotations(Trip.class, TripMixIn.class);
         objectMapper.addMixIn(Trip.class, TripMixIn.class);
         objectMapper.addMixIn(Frequency.class, FrequencyMixIn.class);
         objectMapper.addMixIn(Pattern.class, PatternMixin.class);
