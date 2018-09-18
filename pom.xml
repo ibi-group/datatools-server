@@ -205,13 +205,7 @@
             <artifactId>guava</artifactId>
             <version>18.0</version>
         </dependency>
-
-        <!-- Used to fetch and put objects on S3 -->
-        <dependency>
-            <groupId>com.amazonaws</groupId>
-            <artifactId>aws-java-sdk-s3</artifactId>
-            <version>1.11.172</version>
-        </dependency>
+        <!-- Used to interface with AWS (S3, EC2, etc.) -->
         <dependency>
             <groupId>com.amazonaws</groupId>
             <artifactId>aws-java-sdk</artifactId>
