@@ -185,7 +185,7 @@
             <version>2.1.0</version>
         </dependency>
 
-        <!-- Used for loading/fetching/writing GTFS entities (also provides access to commons-io) -->
+        <!-- Used for loading/fetching/writing GTFS entities (also provides access to commons-io and AWS S3 SDK). -->
         <dependency>
             <groupId>com.conveyal</groupId>
             <artifactId>gtfs-lib</artifactId>
@@ -205,12 +205,6 @@
             <artifactId>guava</artifactId>
             <version>18.0</version>
         </dependency>
-        <!-- Used to interface with AWS (S3, EC2, etc.) -->
-        <!--<dependency>-->
-            <!--<groupId>com.amazonaws</groupId>-->
-            <!--<artifactId>aws-java-sdk</artifactId>-->
-            <!--<version>1.11.410</version>-->
-        <!--</dependency>-->
 
         <!-- Note: Unless we are explicit with the jackson dependencies listed below, other versions included in other
         dependencies may cause conflicts. Specifically, there is an issue with the JsonAlias annotation (used in
