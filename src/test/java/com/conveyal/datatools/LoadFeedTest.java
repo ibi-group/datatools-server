@@ -2,7 +2,7 @@ package com.conveyal.datatools;
 
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.BeforeAll;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -13,13 +13,9 @@ public abstract class LoadFeedTest {
     private static final Logger LOG = LoggerFactory.getLogger(LoadFeedTest.class);
     public static FeedSource source;
     public static FeedVersion version;
-    private static boolean setUpIsDone = false;
 
-    @BeforeClass
+    @BeforeAll
     public void setUp() {
-        if (setUpIsDone) {
-            return;
-        }
         DatatoolsTest.setUp();
         LOG.info("ProcessGtfsSnapshotMergeTest setup");
 
