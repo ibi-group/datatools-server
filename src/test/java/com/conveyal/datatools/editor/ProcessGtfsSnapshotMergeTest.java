@@ -1,20 +1,13 @@
 package com.conveyal.datatools.editor;
 
-import com.conveyal.datatools.LoadFeedTest;
-import com.conveyal.datatools.editor.datastore.FeedTx;
-import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.jobs.ProcessGtfsSnapshotMerge;
-import org.junit.Before;
-import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import static org.junit.Assert.assertEquals;
 
 /**
  * Created by landon on 2/24/17.
  */
-public class ProcessGtfsSnapshotMergeTest extends LoadFeedTest {
+public class ProcessGtfsSnapshotMergeTest {
     private static final Logger LOG = LoggerFactory.getLogger(ProcessGtfsSnapshotMergeTest.class);
     static ProcessGtfsSnapshotMerge snapshotMerge;
     private static boolean setUpIsDone = false;
