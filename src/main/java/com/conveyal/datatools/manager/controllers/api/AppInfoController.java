@@ -13,8 +13,8 @@ import static com.conveyal.datatools.manager.DataManager.commit;
 import static com.conveyal.datatools.manager.DataManager.repoUrl;
 import static spark.Spark.get;
 
-public class ServerController {
-    public static final Logger LOG = LoggerFactory.getLogger(ServerController.class);
+public class AppInfoController {
+    public static final Logger LOG = LoggerFactory.getLogger(AppInfoController.class);
 
     public static Map<String, String> getInfo(Request req, Response res) {
         // TODO: convert into a POJO if more stuff is needed here
@@ -25,6 +25,6 @@ public class ServerController {
     }
 
     public static void register (String apiPrefix) {
-        get(apiPrefix + "public/serverinfo", ServerController::getInfo, JsonUtil.objectMapper::writeValueAsString);
+        get(apiPrefix + "public/appinfo", AppInfoController::getInfo, JsonUtil.objectMapper::writeValueAsString);
     }
 }

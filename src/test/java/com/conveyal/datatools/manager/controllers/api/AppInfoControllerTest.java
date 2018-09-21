@@ -12,7 +12,7 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 
-public class ServerControllerTest {
+public class AppInfoControllerTest {
     /**
      * Prepare and start a testing-specific web server
      */
@@ -23,13 +23,13 @@ public class ServerControllerTest {
     }
 
     /**
-     * Make sure the server info endpoint can load and return expected data.
+     * Make sure the app info endpoint can load and return expected data.
      */
     @Test
-    public void canReturnServerInfo() throws IOException {
+    public void canReturnApprInfo() throws IOException {
         String jsonString = given()
             .port(4000)
-            .get("/api/manager/public/serverinfo")
+            .get("/api/manager/public/appinfo")
         .then()
             // make sure the repoUrl matches what is found in the pom.xml
             .body("repoUrl", equalTo("https://github.com/catalogueglobal/datatools-server.git"))

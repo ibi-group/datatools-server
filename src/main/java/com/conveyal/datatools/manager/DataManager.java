@@ -16,7 +16,7 @@ import com.conveyal.datatools.manager.controllers.api.NoteController;
 import com.conveyal.datatools.manager.controllers.api.OrganizationController;
 import com.conveyal.datatools.manager.controllers.api.ProjectController;
 import com.conveyal.datatools.manager.controllers.api.RegionController;
-import com.conveyal.datatools.manager.controllers.api.ServerController;
+import com.conveyal.datatools.manager.controllers.api.AppInfoController;
 import com.conveyal.datatools.manager.controllers.api.StatusController;
 import com.conveyal.datatools.manager.controllers.api.UserController;
 import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
@@ -211,7 +211,7 @@ public class DataManager {
         // FIXME: Add user permissions check to ensure user has access to feeds.
         GraphQLMain.initialize(GTFS_DATA_SOURCE, GTFS_API_PREFIX);
         // Register core API routes
-        ServerController.register(API_PREFIX);
+        AppInfoController.register(API_PREFIX);
         ProjectController.register(API_PREFIX);
         FeedSourceController.register(API_PREFIX);
         FeedVersionController.register(API_PREFIX);
