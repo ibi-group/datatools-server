@@ -1,24 +1,18 @@
 package com.conveyal.gtfs;
 
 import com.conveyal.gtfs.graphql.GTFSGraphQL;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import graphql.ExecutionInput;
-import graphql.ExecutionResult;
-import graphql.GraphQLError;
-import graphql.introspection.IntrospectionQuery;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
 import spark.Response;
 
 import java.io.IOException;
-import java.util.List;
+import java.util.HashMap;
 import java.util.Map;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
-import static spark.Spark.halt;
+import static com.conveyal.datatools.manager.DataManager.GTFS_DATA_SOURCE;
 
 /**
  * This Spark Controller contains methods to provide HTTP responses to GraphQL queries, including a query for the
@@ -66,15 +60,19 @@ public class GraphQLController {
         if (varsJson == null && queryJson == null) {
             return getSchema(null, null);
         }
-        Map<String, Object> variables = GraphQLMain.mapper.convertValue(varsJson, Map.class);
-        ExecutionInput executionInput = ExecutionInput.newExecutionInput()
-                .query(queryJson)
-                .variables(variables)
-                .build();
-        ExecutionResult result = GTFSGraphQL.getGraphQl().execute(executionInput);
+        // The graphiql app sends over this unparseable string while doing an introspection query.  Therefore this code
+        // checks for it and sends an empty map in that case.
+        Map<String, Object> variables = varsJson.toString().equals("\"{}\"")
+            ? new HashMap<>()
+            : GraphQLMain.mapper.convertValue(varsJson, Map.class);
+        Map<String, Object> result = GTFSGraphQL.run(
+            GTFS_DATA_SOURCE,
+            queryJson,
+            variables
+        );
         long endTime = System.currentTimeMillis();
         LOG.info("Query took {} msec", endTime - startTime);
-        return result.toSpecification();
+        return result;
     }
 
 
@@ -82,7 +80,7 @@ public class GraphQLController {
      * A Spark Controller that returns the GraphQL schema.
      */
     static Map<String, Object> getSchema(Request req, Response res) {
-        return GTFSGraphQL.getGraphQl().execute(IntrospectionQuery.INTROSPECTION_QUERY).toSpecification();
+        return GTFSGraphQL.introspectedSchema;
     }
 
 

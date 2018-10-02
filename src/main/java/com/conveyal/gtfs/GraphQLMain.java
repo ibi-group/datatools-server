@@ -1,11 +1,9 @@
 package com.conveyal.gtfs;
 
 import com.conveyal.datatools.common.utils.CorsFilter;
-import com.conveyal.gtfs.graphql.GTFSGraphQL;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import spark.ResponseTransformer;
 
 import javax.sql.DataSource;
 
@@ -57,7 +55,6 @@ public class GraphQLMain {
      */
     public static void initialize (DataSource dataSource, String apiPrefix) {
         LOG.info("Initialized GTFS GraphQL API at localhost:port{}", apiPrefix);
-        GTFSGraphQL.initialize(dataSource);
         get(apiPrefix + "graphql", GraphQLController::get, mapper::writeValueAsString);
         post(apiPrefix + "graphql", GraphQLController::post, mapper::writeValueAsString);
         get(apiPrefix + "graphql/schema", GraphQLController::getSchema, mapper::writeValueAsString);
