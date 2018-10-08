@@ -6,7 +6,6 @@ import java.util.List;
 
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.AmazonServiceException;
-import com.amazonaws.ClientConfiguration;
 import com.amazonaws.SdkClientException;
 import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.services.s3.AmazonS3;
@@ -16,7 +15,6 @@ import com.amazonaws.services.s3.transfer.TransferManager;
 import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
 import com.amazonaws.services.s3.transfer.Upload;
 import com.conveyal.datatools.manager.DataManager;
-import com.conveyal.datatools.manager.controllers.api.GtfsApiController;
 import com.conveyal.datatools.manager.models.FeedSource;
 import gnu.trove.list.TLongList;
 import gnu.trove.list.array.TLongArrayList;
@@ -27,6 +25,8 @@ import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
 import com.amazonaws.auth.profile.ProfileCredentialsProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.conveyal.datatools.manager.DataManager.hasConfigProperty;
 
 /**
  * Store a feed on the file system or s3
@@ -69,7 +69,7 @@ public class FeedStore {
 
     static {
         // s3 storage
-        if (DataManager.useS3 || GtfsApiController.extensionType.equals("mtc")){
+        if (DataManager.useS3 || hasConfigProperty("modules.gtfsapi.use_extension")){
             s3Bucket = DataManager.getConfigPropertyAsText("application.data.gtfs_s3_bucket");
             AmazonS3ClientBuilder builder = AmazonS3ClientBuilder.standard()
                     .withCredentials(getAWSCreds());

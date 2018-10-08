@@ -1,17 +1,17 @@
-package com.conveyal.datatools.manager.utils;
+package com.conveyal.datatools.common.utils;
 
 /**
- * Created by landon on 4/21/16.
+ * Created by demory on 9/2/16.
  */
-import java.util.HashMap;
-import spark.Filter;
-import spark.Request;
-import spark.Response;
+
 import spark.Spark;
+
+import java.util.HashMap;
 
 /**
  * Really simple helper for enabling CORS in a spark application;
  */
+
 public final class CorsFilter {
 
     private static final HashMap<String, String> corsHeaders = new HashMap<String, String>();
@@ -24,14 +24,6 @@ public final class CorsFilter {
     }
 
     public final static void apply() {
-        Filter filter = new Filter() {
-            @Override
-            public void handle(Request request, Response response) throws Exception {
-                corsHeaders.forEach((key, value) -> {
-                    response.header(key, value);
-                });
-            }
-        };
-        Spark.after(filter);
+        Spark.after((request, response) -> corsHeaders.forEach((key, value) -> response.header(key, value)));
     }
 }

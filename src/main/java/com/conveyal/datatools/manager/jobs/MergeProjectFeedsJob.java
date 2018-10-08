@@ -41,7 +41,7 @@ import static spark.Spark.halt;
  */
 public class MergeProjectFeedsJob extends MonitorableJob {
 
-    private static final Logger LOG = LoggerFactory.getLogger(MonitorableJob.class);
+    private static final Logger LOG = LoggerFactory.getLogger(MergeProjectFeedsJob.class);
     public final Project project;
 
     public MergeProjectFeedsJob(Project project, String owner) {

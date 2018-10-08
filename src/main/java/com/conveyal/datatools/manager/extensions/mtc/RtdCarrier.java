@@ -1,7 +1,10 @@
 package com.conveyal.datatools.manager.extensions.mtc;
 
 import com.conveyal.datatools.manager.models.FeedSource;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonProperty;
+
+import static com.conveyal.datatools.manager.models.ExternalFeedSourceProperty.constructId;
 
 /**
  * Created by demory on 3/30/16.
@@ -63,23 +66,36 @@ public class RtdCarrier {
     public RtdCarrier() {
     }
 
-    /*public void mapFeedSource(FeedSource source){
-        source.defaultGtfsId = this.AgencyId;
-        source.shortName = this.AgencyShortName;
-        source.AgencyPhone = this.AgencyPhone;
-        source.RttAgencyName = this.RttAgencyName;
-        source.RttEnabled = this.RttEnabled;
-        source.AgencyShortName = this.AgencyShortName;
-        source.AgencyPublicId = this.AgencyPublicId;
-        source.AddressLat = this.AddressLat;
-        source.AddressLon = this.AddressLon;
-        source.DefaultRouteType = this.DefaultRouteType;
-        source.CarrierStatus = this.CarrierStatus;
-        source.AgencyAddress = this.AgencyAddress;
-        source.AgencyEmail = this.AgencyEmail;
-        source.AgencyUrl = this.AgencyUrl;
-        source.AgencyFareUrl = this.AgencyFareUrl;
+    /**
+     * Construct an RtdCarrier given the provided feed source.
+     * @param source
+     */
+    public RtdCarrier(FeedSource source) {
+        AgencyId = getValueForField(source, MtcFeedResource.AGENCY_ID);
+        AgencyPhone = getValueForField(source, "AgencyPhone");
+        AgencyName = getValueForField(source, "AgencyName");
+        RttAgencyName = getValueForField(source, "RttAgencyName");
+        RttEnabled = getValueForField(source, "RttEnabled");
+        AgencyShortName = getValueForField(source, "AgencyShortName");
+        AgencyPublicId = getValueForField(source, "AgencyPublicId");
+        AddressLat = getValueForField(source, "AddressLat");
+        AddressLon = getValueForField(source, "AddressLon");
+        DefaultRouteType = getValueForField(source, "DefaultRouteType");
+        CarrierStatus = getValueForField(source, "CarrierStatus");
+        AgencyAddress = getValueForField(source, "AgencyAddress");
+        AgencyEmail = getValueForField(source, "AgencyEmail");
+        AgencyUrl = getValueForField(source, "AgencyUrl");
+        AgencyFareUrl = getValueForField(source, "AgencyFareUrl");
+    }
 
-        source.save();
-    }*/
+    private String getPropId(FeedSource source, String fieldName) {
+        return constructId(source, MtcFeedResource.RESOURCE_TYPE, fieldName);
+    }
+
+    /**
+     * FIXME: Are there cases where this might throw NPEs?
+     */
+    private String getValueForField (FeedSource source, String fieldName) {
+        return Persistence.externalFeedSourceProperties.getById(getPropId(source, fieldName)).value;
+    }
 }

@@ -25,7 +25,6 @@ public class BuildTransportNetworkJob extends MonitorableJob {
 
     @Override
     public void jobLogic() {
-        TransportNetwork transportNetwork = null;
         LOG.info("Building transport network");
         try {
             if (feedVersion.validationResult != null && feedVersion.validationResult.fatalException == null) {

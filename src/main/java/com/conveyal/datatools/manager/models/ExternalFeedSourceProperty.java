@@ -1,9 +1,7 @@
 package com.conveyal.datatools.manager.models;
 
-import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
-import java.util.Collection;
 
 /**
  * Created by demory on 3/30/16.

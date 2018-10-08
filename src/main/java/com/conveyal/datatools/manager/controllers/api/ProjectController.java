@@ -1,7 +1,5 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.amazonaws.auth.policy.Statement;
-import com.amazonaws.auth.policy.actions.S3Actions;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
@@ -9,18 +7,18 @@ import com.conveyal.datatools.manager.jobs.FetchProjectFeedsJob;
 import com.conveyal.datatools.manager.jobs.MakePublicJob;
 import com.conveyal.datatools.manager.jobs.MergeProjectFeedsJob;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
+import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
 import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
 import java.io.IOException;
 import java.time.Instant;
 import java.time.LocalDate;
@@ -30,9 +28,6 @@ import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -40,11 +35,11 @@ import java.util.stream.Collectors;
 import spark.Request;
 import spark.Response;
 
-import static com.conveyal.datatools.common.utils.S3Utils.getS3Credentials;
+import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
-import javax.servlet.http.HttpServletResponse;
 
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithError;
+import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.manager.DataManager.publicPath;
 import static spark.Spark.*;
 
@@ -98,7 +93,7 @@ public class ProjectController {
             Project newlyStoredProject = Persistence.projects.create(req.body());
             return newlyStoredProject;
         } else {
-            haltWithError(403, "Not authorized to create a project on organization " + organizationId);
+            haltWithMessage(403, "Not authorized to create a project on organization " + organizationId);
             return null;
         }
     }
@@ -122,10 +117,10 @@ public class ProjectController {
                     || updateDocument.containsKey("autoFetchFeeds")
                     || updateDocument.containsKey("defaultTimeZone")) {
                 // If auto fetch flag is turned on
-                if (updatedProject.autoFetchFeeds){
+                if (updatedProject.autoFetchFeeds) {
                     ScheduledFuture fetchAction = scheduleAutoFeedFetch(updatedProject, 1);
                     DataManager.autoFetchMap.put(updatedProject.id, fetchAction);
-                } else{
+                } else {
                     // otherwise, cancel any existing task for this id
                     cancelAutoFetch(updatedProject.id);
                 }
@@ -133,7 +128,7 @@ public class ProjectController {
             return updatedProject;
         } catch (Exception e) {
             e.printStackTrace();
-            halt(400, SparkUtils.formatJSON("Error updating project"));
+            haltWithMessage(400, "Error updating project");
             return null;
         }
     }
@@ -141,12 +136,12 @@ public class ProjectController {
     /**
      * Delete the project for the UUID given in the request.
      */
-    private static Project deleteProject(Request req, Response res) throws IOException {
+    private static Project deleteProject(Request req, Response res) {
         // Fetch project first to check permissions, and so we can return the deleted project after deletion.
         Project project = requestProjectById(req, "manage");
-        boolean successfullyDeleted = Persistence.projects.removeById(req.params("id"));
+        boolean successfullyDeleted = project.delete();
         if (!successfullyDeleted) {
-            halt(400, SparkUtils.formatJSON("Did not delete project."));
+            haltWithMessage(400, "Did not delete project.");
         }
         return project;
     }
@@ -238,14 +233,20 @@ public class ProjectController {
         return project;
     }
 
-    private static boolean downloadMergedFeed(Request req, Response res) throws IOException {
+    /**
+     * HTTP endpoint to initialize a merge project feeds operation. Client should check the job status endpoint for the
+     * completion of merge project feeds job. On successful completion of the job, the client should make a GET request
+     * to getFeedDownloadCredentials with the project ID to obtain either temporary S3 credentials or a download token
+     * (depending on application configuration "application.data.use_s3_storage") to download the zip file.
+     */
+    private static String downloadMergedFeed(Request req, Response res) {
         Project project = requestProjectById(req, "view");
         Auth0UserProfile userProfile = req.attribute("user");
         // TODO: make this an authenticated call?
         MergeProjectFeedsJob mergeProjectFeedsJob = new MergeProjectFeedsJob(project, userProfile.getUser_id());
         DataManager.heavyExecutor.execute(mergeProjectFeedsJob);
-
-        return true;
+        // Return job ID to requester for monitoring job status.
+        return formatJobMessage(mergeProjectFeedsJob.jobId, "Merge operation is processing.");
     }
 
     /**
@@ -257,7 +258,9 @@ public class ProjectController {
 
         // if storing feeds on s3, return temporary s3 credentials for that zip file
         if (DataManager.useS3) {
-            return getS3Credentials(DataManager.awsRole, DataManager.feedBucket, "project/" + project.id + ".zip", Statement.Effect.Allow, S3Actions.GetObject, 900);
+            // Return presigned download link if using S3.
+            String key = String.format("project/%s.zip", project.id);
+            return downloadFromS3(FeedStore.s3Client, DataManager.feedBucket, key, false, res);
         } else {
             // when feeds are stored locally, single-use download token will still be used
             FeedDownloadToken token = new FeedDownloadToken(project);
@@ -291,7 +294,7 @@ public class ProjectController {
      * index of GTFS data. This action is triggered manually by a UI button and for now never happens automatically.
      * An ExternalFeedResource of the specified type must be present in DataManager.feedResources
      */
-    private static Project thirdPartySync(Request req, Response res) throws Exception {
+    private static Project thirdPartySync(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         String id = req.params("id");
         Project proj = Persistence.projects.getById(id);
@@ -299,7 +302,7 @@ public class ProjectController {
         String syncType = req.params("type");
 
         if (!userProfile.canAdministerProject(proj.id, proj.organizationId)) {
-            halt(403);
+            haltWithMessage(403, "Third-party sync not permitted for user.");
         }
 
         LOG.info("syncing with third party " + syncType);
@@ -308,7 +311,7 @@ public class ProjectController {
             return proj;
         }
 
-        halt(404);
+        haltWithMessage(404, syncType + " sync type not enabled for application.");
         return null;
     }
 
@@ -397,6 +400,10 @@ public class ProjectController {
         get(apiPrefix + "downloadprojectfeed/:token", ProjectController::downloadMergedFeedWithToken);
     }
 
+    /**
+     * HTTP endpoint that allows the requester to download a merged project feeds file stored locally (it should only
+     * be invoked if the application is not using S3 storage) given that the requester supplies a valid token.
+     */
     private static Object downloadMergedFeedWithToken(Request req, Response res) {
         FeedDownloadToken token = Persistence.tokens.getById(req.params("token"));
 

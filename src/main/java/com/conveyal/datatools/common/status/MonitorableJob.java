@@ -1,10 +1,12 @@
 package com.conveyal.datatools.common.status;
 
 import com.conveyal.datatools.manager.DataManager;
+import org.apache.commons.lang.exception.ExceptionUtils;
 import org.eclipse.jetty.util.ConcurrentHashSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
@@ -14,17 +16,17 @@ import java.util.concurrent.TimeUnit;
  * Created by landon on 6/13/16.
  */
 public abstract class MonitorableJob implements Runnable {
-
     private static final Logger LOG = LoggerFactory.getLogger(MonitorableJob.class);
     protected final String owner;
 
     // Public fields will be serialized over HTTP API and visible to the web client
-    public final String name;
     public final JobType type;
     public String parentJobId;
     public JobType parentJobType;
-    // Not final to allow some jobs to have extra status fields.
+    // Status is not final to allow some jobs to have extra status fields.
     public Status status = new Status();
+    // Name is not final in case it needs to be amended during job processing.
+    public String name;
     public final String jobId = UUID.randomUUID().toString();
 
     /**
@@ -37,7 +39,10 @@ public abstract class MonitorableJob implements Runnable {
         UNKNOWN_TYPE,
         BUILD_TRANSPORT_NETWORK,
         CREATE_FEEDVERSION_FROM_SNAPSHOT,
-        PROCESS_SNAPSHOT,
+        // **** Legacy snapshot jobs
+        PROCESS_SNAPSHOT_MERGE,
+        PROCESS_SNAPSHOT_EXPORT,
+        // ****
         LOAD_FEED,
         VALIDATE_FEED,
         DEPLOY_TO_OTP,
@@ -45,6 +50,10 @@ public abstract class MonitorableJob implements Runnable {
         FETCH_SINGLE_FEED,
         MAKE_PROJECT_PUBLIC,
         PROCESS_FEED,
+        CREATE_SNAPSHOT,
+        EXPORT_SNAPSHOT_TO_GTFS,
+        CONVERT_EDITOR_MAPDB_TO_SQL,
+        VALIDATE_ALL_FEEDS,
         MERGE_PROJECT_FEEDS
     }
 
@@ -160,6 +169,7 @@ public abstract class MonitorableJob implements Runnable {
             // Set job status to failed
             // Note that when an exception occurs during job execution we do not call unRegisterJob,
             // so the job continues to exist in the failed state and the user can see it.
+            LOG.error("Job failed", ex);
             status.update(true, ex.getMessage(), 100, true);
         }
         status.startTime = TimeUnit.NANOSECONDS.toMillis(startTimeNanos);
@@ -183,17 +193,18 @@ public abstract class MonitorableJob implements Runnable {
     /**
      * Enqueues a sub-job to be run when the main logic of this job has finished.
      */
-    public void addNextJob(MonitorableJob job) {
-        job.parentJobId = this.jobId;
-        job.parentJobType = this.type;
-        subJobs.add(job);
+    public void addNextJob(MonitorableJob ...jobs) {
+        for (MonitorableJob job : jobs) {
+            job.parentJobId = this.jobId;
+            job.parentJobType = this.type;
+            subJobs.add(job);
+        }
     }
 
     /**
      * Represents the current status of this job.
      */
-    public static class Status implements Cloneable {
-
+    public static class Status {
         /** What message (defined in messages.<lang>) should be displayed to the user? */
         public String message;
 
@@ -228,6 +239,11 @@ public abstract class MonitorableJob implements Runnable {
         // Name of file/item once completed
         public String completedName;
 
+        public void update (String message, double percentComplete) {
+            this.message = message;
+            this.percentComplete = percentComplete;
+        }
+
         public void update (boolean isError, String message, double percentComplete) {
             this.error = isError;
             this.message = message;
@@ -239,6 +255,22 @@ public abstract class MonitorableJob implements Runnable {
             this.message = message;
             this.percentComplete = percentComplete;
             this.completed = isComplete;
+        }
+
+        public void fail (String message, Exception e) {
+            this.error = true;
+            this.percentComplete = 100;
+            this.completed = true;
+            this.message = message;
+            this.exceptionDetails = ExceptionUtils.getStackTrace(e);
+            this.exceptionType = e.getMessage();
+        }
+
+        public void fail (String message) {
+            this.error = true;
+            this.percentComplete = 100;
+            this.completed = true;
+            this.message = message;
         }
 
     }
