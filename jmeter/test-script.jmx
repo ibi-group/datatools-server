@@ -771,7 +771,7 @@ vars.put(&quot;continueBatchLoop&quot;, &quot;false&quot;)</stringProp>
                 <collectionProp name="Arguments.arguments">
                   <elementProp name="" elementType="HTTPArgument">
                     <boolProp name="HTTPArgument.always_encode">false</boolProp>
-                    <stringProp name="Argument.value">{&quot;query&quot;:&quot;\n      query stops($namespace: String) {\n        feed(namespace: $namespace) {\n          namespace\n          feed_id\n          feed_version\n          filename\n          row_counts {\n            stops\n          }\n          stops {\n            stop_id\n            stop_name\n            stop_lat\n            stop_lon\n          }\n        }\n      }\n    &quot;,&quot;variables&quot;:&quot;{\&quot;namespace\&quot;:\&quot;${namespace}\&quot;}&quot;}</stringProp>
+                    <stringProp name="Argument.value">{&quot;query&quot;:&quot;\n      query stops($namespace: String) {\n        feed(namespace: $namespace) {\n          namespace\n          feed_id\n          feed_version\n          filename\n          row_counts {\n            stops\n          }\n          stops {\n            stop_id\n            stop_name\n            stop_lat\n            stop_lon\n          }\n        }\n      }\n    &quot;, &quot;variables&quot;: {&quot;namespace&quot;: &quot;${namespace}&quot; }}</stringProp>
                     <stringProp name="Argument.metadata">=</stringProp>
                   </elementProp>
                 </collectionProp>
@@ -780,7 +780,7 @@ vars.put(&quot;continueBatchLoop&quot;, &quot;false&quot;)</stringProp>
               <stringProp name="HTTPSampler.port"></stringProp>
               <stringProp name="HTTPSampler.protocol"></stringProp>
               <stringProp name="HTTPSampler.contentEncoding"></stringProp>
-              <stringProp name="HTTPSampler.path">/api/manager/graphql</stringProp>
+              <stringProp name="HTTPSampler.path">/api/manager/secure/gtfs/graphql</stringProp>
               <stringProp name="HTTPSampler.method">POST</stringProp>
               <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
               <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
@@ -823,8 +823,8 @@ try {
 	failureMessage += &quot;Invalid JSON.\n&quot;
 }
 
-def totalNumStops = jsonResponse.feed.row_counts.stops
-def lenQueriedStops = jsonResponse.feed.stops.size()
+def totalNumStops = jsonResponse.data.feed.row_counts.stops
+def lenQueriedStops = jsonResponse.data.feed.stops.size()
 
 if (totalNumStops == 0) {
 	failureMessage += &quot;recieved stop row count of 0 stops\n&quot;
@@ -859,7 +859,7 @@ if (failureMessage?.trim()) {
                 <collectionProp name="Arguments.arguments">
                   <elementProp name="" elementType="HTTPArgument">
                     <boolProp name="HTTPArgument.always_encode">false</boolProp>
-                    <stringProp name="Argument.value">{&quot;query&quot;:&quot;\n      query ($namespace: String) {\n        feed(namespace: $namespace) {\n          feed_id\n          feed_version\n          filename\n          routes {\n            route_id\n            route_type\n          }\n        }\n      }\n    &quot;,&quot;variables&quot;:&quot;{\&quot;namespace\&quot;:\&quot;${namespace}\&quot;}&quot;}</stringProp>
+                    <stringProp name="Argument.value">{&quot;query&quot;:&quot;\n      query ($namespace: String) {\n        feed(namespace: $namespace) {\n          feed_id\n          feed_version\n          filename\n          routes {\n            route_id\n            route_type\n          }\n        }\n      }\n    &quot;, &quot;variables&quot;: {&quot;namespace&quot;: &quot;${namespace}&quot;}}</stringProp>
                     <stringProp name="Argument.metadata">=</stringProp>
                   </elementProp>
                 </collectionProp>
@@ -868,7 +868,7 @@ if (failureMessage?.trim()) {
               <stringProp name="HTTPSampler.port"></stringProp>
               <stringProp name="HTTPSampler.protocol"></stringProp>
               <stringProp name="HTTPSampler.contentEncoding"></stringProp>
-              <stringProp name="HTTPSampler.path">/api/manager/graphql</stringProp>
+              <stringProp name="HTTPSampler.path">/api/manager/secure/gtfs/graphql</stringProp>
               <stringProp name="HTTPSampler.method">POST</stringProp>
               <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
               <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
@@ -895,7 +895,7 @@ if (failureMessage?.trim()) {
               <hashTree/>
               <JSONPostProcessor guiclass="JSONPostProcessorGui" testclass="JSONPostProcessor" testname="JSON Extractor" enabled="true">
                 <stringProp name="JSONPostProcessor.referenceNames">randomRouteId</stringProp>
-                <stringProp name="JSONPostProcessor.jsonPathExprs">$.feed.routes[*].route_id</stringProp>
+                <stringProp name="JSONPostProcessor.jsonPathExprs">$.data.feed.routes[*].route_id</stringProp>
                 <stringProp name="JSONPostProcessor.match_numbers">0</stringProp>
               </JSONPostProcessor>
               <hashTree/>
@@ -906,7 +906,7 @@ if (failureMessage?.trim()) {
                 <collectionProp name="Arguments.arguments">
                   <elementProp name="" elementType="HTTPArgument">
                     <boolProp name="HTTPArgument.always_encode">false</boolProp>
-                    <stringProp name="Argument.value">{&quot;query&quot;:&quot;\n      query ($namespace: String, $route_id: String) {\n        feed(namespace: $namespace) {\n          feed_id\n          feed_version\n          filename\n          routes (route_id: [$route_id]) {\n            route_id\n            route_type\n            trips {\n              trip_id\n              route_id\n            }\n          }\n        }\n      }\n    &quot;,&quot;variables&quot;:&quot;{\&quot;namespace\&quot;:\&quot;${namespace}\&quot;,\&quot;route_id\&quot;:\&quot;${randomRouteId}\&quot;}&quot;}</stringProp>
+                    <stringProp name="Argument.value">{&quot;query&quot;:&quot;\n      query ($namespace: String, $route_id: String) {\n        feed(namespace: $namespace) {\n          feed_id\n          feed_version\n          filename\n          routes (route_id: [$route_id]) {\n            route_id\n            route_type\n            trips {\n              trip_id\n              route_id\n            }\n          }\n        }\n      }\n    &quot;, &quot;variables&quot;: {&quot;namespace&quot;: &quot;${namespace}&quot;, &quot;route_id&quot;: &quot;${randomRouteId}&quot;}}</stringProp>
                     <stringProp name="Argument.metadata">=</stringProp>
                   </elementProp>
                 </collectionProp>
@@ -915,7 +915,7 @@ if (failureMessage?.trim()) {
               <stringProp name="HTTPSampler.port"></stringProp>
               <stringProp name="HTTPSampler.protocol"></stringProp>
               <stringProp name="HTTPSampler.contentEncoding"></stringProp>
-              <stringProp name="HTTPSampler.path">/api/manager/graphql</stringProp>
+              <stringProp name="HTTPSampler.path">/api/manager/secure/gtfs/graphql</stringProp>
               <stringProp name="HTTPSampler.method">POST</stringProp>
               <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
               <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
@@ -958,7 +958,7 @@ try {
 	failureMessage += &quot;Invalid JSON.\n&quot;
 }
 
-def trips = jsonResponse.feed.routes[0].trips
+def trips = jsonResponse.data.feed.routes[0].trips
 
 trips.each {
 	if (!it.route_id.equals(vars.get(&quot;randomRouteId&quot;))) {
@@ -981,7 +981,7 @@ if (failureMessage?.trim()) {
                 <collectionProp name="Arguments.arguments">
                   <elementProp name="" elementType="HTTPArgument">
                     <boolProp name="HTTPArgument.always_encode">false</boolProp>
-                    <stringProp name="Argument.value">{&quot;query&quot;:&quot;\n      query ($namespace: String, $route_id: String) {\n        feed(namespace: $namespace) {\n          feed_id\n          feed_version\n          filename\n          routes (route_id: [$route_id]) {\n            route_id\n            route_type\n            patterns {\n              pattern_id\n              route_id\n              trips {\n                trip_id\n                pattern_id\n              }\n            }\n          }\n        }\n      }\n    &quot;,&quot;variables&quot;:&quot;{\&quot;namespace\&quot;:\&quot;${namespace}\&quot;,\&quot;route_id\&quot;:\&quot;${randomRouteId}\&quot;}&quot;}</stringProp>
+                    <stringProp name="Argument.value">{&quot;query&quot;:&quot;\n      query ($namespace: String, $route_id: String) {\n        feed(namespace: $namespace) {\n          feed_id\n          feed_version\n          filename\n          routes (route_id: [$route_id]) {\n            route_id\n            route_type\n            patterns {\n              pattern_id\n              route_id\n              trips {\n                trip_id\n                pattern_id\n              }\n            }\n          }\n        }\n      }\n    &quot;, &quot;variables&quot;: {&quot;namespace&quot;: &quot;${namespace}&quot;, &quot;route_id&quot;: &quot;${randomRouteId}&quot;}}</stringProp>
                     <stringProp name="Argument.metadata">=</stringProp>
                   </elementProp>
                 </collectionProp>
@@ -990,7 +990,7 @@ if (failureMessage?.trim()) {
               <stringProp name="HTTPSampler.port"></stringProp>
               <stringProp name="HTTPSampler.protocol"></stringProp>
               <stringProp name="HTTPSampler.contentEncoding"></stringProp>
-              <stringProp name="HTTPSampler.path">/api/manager/graphql</stringProp>
+              <stringProp name="HTTPSampler.path">/api/manager/secure/gtfs/graphql</stringProp>
               <stringProp name="HTTPSampler.method">POST</stringProp>
               <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
               <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
@@ -1033,7 +1033,7 @@ try {
 	failureMessage += &quot;Invalid JSON.\n&quot;
 }
 
-def patterns = jsonResponse.feed.routes[0].patterns
+def patterns = jsonResponse.data.feed.routes[0].patterns
 
 patterns.each {
 	if (!it.route_id.equals(vars.get(&quot;randomRouteId&quot;))) {
@@ -1051,7 +1051,7 @@ if (failureMessage?.trim()) {
               <hashTree/>
               <JSONPostProcessor guiclass="JSONPostProcessorGui" testclass="JSONPostProcessor" testname="JSON Extractor" enabled="true">
                 <stringProp name="JSONPostProcessor.referenceNames">randomPatternId</stringProp>
-                <stringProp name="JSONPostProcessor.jsonPathExprs">$.feed.routes[0].patterns[*].pattern_id</stringProp>
+                <stringProp name="JSONPostProcessor.jsonPathExprs">$.data.feed.routes[0].patterns[*].pattern_id</stringProp>
                 <stringProp name="JSONPostProcessor.match_numbers">0</stringProp>
               </JSONPostProcessor>
               <hashTree/>
@@ -1062,7 +1062,7 @@ if (failureMessage?.trim()) {
                 <collectionProp name="Arguments.arguments">
                   <elementProp name="" elementType="HTTPArgument">
                     <boolProp name="HTTPArgument.always_encode">false</boolProp>
-                    <stringProp name="Argument.value">{&quot;query&quot;:&quot;\n      query ($namespace: String, $pattern_id: String) {\n        feed(namespace: $namespace) {\n          feed_id\n          feed_version\n          filename\n          patterns (pattern_id: [$pattern_id]) {\n            pattern_id\n            route_id\n            stops {\n              stop_id\n            }\n            trips {\n              trip_id\n              pattern_id\n              stop_times {\n                stop_id\n                trip_id\n              }\n            }\n          }\n        }\n      }\n    &quot;,&quot;variables&quot;:&quot;{\&quot;namespace\&quot;:\&quot;${namespace}\&quot;,\&quot;pattern_id\&quot;:\&quot;${randomPatternId}\&quot;}&quot;}</stringProp>
+                    <stringProp name="Argument.value">{&quot;query&quot;:&quot;\n      query ($namespace: String, $pattern_id: String) {\n        feed(namespace: $namespace) {\n          feed_id\n          feed_version\n          filename\n          patterns (pattern_id: [$pattern_id]) {\n            pattern_id\n            route_id\n            stops {\n              stop_id\n            }\n            trips {\n              trip_id\n              pattern_id\n              stop_times {\n                stop_id\n                trip_id\n              }\n            }\n          }\n        }\n      }\n    &quot;, &quot;variables&quot;: {&quot;namespace&quot;: &quot;${namespace}&quot;, &quot;pattern_id&quot;: &quot;${randomPatternId}&quot;}}</stringProp>
                     <stringProp name="Argument.metadata">=</stringProp>
                   </elementProp>
                 </collectionProp>
@@ -1071,7 +1071,7 @@ if (failureMessage?.trim()) {
               <stringProp name="HTTPSampler.port"></stringProp>
               <stringProp name="HTTPSampler.protocol"></stringProp>
               <stringProp name="HTTPSampler.contentEncoding"></stringProp>
-              <stringProp name="HTTPSampler.path">/api/manager/graphql</stringProp>
+              <stringProp name="HTTPSampler.path">/api/manager/secure/gtfs/graphql</stringProp>
               <stringProp name="HTTPSampler.method">POST</stringProp>
               <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
               <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
@@ -1114,7 +1114,7 @@ try {
 	failureMessage += &quot;Invalid JSON.\n&quot;
 }
 
-def trips = jsonResponse.feed.patterns[0].trips
+def trips = jsonResponse.data.feed.patterns[0].trips
 
 trips.each { trip -&gt;
 	trip.stop_times.each { stop_time -&gt;
@@ -1153,8 +1153,8 @@ try {
 	failureMessage += &quot;Invalid JSON.\n&quot;
 }
 
-def numStopsInPattern = jsonResponse.feed.patterns[0].stops.size()
-def trips = jsonResponse.feed.patterns[0].trips
+def numStopsInPattern = jsonResponse.data.feed.patterns[0].stops.size()
+def trips = jsonResponse.data.feed.patterns[0].trips
 def numStopTimesInTrip = 0
 
 trips.each { trip -&gt;
