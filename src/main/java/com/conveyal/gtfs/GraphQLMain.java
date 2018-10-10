@@ -1,15 +1,10 @@
 package com.conveyal.gtfs;
 
 import com.conveyal.datatools.common.utils.CorsFilter;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import javax.sql.DataSource;
 
 import static spark.Spark.after;
-import static spark.Spark.get;
-import static spark.Spark.post;
 
 /**
  * Test main method to set up a new-style (as of June 2017) GraphQL API
@@ -30,10 +25,6 @@ import static spark.Spark.post;
  * POSTGRES_LOCAL_URL = "jdbc:postgresql://localhost/catalogue";
  */
 public class GraphQLMain {
-    // Shared object mapper with GraphQLController.
-    protected static final ObjectMapper mapper = new ObjectMapper();
-    private static final Logger LOG = LoggerFactory.getLogger(GraphQLMain.class);
-
     /**
      * @param args to use the local postgres database, jdbc:postgresql://localhost/gtfs
      */
@@ -43,22 +34,11 @@ public class GraphQLMain {
         if (args.length > 1) {
             apiPrefix = args[1];
         }
-        DataSource dataSource = GTFS.createDataSource(databaseUrl, null, null);
-        initialize(dataSource, apiPrefix);
+        // Initialize HTTP endpoints with new data source.
+        GraphQLController.initialize(GTFS.createDataSource(databaseUrl, null, null), apiPrefix);
+        // Apply CORS and content encoding header.
         CorsFilter.apply();
         after((request, response) -> response.header("Content-Encoding", "gzip"));
-    }
-
-    /**
-     * DataSource created with GTFS::createDataSource (see main() for example)
-     * API prefix should begin and end with "/", e.g. "/api/"
-     */
-    public static void initialize (DataSource dataSource, String apiPrefix) {
-        LOG.info("Initialized GTFS GraphQL API at localhost:port{}", apiPrefix);
-        get(apiPrefix + "graphql", GraphQLController::get, mapper::writeValueAsString);
-        post(apiPrefix + "graphql", GraphQLController::post, mapper::writeValueAsString);
-        get(apiPrefix + "graphql/schema", GraphQLController::getSchema, mapper::writeValueAsString);
-        post(apiPrefix + "graphql/schema", GraphQLController::getSchema, mapper::writeValueAsString);
     }
 
 }

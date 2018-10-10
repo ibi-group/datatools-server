@@ -2,17 +2,20 @@ package com.conveyal.gtfs;
 
 import com.conveyal.gtfs.graphql.GTFSGraphQL;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
 import spark.Response;
 
+import javax.sql.DataSource;
 import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
-import static com.conveyal.datatools.manager.DataManager.GTFS_DATA_SOURCE;
+import static spark.Spark.get;
+import static spark.Spark.post;
 
 /**
  * This Spark Controller contains methods to provide HTTP responses to GraphQL queries, including a query for the
@@ -20,14 +23,17 @@ import static com.conveyal.datatools.manager.DataManager.GTFS_DATA_SOURCE;
  */
 public class GraphQLController {
     private static final Logger LOG = LoggerFactory.getLogger(GraphQLController.class);
+    // Shared object mapper with GraphQLController.
+    private static final ObjectMapper mapper = new ObjectMapper();
+    private static DataSource GRAPHQL_DATA_SOURCE;
 
     /**
      * A Spark Controller that responds to a GraphQL query in HTTP GET query parameters.
      */
-    public static Map<String, Object> get (Request request, Response response) {
+    public static Map<String, Object> getGraphQL (Request request, Response response) {
         JsonNode varsJson = null;
         try {
-            varsJson = GraphQLMain.mapper.readTree(request.queryParams("variables"));
+            varsJson = mapper.readTree(request.queryParams("variables"));
         } catch (IOException e) {
             LOG.warn("Error processing variables", e);
             haltWithMessage(400, "Malformed JSON");
@@ -39,10 +45,10 @@ public class GraphQLController {
     /**
      * A Spark Controller that responds to a GraphQL query in an HTTP POST body.
      */
-    public static Map<String, Object> post (Request req, Response response) {
+    public static Map<String, Object> postGraphQL (Request req, Response response) {
         JsonNode node = null;
         try {
-            node = GraphQLMain.mapper.readTree(req.body());
+            node = mapper.readTree(req.body());
         } catch (IOException e) {
             LOG.warn("Error processing POST body JSON", e);
             haltWithMessage(400, "Malformed JSON");
@@ -62,11 +68,11 @@ public class GraphQLController {
         }
         // The graphiql app sends over this unparseable string while doing an introspection query.  Therefore this code
         // checks for it and sends an empty map in that case.
-        Map<String, Object> variables = varsJson.toString().equals("\"{}\"")
+        Map<String, Object> variables = varsJson == null || varsJson.toString().equals("\"{}\"")
             ? new HashMap<>()
-            : GraphQLMain.mapper.convertValue(varsJson, Map.class);
+            : mapper.convertValue(varsJson, Map.class);
         Map<String, Object> result = GTFSGraphQL.run(
-            GTFS_DATA_SOURCE,
+            GRAPHQL_DATA_SOURCE,
             queryJson,
             variables
         );
@@ -84,4 +90,18 @@ public class GraphQLController {
     }
 
 
+    /**
+     * Register Spark HTTP endpoints. API prefix should begin and end with "/", e.g. "/api/".
+     */
+    public static void initialize (DataSource dataSource, String apiPrefix) {
+        LOG.info("Initialized GTFS GraphQL API at localhost:port{}", apiPrefix);
+        if (dataSource == null) {
+            throw new RuntimeException("Cannot initialize GraphQL endpoints. Data source must not be null.");
+        }
+        GRAPHQL_DATA_SOURCE = dataSource;
+        get(apiPrefix + "graphql", GraphQLController::getGraphQL, mapper::writeValueAsString);
+        post(apiPrefix + "graphql", GraphQLController::postGraphQL, mapper::writeValueAsString);
+        get(apiPrefix + "graphql/schema", GraphQLController::getSchema, mapper::writeValueAsString);
+        post(apiPrefix + "graphql/schema", GraphQLController::getSchema, mapper::writeValueAsString);
+    }
 }

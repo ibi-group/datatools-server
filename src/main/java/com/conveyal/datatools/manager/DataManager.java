@@ -29,7 +29,7 @@ import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.persistence.TransportNetworkCache;
 import com.conveyal.gtfs.GTFS;
-import com.conveyal.gtfs.GraphQLMain;
+import com.conveyal.gtfs.GraphQLController;
 import com.conveyal.gtfs.loader.Table;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -209,7 +209,7 @@ public class DataManager {
         CorsFilter.apply();
         // Initialize GTFS GraphQL API service
         // FIXME: Add user permissions check to ensure user has access to feeds.
-        GraphQLMain.initialize(GTFS_DATA_SOURCE, GTFS_API_PREFIX);
+        GraphQLController.initialize(GTFS_DATA_SOURCE, GTFS_API_PREFIX);
         // Register core API routes
         AppInfoController.register(API_PREFIX);
         ProjectController.register(API_PREFIX);
