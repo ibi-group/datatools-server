@@ -5,6 +5,7 @@ import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.BuildTransportNetworkJob;
 import com.conveyal.datatools.manager.jobs.CreateFeedVersionFromSnapshotJob;
+import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -41,8 +42,10 @@ import java.util.Collection;
 import java.util.Date;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.io.ByteStreams;
@@ -421,6 +424,15 @@ public class FeedVersionController  {
         }
     }
 
+    private static String mergeFeedVersions(Request req, Response res) {
+        String[] versionIds = req.queryParams("feedVersionIds").split(",");
+        Auth0UserProfile userProfile = req.attribute("user");
+        Set<FeedVersion> versions = Stream.of(versionIds).map(id -> Persistence.feedVersions.getById(id)).collect(Collectors.toSet());
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(userProfile.getEmail(), versions, "merged");
+        DataManager.heavyExecutor.execute(mergeFeedsJob);
+        return SparkUtils.formatJobMessage(mergeFeedsJob.jobId, "Merging feed versions...");
+    }
+
     /**
      * Download locally stored feed version with token supplied by this application. This method is only used when
      * useS3 is set to false. Otherwise, a direct download from s3 should be used.
@@ -460,6 +472,7 @@ public class FeedVersionController  {
         post(apiPrefix + "secure/feedversion", FeedVersionController::createFeedVersionViaUpload, json::write);
         post(apiPrefix + "secure/feedversion/fromsnapshot", FeedVersionController::createFeedVersionFromSnapshot, json::write);
         put(apiPrefix + "secure/feedversion/:id/rename", FeedVersionController::renameFeedVersion, json::write);
+        put(apiPrefix + "secure/feedversion/merge", FeedVersionController::mergeFeedVersions, json::write);
         post(apiPrefix + "secure/feedversion/:id/publish", FeedVersionController::publishToExternalResource, json::write);
         delete(apiPrefix + "secure/feedversion/:id", FeedVersionController::deleteFeedVersion, json::write);
 
