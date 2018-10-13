@@ -29,8 +29,8 @@ The test plan can be ran straight from the command line.  A helper script is pro
 | # | argument | possible values | description |
 | ---- | ---- | ---- | ---- |
 | 1 | test plan mode | `batch`, `fetch`, `query` or `upload` | which test plan mode to use when running the jmeter script. (see notes below for more explanation of these test plan modes) |
-| 2 | number of threads | an integer greater than 0 | The number of simultaneous threads to run at a time.  The threads will be have staggered start times 1 second apart. |
-| 3 | number of loops | an integer greater than 0 | the number of loops of to run.  This is combined with the number of threads, so if the number of threads is 10 and the number of loops is 8, the total number of test plans to run will be 80. |
+| 2 | number of threads | an integer greater than 0 | The number of simultaneous threads to run at a time.  The threads will have staggered start times 1 second apart. |
+| 3 | number of loops | an integer greater than 0 | the number of loops to run.  This is combined with the number of threads, so if the number of threads is 10 and the number of loops is 8, the total number of test plans to run will be 80. |
 | 4 | project name or batch csv file | string of the project name or string of file path to batch csv file | This argument is required if running the script with the `batch` test plan mode, otherwise, this argument is optional.  The jmeter script will create new projects with a project name plus the current iteration number.  The default name is "test project #".  Also, if the s3 bucket argument is also provided, the output folder will be tarred up and with this name. |
 | 5 | s3 bucket | string of an s3 bucket | OPTIONAL.  If provided, the script will tar up the output folder and attempt to upload to the specified s3 bucket.  This assumes that aws credentials have been setup for use by the `aws` command line tool. |
 
@@ -46,7 +46,7 @@ _Run the test plan in query mode 80 total times in 10 threads each completing 8 
 ./run-tests.sh query 10 8 my-project-name my-s3-bucket
 ```
 
-_Run in batch mode.  Note that all feeds in the csv file will be processed in each loop.  So in the follow command, each feed in the batch.csv file would be processed 6 times._
+_Run in batch mode.  Note that all feeds in the csv file will be processed in each loop.  So in the follow command, each feed in the batch.csv file would be processed 6 times.  See the section below for documentation on the csv file and also see the fixtures folder for an example file._
 ```sh
 ./run-tests.sh query 3 2 batch.csv my-s3-bucket
 ```
@@ -78,7 +78,13 @@ python run-upload-tests.py fetch gtfs-test-feeds datatools-jmeter-results
 
 ## Test Plan
 
-A single test plan file is used for maintainablility.  By default, the test plan runs 1 thread in 1 loop and will upload a feed and then perform various checks on the uploaded feed version.  As noted in the above section, it is possible to run different variations of the test plan.  There are 3 types of test plans that can be initiated: `fetch`, `query` or `upload`.  Also, there is a mode called `batch` that will read in a csv file of feeds that can be ran through either the `upload` or `fetch` test plans.
+A single test plan file is used for maintainablility.  By default, the test plan runs 1 thread in 1 loop and will upload a feed and then perform various checks on the uploaded feed version.  As noted in the above section, it is possible to run different variations of the test plan.  There are 4 types of test plans that can be initiated: `batch`, `fetch`, `query` or `upload`.
+
+### Batch Test Plan Mode Script Steps
+
+When the test plan is ran in batch mode, a csv file must be provided that contains rows of test plans of either `fetch` or `upload` types.  Each row is then ran the with specified number of threads and loops.
+
+1.  For Each Row: Run either the `fetch` or `upload` test plan according to the configuration in the row.
 
 ### Upload Test Plan Mode Script Steps
 
