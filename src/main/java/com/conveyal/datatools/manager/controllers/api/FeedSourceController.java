@@ -12,8 +12,6 @@ import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
-import com.conveyal.datatools.manager.utils.json.JsonUtil;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.bson.Document;
@@ -23,12 +21,15 @@ import spark.Request;
 import spark.Response;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.Map;
 
+import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
 import static com.conveyal.datatools.manager.models.ExternalFeedSourceProperty.constructId;
-import static com.mongodb.client.model.Filters.eq;
 import static spark.Spark.*;
 
 /**
@@ -230,13 +231,11 @@ public class FeedSourceController {
 
         Auth0UserProfile userProfile = req.attribute("user");
         // Run in heavyExecutor because ProcessSingleFeedJob is chained to this job (if update finds new version).
-        FetchSingleFeedJob job = new FetchSingleFeedJob(s, userProfile.getUser_id(), false);
-        DataManager.lightExecutor.execute(job);
+        FetchSingleFeedJob fetchSingleFeedJob = new FetchSingleFeedJob(s, userProfile.getUser_id(), false);
+        DataManager.lightExecutor.execute(fetchSingleFeedJob);
 
-        // WARNING: infinite 2D bounds Jackson error when returning job.result, so this method now returns true
-        // because we don't need to return the feed immediately anyways.
-        // return job.result;
-        return SparkUtils.formatJobMessage(job.jobId, "Fetching feed...");
+        // Return the jobId so that the requester can track the job's progress.
+        return formatJobMessage(fetchSingleFeedJob.jobId, "Fetching latest feed source.");
     }
 
     /**
@@ -312,7 +311,7 @@ public class FeedSourceController {
         put(apiPrefix + "secure/feedsource/:id", FeedSourceController::updateFeedSource, json::write);
         put(apiPrefix + "secure/feedsource/:id/updateExternal", FeedSourceController::updateExternalFeedResource, json::write);
         delete(apiPrefix + "secure/feedsource/:id", FeedSourceController::deleteFeedSource, json::write);
-        post(apiPrefix + "secure/feedsource/:id/fetch", FeedSourceController::fetch, JsonUtil.objectMapper::writeValueAsString);
+        post(apiPrefix + "secure/feedsource/:id/fetch", FeedSourceController::fetch, json::write);
 
         // Public routes
         get(apiPrefix + "public/feedsource/:id", FeedSourceController::getFeedSource, json::write);
