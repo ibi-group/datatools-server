@@ -46,7 +46,7 @@ _Run the test plan in query mode 80 total times in 10 threads each completing 8 
 ./run-tests.sh query 10 8 my-project-name my-s3-bucket
 ```
 
-_Run in batch mode.  Note that all feeds in the csv file will be processed in each loop.  So in the follow command, each feed in the batch.csv file would be processed 6 times.  See the section below for documentation on the csv file and also see the fixtures folder for an example file._
+_Run in batch mode.  Note that all feeds in the csv file will be processed in each loop.  So in the following command, each feed in the batch.csv file would be processed 6 times.  See the section below for documentation on the csv file and also see the fixtures folder for an example file._
 ```sh
 ./run-tests.sh query 3 2 batch.csv my-s3-bucket
 ```
@@ -82,13 +82,13 @@ A single test plan file is used for maintainablility.  By default, the test plan
 
 ### Batch Test Plan Mode Script Steps
 
-When the test plan is ran in batch mode, a csv file must be provided that contains rows of test plans of either `fetch` or `upload` types.  Each row is then ran the with specified number of threads and loops.
+When the test plan is run in batch mode, a csv file must be provided that contains rows of test plans of either `fetch` or `upload` types.  Each row is then ran the with specified number of threads and loops.
 
 1.  For Each Row: Run either the `fetch` or `upload` test plan according to the configuration in the row.
 
 ### Upload Test Plan Mode Script Steps
 
-This section is ran under the `upload` test plan mode or for a feed marked for uploading in the batch csv file.
+This section is run under the `upload` test plan mode or for a feed marked for uploading in the batch csv file.
 
 1.  Create Project
 1.  Create Feedsource
@@ -99,7 +99,7 @@ This section is ran under the `upload` test plan mode or for a feed marked for u
 
 ### Fetch Test Plan Mode Script Steps
 
-This section is ran under the `fetch` test plan mode or for a feed marked for fetching in the batch csv file.
+This section is run under the `fetch` test plan mode or for a feed marked for fetching in the batch csv file.
 
 1.  Create Project
 1.  Create Feedsource
@@ -110,7 +110,7 @@ This section is ran under the `fetch` test plan mode or for a feed marked for fe
 
 ### Query Test Plan Mode Script Steps
 
-This section is ran under the `query` test plan mode.  This script assumes that each project has a feed source that has a valid feed version.
+This section is run under the `query` test plan mode.  This script assumes that each project has a feed source that has a valid feed version.
 
 1.  Fetch all projects
 1.  Pick a random project
@@ -122,7 +122,7 @@ This section is ran under the `query` test plan mode.  This script assumes that 
 
 ### API Integrity Script Steps
 
-This section is ran in all test plan modes.
+This section is run in all test plan modes.
 
 1.  Fetch all routes
 1.  Pick a random route
