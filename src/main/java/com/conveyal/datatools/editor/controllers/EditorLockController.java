@@ -69,12 +69,12 @@ public class EditorLockController {
         } else if (!currentSession.userId.equals(userProfile.getUser_id())) {
             // If the session has not expired, and another user has the active session.
             LOG.warn("Edit session {} for user {} in progress for feed {}. User {} not permitted to lock feed for {} minutes.", currentSession.sessionId, currentSession.userEmail, currentSession.feedId, userProfile.getEmail(), minutesUntilExpiration);
-            haltWithMessage(400, getLockedFeedMessage(currentSession, minutesUntilExpiration));
+            haltWithMessage(req, 400, getLockedFeedMessage(currentSession, minutesUntilExpiration));
             return null;
         } else {
             String sessionId = req.session().id();
             LOG.warn("User {} is editing feed {} in another session {}. Cannot create lock for session {}", userProfile.getEmail(), feedId, currentSession.sessionId, sessionId);
-            haltWithMessage(400, "Warning! You are editing this feed in another session/browser tab!");
+            haltWithMessage(req, 400, "Warning! You are editing this feed in another session/browser tab!");
             return null;
         }
     }
@@ -109,7 +109,7 @@ public class EditorLockController {
         if (currentSession == null) {
             // If there is no current session to maintain, request that user reloads browser.
             LOG.warn("No active editor session to maintain {}.", sessionId);
-            haltWithMessage(400, "No active session for feedId. Please refresh your browser and try editing later.");
+            haltWithMessage(req, 400, "No active session for feedId. Please refresh your browser and try editing later.");
             return null;
         } else if (!currentSession.sessionId.equals(sessionId)) {
             long secondsSinceLastCheckIn = TimeUnit.MILLISECONDS.toSeconds  (System.currentTimeMillis() - currentSession.lastCheckIn);
@@ -122,10 +122,10 @@ public class EditorLockController {
                 // If the new current session is held by this user, give them the option to evict the current session /
                 // unlock the feed.
                 LOG.warn("User {} already has an active editor session () for feed {}.", userProfile.getEmail(), currentSession.sessionId, currentSession.feedId);
-                haltWithMessage(400, "Warning! You have an active editing session for this feed underway in a different browser tab.");
+                haltWithMessage(req, 400, "Warning! You have an active editing session for this feed underway in a different browser tab.");
             } else {
                 LOG.warn("User {} attempted editor session for feed {} while active session underway for user {}.", userProfile.getEmail(), currentSession.feedId, currentSession.userEmail);
-                haltWithMessage(400, getLockedFeedMessage(currentSession, minutesUntilExpiration));
+                haltWithMessage(req, 400, getLockedFeedMessage(currentSession, minutesUntilExpiration));
             }
             return null;
         } else {

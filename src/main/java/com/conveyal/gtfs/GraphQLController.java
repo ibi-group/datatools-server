@@ -1,12 +1,9 @@
 package com.conveyal.gtfs;
 
 import com.conveyal.gtfs.graphql.GTFSGraphQL;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import graphql.ExecutionInput;
 import graphql.ExecutionResult;
-import graphql.GraphQLError;
 import graphql.introspection.IntrospectionQuery;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,11 +11,9 @@ import spark.Request;
 import spark.Response;
 
 import java.io.IOException;
-import java.util.List;
 import java.util.Map;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
-import static spark.Spark.halt;
 
 /**
  * This Spark Controller contains methods to provide HTTP responses to GraphQL queries, including a query for the
@@ -36,7 +31,7 @@ public class GraphQLController {
             varsJson = GraphQLMain.mapper.readTree(request.queryParams("variables"));
         } catch (IOException e) {
             LOG.warn("Error processing variables", e);
-            haltWithMessage(400, "Malformed JSON");
+            haltWithMessage(request, 400, "Malformed JSON");
         }
         String queryJson = request.queryParams("query");
         return doQuery(varsJson, queryJson, response);
@@ -51,7 +46,7 @@ public class GraphQLController {
             node = GraphQLMain.mapper.readTree(req.body());
         } catch (IOException e) {
             LOG.warn("Error processing POST body JSON", e);
-            haltWithMessage(400, "Malformed JSON");
+            haltWithMessage(req, 400, "Malformed JSON");
         }
         JsonNode vars = node.get("variables");
         String query = node.get("query").asText();

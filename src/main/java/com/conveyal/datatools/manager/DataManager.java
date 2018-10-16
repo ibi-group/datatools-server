@@ -55,8 +55,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
-import static com.conveyal.datatools.manager.auth.Auth0Connection.logRequest;
-import static com.conveyal.datatools.manager.auth.Auth0Connection.logResponse;
+import static com.conveyal.datatools.common.utils.SparkUtils.logRequest;
+import static com.conveyal.datatools.common.utils.SparkUtils.logResponse;
 import static spark.Spark.after;
 import static spark.Spark.before;
 import static spark.Spark.exception;
@@ -309,7 +309,7 @@ public class DataManager {
         // Return 404 for any API path that is not configured.
         // IMPORTANT: Any API paths must be registered before this halt.
         get("/api/" + "*", (request, response) -> {
-            haltWithMessage(404, "No API route configured for this path.");
+            haltWithMessage(request, 404, "No API route configured for this path.");
             return null;
         });
 

@@ -16,9 +16,11 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-import static com.conveyal.datatools.common.utils.SparkUtils.formatJSON;
-import static spark.Spark.*;
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
+import static spark.Spark.delete;
 import static spark.Spark.get;
+import static spark.Spark.post;
+import static spark.Spark.put;
 
 /**
  * Created by landon on 1/30/17.
@@ -30,7 +32,7 @@ public class OrganizationController {
     public static Organization getOrganization (Request req, Response res) {
         String id = req.params("id");
         if (id == null) {
-            halt(400, "Must specify valid organization id");
+            haltWithMessage(req, 400, "Must specify valid organization id");
         }
         Organization org = Persistence.organizations.getById(id);
         return org;
@@ -47,7 +49,7 @@ public class OrganizationController {
             LOG.info("returning org {}", orgs);
             return orgs;
         } else {
-            halt(401, "Must be application admin to view organizations");
+            haltWithMessage(req, 401, "Must be application admin to view organizations");
         }
         return null;
     }
@@ -59,7 +61,7 @@ public class OrganizationController {
             Organization org = Persistence.organizations.create(req.body());
             return org;
         } else {
-            halt(401, "Must be application admin to view organizations");
+            haltWithMessage(req, 401, "Must be application admin to view organizations");
         }
         return null;
     }
@@ -70,6 +72,7 @@ public class OrganizationController {
         Organization organization = Persistence.organizations.update(organizationId, req.body());
 
         // FIXME: Add back in hook after organization is updated.
+        // See https://github.com/catalogueglobal/datatools-server/issues/111
 //        JsonNode projects = entry.getValue();
 //        Collection<Project> projectsToInsert = new ArrayList<>(projects.size());
 //        Collection<Project> existingProjects = org.projects();
@@ -105,7 +108,7 @@ public class OrganizationController {
         Organization org = requestOrganizationById(req);
         Collection<Project> organizationProjects = org.projects();
         if (organizationProjects != null && organizationProjects.size() > 0) {
-            halt(400, formatJSON("Cannot delete organization that is referenced by projects.", 400));
+            haltWithMessage(req, 400, "Cannot delete organization that is referenced by projects.");
         }
         Persistence.organizations.removeById(org.id);
         return org;
@@ -115,16 +118,16 @@ public class OrganizationController {
         Auth0UserProfile userProfile = req.attribute("user");
         String id = req.params("id");
         if (id == null) {
-            halt(400, "Must specify valid organization id");
+            haltWithMessage(req, 400, "Must specify valid organization id");
         }
         if (userProfile.canAdministerApplication()) {
             Organization org = Persistence.organizations.getById(id);
             if (org == null) {
-                halt(400, "Organization does not exist");
+                haltWithMessage(req, 400, "Organization does not exist");
             }
             return org;
         } else {
-            halt(401, "Must be application admin to modify organization");
+            haltWithMessage(req, 401, "Must be application admin to modify organization");
         }
         return null;
     }
