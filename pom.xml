@@ -14,16 +14,6 @@
         <developerConnection>scm:git:ssh://git@github.com/catalogueglobal/datatools-server.git</developerConnection>
         <url>https://github.com/catalogueglobal/datatools-server.git</url>
     </scm>
-
-    <!-- Define where the artifacts produced by this build will be deployed -->
-    <distributionManagement>
-        <repository>
-            <!-- Also used as snapshotRepository by default -->
-            <id>conveyal-maven-repo</id>
-            <name>Conveyal Maven Repository</name>
-            <url>s3://maven.conveyal.com/</url>
-        </repository>
-    </distributionManagement>
     <properties>
         <jackson.version>2.9.0</jackson.version>
     </properties>
@@ -164,16 +154,6 @@
                 <updatePolicy>always</updatePolicy>
             </snapshots>
         </repository>
-        <!--FIXME: Do not remove entirely yet. R5 is still retrieved from here. We are no longer deploying to/retrieving from maven.conveyal.com-->
-        <repository>
-            <id>conveyal</id>
-            <name>conveyal</name>
-            <url>https://maven.conveyal.com</url>
-            <snapshots>
-                <enabled>true</enabled>
-                <updatePolicy>always</updatePolicy>
-            </snapshots>
-        </repository>
         <repository>
             <id>osgeo</id>
             <name>Open Source Geospatial Foundation Repository</name>
@@ -238,7 +218,7 @@
             <version>2.1.0</version>
         </dependency>
 
-        <!-- Used for loading/fetching/writing GTFS entities -->
+        <!-- Used for loading/fetching/writing GTFS entities (also provides access to commons-io and AWS S3 SDK). -->
         <dependency>
             <groupId>com.conveyal</groupId>
             <artifactId>gtfs-lib</artifactId>
@@ -257,25 +237,6 @@
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
             <version>18.0</version>
-        </dependency>
-
-        <!-- R5 is used to generate transit networks used for generating isochrones for feed versions -->
-        <dependency>
-            <groupId>com.conveyal</groupId>
-            <artifactId>r5</artifactId>
-            <version>2.0.0</version>
-        </dependency>
-
-        <!-- Used to fetch and put objects on S3 -->
-        <dependency>
-            <groupId>com.amazonaws</groupId>
-            <artifactId>aws-java-sdk-s3</artifactId>
-            <version>1.11.172</version>
-        </dependency>
-        <dependency>
-            <groupId>com.amazonaws</groupId>
-            <artifactId>aws-java-sdk</artifactId>
-            <version>1.11.172</version>
         </dependency>
 
         <!-- Note: Unless we are explicit with the jackson dependencies listed below, other versions included in other
@@ -305,13 +266,8 @@
             <version>${jackson.version}</version>
         </dependency>
 
-        <dependency>
-            <groupId>org.geotools</groupId>
-            <artifactId>gt-geojson</artifactId>
-            <version>14.3</version>
-        </dependency>
-
-        <!-- Used to send email notifications to subscribing users -->
+        <!-- Used to send email notifications to subscribing users. Note: datatools-server also depends on this library
+         for commons lang3 from org.apache.commons. -->
         <dependency>
             <groupId>com.sparkpost</groupId>
             <artifactId>sparkpost-lib</artifactId>
@@ -329,13 +285,7 @@
         <dependency>
             <groupId>org.geotools</groupId>
             <artifactId>gt-shapefile</artifactId>
-            <version>14.0</version>
-        </dependency>
-
-        <dependency>
-            <groupId>commons-io</groupId>
-            <artifactId>commons-io</artifactId>
-            <version>2.4</version>
+            <version>19.2</version>
         </dependency>
 
         <!-- Unit testing -->
@@ -352,6 +302,8 @@
             <version>[3.0,4.0)</version>
             <artifactId>bugsnag</artifactId>
         </dependency>
+
+        <!-- JWT verification for Auth0 -->
         <dependency>
             <groupId>com.auth0</groupId>
             <artifactId>java-jwt</artifactId>
