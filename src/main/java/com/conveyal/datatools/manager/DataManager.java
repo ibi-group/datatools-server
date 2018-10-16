@@ -15,7 +15,6 @@ import com.conveyal.datatools.manager.controllers.api.GtfsPlusController;
 import com.conveyal.datatools.manager.controllers.api.NoteController;
 import com.conveyal.datatools.manager.controllers.api.OrganizationController;
 import com.conveyal.datatools.manager.controllers.api.ProjectController;
-import com.conveyal.datatools.manager.controllers.api.RegionController;
 import com.conveyal.datatools.manager.controllers.api.AppInfoController;
 import com.conveyal.datatools.manager.controllers.api.StatusController;
 import com.conveyal.datatools.manager.controllers.api.UserController;
@@ -27,7 +26,6 @@ import com.conveyal.datatools.manager.jobs.FeedUpdater;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
-import com.conveyal.datatools.manager.persistence.TransportNetworkCache;
 import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.GraphQLMain;
 import com.conveyal.gtfs.loader.Table;
@@ -87,9 +85,6 @@ public class DataManager {
 
     // Stores jobs underway by user ID.
     public static Map<String, ConcurrentHashSet<MonitorableJob>> userJobsMap = new ConcurrentHashMap<>();
-
-    // Caches r5 transport networks for use in generating isochrones
-    public static final TransportNetworkCache transportNetworkCache = new TransportNetworkCache();
 
     // Stores ScheduledFuture objects that kick off runnable tasks (e.g., fetch project feeds at 2:00 AM).
     public static Map<String, ScheduledFuture> autoFetchMap = new HashMap<>();
@@ -215,7 +210,6 @@ public class DataManager {
         ProjectController.register(API_PREFIX);
         FeedSourceController.register(API_PREFIX);
         FeedVersionController.register(API_PREFIX);
-        RegionController.register(API_PREFIX);
         NoteController.register(API_PREFIX);
         StatusController.register(API_PREFIX);
         OrganizationController.register(API_PREFIX);
