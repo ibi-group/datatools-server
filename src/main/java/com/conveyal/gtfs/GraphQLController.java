@@ -36,7 +36,7 @@ public class GraphQLController {
             varsJson = mapper.readTree(request.queryParams("variables"));
         } catch (IOException e) {
             LOG.warn("Error processing variables", e);
-            haltWithMessage(400, "Malformed JSON");
+            haltWithMessage(request, 400, "Malformed JSON");
         }
         String queryJson = request.queryParams("query");
         return doQuery(varsJson, queryJson, response);
@@ -51,7 +51,7 @@ public class GraphQLController {
             node = mapper.readTree(req.body());
         } catch (IOException e) {
             LOG.warn("Error processing POST body JSON", e);
-            haltWithMessage(400, "Malformed JSON");
+            haltWithMessage(req, 400, "Malformed JSON");
         }
         JsonNode vars = node.get("variables");
         String query = node.get("query").asText();

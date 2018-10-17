@@ -66,6 +66,20 @@ public class DumpController {
     private static JsonManager<DatabaseState> json =
         new JsonManager<>(DatabaseState.class, JsonViews.DataDump.class);
 
+
+    /**
+     * Method to handle a web request for a legacy object
+     */
+    private static boolean getLegacy(Request req, Response response) {
+        try {
+            return loadLegacy(req.body());
+        } catch (IOException e) {
+            e.printStackTrace();
+            haltWithMessage(req, 400, "Error loading legacy JSON", e);
+            return false;
+        }
+    }
+
     /**
      * Copies each table containing application data into the database state object and returns entire set of data. This,
      * along with the other methods in this class, should only be used in a controlled environment where no outside access
@@ -208,42 +222,35 @@ public class DumpController {
     /**
      * Load a v2 JSON dump (i.e., objects with the class structure immediately before the MongoDB migration).
      */
-    private static boolean loadLegacy(String jsonString) {
+    private static boolean loadLegacy(String jsonString) throws IOException {
         ObjectMapper mapper = new ObjectMapper();
-        JsonNode node;
-        try {
-            node = mapper.readTree(jsonString);
-            Iterator<Map.Entry<String, JsonNode>> fieldsIter = node.fields();
-            while (fieldsIter.hasNext()) {
-                Map.Entry<String, JsonNode> entry = fieldsIter.next();
-                LOG.info("Loading {} {}...", entry.getValue().size(), entry.getKey());
-                switch(entry.getKey()) {
-                    case "projects":
-                        for(int i=0; i< entry.getValue().size(); i++) {
-                            loadLegacyProject(entry.getValue().get(i));
-                        }
-                        break;
-                    case "feedSources":
-                        for(int i=0; i< entry.getValue().size(); i++) {
-                            loadLegacyFeedSource(entry.getValue().get(i));
-                        }
-                        break;
-                    case "feedVersions":
-                        for(int i=0; i< entry.getValue().size(); i++) {
-                            loadLegacyFeedVersion(entry.getValue().get(i));
-                        }
-                        break;
-                    // FIXME: add deployments, etc.
-                    default:
-                        break;
-                }
+        JsonNode node = mapper.readTree(jsonString);
+        Iterator<Map.Entry<String, JsonNode>> fieldsIter = node.fields();
+        while (fieldsIter.hasNext()) {
+            Map.Entry<String, JsonNode> entry = fieldsIter.next();
+            LOG.info("Loading {} {}...", entry.getValue().size(), entry.getKey());
+            switch(entry.getKey()) {
+                case "projects":
+                    for(int i=0; i< entry.getValue().size(); i++) {
+                        loadLegacyProject(entry.getValue().get(i));
+                    }
+                    break;
+                case "feedSources":
+                    for(int i=0; i< entry.getValue().size(); i++) {
+                        loadLegacyFeedSource(entry.getValue().get(i));
+                    }
+                    break;
+                case "feedVersions":
+                    for(int i=0; i< entry.getValue().size(); i++) {
+                        loadLegacyFeedVersion(entry.getValue().get(i));
+                    }
+                    break;
+                // FIXME: add deployments, etc.
+                default:
+                    break;
             }
-            return true;
-        } catch (Exception e) {
-            e.printStackTrace();
-            haltWithMessage(400, "Error loading legacy JSON", e);
-            return false;
         }
+        return true;
     }
 
     /**
@@ -364,7 +371,7 @@ public class DumpController {
      * Enables the HTTP controllers at the specified prefix.
      */
     public static void register (String apiPrefix) {
-        post(apiPrefix + "loadLegacy", (request, response) -> loadLegacy(request.body()), json::write);
+        post(apiPrefix + "loadLegacy", DumpController::getLegacy, json::write);
         post(apiPrefix + "load", (request, response) -> load(request.body()), json::write);
         post(apiPrefix + "validateAll", (request, response) -> {
             boolean force = request.queryParams("force") != null && request.queryParams("force").equals("true");

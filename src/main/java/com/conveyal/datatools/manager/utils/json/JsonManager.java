@@ -39,7 +39,6 @@ public class JsonManager<T> {
         // previous model for gtfs validation errors
 //        om.addMixIn(InvalidValue.class, InvalidValueMixIn.class);
         om.addMixIn(Rectangle2D.class, Rectangle2DMixIn.class);
-//        om.registerModule(new GeoJsonModule());
         SimpleModule deser = new SimpleModule();
 
         deser.addDeserializer(LocalDate.class, new JacksonSerializers.LocalDateDeserializer());
