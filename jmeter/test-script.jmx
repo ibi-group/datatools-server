@@ -1187,6 +1187,91 @@ if (failureMessage?.trim()) {
               </JSR223Assertion>
               <hashTree/>
             </hashTree>
+            <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="HTTP Request - Graphql - get a nested query that should requires fetching redundant data" enabled="true">
+              <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+              <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+                <collectionProp name="Arguments.arguments">
+                  <elementProp name="" elementType="HTTPArgument">
+                    <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                    <stringProp name="Argument.value">{&quot;query&quot;:&quot;query nestedQuery($namespace: String) { feed (namespace: $namespace) { routes(limit: -1) { route_id stops(limit: -1) { routes(limit: -1) { route_id stops(limit: -1) { stop_id } } stop_id } } } }&quot;, &quot;variables&quot;: {&quot;namespace&quot;: &quot;${namespace}&quot;}}</stringProp>
+                    <stringProp name="Argument.metadata">=</stringProp>
+                  </elementProp>
+                </collectionProp>
+              </elementProp>
+              <stringProp name="HTTPSampler.domain"></stringProp>
+              <stringProp name="HTTPSampler.port"></stringProp>
+              <stringProp name="HTTPSampler.protocol"></stringProp>
+              <stringProp name="HTTPSampler.contentEncoding"></stringProp>
+              <stringProp name="HTTPSampler.path">/api/manager/secure/gtfs/graphql</stringProp>
+              <stringProp name="HTTPSampler.method">POST</stringProp>
+              <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+              <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
+              <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+              <boolProp name="HTTPSampler.DO_MULTIPART_POST">false</boolProp>
+              <stringProp name="HTTPSampler.embedded_url_re"></stringProp>
+              <stringProp name="HTTPSampler.connect_timeout"></stringProp>
+              <stringProp name="HTTPSampler.response_timeout"></stringProp>
+            </HTTPSamplerProxy>
+            <hashTree>
+              <UniformRandomTimer guiclass="UniformRandomTimerGui" testclass="UniformRandomTimer" testname="Uniform Random Timer - 1-2s" enabled="true">
+                <stringProp name="ConstantTimer.delay">1000</stringProp>
+                <stringProp name="RandomTimer.range">1000.0</stringProp>
+              </UniformRandomTimer>
+              <hashTree/>
+              <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="HTTP Header Manager" enabled="true">
+                <collectionProp name="HeaderManager.headers">
+                  <elementProp name="" elementType="Header">
+                    <stringProp name="Header.name">Content-Type</stringProp>
+                    <stringProp name="Header.value">application/json</stringProp>
+                  </elementProp>
+                </collectionProp>
+              </HeaderManager>
+              <hashTree/>
+              <JSR223Assertion guiclass="TestBeanGUI" testclass="JSR223Assertion" testname="JSR223 Assertion - Check that all feed-level routes have their route present in the routes of stops" enabled="true">
+                <stringProp name="cacheKey"></stringProp>
+                <stringProp name="filename"></stringProp>
+                <stringProp name="parameters"></stringProp>
+                <stringProp name="script">import groovy.json.JsonSlurper;
+
+def failureMessage = &quot;&quot;;
+def jsonResponse = null;
+
+JsonSlurper JSON = new JsonSlurper ();
+
+// parse json
+try {
+	jsonResponse = JSON.parseText(prev.getResponseDataAsString());
+} catch (Exception e) {
+	failureMessage += &quot;Invalid JSON.\n&quot;
+}
+
+def routes = jsonResponse.data.feed.routes
+
+routes.each { route -&gt;
+	routeId = route.route_id
+	route.stops.each { stop -&gt;
+		foundRouteId = false
+		stop.routes.each { nestedRoute -&gt; 
+		    if (nestedRoute.route_id.equals(routeId)) {
+		    	   foundRouteId = true
+		    }
+		}
+		if (!foundRouteId) {
+			failureMessage += &quot;route id not found in nested list of routes at stops.&quot;
+			failureMessage += &quot;  Missing route id: &quot; + routeId
+		}
+	}
+}
+
+// set assertion result to fail if an error happened
+if (failureMessage?.trim()) {
+	AssertionResult.setFailureMessage(failureMessage);
+     AssertionResult.setFailure(true);    
+}</stringProp>
+                <stringProp name="scriptLanguage">groovy</stringProp>
+              </JSR223Assertion>
+              <hashTree/>
+            </hashTree>
           </hashTree>
         </hashTree>
         <ResultCollector guiclass="TableVisualizer" testclass="ResultCollector" testname="View Results in Table" enabled="true">
