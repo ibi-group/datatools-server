@@ -99,8 +99,9 @@
           </collectionProp>
         </HeaderManager>
         <hashTree/>
-        <WhileController guiclass="WhileControllerGui" testclass="WhileController" testname="While Controller" enabled="true">
+        <WhileController guiclass="WhileControllerGui" testclass="WhileController" testname="While Controller - Continue with next batch record?" enabled="true">
           <stringProp name="WhileController.condition">${continueBatchLoop}</stringProp>
+          <stringProp name="TestPlan.comments">Used to determine if this loop should be completed again by advancing to the next record in a batch csv file</stringProp>
         </WhileController>
         <hashTree>
           <CounterConfig guiclass="CounterConfigGui" testclass="CounterConfig" testname="Counter" enabled="true">
@@ -645,19 +646,46 @@ if (failureMessage?.trim()) {
               <stringProp name="HTTPSampler.response_timeout"></stringProp>
             </HTTPSamplerProxy>
             <hashTree>
-              <BeanShellPreProcessor guiclass="TestBeanGUI" testclass="BeanShellPreProcessor" testname="BeanShell PreProcessor" enabled="true">
+              <BeanShellPreProcessor guiclass="TestBeanGUI" testclass="BeanShellPreProcessor" testname="BeanShell PreProcessor - disable batch looping" enabled="true">
                 <boolProp name="resetInterpreter">false</boolProp>
                 <stringProp name="parameters"></stringProp>
                 <stringProp name="filename"></stringProp>
                 <stringProp name="script">// do not do batch loop in this case
 vars.put(&quot;continueBatchLoop&quot;, &quot;false&quot;)</stringProp>
+                <stringProp name="TestPlan.comments">Batch mode is not enabled in query mode</stringProp>
               </BeanShellPreProcessor>
               <hashTree/>
-              <JSONPostProcessor guiclass="JSONPostProcessorGui" testclass="JSONPostProcessor" testname="JSON Extractor" enabled="true">
+              <JSONPostProcessor guiclass="JSONPostProcessorGui" testclass="JSONPostProcessor" testname="JSON Extractor - get a random project Id" enabled="true">
                 <stringProp name="JSONPostProcessor.referenceNames">projectId</stringProp>
                 <stringProp name="JSONPostProcessor.jsonPathExprs">$[*].id</stringProp>
                 <stringProp name="JSONPostProcessor.match_numbers">0</stringProp>
               </JSONPostProcessor>
+              <hashTree/>
+              <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="JSR223 PostProcessor - Try to find the specified project if provided" enabled="true">
+                <stringProp name="cacheKey"></stringProp>
+                <stringProp name="filename"></stringProp>
+                <stringProp name="parameters"></stringProp>
+                <stringProp name="script">import groovy.json.JsonSlurper;
+
+JsonSlurper JSON = new JsonSlurper ();
+
+// if a custom project name is specified, try to find it.
+// if a project matching the name is found, then override the projectId set by the JSON extractor in the step before this.
+if (!vars.get(&quot;projectName&quot;).equals(&quot;test project&quot;)) {
+	// parse json
+	try {
+		def jsonResponse = JSON.parseText(prev.getResponseDataAsString());
+		jsonResponse.each{ project -&gt; 
+			if (project.name.equals(vars.get(&quot;projectName&quot;))) {
+				vars.put(&quot;projectId&quot;, project.id)
+			}
+		}
+	} catch (Exception e) {
+		
+	}
+}</stringProp>
+                <stringProp name="scriptLanguage">groovy</stringProp>
+              </JSR223PostProcessor>
               <hashTree/>
             </hashTree>
             <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="HTTP Request - Get feed sources" enabled="true">
@@ -1114,16 +1142,18 @@ try {
 	failureMessage += &quot;Invalid JSON.\n&quot;
 }
 
-def trips = jsonResponse.data.feed.patterns[0].trips
+def firstPattern = jsonResponse.data.feed.patterns[0]
 
-trips.each { trip -&gt;
-	trip.stop_times.each { stop_time -&gt;
-		if (!trip.trip_id.equals(stop_time.trip_id)) {
-			failureMessage += &quot;trip_id mismatch.&quot;
-			failureMessage += &quot;Parent trip has trip_id: &quot; + trip.trip_id
-			failureMessage += &quot; Stop Time has stop_id: &quot; + stop_time.stop_id
-			failureMessage += &quot; and trip_id: &quot; + stop_time.trip_id + &quot;\n&quot;
-		}	
+if (firstPattern != null) {
+	firstPattern.trips.each { trip -&gt;
+		trip.stop_times.each { stop_time -&gt;
+			if (!trip.trip_id.equals(stop_time.trip_id)) {
+				failureMessage += &quot;trip_id mismatch.&quot;
+				failureMessage += &quot;Parent trip has trip_id: &quot; + trip.trip_id
+				failureMessage += &quot; Stop Time has stop_id: &quot; + stop_time.stop_id
+				failureMessage += &quot; and trip_id: &quot; + stop_time.trip_id + &quot;\n&quot;
+			}	
+		}
 	}
 }
 
@@ -1153,28 +1183,18 @@ try {
 	failureMessage += &quot;Invalid JSON.\n&quot;
 }
 
-def numStopsInPattern = jsonResponse.data.feed.patterns[0].stops.size()
 def trips = jsonResponse.data.feed.patterns[0].trips
-def numStopTimesInTrip = 0
 
 trips.each { trip -&gt;
-	numStopTimesInTrip = trip.stop_times.size()
-	if (numStopTimesInTrip != numStopsInPattern) {
-		failureMessage += &quot;mismatch in number of trip stops vs number of pattern stops.&quot;
-		failureMessage += &quot;There are &quot; + numStopsInPattern + &quot; pattern stops&quot;
-		failureMessage += &quot;, but there are &quot; + numStopTimesInTrip + &quot; stop_times&quot;
-		failureMessage += &quot; in trip &quot; + trip.trip_id + &quot;\n&quot;
-	} else {
-		trip.stop_times.eachWithIndex { stop_time, idx -&gt;
-			if (!stop_time.stop_id.equals(trip.stop_times[idx].stop_id)) {
-				failureMessage += &quot;stop_id mismatch.&quot;
-				failureMessage += &quot;Pattern stop list stop_id: &quot; + trip.stop_times[idx].stop_id
-				failureMessage += &quot; at index: &quot; + idx
-				failureMessage += &quot; Stop Time of trip &quot; + trip.trip_id 
-				failureMessage += &quot; at index: &quot; + idx
-				failureMessage += &quot; has stop_id: &quot; + stop_time.stop_id + &quot;\n&quot;
-			}	
-		}
+	trip.stop_times.eachWithIndex { stop_time, idx -&gt;
+		if (!stop_time.stop_id.equals(trip.stop_times[idx].stop_id)) {
+			failureMessage += &quot;stop_id mismatch.&quot;
+			failureMessage += &quot;Pattern stop list stop_id: &quot; + trip.stop_times[idx].stop_id
+			failureMessage += &quot; at index: &quot; + idx
+			failureMessage += &quot; Stop Time of trip &quot; + trip.trip_id 
+			failureMessage += &quot; at index: &quot; + idx
+			failureMessage += &quot; has stop_id: &quot; + stop_time.stop_id + &quot;\n&quot;
+		}	
 	}
 }
 
@@ -1187,13 +1207,13 @@ if (failureMessage?.trim()) {
               </JSR223Assertion>
               <hashTree/>
             </hashTree>
-            <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="HTTP Request - Graphql - get a nested query that should requires fetching redundant data" enabled="true">
+            <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="HTTP Request - Graphql - get nested pattern stops." enabled="true">
               <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
               <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
                 <collectionProp name="Arguments.arguments">
                   <elementProp name="" elementType="HTTPArgument">
                     <boolProp name="HTTPArgument.always_encode">false</boolProp>
-                    <stringProp name="Argument.value">{&quot;query&quot;:&quot;query nestedQuery($namespace: String) { feed (namespace: $namespace) { routes(limit: -1) { route_id stops(limit: -1) { routes(limit: -1) { route_id stops(limit: -1) { stop_id } } stop_id } } } }&quot;, &quot;variables&quot;: {&quot;namespace&quot;: &quot;${namespace}&quot;}}</stringProp>
+                    <stringProp name="Argument.value">{&quot;query&quot;:&quot;query nestedQuery($namespace: String) {feed (namespace: $namespace) { routes(limit: 1) { patterns(limit: -1) { route { patterns(limit: -1) { route { route_id stops (limit: -1) { stop_id }}} route_id stops (limit: -1) { stop_id }}} route_id stops(limit: -1) { stop_id }}}}&quot;, &quot;variables&quot;: {&quot;namespace&quot;: &quot;${namespace}&quot;}}</stringProp>
                     <stringProp name="Argument.metadata">=</stringProp>
                   </elementProp>
                 </collectionProp>
@@ -1211,6 +1231,7 @@ if (failureMessage?.trim()) {
               <stringProp name="HTTPSampler.embedded_url_re"></stringProp>
               <stringProp name="HTTPSampler.connect_timeout"></stringProp>
               <stringProp name="HTTPSampler.response_timeout"></stringProp>
+              <stringProp name="TestPlan.comments">This should test whether the dataloader is able to cache queries and also if queries can be combined</stringProp>
             </HTTPSamplerProxy>
             <hashTree>
               <UniformRandomTimer guiclass="UniformRandomTimerGui" testclass="UniformRandomTimer" testname="Uniform Random Timer - 1-2s" enabled="true">
@@ -1249,16 +1270,10 @@ def routes = jsonResponse.data.feed.routes
 
 routes.each { route -&gt;
 	routeId = route.route_id
-	route.stops.each { stop -&gt;
-		foundRouteId = false
-		stop.routes.each { nestedRoute -&gt; 
-		    if (nestedRoute.route_id.equals(routeId)) {
-		    	   foundRouteId = true
-		    }
-		}
-		if (!foundRouteId) {
-			failureMessage += &quot;route id not found in nested list of routes at stops.&quot;
-			failureMessage += &quot;  Missing route id: &quot; + routeId
+	route.patterns.each { pattern -&gt;
+		if (pattern.route[0].route_id != routeId) {
+			failureMessage += &quot;route id not found in nested list of the route in a pattern.&quot;
+			failureMessage += &quot;  Missing route id: &quot; + routeId + &quot;\n&quot;
 		}
 	}
 }
@@ -1274,6 +1289,14 @@ if (failureMessage?.trim()) {
             </hashTree>
           </hashTree>
         </hashTree>
+        <JSR223Sampler guiclass="TestBeanGUI" testclass="JSR223Sampler" testname="JSR223 Sampler - reset continueBatchLoop variable" enabled="true">
+          <stringProp name="scriptLanguage">groovy</stringProp>
+          <stringProp name="parameters"></stringProp>
+          <stringProp name="filename"></stringProp>
+          <stringProp name="cacheKey"></stringProp>
+          <stringProp name="script">vars.put(&quot;continueBatchLoop&quot;, &quot;true&quot;)</stringProp>
+        </JSR223Sampler>
+        <hashTree/>
         <ResultCollector guiclass="TableVisualizer" testclass="ResultCollector" testname="View Results in Table" enabled="true">
           <boolProp name="ResultCollector.error_logging">false</boolProp>
           <objProp>

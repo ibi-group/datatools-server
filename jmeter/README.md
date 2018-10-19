@@ -31,7 +31,7 @@ The test plan can be ran straight from the command line.  A helper script is pro
 | 1 | test plan mode | `batch`, `fetch`, `query` or `upload` | which test plan mode to use when running the jmeter script. (see notes below for more explanation of these test plan modes) |
 | 2 | number of threads | an integer greater than 0 | The number of simultaneous threads to run at a time.  The threads will have staggered start times 1 second apart. |
 | 3 | number of loops | an integer greater than 0 | the number of loops to run.  This is combined with the number of threads, so if the number of threads is 10 and the number of loops is 8, the total number of test plans to run will be 80. |
-| 4 | project name or batch csv file | string of the project name or string of file path to batch csv file | This argument is required if running the script with the `batch` test plan mode, otherwise, this argument is optional.  The jmeter script will create new projects with a project name plus the current iteration number.  The default name is "test project #".  Also, if the s3 bucket argument is also provided, the output folder will be tarred up and with this name. |
+| 4 | project name or batch csv file | string of the project name or string of file path to batch csv file | This argument is required if running the script with the `batch` test plan mode, otherwise, this argument is optional.  If in `fetch` or `upload` mode, the jmeter script will create new projects with a the provided project name (or "test project" if a name is not provided) plus the current iteration number.  If in `query` mode, jmeter will try to find the project matching the provided name (as long as the project name is not "test project") or a random project will be picked if this argument is not provided.  Also, if the s3 bucket argument is also provided, the output folder will be tarred up and with this name. |
 | 5 | s3 bucket | string of an s3 bucket | OPTIONAL.  If provided, the script will tar up the output folder and attempt to upload to the specified s3 bucket.  This assumes that aws credentials have been setup for use by the `aws` command line tool. |
 
 Examples:
@@ -124,6 +124,8 @@ This section is run under the `query` test plan mode.  This script assumes that 
 
 This section is run in all test plan modes.
 
+1.  Fetch stops and a row count of stops
+1.  Make sure the number of stops matches the row count of stops
 1.  Fetch all routes
 1.  Pick a random route
 1.  Fetch all trips on selected route
@@ -133,6 +135,8 @@ This section is run in all test plan modes.
 1.  Fetch embedded stop_times from trips from a random pattern
 1.  Check that all stop_times have proper trip_id
 1.  Check that all stop_times in trips on pattern have same stop sequence as pattern
+1.  Make a GraphQL request that contains a nested query of routes, patterns and stops
+1.  Make sure that each route is present in the route within the list of patterns
 
 ## Reporting
 
@@ -140,4 +144,4 @@ If running this script in GUI mode, it is possible to see all results in real-ti
 
 When running the test plan from the command line in non-gui mode, reports will be saved to the `output` folder.  The outputs will contain a csv file of all requests made and an html report summarizing the results.  If the test plan mode was `batch`, `fetch` or `upload` than another csv file will be written that contains a list of the elapsed time for processing the creation of a new gtfs feed version.
 
-The csv files can be loaded into a jmeter GUI listener to view more details.
+The csv files can be loaded into a jmeter GUI to view more details.
