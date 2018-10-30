@@ -1,17 +1,24 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.conveyal.datatools.common.utils.SparkUtils;
+import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
-import com.conveyal.datatools.manager.models.*;
+import com.conveyal.datatools.manager.auth.Auth0Users;
+import com.conveyal.datatools.manager.models.FeedSource;
+import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.models.JsonViews;
+import com.conveyal.datatools.manager.models.Note;
+import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
-import com.conveyal.datatools.manager.DataManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
-import org.apache.http.client.methods.*;
+import org.apache.http.client.methods.HttpDelete;
+import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPatch;
+import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.ByteArrayEntity;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.util.EntityUtils;
@@ -20,17 +27,23 @@ import org.slf4j.LoggerFactory;
 import spark.Request;
 import spark.Response;
 
-import java.io.*;
+import java.io.IOException;
+import java.io.Serializable;
 import java.net.URLEncoder;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
-import java.util.*;
-
-import com.conveyal.datatools.manager.auth.Auth0Users;
+import java.util.ArrayList;
+import java.util.Date;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
-import static spark.Spark.*;
+import static spark.Spark.delete;
+import static spark.Spark.get;
+import static spark.Spark.post;
+import static spark.Spark.put;
 
 /**
  * Handles the HTTP endpoints related to CRUD operations for Auth0 users.
@@ -98,7 +111,7 @@ public class UserController {
             }
             return queryString;
         } else {
-            haltWithMessage(401, "Must be application or organization admin to view users");
+            haltWithMessage(req, 401, "Must be application or organization admin to view users");
             // Return statement cannot be reached due to halt.
             return null;
         }
@@ -141,7 +154,7 @@ public class UserController {
         HttpResponse response = client.execute(request);
         String result = EntityUtils.toString(response.getEntity());
         int statusCode = response.getStatusLine().getStatusCode();
-        if(statusCode >= 300) haltWithMessage(statusCode, response.toString());
+        if(statusCode >= 300) haltWithMessage(req, statusCode, response.toString());
 
         return result;
     }
@@ -174,7 +187,7 @@ public class UserController {
         String result = EntityUtils.toString(response.getEntity());
 
         int statusCode = response.getStatusLine().getStatusCode();
-        if(statusCode >= 300) haltWithMessage(statusCode, response.toString());
+        if(statusCode >= 300) haltWithMessage(req, statusCode, response.toString());
 
         System.out.println(result);
 
@@ -232,7 +245,7 @@ public class UserController {
         HttpClient client = HttpClientBuilder.create().build();
         HttpResponse response = client.execute(request);
         int statusCode = response.getStatusLine().getStatusCode();
-        if(statusCode >= 300) haltWithMessage(statusCode, response.getStatusLine().getReasonPhrase());
+        if(statusCode >= 300) haltWithMessage(req, statusCode, response.getStatusLine().getReasonPhrase());
 
         return true;
     }
@@ -252,7 +265,7 @@ public class UserController {
         Auth0UserProfile.DatatoolsInfo datatools = userProfile.getApp_metadata().getDatatoolsInfo();
         if (datatools == null) {
             // NOTE: this condition will also occur if DISABLE_AUTH is set to true
-            haltWithMessage(403, "User does not have permission to access to this application");
+            haltWithMessage(req, 403, "User does not have permission to access to this application");
         }
 
         Auth0UserProfile.Subscription[] subscriptions = datatools.getSubscriptions();

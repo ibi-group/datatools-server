@@ -3,18 +3,14 @@ package com.conveyal.datatools.manager.auth;
 import com.auth0.jwt.JWTVerifier;
 import com.auth0.jwt.JWTVerifyException;
 import com.auth0.jwt.pem.PemReader;
-import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.persistence.Persistence;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
-import spark.Response;
 
-import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
@@ -22,14 +18,11 @@ import java.security.NoSuchProviderException;
 import java.security.PublicKey;
 import java.security.SignatureException;
 import java.security.spec.InvalidKeySpecException;
-import java.util.Arrays;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
 import static com.conveyal.datatools.manager.DataManager.hasConfigProperty;
-import static spark.Spark.halt;
 
 /**
  * This handles verifying the Auth0 token passed in the Auth header of Spark HTTP requests.
@@ -63,16 +56,16 @@ public class Auth0Connection {
         // Check that auth header is present and formatted correctly (Authorization: Bearer [token]).
         final String authHeader = req.headers("Authorization");
         if (authHeader == null) {
-            haltWithMessage(401, "Authorization header is missing.");
+            haltWithMessage(req, 401, "Authorization header is missing.");
         }
         String[] parts = authHeader.split(" ");
         if (parts.length != 2 || !"bearer".equals(parts[0].toLowerCase())) {
-            haltWithMessage(401, String.format("Authorization header is malformed: %s", authHeader));
+            haltWithMessage(req, 401, String.format("Authorization header is malformed: %s", authHeader));
         }
         // Retrieve token from auth header.
         String token = parts[1];
         if (token == null) {
-            haltWithMessage(401, "Could not find authorization token");
+            haltWithMessage(req, 401, "Could not find authorization token");
         }
         // Validate the JWT and cast into the user profile, which will be attached as an attribute on the request object
         // for downstream controllers to check permissions.
@@ -88,7 +81,7 @@ public class Auth0Connection {
             req.attribute("raw_user", MAPPER.writeValueAsString(jwt));
         } catch (Exception e) {
             LOG.warn("Login failed to verify with our authorization provider.", e);
-            haltWithMessage(401, "Could not verify user's token");
+            haltWithMessage(req, 401, "Could not verify user's token");
         }
     }
 
@@ -156,13 +149,13 @@ public class Auth0Connection {
         FeedSource feedSource = feedId != null ? Persistence.feedSources.getById(feedId) : null;
         if (feedSource == null) {
             LOG.warn("feedId {} not found", feedId);
-            haltWithMessage(400, "Must provide valid feedId parameter");
+            haltWithMessage(request, 400, "Must provide valid feedId parameter");
         }
 
         if (!request.requestMethod().equals("GET")) {
             if (!userProfile.canEditGTFS(feedSource.organizationId(), feedSource.projectId, feedSource.id)) {
                 LOG.warn("User {} cannot edit GTFS for {}", userProfile.email, feedId);
-                haltWithMessage(403, "User does not have permission to edit GTFS for feedId");
+                haltWithMessage(request, 403, "User does not have permission to edit GTFS for feedId");
             }
         }
     }
@@ -172,86 +165,6 @@ public class Auth0Connection {
      */
     public static boolean authDisabled() {
         return DataManager.hasConfigProperty("DISABLE_AUTH") && "true".equals(getConfigPropertyAsText("DISABLE_AUTH"));
-    }
-
-    /**
-     * Log Spark requests.
-     */
-    public static void logRequest(Request request, Response response) {
-        logRequestOrResponse(true, request, response);
-    }
-
-    /**
-     * Log Spark responses.
-     */
-    public static void logResponse(Request request, Response response) {
-        logRequestOrResponse(false, request, response);
-    }
-
-    /**
-     * Log request/response.  Pretty print JSON if the content-type is JSON.
-     */
-    public static void logRequestOrResponse(boolean logRequest, Request request, Response response) {
-        Auth0UserProfile userProfile = request.attribute("user");
-        String userEmail = userProfile != null ? userProfile.email : "no-auth";
-        HttpServletResponse raw = response.raw();
-        // NOTE: Do not attempt to read the body into a string until it has been determined that the content-type is
-        // JSON.
-        String bodyString = "";
-        try {
-            String contentType;
-            if (logRequest) {
-                contentType = request.contentType();
-            } else {
-                contentType = raw.getHeader("content-type");
-            }
-            if ("application/json".equals(contentType)) {
-                bodyString = logRequest ? request.body() : response.body();
-                if (bodyString != null) {
-                    // Pretty print JSON if ContentType is JSON and body is not empty
-                    JsonNode jsonNode = MAPPER.readTree(bodyString);
-                    // Add new line for legibility when printing
-                    bodyString = "\n" + MAPPER.writerWithDefaultPrettyPrinter().writeValueAsString(jsonNode);
-                } else {
-                    bodyString = "{body content is null}";
-                }
-            } else if (contentType != null) {
-                bodyString = String.format("\nnon-JSON body type: %s", contentType);
-            }
-        } catch (IOException e) {
-            LOG.warn("Could not parse JSON", e);
-            bodyString = "\nBad JSON:\n" + bodyString;
-        }
-
-        String queryString = request.queryParams().size() > 0 ? "?" + request.queryString() : "";
-        LOG.info(
-            "{} {} {}: {}{}{}{}",
-            logRequest ? "req" : String.format("res (%s)", raw.getStatus()),
-            userEmail,
-            request.requestMethod(),
-            BASE_URL,
-            request.pathInfo(),
-            queryString,
-            trimLines(bodyString)
-        );
-    }
-
-    private static String trimLines(String str) {
-        if (str == null) return "";
-        String[] lines = str.split("\n");
-        boolean linesExceedLimit = lines.length > DEFAULT_LINES_TO_PRINT;
-        // Gather lines to print in smaller array (so that filter below only has to be applied to a few lines).
-        String[] linesToPrint = linesExceedLimit
-            ? Arrays.copyOfRange(lines, 0, DEFAULT_LINES_TO_PRINT - 1)
-            : lines;
-        String stringToPrint = Arrays.stream(linesToPrint)
-            // Filter out any password found in JSON (e.g., when creating an Auth0 user), so that sensitive information
-            // is not logged. NOTE: this is a pretty clumsy match, but it is probably better to err on the side of caution.
-            .map(line -> line.contains("password") ? "  \"password\": \"xxxxxx\", (value filtered by logger)" : line)
-            .collect(Collectors.joining("\n"));
-        return linesExceedLimit
-            ? String.format("%s \n...and %d more lines", stringToPrint, lines.length - DEFAULT_LINES_TO_PRINT)
-            : stringToPrint;
     }
 
     /**
@@ -267,13 +180,13 @@ public class Auth0Connection {
         FeedSource feedSource = feedId != null ? Persistence.feedSources.getById(feedId) : null;
         if (feedSource == null) {
             LOG.warn("feedId {} not found", feedId);
-            halt(400, SparkUtils.formatJSON("Must provide valid feedId parameter", 400));
+            haltWithMessage(request, 400, "Must provide valid feedId parameter");
         }
 
         if (!request.requestMethod().equals("GET")) {
             if (!userProfile.canEditGTFS(feedSource.organizationId(), feedSource.projectId, feedSource.id)) {
                 LOG.warn("User {} cannot edit GTFS for {}", userProfile.email, feedId);
-                halt(403, SparkUtils.formatJSON("User does not have permission to edit GTFS for feedId", 403));
+                haltWithMessage(request, 403, "User does not have permission to edit GTFS for feedId");
             }
         }
     }

@@ -523,8 +523,6 @@ public class FeedSource extends Model implements Cloneable {
             // Remove all external properties for this feed source.
             Persistence.externalFeedSourceProperties.removeFiltered(eq("feedSourceId", this.id));
 
-            // TODO: add delete for osm extract and r5 network (maybe that goes with version)
-
             // FIXME: Should this delete related feed versions from the SQL database (for both published versions and
             // editor snapshots)?
 

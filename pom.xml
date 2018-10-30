@@ -46,24 +46,25 @@
 
     <!-- Define where the source code for project lives -->
     <scm>
-        <connection>scm:git:https://github.com/conveyal/datatools-server.git</connection>
-        <developerConnection>scm:git:ssh://git@github.com/conveyal/datatools-server.git</developerConnection>
-        <url>https://github.com/conveyal/datatools-server.git</url>
+        <connection>scm:git:https://github.com/catalogueglobal/datatools-server.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/catalogueglobal/datatools-server.git</developerConnection>
+        <url>https://github.com/catalogueglobal/datatools-server.git</url>
     </scm>
-
-    <!-- Define where the artifacts produced by this build will be deployed -->
-    <distributionManagement>
-        <repository>
-            <!-- Also used as snapshotRepository by default -->
-            <id>conveyal-maven-repo</id>
-            <name>Conveyal Maven Repository</name>
-            <url>s3://maven.conveyal.com/</url>
-        </repository>
-    </distributionManagement>
     <properties>
         <jackson.version>2.9.0</jackson.version>
     </properties>
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+                <includes>
+                    <include>**/*.properties</include>
+                    <include>gtfs/*</include>
+                    <include>public/*</include>
+                </includes>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -118,6 +119,11 @@
                 </executions>
                 <configuration>
                     <dotGitDirectory>${project.basedir}/.git</dotGitDirectory>
+                    <!-- the below line will automatically generate the git properties file which is needed for the
+                     SeverController to fully function.
+                    -->
+                    <generateGitPropertiesFile>true</generateGitPropertiesFile>
+                    <injectAllReactorProjects>true</injectAllReactorProjects>
                 </configuration>
             </plugin>
             <plugin>
@@ -135,7 +141,7 @@
             <plugin>
                 <groupId>org.jacoco</groupId>
                 <artifactId>jacoco-maven-plugin</artifactId>
-                <version>0.7.9</version>
+                <version>0.8.2</version>
                 <executions>
                     <execution>
                         <goals>
@@ -151,6 +157,23 @@
                     </execution>
                 </executions>
             </plugin>
+            <!-- This plugin makes sure junit 5 tests run -->
+            <plugin>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>2.22.0</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.junit.platform</groupId>
+                        <artifactId>junit-platform-surefire-provider</artifactId>
+                        <version>1.3.1</version>
+                    </dependency>
+                    <dependency>
+                        <groupId>org.junit.jupiter</groupId>
+                        <artifactId>junit-jupiter-engine</artifactId>
+                        <version>5.3.1</version>
+                    </dependency>
+                </dependencies>
+            </plugin>
         </plugins>
     </build>
     <repositories>
@@ -162,16 +185,6 @@
             <id>central2</id>
             <name>check central first to avoid a lot of not found warnings</name>
             <url>https://repo1.maven.org/maven2</url>
-            <snapshots>
-                <enabled>true</enabled>
-                <updatePolicy>always</updatePolicy>
-            </snapshots>
-        </repository>
-        <!--FIXME: Do not remove entirely yet. R5 is still retrieved from here. We are no longer deploying to/retrieving from maven.conveyal.com-->
-        <repository>
-            <id>conveyal</id>
-            <name>conveyal</name>
-            <url>https://maven.conveyal.com</url>
             <snapshots>
                 <enabled>true</enabled>
                 <updatePolicy>always</updatePolicy>
@@ -241,7 +254,7 @@
             <version>2.1.0</version>
         </dependency>
 
-        <!-- Used for loading/fetching/writing GTFS entities -->
+        <!-- Used for loading/fetching/writing GTFS entities (also provides access to commons-io and AWS S3 SDK). -->
         <dependency>
             <groupId>com.conveyal</groupId>
             <artifactId>gtfs-lib</artifactId>
@@ -260,25 +273,6 @@
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
             <version>18.0</version>
-        </dependency>
-
-        <!-- R5 is used to generate transit networks used for generating isochrones for feed versions -->
-        <dependency>
-            <groupId>com.conveyal</groupId>
-            <artifactId>r5</artifactId>
-            <version>2.0.0</version>
-        </dependency>
-
-        <!-- Used to fetch and put objects on S3 -->
-        <dependency>
-            <groupId>com.amazonaws</groupId>
-            <artifactId>aws-java-sdk-s3</artifactId>
-            <version>1.11.172</version>
-        </dependency>
-        <dependency>
-            <groupId>com.amazonaws</groupId>
-            <artifactId>aws-java-sdk</artifactId>
-            <version>1.11.172</version>
         </dependency>
 
         <!-- Note: Unless we are explicit with the jackson dependencies listed below, other versions included in other
@@ -308,13 +302,8 @@
             <version>${jackson.version}</version>
         </dependency>
 
-        <dependency>
-            <groupId>org.geotools</groupId>
-            <artifactId>gt-geojson</artifactId>
-            <version>14.3</version>
-        </dependency>
-
-        <!-- Used to send email notifications to subscribing users -->
+        <!-- Used to send email notifications to subscribing users. Note: datatools-server also depends on this library
+         for commons lang3 from org.apache.commons. -->
         <dependency>
             <groupId>com.sparkpost</groupId>
             <artifactId>sparkpost-lib</artifactId>
@@ -332,20 +321,14 @@
         <dependency>
             <groupId>org.geotools</groupId>
             <artifactId>gt-shapefile</artifactId>
-            <version>14.0</version>
-        </dependency>
-
-        <dependency>
-            <groupId>commons-io</groupId>
-            <artifactId>commons-io</artifactId>
-            <version>2.4</version>
+            <version>19.2</version>
         </dependency>
 
         <!-- Unit testing -->
         <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <version>4.12</version>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <version>5.3.1</version>
             <scope>test</scope>
         </dependency>
 
@@ -355,10 +338,26 @@
             <version>[3.0,4.0)</version>
             <artifactId>bugsnag</artifactId>
         </dependency>
+
+        <!-- JWT verification for Auth0 -->
         <dependency>
             <groupId>com.auth0</groupId>
             <artifactId>java-jwt</artifactId>
             <version>2.3.0</version>
+        </dependency>
+
+        <!-- Rest Assured is an assertion library that makes testing web APIs easy. -->
+        <dependency>
+            <groupId>io.rest-assured</groupId>
+            <artifactId>rest-assured</artifactId>
+            <version>3.1.1</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- Hamcrest is an assertion library that prints pretty messages when assertions fail -->
+        <dependency>
+            <groupId>org.hamcrest</groupId>
+            <artifactId>java-hamcrest</artifactId>
+            <version>2.0.0.0</version>
         </dependency>
 
     </dependencies>

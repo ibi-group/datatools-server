@@ -2,21 +2,10 @@ package com.conveyal.datatools.common.utils;
 
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.HttpMethod;
-import com.amazonaws.auth.policy.Action;
-import com.amazonaws.auth.policy.Policy;
-import com.amazonaws.auth.policy.Resource;
-import com.amazonaws.auth.policy.Statement;
-import com.amazonaws.auth.policy.actions.S3Actions;
 import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.GeneratePresignedUrlRequest;
 import com.amazonaws.services.s3.model.PutObjectRequest;
-import com.amazonaws.services.securitytoken.AWSSecurityTokenService;
-import com.amazonaws.services.securitytoken.AWSSecurityTokenServiceClientBuilder;
-import com.amazonaws.services.securitytoken.model.AssumeRoleRequest;
-import com.amazonaws.services.securitytoken.model.AssumeRoleResult;
-import com.amazonaws.services.securitytoken.model.Credentials;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import org.apache.commons.io.IOUtils;
@@ -34,11 +23,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.util.Date;
-import java.util.HashSet;
-import java.util.Set;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
-import static spark.Spark.halt;
 
 /**
  * Created by landon on 8/2/16.
@@ -53,7 +39,7 @@ public class S3Utils {
 
         String s3Bucket = DataManager.getConfigPropertyAsText("application.data.gtfs_s3_bucket");
         if (s3Bucket == null) {
-            halt(400);
+            haltWithMessage(req, 400, "s3bucket is incorrectly configured on server");
         }
 
         // Get file from request
@@ -71,7 +57,7 @@ public class S3Utils {
             IOUtils.copy(inputStream, out);
         } catch (Exception e) {
             e.printStackTrace();
-            haltWithMessage(400, "Unable to read uploaded file");
+            haltWithMessage(req, 400, "Unable to read uploaded file");
         }
 
         try {
@@ -86,7 +72,7 @@ public class S3Utils {
             return url;
         } catch (AmazonServiceException ase) {
             ase.printStackTrace();
-            haltWithMessage(400, "Error uploading file to S3");
+            haltWithMessage(req, 400, "Error uploading file to S3");
             return null;
         } finally {
             boolean deleted = tempFile.delete();
