@@ -38,8 +38,6 @@ public class Auth0Connection {
     public static final String SCOPED_USER_METADATA = String.join("/", SCOPE, USER_METADATA);
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final Logger LOG = LoggerFactory.getLogger(Auth0Connection.class);
-    private static final String BASE_URL = getConfigPropertyAsText("application.public_url");
-    private static final int DEFAULT_LINES_TO_PRINT = 10;
     private static JWTVerifier verifier;
 
     /**
@@ -67,18 +65,18 @@ public class Auth0Connection {
         if (token == null) {
             haltWithMessage(req, 401, "Could not find authorization token");
         }
+        // Handle getting the verifier outside of the below verification try/catch, which is intended to catch issues
+        // with the client request. (getVerifier has its own exception/halt handling).
+        verifier = getVerifier(req);
         // Validate the JWT and cast into the user profile, which will be attached as an attribute on the request object
         // for downstream controllers to check permissions.
         try {
-            Map<String, Object> jwt = verifyToken(token);
+            Map<String, Object> jwt = verifier.verify(token);
             remapTokenValues(jwt);
             Auth0UserProfile profile = MAPPER.convertValue(jwt, Auth0UserProfile.class);
             // The user attribute is used on the server side to check user permissions and does not have all of the
             // fields that the raw Auth0 profile string does.
             req.attribute("user", profile);
-            // The raw_user attribute is used to return the complete user profile string to the client upon request in
-            // the UserController. Previously the client sought the profile directly from Auth0 but the need to add
-            req.attribute("raw_user", MAPPER.writeValueAsString(jwt));
         } catch (Exception e) {
             LOG.warn("Login failed to verify with our authorization provider.", e);
             haltWithMessage(req, 401, "Could not verify user's token");
@@ -86,24 +84,28 @@ public class Auth0Connection {
     }
 
     /**
-     * Choose the correct JWT verification algorithm (based on the values present in env.yml config) and verify the JWT
-     * token.
+     * Choose the correct JWT verification algorithm (based on the values present in env.yml config) and get the
+     * respective verifier.
      */
-    private static Map<String, Object> verifyToken(String token) throws NoSuchAlgorithmException, NoSuchProviderException, InvalidKeySpecException, IOException, JWTVerifyException, InvalidKeyException, SignatureException {
+    private static JWTVerifier getVerifier(Request req) {
         if (verifier == null) {
-            if (hasConfigProperty("AUTH0_SECRET")) {
-                // Use HS256 algorithm to verify token (uses client secret).
-                byte[] decodedSecret = new org.apache.commons.codec.binary.Base64().decode(getConfigPropertyAsText("AUTH0_SECRET"));
-                verifier = new JWTVerifier(decodedSecret);
-            } else if (hasConfigProperty("AUTH0_PUBLIC_KEY")) {
-                // Use RS256 algorithm to verify token (uses public key/.pem file).
-                PublicKey publicKey = PemReader.readPublicKey(getConfigPropertyAsText("AUTH0_PUBLIC_KEY"));
-                verifier = new JWTVerifier(publicKey);
-            } else {
-                throw new RuntimeException("Server authentication provider not configured correctly.");
+            try {
+                if (hasConfigProperty("AUTH0_SECRET")) {
+                    // Use HS256 algorithm to verify token (uses client secret).
+                    byte[] decodedSecret = new org.apache.commons.codec.binary.Base64().decode(getConfigPropertyAsText("AUTH0_SECRET"));
+                    verifier = new JWTVerifier(decodedSecret);
+                } else if (hasConfigProperty("AUTH0_PUBLIC_KEY")) {
+                    // Use RS256 algorithm to verify token (uses public key/.pem file).
+                    PublicKey publicKey = PemReader.readPublicKey(getConfigPropertyAsText("AUTH0_PUBLIC_KEY"));
+                    verifier = new JWTVerifier(publicKey);
+                } else throw new IllegalStateException("Auth0 public key or secret token must be defined in config (env.yml).");
+            } catch (IllegalStateException | NullPointerException | NoSuchAlgorithmException | IOException | NoSuchProviderException | InvalidKeySpecException e) {
+                LOG.error("Auth0 verifier configured incorrectly.");
+                e.printStackTrace();
+                haltWithMessage(req, 500, "Server authentication configured incorrectly.");
             }
         }
-        return verifier.verify(token);
+        return verifier;
     }
 
     /**
