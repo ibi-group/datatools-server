@@ -792,6 +792,43 @@ if (!vars.get(&quot;projectName&quot;).equals(&quot;test project&quot;)) {
                 <stringProp name="JSONPostProcessor.match_numbers"></stringProp>
               </JSONPostProcessor>
               <hashTree/>
+              <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="JSR223 PostProcessor - get service day with the most service hours" enabled="true">
+                <stringProp name="scriptLanguage">groovy</stringProp>
+                <stringProp name="parameters"></stringProp>
+                <stringProp name="filename"></stringProp>
+                <stringProp name="cacheKey"></stringProp>
+                <stringProp name="script">import groovy.json.JsonSlurper;
+
+def failureMessage = &quot;&quot;;
+def jsonResponse = null;
+
+JsonSlurper JSON = new JsonSlurper ();
+
+// parse json
+try {
+	jsonResponse = JSON.parseText(prev.getResponseDataAsString());
+} catch (Exception e) {
+	failureMessage += &quot;Invalid JSON.\n&quot;
+}
+
+def curDate = jsonResponse.validationResult.firstCalendarDate.toInteger()
+def dateWithMostService = curDate
+def maxServiceSeconds = jsonResponse.validationResult.dailyTotalSeconds[0]
+
+jsonResponse.validationResult.dailyTotalSeconds.each { 
+	// Update maxServiceSeconds if needed
+	if (it &gt; maxServiceSeconds) {
+		dateWithMostService = curDate
+		maxServiceSeconds = it
+	}
+
+	// increment cur date
+	curDate += 1
+}
+
+vars.put(&quot;date&quot;, dateWithMostService.toString())</stringProp>
+              </JSR223PostProcessor>
+              <hashTree/>
             </hashTree>
             <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="HTTP Request - Graphql - get stops" enabled="true">
               <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
@@ -1285,6 +1322,90 @@ if (failureMessage?.trim()) {
 }</stringProp>
                 <stringProp name="scriptLanguage">groovy</stringProp>
               </JSR223Assertion>
+              <hashTree/>
+            </hashTree>
+            <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="HTTP Request - Graphql - get all shapes" enabled="true">
+              <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+              <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+                <collectionProp name="Arguments.arguments">
+                  <elementProp name="" elementType="HTTPArgument">
+                    <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                    <stringProp name="Argument.value">{&quot;query&quot;:&quot;query shapesQuery($namespace: String) {feed (namespace: $namespace) {patterns(limit: -1) {shape(limit: -1) {shape_pt_lat shape_pt_lon shape_pt_sequence}}}}&quot;, &quot;variables&quot;: {&quot;namespace&quot;: &quot;${namespace}&quot;}}</stringProp>
+                    <stringProp name="Argument.metadata">=</stringProp>
+                  </elementProp>
+                </collectionProp>
+              </elementProp>
+              <stringProp name="HTTPSampler.domain"></stringProp>
+              <stringProp name="HTTPSampler.port"></stringProp>
+              <stringProp name="HTTPSampler.protocol"></stringProp>
+              <stringProp name="HTTPSampler.contentEncoding"></stringProp>
+              <stringProp name="HTTPSampler.path">/api/manager/secure/gtfs/graphql</stringProp>
+              <stringProp name="HTTPSampler.method">POST</stringProp>
+              <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+              <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
+              <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+              <boolProp name="HTTPSampler.DO_MULTIPART_POST">false</boolProp>
+              <stringProp name="HTTPSampler.embedded_url_re"></stringProp>
+              <stringProp name="HTTPSampler.connect_timeout"></stringProp>
+              <stringProp name="HTTPSampler.response_timeout"></stringProp>
+              <stringProp name="TestPlan.comments">This tests a common query of getting all shapes of all patterns.</stringProp>
+            </HTTPSamplerProxy>
+            <hashTree>
+              <UniformRandomTimer guiclass="UniformRandomTimerGui" testclass="UniformRandomTimer" testname="Uniform Random Timer - 1-2s" enabled="true">
+                <stringProp name="ConstantTimer.delay">1000</stringProp>
+                <stringProp name="RandomTimer.range">1000.0</stringProp>
+              </UniformRandomTimer>
+              <hashTree/>
+              <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="HTTP Header Manager" enabled="true">
+                <collectionProp name="HeaderManager.headers">
+                  <elementProp name="" elementType="Header">
+                    <stringProp name="Header.name">Content-Type</stringProp>
+                    <stringProp name="Header.value">application/json</stringProp>
+                  </elementProp>
+                </collectionProp>
+              </HeaderManager>
+              <hashTree/>
+            </hashTree>
+            <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="HTTP Request - Graphql - patternsQuery" enabled="true">
+              <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+              <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+                <collectionProp name="Arguments.arguments">
+                  <elementProp name="" elementType="HTTPArgument">
+                    <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                    <stringProp name="Argument.value">{&quot;query&quot;:&quot;query patternsQuery($date: String, $namespace: String, $routeId: [String]) { feed (namespace: $namespace) { routes (route_id: $routeId) { route_id, route_short_name, route_long_name, patterns (limit: -1) { pattern_id, name, shape (limit: -1) { lat: shape_pt_lat lon: shape_pt_lon }, stops (limit: -1) { stop_id } trips ( date: $date, limit: -1 ) { stop_times (limit: 1) { arrival_time departure_time } } } stops (limit: -1) { location_type stop_code stop_desc stop_id stop_lat stop_lon stop_name stop_url wheelchair_boarding zone_id } } } }&quot;, &quot;variables&quot;: {&quot;date&quot;: &quot;${date}&quot;, &quot;namespace&quot;: &quot;${namespace}&quot;,  &quot;route_id&quot;: &quot;${randomRouteId}&quot;}}</stringProp>
+                    <stringProp name="Argument.metadata">=</stringProp>
+                  </elementProp>
+                </collectionProp>
+              </elementProp>
+              <stringProp name="HTTPSampler.domain"></stringProp>
+              <stringProp name="HTTPSampler.port"></stringProp>
+              <stringProp name="HTTPSampler.protocol"></stringProp>
+              <stringProp name="HTTPSampler.contentEncoding"></stringProp>
+              <stringProp name="HTTPSampler.path">/api/manager/secure/gtfs/graphql</stringProp>
+              <stringProp name="HTTPSampler.method">POST</stringProp>
+              <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+              <boolProp name="HTTPSampler.auto_redirects">false</boolProp>
+              <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+              <boolProp name="HTTPSampler.DO_MULTIPART_POST">false</boolProp>
+              <stringProp name="HTTPSampler.embedded_url_re"></stringProp>
+              <stringProp name="HTTPSampler.connect_timeout"></stringProp>
+              <stringProp name="HTTPSampler.response_timeout"></stringProp>
+              <stringProp name="TestPlan.comments">This executes the patternsQuery which is used to display the TripsPerHourChart in datatools-ui</stringProp>
+            </HTTPSamplerProxy>
+            <hashTree>
+              <UniformRandomTimer guiclass="UniformRandomTimerGui" testclass="UniformRandomTimer" testname="Uniform Random Timer - 1-2s" enabled="true">
+                <stringProp name="ConstantTimer.delay">1000</stringProp>
+                <stringProp name="RandomTimer.range">1000.0</stringProp>
+              </UniformRandomTimer>
+              <hashTree/>
+              <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="HTTP Header Manager" enabled="true">
+                <collectionProp name="HeaderManager.headers">
+                  <elementProp name="" elementType="Header">
+                    <stringProp name="Header.name">Content-Type</stringProp>
+                    <stringProp name="Header.value">application/json</stringProp>
+                  </elementProp>
+                </collectionProp>
+              </HeaderManager>
               <hashTree/>
             </hashTree>
           </hashTree>
