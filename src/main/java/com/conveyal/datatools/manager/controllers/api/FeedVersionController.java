@@ -16,7 +16,17 @@ import com.conveyal.datatools.manager.utils.HashUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.google.common.io.ByteStreams;
+import org.eclipse.jetty.http.HttpStatus;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import spark.Request;
+import spark.Response;
 
+import javax.servlet.ServletInputStream;
+import javax.servlet.ServletRequestWrapper;
+import javax.servlet.http.HttpServletResponse;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
@@ -31,18 +41,6 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 import java.util.stream.Collectors;
-
-import com.fasterxml.jackson.databind.JsonNode;
-import com.google.common.io.ByteStreams;
-import org.eclipse.jetty.http.HttpStatus;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import spark.Request;
-import spark.Response;
-
-import javax.servlet.ServletInputStream;
-import javax.servlet.ServletRequestWrapper;
-import javax.servlet.http.HttpServletResponse;
 
 import static com.conveyal.datatools.common.status.MonitorableJob.JobType.BUILD_TRANSPORT_NETWORK;
 import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
@@ -85,7 +83,7 @@ public class FeedVersionController  {
     public static FeedSource requestFeedSourceById(Request req, String action, String paramName) {
         String id = req.queryParams(paramName);
         if (id == null) {
-            haltWithMessage(400, "Please specify feedSourceId param");
+            haltWithMessage(req, 400, "Please specify feedSourceId param");
         }
         return checkFeedSourcePermissions(req, Persistence.feedSources.getById(id), action);
     }
@@ -143,7 +141,7 @@ public class FeedVersionController  {
             LOG.info("Saving feed from upload {}", feedSource);
         } catch (Exception e) {
             LOG.error("Unable to open input stream from uploaded file", e);
-            haltWithMessage(400, "Unable to read uploaded feed");
+            haltWithMessage(req, 400, "Unable to read uploaded feed");
         }
 
         // TODO: fix FeedVersion.hash() call when called in this context. Nothing gets hashed because the file has not been saved yet.
@@ -160,7 +158,7 @@ public class FeedVersionController  {
             LOG.warn("File deleted");
 
             // There is no need to delete the newFeedVersion because it has not yet been persisted to MongoDB.
-            haltWithMessage(304, "Uploaded feed is identical to the latest version known to the database.");
+            haltWithMessage(req, 304, "Uploaded feed is identical to the latest version known to the database.");
         }
 
         newFeedVersion.name = newFeedVersion.formattedTimestamp() + " Upload";
@@ -190,7 +188,7 @@ public class FeedVersionController  {
         FeedSource feedSource = requestFeedSourceById(req, "manage");
         Snapshot snapshot = Persistence.snapshots.getById(req.queryParams("snapshotId"));
         if (snapshot == null) {
-            haltWithMessage(400, "Must provide valid snapshot ID");
+            haltWithMessage(req, 400, "Must provide valid snapshot ID");
         }
         FeedVersion feedVersion = new FeedVersion(feedSource);
         CreateFeedVersionFromSnapshotJob createFromSnapshotJob =
@@ -216,7 +214,7 @@ public class FeedVersionController  {
     public static FeedVersion requestFeedVersion(Request req, String action, String feedVersionId) {
         FeedVersion version = Persistence.feedVersions.getById(feedVersionId);
         if (version == null) {
-            haltWithMessage(404, "Feed version ID does not exist");
+            haltWithMessage(req, 404, "Feed version ID does not exist");
         }
         // Performs permissions checks on the feed source this feed version belongs to, and halts if permission is denied.
         checkFeedSourcePermissions(req, version.parentFeedSource(), action);
@@ -228,7 +226,7 @@ public class FeedVersionController  {
 
         String name = req.queryParams("name");
         if (name == null) {
-            haltWithMessage(400, "Name parameter not specified");
+            haltWithMessage(req, 400, "Name parameter not specified");
         }
 
         Persistence.feedVersions.updateField(v.id, "name", name);
@@ -237,7 +235,7 @@ public class FeedVersionController  {
 
     private static Object downloadFeedVersionDirectly(Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "view");
-        return downloadFile(version.retrieveGtfsFile(), version.id, res);
+        return downloadFile(version.retrieveGtfsFile(), version.id, req, res);
     }
 
     /**
@@ -264,7 +262,7 @@ public class FeedVersionController  {
      */
     private static JsonNode validate (Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "manage");
-        haltWithMessage(400, "Validate endpoint not currently configured!");
+        haltWithMessage(req, 400, "Validate endpoint not currently configured!");
         // FIXME: Update for sql-loader validation process?
         return null;
 //        return version.retrieveValidationResult(true);
@@ -298,18 +296,18 @@ public class FeedVersionController  {
 
         if(token == null || !token.isValid()) {
             LOG.error("Feed download token is invalid: {}", token);
-            haltWithMessage(400, "Feed download token not valid");
+            haltWithMessage(req, 400, "Feed download token not valid");
         }
         // Fetch feed version to download.
         FeedVersion version = token.retrieveFeedVersion();
         if (version == null) {
-            haltWithMessage(400, "Could not retrieve version to download");
+            haltWithMessage(req, 400, "Could not retrieve version to download");
         }
         LOG.info("Using token {} to download feed version {}", token.id, version.id);
         // Remove token so that it cannot be used again for feed download
         Persistence.tokens.removeById(tokenValue);
         File file = version.retrieveGtfsFile();
-        return downloadFile(file, version.id, res);
+        return downloadFile(file, version.id, req, res);
     }
 
     public static void register (String apiPrefix) {

@@ -1,13 +1,11 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.FetchProjectFeedsJob;
 import com.conveyal.datatools.manager.jobs.MakePublicJob;
 import com.conveyal.datatools.manager.jobs.MergeProjectFeedsJob;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
-import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Project;
@@ -18,6 +16,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import spark.Request;
+import spark.Response;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -32,16 +32,15 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import spark.Request;
-import spark.Response;
-
 import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
-
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.manager.DataManager.publicPath;
-import static spark.Spark.*;
+import static spark.Spark.delete;
+import static spark.Spark.get;
+import static spark.Spark.post;
+import static spark.Spark.put;
 
 /**
  * Handlers for HTTP API requests that affect Projects.
@@ -93,7 +92,7 @@ public class ProjectController {
             Project newlyStoredProject = Persistence.projects.create(req.body());
             return newlyStoredProject;
         } else {
-            haltWithMessage(403, "Not authorized to create a project on organization " + organizationId);
+            haltWithMessage(req, 403, "Not authorized to create a project on organization " + organizationId);
             return null;
         }
     }
@@ -128,7 +127,7 @@ public class ProjectController {
             return updatedProject;
         } catch (Exception e) {
             e.printStackTrace();
-            haltWithMessage(400, "Error updating project");
+            haltWithMessage(req, 400, "Error updating project");
             return null;
         }
     }
@@ -141,7 +140,7 @@ public class ProjectController {
         Project project = requestProjectById(req, "manage");
         boolean successfullyDeleted = project.delete();
         if (!successfullyDeleted) {
-            haltWithMessage(400, "Did not delete project.");
+            haltWithMessage(req, 400, "Did not delete project.");
         }
         return project;
     }
@@ -170,7 +169,7 @@ public class ProjectController {
     private static Project requestProjectById (Request req, String action) {
         String id = req.params("id");
         if (id == null) {
-            halt(SparkUtils.formatJSON("Please specify id param", 400));
+            haltWithMessage(req, 400, "Please specify id param");
         }
         return checkProjectPermissions(req, Persistence.projects.getById(id), action);
     }
@@ -195,7 +194,7 @@ public class ProjectController {
 
         // check for null project
         if (project == null) {
-            halt(400, SparkUtils.formatJSON("Project ID does not exist", 400));
+            haltWithMessage(req, 400, "Project ID does not exist");
             return null;
         }
 
@@ -225,7 +224,7 @@ public class ProjectController {
         } else {
             project.feedSources = null;
             if (!authorized) {
-                halt(403, SparkUtils.formatJSON("User not authorized to perform action on project", 403));
+                haltWithMessage(req, 403, "User not authorized to perform action on project");
                 return null;
             }
         }
@@ -278,11 +277,11 @@ public class ProjectController {
         Auth0UserProfile userProfile = req.attribute("user");
         String id = req.params("id");
         if (id == null) {
-            halt(400, "must provide project id!");
+            haltWithMessage(req, 400, "must provide project id!");
         }
         Project p = Persistence.projects.getById(id);
         if (p == null) {
-            halt(400, "no such project!");
+            haltWithMessage(req, 400, "no such project!");
         }
         // Run this as a synchronous job; if it proves to be too slow we will change to asynchronous.
         new MakePublicJob(p, userProfile.getUser_id()).run();
@@ -302,7 +301,7 @@ public class ProjectController {
         String syncType = req.params("type");
 
         if (!userProfile.canAdministerProject(proj.id, proj.organizationId)) {
-            haltWithMessage(403, "Third-party sync not permitted for user.");
+            haltWithMessage(req, 403, "Third-party sync not permitted for user.");
         }
 
         LOG.info("syncing with third party " + syncType);
@@ -311,7 +310,7 @@ public class ProjectController {
             return proj;
         }
 
-        haltWithMessage(404, syncType + " sync type not enabled for application.");
+        haltWithMessage(req, 404, syncType + " sync type not enabled for application.");
         return null;
     }
 
@@ -408,14 +407,14 @@ public class ProjectController {
         FeedDownloadToken token = Persistence.tokens.getById(req.params("token"));
 
         if(token == null || !token.isValid()) {
-            halt(400, "Feed download token not valid");
+            haltWithMessage(req, 400, "Feed download token not valid");
         }
 
         Project project = token.retrieveProject();
 
         Persistence.tokens.removeById(token.id);
         String fileName = project.id + ".zip";
-        return downloadFile(FeedVersion.feedStore.getFeed(fileName), fileName, res);
+        return downloadFile(FeedVersion.feedStore.getFeed(fileName), fileName, req, res);
     }
 
 }

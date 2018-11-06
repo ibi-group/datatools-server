@@ -2,7 +2,7 @@
 
 if [ -z $1 ]
 then
-  >&2 echo 'Must supply "upload" or "fetch" as first argument'
+  >&2 echo 'Must supply "batch", "fetch", "query" or "upload" as first argument'
   exit 1
 fi
 
@@ -20,7 +20,13 @@ fi
 
 if [ -z $4 ]
 then
-  echo 'WARNING: name of project not supplied.  In upload mode, all projects will be named "test project #"'
+  if [ "$1" == "batch" ]
+  then
+    >&2 echo 'Must supply fourth argument (csv file) in batch mode'
+    exit 1
+  else
+    echo 'WARNING: name of project not supplied.  In upload mode, all projects will be named "test project #"'
+  fi
 fi
 
 if [ -z $5 ]
@@ -40,20 +46,37 @@ jmeter_cmd="apache-jmeter-3.3/bin/jmeter.sh -n -t test-script.jmx -l output/resu
 
 if [ -n "$4" ]
 then
-  jmeter_cmd="$jmeter_cmd -Jproject=$4"
+  if [ "$1" == "batch" ]
+  then
+    jmeter_cmd="$jmeter_cmd -Jbatchfile=$4"
+  else
+    jmeter_cmd="$jmeter_cmd -Jproject=$4"
+  fi
 fi
 
 echo "$jmeter_cmd"
 eval "$jmeter_cmd"
 
+tar_file="output.tar.gz" 
+if [ -n "$4" ] && [ "$1" != "batch" ]
+then
+  tar_file="$4.tar.gz"
+fi
+tar -czf $tar_file output
+
 if [ -z $5 ]
 then
   echo 'WARNING: s3 bucket not supplied, results will not be uploaded to s3'
 else
-  tar -czvf output.tar.gz output
-  s3location="s3://$5/dt_jmeter_run_$(date +%Y-%m-%dT%H-%M-%S-%Z).tar.gz"
+  s3location="s3://$5/dt_jmeter_run_"
+  if [ -n "$4" ]
+  then
+    s3location=${s3location}${tar_file}_
+  fi
+  s3location="$s3location$(date +%Y-%m-%dT%H-%M-%S-%Z).tar.gz"
+  
   echo "Uploading to $s3location"
-  aws s3 cp output.tar.gz $s3location
+  aws s3 cp $tar_file $s3location
   echo "Uploaded to $s3location"
 fi
 

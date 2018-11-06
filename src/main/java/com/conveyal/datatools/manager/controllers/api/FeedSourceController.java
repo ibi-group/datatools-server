@@ -12,8 +12,6 @@ import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
-import com.conveyal.datatools.manager.utils.json.JsonUtil;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.bson.Document;
@@ -23,13 +21,19 @@ import spark.Request;
 import spark.Response;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Iterator;
+import java.util.Map;
 
+import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
 import static com.conveyal.datatools.manager.models.ExternalFeedSourceProperty.constructId;
-import static com.mongodb.client.model.Filters.eq;
-import static spark.Spark.*;
+import static spark.Spark.delete;
+import static spark.Spark.get;
+import static spark.Spark.post;
+import static spark.Spark.put;
 
 /**
  * Handlers for HTTP API requests that affect FeedSources.
@@ -125,11 +129,11 @@ public class FeedSourceController {
                 return newFeedSource;
             } catch (Exception e) {
                 LOG.error("Unknown error creating feed source", e);
-                haltWithMessage(400, "Unknown error encountered creating feed source", e);
+                haltWithMessage(req, 400, "Unknown error encountered creating feed source", e);
                 return null;
             }
         } else {
-            haltWithMessage(400, "Must provide project ID for feed source");
+            haltWithMessage(req, 400, "Must provide project ID for feed source");
             return null;
         }
     }
@@ -178,7 +182,7 @@ public class FeedSourceController {
         Iterator<Map.Entry<String, JsonNode>> fieldsIterator = node.fields();
         ExternalFeedResource externalFeedResource = DataManager.feedResources.get(resourceType);
         if (externalFeedResource == null) {
-            haltWithMessage(400, String.format("Resource '%s' not registered with server.", resourceType));
+            haltWithMessage(req, 400, String.format("Resource '%s' not registered with server.", resourceType));
         }
         // Iterate over fields found in body and update external properties accordingly.
         while (fieldsIterator.hasNext()) {
@@ -187,7 +191,7 @@ public class FeedSourceController {
             ExternalFeedSourceProperty prop = Persistence.externalFeedSourceProperties.getById(propertyId);
 
             if (prop == null) {
-                haltWithMessage(400, String.format("Property '%s' does not exist!", propertyId));
+                haltWithMessage(req, 400, String.format("Property '%s' does not exist!", propertyId));
             }
             // Hold previous value for use when updating third-party resource
             String previousValue = prop.value;
@@ -215,7 +219,7 @@ public class FeedSourceController {
             return source;
         } catch (Exception e) {
             LOG.error("Could not delete feed source", e);
-            haltWithMessage(400, "Unknown error deleting feed source.");
+            haltWithMessage(req, 400, "Unknown error deleting feed source.");
             return null;
         }
     }
@@ -230,13 +234,11 @@ public class FeedSourceController {
 
         Auth0UserProfile userProfile = req.attribute("user");
         // Run in heavyExecutor because ProcessSingleFeedJob is chained to this job (if update finds new version).
-        FetchSingleFeedJob job = new FetchSingleFeedJob(s, userProfile.getUser_id(), false);
-        DataManager.lightExecutor.execute(job);
+        FetchSingleFeedJob fetchSingleFeedJob = new FetchSingleFeedJob(s, userProfile.getUser_id(), false);
+        DataManager.lightExecutor.execute(fetchSingleFeedJob);
 
-        // WARNING: infinite 2D bounds Jackson error when returning job.result, so this method now returns true
-        // because we don't need to return the feed immediately anyways.
-        // return job.result;
-        return SparkUtils.formatJobMessage(job.jobId, "Fetching feed...");
+        // Return the jobId so that the requester can track the job's progress.
+        return formatJobMessage(fetchSingleFeedJob.jobId, "Fetching latest feed source.");
     }
 
     /**
@@ -248,7 +250,7 @@ public class FeedSourceController {
     public static FeedSource requestFeedSourceById(Request req, String action) {
         String id = req.params("id");
         if (id == null) {
-            halt(400, SparkUtils.formatJSON("Please specify id param", 400));
+            haltWithMessage(req, 400, "Please specify id param");
         }
         return checkFeedSourcePermissions(req, Persistence.feedSources.getById(id), action);
     }
@@ -260,7 +262,7 @@ public class FeedSourceController {
 
         // check for null feedSource
         if (feedSource == null)
-            haltWithMessage(400, "Feed source ID does not exist");
+            haltWithMessage(req, 400, "Feed source ID does not exist");
         String orgId = feedSource.organizationId();
         boolean authorized;
         switch (action) {
@@ -289,15 +291,15 @@ public class FeedSourceController {
         if (publicFilter){
             // if feed not public and user not authorized, halt
             if (!feedSource.isPublic && !authorized)
-                haltWithMessage(403, "User not authorized to perform action on feed source");
+                haltWithMessage(req, 403, "User not authorized to perform action on feed source");
                 // if feed is public, but action is managerial, halt (we shouldn't ever retrieveById here, but just in case)
             else if (feedSource.isPublic && action.equals("manage"))
-                haltWithMessage(403, "User not authorized to perform action on feed source");
+                haltWithMessage(req, 403, "User not authorized to perform action on feed source");
 
         }
         else {
             if (!authorized)
-                haltWithMessage(403, "User not authorized to perform action on feed source");
+                haltWithMessage(req, 403, "User not authorized to perform action on feed source");
         }
 
         // if we make it here, user has permission and it's a valid feedsource
@@ -312,7 +314,7 @@ public class FeedSourceController {
         put(apiPrefix + "secure/feedsource/:id", FeedSourceController::updateFeedSource, json::write);
         put(apiPrefix + "secure/feedsource/:id/updateExternal", FeedSourceController::updateExternalFeedResource, json::write);
         delete(apiPrefix + "secure/feedsource/:id", FeedSourceController::deleteFeedSource, json::write);
-        post(apiPrefix + "secure/feedsource/:id/fetch", FeedSourceController::fetch, JsonUtil.objectMapper::writeValueAsString);
+        post(apiPrefix + "secure/feedsource/:id/fetch", FeedSourceController::fetch, json::write);
 
         // Public routes
         get(apiPrefix + "public/feedsource/:id", FeedSourceController::getFeedSource, json::write);

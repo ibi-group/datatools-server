@@ -96,7 +96,7 @@ public abstract class MonitorableJob implements Runnable {
     /**
      * This method must be overridden by subclasses to perform the core steps of the job.
      */
-    public abstract void jobLogic();
+    public abstract void jobLogic() throws Exception;
 
     /**
      * This method may be overridden in the event that you want to perform a special final step after this job and
