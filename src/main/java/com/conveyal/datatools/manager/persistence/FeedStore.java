@@ -2,7 +2,6 @@ package com.conveyal.datatools.manager.persistence;
 
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.AmazonServiceException;
-import com.amazonaws.SdkClientException;
 import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
 import com.amazonaws.auth.profile.ProfileCredentialsProvider;
@@ -90,7 +89,7 @@ public class FeedStore {
             }
             try {
                 s3Client = builder.build();
-            } catch (SdkClientException e) {
+            } catch (Exception e) {
                 LOG.error("S3 client not initialized correctly.  Must provide config property application.data.s3_region or specify region in ~/.aws/config", e);
             }
             // TODO: check for this??

@@ -6,6 +6,7 @@ import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.io.ByteStreams;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -70,7 +71,7 @@ public class SparkUtils {
      * Constructs an object node with a result (i.e., OK or ERR), message, code, and if the exception argument is
      * supplied details about the exception encountered.
      */
-    public static JsonNode getObjectNode(String message, int code, Exception e) {
+    public static ObjectNode getObjectNode(String message, int code, Exception e) {
         String detail = e != null ? e.getMessage() : null;
         return mapper.createObjectNode()
             .put("result", code >= 400 ? "ERR" : "OK")

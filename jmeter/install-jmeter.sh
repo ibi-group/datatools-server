@@ -16,3 +16,6 @@ java -cp apache-jmeter-3.3/lib/ext/jmeter-plugins-manager-0.16.jar org.jmeterplu
 
 # install jpgc-json-2
 apache-jmeter-3.3/bin/PluginsManagerCMD.sh install jpgc-json
+
+# install jar file for commons csv
+wget -O apache-jmeter-3.3/lib/ext/commons-csv-1.5.jar http://central.maven.org/maven2/org/apache/commons/commons-csv/1.5/commons-csv-1.5.jar
