@@ -1,7 +1,8 @@
 package com.conveyal.datatools.manager.auth;
 
 import com.auth0.jwt.JWTVerifier;
-import com.auth0.jwt.internal.org.apache.commons.codec.binary.Base64;
+import com.auth0.jwt.JWTVerifyException;
+import com.auth0.jwt.pem.PemReader;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -10,18 +11,34 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
 
+import java.io.IOException;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
+import java.security.NoSuchProviderException;
+import java.security.PublicKey;
+import java.security.SignatureException;
+import java.security.spec.InvalidKeySpecException;
 import java.util.Map;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
+import static com.conveyal.datatools.manager.DataManager.hasConfigProperty;
 
 /**
+ * This handles verifying the Auth0 token passed in the Auth header of Spark HTTP requests.
+ *
  * Created by demory on 3/22/16.
  */
 
 public class Auth0Connection {
+    public static final String APP_METADATA = "app_metadata";
+    public static final String USER_METADATA = "user_metadata";
+    public static final String SCOPE = "http://datatools";
+    public static final String SCOPED_APP_METADATA = String.join("/", SCOPE, APP_METADATA);
+    public static final String SCOPED_USER_METADATA = String.join("/", SCOPE, USER_METADATA);
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final Logger LOG = LoggerFactory.getLogger(Auth0Connection.class);
+    private static JWTVerifier verifier;
 
     /**
      * Check the incoming API request for the user token (and verify it) and assign as the "user" attribute on the
@@ -48,18 +65,69 @@ public class Auth0Connection {
         if (token == null) {
             haltWithMessage(req, 401, "Could not find authorization token");
         }
+        // Handle getting the verifier outside of the below verification try/catch, which is intended to catch issues
+        // with the client request. (getVerifier has its own exception/halt handling).
+        verifier = getVerifier(req);
         // Validate the JWT and cast into the user profile, which will be attached as an attribute on the request object
         // for downstream controllers to check permissions.
         try {
-            byte[] decodedSecret = new Base64().decode(getConfigPropertyAsText("AUTH0_SECRET"));
-            JWTVerifier verifier = new JWTVerifier(decodedSecret);
             Map<String, Object> jwt = verifier.verify(token);
+            remapTokenValues(jwt);
             Auth0UserProfile profile = MAPPER.convertValue(jwt, Auth0UserProfile.class);
+            // The user attribute is used on the server side to check user permissions and does not have all of the
+            // fields that the raw Auth0 profile string does.
             req.attribute("user", profile);
         } catch (Exception e) {
             LOG.warn("Login failed to verify with our authorization provider.", e);
             haltWithMessage(req, 401, "Could not verify user's token");
         }
+    }
+
+    /**
+     * Choose the correct JWT verification algorithm (based on the values present in env.yml config) and get the
+     * respective verifier.
+     */
+    private static JWTVerifier getVerifier(Request req) {
+        if (verifier == null) {
+            try {
+                if (hasConfigProperty("AUTH0_SECRET")) {
+                    // Use HS256 algorithm to verify token (uses client secret).
+                    byte[] decodedSecret = new org.apache.commons.codec.binary.Base64().decode(getConfigPropertyAsText("AUTH0_SECRET"));
+                    verifier = new JWTVerifier(decodedSecret);
+                } else if (hasConfigProperty("AUTH0_PUBLIC_KEY")) {
+                    // Use RS256 algorithm to verify token (uses public key/.pem file).
+                    PublicKey publicKey = PemReader.readPublicKey(getConfigPropertyAsText("AUTH0_PUBLIC_KEY"));
+                    verifier = new JWTVerifier(publicKey);
+                } else throw new IllegalStateException("Auth0 public key or secret token must be defined in config (env.yml).");
+            } catch (IllegalStateException | NullPointerException | NoSuchAlgorithmException | IOException | NoSuchProviderException | InvalidKeySpecException e) {
+                LOG.error("Auth0 verifier configured incorrectly.");
+                e.printStackTrace();
+                haltWithMessage(req, 500, "Server authentication configured incorrectly.", e);
+            }
+        }
+        return verifier;
+    }
+
+    /**
+     * Handle mapping token values to the expected keys. This accounts for app_metadata and user_metadata that have been
+     * scoped to conform with OIDC (i.e., how newer Auth0 accounts structure the user profile) as well as the user_id ->
+     * sub mapping.
+     */
+    private static void remapTokenValues(Map<String, Object> jwt) {
+        // If token did not contain app_metadata or user_metadata, add the scoped values to the decoded token object.
+        if (!jwt.containsKey(APP_METADATA) && jwt.containsKey(SCOPED_APP_METADATA)) {
+            jwt.put(APP_METADATA, jwt.get(SCOPED_APP_METADATA));
+        }
+        if (!jwt.containsKey(USER_METADATA) && jwt.containsKey(SCOPED_USER_METADATA)) {
+            jwt.put(USER_METADATA, jwt.get(SCOPED_USER_METADATA));
+        }
+        // Do the same for user_id -> sub
+        if (!jwt.containsKey("user_id") && jwt.containsKey("sub")) {
+            jwt.put("user_id", jwt.get("sub"));
+        }
+        // Remove scoped metadata objects to clean up user profile object.
+        jwt.remove(SCOPED_APP_METADATA);
+        jwt.remove(SCOPED_USER_METADATA);
     }
 
     /**
