@@ -211,7 +211,10 @@ public class FeedStore {
     }
 
     /**
-     * Create a new feed with the given ID.
+     * Store GTFS file locally. This method is used when a new feed version or generated GTFS file
+     * (e.g., the product of merging multiple GTFS files from a project) needs to be stored locally for
+     * future use. Note: uploading the file to S3 is handled elsewhere as a finishing step, e.g., at the
+     * conclusion of a successful feed processing/validation step.
      */
     public File newFeed (String id, InputStream inputStream, FeedSource feedSource) throws IOException {
         // write feed to specified ID.
