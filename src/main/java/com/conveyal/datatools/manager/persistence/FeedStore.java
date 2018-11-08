@@ -214,7 +214,6 @@ public class FeedStore {
      * Create a new feed with the given ID.
      */
     public File newFeed (String id, InputStream inputStream, FeedSource feedSource) throws IOException {
-        // For s3 storage (store locally and let gtfsCache handle loading feed to s3)
         // write feed to specified ID.
         // NOTE: depending on the feed store, there may not be a feedSource provided (e.g., gtfsplus)
 

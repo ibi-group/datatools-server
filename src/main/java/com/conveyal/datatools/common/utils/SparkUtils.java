@@ -53,7 +53,7 @@ public class SparkUtils {
             // TODO: Is flushing the stream necessary?
             outputStream.flush();
         } catch (IOException e) {
-            haltWith500(req, "Could not write file to output stream", e);
+            haltWithMessage(req, 500, "Could not write file to output stream", e);
         }
         return raw;
     }
@@ -89,28 +89,6 @@ public class SparkUtils {
     }
 
     /**
-     * Wrapper around haltWithMessage for HTTP 500 errors that should be logged and sent to bugsnag
-     */
-    public static void haltWith500(Request request, String message, Exception e) throws HaltException {
-        // log error into datatools log
-        LOG.error(message);
-        e.printStackTrace();
-
-        // create report to notify bugsnag if configured
-        Bugsnag bugsnag = getBugsnag();
-        if (bugsnag != null) {
-            Report report = bugsnag.buildReport(e);
-            Auth0UserProfile userProfile = request.attribute("user");
-            String userEmail = userProfile != null ? userProfile.getEmail() : "no-auth";
-            report.setUserEmail(userEmail);
-            bugsnag.notify(report);
-        }
-
-        // respond to user
-        haltWithMessage(request, 500, message, e);
-    }
-
-    /**
      * Wrapper around Spark halt method that formats message as JSON using {@link SparkUtils#formatJSON}.
      */
     public static void haltWithMessage(Request request, int statusCode, String message) throws HaltException {
@@ -118,7 +96,9 @@ public class SparkUtils {
     }
 
     /**
-     * Wrapper around Spark halt method that formats message as JSON using {@link SparkUtils#formatJSON}. Exception
+     * Wrapper around Spark halt method that formats message as JSON using {@link SparkUtils#formatJSON}.
+     * Extra logic occurs for when the status code is >= 500.  A Bugsnag report is created if
+     * Bugsnag is configured.
      */
     public static void haltWithMessage(
         Request request,
@@ -126,6 +106,25 @@ public class SparkUtils {
         String message,
         Exception e
     ) throws HaltException {
+
+        if (statusCode >= 500) {
+            LOG.error(message);
+
+            // create report to notify bugsnag if configured
+            Bugsnag bugsnag = getBugsnag();
+            if (bugsnag != null && e != null) {
+                // log stack
+                e.printStackTrace();
+
+                // create report to send to bugsnag
+                Report report = bugsnag.buildReport(e);
+                Auth0UserProfile userProfile = request.attribute("user");
+                String userEmail = userProfile != null ? userProfile.getEmail() : "no-auth";
+                report.setUserEmail(userEmail);
+                bugsnag.notify(report);
+            }
+        }
+
         JsonNode json = getObjectNode(message, statusCode, e);
         String logString = null;
         try {

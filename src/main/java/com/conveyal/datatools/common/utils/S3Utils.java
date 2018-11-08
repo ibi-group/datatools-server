@@ -24,7 +24,6 @@ import java.io.InputStream;
 import java.net.URL;
 import java.util.Date;
 
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWith500;
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 
 /**
@@ -40,8 +39,9 @@ public class S3Utils {
 
         String s3Bucket = DataManager.getConfigPropertyAsText("application.data.gtfs_s3_bucket");
         if (s3Bucket == null) {
-            haltWith500(
+            haltWithMessage(
                 req,
+                500,
                 "s3bucket is incorrectly configured on server",
                 new Exception("s3bucket is incorrectly configured on server")
             );
@@ -62,10 +62,7 @@ public class S3Utils {
             inputStream = part.getInputStream();
             FileOutputStream out = new FileOutputStream(tempFile);
             IOUtils.copy(inputStream, out);
-        } catch (IOException e) {
-            e.printStackTrace();
-            haltWithMessage(req, 400, "Unable to read uploaded file");
-        } catch (ServletException e) {
+        } catch (IOException | ServletException e) {
             e.printStackTrace();
             haltWithMessage(req, 400, "Unable to read uploaded file");
         }
@@ -81,7 +78,7 @@ public class S3Utils {
                     .withCannedAcl(CannedAccessControlList.PublicRead));
             return url;
         } catch (AmazonServiceException ase) {
-            haltWith500(req, "Error uploading file to S3", ase);
+            haltWithMessage(req, 500, "Error uploading file to S3", ase);
             return null;
         } finally {
             boolean deleted = tempFile.delete();

@@ -40,7 +40,6 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWith500;
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static spark.Spark.get;
 import static spark.Spark.post;
@@ -134,7 +133,7 @@ public class GtfsPlusController {
             }
             zos.close();
         } catch (IOException e) {
-            haltWith500(req, "An error occurred while trying to create a gtfs file", e);
+            haltWithMessage(req, 500, "An error occurred while trying to create a gtfs file", e);
         }
 
         return downloadGtfsPlusFile(gtfsPlusFile, req, res);
@@ -157,7 +156,7 @@ public class GtfsPlusController {
             bufferedOutputStream.flush();
             bufferedOutputStream.close();
         } catch (IOException e) {
-            haltWith500(req, "could not download gtfs plus file", e);
+            haltWithMessage(req, 500, "could not download gtfs plus file", e);
         }
 
         return res.raw();
@@ -249,7 +248,7 @@ public class GtfsPlusController {
             }
             zos.close();
         } catch (IOException e) {
-            haltWith500(req, "Error creating combined GTFS/GTFS+ file", e);
+            haltWithMessage(req, 500,  "Error creating combined GTFS/GTFS+ file", e);
         }
 
         FeedVersion newFeedVersion = new FeedVersion(feedVersion.parentFeedSource());
@@ -257,7 +256,7 @@ public class GtfsPlusController {
         try {
             newFeedVersion.newGtfsFile(new FileInputStream(newFeed));
         } catch (IOException e) {
-            haltWith500(req, "Error creating new FeedVersion from combined GTFS/GTFS+", e);
+            haltWithMessage(req, 500, "Error creating new FeedVersion from combined GTFS/GTFS+", e);
         }
 
         newFeedVersion.hash();
@@ -304,7 +303,7 @@ public class GtfsPlusController {
             }
 
         } catch(IOException e) {
-            haltWith500(req, "Could not read GTFS+ zip file", e);
+            haltWithMessage(req, 500, "Could not read GTFS+ zip file", e);
         }
         LOG.info("GTFS+ tables found: {}/{}", gtfsPlusTableCount, DataManager.gtfsPlusConfig.size());
         return issues;

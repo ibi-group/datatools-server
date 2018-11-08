@@ -1,6 +1,5 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
@@ -27,7 +26,6 @@ import java.util.Iterator;
 import java.util.Map;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWith500;
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
 import static com.conveyal.datatools.manager.models.ExternalFeedSourceProperty.constructId;
@@ -129,7 +127,7 @@ public class FeedSourceController {
                         String.format("New feed %s created in project %s.", newFeedSource.name, parentProject.name));
                 return newFeedSource;
             } catch (Exception e) {
-                haltWith500(req, "Unknown error encountered creating feed source", e);
+                haltWithMessage(req, 500, "Unknown error encountered creating feed source", e);
                 return null;
             }
         } else {
@@ -208,7 +206,7 @@ public class FeedSourceController {
             try {
                 externalFeedResource.propertyUpdated(updatedProp, previousValue, req.headers("Authorization"));
             } catch (IOException e) {
-                haltWith500(req, "Could not update external feed source", e);
+                haltWithMessage(req, 500, "Could not update external feed source", e);
             }
         }
         // Updated external properties will be included in JSON (FeedSource#externalProperties)
@@ -227,7 +225,7 @@ public class FeedSourceController {
             source.delete();
             return source;
         } catch (Exception e) {
-            haltWith500(req, "Unknown error occurred while deleting feed source.", e);
+            haltWithMessage(req, 500, "Unknown error occurred while deleting feed source.", e);
             return null;
         }
     }

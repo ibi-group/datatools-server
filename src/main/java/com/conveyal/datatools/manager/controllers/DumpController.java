@@ -32,7 +32,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWith500;
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 import static spark.Spark.get;

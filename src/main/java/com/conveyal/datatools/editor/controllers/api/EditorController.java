@@ -27,7 +27,6 @@ import java.sql.PreparedStatement;
 import java.sql.SQLException;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJSON;
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWith500;
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.editor.controllers.EditorLockController.sessionsForFeedIds;
 import static spark.Spark.delete;
@@ -110,7 +109,7 @@ public abstract class EditorController<T extends Entity> {
             haltWithMessage(req, 400, "Invalid namespace");
             return null;
         } catch (SQLException e) {
-            haltWith500(req, "Error deleting entity", e);
+            haltWithMessage(req, 500, "Error deleting entity", e);
             return null;
         } finally {
             LOG.info("Delete operation took {} msec", System.currentTimeMillis() - startTime);
@@ -142,7 +141,7 @@ public abstract class EditorController<T extends Entity> {
         } catch (InvalidNamespaceException e) {
             haltWithMessage(req, 400, "Invalid namespace");
         } catch (SQLException e) {
-            haltWith500(req, "Error deleting entity", e);
+            haltWithMessage(req, 500, "Error deleting entity", e);
         } finally {
             LOG.info("Delete operation took {} msec", System.currentTimeMillis() - startTime);
         }
@@ -202,7 +201,7 @@ public abstract class EditorController<T extends Entity> {
             connection.commit();
             return jsonObject.toString();
         } catch (SQLException e) {
-            haltWith500(req, "Could not update branding url", e);
+            haltWithMessage(req, 500, "Could not update branding url", e);
             return null;
         } finally {
             DbUtils.closeQuietly(connection);
@@ -238,7 +237,7 @@ public abstract class EditorController<T extends Entity> {
         } catch (IOException e) {
             haltWithMessage(req, 400, "Invalid json", e);
         } catch (SQLException e) {
-            haltWith500(req, "An error was encountered while trying to save to the database", e);
+            haltWithMessage(req, 500, "An error was encountered while trying to save to the database", e);
         } finally {
             String operation = isCreating ? "Create" : "Update";
             LOG.info("{} operation took {} msec", operation, System.currentTimeMillis() - startTime);

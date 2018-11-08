@@ -164,7 +164,7 @@ public class DataManager {
     public static Bugsnag getBugsnag() {
         String bugsnagKey = getConfigPropertyAsText("BUGSNAG_KEY");
         if (bugsnagKey != null) {
-            return new Bugsnag(bugsnagKey);
+            return Bugsnag.init(bugsnagKey);
         }
         return null;
     }

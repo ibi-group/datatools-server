@@ -26,7 +26,6 @@ import java.util.Collection;
 import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWith500;
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static spark.Spark.delete;
 import static spark.Spark.get;
@@ -188,8 +187,9 @@ public class SnapshotController {
         // FIXME: use new FeedStore.
         if (DataManager.useS3) {
             if (!FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, key)) {
-                haltWith500(
+                haltWithMessage(
                     req,
+                    500,
                     String.format("Error downloading snapshot from S3. Object %s does not exist.", key),
                     new Exception("s3 object does not exist")
                 );
@@ -224,7 +224,7 @@ public class SnapshotController {
             // FIXME delete tables from database?
             return snapshot;
         } catch (Exception e) {
-            haltWith500(req, "Unknown error occurred while deleting snapshot.", e);
+            haltWithMessage(req, 500, "Unknown error occurred while deleting snapshot.", e);
             return null;
         }
     }

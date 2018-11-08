@@ -34,7 +34,6 @@ import java.util.stream.Collectors;
 import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWith500;
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.manager.DataManager.publicPath;
 import static spark.Spark.delete;
@@ -126,7 +125,7 @@ public class ProjectController {
             }
             return updatedProject;
         } catch (Exception e) {
-            haltWith500(req, "Error updating project", e);
+            haltWithMessage(req, 500, "Error updating project", e);
             return null;
         }
     }
@@ -139,7 +138,7 @@ public class ProjectController {
         Project project = requestProjectById(req, "manage");
         boolean successfullyDeleted = project.delete();
         if (!successfullyDeleted) {
-            haltWith500(req, "Did not delete project.", new Exception("Delete unsuccessful"));
+            haltWithMessage(req, 500, "Did not delete project.", new Exception("Delete unsuccessful"));
         }
         return project;
     }
@@ -308,7 +307,7 @@ public class ProjectController {
             try {
                 DataManager.feedResources.get(syncType).importFeedsForProject(proj, req.headers("Authorization"));
             } catch (Exception e) {
-                haltWith500(req, "An error occurred while trying to sync", e);
+                haltWithMessage(req, 500, "An error occurred while trying to sync", e);
             }
             return proj;
         }
