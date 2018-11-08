@@ -102,7 +102,7 @@ public class Auth0Connection {
             } catch (IllegalStateException | NullPointerException | NoSuchAlgorithmException | IOException | NoSuchProviderException | InvalidKeySpecException e) {
                 LOG.error("Auth0 verifier configured incorrectly.");
                 e.printStackTrace();
-                haltWithMessage(req, 500, "Server authentication configured incorrectly.");
+                haltWithMessage(req, 500, "Server authentication configured incorrectly.", e);
             }
         }
         return verifier;
