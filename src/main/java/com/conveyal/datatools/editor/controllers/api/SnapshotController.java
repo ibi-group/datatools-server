@@ -213,7 +213,7 @@ public class SnapshotController {
         if (snapshot == null) haltWithMessage(req, 400, "Must provide valid snapshot ID.");
         try {
             // Remove the snapshot and then renumber the snapshots
-            Persistence.snapshots.removeById(snapshot.id);
+            snapshot.delete();
             feedSource.renumberSnapshots();
             // FIXME Are there references that need to be removed? E.g., what if the active buffer snapshot is deleted?
             // FIXME delete tables from database?

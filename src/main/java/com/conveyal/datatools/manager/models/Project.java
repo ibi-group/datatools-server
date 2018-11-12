@@ -100,16 +100,13 @@ public class Project extends Model {
         }
     }
 
-    public boolean delete() {
+    public void delete() {
         // FIXME: Handle this in a Mongo transaction. See https://docs.mongodb.com/master/core/transactions/#transactions-and-mongodb-drivers
-//        ClientSession clientSession = Persistence.startSession();
-//        clientSession.startTransaction();
-
         // Delete each feed source in the project (which in turn deletes each feed version).
         retrieveProjectFeedSources().forEach(FeedSource::delete);
         // Delete each deployment in the project.
         retrieveDeployments().forEach(Deployment::delete);
         // Finally, delete the project.
-        return Persistence.projects.removeById(this.id);
+        Persistence.projects.removeById(this.id);
     }
 }
