@@ -2,7 +2,6 @@ package com.conveyal.datatools.editor.models;
 
 import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
-import com.conveyal.datatools.editor.jobs.ProcessGtfsSnapshotExport;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
@@ -87,32 +86,6 @@ public class Snapshot implements Cloneable, Serializable {
 
     public String generateFileName () {
         return this.feedId + "_" + this.snapshotTime + ".zip";
-    }
-
-    /** Write snapshot to disk as GTFS */
-    public static boolean writeSnapshotAsGtfs (Tuple2<String, Integer> decodedId, File outFile) {
-        GlobalTx gtx = VersionedDataStore.getGlobalTx();
-        Snapshot local;
-        try {
-            if (!gtx.snapshots.containsKey(decodedId)) {
-                return false;
-            }
-            local = gtx.snapshots.get(decodedId);
-            new ProcessGtfsSnapshotExport(local, outFile).run();
-        } finally {
-            gtx.rollbackIfOpen();
-        }
-        return true;
-    }
-
-    public static boolean writeSnapshotAsGtfs (String id, File outFile) {
-        Tuple2<String, Integer> decodedId;
-        try {
-            decodedId = JacksonSerializers.Tuple2IntDeserializer.deserialize(id);
-        } catch (IOException e1) {
-            return false;
-        }
-        return writeSnapshotAsGtfs(decodedId, outFile);
     }
 
     @JsonIgnore
