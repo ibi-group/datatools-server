@@ -16,6 +16,7 @@ import com.conveyal.datatools.manager.controllers.api.NoteController;
 import com.conveyal.datatools.manager.controllers.api.OrganizationController;
 import com.conveyal.datatools.manager.controllers.api.ProjectController;
 import com.conveyal.datatools.manager.controllers.api.AppInfoController;
+import com.conveyal.datatools.manager.controllers.api.ServerController;
 import com.conveyal.datatools.manager.controllers.api.StatusController;
 import com.conveyal.datatools.manager.controllers.api.UserController;
 import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
@@ -213,6 +214,7 @@ public class DataManager {
         NoteController.register(API_PREFIX);
         StatusController.register(API_PREFIX);
         OrganizationController.register(API_PREFIX);
+        ServerController.register(API_PREFIX);
 
         // Register editor API routes
         if (isModuleEnabled("editor")) {
@@ -224,6 +226,7 @@ public class DataManager {
             gtfsConfig = yamlMapper.readTree(gtfs);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.AGENCY, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.CALENDAR, DataManager.GTFS_DATA_SOURCE);
+            // NOTE: fare_attributes controller handles updates to nested table fare_rules.
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.FARE_ATTRIBUTES, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.FEED_INFO, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.ROUTES, DataManager.GTFS_DATA_SOURCE);

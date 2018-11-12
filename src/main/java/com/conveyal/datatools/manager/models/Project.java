@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,23 +35,11 @@ public class Project extends Model {
 
     public OtpRouterConfig routerConfig;
 
-    public Collection<OtpServer> otpServers;
-
     public String organizationId;
 
-    /**
-     * Locate and return an OTP server contained within the project that matches the name argument.
-     */
-    public OtpServer retrieveServer(String name) {
-        if (name == null) return null;
-        for (OtpServer otpServer : otpServers) {
-            if (otpServer.name == null) continue;
-            if (name.equals(otpServer.name) || name.equals(otpServer.target())) {
-                return otpServer;
-            }
-        }
-        LOG.warn("Could not find OTP server with name {}", name);
-        return null;
+    @JsonProperty
+    public List<OtpServer> getOtpServers () {
+        return Persistence.servers.getFiltered(eq("projectId", this.id));
     }
 
     public String defaultTimeZone;
@@ -86,9 +75,7 @@ public class Project extends Model {
      * Get all the deployments for this project.
      */
     public Collection<Deployment> retrieveDeployments() {
-        List<Deployment> deployments = Persistence.deployments
-                .getFiltered(eq("projectId", this.id));
-        return deployments;
+        return Persistence.deployments.getFiltered(eq("projectId", this.id));
     }
 
     // TODO: Does this need to be returned with JSON API response

@@ -55,7 +55,8 @@ public abstract class MonitorableJob implements Runnable {
         EXPORT_SNAPSHOT_TO_GTFS,
         CONVERT_EDITOR_MAPDB_TO_SQL,
         VALIDATE_ALL_FEEDS,
-        MERGE_PROJECT_FEEDS
+        MERGE_PROJECT_FEEDS,
+        MONITOR_SERVER_STATUS
     }
 
     public MonitorableJob(String owner, String name, JobType type) {
@@ -63,10 +64,6 @@ public abstract class MonitorableJob implements Runnable {
         this.name = name;
         this.type = type;
         registerJob();
-    }
-
-    public MonitorableJob(String owner) {
-        this(owner, "Unnamed Job", JobType.UNKNOWN_TYPE);
     }
 
     /**

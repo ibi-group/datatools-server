@@ -11,6 +11,7 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Note;
 import com.conveyal.datatools.manager.models.Organization;
+import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.models.Snapshot;
 import com.mongodb.MongoClient;
@@ -47,8 +48,9 @@ public class Persistence {
     public static TypedPersistence<Note> notes;
     public static TypedPersistence<Organization> organizations;
     public static TypedPersistence<ExternalFeedSourceProperty> externalFeedSourceProperties;
-    public static TypedPersistence<FeedDownloadToken> tokens;
+    public static TypedPersistence<OtpServer> servers;
     public static TypedPersistence<Snapshot> snapshots;
+    public static TypedPersistence<FeedDownloadToken> tokens;
 
     public static void initialize () {
 
@@ -90,8 +92,9 @@ public class Persistence {
         notes = new TypedPersistence(mongoDatabase, Note.class);
         organizations = new TypedPersistence(mongoDatabase, Organization.class);
         externalFeedSourceProperties = new TypedPersistence(mongoDatabase, ExternalFeedSourceProperty.class);
-        tokens = new TypedPersistence(mongoDatabase, FeedDownloadToken.class);
+        servers = new TypedPersistence(mongoDatabase, OtpServer.class);
         snapshots = new TypedPersistence(mongoDatabase, Snapshot.class);
+        tokens = new TypedPersistence(mongoDatabase, FeedDownloadToken.class);
 
         // TODO: Set up indexes on feed versions by feedSourceId, version #? deployments, feedSources by projectId.
 //        deployments.getMongoCollection().createIndex(Indexes.descending("projectId"));

@@ -1,28 +1,47 @@
 package com.conveyal.datatools.manager.models;
 
-import java.io.Serializable;
+import com.conveyal.datatools.manager.persistence.Persistence;
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.List;
 
 /**
  * Created by landon on 5/20/16.
  */
-public class OtpServer implements Serializable {
+public class OtpServer extends Model {
     private static final long serialVersionUID = 1L;
     public String name;
     public List<String> internalUrl;
+    public List<String> instanceIds;
+    public String instanceType;
+    public int instanceCount;
+    public String projectId;
+    public String targetGroupArn;
     public String publicUrl;
-    public Boolean admin;
+    public boolean admin;
     public String s3Bucket;
     public String s3Credentials;
     public boolean createServer;
 
+    /** Empty constructor for serialization. */
+    public OtpServer () {}
+
+    @JsonProperty("organizationId")
+    public String organizationId() {
+        Project project = parentProject();
+        return project == null ? null : project.organizationId;
+    }
+
+    public Project parentProject() {
+        return Persistence.projects.getById(projectId);
+    }
+
     /**
-     * Convert the name field into a string with no special characters.
+     * Nothing fancy here. Just delete the Mongo record.
      *
-     * FIXME: This is currently used to keep track of which deployments have been deployed to which servers (it is used
-     * for the {@link Deployment#deployedTo} field), but we should likely.
+     * TODO should this also check refs in deployments?
      */
-    public String target() {
-        return name != null ? name.replaceAll("[^a-zA-Z0-9]", "_") : null;
+    public void delete () {
+        Persistence.servers.removeById(this.id);
     }
 }

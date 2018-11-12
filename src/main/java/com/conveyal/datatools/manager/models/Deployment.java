@@ -23,7 +23,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
 import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
@@ -42,7 +41,6 @@ import org.slf4j.LoggerFactory;
 
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
-import static com.mongodb.client.model.Filters.not;
 
 /**
  * A deployment of (a given version of) OTP on a given set of feeds.
@@ -56,6 +54,9 @@ public class Deployment extends Model implements Serializable {
     private static final Logger LOG = LoggerFactory.getLogger(Deployment.class);
 
     public String name;
+
+    public static final String DEFAULT_OTP_VERSION = "otp-v1.3.0";
+    public static final String DEFAULT_R5_VERSION = "v2.4.1-9-g3be6daa";
 
     /** What server is this currently deployed to? */
     public String deployedTo;
@@ -118,8 +119,22 @@ public class Deployment extends Model implements Serializable {
     // future use
     public String osmFileId;
 
-    /** The commit of OTP being used on this deployment */
-    public String otpCommit;
+    /**
+     * The version (according to git describe) of OTP being used on this deployment This should default to
+     * {@link Deployment#DEFAULT_OTP_VERSION}.
+     */
+    public String otpVersion;
+
+    public boolean buildGraphOnly;
+
+    /**
+     * The version (according to git describe) of R5 being used on this deployment. This should default to
+     * {@link Deployment#DEFAULT_R5_VERSION}.
+     */
+    public String r5Version;
+
+    /** Whether this deployment should build an r5 server (false=OTP) */
+    public boolean r5;
 
     /** Date when the deployment was last deployed to a server */
     public Date lastDeployed;
