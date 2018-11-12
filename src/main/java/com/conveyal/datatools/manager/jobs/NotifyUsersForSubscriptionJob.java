@@ -37,7 +37,7 @@ public class NotifyUsersForSubscriptionJob implements Runnable {
     /**
      * Convenience method to create and schedule a notification job to notify subscribed users.
      */
-    public static void createNotification(String subscriptionType, String target, String     message) {
+    public static void createNotification(String subscriptionType, String target, String message) {
         if (APPLICATION_URL == null || !(APPLICATION_URL.startsWith("https://") || APPLICATION_URL.startsWith("http://"))) {
             LOG.error("application.public_url (value={}) property must be set to a valid URL in order to send notifications to users.", APPLICATION_URL);
             return;
