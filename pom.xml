@@ -324,6 +324,17 @@
             <version>2.0.0.0</version>
         </dependency>
 
+        <!-- AWS individual module imports (S3 imported by gtfs-lib) -->
+        <dependency>
+            <groupId>com.amazonaws</groupId>
+            <artifactId>aws-java-sdk-ec2</artifactId>
+            <version>1.11.410</version>
+        </dependency>
+        <dependency>
+            <groupId>com.amazonaws</groupId>
+            <artifactId>aws-java-sdk-elasticloadbalancingv2</artifactId>
+            <version>1.11.410</version>
+        </dependency>
     </dependencies>
 
 </project>
