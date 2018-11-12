@@ -22,6 +22,7 @@ import org.apache.http.client.methods.HttpPost;
 import org.apache.http.entity.ByteArrayEntity;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.util.EntityUtils;
+import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
@@ -187,10 +188,20 @@ public class UserController {
         String result = EntityUtils.toString(response.getEntity());
 
         int statusCode = response.getStatusLine().getStatusCode();
-        if(statusCode >= 300) haltWithMessage(req, statusCode, response.toString());
-
-        System.out.println(result);
-
+        if(statusCode >= 300) {
+            // If Auth0 status shows an error, throw a halt with a reasonably intelligible message.
+            LOG.error("Auth0 error encountered. Could not create user: {}", response.toString());
+            String errorMessage;
+            switch (statusCode) {
+                case HttpStatus.CONFLICT_409:
+                    errorMessage = String.format("User already exists for email address %s.", jsonNode.get("email"));
+                    break;
+                default:
+                    errorMessage = String.format("Error while creating user: %s.", HttpStatus.getMessage(statusCode));
+                    break;
+            }
+            haltWithMessage(req, statusCode, errorMessage);
+        }
         return result;
     }
 
