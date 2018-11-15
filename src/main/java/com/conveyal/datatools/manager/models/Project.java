@@ -11,6 +11,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Filters.or;
 
 /**
  * Represents a collection of feed sources that can be made into a deployment.
@@ -37,9 +38,17 @@ public class Project extends Model {
 
     public String organizationId;
 
-    @JsonProperty
-    public List<OtpServer> getOtpServers () {
-        return Persistence.servers.getFiltered(eq("projectId", this.id));
+    /**
+     * A list of servers that are available to deploy project feeds/OSM to. This includes servers assigned to this
+     * project as well as those that belong to no project.
+     * @return
+     */
+    @JsonProperty("otpServers")
+    public List<OtpServer> availableOtpServers() {
+        return Persistence.servers.getFiltered(or(
+            eq("projectId", this.id),
+            eq("projectId", null)
+        ));
     }
 
     public String defaultTimeZone;
