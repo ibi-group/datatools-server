@@ -4,9 +4,8 @@ import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.DeleteObjectsRequest;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.editor.datastore.GlobalTx;
-import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.jobs.FeedExpirationNotificationJob;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -27,12 +26,19 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
+import static com.conveyal.datatools.common.utils.Utils.getTimezone;
+import static com.conveyal.datatools.manager.DataManager.scheduledNotificationExpirations;
+import static com.conveyal.datatools.manager.DataManager.scheduler;
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.mongodb.client.model.Filters.eq;
 
@@ -538,4 +544,88 @@ public class FeedSource extends Model implements Cloneable {
         return (FeedSource) super.clone();
     }
 
+    @Override
+    public boolean equals(Object o) {
+        if (this == o)
+            return true;
+        if (o == null || getClass() != o.getClass())
+            return false;
+        FeedSource that = (FeedSource) o;
+        return id.equals(that.id);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(id);
+    }
+
+    /**
+     * Cancels all existing feed expiration notifications
+     */
+    public void cancelExpirationNotifications() {
+        for (Future expirationNotification : scheduledNotificationExpirations.get(this)) {
+            expirationNotification.cancel(true);
+        }
+        scheduledNotificationExpirations.removeAll(this);
+    }
+
+    public void scheduleExpirationNotifications () {
+        // cancel existing expiration notifications
+        cancelExpirationNotifications();
+
+        FeedVersion latest = retrieveLatest();
+
+        if (
+            latest != null &&
+            latest.validationResult != null &&
+                latest.validationResult.lastCalendarDate.isAfter(LocalDate.now())
+        ) {
+            // get parent project
+            Project parentProject = this.retrieveProject();
+
+            if (parentProject == null) {
+                // parent project has been deleted, but feed source/version have not
+                // abort the setting up of the notification and figure out why the database has been
+                // allowed to devolve to this state
+                return;
+            }
+
+            // get the timezone from the parent project
+            ZoneId timezone = getTimezone(parentProject.defaultTimeZone);
+
+            // calculate feed expiration time from last service date
+            long expirationEpochSeconds = latest
+                .validationResult
+                .lastCalendarDate
+                .atTime(0, 0)
+                .atZone(timezone)
+                .toEpochSecond();
+            long curSeconds = System.currentTimeMillis() / 1000;
+            long timeUntilExpiration = expirationEpochSeconds - curSeconds;
+            long timeUntilOneWeekBeforeExpiration = timeUntilExpiration - 86400 * 7;
+
+            // schedule notification jobs and record them in the scheduled notifications
+
+            // one week warning
+            if (timeUntilOneWeekBeforeExpiration > 0) {
+                scheduledNotificationExpirations.put(
+                    this,
+                    scheduler.schedule(
+                        new FeedExpirationNotificationJob(this.id, true),
+                        timeUntilOneWeekBeforeExpiration, TimeUnit.SECONDS
+                    )
+                );
+            }
+
+            // actual expiration
+            scheduledNotificationExpirations.put(
+                this,
+                scheduler.schedule(
+                    new FeedExpirationNotificationJob(this.id, false),
+                    timeUntilExpiration,
+                    TimeUnit.SECONDS
+                )
+            );
+        }
+    }
 }

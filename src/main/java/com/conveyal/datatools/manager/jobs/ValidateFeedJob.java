@@ -7,8 +7,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Map;
-
 /**
  * This job handles the validation of a given feed version. If the version is not new, it will simply replace the
  * existing version with the version object that has updated validation info.
@@ -48,6 +46,9 @@ public class ValidateFeedJob extends MonitorableJob {
                 } else {
                     Persistence.feedVersions.replace(feedVersion.id, feedVersion);
                 }
+
+                // schedule expiration notification jobs
+                feedVersion.parentFeedSource().scheduleExpirationNotifications();
             }
             // TODO: If ValidateFeedJob is called without a parent job (e.g., to "re-validate" a feed), we should handle
             // storing the updated ValidationResult in Mongo.

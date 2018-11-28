@@ -36,6 +36,7 @@ import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
+import static com.conveyal.datatools.common.utils.Utils.getTimezone;
 import static com.conveyal.datatools.manager.DataManager.publicPath;
 import static spark.Spark.delete;
 import static spark.Spark.get;
@@ -326,12 +327,7 @@ public class ProjectController {
             // First cancel any already scheduled auto fetch task for this project id.
             cancelAutoFetch(project.id);
 
-            ZoneId timezone;
-            try {
-                timezone = ZoneId.of(project.defaultTimeZone);
-            }catch(Exception e){
-                timezone = ZoneId.of("America/New_York");
-            }
+            ZoneId timezone = getTimezone(project.defaultTimeZone);
             LOG.info("Scheduling auto-fetch for projectID: {}", project.id);
 
             // NOW in default timezone
