@@ -7,6 +7,7 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.FeedStore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.slf4j.Logger;
@@ -39,7 +40,12 @@ import java.util.zip.ZipOutputStream;
 public class MergeProjectFeedsJob extends MonitorableJob {
 
     private static final Logger LOG = LoggerFactory.getLogger(MergeProjectFeedsJob.class);
-    public final Project project;
+    private final Project project;
+
+    @JsonProperty
+    public String getProjectId () {
+        return project.id;
+    }
 
     public MergeProjectFeedsJob(Project project, String owner) {
         super(owner, "Merging project feeds for " + project.name, JobType.MERGE_PROJECT_FEEDS);
