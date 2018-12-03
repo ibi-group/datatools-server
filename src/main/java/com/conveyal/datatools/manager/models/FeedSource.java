@@ -151,8 +151,6 @@ public class FeedSource extends Model implements Cloneable {
     public FeedVersion fetch (MonitorableJob.Status status, String optionalUrlOverride) {
         status.message = "Downloading file";
 
-        FeedVersion latest = retrieveLatest();
-
         // We create a new FeedVersion now, so that the fetched date is (milliseconds) before
         // fetch occurs. That way, in the highly unlikely event that a feed is updated while we're
         // fetching it, we will not miss a new feed.
@@ -189,7 +187,8 @@ public class FeedSource extends Model implements Cloneable {
         }
 
         conn.setDefaultUseCaches(true);
-
+        // Get latest version to check that the fetched version does not duplicate a feed already loaded.
+        FeedVersion latest = retrieveLatest();
         // lastFetched is set to null when the URL changes and when latest feed version is deleted
         if (latest != null && this.lastFetched != null)
             conn.setIfModifiedSince(Math.min(latest.updated.getTime(), this.lastFetched.getTime()));
