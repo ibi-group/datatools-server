@@ -33,6 +33,8 @@ import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
+import static com.conveyal.datatools.common.utils.Scheduler.autoFetchMap;
+import static com.conveyal.datatools.common.utils.Scheduler.schedulerService;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
@@ -119,7 +121,7 @@ public class ProjectController {
                 // If auto fetch flag is turned on
                 if (updatedProject.autoFetchFeeds) {
                     ScheduledFuture fetchAction = scheduleAutoFeedFetch(updatedProject, 1);
-                    DataManager.autoFetchMap.put(updatedProject.id, fetchAction);
+                    autoFetchMap.put(updatedProject.id, fetchAction);
                 } else {
                     // otherwise, cancel any existing task for this id
                     cancelAutoFetch(updatedProject.id);
@@ -353,7 +355,7 @@ public class ProjectController {
 
             // system is defined as owner because owner field must not be null
             FetchProjectFeedsJob fetchProjectFeedsJob = new FetchProjectFeedsJob(project, "system");
-            return DataManager.scheduler.scheduleAtFixedRate(fetchProjectFeedsJob,
+            return schedulerService.scheduleAtFixedRate(fetchProjectFeedsJob,
                     delayInMinutes, TimeUnit.DAYS.toMinutes(intervalInDays), minutes);
         } catch (Exception e) {
             e.printStackTrace();
@@ -367,9 +369,9 @@ public class ProjectController {
      */
     private static void cancelAutoFetch(String projectId){
         Project p = Persistence.projects.getById(projectId);
-        if ( p != null && DataManager.autoFetchMap.get(p.id) != null) {
+        if ( p != null && autoFetchMap.get(p.id) != null) {
             LOG.info("Cancelling auto-fetch for projectID: {}", p.id);
-            DataManager.autoFetchMap.get(p.id).cancel(true);
+            autoFetchMap.get(p.id).cancel(true);
         }
     }
 

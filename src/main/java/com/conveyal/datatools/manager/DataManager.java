@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager;
 import com.bugsnag.Bugsnag;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.CorsFilter;
+import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.editor.controllers.EditorLockController;
 import com.conveyal.datatools.editor.controllers.api.EditorControllerImpl;
 import com.conveyal.datatools.editor.controllers.api.SnapshotController;
@@ -23,8 +24,6 @@ import com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource;
 import com.conveyal.datatools.manager.extensions.transitfeeds.TransitFeedsFeedResource;
 import com.conveyal.datatools.manager.extensions.transitland.TransitLandFeedResource;
 import com.conveyal.datatools.manager.jobs.FeedUpdater;
-import com.conveyal.datatools.manager.models.FeedSource;
-import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.GTFS;
@@ -33,8 +32,6 @@ import com.conveyal.gtfs.loader.Table;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.ListMultimap;
 import com.google.common.io.Resources;
 import org.apache.commons.io.Charsets;
 import org.eclipse.jetty.util.ConcurrentHashSet;
@@ -54,9 +51,6 @@ import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
-import java.util.concurrent.Future;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.logRequest;
@@ -90,12 +84,6 @@ public class DataManager {
     // Stores jobs underway by user ID.
     public static Map<String, ConcurrentHashSet<MonitorableJob>> userJobsMap = new ConcurrentHashMap<>();
 
-    // Stores ScheduledFuture objects that kick off runnable tasks (e.g., fetch project feeds at 2:00 AM).
-    public static Map<String, ScheduledFuture> autoFetchMap = new HashMap<>();
-    // Scheduled executor that handles running scheduled jobs.
-    public final static ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
-    // multimap for keeping track of notification expirations
-    public final static ListMultimap<FeedSource, Future> scheduledNotificationExpirations = ArrayListMultimap.create();
     // ObjectMapper that loads in YAML config files
     private static final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
 
@@ -123,16 +111,6 @@ public class DataManager {
     public static void main(String[] args) throws IOException {
 
         initializeApplication(args);
-
-        // initialize map of auto fetched projects
-        for (Project project : Persistence.projects.getAll()) {
-            if (project.autoFetchFeeds) {
-                ScheduledFuture scheduledFuture = ProjectController.scheduleAutoFeedFetch(project, 1);
-                autoFetchMap.put(project.id, scheduledFuture);
-            }
-        }
-
-        scheduleFeedNotificationExpirations();
 
         registerRoutes();
 
@@ -172,19 +150,9 @@ public class DataManager {
 
         // Initialize MongoDB storage
         Persistence.initialize();
-    }
 
-    /**
-     * Schedule all feed version expiration notification jobs
-     */
-    private static void scheduleFeedNotificationExpirations() {
-        LOG.info("Scheduling feed expiration notifications");
-
-        // get all active feed sources
-        for (FeedSource feedSource : Persistence.feedSources.getAll()) {
-            // schedule expiration notification jobs for the latest feed version
-            feedSource.scheduleExpirationNotifications();
-        }
+        // Initialize scheduled tasks
+        Scheduler.initialize();
     }
 
     /**

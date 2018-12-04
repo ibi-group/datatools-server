@@ -32,13 +32,12 @@ import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
+import static com.conveyal.datatools.common.utils.Scheduler.scheduledNotificationExpirations;
+import static com.conveyal.datatools.common.utils.Scheduler.schedulerService;
 import static com.conveyal.datatools.common.utils.Utils.getTimezone;
-import static com.conveyal.datatools.manager.DataManager.scheduledNotificationExpirations;
-import static com.conveyal.datatools.manager.DataManager.scheduler;
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.mongodb.client.model.Filters.eq;
 
@@ -544,31 +543,33 @@ public class FeedSource extends Model implements Cloneable {
         return (FeedSource) super.clone();
     }
 
-    @Override
-    public boolean equals(Object o) {
-        if (this == o)
-            return true;
-        if (o == null || getClass() != o.getClass())
-            return false;
-        FeedSource that = (FeedSource) o;
-        return id.equals(that.id);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(id);
-    }
-
     /**
      * Cancels all existing feed expiration notifications
      */
     public void cancelExpirationNotifications() {
-        for (Future expirationNotification : scheduledNotificationExpirations.get(this)) {
+        int numNotificationJobs = 0;
+        for (Future expirationNotification : scheduledNotificationExpirations.get(this.id)) {
             expirationNotification.cancel(true);
+            numNotificationJobs++;
         }
-        scheduledNotificationExpirations.removeAll(this);
+        scheduledNotificationExpirations.removeAll(this.id);
+
+        // Declutter the logs, but only logging when feed expiration notifications have actually
+        // been cancelled
+        if (numNotificationJobs > 0) {
+            LOG.info(
+                "Cancelled {} feed expiration notification jobs for feed {}",
+                numNotificationJobs,
+                this.id
+            );
+        }
     }
 
+    /**
+     * Schedules feed expiration notifications.  This method will find the latest feed version and
+     * then schedule a 1 week expiration warning notification and also notification the day that the
+     * feed version expires.  It also cancels any existing notifications for this feed source.
+     */
     public void scheduleExpirationNotifications () {
         // cancel existing expiration notifications
         cancelExpirationNotifications();
@@ -587,6 +588,7 @@ public class FeedSource extends Model implements Cloneable {
                 // parent project has been deleted, but feed source/version have not
                 // abort the setting up of the notification and figure out why the database has been
                 // allowed to devolve to this state
+                LOG.warn("The parent project for feed source {} does not exist in the database.", this.id);
                 return;
             }
 
@@ -597,7 +599,7 @@ public class FeedSource extends Model implements Cloneable {
             long expirationEpochSeconds = latest
                 .validationResult
                 .lastCalendarDate
-                .atTime(0, 0)
+                .atTime(4, 0)
                 .atZone(timezone)
                 .toEpochSecond();
             long curSeconds = System.currentTimeMillis() / 1000;
@@ -609,8 +611,8 @@ public class FeedSource extends Model implements Cloneable {
             // one week warning
             if (timeUntilOneWeekBeforeExpiration > 0) {
                 scheduledNotificationExpirations.put(
-                    this,
-                    scheduler.schedule(
+                    this.id,
+                    schedulerService.schedule(
                         new FeedExpirationNotificationJob(this.id, true),
                         timeUntilOneWeekBeforeExpiration, TimeUnit.SECONDS
                     )
@@ -619,13 +621,15 @@ public class FeedSource extends Model implements Cloneable {
 
             // actual expiration
             scheduledNotificationExpirations.put(
-                this,
-                scheduler.schedule(
+                this.id,
+                schedulerService.schedule(
                     new FeedExpirationNotificationJob(this.id, false),
                     timeUntilExpiration,
                     TimeUnit.SECONDS
                 )
             );
+
+            LOG.info("Scheduled feed expiration notifications for feed {}", this.id);
         }
     }
 }
