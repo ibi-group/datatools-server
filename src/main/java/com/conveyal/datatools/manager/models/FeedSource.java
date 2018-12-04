@@ -4,6 +4,8 @@ import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.DeleteObjectsRequest;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.utils.ScheduledJob;
+import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.jobs.FeedExpirationNotificationJob;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
@@ -35,7 +37,7 @@ import java.util.Map;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
-import static com.conveyal.datatools.common.utils.Scheduler.scheduledNotificationExpirations;
+import static com.conveyal.datatools.common.utils.Scheduler.scheduledJobsById;
 import static com.conveyal.datatools.common.utils.Scheduler.schedulerService;
 import static com.conveyal.datatools.common.utils.Utils.getTimezone;
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
@@ -57,7 +59,6 @@ public class FeedSource extends Model implements Cloneable {
     //@JsonView(JsonViews.DataDump.class)
     public String projectId;
 
-//    public String[] regions = {"1"};
     /**
      * Get the Project of which this feed is a part
      */
@@ -540,95 +541,5 @@ public class FeedSource extends Model implements Cloneable {
 
     public FeedSource clone () throws CloneNotSupportedException {
         return (FeedSource) super.clone();
-    }
-
-    /**
-     * Cancels all existing feed expiration notifications
-     */
-    public void cancelExpirationNotifications() {
-        int numNotificationJobs = 0;
-        for (Future expirationNotification : scheduledNotificationExpirations.get(this.id)) {
-            expirationNotification.cancel(true);
-            numNotificationJobs++;
-        }
-        scheduledNotificationExpirations.removeAll(this.id);
-
-        // Declutter the logs, but only logging when feed expiration notifications have actually
-        // been cancelled
-        if (numNotificationJobs > 0) {
-            LOG.info(
-                "Cancelled {} feed expiration notification jobs for feed {}",
-                numNotificationJobs,
-                this.id
-            );
-        }
-    }
-
-    /**
-     * Schedules feed expiration notifications.  This method will find the latest feed version and
-     * then schedule a 1 week expiration warning notification and also notification the day that the
-     * feed version expires.  It also cancels any existing notifications for this feed source.
-     */
-    public void scheduleExpirationNotifications () {
-        // cancel existing expiration notifications
-        cancelExpirationNotifications();
-
-        FeedVersion latest = retrieveLatest();
-
-        if (
-            latest != null &&
-            latest.validationResult != null &&
-                latest.validationResult.lastCalendarDate.isAfter(LocalDate.now())
-        ) {
-            // get parent project
-            Project parentProject = this.retrieveProject();
-
-            if (parentProject == null) {
-                // parent project has been deleted, but feed source/version have not
-                // abort the setting up of the notification and figure out why the database has been
-                // allowed to devolve to this state
-                LOG.warn("The parent project for feed source {} does not exist in the database.", this.id);
-                return;
-            }
-
-            // get the timezone from the parent project
-            ZoneId timezone = getTimezone(parentProject.defaultTimeZone);
-
-            // calculate feed expiration time from last service date
-            long expirationEpochSeconds = latest
-                .validationResult
-                .lastCalendarDate
-                .atTime(4, 0)
-                .atZone(timezone)
-                .toEpochSecond();
-            long curSeconds = System.currentTimeMillis() / 1000;
-            long timeUntilExpiration = expirationEpochSeconds - curSeconds;
-            long timeUntilOneWeekBeforeExpiration = timeUntilExpiration - 86400 * 7;
-
-            // schedule notification jobs and record them in the scheduled notifications
-
-            // one week warning
-            if (timeUntilOneWeekBeforeExpiration > 0) {
-                scheduledNotificationExpirations.put(
-                    this.id,
-                    schedulerService.schedule(
-                        new FeedExpirationNotificationJob(this.id, true),
-                        timeUntilOneWeekBeforeExpiration, TimeUnit.SECONDS
-                    )
-                );
-            }
-
-            // actual expiration
-            scheduledNotificationExpirations.put(
-                this.id,
-                schedulerService.schedule(
-                    new FeedExpirationNotificationJob(this.id, false),
-                    timeUntilExpiration,
-                    TimeUnit.SECONDS
-                )
-            );
-
-            LOG.info("Scheduled feed expiration notifications for feed {}", this.id);
-        }
     }
 }

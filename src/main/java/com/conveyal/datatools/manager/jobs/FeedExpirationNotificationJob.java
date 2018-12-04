@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.jobs;
 
+import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Project;
@@ -13,7 +14,7 @@ import java.util.Set;
 import static com.conveyal.datatools.manager.auth.Auth0Users.getVerifiedEmailsBySubscription;
 import static com.conveyal.datatools.manager.utils.NotificationsUtils.sendNotification;
 
-public class FeedExpirationNotificationJob implements Runnable {
+public class FeedExpirationNotificationJob extends MonitorableJob {
     private static final Logger LOG = LoggerFactory.getLogger(FeedExpirationNotificationJob.class);
     private static final String APPLICATION_URL = DataManager.getConfigPropertyAsText("application.public_url");
 
@@ -21,12 +22,13 @@ public class FeedExpirationNotificationJob implements Runnable {
     boolean isWarningNotification;
 
     public FeedExpirationNotificationJob(String feedSourceId, boolean isWarningNotification) {
+        super();
         this.feedSourceId = feedSourceId;
         this.isWarningNotification = isWarningNotification;
     }
 
     @Override
-    public void run() {
+    public void jobLogic() {
         FeedSource source = Persistence.feedSources.getById(feedSourceId);
         Project project = source.retrieveProject();
 
@@ -78,11 +80,7 @@ public class FeedExpirationNotificationJob implements Runnable {
             );
 
             for (String email : emails) {
-                try {
-                    sendNotification(email, message, text, html);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
+                sendNotification(email, message, text, html);
             }
         }
     }

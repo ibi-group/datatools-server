@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -48,7 +49,7 @@ public class ValidateFeedJob extends MonitorableJob {
                 }
 
                 // schedule expiration notification jobs
-                feedVersion.parentFeedSource().scheduleExpirationNotifications();
+                Scheduler.scheduleExpirationNotifications(feedVersion.parentFeedSource());
             }
             // TODO: If ValidateFeedJob is called without a parent job (e.g., to "re-validate" a feed), we should handle
             // storing the updated ValidationResult in Mongo.

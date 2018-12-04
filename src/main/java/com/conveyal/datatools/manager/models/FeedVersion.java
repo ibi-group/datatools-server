@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -391,7 +392,7 @@ public class FeedVersion extends Model implements Serializable {
             this.parentFeedSource().renumberFeedVersions();
 
             // recalculate feed expiration notifications in case the latest version has changed
-            fs.scheduleExpirationNotifications();
+            Scheduler.scheduleExpirationNotifications(fs);
 
             LOG.info("Version {} deleted", id);
         } catch (Exception e) {
