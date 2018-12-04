@@ -57,7 +57,13 @@
         <resources>
             <resource>
                 <directory>src/main/resources</directory>
-                <filtering>false</filtering>
+                <filtering>true</filtering>
+                <includes>
+                    <include>**/*.properties</include>
+                    <include>logback.xml</include>
+                    <include>gtfs/*</include>
+                    <include>public/*</include>
+                </includes>
             </resource>
         </resources>
         <plugins>
