@@ -88,9 +88,9 @@ public class Scheduler {
                 jobsCancelled++;
             }
         }
-        // De-clutter the logs, but only logging when jobs have actually been cancelled/removed
+        // De-clutter the logs by only logging when jobs have actually been cancelled/removed.
         if (jobsCancelled > 0) {
-            LOG.info("Cancelled/removed {} {} jobs for {}", clazz.getSimpleName(), jobsCancelled, id);
+            LOG.info("Cancelled/removed {} {} jobs for {}", jobsCancelled, clazz.getSimpleName(), id);
         }
     }
 
@@ -113,8 +113,10 @@ public class Scheduler {
             ZonedDateTime now = ZonedDateTime.ofInstant(Instant.now(), timezone);
 
             // Scheduled start time
-            ZonedDateTime startTime = LocalDateTime.of(LocalDate.now(),
-                                                       LocalTime.of(project.autoFetchHour, project.autoFetchMinute)).atZone(timezone);
+            ZonedDateTime startTime = LocalDateTime.of(
+                LocalDate.now(),
+                LocalTime.of(project.autoFetchHour, project.autoFetchMinute)
+            ).atZone(timezone);
             LOG.info("Now: {}", now.format(DateTimeFormatter.ISO_ZONED_DATE_TIME));
             LOG.info("Scheduled start time: {}", startTime.format(DateTimeFormatter.ISO_ZONED_DATE_TIME));
 
