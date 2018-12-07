@@ -40,5 +40,5 @@ deploy:
   local-dir: deploy
   acl: public_read
   on:
-    repo: catalogueglobal/datatools-server
+    repo: conveyal/datatools-server
     all_branches: true
