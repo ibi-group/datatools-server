@@ -19,7 +19,7 @@ import static spark.Spark.post;
  * What we're trying to provide is this:
  * The queries that analysis-ui makes are at https://github.com/conveyal/analysis-ui/blob/dev/lib/graphql/query.js ;
  * note that feeds are wrapped in bundles in analysis-ui (we wrap the GTFS API types)
- * GraphQL queries for datatools-ui are at https://github.com/catalogueglobal/datatools-ui/blob/dev/lib/gtfs/util/graphql.js.
+ * GraphQL queries for datatools-ui are at https://github.com/conveyal/datatools-ui/blob/dev/lib/gtfs/util/graphql.js.
  *
  * We will eventually want to replace some of the REST-ish endpoints in datatools-ui, including:
  * stops/routes by bounding box
