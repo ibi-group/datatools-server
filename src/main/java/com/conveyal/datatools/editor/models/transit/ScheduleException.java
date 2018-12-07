@@ -83,14 +83,41 @@ public class ScheduleException extends Model implements Cloneable, Serializable 
      * Represents a desire about what service should be like on a particular day.
      * For example, run Sunday service on Presidents' Day, or no service on New Year's Day.
      */
-    public static enum ExemplarServiceDescriptor {
+    public enum ExemplarServiceDescriptor {
         MONDAY, TUESDAY, WEDNESDAY, THURSDAY, FRIDAY, SATURDAY, SUNDAY, NO_SERVICE, CUSTOM, SWAP;
+
+        public int toInt () {
+            switch (this) {
+                case MONDAY:
+                    return 0;
+                case TUESDAY:
+                    return 1;
+                case WEDNESDAY:
+                    return 2;
+                case THURSDAY:
+                    return 3;
+                case FRIDAY:
+                    return 4;
+                case SATURDAY:
+                    return 5;
+                case SUNDAY:
+                    return 6;
+                case NO_SERVICE:
+                    return 7;
+                case CUSTOM:
+                    return 8;
+                case SWAP:
+                    return 9;
+                default:
+                    return 0;
+            }
+        }
     }
 
     public ScheduleException clone () throws CloneNotSupportedException {
         ScheduleException c = (ScheduleException) super.clone();
-        c.dates = new ArrayList<LocalDate>(this.dates);
-        c.customSchedule = new ArrayList<String>(this.customSchedule);
+        c.dates = new ArrayList<>(this.dates);
+        c.customSchedule = new ArrayList<>(this.customSchedule);
         return c;
     }
 }

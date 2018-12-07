@@ -115,7 +115,7 @@ public class Trip extends Model implements Cloneable, Serializable {
         return ret;
     }*/
 
-    /** get the frequencies.txt entry for this trip, or null if this trip should not be in frequencies.txt */
+    /** retrieveById the frequencies.txt entry for this trip, or null if this trip should not be in frequencies.txt */
     public Frequency getFrequency(com.conveyal.gtfs.model.Trip trip) {
         if (useFrequency == null || !useFrequency || headway <= 0 || trip.trip_id != getGtfsId())
             return null;

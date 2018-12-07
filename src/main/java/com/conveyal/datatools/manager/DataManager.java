@@ -1,135 +1,239 @@
 package com.conveyal.datatools.manager;
 
+import com.bugsnag.Bugsnag;
+import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.utils.CorsFilter;
+import com.conveyal.datatools.editor.controllers.EditorLockController;
+import com.conveyal.datatools.editor.controllers.api.EditorControllerImpl;
+import com.conveyal.datatools.editor.controllers.api.SnapshotController;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
-
 import com.conveyal.datatools.manager.controllers.DumpController;
-import com.conveyal.datatools.manager.controllers.api.*;
-import com.conveyal.datatools.editor.controllers.api.*;
-
+import com.conveyal.datatools.manager.controllers.api.DeploymentController;
+import com.conveyal.datatools.manager.controllers.api.FeedSourceController;
+import com.conveyal.datatools.manager.controllers.api.FeedVersionController;
+import com.conveyal.datatools.manager.controllers.api.GtfsPlusController;
+import com.conveyal.datatools.manager.controllers.api.NoteController;
+import com.conveyal.datatools.manager.controllers.api.OrganizationController;
+import com.conveyal.datatools.manager.controllers.api.ProjectController;
+import com.conveyal.datatools.manager.controllers.api.AppInfoController;
+import com.conveyal.datatools.manager.controllers.api.StatusController;
+import com.conveyal.datatools.manager.controllers.api.UserController;
 import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
 import com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource;
 import com.conveyal.datatools.manager.extensions.transitfeeds.TransitFeedsFeedResource;
 import com.conveyal.datatools.manager.extensions.transitland.TransitLandFeedResource;
-
-import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.manager.jobs.FeedUpdater;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.FeedStore;
-import com.conveyal.datatools.manager.utils.CorsFilter;
-import com.conveyal.gtfs.GTFSCache;
+import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.gtfs.GTFS;
+import com.conveyal.gtfs.GraphQLMain;
+import com.conveyal.gtfs.loader.Table;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.google.common.io.Resources;
 import org.apache.commons.io.Charsets;
+import org.eclipse.jetty.util.ConcurrentHashSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.utils.IOUtils;
 
+import javax.sql.DataSource;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.Set;
+import java.util.Properties;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 
-import static spark.Spark.*;
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
+import static com.conveyal.datatools.common.utils.SparkUtils.logRequest;
+import static com.conveyal.datatools.common.utils.SparkUtils.logResponse;
+import static spark.Spark.after;
+import static spark.Spark.before;
+import static spark.Spark.exception;
+import static spark.Spark.get;
+import static spark.Spark.port;
 
+/**
+ * This is the singleton where the application is initialized. It currently stores a number of static fields which are
+ * referenced throughout the application.
+ */
 public class DataManager {
+    private static final Logger LOG = LoggerFactory.getLogger(DataManager.class);
 
-    public static final Logger LOG = LoggerFactory.getLogger(DataManager.class);
+    // These fields hold YAML files that represent the server configuration.
+    private static JsonNode envConfig;
+    private static JsonNode serverConfig;
 
-    public static JsonNode config;
-    public static JsonNode serverConfig;
-
+    // These fields hold YAML files that represent the GTFS and GTFS+ specifications.
     public static JsonNode gtfsPlusConfig;
     public static JsonNode gtfsConfig;
 
+    // Contains the config-enabled ExternalFeedResource objects that define connections to third-party feed indexes
+    // (e.g., transit.land, TransitFeeds.com)
+    // TODO: define type for ExternalFeedResource Strings
     public static final Map<String, ExternalFeedResource> feedResources = new HashMap<>();
 
-    public static Map<String, Set<MonitorableJob>> userJobsMap = new HashMap<>();
+    // Stores jobs underway by user ID.
+    public static Map<String, ConcurrentHashSet<MonitorableJob>> userJobsMap = new ConcurrentHashMap<>();
 
+    // Stores ScheduledFuture objects that kick off runnable tasks (e.g., fetch project feeds at 2:00 AM).
     public static Map<String, ScheduledFuture> autoFetchMap = new HashMap<>();
+    // Scheduled executor that handles running scheduled jobs.
     public final static ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+    // ObjectMapper that loads in YAML config files
     private static final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
-    public static GTFSCache gtfsCache;
+
+
+    // Heavy executor should contain long-lived CPU-intensive tasks (e.g., feed loading/validation)
+    public static Executor heavyExecutor = Executors.newFixedThreadPool(4);
+    // light executor is for tasks for things that should finish quickly (e.g., email notifications)
+    public static Executor lightExecutor = Executors.newSingleThreadExecutor();
 
     public static String feedBucket;
     public static String bucketFolder;
 
-//    public final AmazonS3Client s3Client;
+    public static String repoUrl;
+    public static String commit = "";
+
     public static boolean useS3;
-    public static final String apiPrefix = "/api/manager/";
-
-    public static final String DEFAULT_ENV = "configurations/default/env.yml";
-    public static final String DEFAULT_CONFIG = "configurations/default/server.yml";
-
-    private static List<String> apiFeedSources = new ArrayList<>();
+    private static final String API_PREFIX = "/api/manager/";
+    private static final String GTFS_API_PREFIX = API_PREFIX + "secure/gtfs/";
+    private static final String EDITOR_API_PREFIX = "/api/editor/";
+    public static final String publicPath = "(" + API_PREFIX + "|" + EDITOR_API_PREFIX + ")public/.*";
+    private static final String DEFAULT_ENV = "configurations/default/env.yml";
+    private static final String DEFAULT_CONFIG = "configurations/default/server.yml";
+    public static DataSource GTFS_DATA_SOURCE;
 
     public static void main(String[] args) throws IOException {
 
-        // load config
-        loadConfig(args);
+        initializeApplication(args);
 
-        // set port
+        // initialize map of auto fetched projects
+        for (Project project : Persistence.projects.getAll()) {
+            if (project.autoFetchFeeds) {
+                ScheduledFuture scheduledFuture = ProjectController.scheduleAutoFeedFetch(project, 1);
+                autoFetchMap.put(project.id, scheduledFuture);
+            }
+        }
+
+        registerRoutes();
+
+        registerExternalResources();
+    }
+
+    static void initializeApplication(String[] args) throws IOException {
+        // Load configuration files (env.yml and server.yml).
+        loadConfig(args);
+        loadProperties();
+
+        String bugsnagKey = getConfigPropertyAsText("BUGSNAG_KEY");
+        if (bugsnagKey != null) {
+            new Bugsnag(bugsnagKey);
+        }
+
+        // FIXME: hack to statically load FeedStore
+        LOG.info(FeedStore.class.getSimpleName());
+
+        // Optionally set port for server. Otherwise, Spark defaults to 4567.
         if (getConfigProperty("application.port") != null) {
             port(Integer.parseInt(getConfigPropertyAsText("application.port")));
         }
-        useS3 = getConfigPropertyAsText("application.data.use_s3_storage").equals("true");
+        useS3 = "true".equals(getConfigPropertyAsText("application.data.use_s3_storage"));
 
-        // initialize map of auto fetched projects
-        for (Project p : Project.getAll()) {
-            if (p.autoFetchFeeds != null && autoFetchMap.get(p.id) == null){
-                if (p.autoFetchFeeds) {
-                    ScheduledFuture scheduledFuture = ProjectController.scheduleAutoFeedFetch(p.id, p.autoFetchHour, p.autoFetchMinute, 1, p.defaultTimeZone);
-                    autoFetchMap.put(p.id, scheduledFuture);
-                }
-            }
-        }
+        GTFS_DATA_SOURCE = GTFS.createDataSource(
+            getConfigPropertyAsText("GTFS_DATABASE_URL"),
+            getConfigPropertyAsText("GTFS_DATABASE_USER"),
+            getConfigPropertyAsText("GTFS_DATABASE_PASSWORD")
+        );
 
         feedBucket = getConfigPropertyAsText("application.data.gtfs_s3_bucket");
         bucketFolder = FeedStore.s3Prefix;
 
-        if (useS3) {
-            LOG.info("Initializing gtfs-api for bucket {}/{} and cache dir {}", feedBucket, bucketFolder, FeedStore.basePath);
-            gtfsCache = new GTFSCache(feedBucket, bucketFolder, FeedStore.basePath);
+        // Initialize MongoDB storage
+        Persistence.initialize();
+    }
+
+    /**
+     * Load some properties files to obtain information about this project.
+     * This method reads in two files:
+     * - src/main/resources/.properties
+     * - src/main/resources/git.properties
+     *
+     * The git.properties file is automatically generated by the commit-id-plugin.  If working with an existing copy of
+     * the repo from an older commit, you may need to run `mvn package` to have the file get generated.
+     */
+    private static void loadProperties() {
+        final Properties projectProperties = new Properties();
+        InputStream projectPropertiesInputStream =
+            DataManager.class.getClassLoader().getResourceAsStream(".properties");
+        try {
+            projectProperties.load(projectPropertiesInputStream);
+            repoUrl = projectProperties.getProperty("repo_url");
+        } catch (IOException e) {
+            LOG.warn("could not read .properties file");
+            e.printStackTrace();
         }
-        else {
-            LOG.info("Initializing gtfs cache locally (no s3 bucket) {}", FeedStore.basePath);
-            gtfsCache = new GTFSCache(null, FeedStore.basePath);
+
+        final Properties gitProperties = new Properties();
+        try {
+            InputStream gitPropertiesInputStream =
+                DataManager.class.getClassLoader().getResourceAsStream("git.properties");
+            gitProperties.load(gitPropertiesInputStream);
+            commit = gitProperties.getProperty("git.commit.id");
+        } catch (Exception e) {
+            LOG.warn("could not read git.properties file");
+            e.printStackTrace();
         }
+    }
+
+    /**
+     * Register API routes with Spark. This register core application routes, any routes associated with optional
+     * modules and sets other core routes (e.g., 404 response) and response headers (e.g., API content type is JSON).
+     */
+    static void registerRoutes() throws IOException {
         CorsFilter.apply();
+        // Initialize GTFS GraphQL API service
+        // FIXME: Add user permissions check to ensure user has access to feeds.
+        GraphQLMain.initialize(GTFS_DATA_SOURCE, GTFS_API_PREFIX);
+        // Register core API routes
+        AppInfoController.register(API_PREFIX);
+        ProjectController.register(API_PREFIX);
+        FeedSourceController.register(API_PREFIX);
+        FeedVersionController.register(API_PREFIX);
+        NoteController.register(API_PREFIX);
+        StatusController.register(API_PREFIX);
+        OrganizationController.register(API_PREFIX);
 
-        // core controllers
-        ProjectController.register(apiPrefix);
-        FeedSourceController.register(apiPrefix);
-        FeedVersionController.register(apiPrefix);
-        RegionController.register(apiPrefix);
-        NoteController.register(apiPrefix);
-        StatusController.register(apiPrefix);
-        OrganizationController.register(apiPrefix);
+        // Register editor API routes
+        if (isModuleEnabled("editor")) {
 
-        // Editor routes
-        if ("true".equals(getConfigPropertyAsText("modules.editor.enabled"))) {
+            SnapshotController.register(EDITOR_API_PREFIX);
+            EditorLockController.register(EDITOR_API_PREFIX);
+
             String gtfs = IOUtils.toString(DataManager.class.getResourceAsStream("/gtfs/gtfs.yml"));
             gtfsConfig = yamlMapper.readTree(gtfs);
-            AgencyController.register(apiPrefix);
-            CalendarController.register(apiPrefix);
-            RouteController.register(apiPrefix);
-            RouteTypeController.register(apiPrefix);
-            ScheduleExceptionController.register(apiPrefix);
-            StopController.register(apiPrefix);
-            TripController.register(apiPrefix);
-            TripPatternController.register(apiPrefix);
-            SnapshotController.register(apiPrefix);
-            FeedInfoController.register(apiPrefix);
-            FareController.register(apiPrefix);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.AGENCY, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.CALENDAR, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.FARE_ATTRIBUTES, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.FEED_INFO, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.ROUTES, DataManager.GTFS_DATA_SOURCE);
+            // NOTE: Patterns controller handles updates to nested tables shapes, pattern stops, and frequencies.
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.PATTERNS, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.SCHEDULE_EXCEPTIONS, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.STOPS, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.TRIPS, DataManager.GTFS_DATA_SOURCE);
+            // TODO: Add transfers.txt controller?
+//            GisController.register(EDITOR_API_PREFIX);
         }
 
         // log all exceptions to system.out
@@ -137,113 +241,136 @@ public class DataManager {
 
         // module-specific controllers
         if (isModuleEnabled("deployment")) {
-            DeploymentController.register(apiPrefix);
+            DeploymentController.register(API_PREFIX);
         }
         if (isModuleEnabled("gtfsapi")) {
-            GtfsApiController.register(apiPrefix);
+            // Check that update interval (in seconds) and use_extension are specified and initialize feedUpdater.
+            if (hasConfigProperty("modules.gtfsapi.update_frequency") && hasConfigProperty("modules.gtfsapi.use_extension")) {
+                String extensionType = getConfigPropertyAsText("modules.gtfsapi.use_extension");
+                String extensionFeedBucket = getExtensionPropertyAsText(extensionType, "s3_bucket");
+                String extensionBucketFolder = getExtensionPropertyAsText(extensionType, "s3_download_prefix");
+                int updateFrequency = getConfigProperty("modules.gtfsapi.update_frequency").asInt();
+                if (feedBucket != null && extensionBucketFolder != null) FeedUpdater.schedule(updateFrequency, extensionFeedBucket, extensionBucketFolder);
+                else LOG.warn("FeedUpdater not initialized. S3 bucket and folder not provided.");
+            }
         }
         if (isModuleEnabled("gtfsplus")) {
-            GtfsPlusController.register(apiPrefix);
+            GtfsPlusController.register(API_PREFIX);
             URL gtfsplus = DataManager.class.getResource("/gtfs/gtfsplus.yml");
             gtfsPlusConfig = yamlMapper.readTree(Resources.toString(gtfsplus, Charsets.UTF_8));
         }
         if (isModuleEnabled("user_admin")) {
-            UserController.register(apiPrefix);
+            UserController.register(API_PREFIX);
         }
         if (isModuleEnabled("dump")) {
             DumpController.register("/");
         }
+        before(EDITOR_API_PREFIX + "secure/*", ((request, response) -> {
+            Auth0Connection.checkUser(request);
+            Auth0Connection.checkEditPrivileges(request);
+        }));
 
-        before(apiPrefix + "secure/*", (request, response) -> {
+
+        before(API_PREFIX + "secure/*", (request, response) -> {
             if(request.requestMethod().equals("OPTIONS")) return;
             Auth0Connection.checkUser(request);
         });
 
-        // lazy load by feed source id if new one is requested
-//        if ("true".equals(getConfigPropertyAsText("modules.gtfsapi.load_on_fetch"))) {
-//            before(apiPrefix + "*", (request, response) -> {
-//                String feeds = request.queryParams("feed");
-//                if (feeds != null) {
-//                    String[] feedIds = feeds.split(",");
-//                    for (String feedId : feedIds) {
-//                        FeedSource fs = FeedSource.get(feedId);
-//                        if (fs == null) {
-//                            continue;
-//                        }
-//                        else if (!GtfsApiController.gtfsApi.registeredFeedSources.contains(fs.id) && !apiFeedSources.contains(fs.id)) {
-//                            apiFeedSources.add(fs.id);
-//
-//                            LoadGtfsApiFeedJob loadJob = new LoadGtfsApiFeedJob(fs);
-//                            new Thread(loadJob).start();
-//                        halt(202, "Initializing feed load...");
-//                        }
-//                        else if (apiFeedSources.contains(fs.id) && !GtfsApiController.gtfsApi.registeredFeedSources.contains(fs.id)) {
-//                            halt(202, "Loading feed, please try again later");
-//                        }
-//                    }
-//
-//                }
-//            });
-//        }
+        // FIXME: Add auth check for gtfs-api. This is tricky because it requires extracting the namespace argument from
+        // the GraphQL query, which could be embedded in the query itself or in the variables JSON. We would then need
+        // to check against both the snapshots and feed versions collections for the feed source ID to use in the
+        // permissions check.
+//        before(GTFS_API_PREFIX + "*", (request, response) -> {
+//            Auth0Connection.checkGTFSPrivileges(request);
+//        });
+
         // return "application/json" for all API routes
-        after(apiPrefix + "*", (request, response) -> {
+        before(API_PREFIX + "*", (request, response) -> {
+            response.type("application/json");
+            response.header("Content-Encoding", "gzip");
+        });
+        before(EDITOR_API_PREFIX + "*", (request, response) -> {
             response.type("application/json");
             response.header("Content-Encoding", "gzip");
         });
         // load index.html
-        InputStream stream = DataManager.class.getResourceAsStream("/public/index.html");
-        String index = IOUtils.toString(stream).replace("${S3BUCKET}", getConfigPropertyAsText("application.assets_bucket"));
-        stream.close();
+        final String index = resourceToString("/public/index.html")
+                .replace("${S3BUCKET}", getConfigPropertyAsText("application.assets_bucket"));
+        final String auth0html = resourceToString("/public/auth0-silent-callback.html");
 
-        // return 404 for any api response that's not found
-        get(apiPrefix + "*", (request, response) -> {
-            halt(404);
+        // auth0 silent callback
+        get("/api/auth0-silent-callback", (request, response) -> {
+            response.type("text/html");
+            return auth0html;
+        });
+
+        /////////////////    Final API routes     /////////////////////
+
+        // Return 404 for any API path that is not configured.
+        // IMPORTANT: Any API paths must be registered before this halt.
+        get("/api/" + "*", (request, response) -> {
+            haltWithMessage(request, 404, "No API route configured for this path.");
             return null;
         });
-        
-//        // return assets as byte array
-//        get("/assets/*", (request, response) -> {
-//            try (InputStream stream = DataManager.class.getResourceAsStream("/public" + request.pathInfo())) {
-//                return IOUtils.toByteArray(stream);
-//            } catch (IOException e) {
-//                return null;
-//            }
-//        });
+
         // return index.html for any sub-directory
         get("/*", (request, response) -> {
             response.type("text/html");
             return index;
         });
-        registerExternalResources();
+
+        // add logger
+        before((request, response) -> {
+            logRequest(request, response);
+        });
+
+        // add logger
+        after((request, response) -> {
+            logResponse(request, response);
+        });
     }
 
+    /**
+     * Convenience function to check existence of a config property (nested fields defined by dot notation
+     * "data.use_s3_storage") in either server.yml or env.yml.
+     */
     public static boolean hasConfigProperty(String name) {
         // try the server config first, then the main config
-        boolean fromServerConfig = hasConfigProperty(serverConfig, name);
-        if(fromServerConfig) return fromServerConfig;
-
-        return hasConfigProperty(config, name);
+        return hasConfigProperty(serverConfig, name) || hasConfigProperty(envConfig, name);
     }
 
-    public static boolean hasConfigProperty(JsonNode config, String name) {
+    private static String resourceToString (String resourceName) {
+        try (InputStream stream = DataManager.class.getResourceAsStream(resourceName)) {
+            return IOUtils.toString(stream);
+        } catch (IOException e) {
+            e.printStackTrace();
+            throw new RuntimeException("Could not find resource.");
+        }
+    }
+
+    private static boolean hasConfigProperty(JsonNode config, String name) {
         String parts[] = name.split("\\.");
         JsonNode node = config;
-        for(int i = 0; i < parts.length; i++) {
+        for (int i = 0; i < parts.length; i++) {
             if(node == null) return false;
             node = node.get(parts[i]);
         }
         return node != null;
     }
 
+    /**
+     * Convenience function to get a config property (nested fields defined by dot notation "data.use_s3_storage") as
+     * JsonNode. Checks server.yml, then env.yml, and finally returns null if property is not found.
+     */
     public static JsonNode getConfigProperty(String name) {
         // try the server config first, then the main config
         JsonNode fromServerConfig = getConfigProperty(serverConfig, name);
         if(fromServerConfig != null) return fromServerConfig;
 
-        return getConfigProperty(config, name);
+        return getConfigProperty(envConfig, name);
     }
 
-    public static JsonNode getConfigProperty(JsonNode config, String name) {
+    private static JsonNode getConfigProperty(JsonNode config, String name) {
         String parts[] = name.split("\\.");
         JsonNode node = config;
         for(int i = 0; i < parts.length; i++) {
@@ -256,6 +383,9 @@ public class DataManager {
         return node;
     }
 
+    /**
+     * Get a config property (nested fields defined by dot notation "data.use_s3_storage") as text.
+     */
     public static String getConfigPropertyAsText(String name) {
         JsonNode node = getConfigProperty(name);
         if (node != null) {
@@ -265,15 +395,29 @@ public class DataManager {
             return null;
         }
     }
+    public static String getExtensionPropertyAsText (String extensionType, String name) {
+        return getConfigPropertyAsText(String.join(".", "extensions", extensionType.toLowerCase(), name));
+    }
 
+    /**
+     * Checks if an application module (e.g., editor, GTFS+) has been enabled. The UI must also have the module
+     * enabled in order to use.
+     */
     public static boolean isModuleEnabled(String moduleName) {
-        return "true".equals(getConfigPropertyAsText("modules." + moduleName + ".enabled"));
+        return hasConfigProperty("modules." + moduleName) && "true".equals(getConfigPropertyAsText("modules." + moduleName + ".enabled"));
     }
 
+    /**
+     * Checks if an extension has been enabled. Extensions primarily define external resources
+     * the application can sync with. The UI config must also have the extension enabled in order to use.
+     */
     public static boolean isExtensionEnabled(String extensionName) {
-        return "true".equals(getConfigPropertyAsText("extensions." + extensionName + ".enabled"));
+        return hasConfigProperty("extensions." + extensionName) && "true".equals(getExtensionPropertyAsText(extensionName, "enabled"));
     }
 
+    /**
+     * Check if extension is enabled and, if so, register it.
+     */
     private static void registerExternalResources() {
 
         if (isExtensionEnabled("mtc")) {
@@ -291,26 +435,36 @@ public class DataManager {
             registerExternalResource(new TransitFeedsFeedResource());
         }
     }
-    private static void loadConfig (String[] args) throws IOException {
-        FileInputStream configStream;
+
+    /**
+     * Load config files from either program arguments or (if no args specified) from
+     * default configuration file locations. Config fields are retrieved with getConfigProperty.
+     */
+    private static void loadConfig(String[] args) throws IOException {
+        FileInputStream envConfigStream;
         FileInputStream serverConfigStream;
 
         if (args.length == 0) {
             LOG.warn("Using default env.yml: {}", DEFAULT_ENV);
             LOG.warn("Using default server.yml: {}", DEFAULT_CONFIG);
-            configStream = new FileInputStream(new File(DEFAULT_ENV));
+            envConfigStream = new FileInputStream(new File(DEFAULT_ENV));
             serverConfigStream = new FileInputStream(new File(DEFAULT_CONFIG));
         }
         else {
             LOG.info("Loading env.yml: {}", args[0]);
             LOG.info("Loading server.yml: {}", args[1]);
-            configStream = new FileInputStream(new File(args[0]));
+            envConfigStream = new FileInputStream(new File(args[0]));
             serverConfigStream = new FileInputStream(new File(args[1]));
         }
 
-        config = yamlMapper.readTree(configStream);
+        envConfig = yamlMapper.readTree(envConfigStream);
         serverConfig = yamlMapper.readTree(serverConfigStream);
     }
+
+    /**
+     * Register external feed resource (e.g., transit.land) with feedResources map.
+     * This essentially "enables" the syncing and storing feeds from the external resource.
+     */
     private static void registerExternalResource(ExternalFeedResource resource) {
         feedResources.put(resource.getResourceType(), resource);
     }

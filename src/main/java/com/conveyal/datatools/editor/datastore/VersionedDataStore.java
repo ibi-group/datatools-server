@@ -1,9 +1,9 @@
 package com.conveyal.datatools.editor.datastore;
 
 import com.conveyal.datatools.manager.DataManager;
-import com.google.common.collect.Maps;
 import com.conveyal.datatools.editor.models.Snapshot;
 import com.conveyal.datatools.editor.models.transit.Stop;
+import com.google.common.collect.Maps;
 import org.mapdb.BTreeMap;
 import org.mapdb.DB;
 import org.mapdb.DBMaker;
@@ -13,9 +13,11 @@ import org.slf4j.LoggerFactory;
 import com.conveyal.datatools.editor.utils.ClassLoaderSerializer;
 
 import java.io.File;
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.NavigableSet;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Create a new versioned com.conveyal.datatools.editor.datastore. A versioned data store handles multiple databases,
@@ -29,7 +31,8 @@ public class VersionedDataStore {
     private static File dataDirectory = new File(DataManager.getConfigPropertyAsText("application.data.editor_mapdb"));
     private static TxMaker globalTxMaker;
 
-    private static Map<String, TxMaker> feedTxMakers = Maps.newConcurrentMap();
+    // FIXME: is changing from Maps.newConcurrentMap() suitable here?  Check with mattwigway.
+    private static ConcurrentHashMap<String, TxMaker> feedTxMakers = new ConcurrentHashMap<>();
 
     static {
         File globalDataDirectory = new File(dataDirectory, "global");
@@ -51,7 +54,7 @@ public class VersionedDataStore {
 
     /**
      * Start a transaction in an agency database. No checking is done to ensure the agency exists;
-     * if it does not you will get a (hopefully) empty DB, unless you've done the same thing previously.
+     * if it does not you will retrieveById a (hopefully) empty DB, unless you've done the same thing previously.
      */
     public static FeedTx getFeedTx(String feedId) {
         return new FeedTx(getRawFeedTx(feedId));
@@ -71,6 +74,9 @@ public class VersionedDataStore {
                     TxMaker agencyTxm = DBMaker.newFileDB(new File(path, "master.db"))
                             .mmapFileEnable()
                             .compressionEnable()
+                            .asyncWriteEnable()
+                            .closeOnJvmShutdown()
+                            .asyncWriteFlushDelay(5)
                             .makeTxMaker();
 
                     feedTxMakers.put(feedId, agencyTxm);
@@ -81,30 +87,75 @@ public class VersionedDataStore {
         return feedTxMakers.get(feedId).makeTx();
     }
 
-    /** Take a snapshot of an agency database. The snapshot will be saved in the global database. */
+    /**
+     * WARNING: do not use unless you absolutely intend to delete active editor data for a given feedId.
+     * This function will delete the mapdb files for the specified feedId, but leave the snapshots for
+     * this feed intact. So this should only really be used for if/when an editor feed becomes corrupted.
+     * In that case, the steps to follow are:
+     * 1. Create snapshot of latest changes for feed.
+     * 2. Call this function.
+     * 3. Restore latest snapshot (new feed DB will be created where the deleted one once lived).
+     */
+    public static void wipeFeedDB(String feedId) {
+        File path = new File(dataDirectory, feedId);
+        String[] extensions = {".db", ".db.p", ".db.t"};
+        LOG.warn("Permanently deleting Feed DB for {}", feedId);
+
+        // remove entry for feedId in feedTxMaker
+        feedTxMakers.remove(feedId);
+        // delete local cache files (including zip) when feed removed from cache
+        for (String type : extensions) {
+            File file = new File(path, "master" + type);
+            file.delete();
+        }
+    }
+
     public static Snapshot takeSnapshot (String feedId, String name, String comment) {
-        FeedTx tx = getFeedTx(feedId);
-        GlobalTx gtx = getGlobalTx();
+        return takeSnapshot(feedId, null, name, comment);
+    }
+
+    /** Take a snapshot of an agency database. The snapshot will be saved in the global database. */
+    public static Snapshot takeSnapshot (String feedId, String feedVersionId, String name, String comment) {
+        FeedTx tx = null;
+        GlobalTx gtx = null;
+        boolean transactionCommitError = false;
         int version = -1;
         DB snapshot = null;
-        Snapshot ret = null;
+        Snapshot ret;
         try {
+            tx = getFeedTx(feedId);
+            gtx = getGlobalTx();
             version = tx.getNextSnapshotId();
-
-            LOG.info("Creating snapshot {} for feed {}", feedId, version);
+            LOG.info("Creating snapshot {} for feed {}", version, feedId);
             long startTime = System.currentTimeMillis();
 
             ret = new Snapshot(feedId, version);
 
-            if (gtx.snapshots.containsKey(ret.id))
-                throw new IllegalStateException("Duplicate snapshot IDs");
+            // if we encounter a duplicate snapshot ID, increment until there is a safe one
+            if (gtx.snapshots.containsKey(ret.id)) {
+                LOG.error("Duplicate snapshot IDs, incrementing until we have a fresh one.");
+                while(gtx.snapshots.containsKey(ret.id)) {
+                    version = tx.getNextSnapshotId();
+                    LOG.info("Attempting to create snapshot {} for feed {}", version, feedId);
+                    ret = new Snapshot(feedId, version);
+                }
+            }
 
             ret.snapshotTime = System.currentTimeMillis();
+            ret.feedVersionId = feedVersionId;
             ret.name = name;
             ret.comment = comment;
             ret.current = true;
 
             snapshot = getSnapshotDb(feedId, version, false);
+
+            // if snapshot contains maps, increment the version ID until we find a snapshot that is empty
+            while (snapshot.getAll().size() != 0) {
+                version = tx.getNextSnapshotId();
+                LOG.info("Attempting to create snapshot {} for feed {}", version, feedId);
+                ret = new Snapshot(feedId, version);
+                snapshot = getSnapshotDb(feedId, version, false);
+            }
 
             new SnapshotTx(snapshot).make(tx);
             // for good measure
@@ -113,9 +164,20 @@ public class VersionedDataStore {
 
             gtx.snapshots.put(ret.id, ret);
             gtx.commit();
-            tx.commit();
+
+            // unfortunately if a mapdb gets corrupted, trying to commit this transaction will cause things
+            // to go all haywired. Further, if we try to rollback after this commit, the snapshot will fail.
+            // So we keep track of transactionCommitError here and avoid rollback if an error is encountered.
+            // This will throw an unclosed transaction error, but since the
+            try {
+                tx.commit();
+            } catch (Exception e) {
+                transactionCommitError = true;
+                LOG.error("Error committing feed transaction", e);
+            }
             String snapshotMessage = String.format("Saving snapshot took %.2f seconds", (System.currentTimeMillis() - startTime) / 1000D);
             LOG.info(snapshotMessage);
+
 
             return ret;
         } catch (Exception e) {
@@ -132,12 +194,13 @@ public class VersionedDataStore {
                     }
                 }
             }
-
+//            if (tx != null) tx.rollbackIfOpen();
+//            gtx.rollbackIfOpen();
             // re-throw
             throw new RuntimeException(e);
         } finally {
-            tx.rollbackIfOpen();
-            gtx.rollbackIfOpen();
+            if (tx != null && !transactionCommitError) tx.rollbackIfOpen();
+            if (gtx != null) gtx.rollbackIfOpen();
         }
     }
 
@@ -158,7 +221,7 @@ public class VersionedDataStore {
         }
     }
 
-    /** get the directory in which to store a snapshot */
+    /** retrieveById the directory in which to store a snapshot */
     public static DB getSnapshotDb (String feedId, int version, boolean readOnly) {
         File thisSnapshotDir = getSnapshotDir(feedId, version);
         thisSnapshotDir.mkdirs();
@@ -178,7 +241,7 @@ public class VersionedDataStore {
         return maker.make();
     }
 
-    /** get the directory in which a snapshot is stored */
+    /** retrieveById the directory in which a snapshot is stored */
     public static File getSnapshotDir (String feedId, int version) {
         File agencyDir = new File(dataDirectory, feedId);
         File snapshotsDir = new File(agencyDir, "snapshots");
@@ -207,7 +270,7 @@ public class VersionedDataStore {
         /** has this transaction been closed? */
         boolean closed = false;
 
-        /** Convenience function to get a map */
+        /** Convenience function to retrieveById a map */
         protected final <T1, T2> BTreeMap<T1, T2> getMap (String name) {
             return tx.createTreeMap(name)
                     // use java serialization to allow for schema upgrades
@@ -216,7 +279,7 @@ public class VersionedDataStore {
         }
 
         /**
-         * Convenience function to get a set. These are used as indices so they use the default serialization;
+         * Convenience function to retrieveById a set. These are used as indices so they use the default serialization;
          * if we make a schema change we drop and recreate them.
          */
         protected final <T> NavigableSet <T> getSet (String name) {

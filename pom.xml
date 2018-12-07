@@ -6,27 +6,65 @@
 
     <groupId>com.conveyal</groupId>
     <artifactId>datatools-server</artifactId>
-    <version>1.0.0</version>
+    <version>3.2.0-SNAPSHOT</version>
 
+    <licenses>
+        <license>
+            <name>MIT License</name>
+            <url>https://opensource.org/licenses/MIT</url>
+        </license>
+    </licenses>
 
-    <!-- Define where the source code for this project lives -->
+    <!-- Developer entries are provided for primary developers.
+   For other contributors, see https://github.com/catalogueglobal/datatools-server/graphs/contributors -->
+    <developers>
+        <developer>
+            <name>Landon Reed</name>
+            <email>lreed@conveyal.com</email>
+            <organization>Conveyal</organization>
+            <organizationUrl>http://conveyal.com/</organizationUrl>
+        </developer>
+        <developer>
+            <name>Andrew Byrd</name>
+            <email>abyrd@conveyal.com</email>
+            <organization>Conveyal</organization>
+            <organizationUrl>http://conveyal.com/</organizationUrl>
+        </developer>
+        <developer>
+            <name>David Emory</name>
+            <email>demory@conveyal.com</email>
+            <organization>Conveyal</organization>
+            <organizationUrl>http://conveyal.com/</organizationUrl>
+        </developer>
+        <developer>
+            <name>Evan Siroky</name>
+            <email>esiroky@conveyal.com</email>
+            <organization>Conveyal</organization>
+            <organizationUrl>http://conveyal.com/</organizationUrl>
+        </developer>
+    </developers>
+
+    <!-- Define where the source code for project lives -->
     <scm>
-        <connection>scm:git:https://github.com/conveyal/datatools-server.git</connection>
-        <developerConnection>scm:git:ssh://git@github.com/conveyal/datatools-server.git</developerConnection>
-        <url>https://github.com/conveyal/datatools-server.git</url>
+        <connection>scm:git:https://github.com/catalogueglobal/datatools-server.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/catalogueglobal/datatools-server.git</developerConnection>
+        <url>https://github.com/catalogueglobal/datatools-server.git</url>
     </scm>
-
-    <!-- Define where the artifacts produced by this build will be deployed -->
-    <distributionManagement>
-        <repository>
-            <!-- Also used as snapshotRepository by default -->
-            <id>conveyal-maven-repo</id>
-            <name>Conveyal Maven Repository</name>
-            <url>s3://maven.conveyal.com/</url>
-        </repository>
-    </distributionManagement>
-
+    <properties>
+        <jackson.version>2.9.0</jackson.version>
+    </properties>
     <build>
+        <resources>
+            <resource>
+                <directory>src/main/resources</directory>
+                <filtering>true</filtering>
+                <includes>
+                    <include>**/*.properties</include>
+                    <include>gtfs/*</include>
+                    <include>public/*</include>
+                </includes>
+            </resource>
+        </resources>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
@@ -39,12 +77,6 @@
                         <configuration>
                             <finalName>dt-${git.commit.id.describe}</finalName>
                             <transformers>
-                                <transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                                    <manifestEntries>
-                                        <Main-Class>com.conveyal.datatools.manager.DataManager</Main-Class>
-                                    </manifestEntries>
-                                </transformer>
-
                                 <!-- files overwrite each other and geotools does not function without this.
                                          http://docs.geotools.org/latest/userguide/faq.html#how-do-i-create-an-executable-jar-for-my-geotools-app -->
                                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
@@ -68,6 +100,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
+                <version>3.7.0</version>
                 <configuration>
                     <source>1.8</source>
                     <target>1.8</target>
@@ -86,19 +119,62 @@
                 </executions>
                 <configuration>
                     <dotGitDirectory>${project.basedir}/.git</dotGitDirectory>
+                    <!-- the below line will automatically generate the git properties file which is needed for the
+                     SeverController to fully function.
+                    -->
+                    <generateGitPropertiesFile>true</generateGitPropertiesFile>
+                    <injectAllReactorProjects>true</injectAllReactorProjects>
                 </configuration>
             </plugin>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-jar-plugin</artifactId>
+                <configuration>
+                    <archive>
+                        <manifest>
+                            <mainClass>com.conveyal.datatools.manager.DataManager</mainClass>
+                        </manifest>
+                    </archive>
+                </configuration>
+            </plugin>
+            <!-- This plugin generates code coverage reports during the test phase of maven. -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.2</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                </executions>
+            </plugin>
+            <!-- This plugin makes sure junit 5 tests run -->
+            <plugin>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>2.22.0</version>
+                <dependencies>
+                    <dependency>
+                        <groupId>org.junit.platform</groupId>
+                        <artifactId>junit-platform-surefire-provider</artifactId>
+                        <version>1.3.1</version>
+                    </dependency>
+                    <dependency>
+                        <groupId>org.junit.jupiter</groupId>
+                        <artifactId>junit-jupiter-engine</artifactId>
+                        <version>5.3.1</version>
+                    </dependency>
+                </dependencies>
+            </plugin>
         </plugins>
-
-        <!-- "Wagon" necessary for uploading/deploying artifacts to the Conveyal Maven repo on Amazon S3. -->
-        <extensions>
-            <extension>
-                <groupId>org.kuali.maven.wagons</groupId>
-                <artifactId>maven-s3-wagon</artifactId>
-                <version>1.2.1</version>
-            </extension>
-        </extensions>
-
     </build>
     <repositories>
         <!-- Hack to force maven to check central first. Maven central is inherited from the superpom,
@@ -109,34 +185,49 @@
             <id>central2</id>
             <name>check central first to avoid a lot of not found warnings</name>
             <url>https://repo1.maven.org/maven2</url>
-        </repository>
-        <repository>
-            <id>conveyal</id>
-            <name>conveyal</name>
-            <url>https://maven.conveyal.com</url>
+            <snapshots>
+                <enabled>true</enabled>
+                <updatePolicy>always</updatePolicy>
+            </snapshots>
         </repository>
         <repository>
             <id>osgeo</id>
             <name>Open Source Geospatial Foundation Repository</name>
             <url>http://download.osgeo.org/webdav/geotools/</url>
-        </repository>
-        <repository>
             <snapshots>
                 <enabled>true</enabled>
+                <updatePolicy>always</updatePolicy>
             </snapshots>
+        </repository>
+        <repository>
+            <id>sonatype</id>
+            <name>sonatype snapshots</name>
+            <url>https://oss.sonatype.org/content/repositories/snapshots/</url>
+            <snapshots>
+                <enabled>true</enabled>
+                <updatePolicy>always</updatePolicy>
+            </snapshots>
+        </repository>
+        <repository>
             <id>boundless</id>
             <name>Boundless Maven Repository</name>
             <url>https://repo.boundlessgeo.com/main</url>
+            <snapshots>
+                <enabled>true</enabled>
+                <updatePolicy>always</updatePolicy>
+            </snapshots>
         </repository>
     </repositories>
 
     <dependencies>
+        <!-- Handles HTTP server -->
         <dependency>
             <groupId>com.sparkjava</groupId>
             <artifactId>spark-core</artifactId>
             <version>2.5</version>
         </dependency>
 
+        <!-- Logging -->
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
@@ -149,124 +240,125 @@
             <version>1.1.3</version>
         </dependency>
 
+        <!-- Used to connect to and import legacy editor MapDBs -->
         <dependency>
             <groupId>org.mapdb</groupId>
             <artifactId>mapdb</artifactId>
             <version>1.0.8</version>
         </dependency>
 
+        <!-- Used for MappedSuperClass annotation on Model classes -->
         <dependency>
             <groupId>org.eclipse.persistence</groupId>
             <artifactId>javax.persistence</artifactId>
             <version>2.1.0</version>
         </dependency>
 
+        <!-- Used for loading/fetching/writing GTFS entities (also provides access to commons-io and AWS S3 SDK). -->
         <dependency>
             <groupId>com.conveyal</groupId>
             <artifactId>gtfs-lib</artifactId>
-            <version>2.0.1</version>
+            <version>4.1.1</version>
         </dependency>
 
+        <!-- Used for data-tools application database -->
         <dependency>
             <groupId>org.mongodb</groupId>
             <artifactId>mongodb-driver</artifactId>
-            <version>3.3.0</version>
+            <version>3.5.0</version>
         </dependency>
 
+        <!-- Miscellaneous utilities -->
         <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
-            <version>15.0</version>
+            <version>18.0</version>
         </dependency>
 
+        <!-- Note: Unless we are explicit with the jackson dependencies listed below, other versions included in other
+        dependencies may cause conflicts. Specifically, there is an issue with the JsonAlias annotation (used in
+        com.conveyal.datatools.manager.models.Snapshot) not working properly.-->
         <dependency>
-            <groupId>com.conveyal</groupId>
-            <artifactId>gtfs-api</artifactId>
-            <version>0.5-SNAPSHOT</version>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-core</artifactId>
+            <version>${jackson.version}</version>
         </dependency>
-
-        <dependency>
-            <groupId>com.conveyal</groupId>
-            <artifactId>gtfs-validator-json</artifactId>
-            <version>0.0.1-SNAPSHOT</version>
-        </dependency>
-
-        <dependency>
-            <groupId>com.conveyal</groupId>
-            <artifactId>r5</artifactId>
-            <version>2.0.0-SNAPSHOT</version>
-        </dependency>
-
-        <dependency>
-            <groupId>com.amazonaws</groupId>
-            <artifactId>aws-java-sdk-s3</artifactId>
-            <version>1.11.103</version>
-        </dependency>
-        <dependency>
-            <groupId>com.amazonaws</groupId>
-            <artifactId>aws-java-sdk</artifactId>
-            <version>1.11.103</version>
-        </dependency>
+        <!-- Handles parsing yaml config -->
         <dependency>
             <groupId>com.fasterxml.jackson.dataformat</groupId>
             <artifactId>jackson-dataformat-yaml</artifactId>
-            <version>2.5.4</version>
+            <version>${jackson.version}</version>
         </dependency>
 
         <dependency>
-            <groupId>org.geotools</groupId>
-            <artifactId>gt-geojson</artifactId>
-            <version>14.3</version>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-databind</artifactId>
+            <version>${jackson.version}</version>
         </dependency>
 
+        <dependency>
+            <groupId>com.fasterxml.jackson.core</groupId>
+            <artifactId>jackson-annotations</artifactId>
+            <version>${jackson.version}</version>
+        </dependency>
+
+        <!-- Used to send email notifications to subscribing users. Note: datatools-server also depends on this library
+         for commons lang3 from org.apache.commons. -->
         <dependency>
             <groupId>com.sparkpost</groupId>
             <artifactId>sparkpost-lib</artifactId>
             <version>0.15</version>
         </dependency>
 
+        <!-- Efficient collections for primitive types -->
         <dependency>
             <groupId>net.sf.trove4j</groupId>
             <artifactId>trove4j</artifactId>
             <version>3.0.3</version>
         </dependency>
 
+        <!-- Used for handling shapefiles -->
         <dependency>
             <groupId>org.geotools</groupId>
             <artifactId>gt-shapefile</artifactId>
-            <version>14.0</version>
+            <version>19.2</version>
         </dependency>
 
+        <!-- Unit testing -->
         <dependency>
-            <groupId>com.conveyal</groupId>
-            <artifactId>jackson2-geojson</artifactId>
-            <version>0.8</version>
-        </dependency>
-
-        <dependency>
-            <groupId>com.fasterxml.jackson.datatype</groupId>
-            <artifactId>jackson-datatype-jsr310</artifactId>
-            <version>2.6.1</version>
-        </dependency>
-
-        <dependency>
-            <groupId>commons-io</groupId>
-            <artifactId>commons-io</artifactId>
-            <version>2.4</version>
-        </dependency>
-        <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <version>4.12</version>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-api</artifactId>
+            <version>5.3.1</version>
             <scope>test</scope>
         </dependency>
 
-        <!-- https://mvnrepository.com/artifact/org.openstreetmap.osmosis/osmosis-core -->
-        <!--<dependency>-->
-            <!--<groupId>org.openstreetmap.osmosis</groupId>-->
-            <!--<artifactId>osmosis-core</artifactId>-->
-            <!--<version>0.45</version>-->
-        <!--</dependency>-->
+        <!-- Error reporting -->
+        <dependency>
+            <groupId>com.bugsnag</groupId>
+            <version>[3.0,4.0)</version>
+            <artifactId>bugsnag</artifactId>
+        </dependency>
+
+        <!-- JWT verification for Auth0 -->
+        <dependency>
+            <groupId>com.auth0</groupId>
+            <artifactId>java-jwt</artifactId>
+            <version>2.3.0</version>
+        </dependency>
+
+        <!-- Rest Assured is an assertion library that makes testing web APIs easy. -->
+        <dependency>
+            <groupId>io.rest-assured</groupId>
+            <artifactId>rest-assured</artifactId>
+            <version>3.1.1</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- Hamcrest is an assertion library that prints pretty messages when assertions fail -->
+        <dependency>
+            <groupId>org.hamcrest</groupId>
+            <artifactId>java-hamcrest</artifactId>
+            <version>2.0.0.0</version>
+        </dependency>
 
     </dependencies>
 

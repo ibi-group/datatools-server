@@ -1,0 +1,3 @@
+project name,fetch or upload,file or http address
+ASC-fetch,fetch,http://documents.atlantaregional.com/transitdata/gtfs_ASC.zip
+ASC-upload,upload,fixtures/gtfs.zip
