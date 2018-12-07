@@ -16,7 +16,7 @@
     </licenses>
 
     <!-- Developer entries are provided for primary developers.
-   For other contributors, see https://github.com/catalogueglobal/datatools-server/graphs/contributors -->
+   For other contributors, see https://github.com/conveyal/datatools-server/graphs/contributors -->
     <developers>
         <developer>
             <name>Landon Reed</name>
@@ -46,9 +46,9 @@
 
     <!-- Define where the source code for project lives -->
     <scm>
-        <connection>scm:git:https://github.com/catalogueglobal/datatools-server.git</connection>
-        <developerConnection>scm:git:ssh://git@github.com/catalogueglobal/datatools-server.git</developerConnection>
-        <url>https://github.com/catalogueglobal/datatools-server.git</url>
+        <connection>scm:git:https://github.com/conveyal/datatools-server.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/conveyal/datatools-server.git</developerConnection>
+        <url>https://github.com/conveyal/datatools-server.git</url>
     </scm>
     <properties>
         <jackson.version>2.9.0</jackson.version>
