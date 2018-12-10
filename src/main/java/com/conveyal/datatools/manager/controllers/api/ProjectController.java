@@ -1,6 +1,5 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.conveyal.datatools.common.utils.ScheduledJob;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
@@ -22,23 +21,13 @@ import spark.Request;
 import spark.Response;
 
 import java.io.IOException;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Collection;
-import java.util.List;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
-import static com.conveyal.datatools.common.utils.Utils.getTimezone;
 import static com.conveyal.datatools.manager.DataManager.publicPath;
 import static spark.Spark.delete;
 import static spark.Spark.get;
@@ -121,7 +110,7 @@ public class ProjectController {
                 // If auto fetch flag is turned on, schedule auto fetch.
                 if (updatedProject.autoFetchFeeds) Scheduler.scheduleAutoFeedFetch(updatedProject, 1);
                 // Otherwise, cancel any existing task for this id.
-                else Scheduler.removeJobsOfType(updatedProject.id, FetchProjectFeedsJob.class, true);
+                else Scheduler.removeProjectJobsOfType(updatedProject.id, FetchProjectFeedsJob.class, true);
             }
             return updatedProject;
         } catch (Exception e) {
