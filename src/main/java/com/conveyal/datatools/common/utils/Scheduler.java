@@ -63,9 +63,9 @@ public class Scheduler {
     }
 
     /**
-     * Convenience method for scheduling one-off jobs.
+     * Convenience method for scheduling one-off jobs for a feed source.
      */
-    public static ScheduledJob scheduleJob (FeedSource feedSource, Runnable job, long delay, TimeUnit timeUnit) {
+    public static ScheduledJob scheduleFeedSourceJob (FeedSource feedSource, Runnable job, long delay, TimeUnit timeUnit) {
         ScheduledFuture scheduledFuture = schedulerService.schedule(job, delay, timeUnit);
         ScheduledJob scheduledJob = new ScheduledJob(job, scheduledFuture);
         scheduledJobsForFeedSources.put(feedSource.id, scheduledJob);
@@ -204,7 +204,7 @@ public class Scheduler {
 
             // one week warning
             if (timeUntilOneWeekBeforeExpiration > 0) {
-                scheduleJob(
+                scheduleFeedSourceJob(
                     feedSource,
                     new FeedExpirationNotificationJob(feedSource.id, true),
                     timeUntilOneWeekBeforeExpiration,
@@ -213,7 +213,7 @@ public class Scheduler {
             }
 
             // actual expiration
-            scheduleJob(
+            scheduleFeedSourceJob(
                 feedSource,
                 new FeedExpirationNotificationJob(feedSource.id, false),
                 timeUntilExpiration,
