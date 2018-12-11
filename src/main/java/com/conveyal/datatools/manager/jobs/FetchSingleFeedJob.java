@@ -34,7 +34,6 @@ public class FetchSingleFeedJob extends MonitorableJob {
      */
     @JsonProperty
     public String getFeedVersionId () {
-        return result == null ? null : result.id;
         // Feed version result is null unless (and until) fetch is successful.
         return result != null ? result.id : null;
     }
