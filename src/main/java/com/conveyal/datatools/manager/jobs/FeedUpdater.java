@@ -3,7 +3,15 @@ package com.conveyal.datatools.manager.jobs;
 import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
-import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
+import com.conveyal.datatools.manager.models.FeedSource;
+import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.persistence.FeedStore;
+import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.HashUtils;
+import com.google.common.io.ByteStreams;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.FileOutputStream;
@@ -16,16 +24,7 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
-import com.conveyal.datatools.manager.models.FeedSource;
-import com.conveyal.datatools.manager.models.FeedVersion;
-import com.conveyal.datatools.manager.persistence.FeedStore;
-import com.conveyal.datatools.manager.persistence.Persistence;
-import com.conveyal.datatools.manager.utils.HashUtils;
-import com.google.common.io.ByteStreams;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
+import static com.conveyal.datatools.common.utils.Scheduler.schedulerService;
 import static com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource.AGENCY_ID;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
@@ -48,14 +47,14 @@ public class FeedUpdater {
 
     private FeedUpdater(int updateFrequencySeconds, String feedBucket, String bucketFolder) {
         LOG.info("Setting feed update to check every {} seconds", updateFrequencySeconds);
-        DataManager.scheduler.scheduleAtFixedRate(new UpdateFeedsTask(), 0, updateFrequencySeconds, TimeUnit.SECONDS);
+        schedulerService.scheduleAtFixedRate(new UpdateFeedsTask(), 0, updateFrequencySeconds, TimeUnit.SECONDS);
         this.feedBucket = feedBucket;
         this.bucketFolder = bucketFolder;
     }
 
     /**
      * Create a {@link FeedUpdater} to poll the provided S3 bucket/prefix at the specified interval (in seconds) for
-     * updated files. The updater's task is run using the {@link DataManager#scheduler}.
+     * updated files. The updater's task is run using the {@link com.conveyal.datatools.common.utils.Scheduler#schedulerService}.
      * @param updateFrequencySeconds
      * @param s3Bucket
      * @param s3Prefix
