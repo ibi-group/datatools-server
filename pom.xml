@@ -60,6 +60,7 @@
                 <filtering>true</filtering>
                 <includes>
                     <include>**/*.properties</include>
+                    <include>logback.xml</include>
                     <include>gtfs/*</include>
                     <include>public/*</include>
                 </includes>

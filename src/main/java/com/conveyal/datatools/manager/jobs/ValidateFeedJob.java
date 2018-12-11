@@ -1,13 +1,12 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.util.Map;
 
 /**
  * This job handles the validation of a given feed version. If the version is not new, it will simply replace the
@@ -48,6 +47,9 @@ public class ValidateFeedJob extends MonitorableJob {
                 } else {
                     Persistence.feedVersions.replace(feedVersion.id, feedVersion);
                 }
+
+                // schedule expiration notification jobs
+                Scheduler.scheduleExpirationNotifications(feedVersion.parentFeedSource());
             }
             // TODO: If ValidateFeedJob is called without a parent job (e.g., to "re-validate" a feed), we should handle
             // storing the updated ValidationResult in Mongo.

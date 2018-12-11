@@ -3,11 +3,13 @@ package com.conveyal.datatools.manager;
 import com.bugsnag.Bugsnag;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.CorsFilter;
+import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.editor.controllers.EditorLockController;
 import com.conveyal.datatools.editor.controllers.api.EditorControllerImpl;
 import com.conveyal.datatools.editor.controllers.api.SnapshotController;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.controllers.DumpController;
+import com.conveyal.datatools.manager.controllers.api.AppInfoController;
 import com.conveyal.datatools.manager.controllers.api.DeploymentController;
 import com.conveyal.datatools.manager.controllers.api.FeedSourceController;
 import com.conveyal.datatools.manager.controllers.api.FeedVersionController;
@@ -15,7 +17,6 @@ import com.conveyal.datatools.manager.controllers.api.GtfsPlusController;
 import com.conveyal.datatools.manager.controllers.api.NoteController;
 import com.conveyal.datatools.manager.controllers.api.OrganizationController;
 import com.conveyal.datatools.manager.controllers.api.ProjectController;
-import com.conveyal.datatools.manager.controllers.api.AppInfoController;
 import com.conveyal.datatools.manager.controllers.api.StatusController;
 import com.conveyal.datatools.manager.controllers.api.UserController;
 import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
@@ -23,7 +24,6 @@ import com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource;
 import com.conveyal.datatools.manager.extensions.transitfeeds.TransitFeedsFeedResource;
 import com.conveyal.datatools.manager.extensions.transitland.TransitLandFeedResource;
 import com.conveyal.datatools.manager.jobs.FeedUpdater;
-import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.GTFS;
@@ -51,8 +51,6 @@ import java.util.Properties;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.logRequest;
@@ -86,10 +84,6 @@ public class DataManager {
     // Stores jobs underway by user ID.
     public static Map<String, ConcurrentHashSet<MonitorableJob>> userJobsMap = new ConcurrentHashMap<>();
 
-    // Stores ScheduledFuture objects that kick off runnable tasks (e.g., fetch project feeds at 2:00 AM).
-    public static Map<String, ScheduledFuture> autoFetchMap = new HashMap<>();
-    // Scheduled executor that handles running scheduled jobs.
-    public final static ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
     // ObjectMapper that loads in YAML config files
     private static final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
 
@@ -117,14 +111,6 @@ public class DataManager {
     public static void main(String[] args) throws IOException {
 
         initializeApplication(args);
-
-        // initialize map of auto fetched projects
-        for (Project project : Persistence.projects.getAll()) {
-            if (project.autoFetchFeeds) {
-                ScheduledFuture scheduledFuture = ProjectController.scheduleAutoFeedFetch(project, 1);
-                autoFetchMap.put(project.id, scheduledFuture);
-            }
-        }
 
         registerRoutes();
 
@@ -159,8 +145,14 @@ public class DataManager {
         feedBucket = getConfigPropertyAsText("application.data.gtfs_s3_bucket");
         bucketFolder = FeedStore.s3Prefix;
 
+        // create application gtfs folder if it doesn't already exist
+        new File(getConfigPropertyAsText("application.data.gtfs")).mkdirs();
+
         // Initialize MongoDB storage
         Persistence.initialize();
+
+        // Initialize scheduled tasks
+        Scheduler.initialize();
     }
 
     /**
