@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Project;
@@ -11,8 +12,6 @@ import org.slf4j.LoggerFactory;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.Collection;
-
-import static com.conveyal.datatools.common.utils.Scheduler.autoFetchMap;
 
 /**
  * Created by landon on 3/25/16.
@@ -31,7 +30,7 @@ public class FetchProjectFeedsJob extends MonitorableJob {
         Project project = Persistence.projects.getById(projectId);
         if (project == null) {
             LOG.error("Fetch feeds job failed because project {} does not exist in database. Clearing the project's scheduled fetch jobs.");
-            autoFetchMap.remove(projectId);
+            Scheduler.removeProjectJobsOfType(projectId, FetchProjectFeedsJob.class, true);
             return;
         }
         LOG.info("Fetch job running for {} project at {}", project.name, ZonedDateTime.now(ZoneId.of("America/New_York")));

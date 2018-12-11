@@ -25,7 +25,6 @@ public class FeedExpirationNotificationJob implements Runnable {
         this.isWarningNotification = isWarningNotification;
     }
 
-    @Override
     public void run() {
         FeedSource source = Persistence.feedSources.getById(feedSourceId);
         Project project = source.retrieveProject();
@@ -78,11 +77,7 @@ public class FeedExpirationNotificationJob implements Runnable {
             );
 
             for (String email : emails) {
-                try {
-                    sendNotification(email, message, text, html);
-                } catch (Exception e) {
-                    e.printStackTrace();
-                }
+                sendNotification(email, message, text, html);
             }
         }
     }

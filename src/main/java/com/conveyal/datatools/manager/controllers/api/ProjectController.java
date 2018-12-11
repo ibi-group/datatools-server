@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.controllers.api;
 
+import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.FetchProjectFeedsJob;
@@ -20,25 +21,13 @@ import spark.Request;
 import spark.Response;
 
 import java.io.IOException;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
 import java.util.Collection;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
-import static com.conveyal.datatools.common.utils.Scheduler.autoFetchMap;
-import static com.conveyal.datatools.common.utils.Scheduler.schedulerService;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
-import static com.conveyal.datatools.common.utils.Utils.getTimezone;
 import static com.conveyal.datatools.manager.DataManager.publicPath;
 import static spark.Spark.delete;
 import static spark.Spark.get;
@@ -118,14 +107,10 @@ public class ProjectController {
                     || updateDocument.containsKey("autoFetchMinute")
                     || updateDocument.containsKey("autoFetchFeeds")
                     || updateDocument.containsKey("defaultTimeZone")) {
-                // If auto fetch flag is turned on
-                if (updatedProject.autoFetchFeeds) {
-                    ScheduledFuture fetchAction = scheduleAutoFeedFetch(updatedProject, 1);
-                    autoFetchMap.put(updatedProject.id, fetchAction);
-                } else {
-                    // otherwise, cancel any existing task for this id
-                    cancelAutoFetch(updatedProject.id);
-                }
+                // If auto fetch flag is turned on, schedule auto fetch.
+                if (updatedProject.autoFetchFeeds) Scheduler.scheduleAutoFeedFetch(updatedProject, 1);
+                // Otherwise, cancel any existing task for this id.
+                else Scheduler.removeProjectJobsOfType(updatedProject.id, FetchProjectFeedsJob.class, true);
             }
             return updatedProject;
         } catch (Exception e) {
@@ -315,64 +300,6 @@ public class ProjectController {
 
         haltWithMessage(req, 404, syncType + " sync type not enabled for application.");
         return null;
-    }
-
-    /**
-     * Schedule an action that fetches all the feeds in the given project according to the autoFetch fields of that project.
-     * Currently feeds are not auto-fetched independently, they must be all fetched together as part of a project.
-     * This method is called when a Project's auto-fetch settings are updated, and when the system starts up to populate
-     * the auto-fetch scheduler.
-     */
-    public static ScheduledFuture scheduleAutoFeedFetch (Project project, int intervalInDays) {
-        TimeUnit minutes = TimeUnit.MINUTES;
-        try {
-            // First cancel any already scheduled auto fetch task for this project id.
-            cancelAutoFetch(project.id);
-
-            ZoneId timezone = getTimezone(project.defaultTimeZone);
-            LOG.info("Scheduling auto-fetch for projectID: {}", project.id);
-
-            // NOW in default timezone
-            ZonedDateTime now = ZonedDateTime.ofInstant(Instant.now(), timezone);
-
-            // Scheduled start time
-            ZonedDateTime startTime = LocalDateTime.of(LocalDate.now(),
-                    LocalTime.of(project.autoFetchHour, project.autoFetchMinute)).atZone(timezone);
-            LOG.info("Now: {}", now.format(DateTimeFormatter.ISO_ZONED_DATE_TIME));
-            LOG.info("Scheduled start time: {}", startTime.format(DateTimeFormatter.ISO_ZONED_DATE_TIME));
-
-            // Get diff between start time and current time
-            long diffInMinutes = (startTime.toEpochSecond() - now.toEpochSecond()) / 60;
-            long delayInMinutes;
-            if ( diffInMinutes >= 0 ){
-                delayInMinutes = diffInMinutes; // delay in minutes
-            }
-            else{
-                delayInMinutes = 24 * 60 + diffInMinutes; // wait for one day plus difference (which is negative)
-            }
-
-            LOG.info("Auto fetch begins in {} hours and runs every {} hours", String.valueOf(delayInMinutes / 60.0), TimeUnit.DAYS.toHours(intervalInDays));
-
-            // system is defined as owner because owner field must not be null
-            FetchProjectFeedsJob fetchProjectFeedsJob = new FetchProjectFeedsJob(project, "system");
-            return schedulerService.scheduleAtFixedRate(fetchProjectFeedsJob,
-                    delayInMinutes, TimeUnit.DAYS.toMinutes(intervalInDays), minutes);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return null;
-        }
-    }
-
-    /**
-     * Cancel an existing auto-fetch job that is scheduled for the given project ID.
-     * There is only one auto-fetch job per project, not one for each feedSource within the project.
-     */
-    private static void cancelAutoFetch(String projectId){
-        Project p = Persistence.projects.getById(projectId);
-        if ( p != null && autoFetchMap.get(p.id) != null) {
-            LOG.info("Cancelling auto-fetch for projectID: {}", p.id);
-            autoFetchMap.get(p.id).cancel(true);
-        }
     }
 
     /**
