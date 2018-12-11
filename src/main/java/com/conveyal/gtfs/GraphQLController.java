@@ -26,7 +26,6 @@ import static spark.Spark.post;
  */
 public class GraphQLController {
     private static final Logger LOG = LoggerFactory.getLogger(GraphQLController.class);
-    // Shared object mapper with GraphQLController.
     private static final ObjectMapper mapper = new ObjectMapper();
 
     /**
