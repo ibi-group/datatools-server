@@ -51,6 +51,7 @@ public abstract class MonitorableJob implements Runnable {
         FETCH_SINGLE_FEED,
         MAKE_PROJECT_PUBLIC,
         PROCESS_FEED,
+        SYSTEM_JOB,
         CREATE_SNAPSHOT,
         EXPORT_SNAPSHOT_TO_GTFS,
         CONVERT_EDITOR_MAPDB_TO_SQL,
@@ -67,6 +68,11 @@ public abstract class MonitorableJob implements Runnable {
 
     public MonitorableJob(String owner) {
         this(owner, "Unnamed Job", JobType.UNKNOWN_TYPE);
+    }
+
+    /** Constructor for a usually unmonitored system job (but still something we want to conform to our model). */
+    public MonitorableJob () {
+        this("system", "System job", JobType.SYSTEM_JOB);
     }
 
     /**
