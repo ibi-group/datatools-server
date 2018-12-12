@@ -76,7 +76,7 @@ public class TransitLandFeedResource implements ExternalFeedResource {
                 con.setRequestProperty("User-Agent", "User-Agent");
 
                 int responseCode = con.getResponseCode();
-                LOG.info("\nSending 'GET' request to URL : " + url);
+                LOG.info("Sending 'GET' request to URL : " + url);
                 LOG.info("Response Code : " + responseCode);
 
                 BufferedReader in = new BufferedReader(

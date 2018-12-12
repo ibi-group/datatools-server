@@ -146,16 +146,12 @@ public class JacksonSerializers {
             } catch (Exception jsonException) {
                 // This is here to catch any loads of database dumps that happen to have the old java.util.Date
                 // field type in validationResult.  God help us.
-                LOG.warn(
-                    String.format("Error parsing date value: `%s`, trying legacy java.util.Date date format", dateText)
-                );
+                LOG.warn("Error parsing date value: `{}`, trying legacy java.util.Date date format", dateText);
                 try {
                     date = Instant.ofEpochMilli(jp.getValueAsLong()).atZone(ZoneOffset.UTC).toLocalDate();
                     return date;
                 } catch (Exception e) {
-                    LOG.warn(
-                        String.format("Error parsing date value: `%s`", dateText)
-                    );
+                    LOG.warn("Error parsing date value: `{}`", dateText);
                     e.printStackTrace();
                 }
             }

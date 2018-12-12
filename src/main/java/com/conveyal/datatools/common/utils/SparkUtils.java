@@ -39,7 +39,7 @@ public class SparkUtils {
      * Write out the supplied file to the Spark response as an octet-stream.
      */
     public static HttpServletResponse downloadFile(File file, String filename, Request req, Response res) {
-        if (file == null) haltWithMessage(req, 404, "File is null");
+        if (file == null) logMessageAndHalt(req, 404, "File is null");
         HttpServletResponse raw = res.raw();
         raw.setContentType("application/octet-stream");
         raw.setHeader("Content-Disposition", "attachment; filename=" + filename);
@@ -54,7 +54,7 @@ public class SparkUtils {
             // TODO: Is flushing the stream necessary?
             outputStream.flush();
         } catch (IOException e) {
-            haltWithMessage(req, 500, "Could not write file to output stream", e);
+            logMessageAndHalt(req, 500, "Could not write file to output stream", e);
         }
         return raw;
     }
@@ -92,8 +92,8 @@ public class SparkUtils {
     /**
      * Wrapper around Spark halt method that formats message as JSON using {@link SparkUtils#formatJSON}.
      */
-    public static void haltWithMessage(Request request, int statusCode, String message) throws HaltException {
-        haltWithMessage(request, statusCode, message, null);
+    public static void logMessageAndHalt(Request request, int statusCode, String message) throws HaltException {
+        logMessageAndHalt(request, statusCode, message, null);
     }
 
     /**
@@ -101,12 +101,15 @@ public class SparkUtils {
      * Extra logic occurs for when the status code is >= 500.  A Bugsnag report is created if
      * Bugsnag is configured.
      */
-    public static void haltWithMessage(
+    public static void logMessageAndHalt(
         Request request,
         int statusCode,
         String message,
         Exception e
     ) throws HaltException {
+        // Note that halting occurred, also print error stacktrace if applicable
+        if (e != null) e.printStackTrace();
+        LOG.info("Halting with status code {}", statusCode);
 
         if (statusCode >= 500) {
             LOG.error(message);
@@ -114,9 +117,6 @@ public class SparkUtils {
             // create report to notify bugsnag if configured
             Bugsnag bugsnag = getBugsnag();
             if (bugsnag != null && e != null) {
-                // log stack
-                e.printStackTrace();
-
                 // create report to send to bugsnag
                 Report report = bugsnag.buildReport(e);
                 Auth0UserProfile userProfile = request.attribute("user");

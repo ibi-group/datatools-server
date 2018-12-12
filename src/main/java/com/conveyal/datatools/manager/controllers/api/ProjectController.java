@@ -19,14 +19,13 @@ import org.slf4j.LoggerFactory;
 import spark.Request;
 import spark.Response;
 
-import java.io.IOException;
 import java.util.Collection;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
+import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.DataManager.publicPath;
 import static spark.Spark.delete;
 import static spark.Spark.get;
@@ -83,7 +82,7 @@ public class ProjectController {
             Project newlyStoredProject = Persistence.projects.create(req.body());
             return newlyStoredProject;
         } else {
-            haltWithMessage(req, 403, "Not authorized to create a project on organization " + organizationId);
+            logMessageAndHalt(req, 403, "Not authorized to create a project on organization " + organizationId);
             return null;
         }
     }
@@ -113,7 +112,7 @@ public class ProjectController {
             }
             return updatedProject;
         } catch (Exception e) {
-            haltWithMessage(req, 500, "Error updating project", e);
+            logMessageAndHalt(req, 500, "Error updating project", e);
             return null;
         }
     }
@@ -126,7 +125,7 @@ public class ProjectController {
         Project project = requestProjectById(req, "manage");
         boolean successfullyDeleted = project.delete();
         if (!successfullyDeleted) {
-            haltWithMessage(req, 500, "Did not delete project.", new Exception("Delete unsuccessful"));
+            logMessageAndHalt(req, 500, "Did not delete project.", new Exception("Delete unsuccessful"));
         }
         return project;
     }
@@ -155,7 +154,7 @@ public class ProjectController {
     private static Project requestProjectById (Request req, String action) {
         String id = req.params("id");
         if (id == null) {
-            haltWithMessage(req, 400, "Please specify id param");
+            logMessageAndHalt(req, 400, "Please specify id param");
         }
         return checkProjectPermissions(req, Persistence.projects.getById(id), action);
     }
@@ -180,7 +179,7 @@ public class ProjectController {
 
         // check for null project
         if (project == null) {
-            haltWithMessage(req, 400, "Project ID does not exist");
+            logMessageAndHalt(req, 400, "Project ID does not exist");
             return null;
         }
 
@@ -210,7 +209,7 @@ public class ProjectController {
         } else {
             project.feedSources = null;
             if (!authorized) {
-                haltWithMessage(req, 403, "User not authorized to perform action on project");
+                logMessageAndHalt(req, 403, "User not authorized to perform action on project");
                 return null;
             }
         }
@@ -263,11 +262,11 @@ public class ProjectController {
         Auth0UserProfile userProfile = req.attribute("user");
         String id = req.params("id");
         if (id == null) {
-            haltWithMessage(req, 400, "must provide project id!");
+            logMessageAndHalt(req, 400, "must provide project id!");
         }
         Project p = Persistence.projects.getById(id);
         if (p == null) {
-            haltWithMessage(req, 400, "no such project!");
+            logMessageAndHalt(req, 400, "no such project!");
         }
         // Run this as a synchronous job; if it proves to be too slow we will change to asynchronous.
         new MakePublicJob(p, userProfile.getUser_id()).run();
@@ -287,7 +286,7 @@ public class ProjectController {
         String syncType = req.params("type");
 
         if (!userProfile.canAdministerProject(proj.id, proj.organizationId)) {
-            haltWithMessage(req, 403, "Third-party sync not permitted for user.");
+            logMessageAndHalt(req, 403, "Third-party sync not permitted for user.");
         }
 
         LOG.info("syncing with third party " + syncType);
@@ -295,12 +294,12 @@ public class ProjectController {
             try {
                 DataManager.feedResources.get(syncType).importFeedsForProject(proj, req.headers("Authorization"));
             } catch (Exception e) {
-                haltWithMessage(req, 500, "An error occurred while trying to sync", e);
+                logMessageAndHalt(req, 500, "An error occurred while trying to sync", e);
             }
             return proj;
         }
 
-        haltWithMessage(req, 404, syncType + " sync type not enabled for application.");
+        logMessageAndHalt(req, 404, syncType + " sync type not enabled for application.");
         return null;
     }
 
@@ -334,7 +333,7 @@ public class ProjectController {
         FeedDownloadToken token = Persistence.tokens.getById(req.params("token"));
 
         if(token == null || !token.isValid()) {
-            haltWithMessage(req, 400, "Feed download token not valid");
+            logMessageAndHalt(req, 400, "Feed download token not valid");
         }
 
         Project project = token.retrieveProject();

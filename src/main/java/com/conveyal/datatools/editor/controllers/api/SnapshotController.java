@@ -26,7 +26,7 @@ import java.util.Collection;
 import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
+import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static spark.Spark.delete;
 import static spark.Spark.get;
 import static spark.Spark.options;
@@ -55,7 +55,7 @@ public class SnapshotController {
      */
     private static Snapshot getSnapshotFromRequest(Request req) {
         String id = req.params("id");
-        if (id == null) haltWithMessage(req, 400, "Must provide valid snapshot ID");
+        if (id == null) logMessageAndHalt(req, 400, "Must provide valid snapshot ID");
         // Check user permissions on feed source.
         FeedVersionController.requestFeedSourceById(req, "view", "feedId");
         return Persistence.snapshots.getById(id);
@@ -121,7 +121,7 @@ public class SnapshotController {
     // FIXME: Is this method used anywhere? Can we delete?
     private static Object updateSnapshot (Request req, Response res) {
         // FIXME
-        haltWithMessage(req, 400, "Method not implemented");
+        logMessageAndHalt(req, 400, "Method not implemented");
         return null;
     }
 
@@ -138,11 +138,11 @@ public class SnapshotController {
         FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, "edit", "feedId");
         Snapshot snapshotToRestore = Persistence.snapshots.getById(id);
         if (snapshotToRestore == null) {
-            haltWithMessage(req, 400, "Must specify valid snapshot ID");
+            logMessageAndHalt(req, 400, "Must specify valid snapshot ID");
         }
         // Update editor namespace pointer.
         if (snapshotToRestore.namespace == null) {
-            haltWithMessage(req, 400, "Failed to restore snapshot. No namespace found.");
+            logMessageAndHalt(req, 400, "Failed to restore snapshot. No namespace found.");
         }
         // Preserve existing editor buffer if requested. FIXME: should the request body also contain name and comments?
         boolean preserveBuffer = "true".equals(req.queryParams("preserveBuffer"));
@@ -187,7 +187,7 @@ public class SnapshotController {
         // FIXME: use new FeedStore.
         if (DataManager.useS3) {
             if (!FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, key)) {
-                haltWithMessage(
+                logMessageAndHalt(
                     req,
                     500,
                     String.format("Error downloading snapshot from S3. Object %s does not exist.", key),
@@ -215,7 +215,7 @@ public class SnapshotController {
         FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, "edit", "feedId");
         // Retrieve snapshot
         Snapshot snapshot = Persistence.snapshots.getById(id);
-        if (snapshot == null) haltWithMessage(req, 400, "Must provide valid snapshot ID.");
+        if (snapshot == null) logMessageAndHalt(req, 400, "Must provide valid snapshot ID.");
         try {
             // Remove the snapshot and then renumber the snapshots
             Persistence.snapshots.removeById(snapshot.id);
@@ -224,7 +224,7 @@ public class SnapshotController {
             // FIXME delete tables from database?
             return snapshot;
         } catch (Exception e) {
-            haltWithMessage(req, 500, "Unknown error occurred while deleting snapshot.", e);
+            logMessageAndHalt(req, 500, "Unknown error occurred while deleting snapshot.", e);
             return null;
         }
     }
@@ -239,7 +239,7 @@ public class SnapshotController {
         FeedDownloadToken token = Persistence.tokens.getById(id);
 
         if(token == null || !token.isValid()) {
-            haltWithMessage(req, 400, "Feed download token not valid");
+            logMessageAndHalt(req, 400, "Feed download token not valid");
         }
 
         Snapshot snapshot = token.retrieveSnapshot();

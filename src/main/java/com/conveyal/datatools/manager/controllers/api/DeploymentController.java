@@ -29,7 +29,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
+import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static spark.Spark.delete;
 import static spark.Spark.get;
 import static spark.Spark.options;
@@ -54,12 +54,12 @@ public class DeploymentController {
         String deploymentId = req.params("id");
         Deployment deployment = Persistence.deployments.getById(deploymentId);
         if (deployment == null) {
-            haltWithMessage(req, HttpStatus.BAD_REQUEST_400, "Deployment does not exist.");
+            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Deployment does not exist.");
         }
         boolean isProjectAdmin = userProfile.canAdministerProject(deployment.projectId, deployment.organizationId());
         if (!isProjectAdmin && !userProfile.getUser_id().equals(deployment.user())) {
             // If user is not a project admin and did not create the deployment, access to the deployment is denied.
-            haltWithMessage(req, HttpStatus.UNAUTHORIZED_401, "User not authorized for deployment.");
+            logMessageAndHalt(req, HttpStatus.UNAUTHORIZED_401, "User not authorized for deployment.");
         }
         return deployment;
     }
@@ -113,23 +113,23 @@ public class DeploymentController {
         if (projectId != null) {
             // Return deployments for project
             Project project = Persistence.projects.getById(projectId);
-            if (project == null) haltWithMessage(req, 400, "Must provide valid projectId value.");
+            if (project == null) logMessageAndHalt(req, 400, "Must provide valid projectId value.");
             if (!userProfile.canAdministerProject(projectId, project.organizationId))
-                haltWithMessage(req, 401, "User not authorized to view project deployments.");
+                logMessageAndHalt(req, 401, "User not authorized to view project deployments.");
             return project.retrieveDeployments();
         } else if (feedSourceId != null) {
             // Return test deployments for feed source (note: these only include test deployments specific to the feed
             // source and will not include all deployments that reference this feed source).
             FeedSource feedSource = Persistence.feedSources.getById(feedSourceId);
-            if (feedSource == null) haltWithMessage(req, 400, "Must provide valid feedSourceId value.");
+            if (feedSource == null) logMessageAndHalt(req, 400, "Must provide valid feedSourceId value.");
             Project project = feedSource.retrieveProject();
             if (!userProfile.canViewFeed(project.organizationId, project.id, feedSourceId))
-                haltWithMessage(req, 401, "User not authorized to view feed source deployments.");
+                logMessageAndHalt(req, 401, "User not authorized to view feed source deployments.");
             return feedSource.retrieveDeployments();
         } else {
             // If no query parameter is supplied, return all deployments for application.
             if (!userProfile.canAdministerApplication())
-                haltWithMessage(req, 401, "User not authorized to view application deployments.");
+                logMessageAndHalt(req, 401, "User not authorized to view application deployments.");
             return Persistence.deployments.getAll();
         }
     }
@@ -158,7 +158,7 @@ public class DeploymentController {
             Persistence.deployments.create(newDeployment);
             return Persistence.deployments.update(newDeployment.id, req.body());
         } else {
-            haltWithMessage(req, 403, "Not authorized to create a deployment for project " + projectId);
+            logMessageAndHalt(req, 403, "Not authorized to create a deployment for project " + projectId);
             return null;
         }
     }
@@ -180,10 +180,10 @@ public class DeploymentController {
                 !userProfile.canAdministerProject(feedSource.projectId, feedSource.organizationId()) &&
                 !userProfile.getUser_id().equals(feedSource.user())
             )
-            haltWithMessage(req, 401, "User not authorized to perform this action");
+            logMessageAndHalt(req, 401, "User not authorized to perform this action");
 
         if (feedSource.latestVersionId() == null)
-            haltWithMessage(req, 400, "Cannot create a deployment from a feed source with no versions.");
+            logMessageAndHalt(req, 400, "Cannot create a deployment from a feed source with no versions.");
 
         Deployment deployment = new Deployment(feedSource);
         deployment.storeUser(userProfile);
@@ -208,16 +208,16 @@ public class DeploymentController {
             ArrayList<FeedVersion> versionsToInsert = new ArrayList<>(versions.size());
             for (Document version : versions) {
                 if (!version.containsKey("id")) {
-                    haltWithMessage(req, 400, "Version not supplied");
+                    logMessageAndHalt(req, 400, "Version not supplied");
                 }
                 FeedVersion feedVersion = null;
                 try {
                     feedVersion = Persistence.feedVersions.getById(version.getString("id"));
                 } catch (Exception e) {
-                    haltWithMessage(req, 404, "Version not found");
+                    logMessageAndHalt(req, 404, "Version not found");
                 }
                 if (feedVersion == null) {
-                    haltWithMessage(req, 404, "Version not found");
+                    logMessageAndHalt(req, 404, "Version not found");
                 }
                 // check that the version belongs to the correct project
                 if (feedVersion.parentFeedSource().projectId.equals(deploymentToUpdate.projectId)) {
@@ -251,7 +251,7 @@ public class DeploymentController {
         Deployment deployment = checkDeploymentPermissions(req, res);
         Project project = Persistence.projects.getById(deployment.projectId);
         if (project == null)
-            haltWithMessage(req, 400, "Internal reference error. Deployment's project ID is invalid");
+            logMessageAndHalt(req, 400, "Internal reference error. Deployment's project ID is invalid");
 
         // FIXME: Currently the otp server to deploy to is determined by the string name field (with special characters
         // replaced with underscores). This should perhaps be replaced with an immutable server ID so that there is
@@ -259,12 +259,12 @@ public class DeploymentController {
         // a set of feeds would likely not create two deployment targets with the same name (and the name is unlikely
         // to change often).
         OtpServer otpServer = project.retrieveServer(target);
-        if (otpServer == null) haltWithMessage(req, 400, "Must provide valid OTP server target ID.");
+        if (otpServer == null) logMessageAndHalt(req, 400, "Must provide valid OTP server target ID.");
 
         // Check that permissions of user allow them to deploy to target.
         boolean isProjectAdmin = userProfile.canAdministerProject(deployment.projectId, deployment.organizationId());
         if (!isProjectAdmin && otpServer.admin) {
-            haltWithMessage(req, 401, "User not authorized to deploy to admin-only target OTP server.");
+            logMessageAndHalt(req, 401, "User not authorized to deploy to admin-only target OTP server.");
         }
 
         // Check that we can deploy to the specified target. (Any deploy job for the target that is presently active will
@@ -280,14 +280,14 @@ public class DeploymentController {
                         deployment.name,
                         target);
                 LOG.warn(message);
-                haltWithMessage(req, HttpStatus.ACCEPTED_202, message);
+                logMessageAndHalt(req, HttpStatus.ACCEPTED_202, message);
             }
         }
 
         // Get the URLs to deploy to.
         List<String> targetUrls = otpServer.internalUrl;
         if ((targetUrls == null || targetUrls.isEmpty()) && (otpServer.s3Bucket == null || otpServer.s3Bucket.isEmpty())) {
-            haltWithMessage(
+            logMessageAndHalt(
                 req,
                 400,
                 String.format("OTP server %s has no internal URL or s3 bucket specified.", otpServer.name)
@@ -313,7 +313,7 @@ public class DeploymentController {
     public static void register (String apiPrefix) {
         post(apiPrefix + "secure/deployments/:id/deploy/:target", DeploymentController::deploy, json::write);
         post(apiPrefix + "secure/deployments/:id/deploy/", ((request, response) -> {
-            haltWithMessage(request, 400, "Must provide valid deployment target name");
+            logMessageAndHalt(request, 400, "Must provide valid deployment target name");
             return null;
         }), json::write);
         options(apiPrefix + "secure/deployments", (q, s) -> "");

@@ -110,7 +110,7 @@ public class ConvertMain {
             Thread.sleep(5000);
         }
         long durationInMillis = System.currentTimeMillis() - startTime;
-        LOG.info(String.format("MIGRATION COMPLETED IN %d SECONDS.", TimeUnit.MILLISECONDS.toSeconds(durationInMillis)));
+        LOG.info("MIGRATION COMPLETED IN {} SECONDS.", TimeUnit.MILLISECONDS.toSeconds(durationInMillis));
         System.exit(0);
     }
 

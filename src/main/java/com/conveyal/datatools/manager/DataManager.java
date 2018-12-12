@@ -52,7 +52,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
+import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.common.utils.SparkUtils.logRequest;
 import static com.conveyal.datatools.common.utils.SparkUtils.logResponse;
 import static spark.Spark.after;
@@ -307,7 +307,7 @@ public class DataManager {
         // Return 404 for any API path that is not configured.
         // IMPORTANT: Any API paths must be registered before this halt.
         get("/api/" + "*", (request, response) -> {
-            haltWithMessage(request, 404, "No API route configured for this path.");
+            logMessageAndHalt(request, 404, "No API route configured for this path.");
             return null;
         });
 
