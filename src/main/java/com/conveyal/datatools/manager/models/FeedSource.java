@@ -4,8 +4,6 @@ import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.DeleteObjectsRequest;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.editor.datastore.GlobalTx;
-import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.persistence.FeedStore;
@@ -30,7 +28,6 @@ import java.net.URL;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
@@ -52,7 +49,6 @@ public class FeedSource extends Model implements Cloneable {
     //@JsonView(JsonViews.DataDump.class)
     public String projectId;
 
-//    public String[] regions = {"1"};
     /**
      * Get the Project of which this feed is a part
      */
@@ -536,5 +532,4 @@ public class FeedSource extends Model implements Cloneable {
     public FeedSource clone () throws CloneNotSupportedException {
         return (FeedSource) super.clone();
     }
-
 }
