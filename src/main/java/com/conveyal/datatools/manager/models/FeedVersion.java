@@ -192,10 +192,10 @@ public class FeedVersion extends Model implements Serializable {
     public String namespace;
 
     /**
-     * Indicates whether a feed version is pending published status, a check that is currently performed in
-     * {@link com.conveyal.datatools.manager.jobs.FeedUpdater}. This field is currently in use only for the MTC extension.
+     * Indicates when (if at all) a feed version was published to an external source. This field is currently in use
+     * only for the MTC extension and is reset to null after the published version has been registered externally.
      * */
-    public boolean processing;
+    public Date published;
 
     public String formattedTimestamp() {
         SimpleDateFormat format = new SimpleDateFormat(HUMAN_READABLE_TIMESTAMP_FORMAT);
