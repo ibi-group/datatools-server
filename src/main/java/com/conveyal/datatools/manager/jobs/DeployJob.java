@@ -24,6 +24,7 @@ import java.util.List;
 import java.util.Scanner;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.persistence.FeedStore;
@@ -115,6 +116,12 @@ public class DeployJob extends MonitorableJob {
 
         // Upload to S3, if applicable
         if(otpServer.s3Bucket != null) {
+            if (!DataManager.useS3) {
+                String message = "Cannot upload deployment to S3. Application not configured for s3 storage.";
+                LOG.error(message);
+                status.fail(message);
+                return;
+            }
             status.message = "Uploading to S3";
             status.uploadingS3 = true;
             LOG.info("Uploading deployment {} to s3", deployment.name);
