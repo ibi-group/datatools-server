@@ -28,7 +28,8 @@ import static com.conveyal.datatools.manager.DataManager.registerRoutes;
  * 4. string field to filter feeds on
  * 5. string value (corresponding to field in arg 3) to filter feeds on (omit to use NULL as value or comma separate to
  *    include multiple values)
- * 6. boolean
+ * 6. boolean (optional) whether to run SQL as a test run (i.e., rollback changes and do not commit). If missing, this
+ *    defaults to false.
  *
  * Sample arguments:
  *
