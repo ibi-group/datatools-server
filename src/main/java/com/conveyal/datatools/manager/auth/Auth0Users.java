@@ -14,12 +14,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.net.URLEncoder;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.Set;
 
 /**
  * This class contains methods for querying Auth0 users using the Auth0 User Management API. Auth0 docs describing the
@@ -173,6 +172,33 @@ public class Auth0Users {
      */
     public static String getUsersForOrganization(String organizationId) {
         return getAuth0Users("app_metadata.datatools.organizations.organization_id:" + organizationId);
+    }
+
+    public static Set<String> getVerifiedEmailsBySubscription(String subscriptionType, String target) {
+        String json = getUsersBySubscription(subscriptionType, target);
+        JsonNode firstNode = null;
+        Set<String> emails = new HashSet<>();
+        try {
+            firstNode = mapper.readTree(json);
+        } catch (IOException e) {
+            LOG.error("Subscribed users list for type={}, target={} is null or unparseable.", subscriptionType, target);
+            return emails;
+        }
+        for (JsonNode user : firstNode) {
+            if (!user.has("email")) {
+                continue;
+            }
+            String email = user.get("email").asText();
+            Boolean emailVerified = user.get("email_verified").asBoolean();
+            // only send email if address has been verified
+            if (!emailVerified) {
+                LOG.warn("Skipping user {}. User's email address has not been verified.", email);
+            } else {
+                emails.add(email);
+            }
+        }
+
+        return emails;
     }
 
     /**
