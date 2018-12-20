@@ -1,8 +1,8 @@
 package com.conveyal.datatools.common.status;
 
 import com.conveyal.datatools.manager.DataManager;
+import com.google.common.collect.Sets;
 import org.apache.commons.lang3.exception.ExceptionUtils;
-import org.eclipse.jetty.util.ConcurrentHashSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -10,6 +10,7 @@ import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -74,10 +75,10 @@ public abstract class MonitorableJob implements Runnable {
      * It is a standard start-up stage for all monitorable jobs.
      */
     private void registerJob() {
-        ConcurrentHashSet<MonitorableJob> userJobs = DataManager.userJobsMap.get(this.owner);
-        if (userJobs == null) {
-            userJobs = new ConcurrentHashSet<>();
-        }
+        Set<MonitorableJob> userJobs = DataManager.userJobsMap.get(this.owner);
+        // If there are no current jobs for the user, create a new empty set. NOTE: this should be a concurrent hash
+        // set so that it is threadsafe.
+        if (userJobs == null) userJobs = Sets.newConcurrentHashSet();
         userJobs.add(this);
 
         DataManager.userJobsMap.put(this.owner, userJobs);
@@ -89,7 +90,7 @@ public abstract class MonitorableJob implements Runnable {
      */
     private void unRegisterJob () {
         // remove this job from the user-job map
-        ConcurrentHashSet<MonitorableJob> userJobs = DataManager.userJobsMap.get(this.owner);
+        Set<MonitorableJob> userJobs = DataManager.userJobsMap.get(this.owner);
         if (userJobs != null) userJobs.remove(this);
     }
 
