@@ -109,7 +109,7 @@ public class SparkUtils {
     ) throws HaltException {
         // Note that halting occurred, also print error stacktrace if applicable
         if (e != null) e.printStackTrace();
-        LOG.info("Halting with status code {}", statusCode);
+        LOG.info("Halting with status code {}.  Error message: {}.", statusCode, message);
 
         if (statusCode >= 500) {
             LOG.error(message);
