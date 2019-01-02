@@ -23,7 +23,6 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
 import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
@@ -42,7 +41,6 @@ import org.slf4j.LoggerFactory;
 
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
-import static com.mongodb.client.model.Filters.not;
 
 /**
  * A deployment of (a given version of) OTP on a given set of feeds.
@@ -247,8 +245,7 @@ public class Deployment extends Model implements Serializable {
             ZipEntry manifestEntry = new ZipEntry("manifest.json");
             out.putNextEntry(manifestEntry);
             // create the json manifest
-            JsonManager<Deployment> jsonManifest = new JsonManager<Deployment>(Deployment.class,
-                    JsonViews.UserInterface.class);
+            JsonManager<Deployment> jsonManifest = new JsonManager<>(Deployment.class, JsonViews.UserInterface.class);
             // this mixin gives us full feed validation results, not summarized
             jsonManifest.addMixin(Deployment.class, DeploymentFullFeedVersionMixin.class);
             byte[] manifest = jsonManifest.write(this).getBytes();
