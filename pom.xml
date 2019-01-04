@@ -51,7 +51,7 @@
         <url>https://github.com/conveyal/datatools-server.git</url>
     </scm>
     <properties>
-        <jackson.version>2.9.6</jackson.version>
+        <jackson.version>2.9.8</jackson.version>
     </properties>
     <build>
         <resources>
