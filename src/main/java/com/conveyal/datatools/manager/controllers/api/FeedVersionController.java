@@ -282,10 +282,10 @@ public class FeedVersionController  {
                 // NOTE: If the MTC extension is enabled, the parent feed source's publishedVersionId will not be updated to the
                 // version's namespace until the FeedUpdater has successfully downloaded the feed from the share S3 bucket.
                 Date publishedDate = new Date();
-                return Persistence.feedVersions.updateField(version.id, "published", publishedDate);
+                return Persistence.feedVersions.updateField(version.id, "sentToExternalPublisher", publishedDate);
             }
         } catch (Exception e) {
-            haltWithMessage(req, 400, "Could not publish feed.", e);
+            haltWithMessage(req, 500, "Could not publish feed.", e);
             return null;
         }
     }

@@ -6,13 +6,13 @@ import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.conveyal.datatools.manager.DataManager;
 
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -30,19 +30,24 @@ import com.google.common.io.ByteStreams;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource.AGENCY_ID;
+import static com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource.AGENCY_ID_FIELDNAME;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 
 /**
  * This class is used to schedule an {@link UpdateFeedsTask}, which will check the specified S3 bucket (and prefix) for
- * new files. If a new feed is found, the feed will be downloaded and its MD5 hash will be checked against the feed
- * versions for the related feed source. When it finds a match, it will ensure that the {@link FeedSource#publishedVersionId}
- * matches the {@link FeedVersion#namespace} for the version/file found on S3 and will update it if not.
+ * new files. If a new feed is found, the feed will be downloaded and the {@link FeedVersion#namespace} for the feed
+ * version (for that feed source) with the most recent {@link FeedVersion#sentToExternalPublisher} timestamp will be set
+ * as the newly published version in {@link FeedSource#publishedVersionId}.
  *
  * This is all done to ensure that the "published" version in MTC's RTD database matches the published version in Data
  * Tools, which is primarily used to ensure that any alerts are built using GTFS stop or route IDs from the active GTFS
  * feed.
+ *
+ * FIXME it is currently not possible with the MTC RTD feed processing workflow because GTFS files are modified during
+ *   RTD's processing, but workflow should be replaced with a check for the processed file's MD5 checksum. Also, one RTD
+ *   state that is not captured by Data Tools is when a feed version fails to process in RTD, the RTD application places
+ *   it in a “failed” folder, yet there is no check by Data Tools to see if the feed landed there.
  */
 public class FeedUpdater {
     private Map<String, String> eTagForFeed;
@@ -69,7 +74,7 @@ public class FeedUpdater {
         return new FeedUpdater(updateFrequencySeconds, s3Bucket, s3Prefix);
     }
 
-    class UpdateFeedsTask implements Runnable {
+    private class UpdateFeedsTask implements Runnable {
         public void run() {
             Map<String, String> updatedTags;
             try {
@@ -95,16 +100,16 @@ public class FeedUpdater {
             LOG.info("Running initial check for feeds on S3.");
             eTagForFeed = new HashMap<>();
         }
-        LOG.info("Checking for feeds on S3.");
+        LOG.debug("Checking for feeds on S3.");
         Map<String, String> newTags = new HashMap<>();
         // iterate over feeds in download_prefix folder and register to (MTC project)
         ObjectListing gtfsList = FeedStore.s3Client.listObjects(feedBucket, bucketFolder);
-        LOG.info(eTagForFeed.toString());
+        LOG.debug(eTagForFeed.toString());
         for (S3ObjectSummary objSummary : gtfsList.getObjectSummaries()) {
 
             String eTag = objSummary.getETag();
             String keyName = objSummary.getKey();
-            LOG.info("{} etag = {}", keyName, eTag);
+            LOG.debug("{} etag = {}", keyName, eTag);
             if (!eTagForFeed.containsValue(eTag)) {
                 // Don't add object if it is a dir
                 if (keyName.equals(bucketFolder)) continue;
@@ -115,7 +120,9 @@ public class FeedUpdater {
                 try {
                     LOG.info("New version found for {} at s3://{}/{}. ETag = {}.", feedId, feedBucket, keyName, eTag);
                     FeedSource feedSource = null;
-                    List<ExternalFeedSourceProperty> properties = Persistence.externalFeedSourceProperties.getFiltered(and(eq("value", feedId), eq("name", AGENCY_ID)));
+                    List<ExternalFeedSourceProperty> properties = Persistence.externalFeedSourceProperties.getFiltered(
+                        and(eq("value", feedId), eq("name", AGENCY_ID_FIELDNAME))
+                    );
                     if (properties.size() > 1) {
                         StringBuilder b = new StringBuilder();
                         properties.forEach(b::append);
@@ -166,21 +173,17 @@ public class FeedUpdater {
             // feed that failed processing by RTD.
             Optional<FeedVersion> lastPublishedVersionCandidate = versions
                 .stream()
-                .min(Comparator.comparing(v -> v.published, Comparator.nullsLast(Comparator.reverseOrder())));
+                .min(Comparator.comparing(v -> v.sentToExternalPublisher, Comparator.nullsLast(Comparator.reverseOrder())));
             if (lastPublishedVersionCandidate.isPresent()) {
                 FeedVersion publishedVersion = lastPublishedVersionCandidate.get();
-                if (publishedVersion.published == null) {
+                if (publishedVersion.sentToExternalPublisher == null) {
                     LOG.warn("Not updating published version for {} (published date is null)", feedId);
                     return;
                 }
-                // Set published namespace to the feed version.
-                LOG.info("Latest published version (published at {}) for {} is {}", publishedVersion.published, feedId, publishedVersion.id);
+                // Set published namespace to the feed version and set the processedByExternalPublisher timestamp.
+                LOG.info("Latest published version (sent at {}) for {} is {}", publishedVersion.sentToExternalPublisher, feedId, publishedVersion.id);
+                Persistence.feedVersions.updateField(publishedVersion.id, "processedByExternalPublisher", new Date());
                 Persistence.feedSources.updateField(feedSource.id, "publishedVersionId", publishedVersion.namespace);
-                // Update all FeedVersion#published for all versions of feed source to null.
-                LOG.info("Resetting published dates for {} versions", feedId);
-                for (FeedVersion v : versions) {
-                    Persistence.feedVersions.updateField(v.id, "published", null);
-                }
             } else {
                 LOG.error("No published versions found for {} ({} id={})", feedId, feedSource.name, feedSource.id);
             }

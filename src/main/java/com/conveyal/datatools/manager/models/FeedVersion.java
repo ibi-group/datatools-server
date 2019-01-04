@@ -192,10 +192,18 @@ public class FeedVersion extends Model implements Serializable {
     public String namespace;
 
     /**
-     * Indicates when (if at all) a feed version was published to an external source. This field is currently in use
+     * Indicates when a feed version was published to an external source. If null, the version has not been sent. This
+     * field is currently in use only for the MTC extension and is reset to null after the published version has been
+     * registered externally.
+     * */
+    public Date sentToExternalPublisher;
+
+    /**
+     * Indicates when a feed version was published to an external source. If null, the version has not been processed by
+     * the external publisher or has not been sent (see {@link #sentToExternalPublisher}. This field is currently in use
      * only for the MTC extension and is reset to null after the published version has been registered externally.
      * */
-    public Date published;
+    public Date processedByExternalPublisher;
 
     public String formattedTimestamp() {
         SimpleDateFormat format = new SimpleDateFormat(HUMAN_READABLE_TIMESTAMP_FORMAT);

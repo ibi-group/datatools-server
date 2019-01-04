@@ -33,7 +33,7 @@ public class MtcFeedResource implements ExternalFeedResource {
 
     private String rtdApi, s3Bucket, s3Prefix, s3CredentialsFilename;
 
-    public static final String AGENCY_ID = "AgencyId";
+    public static final String AGENCY_ID_FIELDNAME = "AgencyId";
     public static final String RESOURCE_TYPE = "MTC";
     public MtcFeedResource() {
         rtdApi = DataManager.getExtensionPropertyAsText(RESOURCE_TYPE, "rtd_api");
@@ -99,7 +99,8 @@ public class MtcFeedResource implements ExternalFeedResource {
                 // check if a FeedSource with this AgencyId already exists
                 for (FeedSource existingSource : project.retrieveProjectFeedSources()) {
                     ExternalFeedSourceProperty agencyIdProp;
-                    agencyIdProp = Persistence.externalFeedSourceProperties.getById(constructId(existingSource, this.getResourceType(), AGENCY_ID));
+                    agencyIdProp = Persistence.externalFeedSourceProperties.getById(constructId(existingSource, this.getResourceType(),
+                                                                                                AGENCY_ID_FIELDNAME));
                     if (agencyIdProp != null && agencyIdProp.value != null && agencyIdProp.value.equals(car.AgencyId)) {
                         //LOG.info("already exists: " + car.AgencyId);
                         source = existingSource;
@@ -163,7 +164,7 @@ public class MtcFeedResource implements ExternalFeedResource {
         FeedSource source = Persistence.feedSources.getById(feedSourceId);
         RtdCarrier carrier = new RtdCarrier(source);
 
-        if(updatedProperty.name.equals(AGENCY_ID) && previousValue == null) {
+        if(updatedProperty.name.equals(AGENCY_ID_FIELDNAME) && previousValue == null) {
             // If the property being updated is the agency ID field and it previously was null, this indicates that a
             // new carrier should be written to the RTD.
             writeCarrierToRtd(carrier, true, authHeader);
@@ -185,11 +186,11 @@ public class MtcFeedResource implements ExternalFeedResource {
         }
         // Construct agency ID from feed source and retrieve from MongoDB.
         ExternalFeedSourceProperty agencyIdProp = Persistence.externalFeedSourceProperties.getById(
-                constructId(feedVersion.parentFeedSource(), this.getResourceType(), AGENCY_ID)
+                constructId(feedVersion.parentFeedSource(), this.getResourceType(), AGENCY_ID_FIELDNAME)
         );
 
         if(agencyIdProp == null || agencyIdProp.value.equals("null")) {
-            LOG.error("Could not read {} for FeedSource {}", AGENCY_ID, feedVersion.feedSourceId);
+            LOG.error("Could not read {} for FeedSource {}", AGENCY_ID_FIELDNAME, feedVersion.feedSourceId);
             return;
         }
 
