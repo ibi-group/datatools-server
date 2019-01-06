@@ -177,7 +177,7 @@ public class FeedUpdater {
             if (lastPublishedVersionCandidate.isPresent()) {
                 FeedVersion publishedVersion = lastPublishedVersionCandidate.get();
                 if (publishedVersion.sentToExternalPublisher == null) {
-                    LOG.warn("Not updating published version for {} (published date is null)", feedId);
+                    LOG.warn("Not updating published version for {} (version was never sent to external publisher)", feedId);
                     return;
                 }
                 // Set published namespace to the feed version and set the processedByExternalPublisher timestamp.
