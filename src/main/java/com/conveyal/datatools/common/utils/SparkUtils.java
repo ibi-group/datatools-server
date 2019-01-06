@@ -30,6 +30,7 @@ public class SparkUtils {
     private static final ObjectMapper mapper = new ObjectMapper();
     private static final String BASE_URL = getConfigPropertyAsText("application.public_url");
     private static final int DEFAULT_LINES_TO_PRINT = 10;
+    private static final int MAX_CHARACTERS_TO_PRINT = 500;
 
     /**
      * Write out the supplied file to the Spark response as an octet-stream.
@@ -162,13 +163,19 @@ public class SparkUtils {
             }
             if ("application/json".equals(contentType)) {
                 bodyString = logRequest ? request.body() : response.body();
-                if (bodyString != null) {
+                if (bodyString == null) {
+                    bodyString = "{body content is null}";
+                } else if (bodyString.length() > MAX_CHARACTERS_TO_PRINT) {
+                    bodyString = new StringBuilder()
+                        .append("body content is longer than 500 characters, printing first 500 characters here:\n")
+                        .append(bodyString, 0, MAX_CHARACTERS_TO_PRINT)
+                        .append("\n...and " + (bodyString.length() - MAX_CHARACTERS_TO_PRINT) + " more characters")
+                        .toString();
+                } else {
                     // Pretty print JSON if ContentType is JSON and body is not empty
                     JsonNode jsonNode = mapper.readTree(bodyString);
                     // Add new line for legibility when printing
                     bodyString = "\n" + mapper.writerWithDefaultPrettyPrinter().writeValueAsString(jsonNode);
-                } else {
-                    bodyString = "{body content is null}";
                 }
             } else if (contentType != null) {
                 bodyString = String.format("\nnon-JSON body type: %s", contentType);

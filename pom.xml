@@ -51,7 +51,7 @@
         <url>https://github.com/conveyal/datatools-server.git</url>
     </scm>
     <properties>
-        <jackson.version>2.9.6</jackson.version>
+        <jackson.version>2.9.8</jackson.version>
     </properties>
     <build>
         <resources>
@@ -60,6 +60,7 @@
                 <filtering>true</filtering>
                 <includes>
                     <include>**/*.properties</include>
+                    <include>logback.xml</include>
                     <include>gtfs/*</include>
                     <include>public/*</include>
                 </includes>
@@ -258,7 +259,7 @@
         <dependency>
             <groupId>com.conveyal</groupId>
             <artifactId>gtfs-lib</artifactId>
-            <version>4.1.1</version>
+            <version>4.2.1</version>
         </dependency>
 
         <!-- Used for data-tools application database -->
