@@ -17,8 +17,10 @@ script:
 # package jar
 - mvn package
 after_success:
-# Upload coverage reports to codecov.io
-- bash <(curl -s https://codecov.io/bash)
+  - semantic-release --prepare @conveyal/maven-semantic-release --publish @semantic-release/github,@conveyal/maven-semantic-release --verify-conditions @semantic-release/github,@conveyal/maven-semantic-release --verify-release @conveyal/maven-semantic-release --use-conveyal-workflow --dev-branch=dev --skip-maven-deploy
+  # Run codecov after semantic-release because maven-semantic-release creates extra commits that
+  # codecov will need a report on to reference in future PRs to the release branch
+  - bash <(curl -s https://codecov.io/bash)
 # notify slack channel of build status
 notifications:
   slack: conveyal:WQxmWiu8PdmujwLw4ziW72Gc
