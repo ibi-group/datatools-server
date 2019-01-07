@@ -8,6 +8,9 @@ services: mongodb
 cache:
   directories:
   - "$HOME/.m2"
+# Install semantic-release
+before_script:
+  - yarn global add @conveyal/maven-semantic-release semantic-release
 before_install:
 #- sed -i.bak -e 's|https://nexus.codehaus.org/snapshots/|https://oss.sonatype.org/content/repositories/codehaus-snapshots/|g' ~/.m2/settings.xml
 # set region in AWS config for S3 setup
