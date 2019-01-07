@@ -1,14 +1,17 @@
 package com.conveyal.datatools.editor.jobs;
 
 import com.conveyal.datatools.editor.datastore.FeedTx;
-import com.conveyal.datatools.manager.models.FeedSource;
+import com.conveyal.datatools.editor.datastore.GlobalTx;
+import com.conveyal.datatools.editor.datastore.VersionedDataStore;
+import com.conveyal.datatools.editor.models.transit.EditorFeed;
+import com.conveyal.datatools.editor.models.transit.Route;
+import com.conveyal.datatools.editor.models.transit.Stop;
+import com.conveyal.datatools.editor.models.transit.TripPattern;
+import com.conveyal.datatools.editor.utils.DirectoryZip;
 import com.google.common.io.Files;
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.GeometryFactory;
 import com.vividsolutions.jts.geom.LineString;
-import com.conveyal.datatools.editor.datastore.GlobalTx;
-import com.conveyal.datatools.editor.datastore.VersionedDataStore;
-import com.conveyal.datatools.editor.models.transit.*;
 import org.geotools.data.DataUtilities;
 import org.geotools.data.DefaultTransaction;
 import org.geotools.data.Transaction;
@@ -22,7 +25,8 @@ import org.geotools.feature.simple.SimpleFeatureBuilder;
 import org.geotools.referencing.crs.DefaultGeographicCRS;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
-import com.conveyal.datatools.editor.utils.DirectoryZip;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.Serializable;
@@ -34,6 +38,7 @@ import java.util.Map;
 
 /** Export routes or stops as a shapefile */
 public class GisExport implements Runnable {
+    public static final Logger LOG = LoggerFactory.getLogger(GisExport.class);
     File file;
     Type type;
     Collection<String> agencyIds;
@@ -205,6 +210,7 @@ public class GisExport implements Runnable {
             outDir.delete();
 
         } catch (Exception e) {
+            LOG.error("An excpetion occurred during the GIS export");
             e.printStackTrace();
         } finally {
             if (gtx != null) gtx.rollback();

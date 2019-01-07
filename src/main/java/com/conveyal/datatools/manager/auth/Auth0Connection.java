@@ -1,7 +1,6 @@
 package com.conveyal.datatools.manager.auth;
 
 import com.auth0.jwt.JWTVerifier;
-import com.auth0.jwt.JWTVerifyException;
 import com.auth0.jwt.pem.PemReader;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -12,15 +11,13 @@ import org.slf4j.LoggerFactory;
 import spark.Request;
 
 import java.io.IOException;
-import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 import java.security.NoSuchProviderException;
 import java.security.PublicKey;
-import java.security.SignatureException;
 import java.security.spec.InvalidKeySpecException;
 import java.util.Map;
 
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
+import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
 import static com.conveyal.datatools.manager.DataManager.hasConfigProperty;
 
@@ -54,16 +51,16 @@ public class Auth0Connection {
         // Check that auth header is present and formatted correctly (Authorization: Bearer [token]).
         final String authHeader = req.headers("Authorization");
         if (authHeader == null) {
-            haltWithMessage(req, 401, "Authorization header is missing.");
+            logMessageAndHalt(req, 401, "Authorization header is missing.");
         }
         String[] parts = authHeader.split(" ");
         if (parts.length != 2 || !"bearer".equals(parts[0].toLowerCase())) {
-            haltWithMessage(req, 401, String.format("Authorization header is malformed: %s", authHeader));
+            logMessageAndHalt(req, 401, String.format("Authorization header is malformed: %s", authHeader));
         }
         // Retrieve token from auth header.
         String token = parts[1];
         if (token == null) {
-            haltWithMessage(req, 401, "Could not find authorization token");
+            logMessageAndHalt(req, 401, "Could not find authorization token");
         }
         // Handle getting the verifier outside of the below verification try/catch, which is intended to catch issues
         // with the client request. (getVerifier has its own exception/halt handling).
@@ -79,7 +76,7 @@ public class Auth0Connection {
             req.attribute("user", profile);
         } catch (Exception e) {
             LOG.warn("Login failed to verify with our authorization provider.", e);
-            haltWithMessage(req, 401, "Could not verify user's token");
+            logMessageAndHalt(req, 401, "Could not verify user's token");
         }
     }
 
@@ -101,8 +98,7 @@ public class Auth0Connection {
                 } else throw new IllegalStateException("Auth0 public key or secret token must be defined in config (env.yml).");
             } catch (IllegalStateException | NullPointerException | NoSuchAlgorithmException | IOException | NoSuchProviderException | InvalidKeySpecException e) {
                 LOG.error("Auth0 verifier configured incorrectly.");
-                e.printStackTrace();
-                haltWithMessage(req, 500, "Server authentication configured incorrectly.", e);
+                logMessageAndHalt(req, 500, "Server authentication configured incorrectly.", e);
             }
         }
         return verifier;
@@ -151,13 +147,13 @@ public class Auth0Connection {
         FeedSource feedSource = feedId != null ? Persistence.feedSources.getById(feedId) : null;
         if (feedSource == null) {
             LOG.warn("feedId {} not found", feedId);
-            haltWithMessage(request, 400, "Must provide valid feedId parameter");
+            logMessageAndHalt(request, 400, "Must provide valid feedId parameter");
         }
 
         if (!request.requestMethod().equals("GET")) {
             if (!userProfile.canEditGTFS(feedSource.organizationId(), feedSource.projectId, feedSource.id)) {
                 LOG.warn("User {} cannot edit GTFS for {}", userProfile.email, feedId);
-                haltWithMessage(request, 403, "User does not have permission to edit GTFS for feedId");
+                logMessageAndHalt(request, 403, "User does not have permission to edit GTFS for feedId");
             }
         }
     }
@@ -182,13 +178,13 @@ public class Auth0Connection {
         FeedSource feedSource = feedId != null ? Persistence.feedSources.getById(feedId) : null;
         if (feedSource == null) {
             LOG.warn("feedId {} not found", feedId);
-            haltWithMessage(request, 400, "Must provide valid feedId parameter");
+            logMessageAndHalt(request, 400, "Must provide valid feedId parameter");
         }
 
         if (!request.requestMethod().equals("GET")) {
             if (!userProfile.canEditGTFS(feedSource.organizationId(), feedSource.projectId, feedSource.id)) {
                 LOG.warn("User {} cannot edit GTFS for {}", userProfile.email, feedId);
-                haltWithMessage(request, 403, "User does not have permission to edit GTFS for feedId");
+                logMessageAndHalt(request, 403, "User does not have permission to edit GTFS for feedId");
             }
         }
     }

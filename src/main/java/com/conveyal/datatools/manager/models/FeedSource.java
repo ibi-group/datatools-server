@@ -174,7 +174,7 @@ public class FeedSource extends Model implements Cloneable {
                     "User-Agent",
                     "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.95 Safari/537.11"
             );
-        } catch (Exception e) {
+        } catch (IOException e) {
             String message = String.format("Unable to open connection to %s; not fetching feed %s", url, this.name);
             LOG.error(message);
             // TODO use this update function throughout this class
