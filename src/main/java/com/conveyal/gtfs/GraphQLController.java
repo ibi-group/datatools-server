@@ -16,7 +16,7 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
+import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static spark.Spark.get;
 import static spark.Spark.post;
 
@@ -37,7 +37,7 @@ public class GraphQLController {
             varsJson = mapper.readTree(request.queryParams("variables"));
         } catch (IOException e) {
             LOG.warn("Error processing variables", e);
-            haltWithMessage(request, 400, "Malformed JSON");
+            logMessageAndHalt(request, 400, "Malformed JSON");
         }
         String queryJson = request.queryParams("query");
         return doQuery(varsJson, queryJson, response);
@@ -52,7 +52,7 @@ public class GraphQLController {
             node = mapper.readTree(req.body());
         } catch (IOException e) {
             LOG.warn("Error processing POST body JSON", e);
-            haltWithMessage(req, 400, "Malformed JSON");
+            logMessageAndHalt(req, 400, "Malformed JSON");
         }
         JsonNode vars = node.get("variables");
         String query = node.get("query").asText();

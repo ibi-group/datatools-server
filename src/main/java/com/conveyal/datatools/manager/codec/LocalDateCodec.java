@@ -37,6 +37,7 @@ public class LocalDateCodec implements Codec<LocalDate> {
                 date = Instant.ofEpochMilli(reader.readInt64()).atZone(ZoneOffset.UTC).toLocalDate();
                 return date;
             } catch (Exception e) {
+                LOG.error("Error parsing date value with legacy java.util.Date date format");
                 e.printStackTrace();
             }
         }

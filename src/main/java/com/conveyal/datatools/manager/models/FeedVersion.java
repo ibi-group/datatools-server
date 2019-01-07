@@ -140,7 +140,7 @@ public class FeedVersion extends Model implements Serializable {
         return feedStore.getFeed(id);
     }
 
-    public File newGtfsFile(InputStream inputStream) {
+    public File newGtfsFile(InputStream inputStream) throws IOException {
         File file = feedStore.newFeed(id, inputStream, parentFeedSource());
         // fileSize field will not be stored until new FeedVersion is stored in MongoDB (usually in
         // the final steps of ValidateFeedJob).
