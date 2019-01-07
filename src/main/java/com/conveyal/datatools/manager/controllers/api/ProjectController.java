@@ -80,6 +80,7 @@ public class ProjectController {
         if (organizationId == null) allowedToCreate = true;
         if (allowedToCreate) {
             Project newlyStoredProject = Persistence.projects.create(req.body());
+            Scheduler.scheduleAutoFeedFetch(newlyStoredProject);
             return newlyStoredProject;
         } else {
             logMessageAndHalt(req, 403, "Not authorized to create a project on organization " + organizationId);
@@ -101,15 +102,7 @@ public class ProjectController {
             Project updatedProject = Persistence.projects.update(id, req.body());
             // Catch updates to auto-fetch params, and update the autofetch schedule accordingly.
             // TODO factor out into generic update hooks, or at least separate method
-            if (updateDocument.containsKey("autoFetchHour")
-                    || updateDocument.containsKey("autoFetchMinute")
-                    || updateDocument.containsKey("autoFetchFeeds")
-                    || updateDocument.containsKey("defaultTimeZone")) {
-                // If auto fetch flag is turned on, schedule auto fetch.
-                if (updatedProject.autoFetchFeeds) Scheduler.scheduleAutoFeedFetch(updatedProject, 1);
-                // Otherwise, cancel any existing task for this id.
-                else Scheduler.removeProjectJobsOfType(updatedProject.id, FetchProjectFeedsJob.class, true);
-            }
+            Scheduler.scheduleAutoFeedFetch(updatedProject);
             return updatedProject;
         } catch (Exception e) {
             logMessageAndHalt(req, 500, "Error updating project", e);

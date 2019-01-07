@@ -38,6 +38,8 @@ public class JsonManager<T> {
         this.om = new ObjectMapper();
         // previous model for gtfs validation errors
 //        om.addMixIn(InvalidValue.class, InvalidValueMixIn.class);
+        // TODO: Removes extraneous mixins? These may be needed to import data from MapDB-backed versions of this
+        //  software to the MongoDB-backed system.
         om.addMixIn(Rectangle2D.class, Rectangle2DMixIn.class);
         SimpleModule deser = new SimpleModule();
 

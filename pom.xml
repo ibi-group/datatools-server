@@ -6,7 +6,7 @@
 
     <groupId>com.conveyal</groupId>
     <artifactId>datatools-server</artifactId>
-    <version>3.3.0-SNAPSHOT</version>
+    <version>3.2.1-SNAPSHOT</version>
 
     <licenses>
         <license>
@@ -16,7 +16,7 @@
     </licenses>
 
     <!-- Developer entries are provided for primary developers.
-   For other contributors, see https://github.com/catalogueglobal/datatools-server/graphs/contributors -->
+   For other contributors, see https://github.com/conveyal/datatools-server/graphs/contributors -->
     <developers>
         <developer>
             <name>Landon Reed</name>
@@ -46,12 +46,12 @@
 
     <!-- Define where the source code for project lives -->
     <scm>
-        <connection>scm:git:https://github.com/catalogueglobal/datatools-server.git</connection>
-        <developerConnection>scm:git:ssh://git@github.com/catalogueglobal/datatools-server.git</developerConnection>
-        <url>https://github.com/catalogueglobal/datatools-server.git</url>
+        <connection>scm:git:https://github.com/conveyal/datatools-server.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/conveyal/datatools-server.git</developerConnection>
+        <url>https://github.com/conveyal/datatools-server.git</url>
     </scm>
     <properties>
-        <jackson.version>2.9.0</jackson.version>
+        <jackson.version>2.9.8</jackson.version>
     </properties>
     <build>
         <resources>
@@ -225,7 +225,7 @@
         <dependency>
             <groupId>com.sparkjava</groupId>
             <artifactId>spark-core</artifactId>
-            <version>2.5</version>
+            <version>2.7.2</version>
         </dependency>
 
         <!-- Logging -->
@@ -259,7 +259,7 @@
         <dependency>
             <groupId>com.conveyal</groupId>
             <artifactId>gtfs-lib</artifactId>
-            <version>4.1.1</version>
+            <version>4.2.2</version>
         </dependency>
 
         <!-- Used for data-tools application database -->

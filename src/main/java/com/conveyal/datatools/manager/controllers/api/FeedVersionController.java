@@ -258,17 +258,28 @@ public class FeedVersionController  {
         FeedVersion version = requestFeedVersion(req, "manage");
 
         // notify any extensions of the change
-        for(String resourceType : DataManager.feedResources.keySet()) {
-            DataManager.feedResources.get(resourceType).feedVersionCreated(version, null);
-        }
-        if (!DataManager.isExtensionEnabled("mtc")) {
-            // update published version ID on feed source
-            Persistence.feedSources.updateField(version.feedSourceId, "publishedVersionId", version.namespace);
-            return version;
-        } else {
-            // NOTE: If the MTC extension is enabled, the parent feed source's publishedVersionId will not be updated to the
-            // version's namespace until the FeedUpdater has successfully downloaded the feed from the share S3 bucket.
-            return Persistence.feedVersions.updateField(version.id, "processing", true);
+        try {
+            for (String resourceType : DataManager.feedResources.keySet()) {
+                DataManager.feedResources.get(resourceType).feedVersionCreated(version, null);
+            }
+            if (!DataManager.isExtensionEnabled("mtc")) {
+                // update published version ID on feed source
+                Persistence.feedSources.updateField(version.feedSourceId, "publishedVersionId", version.namespace);
+                return version;
+            } else {
+                // NOTE: If the MTC extension is enabled, the parent feed source's publishedVersionId will not be updated to the
+                // version's namespace until the FeedUpdater has successfully downloaded the feed from the share S3 bucket.
+                Date publishedDate = new Date();
+                // Set "sent" timestamp to now and reset "processed" timestamp (in the case that it had previously been
+                // published as the active version.
+                version.sentToExternalPublisher = publishedDate;
+                version.processedByExternalPublisher = null;
+                Persistence.feedVersions.replace(version.id, version);
+                return version;
+            }
+        } catch (Exception e) {
+            haltWithMessage(req, 500, "Could not publish feed.", e);
+            return null;
         }
     }
 

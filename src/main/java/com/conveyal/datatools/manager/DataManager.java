@@ -32,9 +32,9 @@ import com.conveyal.gtfs.loader.Table;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.google.common.collect.Sets;
 import com.google.common.io.Resources;
 import org.apache.commons.io.Charsets;
-import org.eclipse.jetty.util.ConcurrentHashSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.utils.IOUtils;
@@ -48,6 +48,7 @@ import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
@@ -81,8 +82,11 @@ public class DataManager {
     // TODO: define type for ExternalFeedResource Strings
     public static final Map<String, ExternalFeedResource> feedResources = new HashMap<>();
 
-    // Stores jobs underway by user ID.
-    public static Map<String, ConcurrentHashSet<MonitorableJob>> userJobsMap = new ConcurrentHashMap<>();
+    /**
+     * Stores jobs underway by user ID. NOTE: any set created and stored here must be created with
+     * {@link Sets#newConcurrentHashSet()} or similar thread-safe Set.
+     */
+    public static Map<String, Set<MonitorableJob>> userJobsMap = new ConcurrentHashMap<>();
 
     // ObjectMapper that loads in YAML config files
     private static final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());

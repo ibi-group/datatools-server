@@ -173,7 +173,6 @@ public class ConvertEditorMapDBToSQL extends MonitorableJob {
                 updateTripsStatement.setString(1, pattern.id);
                 updateTripsStatement.setString(2, trip.gtfsTripId);
                 // FIXME: Do something with the return value?  E.g., rollback if it hits more than one trip.
-                // FIXME: Do this in batches?
                 updateTripsStatement.addBatch();
                 batchSize += 1;
                 // If we've accumulated a lot of prepared statement calls, pass them on to the database backend.
@@ -185,10 +184,11 @@ public class ConvertEditorMapDBToSQL extends MonitorableJob {
         }
 
         // Pattern stops table has not yet been created because pattern stops do not exist in
-        // GTFSFeed. NOte, we want this table to be created regardless of whether patterns exist or not.
+        // GTFSFeed. Note, we want this table to be created regardless of whether patterns exist or not
+        // (which is why it is outside of the check for null pattern map).
         Table.PATTERN_STOP.createSqlTable(connection, namespace, true);
 
-        // Insert all trip patterns and pattern stops into database (tables have already been created FIXME pattern_stops has not yet been created).
+        // Insert all trip patterns and pattern stops into database (tables have already been created).
         if (feedTx.tripPatterns != null) {
             batchSize = 0;
             // Handle inserting patterns
@@ -214,9 +214,8 @@ public class ConvertEditorMapDBToSQL extends MonitorableJob {
                 insertPatternStatement.setString(6, pattern.id);
                 insertPatternStatement.addBatch();
                 batchSize += 1;
-
-                int stopSequence = 1;
-                //                        LOG.info("Inserting {} pattern stops for pattern {}", pattern.patternStops.size(), pattern.id);
+                // stop_sequence must be zero-based and incrementing to match stop_times values.
+                int stopSequence = 0;
                 for (TripPatternStop tripPatternStop : pattern.patternStops) {
                     // TripPatternStop's stop ID needs to be mapped to GTFS stop ID.
                     // FIXME Possible NPE?
@@ -228,7 +227,6 @@ public class ConvertEditorMapDBToSQL extends MonitorableJob {
                     insertPatternStopStatement.setInt(5, tripPatternStop.defaultDwellTime);
                     insertPatternStopStatement.setInt(6, 0);
                     insertPatternStopStatement.setInt(7, 0);
-                    // FIXME: shapeDistTraveled could be null
                     if (tripPatternStop.shapeDistTraveled == null) {
                         insertPatternStopStatement.setNull(8, JDBCType.DOUBLE.getVendorTypeNumber());
                     } else {

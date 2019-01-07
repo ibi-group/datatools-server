@@ -10,7 +10,6 @@ import com.conveyal.datatools.manager.controllers.api.StatusController;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import org.apache.commons.io.FileUtils;
-import org.eclipse.jetty.util.ConcurrentHashSet;
 import org.mapdb.Fun;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -101,7 +100,7 @@ public class ConvertMain {
         int totalJobs = StatusController.getAllJobs().size();
         while (!StatusController.filterActiveJobs(StatusController.getAllJobs()).isEmpty()) {
             // While there are still active jobs, continue waiting.
-            ConcurrentHashSet<MonitorableJob> activeJobs = StatusController.filterActiveJobs(StatusController.getAllJobs());
+            Set<MonitorableJob> activeJobs = StatusController.filterActiveJobs(StatusController.getAllJobs());
             LOG.info(String.format("%d/%d jobs still active. Checking for completion again in 5 seconds...", activeJobs.size(), totalJobs));
 //            LOG.info(String.join(", ", activeJobs.stream().map(job -> job.name).collect(Collectors.toList())));
             int jobsInExecutor = ((ThreadPoolExecutor) DataManager.heavyExecutor).getActiveCount();

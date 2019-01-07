@@ -110,6 +110,18 @@ public class Scheduler {
     }
 
     /**
+     * Schedule or cancel auto feed fetch for a project as needed.  This should be called whenever a
+     * project is created or updated.  If a project is deleted, the auto feed fetch jobs will
+     * automatically cancel itself.
+     */
+    public static void scheduleAutoFeedFetch(Project project) {
+        // If auto fetch flag is turned on, schedule auto fetch.
+        if (project.autoFetchFeeds) Scheduler.scheduleAutoFeedFetch(project, 1);
+        // Otherwise, cancel any existing task for this id.
+        else Scheduler.removeProjectJobsOfType(project.id, FetchProjectFeedsJob.class, true);
+    }
+
+    /**
      * Schedule an action that fetches all the feeds in the given project according to the autoFetch fields of that project.
      * Currently feeds are not auto-fetched independently, they must be all fetched together as part of a project.
      * This method is called when a Project's auto-fetch settings are updated, and when the system starts up to populate
