@@ -32,7 +32,7 @@ import java.util.Date;
 import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
+import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.controllers.api.FeedSourceController.checkFeedSourcePermissions;
 import static spark.Spark.delete;
 import static spark.Spark.get;
@@ -69,7 +69,7 @@ public class FeedVersionController  {
     public static FeedSource requestFeedSourceById(Request req, String action, String paramName) {
         String id = req.queryParams(paramName);
         if (id == null) {
-            haltWithMessage(req, 400, "Please specify feedSourceId param");
+            logMessageAndHalt(req, 400, "Please specify feedSourceId param");
         }
         return checkFeedSourcePermissions(req, Persistence.feedSources.getById(id), action);
     }
@@ -127,7 +127,7 @@ public class FeedVersionController  {
             LOG.info("Saving feed from upload {}", feedSource);
         } catch (Exception e) {
             LOG.error("Unable to open input stream from uploaded file", e);
-            haltWithMessage(req, 400, "Unable to read uploaded feed");
+            logMessageAndHalt(req, 400, "Unable to read uploaded feed");
         }
 
         // TODO: fix FeedVersion.hash() call when called in this context. Nothing gets hashed because the file has not been saved yet.
@@ -144,7 +144,7 @@ public class FeedVersionController  {
             LOG.warn("File deleted");
 
             // There is no need to delete the newFeedVersion because it has not yet been persisted to MongoDB.
-            haltWithMessage(req, 304, "Uploaded feed is identical to the latest version known to the database.");
+            logMessageAndHalt(req, 304, "Uploaded feed is identical to the latest version known to the database.");
         }
 
         newFeedVersion.name = newFeedVersion.formattedTimestamp() + " Upload";
@@ -174,7 +174,7 @@ public class FeedVersionController  {
         FeedSource feedSource = requestFeedSourceById(req, "manage");
         Snapshot snapshot = Persistence.snapshots.getById(req.queryParams("snapshotId"));
         if (snapshot == null) {
-            haltWithMessage(req, 400, "Must provide valid snapshot ID");
+            logMessageAndHalt(req, 400, "Must provide valid snapshot ID");
         }
         FeedVersion feedVersion = new FeedVersion(feedSource);
         CreateFeedVersionFromSnapshotJob createFromSnapshotJob =
@@ -200,7 +200,7 @@ public class FeedVersionController  {
     public static FeedVersion requestFeedVersion(Request req, String action, String feedVersionId) {
         FeedVersion version = Persistence.feedVersions.getById(feedVersionId);
         if (version == null) {
-            haltWithMessage(req, 404, "Feed version ID does not exist");
+            logMessageAndHalt(req, 404, "Feed version ID does not exist");
         }
         // Performs permissions checks on the feed source this feed version belongs to, and halts if permission is denied.
         checkFeedSourcePermissions(req, version.parentFeedSource(), action);
@@ -212,7 +212,7 @@ public class FeedVersionController  {
 
         String name = req.queryParams("name");
         if (name == null) {
-            haltWithMessage(req, 400, "Name parameter not specified");
+            logMessageAndHalt(req, 400, "Name parameter not specified");
         }
 
         Persistence.feedVersions.updateField(v.id, "name", name);
@@ -248,7 +248,7 @@ public class FeedVersionController  {
      */
     private static JsonNode validate (Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "manage");
-        haltWithMessage(req, 400, "Validate endpoint not currently configured!");
+        logMessageAndHalt(req, 400, "Validate endpoint not currently configured!");
         // FIXME: Update for sql-loader validation process?
         return null;
 //        return version.retrieveValidationResult(true);
@@ -278,7 +278,7 @@ public class FeedVersionController  {
                 return version;
             }
         } catch (Exception e) {
-            haltWithMessage(req, 500, "Could not publish feed.", e);
+            logMessageAndHalt(req, 500, "Could not publish feed.", e);
             return null;
         }
     }
@@ -293,12 +293,12 @@ public class FeedVersionController  {
 
         if(token == null || !token.isValid()) {
             LOG.error("Feed download token is invalid: {}", token);
-            haltWithMessage(req, 400, "Feed download token not valid");
+            logMessageAndHalt(req, 400, "Feed download token not valid");
         }
         // Fetch feed version to download.
         FeedVersion version = token.retrieveFeedVersion();
         if (version == null) {
-            haltWithMessage(req, 400, "Could not retrieve version to download");
+            logMessageAndHalt(req, 400, "Could not retrieve version to download");
         }
         LOG.info("Using token {} to download feed version {}", token.id, version.id);
         // Remove token so that it cannot be used again for feed download

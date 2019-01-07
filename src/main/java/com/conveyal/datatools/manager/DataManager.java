@@ -53,7 +53,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
+import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.common.utils.SparkUtils.logRequest;
 import static com.conveyal.datatools.common.utils.SparkUtils.logResponse;
 import static spark.Spark.after;
@@ -126,10 +126,7 @@ public class DataManager {
         loadConfig(args);
         loadProperties();
 
-        String bugsnagKey = getConfigPropertyAsText("BUGSNAG_KEY");
-        if (bugsnagKey != null) {
-            new Bugsnag(bugsnagKey);
-        }
+        getBugsnag();
 
         // FIXME: hack to statically load FeedStore
         LOG.info(FeedStore.class.getSimpleName());
@@ -159,7 +156,16 @@ public class DataManager {
         Scheduler.initialize();
     }
 
-    /**
+    // intialize bugsnag
+    public static Bugsnag getBugsnag() {
+        String bugsnagKey = getConfigPropertyAsText("BUGSNAG_KEY");
+        if (bugsnagKey != null) {
+            return new Bugsnag(bugsnagKey);
+        }
+        return null;
+    }
+
+    /*
      * Load some properties files to obtain information about this project.
      * This method reads in two files:
      * - src/main/resources/.properties
@@ -305,7 +311,7 @@ public class DataManager {
         // Return 404 for any API path that is not configured.
         // IMPORTANT: Any API paths must be registered before this halt.
         get("/api/" + "*", (request, response) -> {
-            haltWithMessage(request, 404, "No API route configured for this path.");
+            logMessageAndHalt(request, 404, "No API route configured for this path.");
             return null;
         });
 

@@ -38,7 +38,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
+import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
 import static spark.Spark.delete;
 import static spark.Spark.get;
@@ -111,7 +111,7 @@ public class UserController {
             }
             return queryString;
         } else {
-            haltWithMessage(req, 401, "Must be application or organization admin to view users");
+            logMessageAndHalt(req, 401, "Must be application or organization admin to view users");
             // Return statement cannot be reached due to halt.
             return null;
         }
@@ -154,7 +154,7 @@ public class UserController {
         HttpResponse response = client.execute(request);
         String result = EntityUtils.toString(response.getEntity());
         int statusCode = response.getStatusLine().getStatusCode();
-        if(statusCode >= 300) haltWithMessage(req, statusCode, response.toString());
+        if(statusCode >= 300) logMessageAndHalt(req, statusCode, response.toString());
 
         return result;
     }
@@ -187,7 +187,7 @@ public class UserController {
         String result = EntityUtils.toString(response.getEntity());
 
         int statusCode = response.getStatusLine().getStatusCode();
-        if(statusCode >= 300) haltWithMessage(req, statusCode, response.toString());
+        if(statusCode >= 300) logMessageAndHalt(req, statusCode, response.toString());
 
         System.out.println(result);
 
@@ -245,7 +245,7 @@ public class UserController {
         HttpClient client = HttpClientBuilder.create().build();
         HttpResponse response = client.execute(request);
         int statusCode = response.getStatusLine().getStatusCode();
-        if(statusCode >= 300) haltWithMessage(req, statusCode, response.getStatusLine().getReasonPhrase());
+        if(statusCode >= 300) logMessageAndHalt(req, statusCode, response.getStatusLine().getReasonPhrase());
 
         return true;
     }
@@ -265,7 +265,7 @@ public class UserController {
         Auth0UserProfile.DatatoolsInfo datatools = userProfile.getApp_metadata().getDatatoolsInfo();
         if (datatools == null) {
             // NOTE: this condition will also occur if DISABLE_AUTH is set to true
-            haltWithMessage(req, 403, "User does not have permission to access to this application");
+            logMessageAndHalt(req, 403, "User does not have permission to access to this application");
         }
 
         Auth0UserProfile.Subscription[] subscriptions = datatools.getSubscriptions();

@@ -1,5 +1,7 @@
 package com.conveyal.datatools.common.utils;
 
+import com.bugsnag.Bugsnag;
+import com.bugsnag.Report;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -19,6 +21,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.Arrays;
 
+import static com.conveyal.datatools.manager.DataManager.getBugsnag;
 import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
 import static spark.Spark.halt;
 
@@ -36,7 +39,7 @@ public class SparkUtils {
      * Write out the supplied file to the Spark response as an octet-stream.
      */
     public static HttpServletResponse downloadFile(File file, String filename, Request req, Response res) {
-        if (file == null) haltWithMessage(req, 404, "File is null");
+        if (file == null) logMessageAndHalt(req, 404, "File is null");
         HttpServletResponse raw = res.raw();
         raw.setContentType("application/octet-stream");
         raw.setHeader("Content-Disposition", "attachment; filename=" + filename);
@@ -50,10 +53,8 @@ public class SparkUtils {
             ByteStreams.copy(fileInputStream, outputStream);
             // TODO: Is flushing the stream necessary?
             outputStream.flush();
-        } catch (Exception e) {
-            LOG.error("Could not write file to output stream", e);
-            e.printStackTrace();
-            haltWithMessage(req, 500, "Error serving GTFS file", e);
+        } catch (IOException e) {
+            logMessageAndHalt(req, 500, "Could not write file to output stream", e);
         }
         return raw;
     }
@@ -91,19 +92,40 @@ public class SparkUtils {
     /**
      * Wrapper around Spark halt method that formats message as JSON using {@link SparkUtils#formatJSON}.
      */
-    public static void haltWithMessage(Request request, int statusCode, String message) throws HaltException {
-        haltWithMessage(request, statusCode, message, null);
+    public static void logMessageAndHalt(Request request, int statusCode, String message) throws HaltException {
+        logMessageAndHalt(request, statusCode, message, null);
     }
 
     /**
-     * Wrapper around Spark halt method that formats message as JSON using {@link SparkUtils#formatJSON}. Exception
+     * Wrapper around Spark halt method that formats message as JSON using {@link SparkUtils#formatJSON}.
+     * Extra logic occurs for when the status code is >= 500.  A Bugsnag report is created if
+     * Bugsnag is configured.
      */
-    public static void haltWithMessage(
+    public static void logMessageAndHalt(
         Request request,
         int statusCode,
         String message,
         Exception e
     ) throws HaltException {
+        // Note that halting occurred, also print error stacktrace if applicable
+        if (e != null) e.printStackTrace();
+        LOG.info("Halting with status code {}.  Error message: {}.", statusCode, message);
+
+        if (statusCode >= 500) {
+            LOG.error(message);
+
+            // create report to notify bugsnag if configured
+            Bugsnag bugsnag = getBugsnag();
+            if (bugsnag != null && e != null) {
+                // create report to send to bugsnag
+                Report report = bugsnag.buildReport(e);
+                Auth0UserProfile userProfile = request.attribute("user");
+                String userEmail = userProfile != null ? userProfile.getEmail() : "no-auth";
+                report.setUserEmail(userEmail);
+                bugsnag.notify(report);
+            }
+        }
+
         JsonNode json = getObjectNode(message, statusCode, e);
         String logString = null;
         try {

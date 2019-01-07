@@ -17,7 +17,7 @@ import java.util.Collections;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
+import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static spark.Spark.get;
 
 /**
@@ -33,7 +33,7 @@ public class StatusController {
     private static Set<MonitorableJob> getAllJobsRoute(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         if (!userProfile.canAdministerApplication()) {
-            haltWithMessage(req, 401, "User not authorized to view all jobs");
+            logMessageAndHalt(req, 401, "User not authorized to view all jobs");
         }
         return getAllJobs();
     }
