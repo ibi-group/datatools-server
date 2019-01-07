@@ -185,6 +185,7 @@ public class Scheduler {
         if (
             latest != null &&
                 latest.validationResult != null &&
+                latest.validationResult.lastCalendarDate != null &&
                 latest.validationResult.lastCalendarDate.isAfter(LocalDate.now())
         ) {
             // get parent project
