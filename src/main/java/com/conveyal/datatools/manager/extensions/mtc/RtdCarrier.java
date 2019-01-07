@@ -71,7 +71,7 @@ public class RtdCarrier {
      * @param source
      */
     public RtdCarrier(FeedSource source) {
-        AgencyId = getValueForField(source, MtcFeedResource.AGENCY_ID);
+        AgencyId = getValueForField(source, MtcFeedResource.AGENCY_ID_FIELDNAME);
         AgencyPhone = getValueForField(source, "AgencyPhone");
         AgencyName = getValueForField(source, "AgencyName");
         RttAgencyName = getValueForField(source, "RttAgencyName");
