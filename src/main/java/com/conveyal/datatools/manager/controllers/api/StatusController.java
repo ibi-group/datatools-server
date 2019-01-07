@@ -1,8 +1,8 @@
 package com.conveyal.datatools.manager.controllers.api;
 
+import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
-import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import org.eclipse.jetty.util.ConcurrentHashSet;
@@ -11,15 +11,13 @@ import org.slf4j.LoggerFactory;
 import spark.Request;
 import spark.Response;
 
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
-import java.util.HashSet;
-import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithError;
-import static spark.Spark.delete;
+import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static spark.Spark.get;
 
 /**
@@ -35,8 +33,12 @@ public class StatusController {
     private static Set<MonitorableJob> getAllJobsRoute(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         if (!userProfile.canAdministerApplication()) {
-            haltWithError(401, "User not authorized to view all jobs");
+            logMessageAndHalt(req, 401, "User not authorized to view all jobs");
         }
+        return getAllJobs();
+    }
+
+    public static Set<MonitorableJob> getAllJobs() {
         return DataManager.userJobsMap.values().stream()
                 .flatMap(Collection::stream)
                 .collect(Collectors.toSet());
@@ -57,7 +59,7 @@ public class StatusController {
      * Gets a job by user ID and job ID.
      * @param clearCompleted if true, remove requested job if it has completed or errored
      */
-    private static MonitorableJob getJobById(String userId, String jobId, boolean clearCompleted) {
+    public static MonitorableJob getJobById(String userId, String jobId, boolean clearCompleted) {
         // Get jobs set directly from userJobsMap because we may remove an element from it below.
         Set<MonitorableJob> userJobs = DataManager.userJobsMap.get(userId);
         if (userJobs == null) {
@@ -87,6 +89,12 @@ public class StatusController {
         return getJobsByUserId(userId, true);
     }
 
+    public static Set<MonitorableJob> filterJobsByType (MonitorableJob.JobType ...jobType) {
+        return getAllJobs().stream()
+                .filter(job -> Arrays.asList(jobType).contains(job.type))
+                .collect(Collectors.toSet());
+    }
+
     /**
      * Get set of active jobs by user ID.
      *
@@ -101,14 +109,19 @@ public class StatusController {
             // Any active jobs will still have their status updated, so they need to be retrieved again with any status
             // updates. All completed or errored jobs are in their final state and will not be updated any longer, so we
             // remove them once the client has seen them.
-            ConcurrentHashSet<MonitorableJob> jobsStillActive = new ConcurrentHashSet<>();
-            allJobsForUser.stream()
-                    .filter(job -> !job.status.completed && !job.status.error)
-                    .forEach(jobsStillActive::add);
+            ConcurrentHashSet<MonitorableJob> jobsStillActive = filterActiveJobs(allJobsForUser);
 
             DataManager.userJobsMap.put(userId, jobsStillActive);
         }
         return allJobsForUser;
+    }
+
+    public static ConcurrentHashSet<MonitorableJob> filterActiveJobs(Set<MonitorableJob> jobs) {
+        ConcurrentHashSet<MonitorableJob> jobsStillActive = new ConcurrentHashSet<>();
+        jobs.stream()
+                .filter(job -> !job.status.completed && !job.status.error)
+                .forEach(jobsStillActive::add);
+        return jobsStillActive;
     }
 
     public static void register (String apiPrefix) {

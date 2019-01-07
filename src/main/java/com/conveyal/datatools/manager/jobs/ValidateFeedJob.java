@@ -1,25 +1,27 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Map;
-
 /**
- * Created by demory on 6/16/16.
+ * This job handles the validation of a given feed version. If the version is not new, it will simply replace the
+ * existing version with the version object that has updated validation info.
  */
 public class ValidateFeedJob extends MonitorableJob {
     public static final Logger LOG = LoggerFactory.getLogger(ValidateFeedJob.class);
 
     private FeedVersion feedVersion;
+    private final boolean isNewVersion;
 
-    public ValidateFeedJob(FeedVersion version, String owner) {
+    public ValidateFeedJob(FeedVersion version, String owner, boolean isNewVersion) {
         super(owner, "Validating Feed", JobType.VALIDATE_FEED);
         feedVersion = version;
+        this.isNewVersion = isNewVersion;
         status.update(false, "Waiting to begin validation...", 0);
     }
 
@@ -40,7 +42,14 @@ public class ValidateFeedJob extends MonitorableJob {
                 // such as BuildTransportNetwork, to finish. If those subsequent jobs fail,
                 // the version won't get loaded into the database (even though it exists in postgres).
                 feedVersion.storeUser(owner);
-                Persistence.feedVersions.create(feedVersion);
+                if (isNewVersion) {
+                    Persistence.feedVersions.create(feedVersion);
+                } else {
+                    Persistence.feedVersions.replace(feedVersion.id, feedVersion);
+                }
+
+                // schedule expiration notification jobs
+                Scheduler.scheduleExpirationNotifications(feedVersion.parentFeedSource());
             }
             // TODO: If ValidateFeedJob is called without a parent job (e.g., to "re-validate" a feed), we should handle
             // storing the updated ValidationResult in Mongo.

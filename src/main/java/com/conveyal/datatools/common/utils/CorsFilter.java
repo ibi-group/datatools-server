@@ -1,12 +1,9 @@
-package com.conveyal.gtfs;
+package com.conveyal.datatools.common.utils;
 
 /**
  * Created by demory on 9/2/16.
  */
 
-import spark.Filter;
-import spark.Request;
-import spark.Response;
 import spark.Spark;
 
 import java.util.HashMap;
@@ -27,14 +24,6 @@ public final class CorsFilter {
     }
 
     public final static void apply() {
-        Filter filter = new Filter() {
-            @Override
-            public void handle(Request request, Response response) throws Exception {
-                corsHeaders.forEach((key, value) -> {
-                    response.header(key, value);
-                });
-            }
-        };
-        Spark.after(filter);
+        Spark.after((request, response) -> corsHeaders.forEach((key, value) -> response.header(key, value)));
     }
 }

@@ -30,7 +30,23 @@ public class Bounds implements Serializable {
                 east - west, north - south);
     }
 
-    public String toCSVString () {
-        return west + "," + + south + "," + east + "," + north;
+    public boolean areValid () {
+        // Ensure that all of the values are actually numbers.
+        return !Double.isNaN(south) &&
+                !Double.isNaN(north) &&
+                !Double.isNaN(east) &&
+                !Double.isNaN(west)
+                // Also ensure that they are set in the correct order.
+                && south < north && west < east
+                // And that they are within the lat/lng limits
+                && south >= -90 && north <= 90 && west >= -180 && east <= 180;
+    }
+
+    public String toTransitLandString() {
+        return String.format("%.6f,%.6f,%.6f,%.6f", west, south, east, north);
+    }
+
+    public String toVexString () {
+        return String.format("%.6f,%.6f,%.6f,%.6f", south, west, north, east);
     }
 }

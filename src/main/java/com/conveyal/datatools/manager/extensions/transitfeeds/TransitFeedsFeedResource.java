@@ -41,7 +41,7 @@ public class TransitFeedsFeedResource implements ExternalFeedResource {
     }
 
     @Override
-    public void importFeedsForProject(Project project, String authHeader) {
+    public void importFeedsForProject(Project project, String authHeader) throws IOException {
         LOG.info("Importing feeds from TransitFeeds");
 
         URL url;
@@ -55,7 +55,7 @@ public class TransitFeedsFeedResource implements ExternalFeedResource {
                 url = new URL(api + "?key=" + apiKey + "&limit=100" + "&page=" + String.valueOf(count));
             } catch (MalformedURLException ex) {
                 LOG.error("Could not construct URL for TransitFeeds API");
-                return;
+                throw ex;
             }
 
 
@@ -84,7 +84,7 @@ public class TransitFeedsFeedResource implements ExternalFeedResource {
                 in.close();
             } catch (IOException ex) {
                 LOG.error("Could not read from Transit Feeds API");
-                return;
+                throw ex;
             }
 
             String json = response.toString();
@@ -93,7 +93,7 @@ public class TransitFeedsFeedResource implements ExternalFeedResource {
                 transitFeedNode = mapper.readTree(json);
             } catch (IOException ex) {
                 LOG.error("Error parsing TransitFeeds JSON response");
-                return;
+                throw ex;
             }
 
             for (JsonNode feed : transitFeedNode.get("results").get("feeds")) {
@@ -144,6 +144,7 @@ public class TransitFeedsFeedResource implements ExternalFeedResource {
                     }
                 } catch (MalformedURLException ex) {
                     LOG.error("Error constructing URLs from TransitFeeds API response");
+                    throw ex;
                 }
 
                 source.projectId = project.id;

@@ -2,7 +2,6 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.Consts;
-import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -17,7 +16,6 @@ import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -34,14 +32,12 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 
-import static spark.Spark.halt;
-
 /**
  * Created by landon on 9/19/17.
  */
 public class MergeProjectFeedsJob extends MonitorableJob {
 
-    private static final Logger LOG = LoggerFactory.getLogger(MonitorableJob.class);
+    private static final Logger LOG = LoggerFactory.getLogger(MergeProjectFeedsJob.class);
     public final Project project;
 
     public MergeProjectFeedsJob(Project project, String owner) {
@@ -51,7 +47,7 @@ public class MergeProjectFeedsJob extends MonitorableJob {
     }
 
     @Override
-    public void jobLogic () {
+    public void jobLogic () throws IOException {
         // get feed sources in project
         Collection<FeedSource> feeds = project.retrieveProjectFeedSources();
 
@@ -60,20 +56,14 @@ public class MergeProjectFeedsJob extends MonitorableJob {
         try {
             mergedFile = File.createTempFile(project.id + "-merged", ".zip");
             mergedFile.deleteOnExit();
-
         } catch (IOException e) {
             LOG.error("Could not create temp file");
             e.printStackTrace();
-            halt(400, SparkUtils.formatJSON("Unknown error while merging feeds.", 400));
+            throw e;
         }
 
         // create the zipfile
-        ZipOutputStream out;
-        try {
-            out = new ZipOutputStream(new FileOutputStream(mergedFile));
-        } catch (FileNotFoundException e) {
-            throw new RuntimeException(e);
-        }
+        ZipOutputStream out = new ZipOutputStream(new FileOutputStream(mergedFile));
 
         LOG.info("Created project merge file: " + mergedFile.getAbsolutePath());
 
@@ -149,9 +139,9 @@ public class MergeProjectFeedsJob extends MonitorableJob {
         } else {
             try {
                 FeedVersion.feedStore.newFeed(project.id + ".zip", new FileInputStream(mergedFile), null);
-            } catch (FileNotFoundException e) {
-                e.printStackTrace();
+            } catch (IOException e) {
                 LOG.error("Could not store feed for project {}", project.id);
+                e.printStackTrace();
             }
         }
         // delete temp file
@@ -170,7 +160,7 @@ public class MergeProjectFeedsJob extends MonitorableJob {
      * @param feedSourceMap map of feedSources to zipFiles from which to extract the .txt tables
      * @return single merged table for feeds
      */
-    private static byte[] mergeTables(JsonNode tableNode, Map<FeedSource, ZipFile> feedSourceMap) {
+    private static byte[] mergeTables(JsonNode tableNode, Map<FeedSource, ZipFile> feedSourceMap) throws IOException {
 
         String tableName = tableNode.get("name").asText();
         ByteArrayOutputStream tableOut = new ByteArrayOutputStream();
@@ -257,8 +247,11 @@ public class MergeProjectFeedsJob extends MonitorableJob {
             }
         } catch (IOException e) {
             e.printStackTrace();
-            LOG.error("Error merging feed sources: {}", feedSourceMap.keySet().stream().map(fs -> fs.name).collect(Collectors.toList()).toString());
-            halt(400, SparkUtils.formatJSON("Error merging feed sources", 400, e));
+            LOG.error(
+                "Error merging feed sources: {}",
+                feedSourceMap.keySet().stream().map(fs -> fs.name).collect(Collectors.toList()).toString()
+            );
+            throw e;
         }
         return tableOut.toByteArray();
     }

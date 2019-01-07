@@ -17,7 +17,7 @@ import java.util.NavigableSet;
 
 /** A wrapped transaction, so the database just looks like a POJO */
 public class DatabaseTx {
-    public static final Logger LOG = LoggerFactory.getLogger(DatabaseTx.class);
+    private static final Logger LOG = LoggerFactory.getLogger(DatabaseTx.class);
 
     /** the database (transaction). subclasses must initialize. */
     protected final DB tx;

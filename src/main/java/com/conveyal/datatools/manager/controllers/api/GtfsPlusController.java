@@ -1,7 +1,6 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.common.utils.Consts;
-import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -20,14 +19,29 @@ import javax.servlet.MultipartConfigElement;
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.Part;
-import java.io.*;
-import java.util.*;
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Serializable;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Enumeration;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 
+import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static spark.Spark.get;
-import static spark.Spark.halt;
 import static spark.Spark.post;
 
 /**
@@ -59,9 +73,9 @@ public class GtfsPlusController {
         try {
             uploadStream = part.getInputStream();
             gtfsPlusStore.newFeed(feedVersionId, uploadStream, null);
-        } catch (Exception e) {
+        } catch (IOException e) {
             LOG.error("Unable to open input stream from upload");
-            halt("Unable to read uploaded feed");
+            logMessageAndHalt(req, 400, "Unable to open input stream from upload", e);
         }
 
         return true;
@@ -74,13 +88,13 @@ public class GtfsPlusController {
         // check for saved
         File file = gtfsPlusStore.getFeed(feedVersionId);
         if(file == null) {
-            return getGtfsPlusFromGtfs(feedVersionId, res);
+            return getGtfsPlusFromGtfs(feedVersionId, req, res);
         }
         LOG.info("Returning updated GTFS+ data");
-        return downloadGtfsPlusFile(file, res);
+        return downloadGtfsPlusFile(file, req, res);
     }
 
-    private static HttpServletResponse getGtfsPlusFromGtfs(String feedVersionId, Response res) {
+    private static HttpServletResponse getGtfsPlusFromGtfs(String feedVersionId, Request req, Response res) {
         LOG.info("Extracting GTFS+ data from main GTFS feed");
         FeedVersion version = Persistence.feedVersions.getById(feedVersionId);
 
@@ -94,7 +108,6 @@ public class GtfsPlusController {
         }
 
         try {
-
             // create a new zip file to only contain the GTFS+ tables
             gtfsPlusFile = File.createTempFile(version.id + "_gtfsplus", ".zip");
             ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(gtfsPlusFile));
@@ -119,15 +132,14 @@ public class GtfsPlusController {
                 zos.closeEntry();
             }
             zos.close();
-
-        } catch (Exception e) {
-            halt(500, "Error getting GTFS+ file from GTFS");
+        } catch (IOException e) {
+            logMessageAndHalt(req, 500, "An error occurred while trying to create a gtfs file", e);
         }
 
-        return downloadGtfsPlusFile(gtfsPlusFile, res);
+        return downloadGtfsPlusFile(gtfsPlusFile, req, res);
     }
 
-    private static HttpServletResponse downloadGtfsPlusFile(File file, Response res) {
+    private static HttpServletResponse downloadGtfsPlusFile(File file, Request req, Response res) {
         res.raw().setContentType("application/octet-stream");
         res.raw().setHeader("Content-Disposition", "attachment; filename=" + file.getName() + ".zip");
 
@@ -143,8 +155,8 @@ public class GtfsPlusController {
 
             bufferedOutputStream.flush();
             bufferedOutputStream.close();
-        } catch (Exception e) {
-            halt(500, "Error serving GTFS+ file");
+        } catch (IOException e) {
+            logMessageAndHalt(req, 500, "could not download gtfs plus file", e);
         }
 
         return res.raw();
@@ -160,14 +172,14 @@ public class GtfsPlusController {
             if (feedVersion != null) {
                 file = feedVersion.retrieveGtfsFile();
             } else {
-                halt(400, SparkUtils.formatJSON("Feed version ID is not valid", 400));
+                logMessageAndHalt(req, 400, "Feed version ID is not valid");
             }
         }
 
         if (file != null) {
             return file.lastModified();
         } else {
-            halt(400, SparkUtils.formatJSON("Feed version file not found", 400));
+            logMessageAndHalt(req, 404, "Feed version file not found");
             return null;
         }
     }
@@ -178,7 +190,7 @@ public class GtfsPlusController {
         LOG.info("Publishing GTFS+ for " + feedVersionId);
         File plusFile = gtfsPlusStore.getFeed(feedVersionId);
         if(plusFile == null || !plusFile.exists()) {
-            halt(400, "No saved GTFS+ data for version");
+            logMessageAndHalt(req, 400, "No saved GTFS+ data for version");
         }
 
         FeedVersion feedVersion = Persistence.feedVersions.getById(feedVersionId);
@@ -234,21 +246,17 @@ public class GtfsPlusController {
                 in.close();
                 zos.closeEntry();
             }
-
             zos.close();
-
-        } catch (Exception e) {
-            e.printStackTrace();
-            halt(500, "Error merging GTFS+ data with GTFS");
+        } catch (IOException e) {
+            logMessageAndHalt(req, 500, "Error creating combined GTFS/GTFS+ file", e);
         }
 
         FeedVersion newFeedVersion = new FeedVersion(feedVersion.parentFeedSource());
 
         try {
             newFeedVersion.newGtfsFile(new FileInputStream(newFeed));
-        } catch (Exception e) {
-            e.printStackTrace();
-            halt(500, "Error creating new FeedVersion from combined GTFS/GTFS+");
+        } catch (IOException e) {
+            logMessageAndHalt(req, 500, "Error creating new FeedVersion from combined GTFS/GTFS+", e);
         }
 
         newFeedVersion.hash();
@@ -294,27 +302,25 @@ public class GtfsPlusController {
                 }
             }
 
-        } catch(Exception e) {
-            e.printStackTrace();
-            halt(500);
+        } catch(IOException e) {
+            logMessageAndHalt(req, 500, "Could not read GTFS+ zip file", e);
         }
         LOG.info("GTFS+ tables found: {}/{}", gtfsPlusTableCount, DataManager.gtfsPlusConfig.size());
         return issues;
     }
 
-    private static void validateTable(Collection<ValidationIssue> issues, JsonNode tableNode, InputStream inputStream, GTFSFeed gtfsFeed) throws IOException {
-
+    private static void validateTable(
+        Collection<ValidationIssue> issues,
+        JsonNode tableNode,
+        InputStream inputStream,
+        GTFSFeed gtfsFeed
+    ) throws IOException {
         String tableId = tableNode.get("id").asText();
         BufferedReader in = new BufferedReader(new InputStreamReader(inputStream));
         String line = in.readLine();
         String[] fields = line.split(",");
         List<String> fieldList = Arrays.asList(fields);
-        for (String field : fieldList) {
-            field = field.toLowerCase();
-        }
-
         JsonNode[] fieldNodes = new JsonNode[fields.length];
-
         JsonNode fieldsNode = tableNode.get("fields");
         for(int i = 0; i < fieldsNode.size(); i++) {
             JsonNode fieldNode = fieldsNode.get(i);

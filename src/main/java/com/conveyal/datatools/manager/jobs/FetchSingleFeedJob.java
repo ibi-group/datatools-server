@@ -4,9 +4,7 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
-import com.conveyal.datatools.manager.persistence.Persistence;
-
-import java.util.Map;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 public class FetchSingleFeedJob extends MonitorableJob {
 
@@ -29,10 +27,27 @@ public class FetchSingleFeedJob extends MonitorableJob {
         status.uploading = true;
     }
 
+    /**
+     * Getter that allows a client to know the ID of the feed version that will be created as soon as the upload is
+     * initiated; however, we will not store the FeedVersion in the mongo application database until the upload and
+     * processing is completed. This prevents clients from manipulating GTFS data before it is entirely imported.
+     */
+    @JsonProperty
+    public String getFeedVersionId () {
+        // Feed version result is null unless (and until) fetch is successful.
+        return result != null ? result.id : null;
+    }
+
+    @JsonProperty
+    public String getFeedSourceId () {
+        // Feed version result is null unless (and until) fetch is successful.
+        return result != null ? result.parentFeedSource().id : null;
+    }
+
     @Override
     public void jobLogic () {
         // TODO: fetch automatically vs. manually vs. in-house
-        result = feedSource.fetch(status, owner);
+        result = feedSource.fetch(status);
 
         // Null result indicates that a fetch was not needed (GTFS has not been modified)
         // True failures will throw exceptions.
@@ -45,7 +60,7 @@ public class FetchSingleFeedJob extends MonitorableJob {
             //
             // The exception (continueThread = true) is provided for FetchProjectFeedsJob, when we want the feeds to
             // fetch and then process in sequence.
-            ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(result, this.owner);
+            ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(result, this.owner, true);
             if (continueThread) {
                 addNextJob(processSingleFeedJob);
             } else {

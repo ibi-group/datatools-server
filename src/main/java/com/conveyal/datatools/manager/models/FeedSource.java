@@ -4,8 +4,6 @@ import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.DeleteObjectsRequest;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.editor.datastore.GlobalTx;
-import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.persistence.FeedStore;
@@ -17,6 +15,7 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
+import com.mongodb.client.FindIterable;
 import com.mongodb.client.model.Sorts;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,6 +23,7 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
 import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Collection;
 import java.util.Date;
@@ -32,7 +32,6 @@ import java.util.Map;
 
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.mongodb.client.model.Filters.eq;
-import static com.mongodb.client.model.Updates.set;
 
 /**
  * Created by demory on 3/22/16.
@@ -50,7 +49,6 @@ public class FeedSource extends Model implements Cloneable {
     //@JsonView(JsonViews.DataDump.class)
     public String projectId;
 
-//    public String[] regions = {"1"};
     /**
      * Get the Project of which this feed is a part
      */
@@ -115,6 +113,8 @@ public class FeedSource extends Model implements Cloneable {
 
     public String publishedVersionId;
 
+    public String editorNamespace;
+
     /**
      * Create a new feed.
      */
@@ -132,15 +132,20 @@ public class FeedSource extends Model implements Cloneable {
         this(null);
     }
 
+
+    public FeedVersion fetch (MonitorableJob.Status status) {
+        return fetch(status, null);
+    }
     /**
-     * Fetch the latest version of the feed.
+     * Fetch the latest version of the feed. Optionally provide an override URL from which to fetch the feed. This
+     * optional URL is used for a one-level deep recursive call of fetch when a redirect is encountered.
+     *
+     * FIXME: Should the FeedSource fetch URL field be updated if a recursive call with new URL is successful?
      *
      * @return the fetched FeedVersion if a new version is available or null if nothing needs to be updated.
      */
-    public FeedVersion fetch (MonitorableJob.Status status, String fetchUser) {
+    public FeedVersion fetch (MonitorableJob.Status status, String optionalUrlOverride) {
         status.message = "Downloading file";
-
-        FeedVersion latest = retrieveLatest();
 
         // We create a new FeedVersion now, so that the fetched date is (milliseconds) before
         // fetch occurs. That way, in the highly unlikely event that a feed is updated while we're
@@ -149,14 +154,27 @@ public class FeedSource extends Model implements Cloneable {
         version.retrievalMethod = FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
 
         // build the URL from which to fetch
-        URL url = this.url;
+        URL url = null;
+        try {
+            // If an optional URL is provided (in the case of a recursive fetch) use that. Otherwise, use the fetch URL
+            url = optionalUrlOverride != null ? new URL(optionalUrlOverride) : this.url;
+        } catch (MalformedURLException e) {
+            e.printStackTrace();
+            status.fail(String.format("Could not connect to bad redirect URL %s", optionalUrlOverride));
+        }
         LOG.info("Fetching from {}", url.toString());
 
         // make the request, using the proper HTTP caching headers to prevent refetch, if applicable
         HttpURLConnection conn;
         try {
             conn = (HttpURLConnection) url.openConnection();
-        } catch (Exception e) {
+            // Set user agent request header in order to avoid 403 Forbidden response from some servers.
+            // https://stackoverflow.com/questions/13670692/403-forbidden-with-java-but-not-web-browser
+            conn.setRequestProperty(
+                    "User-Agent",
+                    "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.95 Safari/537.11"
+            );
+        } catch (IOException e) {
             String message = String.format("Unable to open connection to %s; not fetching feed %s", url, this.name);
             LOG.error(message);
             // TODO use this update function throughout this class
@@ -165,7 +183,8 @@ public class FeedSource extends Model implements Cloneable {
         }
 
         conn.setDefaultUseCaches(true);
-
+        // Get latest version to check that the fetched version does not duplicate a feed already loaded.
+        FeedVersion latest = retrieveLatest();
         // lastFetched is set to null when the URL changes and when latest feed version is deleted
         if (latest != null && this.lastFetched != null)
             conn.setIfModifiedSince(Math.min(latest.updated.getTime(), this.lastFetched.getTime()));
@@ -175,36 +194,57 @@ public class FeedSource extends Model implements Cloneable {
         try {
             conn.connect();
             String message;
-            switch (conn.getResponseCode()) {
+            int responseCode = conn.getResponseCode();
+            LOG.info("Fetch feed response code={}", responseCode);
+            switch (responseCode) {
                 case HttpURLConnection.HTTP_NOT_MODIFIED:
                     message = String.format("Feed %s has not been modified", this.name);
                     LOG.warn(message);
                     status.update(false, message, 100.0);
                     return null;
                 case HttpURLConnection.HTTP_OK:
-                case HttpURLConnection.HTTP_MOVED_TEMP:
-                case HttpURLConnection.HTTP_MOVED_PERM:
+                    // Response is OK. Continue on to save the GTFS file.
                     message = String.format("Saving %s feed.", this.name);
                     LOG.info(message);
                     status.update(false, message, 75.0);
                     newGtfsFile = version.newGtfsFile(conn.getInputStream());
                     break;
+                case HttpURLConnection.HTTP_MOVED_TEMP:
+                case HttpURLConnection.HTTP_MOVED_PERM:
+                case HttpURLConnection.HTTP_SEE_OTHER:
+                    // Get redirect url from "location" header field
+                    String newUrl = conn.getHeaderField("Location");
+                    if (optionalUrlOverride != null) {
+                        // Only permit recursion one level deep. If more than one redirect is detected, fail the job and
+                        // suggest that user try again with new URL.
+                        message = String.format("More than one redirects for fetch URL detected. Please try fetch again with latest URL: %s", newUrl);
+                        LOG.error(message);
+                        status.fail(message);
+                        return null;
+                    } else {
+                        // If override URL is null, this is the zeroth fetch. Recursively call fetch, but only one time
+                        // to prevent multiple (possibly infinite?) redirects. Any more redirects than one should
+                        // probably be met with user action to update the fetch URL.
+                        LOG.info("Recursively calling fetch feed with new URL: {}", newUrl);
+                        return fetch(status, newUrl);
+                    }
                 default:
-                    message = String.format("HTTP status (%d: %s) retrieving %s feed", conn.getResponseCode(), conn.getResponseMessage(), this.name);
+                    // Any other HTTP codes result in failure.
+                    // FIXME Are there "success" codes we're not accounting for?
+                    message = String.format("HTTP status (%d: %s) retrieving %s feed", responseCode, conn.getResponseMessage(), this.name);
                     LOG.error(message);
-                    status.update(true, message, 100.0);
+                    status.fail(message);
                     return null;
             }
         } catch (IOException e) {
             String message = String.format("Unable to connect to %s; not fetching %s feed", url, this.name);
             LOG.error(message);
-            status.update(true, message, 100.0);
+            status.fail(message);
             e.printStackTrace();
             return null;
         }
 
         // note that anything other than a new feed fetched successfully will have already returned from the function
-//        version.hash();
         version.hash = HashUtils.hashFile(newGtfsFile);
 
 
@@ -213,21 +253,27 @@ public class FeedSource extends Model implements Cloneable {
             // operators should add If-Modified-Since support to avoid wasting bandwidth.
             String message = String.format("Feed %s was fetched but has not changed; server operators should add If-Modified-Since support to avoid wasting bandwidth", this.name);
             LOG.warn(message);
-            newGtfsFile.delete();
+            String filePath = newGtfsFile.getAbsolutePath();
+            if (newGtfsFile.delete()) {
+                LOG.info("Deleting redundant GTFS file: {}", filePath);
+            } else {
+                LOG.warn("Failed to delete unneeded GTFS file at: {}", filePath);
+            }
             status.update(false, message, 100.0, true);
             return null;
         }
         else {
             version.userId = this.userId;
 
-            // FIXME: Does this work?
+            // Update last fetched value for feed source.
             Persistence.feedSources.updateField(this.id, "lastFetched", version.updated);
 
             // Set file timestamp according to last modified header from connection
             version.fileTimestamp = conn.getLastModified();
-            NotifyUsersForSubscriptionJob notifyFeedJob = new NotifyUsersForSubscriptionJob("feed-updated", this.id, "New feed version created for " + this.name);
-            DataManager.lightExecutor.execute(notifyFeedJob);
-
+            NotifyUsersForSubscriptionJob.createNotification(
+                    "feed-updated",
+                    this.id,
+                    String.format("New feed version created for %s.", this.name));
             String message = String.format("Fetch complete for %s", this.name);
             LOG.info(message);
             status.update(false, message, 100.0);
@@ -324,16 +370,6 @@ public class FeedSource extends Model implements Cloneable {
         return resourceTable;
     }
 
-    public static FeedSource retrieve(String id) {
-//        return sourceStore.getById(id);
-        return null;
-    }
-
-    public static Collection<FeedSource> retrieveAll() {
-//        return sourceStore.getAll();
-        return null;
-    }
-
     /**
      * Get all of the feed versions for this source
      * @return collection of feed versions
@@ -343,8 +379,26 @@ public class FeedSource extends Model implements Cloneable {
         return Persistence.feedVersions.getFiltered(eq("feedSourceId", this.id));
     }
 
-    @JsonView(JsonViews.UserInterface.class)
-    @JsonProperty("feedVersionCount")
+    /**
+     * Get all of the snapshots for this source
+     * @return collection of snapshots
+     */
+    @JsonIgnore
+    public Collection<Snapshot> retrieveSnapshots() {
+        return Persistence.snapshots.getFiltered(eq(Snapshot.FEED_SOURCE_REF, this.id));
+    }
+
+    /**
+     * Get all of the test deployments for this feed source.
+     * @return collection of deloyments
+     */
+    @JsonIgnore
+    public Collection<Deployment> retrieveDeployments () {
+        return Persistence.deployments.getFiltered(eq(Snapshot.FEED_SOURCE_REF, this.id));
+    }
+
+//    @JsonView(JsonViews.UserInterface.class)
+//    @JsonProperty("feedVersionCount")
     public int feedVersionCount() {
         return retrieveFeedVersions().size();
     }
@@ -413,9 +467,26 @@ public class FeedSource extends Model implements Cloneable {
     // FIXME for a brief moment feed version numbers are incoherent. Do this in a single operation or eliminate feed version numbers.
     public void renumberFeedVersions() {
         int i = 1;
-        for (FeedVersion feedVersion : Persistence.feedVersions.getMongoCollection().find(eq("feedSourceId", this.id)).sort(Sorts.ascending("updated"))) {
+        FindIterable<FeedVersion> orderedFeedVersions = Persistence.feedVersions.getMongoCollection()
+                .find(eq("feedSourceId", this.id))
+                .sort(Sorts.ascending("updated"));
+        for (FeedVersion feedVersion : orderedFeedVersions) {
             // Yes it's ugly to pass in a string, but we need to change the parameter type of update to take a Document.
             Persistence.feedVersions.update(feedVersion.id, String.format("{version:%d}", i));
+            i += 1;
+        }
+    }
+
+    // TODO don't number the snapshots just timestamp them
+    // FIXME for a brief moment snapshot numbers are incoherent. Do this in a single operation or eliminate snapshot version numbers.
+    public void renumberSnapshots() {
+        int i = 1;
+        FindIterable<Snapshot> orderedSnapshots = Persistence.snapshots.getMongoCollection()
+                .find(eq(Snapshot.FEED_SOURCE_REF, this.id))
+                .sort(Sorts.ascending("snapshotTime"));
+        for (Snapshot snapshot : orderedSnapshots) {
+            // Yes it's ugly to pass in a string, but we need to change the parameter type of update to take a Document.
+            Persistence.snapshots.updateField(snapshot.id, "version", i);
             i += 1;
         }
     }
@@ -431,39 +502,34 @@ public class FeedSource extends Model implements Cloneable {
 
     /**
      * Delete this feed source and everything that it contains.
+     *
+     * FIXME: Use a Mongo transaction to handle the deletion of these related objects.
      */
-    public void delete() {
-        retrieveFeedVersions().forEach(FeedVersion::delete);
+    public boolean delete() {
+        try {
+            retrieveFeedVersions().forEach(FeedVersion::delete);
 
-        // delete latest copy of feed source
-        if (DataManager.useS3) {
-            DeleteObjectsRequest delete = new DeleteObjectsRequest(DataManager.feedBucket);
-            delete.withKeys("public/" + this.name + ".zip", FeedStore.s3Prefix + this.id + ".zip");
-            FeedStore.s3Client.deleteObjects(delete);
+            // Delete latest copy of feed source on S3.
+            if (DataManager.useS3) {
+                DeleteObjectsRequest delete = new DeleteObjectsRequest(DataManager.feedBucket);
+                delete.withKeys("public/" + this.name + ".zip", FeedStore.s3Prefix + this.id + ".zip");
+                FeedStore.s3Client.deleteObjects(delete);
+            }
+            // Remove all external properties for this feed source.
+            Persistence.externalFeedSourceProperties.removeFiltered(eq("feedSourceId", this.id));
+
+            // FIXME: Should this delete related feed versions from the SQL database (for both published versions and
+            // editor snapshots)?
+
+            // Finally, delete the feed source mongo document.
+            return Persistence.feedSources.removeById(this.id);
+        } catch (Exception e) {
+            LOG.error("Could not delete feed source", e);
+            return false;
         }
-
-        // Delete editor feed mapdb
-        // TODO: does the mapdb folder need to be deleted separately?
-        GlobalTx gtx = VersionedDataStore.getGlobalTx();
-        if (!gtx.feeds.containsKey(id)) {
-            gtx.rollback();
-        }
-        else {
-            gtx.feeds.remove(id);
-            gtx.commit();
-        }
-
-        // FIXME use Mongo filters instead
-        Persistence.externalFeedSourceProperties.getAll().stream()
-                .filter(prop -> prop.feedSourceId.equals(this.id))
-                .forEach(prop -> Persistence.externalFeedSourceProperties.removeById(prop.id));
-
-        // TODO: add delete for osm extract and r5 network (maybe that goes with version)
-        Persistence.feedSources.removeById(this.id);
     }
 
     public FeedSource clone () throws CloneNotSupportedException {
         return (FeedSource) super.clone();
     }
-
 }
