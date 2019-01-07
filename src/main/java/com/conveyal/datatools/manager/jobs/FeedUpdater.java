@@ -1,64 +1,229 @@
 package com.conveyal.datatools.manager.jobs;
 
-import com.amazonaws.services.s3.AmazonS3Client;
-import com.conveyal.datatools.manager.DataManager;
-import com.conveyal.datatools.manager.controllers.api.GtfsApiController;
-
-import java.util.List;
-import java.util.Map;
-import java.util.Timer;
-import java.util.TimerTask;
-import java.util.concurrent.TimeUnit;
-
+import com.amazonaws.services.s3.model.ObjectListing;
+import com.amazonaws.services.s3.model.S3Object;
+import com.amazonaws.services.s3.model.S3ObjectSummary;
+import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
+import com.conveyal.datatools.manager.models.FeedSource;
+import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.persistence.FeedStore;
+import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.HashUtils;
+import com.google.common.io.ByteStreams;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.Collection;
+import java.util.Comparator;
+import java.util.Date;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+
+import static com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource.AGENCY_ID_FIELDNAME;
+import static com.conveyal.datatools.common.utils.Scheduler.schedulerService;
+import static com.mongodb.client.model.Filters.and;
+import static com.mongodb.client.model.Filters.eq;
+
 /**
- * Created by landon on 3/24/16.
+ * This class is used to schedule an {@link UpdateFeedsTask}, which will check the specified S3 bucket (and prefix) for
+ * new files. If a new feed is found, the feed will be downloaded and the {@link FeedVersion#namespace} for the feed
+ * version (for that feed source) with the most recent {@link FeedVersion#sentToExternalPublisher} timestamp will be set
+ * as the newly published version in {@link FeedSource#publishedVersionId}.
+ *
+ * This is all done to ensure that the "published" version in MTC's RTD database matches the published version in Data
+ * Tools, which is primarily used to ensure that any alerts are built using GTFS stop or route IDs from the active GTFS
+ * feed.
+ *
+ * FIXME it is currently not possible with the MTC RTD feed processing workflow because GTFS files are modified during
+ *   RTD's processing, but workflow should be replaced with a check for the processed file's MD5 checksum. Also, one RTD
+ *   state that is not captured by Data Tools is when a feed version fails to process in RTD, the RTD application places
+ *   it in a “failed” folder, yet there is no check by Data Tools to see if the feed landed there.
  */
 public class FeedUpdater {
-    public Map<String, String> eTags;
-    private static Timer timer;
-    private static AmazonS3Client s3;
+    private Map<String, String> eTagForFeed;
+    private final String feedBucket;
+    private final String bucketFolder;
+    private static final Logger LOG = LoggerFactory.getLogger(FeedUpdater.class);
 
-    public static final Logger LOG = LoggerFactory.getLogger(FeedUpdater.class);
-
-    public FeedUpdater(Map<String, String> eTagMap, int delay, int seconds) {
-        this.eTags = eTagMap;
-        DataManager.scheduler.scheduleAtFixedRate(new UpdateFeedsTask(), delay, seconds, TimeUnit.SECONDS);
+    private FeedUpdater(int updateFrequencySeconds, String feedBucket, String bucketFolder) {
+        LOG.info("Setting feed update to check every {} seconds", updateFrequencySeconds);
+        schedulerService.scheduleAtFixedRate(new UpdateFeedsTask(), 0, updateFrequencySeconds, TimeUnit.SECONDS);
+        this.feedBucket = feedBucket;
+        this.bucketFolder = bucketFolder;
     }
 
-    public void addFeedETag(String id, String eTag){
-        this.eTags.put(id, eTag);
+    /**
+     * Create a {@link FeedUpdater} to poll the provided S3 bucket/prefix at the specified interval (in seconds) for
+     * updated files. The updater's task is run using the {@link com.conveyal.datatools.common.utils.Scheduler#schedulerService}.
+     */
+    public static FeedUpdater schedule(int updateFrequencySeconds, String s3Bucket, String s3Prefix) {
+        return new FeedUpdater(updateFrequencySeconds, s3Bucket, s3Prefix);
     }
 
-    public void addFeedETags(Map<String, String> eTagList){
-        this.eTags.putAll(eTagList);
-    }
-
-    public void cancel(){
-        this.timer.cancel(); //Terminate the timer thread
-    }
-
-
-    class UpdateFeedsTask implements Runnable {
+    private class UpdateFeedsTask implements Runnable {
         public void run() {
-            LOG.info("Fetching feeds...");
-            LOG.info("Current eTag list " + eTags.toString());
-            Map<String, String> updatedTags = GtfsApiController.registerS3Feeds(eTags, GtfsApiController.feedBucket, GtfsApiController.bucketFolder);
-            Boolean feedsUpdated = updatedTags.isEmpty() ? false : true;
-            addFeedETags(updatedTags);
-            if (!feedsUpdated) {
-                LOG.info("No feeds updated...");
+            Map<String, String> updatedTags;
+            try {
+                LOG.debug("Checking MTC feeds for newly processed versions");
+                updatedTags = checkForUpdatedFeeds();
+                eTagForFeed.putAll(updatedTags);
+                if (!updatedTags.isEmpty()) LOG.info("New eTag list: {}", eTagForFeed);
+                else LOG.debug("No feeds updated (eTags on S3 match current list).");
+            } catch (Exception e) {
+                LOG.error("Error updating feeds {}", e);
             }
-            else {
-                LOG.info("New eTag list " + eTags);
-            }
-            // TODO: compare current list of eTags against list in completed folder
-
-            // TODO: load feeds for any feeds with new eTags
-//            ApiMain.loadFeedFromBucket()
         }
+    }
+
+    /**
+     * Check for any updated feeds that have been published to the S3 bucket. This tracks eTagForFeed (AWS file hash) of s3
+     * objects in order to keep data-tools application in sync with external processes (for example, MTC RTD).
+     * @return          map of feedIDs to eTag values
+     */
+    private Map<String, String> checkForUpdatedFeeds() {
+        if (eTagForFeed == null) {
+            // If running the check for the first time, instantiate the eTag map.
+            LOG.info("Running initial check for feeds on S3.");
+            eTagForFeed = new HashMap<>();
+        }
+        LOG.debug("Checking for feeds on S3.");
+        Map<String, String> newTags = new HashMap<>();
+        // iterate over feeds in download_prefix folder and register to (MTC project)
+        ObjectListing gtfsList = FeedStore.s3Client.listObjects(feedBucket, bucketFolder);
+        LOG.debug(eTagForFeed.toString());
+        for (S3ObjectSummary objSummary : gtfsList.getObjectSummaries()) {
+
+            String eTag = objSummary.getETag();
+            String keyName = objSummary.getKey();
+            LOG.debug("{} etag = {}", keyName, eTag);
+            if (!eTagForFeed.containsValue(eTag)) {
+                // Don't add object if it is a dir
+                if (keyName.equals(bucketFolder)) continue;
+                String filename = keyName.split("/")[1];
+                String feedId = filename.replace(".zip", "");
+                // Skip object if the filename is null
+                if ("null".equals(feedId)) continue;
+                try {
+                    LOG.info("New version found for {} at s3://{}/{}. ETag = {}.", feedId, feedBucket, keyName, eTag);
+                    FeedSource feedSource = null;
+                    List<ExternalFeedSourceProperty> properties = Persistence.externalFeedSourceProperties.getFiltered(
+                        and(eq("value", feedId), eq("name", AGENCY_ID_FIELDNAME))
+                    );
+                    if (properties.size() > 1) {
+                        StringBuilder b = new StringBuilder();
+                        properties.forEach(b::append);
+                        LOG.warn("Found multiple feed sources for {}: {}",
+                                feedId,
+                                properties.stream().map(p -> p.feedSourceId).collect(Collectors.joining(",")));
+                    }
+                    for (ExternalFeedSourceProperty prop : properties) {
+                        // FIXME: What if there are multiple props found for different feed sources. This could happen if
+                        // multiple projects have been synced with MTC or if the ExternalFeedSourceProperty for a feed
+                        // source is not deleted properly when the feed source is deleted.
+                        feedSource = Persistence.feedSources.getById(prop.feedSourceId);
+                    }
+                    if (feedSource == null) {
+                        LOG.error("No feed source found for feed ID {}", feedId);
+                        continue;
+                    }
+                    updatePublishedFeedVersion(feedId, feedSource);
+                    // TODO: Explore if MD5 checksum can be used to find matching feed version.
+                    // findMatchingFeedVersion(md5, feedId, feedSource);
+                } catch (Exception e) {
+                    LOG.warn("Could not load feed " + keyName, e);
+                } finally {
+                    // Add new tag to map used for tracking updates. NOTE: this is in a finally block because we still
+                    // need to track the eTags even for feed sources that were not found. Otherwise, the feeds will be
+                    // re-downloaded each time the update task is run, which could cause many unnecessary S3 operations.
+                    newTags.put(feedId, eTag);
+                }
+            } else {
+                LOG.debug("Etag {} already exists in map", eTag);
+            }
+        }
+        return newTags;
+    }
+
+    /**
+     * Update the published feed version for the feed source.
+     * @param feedId the unique ID used by MTC to identify a feed source
+     * @param feedSource the feed source for which a newly published version should be registered
+     */
+    private void updatePublishedFeedVersion(String feedId, FeedSource feedSource) {
+        // Collect the feed versions for the feed source.
+        Collection<FeedVersion> versions = feedSource.retrieveFeedVersions();
+        try {
+            // Get the latest published version (if there is one). NOTE: This is somewhat flawed because it presumes
+            // that the latest published version is guaranteed to be the one found in the "completed" folder, but it
+            // could be that more than one versions were recently "published" and the latest published version was a bad
+            // feed that failed processing by RTD.
+            Optional<FeedVersion> lastPublishedVersionCandidate = versions
+                .stream()
+                .min(Comparator.comparing(v -> v.sentToExternalPublisher, Comparator.nullsLast(Comparator.reverseOrder())));
+            if (lastPublishedVersionCandidate.isPresent()) {
+                FeedVersion publishedVersion = lastPublishedVersionCandidate.get();
+                if (publishedVersion.sentToExternalPublisher == null) {
+                    LOG.warn("Not updating published version for {} (version was never sent to external publisher)", feedId);
+                    return;
+                }
+                // Set published namespace to the feed version and set the processedByExternalPublisher timestamp.
+                LOG.info("Latest published version (sent at {}) for {} is {}", publishedVersion.sentToExternalPublisher, feedId, publishedVersion.id);
+                Persistence.feedVersions.updateField(publishedVersion.id, "processedByExternalPublisher", new Date());
+                Persistence.feedSources.updateField(feedSource.id, "publishedVersionId", publishedVersion.namespace);
+            } else {
+                LOG.error("No published versions found for {} ({} id={})", feedId, feedSource.name, feedSource.id);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+            LOG.error("Error encountered while checking for latest published version for {}", feedId);
+        }
+    }
+
+    /**
+     * NOTE: This method is not in use, but should be strongly considered as an alternative approach if/when RTD is able
+     * to maintain md5 checksums when copying a file from "waiting" folder to "completed".
+     * Find matching feed version for a feed source based on md5. NOTE: This is no longer in use because MTC's RTD system
+     * does NOT preserve MD5 checksums when moving a file from the "waiting" to "completed" folders on S3.
+     */
+    private FeedVersion findMatchingFeedVersion(String keyName, FeedSource feedSource) throws IOException {
+        String filename = keyName.split("/")[1];
+        String feedId = filename.replace(".zip", "");
+        S3Object object = FeedStore.s3Client.getObject(feedBucket, keyName);
+        InputStream in = object.getObjectContent();
+        File file = new File(FeedStore.basePath, filename);
+        OutputStream out = new FileOutputStream(file);
+        ByteStreams.copy(in, out);
+        String md5 = HashUtils.hashFile(file);
+        Collection<FeedVersion> versions = feedSource.retrieveFeedVersions();
+        LOG.info("Searching for md5 {} across {} versions for {} ({})", md5, versions.size(), feedSource.name, feedSource.id);
+        FeedVersion matchingVersion = null;
+        int count = 0;
+        for (FeedVersion feedVersion : versions) {
+            LOG.info("version {} md5: {}", count++, feedVersion.hash);
+            if (feedVersion.hash.equals(md5)) {
+                matchingVersion = feedVersion;
+                LOG.info("Found local version that matches latest file on S3  (SQL namespace={})", feedVersion.namespace);
+                if (!feedVersion.namespace.equals(feedSource.publishedVersionId)) {
+                    LOG.info("Updating published version for feed {} to latest s3 published feed.", feedId);
+                    Persistence.feedSources.updateField(feedSource.id, "publishedVersionId", feedVersion.namespace);
+                } else {
+                    LOG.info("No need to update published version (published s3 feed already matches feed source's published namespace).");
+                }
+            }
+        }
+        if (matchingVersion == null) {
+            LOG.error("Did not find version for feed {} that matched eTag found in s3!!!", feedId);
+        }
+        return matchingVersion;
     }
 
 }

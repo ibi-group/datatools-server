@@ -1,36 +1,34 @@
 package com.conveyal.datatools.manager.models;
 
-import com.conveyal.datatools.manager.persistence.DataStore;
-import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-import java.util.*;
+import java.util.Collection;
+import java.util.List;
 import java.util.stream.Collectors;
+
+import static com.mongodb.client.model.Filters.eq;
 
 /**
  * Represents a collection of feed sources that can be made into a deployment.
  * Generally, this would represent one agency that is managing the data.
- * For now, there is one FeedCollection per instance of GTFS data manager, but
+ * For now, there is one Project per instance of GTFS data manager, but
  * we're trying to write the code in such a way that this is not necessary.
  *
  * @author mattwigway
  *
  */
-@JsonInclude(Include.ALWAYS)
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class Project extends Model {
     private static final long serialVersionUID = 1L;
+    private static final Logger LOG = LoggerFactory.getLogger(Project.class);
 
-    private static DataStore<Project> projectStore = new DataStore<>("projects");
-
-    /** The name of this feed collection, e.g. NYSDOT. */
+    /** The name of this project, e.g. NYSDOT. */
     public String name;
 
-    public Boolean useCustomOsmBounds;
-
-    public Double osmNorth, osmSouth, osmEast, osmWest;
+    public boolean useCustomOsmBounds;
 
     public OtpBuildConfig buildConfig;
 
@@ -40,30 +38,30 @@ public class Project extends Model {
 
     public String organizationId;
 
-    @JsonIgnore
-    public OtpServer getServer (String name) {
+    /**
+     * Locate and return an OTP server contained within the project that matches the name argument.
+     */
+    public OtpServer retrieveServer(String name) {
+        if (name == null) return null;
         for (OtpServer otpServer : otpServers) {
-            if (otpServer.name.equals(name)) {
+            if (otpServer.name == null) continue;
+            if (name.equals(otpServer.name) || name.equals(otpServer.target())) {
                 return otpServer;
             }
         }
+        LOG.warn("Could not find OTP server with name {}", name);
         return null;
     }
 
     public String defaultTimeZone;
-
-    public String defaultLanguage;
-
-    //@JsonView
-    public Collection<FeedSource> feedSources;
-
-    public Double defaultLocationLat, defaultLocationLon;
-    public Boolean autoFetchFeeds;
+    public boolean autoFetchFeeds;
     public int autoFetchHour, autoFetchMinute;
 
-//    public Map<String, Double> boundingBox = new HashMap<>();
+    public transient Collection<FeedSource> feedSources;
 
-    public Double north, south, east, west;
+    // Bounds is used for either OSM custom deployment bounds (if useCustomOsmBounds is true)
+    // and/or for applying a geographic filter when syncing with external feed registries.
+    public Bounds bounds;
 
     public Project() {
         this.buildConfig = new OtpBuildConfig();
@@ -72,75 +70,46 @@ public class Project extends Model {
     }
 
     /**
-     * Get all of the FeedCollections that are defined
+     * Get all the feed sources for this project.
      */
-    public static Collection<Project> getAll () {
-        return projectStore.getAll();
-    }
-
-    public static Project get(String id) {
-        return projectStore.getById(id);
-    }
-
-    public void save() {
-        save(true);
-    }
-
-    public void save(boolean commit) {
-        if (commit)
-            projectStore.save(this.id, this);
-        else
-            projectStore.saveWithoutCommit(this.id, this);
-    }
-
-    public void delete() {
-        for (FeedSource s : getProjectFeedSources()) {
-            s.delete();
-        }
-        for (Deployment d : getProjectDeployments()) {
-            d.delete();
-        }
-
-        projectStore.delete(this.id);
-    }
-
-    public static void commit () {
-        projectStore.commit();
-    }
-
-    /**
-     * Get all the feed sources for this feed collection
-     */
-    @JsonIgnore
-    public Collection<FeedSource> getProjectFeedSources() {
-//        ArrayList<? extends FeedSource> ret = new ArrayList<>();
-
+    public Collection<FeedSource> retrieveProjectFeedSources() {
         // TODO: use index, but not important for now because we generally only have one FeedCollection
-        return FeedSource.getAll().stream().filter(fs -> this.id.equals(fs.projectId)).collect(Collectors.toList());
+        return Persistence.feedSources.getAll().stream()
+                .filter(fs -> this.id.equals(fs.projectId))
+                .collect(Collectors.toList());
+    }
 
-    }
-    public int getNumberOfFeeds () {
-        return FeedSource.getAll().stream().filter(fs -> this.id.equals(fs.projectId)).collect(Collectors.toList()).size();
-    }
+    // Note: Previously a numberOfFeeds() dynamic Jackson JsonProperty was in place here. But when the number of projects
+    // in the database grows large, the efficient calculation of this field does not scale.
+
     /**
-     * Get all the deployments for this feed collection
+     * Get all the deployments for this project.
      */
-
-    @JsonIgnore
-    public Collection<Deployment> getProjectDeployments() {
-        ArrayList<Deployment> ret = Deployment.getAll().stream()
-                .filter(d -> this.id.equals(d.projectId))
-                .collect(Collectors.toCollection(ArrayList::new));
-
-        return ret;
+    public Collection<Deployment> retrieveDeployments() {
+        List<Deployment> deployments = Persistence.deployments
+                .getFiltered(eq("projectId", this.id));
+        return deployments;
     }
 
-    @JsonIgnore
-    public Organization getOrganization() {
+    // TODO: Does this need to be returned with JSON API response
+    public Organization retrieveOrganization() {
         if (organizationId != null) {
-            return Organization.get(organizationId);
+            return Persistence.organizations.getById(organizationId);
         } else {
             return null;
         }
+    }
+
+    public boolean delete() {
+        // FIXME: Handle this in a Mongo transaction. See https://docs.mongodb.com/master/core/transactions/#transactions-and-mongodb-drivers
+//        ClientSession clientSession = Persistence.startSession();
+//        clientSession.startTransaction();
+
+        // Delete each feed source in the project (which in turn deletes each feed version).
+        retrieveProjectFeedSources().forEach(FeedSource::delete);
+        // Delete each deployment in the project.
+        retrieveDeployments().forEach(Deployment::delete);
+        // Finally, delete the project.
+        return Persistence.projects.removeById(this.id);
     }
 }

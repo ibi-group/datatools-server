@@ -56,7 +56,7 @@ public class MigrateToMapDB {
 //    /** cache custom calendars, exception ID -> calendar ID*/
 //    private Multimap<String, String> exceptionCalendars = HashMultimap.create();
 //
-//    /** route ID -> agency ID, needed because we need the agency ID to get a reference to the route . . . */
+//    /** route ID -> agency ID, needed because we need the agency ID to retrieve a reference to the route . . . */
 //    TLongLongMap routeAgencyMap = new TLongLongHashMap();
 //
 //    /** pattern ID -> agency ID */
@@ -114,18 +114,18 @@ public class MigrateToMapDB {
 //        int count = 0;
 //        while (reader.readRecord()) {
 //            Agency a = new Agency();
-//            a.id = reader.get("id");
-//            a.color = reader.get("color");
+//            a.id = reader.retrieve("id");
+//            a.color = reader.retrieve("color");
 //            a.defaultLon = reader.getDouble("defaultlon");
 //            a.defaultLat = reader.getDouble("defaultlat");
-//            a.gtfsAgencyId = reader.get("gtfsagencyid");
-//            a.lang = reader.get("lang");
-//            a.name = reader.get("name");
-//            a.phone = reader.get("phone");
-//            a.timezone = reader.get("timezone");
-//            a.url = reader.get("url");
+//            a.gtfsAgencyId = reader.retrieve("gtfsagencyid");
+//            a.lang = reader.retrieve("lang");
+//            a.name = reader.retrieve("name");
+//            a.phone = reader.retrieve("phone");
+//            a.timezone = reader.retrieve("timezone");
+//            a.url = reader.retrieve("url");
 //            // easy to maintain referential integrity; we're retaining DB IDs.
-//            a.routeTypeId = reader.get("defaultroutetype_id");
+//            a.routeTypeId = reader.retrieve("defaultroutetype_id");
 //
 //            gtx.feeds.put(a.id, a);
 //            count++;
@@ -142,12 +142,12 @@ public class MigrateToMapDB {
 //        int count = 0;
 //
 //        while (reader.readRecord()) {
-//            String username = reader.get("username");
+//            String username = reader.retrieve("username");
 //            Boolean admin = reader.getBoolean("admin");
-//            String email = reader.get("email");
-//            String agencyId = reader.get("agency_id");
+//            String email = reader.retrieve("email");
+//            String agencyId = reader.retrieve("agency_id");
 //            Account a = new Account(username, "password", email, admin, agencyId);
-//            a.password = reader.get("password");
+//            a.password = reader.retrieve("password");
 //            a.active = reader.getBoolean("active");
 //            a.id = a.username;
 //
@@ -170,23 +170,23 @@ public class MigrateToMapDB {
 //        while (reader.readRecord()) {
 //            Stop s = new Stop();
 //            s.location = gf.createPoint(new Coordinate(reader.getDouble("lon"), reader.getDouble("lat")));
-//            s.agencyId = reader.get("agency_id");
+//            s.agencyId = reader.retrieve("agency_id");
 //            s.bikeParking = reader.getAvail("bikeparking");
 //            s.carParking = reader.getAvail("carparking");
 //            s.dropOffType = reader.getPdType("dropofftype");
 //            s.pickupType = reader.getPdType("pickuptype");
-//            s.gtfsStopId = reader.get("gtfsstopid");
+//            s.gtfsStopId = reader.retrieve("gtfsstopid");
 //            s.locationType = reader.getLocationType("locationtype");
 //            s.majorStop = reader.getBoolean("majorstop");
-//            s.parentStation = reader.get("parentstation");
-//            s.stopCode = reader.get("stopcode");
-//            s.stopIconUrl = reader.get("stopiconurl");
-//            s.stopDesc = reader.get("stopdesc");
-//            s.stopName = reader.get("stopname");
-//            s.stopUrl = reader.get("stopurl");
+//            s.parentStation = reader.retrieve("parentstation");
+//            s.stopCode = reader.retrieve("stopcode");
+//            s.stopIconUrl = reader.retrieve("stopiconurl");
+//            s.stopDesc = reader.retrieve("stopdesc");
+//            s.stopName = reader.retrieve("stopname");
+//            s.stopUrl = reader.retrieve("stopurl");
 //            s.wheelchairBoarding = reader.getAvail("wheelchairboarding");
-//            s.zoneId = reader.get("zoneid");
-//            s.id = reader.get("id");
+//            s.zoneId = reader.retrieve("zoneid");
+//            s.id = reader.retrieve("id");
 //
 //            getFeedTx(s.agencyId).stops.put(s.id, s);
 //            count ++;
@@ -206,20 +206,20 @@ public class MigrateToMapDB {
 //
 //        while (reader.readRecord()) {
 //            Route r = new Route();
-//            r.id = reader.get("id");
-//            r.comments = reader.get("comments");
-//            r.gtfsRouteId = reader.get("gtfsrouteid");
-//            r.routeColor = reader.get("routecolor");
-//            r.routeDesc = reader.get("routedesc");
-//            r.routeLongName = reader.get("routelongname");
-//            r.routeShortName = reader.get("routeshortname");
-//            r.routeTextColor = reader.get("routetextcolor");
-//            r.routeUrl = reader.get("routeurl");
-//            String status = reader.get("status");
+//            r.id = reader.retrieve("id");
+//            r.comments = reader.retrieve("comments");
+//            r.gtfsRouteId = reader.retrieve("gtfsrouteid");
+//            r.routeColor = reader.retrieve("routecolor");
+//            r.routeDesc = reader.retrieve("routedesc");
+//            r.routeLongName = reader.retrieve("routelongname");
+//            r.routeShortName = reader.retrieve("routeshortname");
+//            r.routeTextColor = reader.retrieve("routetextcolor");
+//            r.routeUrl = reader.retrieve("routeurl");
+//            String status = reader.retrieve("status");
 //            r.status = status != null ? StatusType.valueOf(status) : null;
 //            r.wheelchairBoarding = reader.getAvail("wheelchairboarding");
-//            r.agencyId = reader.get("agency_id");
-//            r.routeTypeId = reader.get("routetype_id");
+//            r.agencyId = reader.retrieve("agency_id");
+//            r.routeTypeId = reader.retrieve("routetype_id");
 //
 //            // cache the agency ID
 //            routeAgencyMap.put(Long.parseLong(r.id), Long.parseLong(r.agencyId));
@@ -243,7 +243,7 @@ public class MigrateToMapDB {
 //        int count = 0;
 //
 //        while (reader.readRecord()) {
-//            shapeCache.put(reader.get("id"), reader.getLineString("shape"));
+//            shapeCache.put(reader.retrieve("id"), reader.getLineString("shape"));
 //            count++;
 //        }
 //
@@ -265,10 +265,10 @@ public class MigrateToMapDB {
 //            Integer ddt = reader.getInteger("defaultdwelltime");
 //            tps.defaultDwellTime = ddt != null ? ddt : 0;
 //            tps.timepoint = reader.getBoolean("timepoint");
-//            tps.stopId = reader.get("stop_id");
+//            tps.stopId = reader.retrieve("stop_id");
 //            // note: not reading shape_dist_traveled as it was incorrectly computed. We'll recompute at the end.
 //
-//            Fun.Tuple2<String, Integer> key = new Fun.Tuple2(reader.get("pattern_id"), reader.getInteger("stopsequence"));
+//            Fun.Tuple2<String, Integer> key = new Fun.Tuple2(reader.retrieve("pattern_id"), reader.getInteger("stopsequence"));
 //
 //            // make sure that we don't have a mess on our hands due to data import issues far in the past.
 //            if (patternStopCache.containsKey(key)) {
@@ -292,18 +292,18 @@ public class MigrateToMapDB {
 //
 //        while (reader.readRecord()) {
 //            TripPattern p = new TripPattern();
-//            p.id = reader.get("id");
-//            p.headsign = reader.get("headsign");
-//            p.name = reader.get("name");
-//            p.routeId = reader.get("route_id");
-//            String shapeId = reader.get("shape_id");
-//            p.shape = shapeId != null ? shapeCache.get(shapeId) : null;
+//            p.id = reader.retrieve("id");
+//            p.headsign = reader.retrieve("headsign");
+//            p.name = reader.retrieve("name");
+//            p.routeId = reader.retrieve("route_id");
+//            String shapeId = reader.retrieve("shape_id");
+//            p.shape = shapeId != null ? shapeCache.retrieve(shapeId) : null;
 //
-//            // get the pattern stops
+//            // retrieve the pattern stops
 //            p.patternStops = new ArrayList<TripPatternStop>();
 //            p.patternStops.addAll(patternStopCache.subMap(new Fun.Tuple2(p.id, null), new Fun.Tuple2(p.id, Fun.HI)).values());
 //
-//            p.agencyId = routeAgencyMap.get(Long.parseLong(p.routeId)) + "";
+//            p.agencyId = routeAgencyMap.retrieve(Long.parseLong(p.routeId)) + "";
 //            patternAgencyMap.put(Long.parseLong(p.id), Long.parseLong(p.agencyId));
 //
 //            p.calcShapeDistTraveled(getFeedTx(p.agencyId));
@@ -333,12 +333,12 @@ public class MigrateToMapDB {
 //            st.departureTime = reader.getInteger("departuretime");
 //            // note: not reading shape_dist_traveled as it was incorrectly computed. We'll recompute at the end.
 //
-//            st.stopHeadsign = reader.get("stopheadsign");
+//            st.stopHeadsign = reader.retrieve("stopheadsign");
 //            st.dropOffType = reader.getPdType("dropofftype");
 //            st.pickupType = reader.getPdType("pickuptype");
-//            st.stopId = reader.get("stop_id");
+//            st.stopId = reader.retrieve("stop_id");
 //
-//            Fun.Tuple2<String, Integer> key = new Fun.Tuple2(reader.get("trip_id"), reader.getInteger("stopsequence"));
+//            Fun.Tuple2<String, Integer> key = new Fun.Tuple2(reader.retrieve("trip_id"), reader.getInteger("stopsequence"));
 //
 //            if (stopTimeCache.containsKey(key)) {
 //                throw new IllegalStateException("Duplicate stop times!");
@@ -358,34 +358,34 @@ public class MigrateToMapDB {
 //
 //        while (reader.readRecord()) {
 //            Trip t = new Trip();
-//            t.id = reader.get("id");
-//            t.blockId = reader.get("blockid");
+//            t.id = reader.retrieve("id");
+//            t.blockId = reader.retrieve("blockid");
 //            t.endTime = reader.getInteger("endtime");
-//            t.gtfsTripId = reader.get("gtfstripid");
+//            t.gtfsTripId = reader.retrieve("gtfstripid");
 //            t.headway = reader.getInteger("headway");
 //            t.invalid = reader.getBoolean("invalid");
 //            t.startTime = reader.getInteger("starttime");
-//            t.tripDescription = reader.get("tripdescription");
-//            String dir =  reader.get("tripdirection");
+//            t.tripDescription = reader.retrieve("tripdescription");
+//            String dir =  reader.retrieve("tripdirection");
 //            t.tripDirection = dir != null ? TripDirection.valueOf(dir) : null;
-//            t.tripHeadsign = reader.get("tripheadsign");
-//            t.tripShortName = reader.get("tripshortname");
+//            t.tripHeadsign = reader.retrieve("tripheadsign");
+//            t.tripShortName = reader.retrieve("tripshortname");
 //            t.useFrequency = reader.getBoolean("usefrequency");
 //            t.wheelchairBoarding = reader.getAvail("wheelchairboarding");
-//            t.patternId = reader.get("pattern_id");
-//            t.routeId = reader.get("route_id");
-//            t.calendarId = reader.get("servicecalendar_id");
-//            t.agencyId = routeAgencyMap.get(Long.parseLong(t.routeId)) + "";
+//            t.patternId = reader.retrieve("pattern_id");
+//            t.routeId = reader.retrieve("route_id");
+//            t.calendarId = reader.retrieve("servicecalendar_id");
+//            t.agencyId = routeAgencyMap.retrieve(Long.parseLong(t.routeId)) + "";
 //
-//            // get stop times
+//            // retrieve stop times
 //            // make sure we put nulls in as needed for skipped stops
 //            t.stopTimes = new ArrayList<StopTime>();
 //
 //            // loop over the pattern stops and find the stop times that match
 //            for (Map.Entry<Fun.Tuple2<String, Integer>, TripPatternStop> entry :
 //                    patternStopCache.subMap(new Fun.Tuple2(t.patternId, null), new Fun.Tuple2(t.patternId, Fun.HI)).entrySet()) {
-//                // get the appropriate stop time, or null if the stop is skipped
-//                StopTime st = stopTimeCache.get(new Fun.Tuple2(t.id, entry.getKey().b));
+//                // retrieve the appropriate stop time, or null if the stop is skipped
+//                StopTime st = stopTimeCache.retrieve(new Fun.Tuple2(t.id, entry.getKey().b));
 //                t.stopTimes.add(st);
 //
 //                if (st != null)
@@ -411,13 +411,13 @@ public class MigrateToMapDB {
 //
 //        while (reader.readRecord()) {
 //            RouteType rt = new RouteType();
-//            rt.id = reader.get("id");
-//            rt.description = reader.get("description");
-//            String grt = reader.get("gtfsroutetype");
+//            rt.id = reader.retrieve("id");
+//            rt.description = reader.retrieve("description");
+//            String grt = reader.retrieve("gtfsroutetype");
 //            rt.gtfsRouteType = grt != null ? GtfsRouteType.valueOf(grt) : null;
-//            String hvt = reader.get("hvtroutetype");
+//            String hvt = reader.retrieve("hvtroutetype");
 //            rt.hvtRouteType = hvt != null ? HvtRouteType.valueOf(hvt) : null;
-//            rt.localizedVehicleType = reader.get("localizedvehicletype");
+//            rt.localizedVehicleType = reader.retrieve("localizedvehicletype");
 //            gtx.routeTypes.put(rt.id, rt);
 //            count++;
 //        }
@@ -433,11 +433,11 @@ public class MigrateToMapDB {
 //
 //        while (reader.readRecord()) {
 //            ServiceCalendar c = new ServiceCalendar();
-//            c.id = reader.get("id");
-//            c.description = reader.get("description");
+//            c.id = reader.retrieve("id");
+//            c.description = reader.retrieve("description");
 //            c.endDate = reader.getLocalDate("enddate");
 //            c.startDate = reader.getLocalDate("startdate");
-//            c.gtfsServiceId = reader.get("gtfsserviceid");
+//            c.gtfsServiceId = reader.retrieve("gtfsserviceid");
 //            c.monday = reader.getBoolean("monday");
 //            c.tuesday = reader.getBoolean("tuesday");
 //            c.wednesday = reader.getBoolean("wednesday");
@@ -445,7 +445,7 @@ public class MigrateToMapDB {
 //            c.friday = reader.getBoolean("friday");
 //            c.saturday = reader.getBoolean("saturday");
 //            c.sunday = reader.getBoolean("sunday");
-//            c.agencyId = reader.get("agency_id");
+//            c.agencyId = reader.retrieve("agency_id");
 //
 //            getFeedTx(c.agencyId).calendars.put(c.id, c);
 //            count++;
@@ -462,7 +462,7 @@ public class MigrateToMapDB {
 //        int count = 0;
 //
 //        while (reader.readRecord()) {
-//            exceptionDates.put(reader.get("scheduleexception_id"), reader.getLocalDate("dates"));
+//            exceptionDates.put(reader.retrieve("scheduleexception_id"), reader.getLocalDate("dates"));
 //            count++;
 //        }
 //
@@ -477,7 +477,7 @@ public class MigrateToMapDB {
 //        int count = 0;
 //
 //        while (reader.readRecord()) {
-//            exceptionCalendars.put(reader.get("scheduleexception_id"), reader.get("customschedule_id"));
+//            exceptionCalendars.put(reader.retrieveById("scheduleexception_id"), reader.retrieveById("customschedule_id"));
 //            count++;
 //        }
 //
@@ -493,13 +493,13 @@ public class MigrateToMapDB {
 //
 //        while (reader.readRecord()) {
 //            ScheduleException e = new ScheduleException();
-//            e.id = reader.get("id");
-//            e.exemplar = ScheduleException.ExemplarServiceDescriptor.valueOf(reader.get("exemplar"));
-//            e.name = reader.get("name");
-//            e.agencyId = reader.get("agency_id");
+//            e.id = reader.retrieve("id");
+//            e.exemplar = ScheduleException.ExemplarServiceDescriptor.valueOf(reader.retrieve("exemplar"));
+//            e.name = reader.retrieve("name");
+//            e.agencyId = reader.retrieve("agency_id");
 //
-//            e.dates = new ArrayList<LocalDate>(exceptionDates.get(e.id));
-//            e.customSchedule = new ArrayList<String>(exceptionCalendars.get(e.id));
+//            e.dates = new ArrayList<LocalDate>(exceptionDates.retrieve(e.id));
+//            e.customSchedule = new ArrayList<String>(exceptionCalendars.retrieve(e.id));
 //
 //            getFeedTx(e.agencyId).exceptions.put(e.id, e);
 //            count++;
@@ -522,7 +522,7 @@ public class MigrateToMapDB {
 //        if (!atxes.containsKey(agencyId))
 //            atxes.put(agencyId, VersionedDataStore.getFeedTx(agencyId));
 //
-//        return atxes.get(agencyId);
+//        return atxes.retrieve(agencyId);
 //    }
 //
 //    private static class DatabaseCsv {
@@ -542,8 +542,8 @@ public class MigrateToMapDB {
 //            return reader.readRecord();
 //        }
 //
-//        public String get (String column) throws IOException {
-//            String ret = reader.get(column);
+//        public String retrieve (String column) throws IOException {
+//            String ret = reader.retrieve(column);
 //            if (ret.isEmpty())
 //                return null;
 //
@@ -552,7 +552,7 @@ public class MigrateToMapDB {
 //
 //        public Double getDouble(String column) {
 //            try {
-//                String dbl = reader.get(column);
+//                String dbl = reader.retrieve(column);
 //                return Double.parseDouble(dbl);
 //            } catch (Exception e) {
 //                return null;
@@ -560,7 +560,7 @@ public class MigrateToMapDB {
 //        }
 //
 //        public StopTimePickupDropOffType getPdType (String column) throws Exception {
-//            String val = reader.get(column);
+//            String val = reader.retrieve(column);
 //
 //            try {
 //                return StopTimePickupDropOffType.valueOf(val);
@@ -570,7 +570,7 @@ public class MigrateToMapDB {
 //        }
 //
 //        public Boolean getBoolean (String column) throws Exception {
-//            String val = get(column);
+//            String val = retrieve(column);
 //
 //            if (val == null)
 //                return null;
@@ -587,7 +587,7 @@ public class MigrateToMapDB {
 //        }
 //
 //        public LineString getLineString (String column) throws Exception {
-//            String val = reader.get(column);
+//            String val = reader.retrieve(column);
 //
 //            try {
 //                return (LineString) new WKTReader().read(val);
@@ -597,7 +597,7 @@ public class MigrateToMapDB {
 //        }
 //
 //        public AttributeAvailabilityType getAvail (String column) throws Exception {
-//            String val = reader.get(column);
+//            String val = reader.retrieve(column);
 //
 //            try {
 //                return AttributeAvailabilityType.valueOf(val);
@@ -607,7 +607,7 @@ public class MigrateToMapDB {
 //        }
 //
 //        public Integer getInteger (String column) throws Exception {
-//            String val = reader.get(column);
+//            String val = reader.retrieve(column);
 //
 //            try {
 //                return Integer.parseInt(val);
@@ -617,7 +617,7 @@ public class MigrateToMapDB {
 //        }
 //
 //        public LocationType getLocationType (String column) throws Exception {
-//            String val = reader.get(column);
+//            String val = reader.retrieve(column);
 //
 //            try {
 //                return LocationType.valueOf(val);
@@ -627,7 +627,7 @@ public class MigrateToMapDB {
 //        }
 //
 //        public LocalDate getLocalDate (String column) throws Exception {
-//            String val = get(column);
+//            String val = retrieve(column);
 //
 //            try {
 //                Matcher m = datePattern.matcher(val);

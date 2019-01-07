@@ -1,11 +1,15 @@
 package com.conveyal.datatools.manager.controllers.api;
 
+import com.conveyal.datatools.common.utils.Consts;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.FeedStore;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.conveyal.gtfs.GTFSFeed;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
@@ -13,15 +17,31 @@ import spark.Response;
 
 import javax.servlet.MultipartConfigElement;
 import javax.servlet.ServletException;
+import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.Part;
-import java.io.*;
-import java.util.*;
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Serializable;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Enumeration;
+import java.util.HashSet;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static spark.Spark.get;
-import static spark.Spark.halt;
 import static spark.Spark.post;
 
 /**
@@ -36,7 +56,7 @@ public class GtfsPlusController {
 
     public static Boolean uploadGtfsPlusFile (Request req, Response res) throws IOException, ServletException {
 
-        //FeedSource s = FeedSource.get(req.queryParams("feedSourceId"));
+        //FeedSource s = FeedSource.retrieveById(req.queryParams("feedSourceId"));
         String feedVersionId = req.params("versionid");
 
         if (req.raw().getAttribute("org.eclipse.jetty.multipartConfig") == null) {
@@ -52,32 +72,31 @@ public class GtfsPlusController {
         InputStream uploadStream;
         try {
             uploadStream = part.getInputStream();
-            //v.newGtfsFile(uploadStream);
             gtfsPlusStore.newFeed(feedVersionId, uploadStream, null);
         } catch (Exception e) {
             LOG.error("Unable to open input stream from upload");
-            halt("Unable to read uploaded feed");
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         }
 
         return true;
     }
 
-    private static Object getGtfsPlusFile(Request req, Response res) {
+    private static HttpServletResponse getGtfsPlusFile(Request req, Response res) {
         String feedVersionId = req.params("versionid");
         LOG.info("Downloading GTFS+ file for FeedVersion " + feedVersionId);
 
         // check for saved
         File file = gtfsPlusStore.getFeed(feedVersionId);
         if(file == null) {
-            return getGtfsPlusFromGtfs(feedVersionId, res);
+            return getGtfsPlusFromGtfs(feedVersionId, req, res);
         }
         LOG.info("Returning updated GTFS+ data");
-        return downloadGtfsPlusFile(file, res);
+        return downloadGtfsPlusFile(file, req, res);
     }
 
-    private static Object getGtfsPlusFromGtfs(String feedVersionId, Response res) {
+    private static HttpServletResponse getGtfsPlusFromGtfs(String feedVersionId, Request req, Response res) {
         LOG.info("Extracting GTFS+ data from main GTFS feed");
-        FeedVersion version = FeedVersion.get(feedVersionId);
+        FeedVersion version = Persistence.feedVersions.getById(feedVersionId);
 
         File gtfsPlusFile = null;
 
@@ -95,7 +114,7 @@ public class GtfsPlusController {
             ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(gtfsPlusFile));
 
             // iterate through the existing GTFS file, copying any GTFS+ tables
-            ZipFile gtfsFile = new ZipFile(version.getGtfsFile());
+            ZipFile gtfsFile = new ZipFile(version.retrieveGtfsFile());
             final Enumeration<? extends ZipEntry> entries = gtfsFile.entries();
             byte[] buffer = new byte[512];
             while (entries.hasMoreElements()) {
@@ -116,13 +135,13 @@ public class GtfsPlusController {
             zos.close();
 
         } catch (Exception e) {
-            halt(500, "Error getting GTFS+ file from GTFS");
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         }
 
-        return downloadGtfsPlusFile(gtfsPlusFile, res);
+        return downloadGtfsPlusFile(gtfsPlusFile, req, res);
     }
 
-    private static Object downloadGtfsPlusFile(File file, Response res) {
+    private static HttpServletResponse downloadGtfsPlusFile(File file, Request req, Response res) {
         res.raw().setContentType("application/octet-stream");
         res.raw().setHeader("Content-Disposition", "attachment; filename=" + file.getName() + ".zip");
 
@@ -138,8 +157,10 @@ public class GtfsPlusController {
 
             bufferedOutputStream.flush();
             bufferedOutputStream.close();
-        } catch (Exception e) {
-            halt(500, "Error serving GTFS+ file");
+        } catch (IOException e) {
+            LOG.error("An error occurred while trying to download a gtfs plus file");
+            e.printStackTrace();
+            haltWithMessage(req, 500, "An error occurred while trying to download a gtfs plus file", e);
         }
 
         return res.raw();
@@ -150,23 +171,33 @@ public class GtfsPlusController {
 
         // check for saved GTFS+ data
         File file = gtfsPlusStore.getFeed(feedVersionId);
-        if(file == null) {
-            FeedVersion feedVersion = FeedVersion.get(feedVersionId);
-            file = feedVersion.getGtfsFile();
+        if (file == null) {
+            FeedVersion feedVersion = Persistence.feedVersions.getById(feedVersionId);
+            if (feedVersion != null) {
+                file = feedVersion.retrieveGtfsFile();
+            } else {
+                haltWithMessage(req, 400, "Feed version ID is not valid");
+            }
         }
 
-        return file.lastModified();
+        if (file != null) {
+            return file.lastModified();
+        } else {
+            haltWithMessage(req, 404, "Feed version file not found");
+            return null;
+        }
     }
 
     private static Boolean publishGtfsPlusFile(Request req, Response res) {
+        Auth0UserProfile profile = req.attribute("user");
         String feedVersionId = req.params("versionid");
         LOG.info("Publishing GTFS+ for " + feedVersionId);
         File plusFile = gtfsPlusStore.getFeed(feedVersionId);
         if(plusFile == null || !plusFile.exists()) {
-            halt(400, "No saved GTFS+ data for version");
+            haltWithMessage(req, 400, "No saved GTFS+ data for version");
         }
 
-        FeedVersion feedVersion = FeedVersion.get(feedVersionId);
+        FeedVersion feedVersion = Persistence.feedVersions.getById(feedVersionId);
 
         // create a set of valid GTFS+ table names
         Set<String> gtfsPlusTables = new HashSet<>();
@@ -184,7 +215,7 @@ public class GtfsPlusController {
             ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(newFeed));
 
             // iterate through the existing GTFS file, copying all non-GTFS+ tables
-            ZipFile gtfsFile = new ZipFile(feedVersion.getGtfsFile());
+            ZipFile gtfsFile = new ZipFile(feedVersion.retrieveGtfsFile());
             final Enumeration<? extends ZipEntry> entries = gtfsFile.entries();
             byte[] buffer = new byte[512];
             while (entries.hasMoreElements()) {
@@ -224,28 +255,24 @@ public class GtfsPlusController {
 
         } catch (Exception e) {
             e.printStackTrace();
-            halt(500, "Error merging GTFS+ data with GTFS");
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         }
 
-        FeedVersion newFeedVersion = new FeedVersion(feedVersion.getFeedSource());
+        FeedVersion newFeedVersion = new FeedVersion(feedVersion.parentFeedSource());
 
         try {
             newFeedVersion.newGtfsFile(new FileInputStream(newFeed));
         } catch (Exception e) {
             e.printStackTrace();
-            halt(500, "Error creating new FeedVersion from combined GTFS/GTFS+");
+            haltWithMessage(req, 500, "Error creating new FeedVersion from combined GTFS/GTFS+", e);
         }
 
         newFeedVersion.hash();
 
         // validation for the main GTFS content hasn't changed
         newFeedVersion.validationResult = feedVersion.validationResult;
-
-        newFeedVersion.save();
-
-        for(String resourceType : DataManager.feedResources.keySet()) {
-            DataManager.feedResources.get(resourceType).feedVersionCreated(newFeedVersion, null);
-        }
+        newFeedVersion.storeUser(profile);
+        Persistence.feedVersions.create(newFeedVersion);
 
         return true;
     }
@@ -253,19 +280,21 @@ public class GtfsPlusController {
     private static Collection<ValidationIssue> getGtfsPlusValidation(Request req, Response res) {
         String feedVersionId = req.params("versionid");
         LOG.info("Validating GTFS+ for " + feedVersionId);
-        FeedVersion feedVersion = FeedVersion.get(feedVersionId);
+        FeedVersion feedVersion = Persistence.feedVersions.getById(feedVersionId);
 
         List<ValidationIssue> issues = new LinkedList<>();
 
 
         // load the main GTFS
-        GTFSFeed gtfsFeed = feedVersion.getGtfsFeed();
+        // FIXME: fix gtfs+ loading/validating for sql-load
+        GTFSFeed gtfsFeed = null; // feedVersion.retrieveFeed();
         // check for saved GTFS+ data
         File file = gtfsPlusStore.getFeed(feedVersionId);
-        if(file == null) {
-            file = feedVersion.getGtfsFile();
+        if (file == null) {
+            LOG.warn("GTFS+ file not found, loading from main version GTFS.");
+            file = feedVersion.retrieveGtfsFile();
         }
-
+        int gtfsPlusTableCount = 0;
         try {
             ZipFile zipFile = new ZipFile(file);
             final Enumeration<? extends ZipEntry> entries = zipFile.entries();
@@ -275,6 +304,7 @@ public class GtfsPlusController {
                     JsonNode tableNode = DataManager.gtfsPlusConfig.get(i);
                     if(tableNode.get("name").asText().equals(entry.getName())) {
                         LOG.info("Validating GTFS+ table: " + entry.getName());
+                        gtfsPlusTableCount++;
                         validateTable(issues, tableNode, zipFile.getInputStream(entry), gtfsFeed);
                     }
                 }
@@ -282,9 +312,9 @@ public class GtfsPlusController {
 
         } catch(Exception e) {
             e.printStackTrace();
-            halt(500);
+            haltWithMessage(req, 500, "an unexpected error occurred", e);
         }
-
+        LOG.info("GTFS+ tables found: {}/{}", gtfsPlusTableCount, DataManager.gtfsPlusConfig.size());
         return issues;
     }
 
@@ -310,7 +340,7 @@ public class GtfsPlusController {
 
         int rowIndex = 0;
         while((line = in.readLine()) != null) {
-            String[] values = line.split(",", -1);
+            String[] values = line.split(Consts.COLUMN_SPLIT, -1);
             for(int v=0; v < values.length; v++) {
                 validateTableValue(issues, tableId, rowIndex, values[v], fieldNodes[v], gtfsFeed);
             }
@@ -329,7 +359,27 @@ public class GtfsPlusController {
         }
 
         switch(fieldNode.get("inputType").asText()) {
+            case "DROPDOWN":
+                boolean invalid = true;
+                ArrayNode options = (ArrayNode) fieldNode.get("options");
+                for (JsonNode option : options) {
+                    String optionValue = option.get("value").asText();
+
+                    // NOTE: per client's request, this check has been made case insensitive
+                    boolean valuesAreEqual = optionValue.equalsIgnoreCase(value);
+
+                    // if value is found in list of options, break out of loop
+                    if (valuesAreEqual || (!fieldNode.get("required").asBoolean() && value.equals(""))) {
+                        invalid = false;
+                        break;
+                    }
+                }
+                if (invalid) {
+                    issues.add(new ValidationIssue(tableId, fieldName, rowIndex, "Value: " + value + " is not a valid option."));
+                }
+                break;
             case "TEXT":
+                // check if value exceeds max length requirement
                 if(fieldNode.get("maxLength") != null) {
                     int maxLength = fieldNode.get("maxLength").asInt();
                     if(value.length() > maxLength) {
@@ -367,6 +417,7 @@ public class GtfsPlusController {
     }
 
     public static class ValidationIssue implements Serializable {
+        private static final long serialVersionUID = 1L;
         public String tableId;
         public String fieldName;
         public int rowIndex;

@@ -14,4 +14,14 @@ public class OtpServer implements Serializable {
     public Boolean admin;
     public String s3Bucket;
     public String s3Credentials;
+
+    /**
+     * Convert the name field into a string with no special characters.
+     *
+     * FIXME: This is currently used to keep track of which deployments have been deployed to which servers (it is used
+     * for the {@link Deployment#deployedTo} field), but we should likely.
+     */
+    public String target() {
+        return name != null ? name.replaceAll("[^a-zA-Z0-9]", "_") : null;
+    }
 }

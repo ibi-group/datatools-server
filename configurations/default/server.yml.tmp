@@ -1,0 +1,31 @@
+application:
+  assets_bucket: datatools-staging # dist directory
+  public_url: http://localhost:9966
+  notifications_enabled: false
+  port: 4000
+  data:
+    gtfs: /tmp
+    use_s3_storage: false
+    s3_region: us-east-1
+    gtfs_s3_bucket: bucket-name
+modules:
+  enterprise:
+    enabled: false
+  editor:
+    enabled: false
+  user_admin:
+    enabled: true
+  gtfsapi:
+    enabled: true
+    load_on_fetch: false
+    load_on_startup: false
+    use_extension: xyz
+#    update_frequency: 3600 # in seconds
+extensions:
+  transitland:
+    enabled: true
+    api: https://transit.land/api/v1/feeds
+  transitfeeds:
+    enabled: true
+    api: http://api.transitfeeds.com/v1/getFeeds
+    key: your-api-key

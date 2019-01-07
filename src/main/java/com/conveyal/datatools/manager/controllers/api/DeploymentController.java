@@ -1,5 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
+import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.DeployJob;
 import com.conveyal.datatools.manager.models.Deployment;
@@ -8,12 +10,13 @@ import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import org.bson.Document;
+import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import spark.HaltException;
 import spark.Request;
 import spark.Response;
 
@@ -21,138 +24,150 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
+import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
 import static spark.Spark.*;
 import static spark.Spark.get;
 
 /**
- * Created by landon on 5/18/16.
+ * Handlers for HTTP API requests that affect Deployments.
+ * These methods are mapped to API endpoints by Spark.
  */
 public class DeploymentController {
-    private static ObjectMapper mapper = new ObjectMapper();
-    private static JsonManager<Deployment> json =
-            new JsonManager<Deployment>(Deployment.class, JsonViews.UserInterface.class);
-
-    private static JsonManager<DeployJob.DeployStatus> statusJson =
-            new JsonManager<DeployJob.DeployStatus>(DeployJob.DeployStatus.class, JsonViews.UserInterface.class);
-
+    private static JsonManager<Deployment> json = new JsonManager<>(Deployment.class, JsonViews.UserInterface.class);
     private static final Logger LOG = LoggerFactory.getLogger(DeploymentController.class);
+    private static Map<String, DeployJob> deploymentJobsByServer = new HashMap<>();
 
-    private static HashMap<String, DeployJob> deploymentJobsByServer = new HashMap<String, DeployJob>();
-
-    public static Object getDeployment (Request req, Response res) {
+    /**
+     * Gets the deployment specified by the request's id parameter and ensure that user has access to the
+     * deployment. If the user does not have permission the Spark request is halted with an error.
+     */
+    private static Deployment checkDeploymentPermissions (Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
-        String id = req.params("id");
-        Deployment d = Deployment.get(id);
-        if (d == null) {
-            halt(400, "Deployment does not exist.");
-            return null;
+        String deploymentId = req.params("id");
+        Deployment deployment = Persistence.deployments.getById(deploymentId);
+        if (deployment == null) {
+            haltWithMessage(req, HttpStatus.BAD_REQUEST_400, "Deployment does not exist.");
         }
-        if (!userProfile.canAdministerProject(d.projectId, d.getOrganizationId()) && !userProfile.getUser_id().equals(d.getUser()))
-            halt(401);
-        else
-            return d;
-
-        return null;
+        boolean isProjectAdmin = userProfile.canAdministerProject(deployment.projectId, deployment.organizationId());
+        if (!isProjectAdmin && !userProfile.getUser_id().equals(deployment.user())) {
+            // If user is not a project admin and did not create the deployment, access to the deployment is denied.
+            haltWithMessage(req, HttpStatus.UNAUTHORIZED_401, "User not authorized for deployment.");
+        }
+        return deployment;
     }
 
-    public static Object deleteDeployment (Request req, Response res) {
-        Auth0UserProfile userProfile = req.attribute("user");
-        String id = req.params("id");
-        Deployment d = Deployment.get(id);
-        if (d == null) {
-            halt(400, "Deployment does not exist.");
-            return null;
-        }
-        if (!userProfile.canAdministerProject(d.projectId, d.getOrganizationId()) && !userProfile.getUser_id().equals(d.getUser()))
-            halt(401);
-        else {
-            d.delete();
-            return d;
-        }
-
-        return null;
+    private static Deployment getDeployment (Request req, Response res) {
+        return checkDeploymentPermissions(req, res);
     }
 
-    /** Download all of the GTFS files in the feed */
-    public static Object downloadDeployment (Request req, Response res) throws IOException {
-        Auth0UserProfile userProfile = req.attribute("user");
-        String id = req.params("id");
-        System.out.println(id);
-        Deployment d = Deployment.get(id);
+    private static Deployment deleteDeployment (Request req, Response res) {
+        Deployment deployment = checkDeploymentPermissions(req, res);
+        deployment.delete();
+        return deployment;
+    }
 
-        if (d == null) {
-            halt(400, "Deployment does not exist.");
-            return null;
-        }
-
-        if (!userProfile.canAdministerProject(d.projectId, d.getOrganizationId()) && !userProfile.getUser_id().equals(d.getUser()))
-            halt(401);
-
+    /**
+     * Download all of the GTFS files in the feed.
+     *
+     * TODO: Should there be an option to download the OSM network as well?
+     */
+    private static FileInputStream downloadDeployment (Request req, Response res) throws IOException {
+        Deployment deployment = checkDeploymentPermissions(req, res);
+        // Create temp file in order to generate input stream.
         File temp = File.createTempFile("deployment", ".zip");
         // just include GTFS, not any of the ancillary information
-        d.dump(temp, false, false, false);
-
+        deployment.dump(temp, false, false, false);
         FileInputStream fis = new FileInputStream(temp);
-
+        String cleanName = deployment.name.replaceAll("[^a-zA-Z0-9]", "");
         res.type("application/zip");
-        res.header("Content-Disposition", "attachment;filename=" + d.name.replaceAll("[^a-zA-Z0-9]", "") + ".zip");
+        res.header("Content-Disposition", String.format("attachment;filename=%s.zip", cleanName));
 
-        // will not actually be deleted until download has completed
+        // Delete temp file to avoid filling up disk space.
+        // Note: file will not actually be deleted until download has completed.
         // http://stackoverflow.com/questions/24372279
-        temp.delete();
+        if (temp.delete()) {
+            LOG.info("Temp deployment file at {} successfully deleted.", temp.getAbsolutePath());
+        } else {
+            LOG.warn("Temp deployment file at {} could not be deleted. Disk space may fill up!", temp.getAbsolutePath());
+        }
 
         return fis;
     }
 
-    public static Object getAllDeployments (Request req, Response res) throws JsonProcessingException {
+    /**
+     * Spark HTTP controller that returns a list of deployments for the entire application, a single project, or a single
+     * feed source (test deployments) depending on the query parameters supplied (e.g., projectId or feedSourceId)
+     */
+    private static Collection<Deployment> getAllDeployments (Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         String projectId = req.queryParams("projectId");
-        Project project = Project.get(projectId);
-        if (!userProfile.canAdministerProject(projectId, project.organizationId))
-            halt(401);
-
+        String feedSourceId = req.queryParams("feedSourceId");
         if (projectId != null) {
-            Project p = Project.get(projectId);
-            return p.getProjectDeployments();
+            // Return deployments for project
+            Project project = Persistence.projects.getById(projectId);
+            if (project == null) haltWithMessage(req, 400, "Must provide valid projectId value.");
+            if (!userProfile.canAdministerProject(projectId, project.organizationId))
+                haltWithMessage(req, 401, "User not authorized to view project deployments.");
+            return project.retrieveDeployments();
+        } else if (feedSourceId != null) {
+            // Return test deployments for feed source (note: these only include test deployments specific to the feed
+            // source and will not include all deployments that reference this feed source).
+            FeedSource feedSource = Persistence.feedSources.getById(feedSourceId);
+            if (feedSource == null) haltWithMessage(req, 400, "Must provide valid feedSourceId value.");
+            Project project = feedSource.retrieveProject();
+            if (!userProfile.canViewFeed(project.organizationId, project.id, feedSourceId))
+                haltWithMessage(req, 401, "User not authorized to view feed source deployments.");
+            return feedSource.retrieveDeployments();
+        } else {
+            // If no query parameter is supplied, return all deployments for application.
+            if (!userProfile.canAdministerApplication())
+                haltWithMessage(req, 401, "User not authorized to view application deployments.");
+            return Persistence.deployments.getAll();
         }
-        else {
-            return Deployment.getAll();
-        }
-    }
-
-    public static Object createDeployment (Request req, Response res) throws IOException {
-        Auth0UserProfile userProfile = req.attribute("user");
-        JsonNode params = mapper.readTree(req.body());
-
-        // find the project
-        Project p = Project.get(params.get("projectId").asText());
-
-        if (!userProfile.canAdministerProject(p.id, p.organizationId))
-            halt(401);
-
-        Deployment d = new Deployment(p);
-        d.setUser(userProfile);
-
-        applyJsonToDeployment(d, params);
-
-        d.save();
-
-        return d;
     }
 
     /**
-     * Create a deployment for a particular feedsource
-     * @throws JsonProcessingException
+     * Create a new deployment for the project. All feed sources with a valid latest version are added to the new
+     * deployment.
      */
-    public static Object createDeploymentFromFeedSource (Request req, Response res) throws JsonProcessingException {
+    private static Deployment createDeployment (Request req, Response res) {
+        // TODO error handling when request is bogus
+        // TODO factor out user profile fetching, permissions checks etc.
+        Auth0UserProfile userProfile = req.attribute("user");
+        Document newDeploymentFields = Document.parse(req.body());
+        String projectId = newDeploymentFields.getString("projectId");
+        String organizationId = newDeploymentFields.getString("organizationId");
+
+        boolean allowedToCreate = userProfile.canAdministerProject(projectId, organizationId);
+
+        if (allowedToCreate) {
+            Project project = Persistence.projects.getById(projectId);
+            Deployment newDeployment = new Deployment(project);
+
+            // FIXME: Here we are creating a deployment and updating it with the JSON string (two db operations)
+            // We do this because there is not currently apply JSON directly to an object (outside of Mongo codec
+            // operations)
+            Persistence.deployments.create(newDeployment);
+            return Persistence.deployments.update(newDeployment.id, req.body());
+        } else {
+            haltWithMessage(req, 403, "Not authorized to create a deployment for project " + projectId);
+            return null;
+        }
+    }
+
+    /**
+     * Create a deployment for a particular feed source.
+     */
+    private static Deployment createDeploymentFromFeedSource (Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         String id = req.params("id");
-        FeedSource s = FeedSource.get(id);
+        FeedSource feedSource = Persistence.feedSources.getById(id);
 
         // three ways to have permission to do this:
         // 1) be an admin
@@ -160,158 +175,144 @@ public class DeploymentController {
         // 3) have access to this feed through project permissions
         // if all fail, the user cannot do this.
         if (
-                !userProfile.canAdministerProject(s.projectId, s.getOrganizationId())
-                        && !userProfile.getUser_id().equals(s.getUser())
-//                        && !userProfile.hasWriteAccess(s.id)
-                )
-            halt(401);
+                !userProfile.canAdministerProject(feedSource.projectId, feedSource.organizationId()) &&
+                !userProfile.getUser_id().equals(feedSource.user())
+            )
+            haltWithMessage(req, 401, "User not authorized to perform this action");
 
-        // never loaded
-        if (s.getLatestVersionId() == null)
-            halt(400);
+        if (feedSource.latestVersionId() == null)
+            haltWithMessage(req, 400, "Cannot create a deployment from a feed source with no versions.");
 
-        Deployment d = new Deployment(s);
-        d.setUser(userProfile);
-        d.save();
-
-        return d;
+        Deployment deployment = new Deployment(feedSource);
+        deployment.storeUser(userProfile);
+        Persistence.deployments.create(deployment);
+        return deployment;
     }
 
 //    @BodyParser.Of(value=BodyParser.Json.class, maxLength=1024*1024)
-    public static Object updateDeployment (Request req, Response res) throws IOException {
-        Auth0UserProfile userProfile = req.attribute("user");
-        String id = req.params("id");
-        Deployment d = Deployment.get(id);
-
-        if (d == null)
-            halt(404);
-        
-        if (!userProfile.canAdministerProject(d.projectId, d.getOrganizationId()) && !userProfile.getUser_id().equals(d.getUser()))
-            halt(401);
-
-        JsonNode params = mapper.readTree(req.body());
-        applyJsonToDeployment(d, params);
-
-        d.save();
-
-        return d;
-    }
 
     /**
-     * Apply JSON params to a deployment.
-     * @param d
-     * @param params
+     * Update a single deployment. If the deployment's feed versions are updated, checks to ensure that each
+     * version exists and is a part of the same parent project are performed before updating.
      */
-    private static void applyJsonToDeployment(Deployment d, JsonNode params) {
-        Iterator<Map.Entry<String, JsonNode>> fieldsIter = params.fields();
-        while (fieldsIter.hasNext()) {
-            Map.Entry<String, JsonNode> entry = fieldsIter.next();
-            if (entry.getKey() == "feedVersions") {
-                JsonNode versions = entry.getValue();
-                ArrayList<FeedVersion> versionsToInsert = new ArrayList<>(versions.size());
-                for (JsonNode version : versions) {
-                    if (!version.has("id")) {
-                        halt(400, "Version not supplied");
-                    }
-                    FeedVersion v = FeedVersion.get(version.get("id").asText());
-                    if (v == null) {
-                        halt(404, "Version not found");
-                    }
-                    if (v.getFeedSource().projectId.equals(d.projectId)) {
-                        versionsToInsert.add(v);
-                    }
+    private static Object updateDeployment (Request req, Response res) {
+        Deployment deploymentToUpdate = checkDeploymentPermissions(req, res);
+        Document updateDocument = Document.parse(req.body());
+        // FIXME use generic update hook, also feedVersions is getting serialized into MongoDB (which is undesirable)
+        // Check that feed versions in request body are OK to add to deployment, i.e., they exist and are a part of
+        // this project.
+        if (updateDocument.containsKey("feedVersions")) {
+            List<Document> versions = (List<Document>) updateDocument.get("feedVersions");
+            ArrayList<FeedVersion> versionsToInsert = new ArrayList<>(versions.size());
+            for (Document version : versions) {
+                if (!version.containsKey("id")) {
+                    haltWithMessage(req, 400, "Version not supplied");
                 }
+                FeedVersion feedVersion = null;
+                try {
+                    feedVersion = Persistence.feedVersions.getById(version.getString("id"));
+                } catch (Exception e) {
+                    haltWithMessage(req, 404, "Version not found");
+                }
+                if (feedVersion == null) {
+                    haltWithMessage(req, 404, "Version not found");
+                }
+                // check that the version belongs to the correct project
+                if (feedVersion.parentFeedSource().projectId.equals(deploymentToUpdate.projectId)) {
+                    versionsToInsert.add(feedVersion);
+                }
+            }
 
-                d.setFeedVersions(versionsToInsert);
-            }
-            if (entry.getKey() == "name") {
-                d.name = entry.getValue().asText();
-            }
+            // Update deployment feedVersionIds field.
+            List<String> versionIds = versionsToInsert.stream().map(v -> v.id).collect(Collectors.toList());
+            Persistence.deployments.updateField(deploymentToUpdate.id, "feedVersionIds", versionIds);
         }
+        Deployment updatedDeployment = Persistence.deployments.update(deploymentToUpdate.id, req.body());
+        // TODO: Should updates to the deployment's fields trigger a notification to subscribers? This could get
+        // very noisy.
+        // Notify subscribed users of changes to deployment.
+//            NotifyUsersForSubscriptionJob.createNotification(
+//                    "deployment-updated",
+//                    deploymentId,
+//                    String.format("Deployment %s properties updated.", deploymentToUpdate.name)
+//            );
+        return updatedDeployment;
     }
 
     /**
-     * Create a deployment bundle, and push it to OTP
-     * @throws IOException
+     * Create a deployment bundle, and send it to the specified OTP target servers (or the specified s3 bucket).
      */
-    public static Object deploy (Request req, Response res) throws IOException {
-        Auth0UserProfile userProfile = req.attribute("user");
-        String target = req.params("target");
-        String id = req.params("id");
-        Deployment d = Deployment.get(id);
-        Project p = Project.get(d.projectId);
-
-        if (!userProfile.canAdministerProject(d.projectId, d.getOrganizationId()) && !userProfile.getUser_id().equals(d.getUser()))
-            halt(401);
-
-        if (!userProfile.canAdministerProject(d.projectId, d.getOrganizationId()) && p.getServer(target).admin)
-            halt(401);
-
-        // check if we can deploy
-        if (deploymentJobsByServer.containsKey(target)) {
-            DeployJob currentJob = deploymentJobsByServer.get(target);
-            if (currentJob != null && !currentJob.getStatus().completed) {
-                // send a 503 service unavailable as it is not possible to deploy to this target right now;
-                // someone else is deploying
-                halt(202, "Deployment currently in progress for target: " + target);
-                LOG.warn("Deployment currently in progress for target: " + target);
+    private static String deploy (Request req, Response res) {
+        try {
+            // Check parameters supplied in request for validity.
+            Auth0UserProfile userProfile = req.attribute("user");
+            String target = req.params("target");
+            Deployment deployment = checkDeploymentPermissions(req, res);
+            Project project = Persistence.projects.getById(deployment.projectId);
+            if (project == null) haltWithMessage(req, 400, "Internal reference error. Deployment's project ID is invalid");
+            // FIXME: Currently the otp server to deploy to is determined by the string name field (with special characters
+            // replaced with underscores). This should perhaps be replaced with an immutable server ID so that there is
+            // no risk that these values can overlap. This may be over engineering this system though. The user deploying
+            // a set of feeds would likely not create two deployment targets with the same name (and the name is unlikely
+            // to change often).
+            OtpServer otpServer = project.retrieveServer(target);
+            if (otpServer == null) haltWithMessage(req, 400, "Must provide valid OTP server target ID.");
+            // Check that permissions of user allow them to deploy to target.
+            boolean isProjectAdmin = userProfile.canAdministerProject(deployment.projectId, deployment.organizationId());
+            if (!isProjectAdmin && otpServer.admin) {
+                haltWithMessage(req, 401, "User not authorized to deploy to admin-only target OTP server.");
             }
+            // Check that we can deploy to the specified target. (Any deploy job for the target that is presently active will
+            // cause a halt.)
+            if (deploymentJobsByServer.containsKey(target)) {
+                // There is a deploy job for the server. Check if it is active.
+                DeployJob deployJob = deploymentJobsByServer.get(target);
+                if (deployJob != null && !deployJob.status.completed) {
+                    // Job for the target is still active! Send a 202 to the requester to indicate that it is not possible
+                    // to deploy to this target right now because someone else is deploying.
+                    String message = String.format(
+                            "Will not process request to deploy %s. Deployment currently in progress for target: %s",
+                            deployment.name,
+                            target);
+                    LOG.warn(message);
+                    haltWithMessage(req, HttpStatus.ACCEPTED_202, message);
+                }
+            }
+            // Get the URLs to deploy to.
+            List<String> targetUrls = otpServer.internalUrl;
+            if ((targetUrls == null || targetUrls.isEmpty()) && (otpServer.s3Bucket == null || otpServer.s3Bucket.isEmpty())) {
+                haltWithMessage(req, 400, String.format("OTP server %s has no internal URL or s3 bucket specified.", otpServer.name));
+            }
+            // For any previous deployments sent to the server/router combination, set deployedTo to null because
+            // this new one will overwrite it. NOTE: deployedTo for the current deployment will only be updated after the
+            // successful completion of the deploy job.
+            for (Deployment oldDeployment : Deployment.retrieveDeploymentForServerAndRouterId(target, deployment.routerId)) {
+                LOG.info("Setting deployment target to null id={}", oldDeployment.id);
+                Persistence.deployments.updateField(oldDeployment.id, "deployedTo", null);
+            }
+
+            // Execute the deployment job and keep track of it in the jobs for server map.
+            DeployJob job = new DeployJob(deployment, userProfile.getUser_id(), otpServer);
+            DataManager.heavyExecutor.execute(job);
+            deploymentJobsByServer.put(target, job);
+
+            return SparkUtils.formatJobMessage(job.jobId, "Deployment initiating.");
+        } catch (HaltException e) {
+            throw e;
+        } catch (Exception e) {
+            e.printStackTrace();
+            haltWithMessage(req, 400, "Could not process deployment request. Please check request parameters and OTP server target fields.");
+            return null;
         }
-        OtpServer otpServer = p.getServer(target);
-        List<String> targetUrls = otpServer.internalUrl;
-
-        Deployment oldD = Deployment.getDeploymentForServerAndRouterId(target, d.routerId);
-        if (oldD != null) {
-            oldD.deployedTo = null;
-            oldD.save();
-        }
-
-        d.deployedTo = target;
-        d.save();
-
-        DeployJob job = new DeployJob(d, userProfile.getUser_id(), targetUrls, otpServer.publicUrl, otpServer.s3Bucket, otpServer.s3Credentials);
-        deploymentJobsByServer.put(target, job);
-
-        Thread tnThread = new Thread(job);
-        tnThread.start();
-
-        halt(200, "{status: \"ok\"}");
-        return null;
     }
-
-    /**
-     * The current status of a deployment, polled to update the progress dialog.
-     * @throws JsonProcessingException
-     */
-    public static Object deploymentStatus (Request req, Response res) throws JsonProcessingException {
-        // this is not access-controlled beyond requiring auth, which is fine
-        // there's no good way to know who should be able to see this.
-        String target = req.queryParams("target");
-
-        if (!deploymentJobsByServer.containsKey(target))
-            halt(404, "Deployment target '"+target+"' not found");
-
-        DeployJob j = deploymentJobsByServer.get(target);
-
-        if (j == null)
-            halt(404, "No active job for " + target + " found");
-
-        return j.getStatus();
-    }
-
-    /**
-     * The servers that it is possible to deploy to.
-     */
-//    public static Object deploymentTargets (Request req, Response res) {
-//        Auth0UserProfile userProfile = req.attribute("user");
-//        return DeploymentManager.getDeploymentNames(userProfile.canAdministerApplication());
-//    }
 
     public static void register (String apiPrefix) {
         post(apiPrefix + "secure/deployments/:id/deploy/:target", DeploymentController::deploy, json::write);
+        post(apiPrefix + "secure/deployments/:id/deploy/", ((request, response) -> {
+            haltWithMessage(request, 400, "Must provide valid deployment target name");
+            return null;
+        }), json::write);
         options(apiPrefix + "secure/deployments", (q, s) -> "");
-        get(apiPrefix + "secure/deployments/status/:target", DeploymentController::deploymentStatus, json::write);
-//        get(apiPrefix + "secure/deployments/targets", DeploymentController::deploymentTargets, json::write);
         get(apiPrefix + "secure/deployments/:id/download", DeploymentController::downloadDeployment);
         get(apiPrefix + "secure/deployments/:id", DeploymentController::getDeployment, json::write);
         delete(apiPrefix + "secure/deployments/:id", DeploymentController::deleteDeployment, json::write);
