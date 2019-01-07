@@ -278,7 +278,7 @@ public class FeedVersionController  {
                 return version;
             }
         } catch (Exception e) {
-            haltWithMessage(req, 500, "Could not publish feed.", e);
+            logMessageAndHalt(req, 500, "Could not publish feed.", e);
             return null;
         }
     }
