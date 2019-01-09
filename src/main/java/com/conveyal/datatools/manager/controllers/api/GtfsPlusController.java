@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.common.utils.Consts;
+import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -91,7 +92,7 @@ public class GtfsPlusController {
             return getGtfsPlusFromGtfs(feedVersionId, req, res);
         }
         LOG.info("Returning updated GTFS+ data");
-        return downloadGtfsPlusFile(file, req, res);
+        return SparkUtils.downloadFile(file, file.getName() + ".zip", req, res);
     }
 
     private static HttpServletResponse getGtfsPlusFromGtfs(String feedVersionId, Request req, Response res) {
@@ -136,30 +137,7 @@ public class GtfsPlusController {
             logMessageAndHalt(req, 500, "An error occurred while trying to create a gtfs file", e);
         }
 
-        return downloadGtfsPlusFile(gtfsPlusFile, req, res);
-    }
-
-    private static HttpServletResponse downloadGtfsPlusFile(File file, Request req, Response res) {
-        res.raw().setContentType("application/octet-stream");
-        res.raw().setHeader("Content-Disposition", "attachment; filename=" + file.getName() + ".zip");
-
-        try {
-            BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(res.raw().getOutputStream());
-            BufferedInputStream bufferedInputStream = new BufferedInputStream(new FileInputStream(file));
-
-            byte[] buffer = new byte[1024];
-            int len;
-            while ((len = bufferedInputStream.read(buffer)) > 0) {
-                bufferedOutputStream.write(buffer, 0, len);
-            }
-
-            bufferedOutputStream.flush();
-            bufferedOutputStream.close();
-        } catch (IOException e) {
-            logMessageAndHalt(req, 500, "could not download gtfs plus file", e);
-        }
-
-        return res.raw();
+        return SparkUtils.downloadFile(gtfsPlusFile, gtfsPlusFile.getName() + ".zip", req, res);
     }
 
     private static Long getGtfsPlusFileTimestamp(Request req, Response res) {
@@ -278,8 +256,8 @@ public class GtfsPlusController {
 
 
         // load the main GTFS
-        // FIXME: fix gtfs+ loading/validating for sql-load
-        GTFSFeed gtfsFeed = null; // feedVersion.retrieveFeed();
+        // FIXME: Swap MapDB-backed GTFSFeed for use of SQL data?
+        GTFSFeed gtfsFeed = GTFSFeed.fromFile(feedVersion.retrieveGtfsFile().getAbsolutePath());
         // check for saved GTFS+ data
         File file = gtfsPlusStore.getFeed(feedVersionId);
         if (file == null) {
