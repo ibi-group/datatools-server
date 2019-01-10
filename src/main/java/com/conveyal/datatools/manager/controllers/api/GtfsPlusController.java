@@ -4,9 +4,11 @@ import com.conveyal.datatools.common.utils.Consts;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.HashUtils;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.conveyal.gtfs.GTFSFeed;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -44,6 +46,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 
+import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static spark.Spark.get;
 import static spark.Spark.post;
@@ -58,7 +61,7 @@ public class GtfsPlusController {
     private static FeedStore gtfsPlusStore = new FeedStore("gtfsplus");
 
 
-    private static Boolean uploadGtfsPlusFile (Request req, Response res) throws IOException, ServletException {
+    private static Boolean uploadGtfsPlusFile (Request req, Response res) {
         try {
             String feedVersionId = req.params("versionid");
             File newGtfsFile = new File(gtfsPlusStore.getPathToFeed(feedVersionId));
@@ -163,7 +166,7 @@ public class GtfsPlusController {
         }
     }
 
-    private static Boolean publishGtfsPlusFile(Request req, Response res) {
+    private static String publishGtfsPlusFile(Request req, Response res) {
         Auth0UserProfile profile = req.attribute("user");
         String feedVersionId = req.params("versionid");
         LOG.info("Publishing GTFS+ for " + feedVersionId);
@@ -184,12 +187,11 @@ public class GtfsPlusController {
         File newFeed = null;
 
         try {
-
-            // create a new zip file to only contain the GTFS+ tables
+            // First, create a new zip file to only contain the GTFS+ tables
             newFeed = File.createTempFile(feedVersionId + "_new", ".zip");
             ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(newFeed));
 
-            // iterate through the existing GTFS file, copying all non-GTFS+ tables
+            // Next, iterate through the existing GTFS file, copying all non-GTFS+ tables.
             ZipFile gtfsFile = new ZipFile(feedVersion.retrieveGtfsFile());
             final Enumeration<? extends ZipEntry> entries = gtfsFile.entries();
             byte[] buffer = new byte[512];
@@ -231,21 +233,25 @@ public class GtfsPlusController {
         }
 
         FeedVersion newFeedVersion = new FeedVersion(feedVersion.parentFeedSource());
-
+        File newGtfsFile = null;
         try {
-            newFeedVersion.newGtfsFile(new FileInputStream(newFeed));
+            newGtfsFile = newFeedVersion.newGtfsFile(new FileInputStream(newFeed));
         } catch (IOException e) {
-            logMessageAndHalt(req, 500, "Error creating new FeedVersion from combined GTFS/GTFS+", e);
+            e.printStackTrace();
+            logMessageAndHalt(req, 500, "Error reading GTFS file input stream", e);
         }
+        if (newGtfsFile == null) {
+            logMessageAndHalt(req, 500, "GTFS input file must not be null");
+            return null;
+        }
+        newFeedVersion.fileSize = newGtfsFile.length();
+        newFeedVersion.hash = HashUtils.hashFile(newGtfsFile);
 
-        newFeedVersion.hash();
+        // Must be handled by executor because it takes a long time.
+        ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(newFeedVersion, profile.getUser_id(), true);
+        DataManager.heavyExecutor.execute(processSingleFeedJob);
 
-        // validation for the main GTFS content hasn't changed
-        newFeedVersion.validationResult = feedVersion.validationResult;
-        newFeedVersion.storeUser(profile);
-        Persistence.feedVersions.create(newFeedVersion);
-
-        return true;
+        return formatJobMessage(processSingleFeedJob.jobId, "Feed version is processing.");
     }
 
     private static Collection<ValidationIssue> getGtfsPlusValidation(Request req, Response res) {
