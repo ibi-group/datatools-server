@@ -11,6 +11,7 @@ import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.conveyal.gtfs.GTFSFeed;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.google.common.io.ByteStreams;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
@@ -18,6 +19,8 @@ import spark.Response;
 
 import javax.servlet.MultipartConfigElement;
 import javax.servlet.ServletException;
+import javax.servlet.ServletInputStream;
+import javax.servlet.ServletRequestWrapper;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.Part;
 import java.io.BufferedInputStream;
@@ -55,28 +58,26 @@ public class GtfsPlusController {
     private static FeedStore gtfsPlusStore = new FeedStore("gtfsplus");
 
 
-    public static Boolean uploadGtfsPlusFile (Request req, Response res) throws IOException, ServletException {
-
-        //FeedSource s = FeedSource.retrieveById(req.queryParams("feedSourceId"));
-        String feedVersionId = req.params("versionid");
-
-        if (req.raw().getAttribute("org.eclipse.jetty.multipartConfig") == null) {
-            MultipartConfigElement multipartConfigElement = new MultipartConfigElement(System.getProperty("java.io.tmpdir"));
-            req.raw().setAttribute("org.eclipse.jetty.multipartConfig", multipartConfigElement);
-        }
-
-        Part part = req.raw().getPart("file");
-
-        LOG.info("Saving GTFS+ feed {} from upload for version " + feedVersionId);
-
-
-        InputStream uploadStream;
+    private static Boolean uploadGtfsPlusFile (Request req, Response res) throws IOException, ServletException {
         try {
-            uploadStream = part.getInputStream();
-            gtfsPlusStore.newFeed(feedVersionId, uploadStream, null);
-        } catch (IOException e) {
+            String feedVersionId = req.params("versionid");
+            File newGtfsFile = new File(gtfsPlusStore.getPathToFeed(feedVersionId));
+            // Bypass Spark's request wrapper which always caches the request body in memory that may be a very large
+            // GTFS file. Also, the body of the request is the GTFS file instead of using multipart form data because
+            // multipart form handling code also caches the request body.
+            ServletInputStream inputStream = ((ServletRequestWrapper) req.raw()).getRequest().getInputStream();
+            FileOutputStream fileOutputStream = new FileOutputStream(newGtfsFile);
+            // Guava's ByteStreams.copy uses a 4k buffer (no need to wrap output stream), but does not close streams.
+            ByteStreams.copy(inputStream, fileOutputStream);
+            fileOutputStream.close();
+            inputStream.close();
+            if (newGtfsFile.length() == 0) {
+                throw new IOException("No file found in request body.");
+            }
+            LOG.info("Saving GTFS+ feed {} from upload for version " + feedVersionId);
+        } catch (Exception e) {
             LOG.error("Unable to open input stream from upload");
-            logMessageAndHalt(req, 400, "Unable to open input stream from upload", e);
+            logMessageAndHalt(req, 500, "Unable to read uploaded GTFS+ file.", e);
         }
 
         return true;
