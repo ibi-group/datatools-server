@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.DatatoolsTest;
+import com.conveyal.datatools.UnitTest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeAll;
@@ -12,12 +13,12 @@ import static io.restassured.RestAssured.given;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 
-public class AppInfoControllerTest {
+public class AppInfoControllerTest extends UnitTest {
     /**
      * Prepare and start a testing-specific web server
      */
     @BeforeAll
-    public static void setUp() {
+    public static void setUp() throws Exception {
         // start server if it isn't already running
         DatatoolsTest.setUp();
     }
