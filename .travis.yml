@@ -28,19 +28,19 @@ script:
   # run mvn package to make sure unit tests and packaging can work
   - mvn package
   # recursively copy coverage results into another folder so the e2e tests don't overwrite them
-  - cp -R site site-unit-test-results
+  - cp -R target target-unit-test-results
   # run just the e2e tests
   - RUN_E2E=true mvn test
   # recursively copy coverage results into another folder so the deployment results don't overwrite them
-  - cp -R site site-e2e-test-results
+  - cp -R target target-e2e-test-results
 after_success:
   - semantic-release --prepare @conveyal/maven-semantic-release --publish @semantic-release/github,@conveyal/maven-semantic-release --verify-conditions @semantic-release/github,@conveyal/maven-semantic-release --verify-release @conveyal/maven-semantic-release --use-conveyal-workflow --dev-branch=dev --skip-maven-deploy
   # Run codecov after semantic-release because maven-semantic-release creates extra commits that
   # codecov will need a report on to reference in future PRs to the release branch
   # upload unit test coverage results
-  - bash <(curl -s https://codecov.io/bash) -s site-unit-test-results -F unit_tests
+  - bash <(curl -s https://codecov.io/bash) -s target-unit-test-results -F unit_tests
   # upload e2e test coverage results
-  - bash <(curl -s https://codecov.io/bash) -s site-e2e-test-results -F end_to_end_tests
+  - bash <(curl -s https://codecov.io/bash) -s target-e2e-test-results -F end_to_end_tests
 # notify slack channel of build status
 notifications:
   slack: conveyal:WQxmWiu8PdmujwLw4ziW72Gc
