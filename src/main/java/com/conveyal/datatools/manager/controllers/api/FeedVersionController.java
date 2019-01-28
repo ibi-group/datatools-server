@@ -219,7 +219,7 @@ public class FeedVersionController  {
         return true;
     }
 
-    private static Object downloadFeedVersionDirectly(Request req, Response res) {
+    private static HttpServletResponse downloadFeedVersionDirectly(Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "view");
         return downloadFile(version.retrieveGtfsFile(), version.id, req, res);
     }
@@ -232,7 +232,7 @@ public class FeedVersionController  {
         FeedVersion version = requestFeedVersion(req, "view");
 
         if (DataManager.useS3) {
-            // Return presigned download link if using S3.
+            // Return pre-signed download link if using S3.
             return downloadFromS3(FeedStore.s3Client, DataManager.feedBucket, FeedStore.s3Prefix + version.id, false, res);
         } else {
             // when feeds are stored locally, single-use download token will still be used
