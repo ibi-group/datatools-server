@@ -13,20 +13,12 @@ import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.conveyal.gtfs.GTFSFeed;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
-import com.google.common.io.ByteStreams;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
 import spark.Response;
 
-import javax.servlet.MultipartConfigElement;
-import javax.servlet.ServletException;
-import javax.servlet.ServletInputStream;
-import javax.servlet.ServletRequestWrapper;
 import javax.servlet.http.HttpServletResponse;
-import javax.servlet.http.Part;
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -47,6 +39,7 @@ import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
+import static com.conveyal.datatools.common.utils.SparkUtils.copyRequestStreamIntoFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static spark.Spark.get;
 import static spark.Spark.post;
@@ -62,27 +55,9 @@ public class GtfsPlusController {
 
 
     private static Boolean uploadGtfsPlusFile (Request req, Response res) {
-        try {
-            String feedVersionId = req.params("versionid");
-            File newGtfsFile = new File(gtfsPlusStore.getPathToFeed(feedVersionId));
-            // Bypass Spark's request wrapper which always caches the request body in memory that may be a very large
-            // GTFS file. Also, the body of the request is the GTFS file instead of using multipart form data because
-            // multipart form handling code also caches the request body.
-            ServletInputStream inputStream = ((ServletRequestWrapper) req.raw()).getRequest().getInputStream();
-            FileOutputStream fileOutputStream = new FileOutputStream(newGtfsFile);
-            // Guava's ByteStreams.copy uses a 4k buffer (no need to wrap output stream), but does not close streams.
-            ByteStreams.copy(inputStream, fileOutputStream);
-            fileOutputStream.close();
-            inputStream.close();
-            if (newGtfsFile.length() == 0) {
-                throw new IOException("No file found in request body.");
-            }
-            LOG.info("Saving GTFS+ feed {} from upload for version " + feedVersionId);
-        } catch (Exception e) {
-            LOG.error("Unable to open input stream from upload");
-            logMessageAndHalt(req, 500, "Unable to read uploaded GTFS+ file.", e);
-        }
-
+        String feedVersionId = req.params("versionid");
+        File newGtfsFile = new File(gtfsPlusStore.getPathToFeed(feedVersionId));
+        copyRequestStreamIntoFile(req, newGtfsFile);
         return true;
     }
 
