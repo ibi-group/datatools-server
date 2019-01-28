@@ -3,11 +3,13 @@ package com.conveyal.datatools.manager;
 import com.bugsnag.Bugsnag;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.CorsFilter;
+import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.editor.controllers.EditorLockController;
 import com.conveyal.datatools.editor.controllers.api.EditorControllerImpl;
 import com.conveyal.datatools.editor.controllers.api.SnapshotController;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.controllers.DumpController;
+import com.conveyal.datatools.manager.controllers.api.AppInfoController;
 import com.conveyal.datatools.manager.controllers.api.DeploymentController;
 import com.conveyal.datatools.manager.controllers.api.FeedSourceController;
 import com.conveyal.datatools.manager.controllers.api.FeedVersionController;
@@ -15,8 +17,6 @@ import com.conveyal.datatools.manager.controllers.api.GtfsPlusController;
 import com.conveyal.datatools.manager.controllers.api.NoteController;
 import com.conveyal.datatools.manager.controllers.api.OrganizationController;
 import com.conveyal.datatools.manager.controllers.api.ProjectController;
-import com.conveyal.datatools.manager.controllers.api.RegionController;
-import com.conveyal.datatools.manager.controllers.api.AppInfoController;
 import com.conveyal.datatools.manager.controllers.api.StatusController;
 import com.conveyal.datatools.manager.controllers.api.UserController;
 import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
@@ -24,19 +24,17 @@ import com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource;
 import com.conveyal.datatools.manager.extensions.transitfeeds.TransitFeedsFeedResource;
 import com.conveyal.datatools.manager.extensions.transitland.TransitLandFeedResource;
 import com.conveyal.datatools.manager.jobs.FeedUpdater;
-import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
-import com.conveyal.datatools.manager.persistence.TransportNetworkCache;
 import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.GraphQLController;
 import com.conveyal.gtfs.loader.Table;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.google.common.collect.Sets;
 import com.google.common.io.Resources;
 import org.apache.commons.io.Charsets;
-import org.eclipse.jetty.util.ConcurrentHashSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.utils.IOUtils;
@@ -50,15 +48,14 @@ import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
 
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
-import static com.conveyal.datatools.manager.auth.Auth0Connection.logRequest;
-import static com.conveyal.datatools.manager.auth.Auth0Connection.logResponse;
+import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
+import static com.conveyal.datatools.common.utils.SparkUtils.logRequest;
+import static com.conveyal.datatools.common.utils.SparkUtils.logResponse;
 import static spark.Spark.after;
 import static spark.Spark.before;
 import static spark.Spark.exception;
@@ -85,16 +82,12 @@ public class DataManager {
     // TODO: define type for ExternalFeedResource Strings
     public static final Map<String, ExternalFeedResource> feedResources = new HashMap<>();
 
-    // Stores jobs underway by user ID.
-    public static Map<String, ConcurrentHashSet<MonitorableJob>> userJobsMap = new ConcurrentHashMap<>();
+    /**
+     * Stores jobs underway by user ID. NOTE: any set created and stored here must be created with
+     * {@link Sets#newConcurrentHashSet()} or similar thread-safe Set.
+     */
+    public static Map<String, Set<MonitorableJob>> userJobsMap = new ConcurrentHashMap<>();
 
-    // Caches r5 transport networks for use in generating isochrones
-    public static final TransportNetworkCache transportNetworkCache = new TransportNetworkCache();
-
-    // Stores ScheduledFuture objects that kick off runnable tasks (e.g., fetch project feeds at 2:00 AM).
-    public static Map<String, ScheduledFuture> autoFetchMap = new HashMap<>();
-    // Scheduled executor that handles running scheduled jobs.
-    public final static ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
     // ObjectMapper that loads in YAML config files
     private static final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
 
@@ -123,14 +116,6 @@ public class DataManager {
 
         initializeApplication(args);
 
-        // initialize map of auto fetched projects
-        for (Project project : Persistence.projects.getAll()) {
-            if (project.autoFetchFeeds) {
-                ScheduledFuture scheduledFuture = ProjectController.scheduleAutoFeedFetch(project, 1);
-                autoFetchMap.put(project.id, scheduledFuture);
-            }
-        }
-
         registerRoutes();
 
         registerExternalResources();
@@ -141,10 +126,7 @@ public class DataManager {
         loadConfig(args);
         loadProperties();
 
-        String bugsnagKey = getConfigPropertyAsText("BUGSNAG_KEY");
-        if (bugsnagKey != null) {
-            new Bugsnag(bugsnagKey);
-        }
+        getBugsnag();
 
         // FIXME: hack to statically load FeedStore
         LOG.info(FeedStore.class.getSimpleName());
@@ -164,11 +146,26 @@ public class DataManager {
         feedBucket = getConfigPropertyAsText("application.data.gtfs_s3_bucket");
         bucketFolder = FeedStore.s3Prefix;
 
+        // create application gtfs folder if it doesn't already exist
+        new File(getConfigPropertyAsText("application.data.gtfs")).mkdirs();
+
         // Initialize MongoDB storage
         Persistence.initialize();
+
+        // Initialize scheduled tasks
+        Scheduler.initialize();
     }
 
-    /**
+    // intialize bugsnag
+    public static Bugsnag getBugsnag() {
+        String bugsnagKey = getConfigPropertyAsText("BUGSNAG_KEY");
+        if (bugsnagKey != null) {
+            return new Bugsnag(bugsnagKey);
+        }
+        return null;
+    }
+
+    /*
      * Load some properties files to obtain information about this project.
      * This method reads in two files:
      * - src/main/resources/.properties
@@ -215,7 +212,6 @@ public class DataManager {
         ProjectController.register(API_PREFIX);
         FeedSourceController.register(API_PREFIX);
         FeedVersionController.register(API_PREFIX);
-        RegionController.register(API_PREFIX);
         NoteController.register(API_PREFIX);
         StatusController.register(API_PREFIX);
         OrganizationController.register(API_PREFIX);
@@ -315,7 +311,7 @@ public class DataManager {
         // Return 404 for any API path that is not configured.
         // IMPORTANT: Any API paths must be registered before this halt.
         get("/api/" + "*", (request, response) -> {
-            haltWithMessage(404, "No API route configured for this path.");
+            logMessageAndHalt(request, 404, "No API route configured for this path.");
             return null;
         });
 

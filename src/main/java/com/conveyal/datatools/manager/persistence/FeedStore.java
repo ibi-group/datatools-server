@@ -1,16 +1,16 @@
 package com.conveyal.datatools.manager.persistence;
 
-import java.io.*;
-import java.util.ArrayList;
-import java.util.List;
-
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.AmazonServiceException;
-import com.amazonaws.SdkClientException;
 import com.amazonaws.auth.AWSCredentialsProvider;
+import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
+import com.amazonaws.auth.profile.ProfileCredentialsProvider;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
-import com.amazonaws.services.s3.model.*;
+import com.amazonaws.services.s3.model.CopyObjectRequest;
+import com.amazonaws.services.s3.model.GetObjectRequest;
+import com.amazonaws.services.s3.model.PutObjectRequest;
+import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.transfer.TransferManager;
 import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
 import com.amazonaws.services.s3.transfer.Upload;
@@ -20,11 +20,16 @@ import gnu.trove.list.TLongList;
 import gnu.trove.list.array.TLongArrayList;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.io.IOUtils;
-
-import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
-import com.amazonaws.auth.profile.ProfileCredentialsProvider;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.List;
 
 import static com.conveyal.datatools.manager.DataManager.hasConfigProperty;
 
@@ -84,7 +89,7 @@ public class FeedStore {
             }
             try {
                 s3Client = builder.build();
-            } catch (SdkClientException e) {
+            } catch (Exception e) {
                 LOG.error("S3 client not initialized correctly.  Must provide config property application.data.s3_region or specify region in ~/.aws/config", e);
             }
             // TODO: check for this??
@@ -181,18 +186,24 @@ public class FeedStore {
         // s3 storage
         if (DataManager.useS3) {
             String key = getS3Key(id);
-            try {
-                LOG.info("Downloading feed from s3://{}/{}", s3Bucket, key);
-                S3Object object = s3Client.getObject(
-                        new GetObjectRequest(s3Bucket, key));
-                InputStream objectData = object.getObjectContent();
 
-                // FIXME: Figure out how to manage temp files created here. Currently, deleteOnExit is called in createTempFile
-                return createTempFile(id, objectData);
+            LOG.info("Downloading feed from s3://{}/{}", s3Bucket, key);
+            InputStream objectData = null;
+            try {
+                S3Object object = s3Client.getObject(
+                    new GetObjectRequest(s3Bucket, key));
+                objectData = object.getObjectContent();
             } catch (AmazonServiceException ase) {
                 LOG.error("Error downloading s3://{}/{}", s3Bucket, key);
                 ase.printStackTrace();
+                return null;
+            }
+
+            // FIXME: Figure out how to manage temp files created here. Currently, deleteOnExit is called in createTempFile
+            try {
+                return createTempFile(id, objectData);
             } catch (IOException e) {
+                LOG.error("Error creating temp file");
                 e.printStackTrace();
             }
         }
@@ -200,68 +211,49 @@ public class FeedStore {
     }
 
     /**
-     * Create a new feed with the given ID.
+     * Store GTFS file locally. This method is used when a new feed version or generated GTFS file
+     * (e.g., the product of merging multiple GTFS files from a project) needs to be stored locally for
+     * future use. Note: uploading the file to S3 is handled elsewhere as a finishing step, e.g., at the
+     * conclusion of a successful feed processing/validation step.
      */
-    public File newFeed (String id, InputStream inputStream, FeedSource feedSource) {
-        // For s3 storage (store locally and let gtfsCache handle loading feed to s3)
-        return storeFeedLocally(id, inputStream, feedSource);
-    }
-    private File storeFeedLocally(String id, InputStream inputStream, FeedSource feedSource) {
-        File feed = null;
-        try {
-            // write feed to specified ID.
-            // NOTE: depending on the feed store, there may not be a feedSource provided (e.g., gtfsplus)
-            feed = writeFileUsingInputStream(id, inputStream);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+    public File newFeed (String id, InputStream inputStream, FeedSource feedSource) throws IOException {
+        // write feed to specified ID.
+        // NOTE: depending on the feed store, there may not be a feedSource provided (e.g., gtfsplus)
+
+        File feed = writeFileUsingInputStream(id, inputStream);
         if (feedSource != null && !DataManager.useS3) {
             // Store latest as feed-source-id.zip if feedSource provided and if not using s3
-            try {
-                copyVersionToLatest(feed, feedSource);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+            copyVersionToLatest(feed, feedSource);
         }
         return feed;
     }
 
-    private void copyVersionToLatest(File version, FeedSource feedSource) {
+    private void copyVersionToLatest(File version, FeedSource feedSource) throws IOException {
         File latest = new File(String.valueOf(path), feedSource.id + ".zip");
-        try {
-            FileUtils.copyFile(version, latest, true);
-            LOG.info("Copying version to latest {}", feedSource);
-        } catch (IOException e) {
-            e.printStackTrace();
-            LOG.error("Unable to save latest at {}", feedSource);
-        }
+        LOG.info("Copying version to latest {}", feedSource);
+        FileUtils.copyFile(version, latest, true);
     }
 
     private File writeFileUsingInputStream(String filename, InputStream inputStream) throws IOException {
         File out = new File(path, filename);
         LOG.info("Writing file to {}/{}", path, filename);
-        try (OutputStream output = new FileOutputStream(out)) {
-            byte[] buf = new byte[1024];
-            int bytesRead;
-            while ((bytesRead = inputStream.read(buf)) > 0) {
-                output.write(buf, 0, bytesRead);
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
-            inputStream.close();
+        OutputStream output = new FileOutputStream(out);
+        byte[] buf = new byte[1024];
+        int bytesRead;
+        while ((bytesRead = inputStream.read(buf)) > 0) {
+            output.write(buf, 0, bytesRead);
         }
+        inputStream.close();
+        output.close();
         return out;
     }
 
     private File createTempFile (String name, InputStream in) throws IOException {
         final File tempFile = new File(new File(System.getProperty("java.io.tmpdir")), name);
         tempFile.deleteOnExit();
-        try (FileOutputStream out = new FileOutputStream(tempFile)) {
-            IOUtils.copy(in, out);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        FileOutputStream out = new FileOutputStream(tempFile);
+        IOUtils.copy(in, out);
+        out.close();
         return tempFile;
     }
 

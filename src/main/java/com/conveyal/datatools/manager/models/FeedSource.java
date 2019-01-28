@@ -4,8 +4,6 @@ import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.DeleteObjectsRequest;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.editor.datastore.GlobalTx;
-import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.persistence.FeedStore;
@@ -30,7 +28,6 @@ import java.net.URL;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
@@ -52,7 +49,6 @@ public class FeedSource extends Model implements Cloneable {
     //@JsonView(JsonViews.DataDump.class)
     public String projectId;
 
-//    public String[] regions = {"1"};
     /**
      * Get the Project of which this feed is a part
      */
@@ -151,8 +147,6 @@ public class FeedSource extends Model implements Cloneable {
     public FeedVersion fetch (MonitorableJob.Status status, String optionalUrlOverride) {
         status.message = "Downloading file";
 
-        FeedVersion latest = retrieveLatest();
-
         // We create a new FeedVersion now, so that the fetched date is (milliseconds) before
         // fetch occurs. That way, in the highly unlikely event that a feed is updated while we're
         // fetching it, we will not miss a new feed.
@@ -180,7 +174,7 @@ public class FeedSource extends Model implements Cloneable {
                     "User-Agent",
                     "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.95 Safari/537.11"
             );
-        } catch (Exception e) {
+        } catch (IOException e) {
             String message = String.format("Unable to open connection to %s; not fetching feed %s", url, this.name);
             LOG.error(message);
             // TODO use this update function throughout this class
@@ -189,7 +183,8 @@ public class FeedSource extends Model implements Cloneable {
         }
 
         conn.setDefaultUseCaches(true);
-
+        // Get latest version to check that the fetched version does not duplicate a feed already loaded.
+        FeedVersion latest = retrieveLatest();
         // lastFetched is set to null when the URL changes and when latest feed version is deleted
         if (latest != null && this.lastFetched != null)
             conn.setIfModifiedSince(Math.min(latest.updated.getTime(), this.lastFetched.getTime()));
@@ -523,8 +518,6 @@ public class FeedSource extends Model implements Cloneable {
             // Remove all external properties for this feed source.
             Persistence.externalFeedSourceProperties.removeFiltered(eq("feedSourceId", this.id));
 
-            // TODO: add delete for osm extract and r5 network (maybe that goes with version)
-
             // FIXME: Should this delete related feed versions from the SQL database (for both published versions and
             // editor snapshots)?
 
@@ -539,5 +532,4 @@ public class FeedSource extends Model implements Cloneable {
     public FeedSource clone () throws CloneNotSupportedException {
         return (FeedSource) super.clone();
     }
-
 }

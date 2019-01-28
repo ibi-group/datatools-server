@@ -3,7 +3,6 @@ package com.conveyal.datatools.manager.controllers.api;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
-import com.conveyal.datatools.manager.jobs.BuildTransportNetworkJob;
 import com.conveyal.datatools.manager.jobs.CreateFeedVersionFromSnapshotJob;
 import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
@@ -16,40 +15,9 @@ import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
-import com.conveyal.r5.analyst.PointSet;
-import com.conveyal.r5.analyst.cluster.AnalystClusterRequest;
-import com.conveyal.r5.analyst.cluster.ResultEnvelope;
-import com.conveyal.r5.analyst.cluster.TaskStatistics;
-import com.conveyal.r5.api.util.LegMode;
-import com.conveyal.r5.api.util.TransitModes;
-import com.conveyal.r5.profile.ProfileRequest;
-import com.conveyal.r5.profile.RepeatedRaptorProfileRouter;
-import com.conveyal.r5.profile.StreetMode;
-import com.conveyal.r5.streets.LinkedPointSet;
-import com.conveyal.r5.transit.TransportNetwork;
-import com.fasterxml.jackson.core.JsonFactory;
-import com.fasterxml.jackson.core.JsonGenerator;
-
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.nio.charset.StandardCharsets;
-import java.time.LocalDate;
-import java.time.ZoneId;
-import java.time.format.DateTimeFormatter;
-import java.util.Collection;
-import java.util.Date;
-import java.util.EnumSet;
-import java.util.List;
-import java.util.Set;
-import java.util.concurrent.ExecutionException;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.google.common.io.ByteStreams;
-import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
@@ -58,12 +26,19 @@ import spark.Response;
 import javax.servlet.ServletInputStream;
 import javax.servlet.ServletRequestWrapper;
 import javax.servlet.http.HttpServletResponse;
+import java.io.File;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.util.Collection;
+import java.util.Date;
+import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
-import static com.conveyal.datatools.common.status.MonitorableJob.JobType.BUILD_TRANSPORT_NETWORK;
 import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
+import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.controllers.api.FeedSourceController.checkFeedSourcePermissions;
 import static spark.Spark.delete;
 import static spark.Spark.get;
@@ -100,7 +75,7 @@ public class FeedVersionController  {
     public static FeedSource requestFeedSourceById(Request req, String action, String paramName) {
         String id = req.queryParams(paramName);
         if (id == null) {
-            haltWithMessage(400, "Please specify feedSourceId param");
+            logMessageAndHalt(req, 400, "Please specify feedSourceId param");
         }
         return checkFeedSourcePermissions(req, Persistence.feedSources.getById(id), action);
     }
@@ -158,7 +133,7 @@ public class FeedVersionController  {
             LOG.info("Saving feed from upload {}", feedSource);
         } catch (Exception e) {
             LOG.error("Unable to open input stream from uploaded file", e);
-            haltWithMessage(400, "Unable to read uploaded feed");
+            logMessageAndHalt(req, 400, "Unable to read uploaded feed");
         }
 
         // TODO: fix FeedVersion.hash() call when called in this context. Nothing gets hashed because the file has not been saved yet.
@@ -175,7 +150,7 @@ public class FeedVersionController  {
             LOG.warn("File deleted");
 
             // There is no need to delete the newFeedVersion because it has not yet been persisted to MongoDB.
-            haltWithMessage(304, "Uploaded feed is identical to the latest version known to the database.");
+            logMessageAndHalt(req, 304, "Uploaded feed is identical to the latest version known to the database.");
         }
 
         newFeedVersion.name = newFeedVersion.formattedTimestamp() + " Upload";
@@ -205,7 +180,7 @@ public class FeedVersionController  {
         FeedSource feedSource = requestFeedSourceById(req, "manage");
         Snapshot snapshot = Persistence.snapshots.getById(req.queryParams("snapshotId"));
         if (snapshot == null) {
-            haltWithMessage(400, "Must provide valid snapshot ID");
+            logMessageAndHalt(req, 400, "Must provide valid snapshot ID");
         }
         FeedVersion feedVersion = new FeedVersion(feedSource);
         CreateFeedVersionFromSnapshotJob createFromSnapshotJob =
@@ -231,132 +206,11 @@ public class FeedVersionController  {
     public static FeedVersion requestFeedVersion(Request req, String action, String feedVersionId) {
         FeedVersion version = Persistence.feedVersions.getById(feedVersionId);
         if (version == null) {
-            haltWithMessage(404, "Feed version ID does not exist");
+            logMessageAndHalt(req, 404, "Feed version ID does not exist");
         }
         // Performs permissions checks on the feed source this feed version belongs to, and halts if permission is denied.
         checkFeedSourcePermissions(req, version.parentFeedSource(), action);
         return version;
-    }
-
-    /**
-     * This method returns isochrones generated by R5 for the provided request parameters (the actual request is
-     * constructed in {@link #buildProfileRequest}). If a transport network does not exist for the feed version, an async
-     * build job is kicked off. Otherwise, the transport network cache is checked for the network.
-     */
-    private static String getIsochrones(Request req, Response res) {
-        if (!DataManager.isModuleEnabled("r5_network")) {
-            haltWithMessage(400, "Isochrone generation not enabled in this application.");
-        }
-        Auth0UserProfile userProfile = req.attribute("user");
-        FeedVersion version = requestFeedVersion(req, "view");
-        // Check server jobs to determine if build or read is in progress.
-        checkForActiveTransportNetworkJob(version);
-        TransportNetwork transportNetwork = null;
-        if (!version.transportNetworkPath().exists()) {
-            // If transport network does not exist, build it in async server job.
-            BuildTransportNetworkJob buildTransportNetworkJob =
-                    new BuildTransportNetworkJob(version, userProfile.getUser_id());
-            DataManager.heavyExecutor.execute(buildTransportNetworkJob);
-            // Set status to Accepted to indicate that the processing is not complete yet.
-            res.status(HttpStatus.ACCEPTED_202);
-            return SparkUtils.formatJobMessage(buildTransportNetworkJob.jobId, "Building transport network");
-        }
-        try {
-            // Get transport network from cache.
-            transportNetwork = DataManager.transportNetworkCache.getTransportNetwork(version.id);
-            // Handle routing request if there is a transport network to route on.
-            AnalystClusterRequest clusterRequest = buildProfileRequest(req);
-            return getRouterResult(transportNetwork, clusterRequest);
-        } catch (ExecutionException e) {
-            e.printStackTrace();
-            haltWithMessage(400, "Error accessing transport network.", e);
-        }
-        return null;
-    }
-
-    /**
-     * Filters active jobs for any "build transport network" types for the provided version. If there is a match,
-     * a halt is sent to the requester.
-     */
-    private static void checkForActiveTransportNetworkJob(FeedVersion version) {
-        // Get list of jobs that are building transport networks for the feed version (should be at most only one).
-        List<BuildTransportNetworkJob> buildJobs = StatusController.filterJobsByType(BUILD_TRANSPORT_NETWORK).stream()
-                .filter(job -> ((BuildTransportNetworkJob) job).feedVersion.id.equals(version.id))
-                .map(job -> (BuildTransportNetworkJob) job)
-                .collect(Collectors.toList());
-
-        if (buildJobs.size() > 0) {
-            // Halt the request if there are active build jobs.
-            haltWithMessage(202, "Please wait. Building transport network for version.");
-        }
-    }
-
-    /**
-     * Routes a profile request on the provided transport network and returns the resulting isochrones.
-     */
-    private static String getRouterResult(TransportNetwork transportNetwork, AnalystClusterRequest clusterRequest) {
-        PointSet targets;
-        if (transportNetwork.gridPointSet == null) {
-            transportNetwork.rebuildLinkedGridPointSet();
-        }
-        targets = transportNetwork.gridPointSet;
-        StreetMode mode = StreetMode.WALK;
-        final LinkedPointSet linkedTargets = targets.link(transportNetwork.streetLayer, mode);
-        RepeatedRaptorProfileRouter router = new RepeatedRaptorProfileRouter(transportNetwork, clusterRequest, linkedTargets, new TaskStatistics());
-        ResultEnvelope result = router.route();
-
-        ByteArrayOutputStream out = new ByteArrayOutputStream();
-        try {
-            JsonGenerator jsonGenerator = new JsonFactory().createGenerator(out);
-            jsonGenerator.writeStartObject();
-            result.avgCase.writeIsochrones(jsonGenerator);
-            jsonGenerator.writeEndObject();
-            jsonGenerator.close();
-            out.close();
-            String outString = new String( out.toByteArray(), StandardCharsets.UTF_8 );
-            return outString;
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        return null;
-    }
-
-    private static AnalystClusterRequest buildProfileRequest(Request req) {
-        // required fields?
-        Double fromLat = Double.valueOf(req.queryParams("fromLat"));
-        Double fromLon = Double.valueOf(req.queryParams("fromLon"));
-        Double toLat = Double.valueOf(req.queryParams("toLat"));
-        Double toLon = Double.valueOf(req.queryParams("toLon"));
-        // Defaults to today if no date passed in.
-        LocalDate date = req.queryParams("date") != null
-                ? LocalDate.parse(req.queryParams("date"), DateTimeFormatter.ISO_LOCAL_DATE)
-                : LocalDate.now(); // format = 2011-12-30 (YYYY-MM-DD)
-
-        // Optional fields with defaults
-        Integer fromTime = req.queryParams("fromTime") != null
-                ? Integer.valueOf(req.queryParams("fromTime"))
-                : 9 * 3600; // 9am in seconds since midnight
-        Integer toTime = req.queryParams("toTime") != null
-                ? Integer.valueOf(req.queryParams("toTime"))
-                : 10 * 3600; // 10am in seconds since midnight
-
-        // build request with transit as default mode
-        AnalystClusterRequest clusterRequest = new AnalystClusterRequest();
-        clusterRequest.profileRequest = new ProfileRequest();
-        clusterRequest.profileRequest.transitModes = EnumSet.of(TransitModes.TRANSIT);
-        // Access and egress restricted to walking.
-        clusterRequest.profileRequest.accessModes = EnumSet.of(LegMode.WALK);
-        clusterRequest.profileRequest.egressModes = EnumSet.of(LegMode.WALK);
-        clusterRequest.profileRequest.date = date;
-        clusterRequest.profileRequest.fromLat = fromLat;
-        clusterRequest.profileRequest.fromLon = fromLon;
-        clusterRequest.profileRequest.toLat = toLat;
-        clusterRequest.profileRequest.toLon = toLon;
-        clusterRequest.profileRequest.fromTime = fromTime;
-        clusterRequest.profileRequest.toTime = toTime;
-        clusterRequest.profileRequest.zoneId = ZoneId.of("America/New_York");
-
-        return clusterRequest;
     }
 
     private static boolean renameFeedVersion (Request req, Response res) {
@@ -364,7 +218,7 @@ public class FeedVersionController  {
 
         String name = req.queryParams("name");
         if (name == null) {
-            haltWithMessage(400, "Name parameter not specified");
+            logMessageAndHalt(req, 400, "Name parameter not specified");
         }
 
         Persistence.feedVersions.updateField(v.id, "name", name);
@@ -373,7 +227,7 @@ public class FeedVersionController  {
 
     private static Object downloadFeedVersionDirectly(Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "view");
-        return downloadFile(version.retrieveGtfsFile(), version.id, res);
+        return downloadFile(version.retrieveGtfsFile(), version.id, req, res);
     }
 
     /**
@@ -400,7 +254,7 @@ public class FeedVersionController  {
      */
     private static JsonNode validate (Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "manage");
-        haltWithMessage(400, "Validate endpoint not currently configured!");
+        logMessageAndHalt(req, 400, "Validate endpoint not currently configured!");
         // FIXME: Update for sql-loader validation process?
         return null;
 //        return version.retrieveValidationResult(true);
@@ -410,17 +264,28 @@ public class FeedVersionController  {
         FeedVersion version = requestFeedVersion(req, "manage");
 
         // notify any extensions of the change
-        for(String resourceType : DataManager.feedResources.keySet()) {
-            DataManager.feedResources.get(resourceType).feedVersionCreated(version, null);
-        }
-        if (!DataManager.isExtensionEnabled("mtc")) {
-            // update published version ID on feed source
-            Persistence.feedSources.updateField(version.feedSourceId, "publishedVersionId", version.namespace);
-            return version;
-        } else {
-            // NOTE: If the MTC extension is enabled, the parent feed source's publishedVersionId will not be updated to the
-            // version's namespace until the FeedUpdater has successfully downloaded the feed from the share S3 bucket.
-            return Persistence.feedVersions.updateField(version.id, "processing", true);
+        try {
+            for (String resourceType : DataManager.feedResources.keySet()) {
+                DataManager.feedResources.get(resourceType).feedVersionCreated(version, null);
+            }
+            if (!DataManager.isExtensionEnabled("mtc")) {
+                // update published version ID on feed source
+                Persistence.feedSources.updateField(version.feedSourceId, "publishedVersionId", version.namespace);
+                return version;
+            } else {
+                // NOTE: If the MTC extension is enabled, the parent feed source's publishedVersionId will not be updated to the
+                // version's namespace until the FeedUpdater has successfully downloaded the feed from the share S3 bucket.
+                Date publishedDate = new Date();
+                // Set "sent" timestamp to now and reset "processed" timestamp (in the case that it had previously been
+                // published as the active version.
+                version.sentToExternalPublisher = publishedDate;
+                version.processedByExternalPublisher = null;
+                Persistence.feedVersions.replace(version.id, version);
+                return version;
+            }
+        } catch (Exception e) {
+            logMessageAndHalt(req, 500, "Could not publish feed.", e);
+            return null;
         }
     }
 
@@ -443,18 +308,18 @@ public class FeedVersionController  {
 
         if(token == null || !token.isValid()) {
             LOG.error("Feed download token is invalid: {}", token);
-            haltWithMessage(400, "Feed download token not valid");
+            logMessageAndHalt(req, 400, "Feed download token not valid");
         }
         // Fetch feed version to download.
         FeedVersion version = token.retrieveFeedVersion();
         if (version == null) {
-            haltWithMessage(400, "Could not retrieve version to download");
+            logMessageAndHalt(req, 400, "Could not retrieve version to download");
         }
         LOG.info("Using token {} to download feed version {}", token.id, version.id);
         // Remove token so that it cannot be used again for feed download
         Persistence.tokens.removeById(tokenValue);
         File file = version.retrieveGtfsFile();
-        return downloadFile(file, version.id, res);
+        return downloadFile(file, version.id, req, res);
     }
 
     public static void register (String apiPrefix) {
@@ -467,7 +332,6 @@ public class FeedVersionController  {
         get(apiPrefix + "secure/feedversion/:id/download", FeedVersionController::downloadFeedVersionDirectly);
         get(apiPrefix + "secure/feedversion/:id/downloadtoken", FeedVersionController::getFeedDownloadCredentials, json::write);
         post(apiPrefix + "secure/feedversion/:id/validate", FeedVersionController::validate, json::write);
-        get(apiPrefix + "secure/feedversion/:id/isochrones", FeedVersionController::getIsochrones, json::write);
         get(apiPrefix + "secure/feedversion", FeedVersionController::getAllFeedVersionsForFeedSource, json::write);
         post(apiPrefix + "secure/feedversion", FeedVersionController::createFeedVersionViaUpload, json::write);
         post(apiPrefix + "secure/feedversion/fromsnapshot", FeedVersionController::createFeedVersionFromSnapshot, json::write);

@@ -1,12 +1,11 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.conveyal.datatools.common.utils.SparkUtils;
+import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
-import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
-import org.eclipse.jetty.util.ConcurrentHashSet;
+import com.google.common.collect.Sets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
@@ -18,9 +17,7 @@ import java.util.Collections;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
-import static org.apache.http.client.methods.RequestBuilder.post;
-import static spark.Spark.delete;
+import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static spark.Spark.get;
 
 /**
@@ -36,7 +33,7 @@ public class StatusController {
     private static Set<MonitorableJob> getAllJobsRoute(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         if (!userProfile.canAdministerApplication()) {
-            haltWithMessage(401, "User not authorized to view all jobs");
+            logMessageAndHalt(req, 401, "User not authorized to view all jobs");
         }
         return getAllJobs();
     }
@@ -112,15 +109,16 @@ public class StatusController {
             // Any active jobs will still have their status updated, so they need to be retrieved again with any status
             // updates. All completed or errored jobs are in their final state and will not be updated any longer, so we
             // remove them once the client has seen them.
-            ConcurrentHashSet<MonitorableJob> jobsStillActive = filterActiveJobs(allJobsForUser);
+            Set<MonitorableJob> jobsStillActive = filterActiveJobs(allJobsForUser);
 
             DataManager.userJobsMap.put(userId, jobsStillActive);
         }
         return allJobsForUser;
     }
 
-    public static ConcurrentHashSet<MonitorableJob> filterActiveJobs(Set<MonitorableJob> jobs) {
-        ConcurrentHashSet<MonitorableJob> jobsStillActive = new ConcurrentHashSet<>();
+    public static Set<MonitorableJob> filterActiveJobs(Set<MonitorableJob> jobs) {
+        // Note: this must be a thread-safe set in case it is placed into the DataManager#userJobsMap.
+        Set<MonitorableJob> jobsStillActive = Sets.newConcurrentHashSet();
         jobs.stream()
                 .filter(job -> !job.status.completed && !job.status.error)
                 .forEach(jobsStillActive::add);

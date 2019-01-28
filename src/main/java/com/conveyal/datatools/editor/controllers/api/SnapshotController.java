@@ -2,8 +2,6 @@ package com.conveyal.datatools.editor.controllers.api;
 
 
 import com.conveyal.datatools.common.utils.SparkUtils;
-import com.amazonaws.auth.policy.Statement;
-import com.amazonaws.auth.policy.actions.S3Actions;
 import com.conveyal.datatools.editor.jobs.CreateSnapshotJob;
 import com.conveyal.datatools.editor.jobs.ExportSnapshotToGTFSJob;
 import com.conveyal.datatools.manager.DataManager;
@@ -19,16 +17,21 @@ import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import spark.Request;
+import spark.Response;
 
 import java.io.IOException;
 import java.util.Collection;
 
-import spark.Request;
-import spark.Response;
-
 import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
-import static com.conveyal.datatools.common.utils.SparkUtils.*;
-import static spark.Spark.*;
+import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
+import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
+import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
+import static spark.Spark.delete;
+import static spark.Spark.get;
+import static spark.Spark.options;
+import static spark.Spark.post;
+import static spark.Spark.put;
 
 /**
  * HTTP CRUD endpoints for managing snapshots, which are copies of GTFS feeds stored in the editor.
@@ -52,7 +55,7 @@ public class SnapshotController {
      */
     private static Snapshot getSnapshotFromRequest(Request req) {
         String id = req.params("id");
-        if (id == null) haltWithMessage(400, "Must provide valid snapshot ID");
+        if (id == null) logMessageAndHalt(req, 400, "Must provide valid snapshot ID");
         // Check user permissions on feed source.
         FeedVersionController.requestFeedSourceById(req, "view", "feedId");
         return Persistence.snapshots.getById(id);
@@ -118,7 +121,7 @@ public class SnapshotController {
     // FIXME: Is this method used anywhere? Can we delete?
     private static Object updateSnapshot (Request req, Response res) {
         // FIXME
-        haltWithMessage(400, "Method not implemented");
+        logMessageAndHalt(req, 400, "Method not implemented");
         return null;
     }
 
@@ -135,11 +138,11 @@ public class SnapshotController {
         FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, "edit", "feedId");
         Snapshot snapshotToRestore = Persistence.snapshots.getById(id);
         if (snapshotToRestore == null) {
-            haltWithMessage(400, "Must specify valid snapshot ID");
+            logMessageAndHalt(req, 400, "Must specify valid snapshot ID");
         }
         // Update editor namespace pointer.
         if (snapshotToRestore.namespace == null) {
-            haltWithMessage(400, "Failed to restore snapshot. No namespace found.");
+            logMessageAndHalt(req, 400, "Failed to restore snapshot. No namespace found.");
         }
         // Preserve existing editor buffer if requested. FIXME: should the request body also contain name and comments?
         boolean preserveBuffer = "true".equals(req.queryParams("preserveBuffer"));
@@ -184,7 +187,12 @@ public class SnapshotController {
         // FIXME: use new FeedStore.
         if (DataManager.useS3) {
             if (!FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, key)) {
-                haltWithMessage(400, String.format("Error downloading snapshot from S3. Object %s does not exist.", key));
+                logMessageAndHalt(
+                    req,
+                    500,
+                    String.format("Error downloading snapshot from S3. Object %s does not exist.", key),
+                    new Exception("s3 object does not exist")
+                );
             }
             // Return presigned download link if using S3.
             return downloadFromS3(FeedStore.s3Client, DataManager.feedBucket, key, false, res);
@@ -207,7 +215,7 @@ public class SnapshotController {
         FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, "edit", "feedId");
         // Retrieve snapshot
         Snapshot snapshot = Persistence.snapshots.getById(id);
-        if (snapshot == null) haltWithMessage(400, "Must provide valid snapshot ID.");
+        if (snapshot == null) logMessageAndHalt(req, 400, "Must provide valid snapshot ID.");
         try {
             // Remove the snapshot and then renumber the snapshots
             Persistence.snapshots.removeById(snapshot.id);
@@ -216,8 +224,7 @@ public class SnapshotController {
             // FIXME delete tables from database?
             return snapshot;
         } catch (Exception e) {
-            e.printStackTrace();
-            haltWithMessage(400, "Unknown error deleting snapshot.", e);
+            logMessageAndHalt(req, 500, "Unknown error occurred while deleting snapshot.", e);
             return null;
         }
     }
@@ -232,13 +239,13 @@ public class SnapshotController {
         FeedDownloadToken token = Persistence.tokens.getById(id);
 
         if(token == null || !token.isValid()) {
-            halt(400, "Feed download token not valid");
+            logMessageAndHalt(req, 400, "Feed download token not valid");
         }
 
         Snapshot snapshot = token.retrieveSnapshot();
         Persistence.tokens.removeById(token.id);
         String fileName = snapshot.id + ".zip";
-        return downloadFile(FeedVersion.feedStore.getFeed(fileName), fileName, res);
+        return downloadFile(FeedVersion.feedStore.getFeed(fileName), fileName, req, res);
     }
 
     public static void register (String apiPrefix) {

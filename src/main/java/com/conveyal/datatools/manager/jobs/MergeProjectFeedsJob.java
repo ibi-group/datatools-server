@@ -2,7 +2,6 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.Consts;
-import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -17,7 +16,6 @@ import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -35,8 +33,6 @@ import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
-
-import static spark.Spark.halt;
 
 /**
  * Created by landon on 9/19/17.

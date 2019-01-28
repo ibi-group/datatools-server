@@ -1,50 +1,35 @@
 package com.conveyal.datatools.manager.models;
 
-
-import java.awt.geom.Rectangle2D;
-import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.Serializable;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
-import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
-import java.util.concurrent.ExecutionException;
-
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
 import com.conveyal.gtfs.BaseGTFSCache;
 import com.conveyal.gtfs.GTFS;
-import com.conveyal.gtfs.GTFSFeed;
 import com.conveyal.gtfs.loader.Feed;
 import com.conveyal.gtfs.loader.FeedLoadResult;
 import com.conveyal.gtfs.validator.ValidationResult;
-import com.conveyal.r5.common.R5Version;
-import com.conveyal.r5.point_to_point.builder.TNBuilderConfig;
-import com.conveyal.r5.transit.TransportNetwork;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.IOUtils;
-import org.apache.commons.lang.exception.ExceptionUtils;
-import org.bson.codecs.pojo.annotations.BsonProperty;
-
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
+import org.bson.codecs.pojo.annotations.BsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.conveyal.datatools.manager.models.Deployment.downloadOsmExtract;
+import java.awt.geom.Rectangle2D;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.Serializable;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.util.Date;
+
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
@@ -155,7 +140,7 @@ public class FeedVersion extends Model implements Serializable {
         return feedStore.getFeed(id);
     }
 
-    public File newGtfsFile(InputStream inputStream) {
+    public File newGtfsFile(InputStream inputStream) throws IOException {
         File file = feedStore.newFeed(id, inputStream, parentFeedSource());
         // fileSize field will not be stored until new FeedVersion is stored in MongoDB (usually in
         // the final steps of ValidateFeedJob).
@@ -206,10 +191,18 @@ public class FeedVersion extends Model implements Serializable {
     public String namespace;
 
     /**
-     * Indicates whether a feed version is pending published status, a check that is currently performed in
-     * {@link com.conveyal.datatools.manager.jobs.FeedUpdater}. This field is currently in use only for the MTC extension.
+     * Indicates when a feed version was published to an external source. If null, the version has not been sent. This
+     * field is currently in use only for the MTC extension and is reset to null after the published version has been
+     * registered externally.
      * */
-    public boolean processing;
+    public Date sentToExternalPublisher;
+
+    /**
+     * Indicates when a feed version was published to an external source. If null, the version has not been processed by
+     * the external publisher or has not been sent (see {@link #sentToExternalPublisher}. This field is currently in use
+     * only for the MTC extension and is reset to null after the published version has been registered externally.
+     * */
+    public Date processedByExternalPublisher;
 
     public String formattedTimestamp() {
         SimpleDateFormat format = new SimpleDateFormat(HUMAN_READABLE_TIMESTAMP_FORMAT);
@@ -327,109 +320,6 @@ public class FeedVersion extends Model implements Serializable {
     }
 
     /**
-     * This reads in the r5 transport network.
-     */
-    public TransportNetwork readTransportNetwork() {
-        TransportNetwork transportNetwork = null;
-        try {
-            transportNetwork = TransportNetwork.read(transportNetworkPath());
-            // check to see if distance tables are built yet... should be removed once better caching strategy is implemented.
-            if (transportNetwork.transitLayer.stopToVertexDistanceTables == null) {
-                transportNetwork.transitLayer.buildDistanceTables(null);
-            }
-        } catch (Exception e) {
-            LOG.error("Could not read transport network for version {}", id);
-            e.printStackTrace();
-        }
-        return transportNetwork;
-    }
-
-    /**
-     * Build the r5 transport network. A couple of things happen here:
-     * 1. The OSM extract is fetched (if not already stored on the server).
-     * 2. Create single GTFSFeed from GTFS file.
-     * 3. Build r5 transport network.
-     */
-    public TransportNetwork buildTransportNetwork(MonitorableJob.Status status) {
-        // return null if validation result is null (probably means something went wrong with validation, plus we won't have feed bounds).
-        if (this.validationResult == null || validationResult.fatalException != null) {
-            return null;
-        }
-
-        // Sometimes this method is called when no status object is available.
-        if (status == null) status = new MonitorableJob.Status();
-
-        // Fetch OSM extract
-        status.update(false, "Fetching OSM extract...", 10);
-
-        // FIXME: don't convert to Rectangle2D?
-        Rectangle2D bounds = this.validationResult.fullBounds.toRectangle2D();
-
-        if (bounds == null) {
-            String message = String.format("Could not build network for %s because feed bounds are unknown.", this.id);
-            LOG.warn(message);
-            status.update(true, message, 10);
-            return null;
-        }
-        // Check for OSM extract on disk.
-        // FIXME: Delete osm extract file?
-        File osmExtract = retrieveCachedOSMFile(bounds);
-        if (!osmExtract.exists()) {
-            // If OSM extract does not already exist on disk, download a new one.
-            try {
-                InputStream is = downloadOsmExtract(bounds);
-                OutputStream out;
-                out = new FileOutputStream(osmExtract);
-                IOUtils.copy(is, out);
-                is.close();
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-
-        // Create/save r5 network
-        status.update(false, "Processing GTFS feed...", 30);
-        List<GTFSFeed> feedList = new ArrayList<>();
-        File gtfsFile = retrieveGtfsFile();
-        GTFSFeed gtfsFeed = GTFSFeed.fromFile(gtfsFile.getAbsolutePath());
-        status.update(false, "Creating transport network...", 50);
-        feedList.add(gtfsFeed);
-        TransportNetwork tn;
-        try {
-            tn = TransportNetwork.fromFeeds(osmExtract.getAbsolutePath(), feedList, TNBuilderConfig.defaultConfig());
-        } catch (Exception e) {
-            String message = String.format("Unknown error encountered while building network for %s.", this.id);
-            LOG.warn(message, e);
-            // Delete the OSM extract directory because it is probably corrupted and may cause issues for the next
-            // version loaded with the same bounds.
-            File osmDirectory = osmExtract.getParentFile();
-            LOG.info("Deleting OSM dir for this version {}", osmDirectory.getAbsolutePath());
-            try {
-                FileUtils.deleteDirectory(osmDirectory);
-            } catch (IOException e1) {
-                LOG.error("Could not delete OSM dir", e);
-            }
-            status.update(true, message, 100);
-            status.exceptionType = e.getMessage();
-            status.exceptionDetails = ExceptionUtils.getStackTrace(e);
-            return null;
-        }
-        tn.transitLayer.buildDistanceTables(null);
-        // Delete file to prevent disk space shortage.
-        if (!gtfsFile.delete()) {
-            LOG.warn("Could not delete file at {}", gtfsFile.getAbsolutePath());
-        }
-        File tnFile = transportNetworkPath();
-        try {
-            tn.write(tnFile);
-            return tn;
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        return null;
-    }
-
-    /**
      * Get the OSM file for the given bounds if it exists on disk.
      *
      * FIXME: Use osm-lib to handle caching OSM data.
@@ -506,33 +396,15 @@ public class FeedVersion extends Model implements Serializable {
             // Although outright deleting the feedVersion from deployments could be surprising and shouldn't be done anyway.
             Persistence.deployments.getMongoCollection().updateMany(eq("projectId", this.parentFeedSource().projectId),
                     pull("feedVersionIds", this.id));
-            transportNetworkPath().delete();
             Persistence.feedVersions.removeById(this.id);
             this.parentFeedSource().renumberFeedVersions();
+
+            // recalculate feed expiration notifications in case the latest version has changed
+            Scheduler.scheduleExpirationNotifications(fs);
+
             LOG.info("Version {} deleted", id);
         } catch (Exception e) {
             LOG.warn("Error deleting version", e);
         }
-    }
-
-    /**
-     * Return directory where r5 transport network is stored.
-     */
-    private String r5Path() {
-        // r5 networks MUST be stored in separate directories (in this case under feed source ID
-        // because of shared osm.mapdb used by r5 networks placed in same dir
-        File r5 = new File(String.join(File.separator, FeedStore.basePath.getAbsolutePath(), this.feedSourceId));
-        if (!r5.exists()) {
-            r5.mkdirs();
-        }
-        return r5.getAbsolutePath();
-    }
-
-    /**
-     * Return file for r5 transport network. NOTE: the filename is comprised of the feed version ID and the r5 version
-     * number.
-     */
-    public File transportNetworkPath() {
-        return new File(String.join(File.separator, r5Path(), id + "_" + R5Version.describe + "_network.dat"));
     }
 }

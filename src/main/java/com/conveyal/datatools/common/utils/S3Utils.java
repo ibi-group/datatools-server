@@ -2,21 +2,10 @@ package com.conveyal.datatools.common.utils;
 
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.HttpMethod;
-import com.amazonaws.auth.policy.Action;
-import com.amazonaws.auth.policy.Policy;
-import com.amazonaws.auth.policy.Resource;
-import com.amazonaws.auth.policy.Statement;
-import com.amazonaws.auth.policy.actions.S3Actions;
 import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.GeneratePresignedUrlRequest;
 import com.amazonaws.services.s3.model.PutObjectRequest;
-import com.amazonaws.services.securitytoken.AWSSecurityTokenService;
-import com.amazonaws.services.securitytoken.AWSSecurityTokenServiceClientBuilder;
-import com.amazonaws.services.securitytoken.model.AssumeRoleRequest;
-import com.amazonaws.services.securitytoken.model.AssumeRoleResult;
-import com.amazonaws.services.securitytoken.model.Credentials;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import org.apache.commons.io.IOUtils;
@@ -34,11 +23,8 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.util.Date;
-import java.util.HashSet;
-import java.util.Set;
 
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
-import static spark.Spark.halt;
+import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 
 /**
  * Created by landon on 8/2/16.
@@ -48,12 +34,17 @@ public class S3Utils {
     private static final Logger LOG = LoggerFactory.getLogger(S3Utils.class);
     private static final int REQUEST_TIMEOUT_MSEC = 30 * 1000;
 
-    public static String uploadBranding(Request req, String key) throws IOException, ServletException {
+    public static String uploadBranding(Request req, String key) {
         String url;
 
         String s3Bucket = DataManager.getConfigPropertyAsText("application.data.gtfs_s3_bucket");
         if (s3Bucket == null) {
-            halt(400);
+            logMessageAndHalt(
+                req,
+                500,
+                "s3bucket is incorrectly configured on server",
+                new Exception("s3bucket is incorrectly configured on server")
+            );
         }
 
         // Get file from request
@@ -61,17 +52,19 @@ public class S3Utils {
             MultipartConfigElement multipartConfigElement = new MultipartConfigElement(System.getProperty("java.io.tmpdir"));
             req.raw().setAttribute("org.eclipse.jetty.multipartConfig", multipartConfigElement);
         }
-        Part part = req.raw().getPart("file");
-        String extension = "." + part.getContentType().split("/", 0)[1];
-        File tempFile = File.createTempFile(key + "_branding", extension);
-        InputStream inputStream;
+        String extension = null;
+        File tempFile = null;
         try {
+            Part part = req.raw().getPart("file");
+            extension = "." + part.getContentType().split("/", 0)[1];
+            tempFile = File.createTempFile(key + "_branding", extension);
+            InputStream inputStream;
             inputStream = part.getInputStream();
             FileOutputStream out = new FileOutputStream(tempFile);
             IOUtils.copy(inputStream, out);
-        } catch (Exception e) {
+        } catch (IOException | ServletException e) {
             e.printStackTrace();
-            haltWithMessage(400, "Unable to read uploaded file");
+            logMessageAndHalt(req, 400, "Unable to read uploaded file");
         }
 
         try {
@@ -85,8 +78,7 @@ public class S3Utils {
                     .withCannedAcl(CannedAccessControlList.PublicRead));
             return url;
         } catch (AmazonServiceException ase) {
-            ase.printStackTrace();
-            haltWithMessage(400, "Error uploading file to S3");
+            logMessageAndHalt(req, 500, "Error uploading file to S3", ase);
             return null;
         } finally {
             boolean deleted = tempFile.delete();

@@ -4,9 +4,7 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
-import com.conveyal.datatools.manager.persistence.Persistence;
-
-import java.util.Map;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 public class FetchSingleFeedJob extends MonitorableJob {
 
@@ -27,6 +25,23 @@ public class FetchSingleFeedJob extends MonitorableJob {
         status.message = "Fetching...";
         status.percentComplete = 0.0;
         status.uploading = true;
+    }
+
+    /**
+     * Getter that allows a client to know the ID of the feed version that will be created as soon as the upload is
+     * initiated; however, we will not store the FeedVersion in the mongo application database until the upload and
+     * processing is completed. This prevents clients from manipulating GTFS data before it is entirely imported.
+     */
+    @JsonProperty
+    public String getFeedVersionId () {
+        // Feed version result is null unless (and until) fetch is successful.
+        return result != null ? result.id : null;
+    }
+
+    @JsonProperty
+    public String getFeedSourceId () {
+        // Feed version result is null unless (and until) fetch is successful.
+        return result != null ? result.parentFeedSource().id : null;
     }
 
     @Override
