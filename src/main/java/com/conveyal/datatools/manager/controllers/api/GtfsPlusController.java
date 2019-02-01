@@ -45,6 +45,15 @@ import static spark.Spark.get;
 import static spark.Spark.post;
 
 /**
+ * This handles the GTFS+ specific HTTP endpoints, which allow for validating GTFS+ tables,
+ * downloading GTFS+ files to a client for editing (for example), and uploading/publishing a GTFS+ zip as
+ * (for example, one that has been edited) as a new feed version. Here is the workflow in sequence:
+ * 
+ * 1. User uploads feed version (with or without GTFS+ tables).
+ * 2. User views validation to determine if errors need amending.
+ * 3. User makes edits (in client) and uploads modified GTFS+.
+ * 4. Once user is satisfied with edits. User publishes as new feed version.
+ * 
  * Created by demory on 4/13/16.
  */
 public class GtfsPlusController {
@@ -53,7 +62,10 @@ public class GtfsPlusController {
 
     private static FeedStore gtfsPlusStore = new FeedStore("gtfsplus");
 
-
+    /**
+     * Upload a GTFS+ file based on a specific feed version and replace (or create)
+     * the file in the GTFS+ specific feed store.
+     */
     private static Boolean uploadGtfsPlusFile (Request req, Response res) {
         String feedVersionId = req.params("versionid");
         File newGtfsFile = new File(gtfsPlusStore.getPathToFeed(feedVersionId));
@@ -61,6 +73,10 @@ public class GtfsPlusController {
         return true;
     }
 
+    /**
+     * Download a GTFS+ file for a specific feed version. If no edited GTFS+ file
+     * has been uploaded for the feed version, the original feed version will be returned.
+     */
     private static HttpServletResponse getGtfsPlusFile(Request req, Response res) {
         String feedVersionId = req.params("versionid");
         LOG.info("Downloading GTFS+ file for FeedVersion " + feedVersionId);
@@ -74,6 +90,9 @@ public class GtfsPlusController {
         return SparkUtils.downloadFile(file, file.getName() + ".zip", req, res);
     }
 
+    /**
+     * Download only the GTFS+ tables in a zip for a specific feed version.
+     */
     private static HttpServletResponse getGtfsPlusFromGtfs(String feedVersionId, Request req, Response res) {
         LOG.info("Extracting GTFS+ data from main GTFS feed");
         FeedVersion version = Persistence.feedVersions.getById(feedVersionId);
@@ -141,6 +160,11 @@ public class GtfsPlusController {
         }
     }
 
+    /**
+     * Publishes the edited/saved GTFS+ file as a new feed version for the feed source.
+     * This is the final stage in the GTFS+ validation/editing workflow described in the
+     * class's javadoc.
+     */
     private static String publishGtfsPlusFile(Request req, Response res) {
         Auth0UserProfile profile = req.attribute("user");
         String feedVersionId = req.params("versionid");
@@ -229,6 +253,11 @@ public class GtfsPlusController {
         return formatJobMessage(processSingleFeedJob.jobId, "Feed version is processing.");
     }
 
+    /**
+     * HTTP endpoint that validates GTFS+ tables for a specific feed version (or its saved/edited GTFS+).
+     * FIXME: For now this uses the MapDB-backed GTFSFeed class. Which actually suggests that this might
+     * should be contained within a MonitorableJob.
+     */
     private static Collection<ValidationIssue> getGtfsPlusValidation(Request req, Response res) {
         String feedVersionId = req.params("versionid");
         LOG.info("Validating GTFS+ for " + feedVersionId);
@@ -269,6 +298,9 @@ public class GtfsPlusController {
         return issues;
     }
 
+    /**
+     * Validate a single GTFS+ table using the table specification found in gtfsplus.yml.
+     */
     private static void validateTable(
         Collection<ValidationIssue> issues,
         JsonNode tableNode,
