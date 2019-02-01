@@ -64,7 +64,7 @@ public class MergeProjectFeedsJob extends MonitorableJob {
             LOG.info("Adding {} feed to merged zip", fs.name);
             feedVersions.add(version);
         }
-        addNextJob(new MergeFeedsJob(owner, feedVersions, project.id + "-merged"));
+        addNextJob(new MergeFeedsJob(owner, feedVersions, String.format("%s.zip", project.id), MergeFeedsJob.MergeType.REGIONAL));
 
     }
 }

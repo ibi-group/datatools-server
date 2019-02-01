@@ -31,6 +31,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -292,8 +293,24 @@ public class FeedVersionController  {
     private static String mergeFeedVersions(Request req, Response res) {
         String[] versionIds = req.queryParams("feedVersionIds").split(",");
         Auth0UserProfile userProfile = req.attribute("user");
-        Set<FeedVersion> versions = Stream.of(versionIds).map(id -> Persistence.feedVersions.getById(id)).collect(Collectors.toSet());
-        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(userProfile.getEmail(), versions, "merged");
+        Set<FeedVersion> versions = new HashSet<>();
+        String feedSourceId = null;
+        for (String id : versionIds) {
+            FeedVersion v = Persistence.feedVersions.getById(id);
+            if (v == null) {
+                logMessageAndHalt(req, 400, "Must provide valid version ID");
+            }
+            // Store feed source id and check other versions for matching.
+            if (feedSourceId == null) feedSourceId = v.feedSourceId;
+            else if (!v.feedSourceId.equals(feedSourceId)) {
+                logMessageAndHalt(req, 400, "Cannot merge versions with different parent feed sources.");
+            }
+            versions.add(v);
+        }
+        if (versionIds.length != 2) {
+            logMessageAndHalt(req, 400, "Merging more than two versions is not currently supported.");
+        }
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(userProfile.getUser_id(), versions, "merged", MergeFeedsJob.MergeType.FEED_VERSIONS);
         DataManager.heavyExecutor.execute(mergeFeedsJob);
         return SparkUtils.formatJobMessage(mergeFeedsJob.jobId, "Merging feed versions...");
     }
