@@ -6,8 +6,6 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
-import com.google.common.collect.ArrayListMultimap;
-import com.google.common.collect.ListMultimap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,7 +16,8 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
-import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
@@ -38,11 +37,11 @@ public class Scheduler {
     private static final Logger LOG = LoggerFactory.getLogger(Scheduler.class);
 
     // Scheduled executor that handles running scheduled jobs.
-    public final static ScheduledExecutorService schedulerService = Executors.newScheduledThreadPool(1);
+    public static final ScheduledExecutorService schedulerService = Executors.newScheduledThreadPool(1);
     /** Stores {@link ScheduledJob} objects containing scheduled tasks keyed on the tasks's associated {@link FeedSource} ID. */
-    public final static ListMultimap<String, ScheduledJob> scheduledJobsForFeedSources = ArrayListMultimap.create();
+    public static final Set<ScheduledJob> scheduledJobsForFeedSources = ConcurrentHashMap.newKeySet();
     /** Stores {@link ScheduledJob} objects containing scheduled tasks keyed on the tasks's associated {@link Project} ID. */
-    public final static ListMultimap<String, ScheduledJob> scheduledJobsForProjects = ArrayListMultimap.create();
+    public static final Set<ScheduledJob> scheduledJobsForProjects = ConcurrentHashMap.newKeySet();
 
     /**
      * A method to initialize all scheduled tasks upon server startup.
@@ -67,26 +66,24 @@ public class Scheduler {
      */
     public static ScheduledJob scheduleFeedSourceJob (FeedSource feedSource, Runnable job, long delay, TimeUnit timeUnit) {
         ScheduledFuture scheduledFuture = schedulerService.schedule(job, delay, timeUnit);
-        ScheduledJob scheduledJob = new ScheduledJob(job, scheduledFuture);
-        scheduledJobsForFeedSources.put(feedSource.id, scheduledJob);
+        ScheduledJob scheduledJob = new ScheduledJob(feedSource, job, scheduledFuture);
+        scheduledJobsForFeedSources.add(scheduledJob);
         return scheduledJob;
     }
 
     /**
      * Cancels and removes all scheduled jobs for a given entity id and job class. NOTE: This is intended as an internal
      * method that should operate on one of the scheduledJobsForXYZ fields of this class. A wrapper method (such as
-     * {@link #removeProjectJobsOfType(String, Class, boolean)}) should be provided for any new entity types with
+     * {@link Scheduler#removeProjectJobsOfType(String, Class, boolean)}) should be provided for any new entity types with
      * scheduled jobs (e.g., if feed version-specific scheduled jobs are needed).
      */
-    private static int removeJobsOfType(ListMultimap<String, ScheduledJob> scheduledJobs, String id, Class<?> clazz, boolean mayInterruptIfRunning) {
+    static int removeJobsOfType(Set<ScheduledJob> scheduledJobs, String id, Class<?> clazz, boolean mayInterruptIfRunning) {
         int jobsCancelled = 0;
-        // First get the list of jobs belonging to the id (e.g., all jobs related to a feed source).
-        List<ScheduledJob> jobs = scheduledJobs.get(id);
-        // Iterate over jobs, cancelling and removing only those matching the job class.
-        for (ScheduledJob scheduledJob : jobs) {
-            if (clazz.isInstance(scheduledJob.job)) {
+        // Iterate over jobs, cancelling and removing those that belong to the id and job type.
+        for (ScheduledJob scheduledJob : scheduledJobs) {
+            if (scheduledJob.id.equals(id) && clazz.isInstance(scheduledJob.job)) {
                 scheduledJob.scheduledFuture.cancel(mayInterruptIfRunning);
-                scheduledJobs.remove(id, scheduledJob);
+                scheduledJobs.remove(scheduledJob);
                 jobsCancelled++;
             }
         }
@@ -163,8 +160,8 @@ public class Scheduler {
                 intervalInMinutes,
                 TimeUnit.MINUTES
             );
-            ScheduledJob scheduledJob = new ScheduledJob(fetchProjectFeedsJob, scheduledFuture);
-            scheduledJobsForProjects.put(project.id, scheduledJob);
+            ScheduledJob scheduledJob = new ScheduledJob(project, fetchProjectFeedsJob, scheduledFuture);
+            scheduledJobsForProjects.add(scheduledJob);
         } catch (Exception e) {
             LOG.error("Error scheduling project {} feed fetch.", project.id);
             e.printStackTrace();

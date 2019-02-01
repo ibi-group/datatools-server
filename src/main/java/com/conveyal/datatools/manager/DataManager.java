@@ -86,7 +86,7 @@ public class DataManager {
      * Stores jobs underway by user ID. NOTE: any set created and stored here must be created with
      * {@link Sets#newConcurrentHashSet()} or similar thread-safe Set.
      */
-    public static Map<String, Set<MonitorableJob>> userJobsMap = new ConcurrentHashMap<>();
+    public static final Map<String, Set<MonitorableJob>> userJobsMap = new ConcurrentHashMap<>();
 
     // ObjectMapper that loads in YAML config files
     private static final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
