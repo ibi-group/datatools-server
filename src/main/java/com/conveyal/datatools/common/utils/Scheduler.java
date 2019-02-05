@@ -18,6 +18,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -83,10 +84,14 @@ public class Scheduler {
         // First get the list of jobs belonging to the id (e.g., all jobs related to a feed source).
         List<ScheduledJob> jobs = scheduledJobs.get(id);
         // Iterate over jobs, cancelling and removing only those matching the job class.
-        for (ScheduledJob scheduledJob : jobs) {
+        // Use an iterator because elements may be removed and if removed in a regular loop it could
+        // throw a java.util.ConcurrentModificationException
+        // See https://stackoverflow.com/q/8104692/269834
+        for (Iterator<ScheduledJob> iterator = jobs.iterator(); iterator.hasNext(); ) {
+            ScheduledJob scheduledJob = iterator.next();
             if (clazz.isInstance(scheduledJob.job)) {
                 scheduledJob.scheduledFuture.cancel(mayInterruptIfRunning);
-                scheduledJobs.remove(id, scheduledJob);
+                iterator.remove();
                 jobsCancelled++;
             }
         }

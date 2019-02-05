@@ -17,18 +17,13 @@ import com.conveyal.datatools.manager.utils.HashUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.google.common.io.ByteStreams;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
 import spark.Response;
 
-import javax.servlet.ServletInputStream;
-import javax.servlet.ServletRequestWrapper;
 import javax.servlet.http.HttpServletResponse;
 import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashSet;
@@ -37,6 +32,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
+import static com.conveyal.datatools.common.utils.SparkUtils.copyRequestStreamIntoFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
@@ -108,34 +104,17 @@ public class FeedVersionController  {
         // FIXME: Make the creation of new GTFS files generic to handle other feed creation methods, including fetching
         // by URL and loading from the editor.
         File newGtfsFile = new File(DataManager.getConfigPropertyAsText("application.data.gtfs"), newFeedVersion.id);
-        try {
-            // Bypass Spark's request wrapper which always caches the request body in memory that may be a very large
-            // GTFS file. Also, the body of the request is the GTFS file instead of using multipart form data because
-            // multipart form handling code also caches the request body.
-            ServletInputStream inputStream = ((ServletRequestWrapper) req.raw()).getRequest().getInputStream();
-            FileOutputStream fileOutputStream = new FileOutputStream(newGtfsFile);
-            // Guava's ByteStreams.copy uses a 4k buffer (no need to wrap output stream), but does not close streams.
-            ByteStreams.copy(inputStream, fileOutputStream);
-            fileOutputStream.close();
-            inputStream.close();
-            if (newGtfsFile.length() == 0) {
-                throw new IOException("No file found in request body.");
-            }
-            // Set last modified based on value of query param. This is determined/supplied by the client
-            // request because this data gets lost in the uploadStream otherwise.
-            Long lastModified = req.queryParams("lastModified") != null
-                    ? Long.valueOf(req.queryParams("lastModified"))
-                    : null;
-            if (lastModified != null) {
-                newGtfsFile.setLastModified(lastModified);
-                newFeedVersion.fileTimestamp = lastModified;
-            }
-            LOG.info("Last modified: {}", new Date(newGtfsFile.lastModified()));
-            LOG.info("Saving feed from upload {}", feedSource);
-        } catch (Exception e) {
-            LOG.error("Unable to open input stream from uploaded file", e);
-            logMessageAndHalt(req, 400, "Unable to read uploaded feed");
+        copyRequestStreamIntoFile(req, newGtfsFile);
+        // Set last modified based on value of query param. This is determined/supplied by the client
+        // request because this data gets lost in the uploadStream otherwise.
+        Long lastModified = req.queryParams("lastModified") != null
+            ? Long.valueOf(req.queryParams("lastModified"))
+            : null;
+        if (lastModified != null) {
+            newGtfsFile.setLastModified(lastModified);
+            newFeedVersion.fileTimestamp = lastModified;
         }
+        LOG.info("Last modified: {}", new Date(newGtfsFile.lastModified()));
 
         // TODO: fix FeedVersion.hash() call when called in this context. Nothing gets hashed because the file has not been saved yet.
         // newFeedVersion.hash();
@@ -226,7 +205,7 @@ public class FeedVersionController  {
         return true;
     }
 
-    private static Object downloadFeedVersionDirectly(Request req, Response res) {
+    private static HttpServletResponse downloadFeedVersionDirectly(Request req, Response res) {
         FeedVersion version = requestFeedVersion(req, "view");
         return downloadFile(version.retrieveGtfsFile(), version.id, req, res);
     }
@@ -239,7 +218,7 @@ public class FeedVersionController  {
         FeedVersion version = requestFeedVersion(req, "view");
 
         if (DataManager.useS3) {
-            // Return presigned download link if using S3.
+            // Return pre-signed download link if using S3.
             return downloadFromS3(FeedStore.s3Client, DataManager.feedBucket, FeedStore.s3Prefix + version.id, false, res);
         } else {
             // when feeds are stored locally, single-use download token will still be used
