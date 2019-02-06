@@ -166,7 +166,7 @@ public class UserController {
         return executeRequestAndGetResult(request, req);
     }
 
-    private static Object updateUser(Request req, Response res) {
+    private static String updateUser(Request req, Response res) {
         String userId = req.params("id");
         Auth0UserProfile user = getUserById(userId);
 
@@ -193,19 +193,7 @@ public class UserController {
 
         setRequestEntityUsingJson(request, json, req);
 
-        String result = executeRequestAndGetResult(request, req);
-
-        try {
-            return mapper.readTree(result);
-        } catch (IOException e) {
-            logMessageAndHalt(
-                req,
-                500,
-                "Failed to parse update user response",
-                e
-            );
-            return null;
-        }
+        return executeRequestAndGetResult(request, req);
     }
 
     private static Object deleteUser(Request req, Response res) {
