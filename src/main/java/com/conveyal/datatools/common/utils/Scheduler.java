@@ -26,6 +26,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import static com.conveyal.datatools.common.utils.Utils.getTimezone;
+import static com.google.common.collect.Multimaps.synchronizedListMultimap;
 
 /**
  * This class centralizes the logic associated with scheduling and cancelling tasks (organized as a {@link ScheduledJob})
@@ -41,9 +42,11 @@ public class Scheduler {
     // Scheduled executor that handles running scheduled jobs.
     public final static ScheduledExecutorService schedulerService = Executors.newScheduledThreadPool(1);
     /** Stores {@link ScheduledJob} objects containing scheduled tasks keyed on the tasks's associated {@link FeedSource} ID. */
-    public final static ListMultimap<String, ScheduledJob> scheduledJobsForFeedSources = ArrayListMultimap.create();
+    public final static ListMultimap<String, ScheduledJob> scheduledJobsForFeedSources =
+        synchronizedListMultimap(ArrayListMultimap.create());
     /** Stores {@link ScheduledJob} objects containing scheduled tasks keyed on the tasks's associated {@link Project} ID. */
-    public final static ListMultimap<String, ScheduledJob> scheduledJobsForProjects = ArrayListMultimap.create();
+    public final static ListMultimap<String, ScheduledJob> scheduledJobsForProjects =
+        synchronizedListMultimap(ArrayListMultimap.create());
 
     /**
      * A method to initialize all scheduled tasks upon server startup.
