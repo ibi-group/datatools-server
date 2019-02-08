@@ -33,9 +33,9 @@ script:
   # recursively copy coverage results into another folder so the e2e tests don't overwrite them
   - cp -R target target-unit-test-results
   # run just the e2e tests
-  - if [ "$SHOULD_RUN_E2E" = "true" ]; RUN_E2E=true mvn test; fi
+  - if [ "$SHOULD_RUN_E2E" = "true" ]; then RUN_E2E=true mvn test; fi
   # recursively copy coverage results into another folder so the deployment results don't overwrite them
-  - if [ "$SHOULD_RUN_E2E" = "true" ]; cp -R target target-e2e-test-results; fi
+  - if [ "$SHOULD_RUN_E2E" = "true" ]; then cp -R target target-e2e-test-results; fi
 after_success:
   - semantic-release --prepare @conveyal/maven-semantic-release --publish @semantic-release/github,@conveyal/maven-semantic-release --verify-conditions @semantic-release/github,@conveyal/maven-semantic-release --verify-release @conveyal/maven-semantic-release --use-conveyal-workflow --dev-branch=dev --skip-maven-deploy
   # Run codecov after semantic-release because maven-semantic-release creates extra commits that
@@ -43,7 +43,7 @@ after_success:
   # upload unit test coverage results
   - bash <(curl -s https://codecov.io/bash) -s target-unit-test-results -F unit_tests
   # upload e2e test coverage results
-  - if [ "$SHOULD_RUN_E2E" = "true" ]; bash <(curl -s https://codecov.io/bash) -s target-e2e-test-results -F end_to_end_tests; fi
+  - if [ "$SHOULD_RUN_E2E" = "true" ]; then bash <(curl -s https://codecov.io/bash) -s target-e2e-test-results -F end_to_end_tests; fi
 # notify slack channel of build status
 notifications:
   slack: conveyal:WQxmWiu8PdmujwLw4ziW72Gc
