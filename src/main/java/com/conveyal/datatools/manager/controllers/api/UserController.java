@@ -173,9 +173,7 @@ public class UserController {
         LOG.info("Updating user {}", user.getEmail());
 
         HttpPatch request = new HttpPatch(getUserIdUrl(req));
-        request.addHeader("Authorization", "Bearer " + AUTH0_API_TOKEN);
-        request.setHeader("Accept-Charset", charset);
-        request.setHeader("Content-Type", "application/json");
+        setHeaders(request);
 
         JsonNode jsonNode = parseJsonFromBody(req);
 
@@ -198,9 +196,7 @@ public class UserController {
 
     private static Object deleteUser(Request req, Response res) {
         HttpDelete request = new HttpDelete(getUserIdUrl(req));
-        request.addHeader("Authorization", "Bearer " + AUTH0_API_TOKEN);
-        request.setHeader("Accept-Charset", charset);
-
+        setHeaders(request);
         executeRequestAndGetResult(request, req);
         return true;
     }
@@ -287,8 +283,7 @@ public class UserController {
      */
     private static HttpGet makeGetRequest(String url) {
         HttpGet request = new HttpGet(url);
-        request.addHeader("Authorization", "Bearer " + AUTH0_API_TOKEN);
-        request.setHeader("Accept-Charset", charset);
+        setHeaders(request);
         return request;
     }
 
@@ -297,10 +292,17 @@ public class UserController {
      */
     private static HttpPost makePostRequest(String url) {
         HttpPost request = new HttpPost(url);
+        setHeaders(request);
+        return request;
+    }
+
+    /**
+     * Set some common headers on the request
+     */
+    private static void setHeaders(HttpRequestBase request) {
         request.addHeader("Authorization", "Bearer " + AUTH0_API_TOKEN);
         request.setHeader("Accept-Charset", charset);
         request.setHeader("Content-Type", "application/json");
-        return request;
     }
 
     /**
