@@ -68,7 +68,9 @@ public class UserController {
      * Auth0 API (get user) than the other get methods (user search query).
      */
     private static String getUser(Request req, Response res) {
-        return executeRequestAndGetResult(makeGetRequest(getUserIdUrl(req)), req);
+        HttpGet request = new HttpGet(getUserIdUrl(req));
+        setHeaders(request);
+        return executeRequestAndGetResult(request, req);
     }
 
     /**
@@ -132,7 +134,8 @@ public class UserController {
      * injecting permissions somehow into the create user request.
      */
     private static String createPublicUser(Request req, Response res) {
-        HttpPost request = makePostRequest(baseUsersUrl);
+        HttpPost request = new HttpPost(baseUsersUrl);
+        setHeaders(request);
 
         JsonNode jsonNode = parseJsonFromBody(req);
         String json = String.format("{" +
@@ -152,7 +155,8 @@ public class UserController {
      * FIXME: This endpoint fails if the user's email already exists in the Auth0 tenant.
      */
     private static String createUser(Request req, Response res) {
-        HttpPost request = makePostRequest(baseUsersUrl);
+        HttpPost request = new HttpPost(baseUsersUrl);
+        setHeaders(request);
 
         JsonNode jsonNode = parseJsonFromBody(req);
         String json = String.format("{" +
@@ -276,24 +280,6 @@ public class UserController {
         }
 
         return activityList;
-    }
-
-    /**
-     * Create a HTTP GET request with some default headers
-     */
-    private static HttpGet makeGetRequest(String url) {
-        HttpGet request = new HttpGet(url);
-        setHeaders(request);
-        return request;
-    }
-
-    /**
-     * Create a HTTP POST request with some default headers
-     */
-    private static HttpPost makePostRequest(String url) {
-        HttpPost request = new HttpPost(url);
-        setHeaders(request);
-        return request;
     }
 
     /**
