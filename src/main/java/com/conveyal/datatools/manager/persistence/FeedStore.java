@@ -171,6 +171,10 @@ public class FeedStore {
         return s3Prefix + id;
     }
 
+    public String getPathToFeed (String id) {
+        return new File(path, id).getAbsolutePath();
+    }
+
     /**
      * Get the feed with the given ID.
      */

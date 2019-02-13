@@ -1,11 +1,14 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.common.utils.Consts;
+import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.HashUtils;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.conveyal.gtfs.GTFSFeed;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -15,12 +18,7 @@ import org.slf4j.LoggerFactory;
 import spark.Request;
 import spark.Response;
 
-import javax.servlet.MultipartConfigElement;
-import javax.servlet.ServletException;
 import javax.servlet.http.HttpServletResponse;
-import javax.servlet.http.Part;
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -40,11 +38,22 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 
+import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
+import static com.conveyal.datatools.common.utils.SparkUtils.copyRequestStreamIntoFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static spark.Spark.get;
 import static spark.Spark.post;
 
 /**
+ * This handles the GTFS+ specific HTTP endpoints, which allow for validating GTFS+ tables,
+ * downloading GTFS+ files to a client for editing (for example), and uploading/publishing a GTFS+ zip as
+ * (for example, one that has been edited) as a new feed version. Here is the workflow in sequence:
+ * 
+ * 1. User uploads feed version (with or without GTFS+ tables).
+ * 2. User views validation to determine if errors need amending.
+ * 3. User makes edits (in client) and uploads modified GTFS+.
+ * 4. Once user is satisfied with edits. User publishes as new feed version.
+ * 
  * Created by demory on 4/13/16.
  */
 public class GtfsPlusController {
@@ -53,34 +62,21 @@ public class GtfsPlusController {
 
     private static FeedStore gtfsPlusStore = new FeedStore("gtfsplus");
 
-
-    public static Boolean uploadGtfsPlusFile (Request req, Response res) throws IOException, ServletException {
-
-        //FeedSource s = FeedSource.retrieveById(req.queryParams("feedSourceId"));
+    /**
+     * Upload a GTFS+ file based on a specific feed version and replace (or create)
+     * the file in the GTFS+ specific feed store.
+     */
+    private static Boolean uploadGtfsPlusFile (Request req, Response res) {
         String feedVersionId = req.params("versionid");
-
-        if (req.raw().getAttribute("org.eclipse.jetty.multipartConfig") == null) {
-            MultipartConfigElement multipartConfigElement = new MultipartConfigElement(System.getProperty("java.io.tmpdir"));
-            req.raw().setAttribute("org.eclipse.jetty.multipartConfig", multipartConfigElement);
-        }
-
-        Part part = req.raw().getPart("file");
-
-        LOG.info("Saving GTFS+ feed {} from upload for version " + feedVersionId);
-
-
-        InputStream uploadStream;
-        try {
-            uploadStream = part.getInputStream();
-            gtfsPlusStore.newFeed(feedVersionId, uploadStream, null);
-        } catch (IOException e) {
-            LOG.error("Unable to open input stream from upload");
-            logMessageAndHalt(req, 400, "Unable to open input stream from upload", e);
-        }
-
+        File newGtfsFile = new File(gtfsPlusStore.getPathToFeed(feedVersionId));
+        copyRequestStreamIntoFile(req, newGtfsFile);
         return true;
     }
 
+    /**
+     * Download a GTFS+ file for a specific feed version. If no edited GTFS+ file
+     * has been uploaded for the feed version, the original feed version will be returned.
+     */
     private static HttpServletResponse getGtfsPlusFile(Request req, Response res) {
         String feedVersionId = req.params("versionid");
         LOG.info("Downloading GTFS+ file for FeedVersion " + feedVersionId);
@@ -91,9 +87,12 @@ public class GtfsPlusController {
             return getGtfsPlusFromGtfs(feedVersionId, req, res);
         }
         LOG.info("Returning updated GTFS+ data");
-        return downloadGtfsPlusFile(file, req, res);
+        return SparkUtils.downloadFile(file, file.getName() + ".zip", req, res);
     }
 
+    /**
+     * Download only the GTFS+ tables in a zip for a specific feed version.
+     */
     private static HttpServletResponse getGtfsPlusFromGtfs(String feedVersionId, Request req, Response res) {
         LOG.info("Extracting GTFS+ data from main GTFS feed");
         FeedVersion version = Persistence.feedVersions.getById(feedVersionId);
@@ -136,30 +135,7 @@ public class GtfsPlusController {
             logMessageAndHalt(req, 500, "An error occurred while trying to create a gtfs file", e);
         }
 
-        return downloadGtfsPlusFile(gtfsPlusFile, req, res);
-    }
-
-    private static HttpServletResponse downloadGtfsPlusFile(File file, Request req, Response res) {
-        res.raw().setContentType("application/octet-stream");
-        res.raw().setHeader("Content-Disposition", "attachment; filename=" + file.getName() + ".zip");
-
-        try {
-            BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(res.raw().getOutputStream());
-            BufferedInputStream bufferedInputStream = new BufferedInputStream(new FileInputStream(file));
-
-            byte[] buffer = new byte[1024];
-            int len;
-            while ((len = bufferedInputStream.read(buffer)) > 0) {
-                bufferedOutputStream.write(buffer, 0, len);
-            }
-
-            bufferedOutputStream.flush();
-            bufferedOutputStream.close();
-        } catch (IOException e) {
-            logMessageAndHalt(req, 500, "could not download gtfs plus file", e);
-        }
-
-        return res.raw();
+        return SparkUtils.downloadFile(gtfsPlusFile, gtfsPlusFile.getName() + ".zip", req, res);
     }
 
     private static Long getGtfsPlusFileTimestamp(Request req, Response res) {
@@ -184,7 +160,12 @@ public class GtfsPlusController {
         }
     }
 
-    private static Boolean publishGtfsPlusFile(Request req, Response res) {
+    /**
+     * Publishes the edited/saved GTFS+ file as a new feed version for the feed source.
+     * This is the final stage in the GTFS+ validation/editing workflow described in the
+     * class's javadoc.
+     */
+    private static String publishGtfsPlusFile(Request req, Response res) {
         Auth0UserProfile profile = req.attribute("user");
         String feedVersionId = req.params("versionid");
         LOG.info("Publishing GTFS+ for " + feedVersionId);
@@ -205,12 +186,11 @@ public class GtfsPlusController {
         File newFeed = null;
 
         try {
-
-            // create a new zip file to only contain the GTFS+ tables
+            // First, create a new zip file to only contain the GTFS+ tables
             newFeed = File.createTempFile(feedVersionId + "_new", ".zip");
             ZipOutputStream zos = new ZipOutputStream(new FileOutputStream(newFeed));
 
-            // iterate through the existing GTFS file, copying all non-GTFS+ tables
+            // Next, iterate through the existing GTFS file, copying all non-GTFS+ tables.
             ZipFile gtfsFile = new ZipFile(feedVersion.retrieveGtfsFile());
             final Enumeration<? extends ZipEntry> entries = gtfsFile.entries();
             byte[] buffer = new byte[512];
@@ -252,23 +232,32 @@ public class GtfsPlusController {
         }
 
         FeedVersion newFeedVersion = new FeedVersion(feedVersion.parentFeedSource());
-
+        File newGtfsFile = null;
         try {
-            newFeedVersion.newGtfsFile(new FileInputStream(newFeed));
+            newGtfsFile = newFeedVersion.newGtfsFile(new FileInputStream(newFeed));
         } catch (IOException e) {
-            logMessageAndHalt(req, 500, "Error creating new FeedVersion from combined GTFS/GTFS+", e);
+            e.printStackTrace();
+            logMessageAndHalt(req, 500, "Error reading GTFS file input stream", e);
         }
+        if (newGtfsFile == null) {
+            logMessageAndHalt(req, 500, "GTFS input file must not be null");
+            return null;
+        }
+        newFeedVersion.fileSize = newGtfsFile.length();
+        newFeedVersion.hash = HashUtils.hashFile(newGtfsFile);
 
-        newFeedVersion.hash();
+        // Must be handled by executor because it takes a long time.
+        ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(newFeedVersion, profile.getUser_id(), true);
+        DataManager.heavyExecutor.execute(processSingleFeedJob);
 
-        // validation for the main GTFS content hasn't changed
-        newFeedVersion.validationResult = feedVersion.validationResult;
-        newFeedVersion.storeUser(profile);
-        Persistence.feedVersions.create(newFeedVersion);
-
-        return true;
+        return formatJobMessage(processSingleFeedJob.jobId, "Feed version is processing.");
     }
 
+    /**
+     * HTTP endpoint that validates GTFS+ tables for a specific feed version (or its saved/edited GTFS+).
+     * FIXME: For now this uses the MapDB-backed GTFSFeed class. Which actually suggests that this might
+     * should be contained within a MonitorableJob.
+     */
     private static Collection<ValidationIssue> getGtfsPlusValidation(Request req, Response res) {
         String feedVersionId = req.params("versionid");
         LOG.info("Validating GTFS+ for " + feedVersionId);
@@ -278,8 +267,8 @@ public class GtfsPlusController {
 
 
         // load the main GTFS
-        // FIXME: fix gtfs+ loading/validating for sql-load
-        GTFSFeed gtfsFeed = null; // feedVersion.retrieveFeed();
+        // FIXME: Swap MapDB-backed GTFSFeed for use of SQL data?
+        GTFSFeed gtfsFeed = GTFSFeed.fromFile(feedVersion.retrieveGtfsFile().getAbsolutePath());
         // check for saved GTFS+ data
         File file = gtfsPlusStore.getFeed(feedVersionId);
         if (file == null) {
@@ -309,6 +298,9 @@ public class GtfsPlusController {
         return issues;
     }
 
+    /**
+     * Validate a single GTFS+ table using the table specification found in gtfsplus.yml.
+     */
     private static void validateTable(
         Collection<ValidationIssue> issues,
         JsonNode tableNode,

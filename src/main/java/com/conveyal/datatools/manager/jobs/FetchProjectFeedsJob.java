@@ -40,6 +40,15 @@ public class FetchProjectFeedsJob extends MonitorableJob {
             if (!FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.equals(feedSource.retrievalMethod)) {
                 continue;
             }
+            // warn if a feed is setup to be fetched automatically, but doesn't have a url defined
+            if (feedSource.url == null) {
+                LOG.warn(
+                    "Feed '{}' ({}) is set to be fetched automatically, but lacks a url!",
+                    feedSource.name,
+                    feedSource.id
+                );
+                continue;
+            }
             // No need to track overall status on this FetchProjectFeedsJob. All "child" jobs execute in threadpool,
             // so we don't know their status.
             FetchSingleFeedJob fetchSingleFeedJob = new FetchSingleFeedJob(feedSource, owner, true);
