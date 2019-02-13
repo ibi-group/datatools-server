@@ -45,10 +45,15 @@ notifications:
 before_deploy:
 # get branch name of current branch for use in jar name: https://graysonkoonce.com/getting-the-current-branch-name-during-a-pull-request-in-travis-ci/
 - export BRANCH=$(if [ "$TRAVIS_PULL_REQUEST" == "false" ]; then echo $TRAVIS_BRANCH; else echo $TRAVIS_PULL_REQUEST_BRANCH; fi)
-# copy packaged jars over to deploy dir
+# Create directory that will contain artifacts to deploy to s3.
 - mkdir deploy
+# Display contents of target directory (for logging purposes only).
+- ls target/*.jar
+# Copy packaged jars over to deploy dir.
 - cp target/dt-*.jar deploy/
-- cp "target/dt-$(git describe --always).jar" "deploy/dt-latest-${BRANCH}.jar"
+# FIXME: Do not create a branch-specific jar for now. Having a jar that changes contents but keeps the same name
+#   may cause confusion down the road and may be undesirable.
+# - cp "target/dt-$(git describe --always).jar" "deploy/dt-latest-${BRANCH}.jar"
 deploy:
   provider: s3
   skip_cleanup: true
