@@ -22,7 +22,8 @@ script:
 after_success:
   # this first codecov run will upload a report associated with the commit set through Travis CI environment variables
   - bash <(curl -s https://codecov.io/bash)
-  # run maven-semantic-release to potentially create a new release of gtfs-lib.
+  # run maven-semantic-release to potentially create a new release of datatools-server. The flag --skip-maven-deploy is
+  # used to avoid deploying to maven central. So essentially, this just creates a release with a changelog on github.
   #
   # If maven-semantic-release finishes successfully and the current branch is master, upload coverage reports for the
   # commits that maven-semantic-release generated. Since the above codecov run is associated with the commit that
