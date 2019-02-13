@@ -18,6 +18,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -25,6 +26,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import static com.conveyal.datatools.common.utils.Utils.getTimezone;
+import static com.google.common.collect.Multimaps.synchronizedListMultimap;
 
 /**
  * This class centralizes the logic associated with scheduling and cancelling tasks (organized as a {@link ScheduledJob})
@@ -40,9 +42,11 @@ public class Scheduler {
     // Scheduled executor that handles running scheduled jobs.
     public final static ScheduledExecutorService schedulerService = Executors.newScheduledThreadPool(1);
     /** Stores {@link ScheduledJob} objects containing scheduled tasks keyed on the tasks's associated {@link FeedSource} ID. */
-    public final static ListMultimap<String, ScheduledJob> scheduledJobsForFeedSources = ArrayListMultimap.create();
+    public final static ListMultimap<String, ScheduledJob> scheduledJobsForFeedSources =
+        synchronizedListMultimap(ArrayListMultimap.create());
     /** Stores {@link ScheduledJob} objects containing scheduled tasks keyed on the tasks's associated {@link Project} ID. */
-    public final static ListMultimap<String, ScheduledJob> scheduledJobsForProjects = ArrayListMultimap.create();
+    public final static ListMultimap<String, ScheduledJob> scheduledJobsForProjects =
+        synchronizedListMultimap(ArrayListMultimap.create());
 
     /**
      * A method to initialize all scheduled tasks upon server startup.
@@ -83,10 +87,14 @@ public class Scheduler {
         // First get the list of jobs belonging to the id (e.g., all jobs related to a feed source).
         List<ScheduledJob> jobs = scheduledJobs.get(id);
         // Iterate over jobs, cancelling and removing only those matching the job class.
-        for (ScheduledJob scheduledJob : jobs) {
+        // Use an iterator because elements may be removed and if removed in a regular loop it could
+        // throw a java.util.ConcurrentModificationException
+        // See https://stackoverflow.com/q/8104692/269834
+        for (Iterator<ScheduledJob> iterator = jobs.iterator(); iterator.hasNext(); ) {
+            ScheduledJob scheduledJob = iterator.next();
             if (clazz.isInstance(scheduledJob.job)) {
                 scheduledJob.scheduledFuture.cancel(mayInterruptIfRunning);
-                scheduledJobs.remove(id, scheduledJob);
+                iterator.remove();
                 jobsCancelled++;
             }
         }
