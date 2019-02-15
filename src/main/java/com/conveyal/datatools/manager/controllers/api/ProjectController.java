@@ -5,8 +5,9 @@ import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.FetchProjectFeedsJob;
 import com.conveyal.datatools.manager.jobs.MakePublicJob;
-import com.conveyal.datatools.manager.jobs.MergeProjectFeedsJob;
+import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
+import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Project;
@@ -20,6 +21,8 @@ import spark.Request;
 import spark.Response;
 
 import java.util.Collection;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
@@ -27,6 +30,7 @@ import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.DataManager.publicPath;
+import static com.conveyal.datatools.manager.jobs.MergeFeedsType.REGIONAL;
 import static spark.Spark.delete;
 import static spark.Spark.get;
 import static spark.Spark.post;
@@ -220,10 +224,24 @@ public class ProjectController {
         Project project = requestProjectById(req, "view");
         Auth0UserProfile userProfile = req.attribute("user");
         // TODO: make this an authenticated call?
-        MergeProjectFeedsJob mergeProjectFeedsJob = new MergeProjectFeedsJob(project, userProfile.getUser_id());
-        DataManager.heavyExecutor.execute(mergeProjectFeedsJob);
+        Set<FeedVersion> feedVersions = new HashSet<>();
+        // Get latest version for each feed source in project
+        Collection<FeedSource> feedSources = project.retrieveProjectFeedSources();
+        for (FeedSource fs : feedSources) {
+            // check if feed version exists
+            FeedVersion version = fs.retrieveLatest();
+            if (version == null) {
+                LOG.warn("Skipping {} because it has no feed versions", fs.name);
+                continue;
+            }
+            // modify feed version to use prepended feed id
+            LOG.info("Adding {} feed to merged zip", fs.name);
+            feedVersions.add(version);
+        }
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(userProfile.getUser_id(), feedVersions, project.id, REGIONAL);
+        DataManager.heavyExecutor.execute(mergeFeedsJob);
         // Return job ID to requester for monitoring job status.
-        return formatJobMessage(mergeProjectFeedsJob.jobId, "Merge operation is processing.");
+        return formatJobMessage(mergeFeedsJob.jobId, "Merge operation is processing.");
     }
 
     /**

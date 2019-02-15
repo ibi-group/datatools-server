@@ -28,8 +28,6 @@ import java.util.Collection;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
 import static com.conveyal.datatools.common.utils.SparkUtils.copyRequestStreamIntoFile;
@@ -37,6 +35,7 @@ import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.controllers.api.FeedSourceController.checkFeedSourcePermissions;
+import static com.conveyal.datatools.manager.jobs.MergeFeedsType.MTC;
 import static spark.Spark.delete;
 import static spark.Spark.get;
 import static spark.Spark.post;
@@ -289,7 +288,7 @@ public class FeedVersionController  {
         if (versionIds.length != 2) {
             logMessageAndHalt(req, 400, "Merging more than two versions is not currently supported.");
         }
-        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(userProfile.getUser_id(), versions, "merged", MergeFeedsJob.MergeType.FEED_VERSIONS);
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(userProfile.getUser_id(), versions, "merged", MTC);
         DataManager.heavyExecutor.execute(mergeFeedsJob);
         return SparkUtils.formatJobMessage(mergeFeedsJob.jobId, "Merging feed versions...");
     }
