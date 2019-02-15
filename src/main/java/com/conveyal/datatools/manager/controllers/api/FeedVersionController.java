@@ -5,6 +5,7 @@ import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.CreateFeedVersionFromSnapshotJob;
 import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
+import com.conveyal.datatools.manager.jobs.MergeFeedsType;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -36,6 +37,7 @@ import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.controllers.api.FeedSourceController.checkFeedSourcePermissions;
 import static com.conveyal.datatools.manager.jobs.MergeFeedsType.MTC;
+import static com.conveyal.datatools.manager.jobs.MergeFeedsType.REGIONAL;
 import static spark.Spark.delete;
 import static spark.Spark.get;
 import static spark.Spark.post;
@@ -268,9 +270,23 @@ public class FeedVersionController  {
         }
     }
 
+    /**
+     * HTTP controller that handles merging multiple feed versions for a given feed source, with version IDs specified
+     * in a comma-separated string in the feedVersionIds query parameter and merge type specified in mergeType query
+     * parameter. NOTE: REGIONAL merge type should only be handled through {@link ProjectController#downloadMergedFeed(Request, Response)}.
+     */
     private static String mergeFeedVersions(Request req, Response res) {
         String[] versionIds = req.queryParams("feedVersionIds").split(",");
-        Auth0UserProfile userProfile = req.attribute("user");
+        // Try to parse merge type (null or bad value throws IllegalArgumentException).
+        MergeFeedsType mergeType;
+        try {
+            mergeType = MergeFeedsType.valueOf(req.queryParams("mergeType"));
+            if (mergeType.equals(REGIONAL)) throw new IllegalArgumentException();
+        } catch (IllegalArgumentException e) {
+            logMessageAndHalt(req, 400, "Must provide valid merge type.", e);
+            return null;
+        }
+        // Collect versions to merge (must belong to same feed source).
         Set<FeedVersion> versions = new HashSet<>();
         String feedSourceId = null;
         for (String id : versionIds) {
@@ -288,7 +304,9 @@ public class FeedVersionController  {
         if (versionIds.length != 2) {
             logMessageAndHalt(req, 400, "Merging more than two versions is not currently supported.");
         }
-        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(userProfile.getUser_id(), versions, "merged", MTC);
+        // Kick off merge feeds job.
+        Auth0UserProfile userProfile = req.attribute("user");
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(userProfile.getUser_id(), versions, "merged", mergeType);
         DataManager.heavyExecutor.execute(mergeFeedsJob);
         return SparkUtils.formatJobMessage(mergeFeedsJob.jobId, "Merging feed versions...");
     }

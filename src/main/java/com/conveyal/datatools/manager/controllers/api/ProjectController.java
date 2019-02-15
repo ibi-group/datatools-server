@@ -220,7 +220,7 @@ public class ProjectController {
      * to getFeedDownloadCredentials with the project ID to obtain either temporary S3 credentials or a download token
      * (depending on application configuration "application.data.use_s3_storage") to download the zip file.
      */
-    private static String downloadMergedFeed(Request req, Response res) {
+    static String downloadMergedFeed(Request req, Response res) {
         Project project = requestProjectById(req, "view");
         Auth0UserProfile userProfile = req.attribute("user");
         // TODO: make this an authenticated call?

@@ -69,33 +69,53 @@ public class MergeFeedsJob extends MonitorableJob {
     private static final Logger LOG = LoggerFactory.getLogger(MergeFeedsJob.class);
     public static final ObjectMapper mapper = new ObjectMapper();
     private final Set<FeedVersion> feedVersions;
+    private final FeedSource feedSource;
     private final ReferenceTracker referenceTracker = new ReferenceTracker();
     public MergeFeedsResult mergeFeedsResult;
     private final String filename;
     public final String projectId;
     public final MergeFeedsType mergeType;
     private File mergedTempFile = null;
+    private final FeedVersion mergedVersion;
 
     public MergeFeedsJob(String owner, Set<FeedVersion> feedVersions, String file, MergeFeedsType mergeType) {
         super(owner, mergeType.equals(REGIONAL) ? "Merging project feeds" : "Merging feed versions", JobType.MERGE_FEED_VERSIONS);
         this.feedVersions = feedVersions;
+        // Grab parent feed source if performing non-regional merge (each version should share the same feed source).
+        this.feedSource = mergeType.equals(REGIONAL) ? null : feedVersions.iterator().next().parentFeedSource();
         // Construct full filename with extension
         this.filename = String.format("%s.zip", file);
         // If the merge type is regional, the file string should be equivalent to projectId, which is used by the client
         // to download the merged feed upon job completion.
         this.projectId = mergeType.equals(REGIONAL) ? file : null;
         this.mergeType = mergeType;
+        // Assuming job is successful, mergedVersion will contain the resulting feed version.
+        this.mergedVersion = mergeType.equals(REGIONAL) ? null : new FeedVersion(this.feedSource);
         this.mergeFeedsResult = new MergeFeedsResult(mergeType);
     }
 
+    /**
+     * The final stage handles clean up (deleting temp file) and adding the next job to process the new merged version
+     * (assuming the merge did not fail).
+     */
     public void jobFinished() {
-        // Delete temp file to ensure it does not cause storage bloat.
+        // Delete temp file to ensure it does not cause storage bloat. Note: merged file has already been stored
+        // permanently.
         if (!mergedTempFile.delete()) {
             // FIXME: send to bugsnag?
             LOG.error("Merged feed file {} not deleted. This may contribute to storage space shortages.", mergedTempFile.getAbsolutePath());
         }
+        if (!mergeType.equals(REGIONAL) && !status.error && !mergeFeedsResult.failed) {
+            // Handle the processing of the new version for non-regional merges (note: s3 upload is handled within this job).
+            ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(mergedVersion, owner, true);
+            addNextJob(processSingleFeedJob);
+        }
     }
 
+    /**
+     * Primary job logic handles collecting and sorting versions, creating a merged table for all versions, and writing
+     * the resulting zip file to storage.
+     */
     @Override
     public void jobLogic() throws IOException {
         // Create temp zip file to add merged feed content to.
@@ -144,8 +164,11 @@ public class MergeFeedsJob extends MonitorableJob {
         // Close output stream for zip file.
         out.close();
         // Handle writing file to storage (local or s3).
-        storeMergedFeed();
-        status.update(false, "Merged feed created successfully.", 100, true);
+        if (mergeFeedsResult.failed) status.fail("Merging feed versions failed.");
+        else {
+            storeMergedFeed();
+            status.update(false, "Merged feed created successfully.", 100, true);
+        }
     }
 
     /**
@@ -171,6 +194,10 @@ public class MergeFeedsJob extends MonitorableJob {
             .collect(Collectors.toList());
     }
 
+    /**
+     * Handles writing the GTFS zip file to disk. For REGIONAL merges, this will end up in a project subdirectory on s3.
+     * Otherwise, it will write to a new version.
+     */
     private void storeMergedFeed() throws IOException {
         if (mergeType.equals(REGIONAL)) {
             status.update(false, "Saving merged feed.", 95);
@@ -189,19 +216,13 @@ public class MergeFeedsJob extends MonitorableJob {
                 }
             }
         } else {
-            // Create a new feed version from the file.
-            // Feed source should be the same for each version if using the MTC merge type.
-            FeedSource source = feedVersions.iterator().next().parentFeedSource();
-            FeedVersion mergedVersion = new FeedVersion(source);
+            // Store the zip file for the merged feed version.
             try {
-                FeedVersion.feedStore.newFeed(mergedVersion.id, new FileInputStream(mergedTempFile), null);
+                FeedVersion.feedStore.newFeed(mergedVersion.id, new FileInputStream(mergedTempFile), feedSource);
             } catch (IOException e) {
                 LOG.error("Could not store merged feed for new version");
                 throw e;
             }
-            // Handle the processing of the new merged version (note: s3 upload is handled within this job.
-            ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(mergedVersion, owner, true);
-            addNextJob(processSingleFeedJob);
         }
     }
 
