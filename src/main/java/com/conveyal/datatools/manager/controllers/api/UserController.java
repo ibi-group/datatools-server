@@ -374,16 +374,9 @@ public class UserController {
             );
         }
 
-        int statusCode = response.getStatusLine().getStatusCode();
-        if(statusCode >= 300) {
-            LOG.error("HTTP request returned error code >= 300: ({})", httpRequest.toString());
-            logMessageAndHalt(req, statusCode, response.toString());
-        }
-
         // parse response body if there is one
         HttpEntity entity = response.getEntity();
         String result = null;
-
         if (entity != null) {
             try {
                 result = EntityUtils.toString(entity);
@@ -391,12 +384,23 @@ public class UserController {
                 logMessageAndHalt(
                     req,
                     500,
-                    String.format("Failed to parse result of http request (%s).",
-                                  httpRequest.toString()
+                    String.format(
+                        "Failed to parse result of http request (%s).",
+                        httpRequest.toString()
                     ),
                     e
                 );
             }
+        }
+
+        int statusCode = response.getStatusLine().getStatusCode();
+        if(statusCode >= 300) {
+            LOG.error(
+                "HTTP request returned error code >= 300: ({}). Body: {}",
+                httpRequest.toString(),
+                result != null ? result : ""
+            );
+            logMessageAndHalt(req, statusCode, response.toString());
         }
 
         LOG.info("Successfully made request: ({})", httpRequest.toString());
