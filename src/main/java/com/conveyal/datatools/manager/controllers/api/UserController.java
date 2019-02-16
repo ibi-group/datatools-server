@@ -151,8 +151,6 @@ public class UserController {
 
     /**
      * HTTP endpoint to create new Auth0 user for the application.
-     *
-     * FIXME: This endpoint fails if the user's email already exists in the Auth0 tenant.
      */
     private static String createUser(Request req, Response res) {
         HttpPost request = new HttpPost(baseUsersUrl);
@@ -173,6 +171,10 @@ public class UserController {
     private static String updateUser(Request req, Response res) {
         String userId = req.params("id");
         Auth0UserProfile user = getUserById(userId);
+
+        if (user == null) {
+            logMessageAndHalt(req, 404, "User not found");
+        }
 
         LOG.info("Updating user {}", user.getEmail());
 
@@ -400,7 +402,21 @@ public class UserController {
                 httpRequest.toString(),
                 result != null ? result : ""
             );
-            logMessageAndHalt(req, statusCode, response.toString());
+            // attempt to parse auth0 response to respond with an error message
+            String auth0Message = "An Auth0 error occurred";
+            JsonNode jsonResponse = null;
+            try {
+                jsonResponse = mapper.readTree(result);
+            } catch (IOException e) {
+                LOG.warn("Could not parse json from auth0 error message. Body: {}", result != null ? result : "");
+                e.printStackTrace();
+            }
+
+            if (jsonResponse != null && jsonResponse.has("message")) {
+                auth0Message = String.format("%s: %s", auth0Message, jsonResponse.get("message").asText());
+            }
+
+            logMessageAndHalt(req, statusCode, auth0Message);
         }
 
         LOG.info("Successfully made request: ({})", httpRequest.toString());
