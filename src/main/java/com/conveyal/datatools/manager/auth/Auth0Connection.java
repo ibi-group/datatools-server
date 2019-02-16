@@ -33,6 +33,8 @@ public class Auth0Connection {
     public static final String SCOPE = "http://datatools";
     public static final String SCOPED_APP_METADATA = String.join("/", SCOPE, APP_METADATA);
     public static final String SCOPED_USER_METADATA = String.join("/", SCOPE, USER_METADATA);
+    private static final boolean IN_TESTING_ENVIRONMENT = DataManager
+        .getConfigPropertyAsText("AUTH0_CLIENT_ID").equals("testing-client-id");
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final Logger LOG = LoggerFactory.getLogger(Auth0Connection.class);
     private static JWTVerifier verifier;
@@ -43,8 +45,9 @@ public class Auth0Connection {
      * @param req Spark request object
      */
     public static void checkUser(Request req) {
-        if (authDisabled()) {
-            // If in a development environment, assign a mock profile to request attribute and skip authentication.
+        if (authDisabled() || IN_TESTING_ENVIRONMENT) {
+            // If in a development or testing environment, assign a mock profile to request attribute and skip
+            // authentication.
             req.attribute("user", new Auth0UserProfile("mock@example.com", "user_id:string"));
             return;
         }
@@ -132,8 +135,8 @@ public class Auth0Connection {
      * tables in the database.
      */
     public static void checkEditPrivileges(Request request) {
-        if (authDisabled()) {
-            // If in a development environment, skip privileges check.
+        if (authDisabled() || IN_TESTING_ENVIRONMENT) {
+            // If in a development or testing environment, skip privileges check.
             return;
         }
         Auth0UserProfile userProfile = request.attribute("user");

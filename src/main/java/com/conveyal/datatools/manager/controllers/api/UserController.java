@@ -59,9 +59,13 @@ public class UserController {
     private static Logger LOG = LoggerFactory.getLogger(UserController.class);
     private static ObjectMapper mapper = new ObjectMapper();
     private static final String charset = "UTF-8";
-    private static String baseUsersUrl = "https://" + AUTH0_DOMAIN + "/api/v2/users";
-    public static JsonManager<Project> json =
-            new JsonManager<>(Project.class, JsonViews.UserInterface.class);
+    // set the base users URL based on whether the domain is the test environment
+    private static String baseUsersUrl = (
+        AUTH0_DOMAIN.equals("localhost:8089")
+            ? "http://localhost:8089"
+            : "https://" + AUTH0_DOMAIN
+    ) + "/api/v2/users";
+    public static JsonManager<Project> json = new JsonManager<>(Project.class, JsonViews.UserInterface.class);
 
     /**
      * HTTP endpoint to get a single Auth0 user for the application (by specified ID param). Note, this uses a different

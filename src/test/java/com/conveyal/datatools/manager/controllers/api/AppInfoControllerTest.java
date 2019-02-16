@@ -3,8 +3,8 @@ package com.conveyal.datatools.manager.controllers.api;
 import com.conveyal.datatools.DatatoolsTest;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
+import org.junit.BeforeClass;
+import org.junit.Test;
 
 import java.io.IOException;
 
@@ -16,7 +16,7 @@ public class AppInfoControllerTest {
     /**
      * Prepare and start a testing-specific web server
      */
-    @BeforeAll
+    @BeforeClass
     public static void setUp() {
         // start server if it isn't already running
         DatatoolsTest.setUp();
@@ -26,7 +26,7 @@ public class AppInfoControllerTest {
      * Make sure the app info endpoint can load and return expected data.
      */
     @Test
-    public void canReturnApprInfo() throws IOException {
+    public void canReturnAppInfo() throws IOException {
         String jsonString = given()
             .port(4000)
             .get("/api/manager/public/appinfo")

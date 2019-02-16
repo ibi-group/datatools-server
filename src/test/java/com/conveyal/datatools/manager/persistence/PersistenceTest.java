@@ -3,12 +3,12 @@ package com.conveyal.datatools.manager.persistence;
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Project;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
+import org.junit.BeforeClass;
+import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.Assert.assertEquals;
 
 /**
  * Created by landon on 9/6/17.
@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 public class PersistenceTest {
     private static final Logger LOG = LoggerFactory.getLogger(PersistenceTest.class);
 
-    @BeforeAll
+    @BeforeClass
     public static void setUp() {
         DatatoolsTest.setUp();
         LOG.info("{} setup", PersistenceTest.class.getSimpleName());
