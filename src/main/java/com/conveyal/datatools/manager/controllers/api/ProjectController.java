@@ -220,7 +220,7 @@ public class ProjectController {
      * to getFeedDownloadCredentials with the project ID to obtain either temporary S3 credentials or a download token
      * (depending on application configuration "application.data.use_s3_storage") to download the zip file.
      */
-    static String downloadMergedFeed(Request req, Response res) {
+    static String mergeProjectFeeds(Request req, Response res) {
         Project project = requestProjectById(req, "view");
         Auth0UserProfile userProfile = req.attribute("user");
         // TODO: make this an authenticated call?
@@ -328,7 +328,7 @@ public class ProjectController {
         post(apiPrefix + "secure/project/:id/fetch", ProjectController::fetch, json::write);
         post(apiPrefix + "secure/project/:id/deployPublic", ProjectController::publishPublicFeeds, json::write);
 
-        get(apiPrefix + "secure/project/:id/download", ProjectController::downloadMergedFeed);
+        get(apiPrefix + "secure/project/:id/download", ProjectController::mergeProjectFeeds);
         get(apiPrefix + "secure/project/:id/downloadtoken", ProjectController::getFeedDownloadCredentials, json::write);
 
         get(apiPrefix + "public/project/:id", ProjectController::getProject, json::write);

@@ -9,7 +9,6 @@ import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.gtfs.error.NewGTFSError;
 import com.conveyal.gtfs.error.NewGTFSErrorType;
 import com.conveyal.gtfs.loader.Field;
-import com.conveyal.gtfs.loader.JdbcGtfsLoader;
 import com.conveyal.gtfs.loader.ReferenceTracker;
 import com.conveyal.gtfs.loader.Table;
 import com.csvreader.CsvReader;
@@ -41,8 +40,7 @@ import static com.conveyal.datatools.manager.jobs.MergeFeedsType.MTC;
 import static com.conveyal.datatools.manager.jobs.MergeFeedsType.REGIONAL;
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.conveyal.gtfs.loader.DateField.GTFS_DATE_FORMATTER;
-import static com.conveyal.gtfs.loader.JdbcGtfsLoader.getFieldIndex;
-import static com.conveyal.gtfs.loader.JdbcGtfsLoader.getKeyFieldIndex;
+import static com.conveyal.gtfs.loader.Field.getFieldIndex;
 
 /**
  * This job handles merging two or more feed versions according to logic specific to the specified merge type.
@@ -259,29 +257,32 @@ public class MergeFeedsJob extends MonitorableJob {
         boolean stopCodeMissingFromFirstTable = false;
         try {
             // Iterate over each zip file.
-            for (int f = 0; f < feedsToMerge.size(); f++) {
+            for (int feedIndex = 0; feedIndex < feedsToMerge.size(); feedIndex++) {
                 mergeFeedsResult.feedCount++;
                 // FIXME add check for merge type.
-                if (f > 0 && (table.name.equals("agency") || table.name.equals("feed_info")) && mergeType.equals(MTC)) {
+                if (feedIndex > 0 && (table.name.equals("agency") || table.name.equals("feed_info")) && mergeType.equals(MTC)) {
                     // Always prefer future file for agency and feed_info tables, which means that we can skip
                     // iterations following the first one.
                     // FIXME: This could cause issues with routes or fares that reference an agency_id that no longer
                     //  exists.
-                    LOG.warn("Skipping {} file for feed {}/{} (future file preferred)", table.name, f, feedsToMerge.size());
+                    LOG.warn("Skipping {} file for feed {}/{} (future file preferred)", table.name, feedIndex, feedsToMerge.size());
                     continue;
                 }
-                FeedToMerge feed = feedsToMerge.get(f);
+                FeedToMerge feed = feedsToMerge.get(feedIndex);
                 FeedVersion version = feed.version;
                 FeedSource feedSource = version.parentFeedSource();
                 // Generate ID prefix to scope GTFS identifiers to avoid conflicts.
                 String idScope = getCleanName(feedSource.name) + version.version;
-                CsvReader csvReader = JdbcGtfsLoader.getCsvReader(feed.zipFile, table, null);
+                CsvReader csvReader = table.getCsvReader(feed.zipFile, null);
                 // If csv reader is null, the table was not found in the zip file. There is no need to handle merging
                 // this table for the current zip file.
-                if (csvReader == null) continue;
+                if (csvReader == null) {
+                    LOG.warn("Table {} not found in the zip file for {}{}", table.name, feedSource.name, version.version);
+                    continue;
+                }
                 LOG.info("Adding {} table for {}{}", table.name, feedSource.name, version.version);
 
-                Field[] fieldsFoundInZip = JdbcGtfsLoader.getFieldsFromFieldHeaders(csvReader.getHeaders(), table, null);
+                Field[] fieldsFoundInZip = table.getFieldsFromFieldHeaders(csvReader.getHeaders(), null);
                 List<Field> fieldsFoundList = Arrays.asList(fieldsFoundInZip);
                 // Determine the index of the key field for this version's table.
                 int keyFieldIndex = getFieldIndex(fieldsFoundInZip, keyField);
@@ -293,13 +294,13 @@ public class MergeFeedsJob extends MonitorableJob {
                     if (mergeType.equals(MTC) && lineNumber == 0 && table.name.equals("stops")) {
                         // For the first line of the stops table, check that the alt. key
                         // field (stop_code) is present. If it is not, revert to the original key field.
-                        if (f == 0) {
+                        if (feedIndex == 0) {
                             // Check that the first file contains stop_code values.
                             if ("".equals(keyValue)) {
-                                LOG.warn("stop_code is not present in file {}/{}. Reverting to stop_id", f, feedsToMerge.size());
+                                LOG.warn("stop_code is not present in file {}/{}. Reverting to stop_id", feedIndex, feedsToMerge.size());
                                 // If the key value for stop_code is not present, revert to stop_id.
                                 keyField = table.getKeyFieldName();
-                                keyFieldIndex = JdbcGtfsLoader.getKeyFieldIndex(table, fieldsFoundInZip);
+                                keyFieldIndex = table.getKeyFieldIndex(fieldsFoundInZip);
                                 keyValue = csvReader.get(keyFieldIndex);
                                 stopCodeMissingFromFirstTable = true;
                             }
@@ -326,8 +327,8 @@ public class MergeFeedsJob extends MonitorableJob {
                     }
                     // Piece together the row to write, which should look practically identical to the original
                     // row except for the identifiers receiving a prefix to avoid ID conflicts.
-                    for (int v = 0; v < specFields.size(); v++) {
-                        Field field = specFields.get(v);
+                    for (int specFieldIndex = 0; specFieldIndex < specFields.size(); specFieldIndex++) {
+                        Field field = specFields.get(specFieldIndex);
                         // Get index of field from GTFS spec as it appears in feed
                         int index = fieldsFoundList.indexOf(field);
                         String val = csvReader.get(index);
@@ -356,7 +357,7 @@ public class MergeFeedsJob extends MonitorableJob {
                                 // future, the service will be excluded from the merged file. Records in trips,
                                 // calendar_dates, and calendar_attributes referencing this service_id shall also be
                                 // removed/ignored. Stop_time records for the ignored trips shall also be removed.
-                                if (f > 0) {
+                                if (feedIndex > 0) {
                                     int startDateIndex = getFieldIndex(fieldsFoundInZip, "start_date");
                                     LocalDate startDate = LocalDate.parse(csvReader.get(startDateIndex), GTFS_DATE_FORMATTER);
                                     if (startDate.isAfter(LocalDate.now())) {
@@ -400,7 +401,7 @@ public class MergeFeedsJob extends MonitorableJob {
                                 // the user with suggestion that the feed with missing stop_code must be fixed with
                                 // stop_code.
                             case "routes":
-                                String primaryKeyValue = csvReader.get(getKeyFieldIndex(table, fieldsFoundInZip));
+                                String primaryKeyValue = csvReader.get(table.getKeyFieldIndex(fieldsFoundInZip));
                                 Set<NewGTFSError> primaryKeyErrors = table.checkReferencesAndUniqueness(primaryKeyValue, lineNumber, field, val, referenceTracker);
                                 // Merging will be based on route_short_name in the current and future datasets. All
                                 // matching route_short_names between the datasets shall be considered same route. Any
@@ -499,7 +500,7 @@ public class MergeFeedsJob extends MonitorableJob {
                             valueToWrite = String.join(":", idScope, val);
                         }
 
-                        rowValues[v] = valueToWrite;
+                        rowValues[specFieldIndex] = valueToWrite;
                     }
                     if (table.name.equals("routes") && rowValues[0].contains("BART")) {
                         LOG.info("Route record: {}", rowValues[0]);

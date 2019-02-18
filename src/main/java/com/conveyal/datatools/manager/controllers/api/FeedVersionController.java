@@ -36,7 +36,6 @@ import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.controllers.api.FeedSourceController.checkFeedSourcePermissions;
-import static com.conveyal.datatools.manager.jobs.MergeFeedsType.MTC;
 import static com.conveyal.datatools.manager.jobs.MergeFeedsType.REGIONAL;
 import static spark.Spark.delete;
 import static spark.Spark.get;
@@ -273,7 +272,7 @@ public class FeedVersionController  {
     /**
      * HTTP controller that handles merging multiple feed versions for a given feed source, with version IDs specified
      * in a comma-separated string in the feedVersionIds query parameter and merge type specified in mergeType query
-     * parameter. NOTE: REGIONAL merge type should only be handled through {@link ProjectController#downloadMergedFeed(Request, Response)}.
+     * parameter. NOTE: REGIONAL merge type should only be handled through {@link ProjectController#mergeProjectFeeds(Request, Response)}.
      */
     private static String mergeFeedVersions(Request req, Response res) {
         String[] versionIds = req.queryParams("feedVersionIds").split(",");
@@ -292,7 +291,10 @@ public class FeedVersionController  {
         for (String id : versionIds) {
             FeedVersion v = Persistence.feedVersions.getById(id);
             if (v == null) {
-                logMessageAndHalt(req, 400, "Must provide valid version ID");
+                logMessageAndHalt(req,
+                                  400,
+                                  String.format("Must provide valid version ID. (No version exists for id=%s.)", id)
+                );
             }
             // Store feed source id and check other versions for matching.
             if (feedSourceId == null) feedSourceId = v.feedSourceId;
