@@ -20,7 +20,7 @@ public abstract class DatatoolsTest {
             return;
         }
         LOG.info("DatatoolsTest setup");
-        String[] args = {"configurations/default/env.yml.test", "configurations/default/server.yml.tmp"};
+        String[] args = {"configurations/default/env.yml.tmp", "configurations/default/server.yml.tmp"};
         try {
             DataManager.main(args);
             setUpIsDone = true;

@@ -1,8 +1,13 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.DatatoolsTest;
+import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.github.tomakehurst.wiremock.junit.WireMockRule;
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
@@ -43,6 +48,17 @@ public class UserControllerTest {
     public static void setUp() {
         // start server if it isn't already running
         DatatoolsTest.setUp();
+        Auth0Connection.setInTestingEnvironment(true);
+        UserController.setBaseUsersUrl("http://localhost:8089/api/v2/users");
+    }
+
+    /**
+     * Reset some Auth0 stuff to non-testing values.
+     */
+    @AfterClass
+    public static void tearDown() {
+        Auth0Connection.setInTestingEnvironment(false);
+        UserController.setBaseUsersUrl(UserController.defaultBaseUsersUrl);
     }
 
     /**
@@ -50,11 +66,13 @@ public class UserControllerTest {
      */
     @Test
     public void canReturnMeaningfulAuth0Error() throws IOException {
+        String emailForExistingAccount = "test-existing-user@test.com";
+
         // create wiremock stub for create users endpoint that responds with a message saying a user with the email
         // already exists
         stubFor(
             post(urlPathEqualTo("/api/v2/users"))
-                .withRequestBody(matchingJsonPath("$.email", equalTo("test-existing-user@test.com")))
+                .withRequestBody(matchingJsonPath("$.email", equalTo(emailForExistingAccount)))
                 .willReturn(
                     aResponse()
                         .withStatus(409)
@@ -63,16 +81,19 @@ public class UserControllerTest {
         );
 
 
+        // create a request body of a user that the above stub will recognize as an existing user
+        ObjectMapper mapper = new ObjectMapper();
+        ObjectNode requestJson = mapper.createObjectNode();
+        requestJson.put("email", emailForExistingAccount);
+        requestJson.put("password", "password");
+        requestJson.putObject("permissions");
+
         // make request and parse the json response
         JsonNode createUserResponse = parseJson(
             given()
                 .port(4000)
-                .body("{\n" +
-                    "  \"email\" : \"test-existing-user@test.com\",\n" +
-                    "  \"password\" : \"password\",\n" +
-                    "  \"permissions\" : {}\n" +
-                    "}")
-                .post("/api/manager/secure/user")
+                .body(requestJson)
+                .post(String.format("%ssecure/user", DataManager.API_PREFIX))
             .then()
                 .extract()
                 .response()

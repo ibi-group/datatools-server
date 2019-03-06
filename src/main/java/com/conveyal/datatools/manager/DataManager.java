@@ -104,7 +104,7 @@ public class DataManager {
     public static String commit = "";
 
     public static boolean useS3;
-    private static final String API_PREFIX = "/api/manager/";
+    public static final String API_PREFIX = "/api/manager/";
     private static final String GTFS_API_PREFIX = API_PREFIX + "secure/gtfs/";
     private static final String EDITOR_API_PREFIX = "/api/editor/";
     public static final String publicPath = "(" + API_PREFIX + "|" + EDITOR_API_PREFIX + ")public/.*";

@@ -60,11 +60,8 @@ public class UserController {
     private static ObjectMapper mapper = new ObjectMapper();
     private static final String charset = "UTF-8";
     // set the base users URL based on whether the domain is the test environment
-    private static String baseUsersUrl = (
-        AUTH0_DOMAIN.equals("localhost:8089")
-            ? "http://localhost:8089"
-            : "https://" + AUTH0_DOMAIN
-    ) + "/api/v2/users";
+    public static final String defaultBaseUsersUrl = "https://" + AUTH0_DOMAIN  + "/api/v2/users";
+    private static String baseUsersUrl = defaultBaseUsersUrl;
     public static JsonManager<Project> json = new JsonManager<>(Project.class, JsonViews.UserInterface.class);
 
     /**
@@ -177,7 +174,11 @@ public class UserController {
         Auth0UserProfile user = getUserById(userId);
 
         if (user == null) {
-            logMessageAndHalt(req, 404, "User not found");
+            logMessageAndHalt(
+                req,
+                404,
+                String.format("Could not update user: User with id %s not found", userId)
+            );
         }
 
         LOG.info("Updating user {}", user.getEmail());
@@ -514,6 +515,14 @@ public class UserController {
             this.feedVersionIndex = version.version;
             this.feedVersionName = version.name;
         }
+    }
+
+    /**
+     * Used to override the base url for making requests to Auth0. This is primarily used for testing purposes to set
+     * the url to something that is stubbed with WireMock.
+     */
+    public static void setBaseUsersUrl (String url) {
+        baseUsersUrl = url;
     }
 
     public static void register (String apiPrefix) {
