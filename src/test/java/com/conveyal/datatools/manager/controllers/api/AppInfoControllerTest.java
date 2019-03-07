@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.DatatoolsTest;
+import com.conveyal.datatools.manager.DataManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.BeforeClass;
@@ -28,7 +29,7 @@ public class AppInfoControllerTest {
     @Test
     public void canReturnAppInfo() throws IOException {
         String jsonString = given()
-            .port(4000)
+            .port(DataManager.PORT)
             .get("/api/manager/public/appinfo")
         .then()
             // make sure the repoUrl matches what is found in the pom.xml
