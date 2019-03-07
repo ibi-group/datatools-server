@@ -2,7 +2,6 @@ package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.manager.DataManager;
-import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
@@ -15,6 +14,9 @@ import org.junit.Test;
 import java.io.IOException;
 
 import static com.conveyal.datatools.TestUtils.parseJson;
+import static com.conveyal.datatools.manager.controllers.api.UserController.TEST_AUTH0_DOMAIN;
+import static com.conveyal.datatools.manager.controllers.api.UserController.TEST_AUTH0_PORT;
+import static com.conveyal.datatools.manager.controllers.api.UserController.USERS_PATH;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
@@ -37,7 +39,7 @@ public class UserControllerTest {
     @Rule
     public WireMockRule wireMockRule = new WireMockRule(
         options()
-            .port(8089)
+            .port(TEST_AUTH0_PORT)
             .usingFilesUnderDirectory("src/test/resources/com/conveyal/datatools/auth0-mock-responses/")
     );
 
@@ -48,8 +50,8 @@ public class UserControllerTest {
     public static void setUp() {
         // start server if it isn't already running
         DatatoolsTest.setUp();
-        Auth0Connection.setInTestingEnvironment(true);
-        UserController.setBaseUsersUrl("http://localhost:8089/api/v2/users");
+        // Set users URL to test domain used by wiremock.
+        UserController.setBaseUsersUrl("http://" + TEST_AUTH0_DOMAIN + USERS_PATH);
     }
 
     /**
@@ -57,8 +59,7 @@ public class UserControllerTest {
      */
     @AfterClass
     public static void tearDown() {
-        Auth0Connection.setInTestingEnvironment(false);
-        UserController.setBaseUsersUrl(UserController.defaultBaseUsersUrl);
+        UserController.setBaseUsersUrl(UserController.DEFAULT_BASE_USERS_URL);
     }
 
     /**
@@ -71,7 +72,7 @@ public class UserControllerTest {
         // create wiremock stub for create users endpoint that responds with a message saying a user with the email
         // already exists
         stubFor(
-            post(urlPathEqualTo("/api/v2/users"))
+            post(urlPathEqualTo(USERS_PATH))
                 .withRequestBody(matchingJsonPath("$.email", equalTo(emailForExistingAccount)))
                 .willReturn(
                     aResponse()
@@ -91,9 +92,9 @@ public class UserControllerTest {
         // make request and parse the json response
         JsonNode createUserResponse = parseJson(
             given()
-                .port(4000)
+                .port(DataManager.PORT)
                 .body(requestJson)
-                .post(String.format("%ssecure/user", DataManager.API_PREFIX))
+                .post(DataManager.API_PREFIX + "secure/user")
             .then()
                 .extract()
                 .response()

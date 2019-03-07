@@ -20,6 +20,7 @@ import java.util.Map;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
 import static com.conveyal.datatools.manager.DataManager.hasConfigProperty;
+import static com.conveyal.datatools.manager.controllers.api.UserController.inTestingEnvironment;
 
 /**
  * This handles verifying the Auth0 token passed in the Auth header of Spark HTTP requests.
@@ -35,7 +36,6 @@ public class Auth0Connection {
     public static final String SCOPED_USER_METADATA = String.join("/", SCOPE, USER_METADATA);
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final Logger LOG = LoggerFactory.getLogger(Auth0Connection.class);
-    private static boolean inTestingEnvironment = false;
     private static JWTVerifier verifier;
 
     /**
@@ -44,7 +44,7 @@ public class Auth0Connection {
      * @param req Spark request object
      */
     public static void checkUser(Request req) {
-        if (authDisabled() || inTestingEnvironment) {
+        if (authDisabled() || inTestingEnvironment()) {
             // If in a development or testing environment, assign a mock profile to request attribute and skip
             // authentication.
             req.attribute("user", new Auth0UserProfile("mock@example.com", "user_id:string"));
@@ -134,7 +134,7 @@ public class Auth0Connection {
      * tables in the database.
      */
     public static void checkEditPrivileges(Request request) {
-        if (authDisabled() || inTestingEnvironment) {
+        if (authDisabled() || inTestingEnvironment()) {
             // If in a development or testing environment, skip privileges check. This is done so that basically any API
             // endpoint can function.
             // TODO: make unit tests of the below items or do some more stuff as mentioned in PR review here:
@@ -192,13 +192,5 @@ public class Auth0Connection {
                 logMessageAndHalt(request, 403, "User does not have permission to edit GTFS for feedId");
             }
         }
-    }
-
-    /**
-     * This is used to activate behavior within this class that emulates a testing environment. Obviously, this is used
-     * and should only be used while running tests of this project.
-     */
-    public static void setInTestingEnvironment (boolean inTestingEnvironment) {
-        Auth0Connection.inTestingEnvironment = inTestingEnvironment;
     }
 }
