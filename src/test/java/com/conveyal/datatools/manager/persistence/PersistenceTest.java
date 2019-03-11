@@ -3,12 +3,12 @@ package com.conveyal.datatools.manager.persistence;
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Project;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
+import org.junit.BeforeClass;
+import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.Assert.assertEquals;
 
 /**
  * Created by landon on 9/6/17.
@@ -16,7 +16,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 public class PersistenceTest {
     private static final Logger LOG = LoggerFactory.getLogger(PersistenceTest.class);
 
-    @BeforeAll
+    @BeforeClass
     public static void setUp() {
         DatatoolsTest.setUp();
         LOG.info("{} setup", PersistenceTest.class.getSimpleName());
@@ -30,7 +30,7 @@ public class PersistenceTest {
         String id = feedSource.id;
         Persistence.feedSources.create(feedSource);
         String retrievedId = Persistence.feedSources.getById(id).id;
-        assertEquals(retrievedId, id, "Found FeedSource ID should equal inserted ID.");
+        assertEquals("Found FeedSource ID should equal inserted ID.", retrievedId, id);
     }
 
 //    @Test
@@ -59,7 +59,7 @@ public class PersistenceTest {
         String id = project.id;
         Persistence.projects.create(project);
         String retrievedId = Persistence.projects.getById(id).id;
-        assertEquals(retrievedId, id, "Found Project ID should equal inserted ID.");
+        assertEquals("Found Project ID should equal inserted ID.", retrievedId, id);
     }
 //
 //    @Test
