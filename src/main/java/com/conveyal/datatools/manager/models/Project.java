@@ -63,6 +63,7 @@ public class Project extends Model {
     // and/or for applying a geographic filter when syncing with external feed registries.
     public Bounds bounds;
 
+    // used to identify a specific deployment. A bunch of UI things depend on this.
     public String pinnedDeploymentId;
 
     public Project() {
