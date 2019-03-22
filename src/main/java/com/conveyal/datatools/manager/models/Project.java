@@ -63,6 +63,8 @@ public class Project extends Model {
     // and/or for applying a geographic filter when syncing with external feed registries.
     public Bounds bounds;
 
+    public String pinnedDeploymentId;
+
     public Project() {
         this.buildConfig = new OtpBuildConfig();
         this.routerConfig = new OtpRouterConfig();
