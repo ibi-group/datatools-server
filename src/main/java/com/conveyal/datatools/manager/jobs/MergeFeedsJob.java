@@ -74,8 +74,15 @@ public class MergeFeedsJob extends MonitorableJob {
     public final String projectId;
     public final MergeFeedsType mergeType;
     private File mergedTempFile = null;
-    private final FeedVersion mergedVersion;
+    final FeedVersion mergedVersion;
+    public boolean failOnDuplicateTripId = true;
 
+    /**
+     * @param owner         user ID that initiated job
+     * @param feedVersions  set of feed versions to merge
+     * @param file          resulting merge filename (without .zip)
+     * @param mergeType     the type of merge to perform (@link MergeFeedsType)
+     */
     public MergeFeedsJob(String owner, Set<FeedVersion> feedVersions, String file, MergeFeedsType mergeType) {
         super(owner, mergeType.equals(REGIONAL) ? "Merging project feeds" : "Merging feed versions", JobType.MERGE_FEED_VERSIONS);
         this.feedVersions = feedVersions;
@@ -102,11 +109,6 @@ public class MergeFeedsJob extends MonitorableJob {
         if (!mergedTempFile.delete()) {
             // FIXME: send to bugsnag?
             LOG.error("Merged feed file {} not deleted. This may contribute to storage space shortages.", mergedTempFile.getAbsolutePath());
-        }
-        if (!mergeType.equals(REGIONAL) && !status.error && !mergeFeedsResult.failed) {
-            // Handle the processing of the new version for non-regional merges (note: s3 upload is handled within this job).
-            ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(mergedVersion, owner, true);
-            addNextJob(processSingleFeedJob);
         }
     }
 
@@ -166,6 +168,14 @@ public class MergeFeedsJob extends MonitorableJob {
         else {
             storeMergedFeed();
             status.update(false, "Merged feed created successfully.", 100, true);
+        }
+        LOG.info("Feed merge is complete.");
+        if (!mergeType.equals(REGIONAL) && !status.error && !mergeFeedsResult.failed) {
+            // Handle the processing of the new version for non-regional merges (note: s3 upload is handled within this job).
+            // We must add this job in jobLogic (rather than jobFinished) because jobFinished is called after this job's
+            // subJobs are run.
+            ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(mergedVersion, owner, true);
+            addNextJob(processSingleFeedJob);
         }
     }
 
@@ -388,7 +398,9 @@ public class MergeFeedsJob extends MonitorableJob {
                                 for (NewGTFSError error : idErrors) {
                                     if (error.errorType.equals(NewGTFSErrorType.DUPLICATE_ID)) {
                                         mergeFeedsResult.failureReasons.add("Trip ID conflict caused merge failure.");
-                                        mergeFeedsResult.addIdConflict(error.badValue);
+                                        mergeFeedsResult.idConflicts.add(error.badValue);
+                                        mergeFeedsResult.errorCount++;
+                                        if (failOnDuplicateTripId) mergeFeedsResult.failed = true;
                                         skipRecord = true;
                                     }
                                 }

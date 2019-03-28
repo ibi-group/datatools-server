@@ -25,10 +25,4 @@ public class MergeFeedsResult {
         this.type = type;
         this.startTime = new Date();
     }
-
-    public void addIdConflict (String id) {
-        idConflicts.add(id);
-        errorCount++;
-        failed = true;
-    }
 }
