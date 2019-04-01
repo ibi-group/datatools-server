@@ -1,14 +1,19 @@
 language: java
+language: java
 jdk:
-- oraclejdk8
+  - oraclejdk8
 install: true
 sudo: false
 # Install mongoDB to perform persistence tests
-services: mongodb
+services:
+  - mongodb
+  - postgresql
+addons:
+  postgresql: 9.6
 cache:
   directories:
-    - "$HOME/.m2"
-    - "$HOME/.cache/yarn"
+    - $HOME/.m2
+    - $HOME/.cache/yarn
 # Install semantic-release
 before_script:
   - yarn global add @conveyal/maven-semantic-release semantic-release@15
@@ -17,6 +22,8 @@ before_install:
 # set region in AWS config for S3 setup
 - mkdir ~/.aws && printf '%s\n' '[default]' 'aws_access_key_id=foo' 'aws_secret_access_key=bar' 'region=us-east-1' > ~/.aws/config
 - cp configurations/default/server.yml.tmp configurations/default/server.yml
+# create database for tests
+- if [ "$SHOULD_RUN_E2E" = "true" ]; then psql -U postgres -c 'CREATE DATABASE catalogue;'; fi
 script:
 # package jar
 - mvn package

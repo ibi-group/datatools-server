@@ -25,22 +25,6 @@ public abstract class DatatoolsTest {
         String[] args = {"configurations/default/env.yml.tmp", "configurations/default/server.yml.tmp"};
         try {
             DataManager.main(args);
-            // Attempt to create database for testing.
-            String databaseUrl = DataManager.getConfigPropertyAsText("GTFS_DATABASE_URL");
-            String databaseName = databaseUrl.split("/")[3];
-            try {
-                Connection connection = DataManager.GTFS_DATA_SOURCE.getConnection();
-                // Auto-commit must be enabled for a create database command.
-                connection.setAutoCommit(true);
-                String createDBSql = String.format("CREATE DATABASE %s", databaseName);
-                LOG.info(createDBSql);
-                connection
-                    .prepareStatement(createDBSql)
-                    .execute();
-            } catch (SQLException e) {
-                // Catch already exists error.
-                e.printStackTrace();
-            }
             setUpIsDone = true;
         } catch (IOException e) {
             e.printStackTrace();
