@@ -32,7 +32,10 @@ public abstract class DatatoolsTest {
                 Connection connection = DataManager.GTFS_DATA_SOURCE.getConnection();
                 // Auto-commit must be enabled for a create database command.
                 connection.setAutoCommit(true);
-                connection.prepareStatement(String.format("CREATE DATABASE %s", databaseName))
+                String createDBSql = String.format("CREATE DATABASE %s", databaseName);
+                LOG.info(createDBSql);
+                connection
+                    .prepareStatement(createDBSql)
                     .execute();
             } catch (SQLException e) {
                 // Catch already exists error.
