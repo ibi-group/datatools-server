@@ -243,9 +243,16 @@
             <version>2.1.0</version>
         </dependency>
 
+        <!-- Used for testing (note: this should match the version in gtfs-lib). -->
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.12</version>
+            <scope>test</scope>
+        </dependency>
+
         <!-- Used for loading/fetching/writing GTFS entities. gtfs-lib also provides access to:
          - commons-io - generic utilities
-         - junit 4 - unit testing
          - AWS S3 SDK - putting/getting objects into/out of S3.
          -->
         <dependency>
