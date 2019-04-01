@@ -243,7 +243,11 @@
             <version>2.1.0</version>
         </dependency>
 
-        <!-- Used for loading/fetching/writing GTFS entities (also provides access to commons-io and AWS S3 SDK). -->
+        <!-- Used for loading/fetching/writing GTFS entities. gtfs-lib also provides access to:
+         - commons-io - generic utilities
+         - junit 4 - unit testing
+         - AWS S3 SDK - putting/getting objects into/out of S3.
+         -->
         <dependency>
             <groupId>com.conveyal</groupId>
             <artifactId>gtfs-lib</artifactId>
@@ -311,14 +315,6 @@
             <groupId>org.geotools</groupId>
             <artifactId>gt-shapefile</artifactId>
             <version>19.2</version>
-        </dependency>
-
-        <!-- Unit testing -->
-        <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <version>4.12</version>
-            <scope>test</scope>
         </dependency>
 
         <!-- Error reporting -->

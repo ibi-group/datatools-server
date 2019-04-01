@@ -6,8 +6,8 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
+import org.junit.BeforeClass;
+import org.junit.Test;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -17,7 +17,7 @@ import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.Assert.assertEquals;
 
 /**
  * Tests for the various {@link MergeFeedsJob} merge types.
@@ -30,7 +30,7 @@ public class MergeFeedsJobTest {
     /**
      * Prepare and start a testing-specific web server
      */
-    @BeforeAll
+    @BeforeClass
     public static void setUp() {
         // start server if it isn't already running
         DatatoolsTest.setUp();
@@ -68,39 +68,39 @@ public class MergeFeedsJobTest {
         FeedVersion mergedVersion = createFeedVersion(source, feed);
         // Ensure the feed has the row counts we expect.
         assertEquals(
-            mergedVersion.feedLoadResult.trips.rowCount,
+            "trips count for merged feed should equal sum of trips for versions merged.",
             bartVersion1.feedLoadResult.trips.rowCount + calTrainVersion.feedLoadResult.trips.rowCount,
-            "trips count for merged feed should equal sum of trips for versions merged."
+            mergedVersion.feedLoadResult.trips.rowCount
         );
         assertEquals(
-            mergedVersion.feedLoadResult.routes.rowCount,
+            "routes count for merged feed should equal sum of routes for versions merged.",
             bartVersion1.feedLoadResult.routes.rowCount + calTrainVersion.feedLoadResult.routes.rowCount,
-            "routes count for merged feed should equal sum of routes for versions merged."
-        );
+            mergedVersion.feedLoadResult.routes.rowCount
+            );
         assertEquals(
+            "stops count for merged feed should equal sum of stops for versions merged.",
             mergedVersion.feedLoadResult.stops.rowCount,
-            bartVersion1.feedLoadResult.stops.rowCount + calTrainVersion.feedLoadResult.stops.rowCount,
-            "stops count for merged feed should equal sum of stops for versions merged."
+            bartVersion1.feedLoadResult.stops.rowCount + calTrainVersion.feedLoadResult.stops.rowCount
         );
         assertEquals(
+            "agency count for merged feed should equal sum of agency for versions merged.",
             mergedVersion.feedLoadResult.agency.rowCount,
-            bartVersion1.feedLoadResult.agency.rowCount + calTrainVersion.feedLoadResult.agency.rowCount,
-            "agency count for merged feed should equal sum of agency for versions merged."
+            bartVersion1.feedLoadResult.agency.rowCount + calTrainVersion.feedLoadResult.agency.rowCount
         );
         assertEquals(
+            "stopTimes count for merged feed should equal sum of stopTimes for versions merged.",
             mergedVersion.feedLoadResult.stopTimes.rowCount,
-            bartVersion1.feedLoadResult.stopTimes.rowCount + calTrainVersion.feedLoadResult.stopTimes.rowCount,
-            "stopTimes count for merged feed should equal sum of stopTimes for versions merged."
+            bartVersion1.feedLoadResult.stopTimes.rowCount + calTrainVersion.feedLoadResult.stopTimes.rowCount
         );
         assertEquals(
+            "calendar count for merged feed should equal sum of calendar for versions merged.",
             mergedVersion.feedLoadResult.calendar.rowCount,
-            bartVersion1.feedLoadResult.calendar.rowCount + calTrainVersion.feedLoadResult.calendar.rowCount,
-            "calendar count for merged feed should equal sum of calendar for versions merged."
+            bartVersion1.feedLoadResult.calendar.rowCount + calTrainVersion.feedLoadResult.calendar.rowCount
         );
         assertEquals(
+            "calendarDates count for merged feed should equal sum of calendarDates for versions merged.",
             mergedVersion.feedLoadResult.calendarDates.rowCount,
-            bartVersion1.feedLoadResult.calendarDates.rowCount + calTrainVersion.feedLoadResult.calendarDates.rowCount,
-            "calendarDates count for merged feed should equal sum of calendarDates for versions merged."
+            bartVersion1.feedLoadResult.calendarDates.rowCount + calTrainVersion.feedLoadResult.calendarDates.rowCount
         );
     }
 
@@ -116,7 +116,11 @@ public class MergeFeedsJobTest {
         // Run the job in this thread (we're not concerned about concurrency here).
         mergeFeedsJob.run();
         // Result should fail.
-        assertEquals(mergeFeedsJob.mergeFeedsResult.failed, true, "Merge feeds job should fail due to duplicate trip IDs.");
+        assertEquals(
+            "Merge feeds job should fail due to duplicate trip IDs.",
+            true,
+            mergeFeedsJob.mergeFeedsResult.failed
+        );
     }
 
     /**
@@ -134,8 +138,16 @@ public class MergeFeedsJobTest {
         mergeFeedsJob.failOnDuplicateTripId = false;
         mergeFeedsJob.run();
         // Result should succeed this time.
-        assertEquals(mergeFeedsJob.mergedVersion.feedLoadResult.trips.rowCount, 4552, "Merged feed trip count should equal expected value.");
-        assertEquals(mergeFeedsJob.mergedVersion.feedLoadResult.routes.rowCount, 9, "Merged feed route count should equal expected value.");
+        assertEquals(
+            "Merged feed trip count should equal expected value.",
+            4552,
+            mergeFeedsJob.mergedVersion.feedLoadResult.trips.rowCount
+        );
+        assertEquals(
+            "Merged feed route count should equal expected value.",
+            9,
+            mergeFeedsJob.mergedVersion.feedLoadResult.routes.rowCount
+        );
     }
 
     /**
