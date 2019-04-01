@@ -6,6 +6,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.SQLException;
 
 /**
  * Created by landon on 2/24/17.
@@ -23,6 +25,19 @@ public abstract class DatatoolsTest {
         String[] args = {"configurations/default/env.yml.tmp", "configurations/default/server.yml.tmp"};
         try {
             DataManager.main(args);
+            // Attempt to create database for testing.
+            String databaseUrl = DataManager.getConfigPropertyAsText("GTFS_DATABASE_URL");
+            String databaseName = databaseUrl.split("/")[3];
+            try {
+                Connection connection = DataManager.GTFS_DATA_SOURCE.getConnection();
+                // Auto-commit must be enabled for a create database command.
+                connection.setAutoCommit(true);
+                connection.prepareStatement(String.format("CREATE DATABASE %s", databaseName))
+                    .execute();
+            } catch (SQLException e) {
+                // Catch already exists error.
+                e.printStackTrace();
+            }
             setUpIsDone = true;
         } catch (IOException e) {
             e.printStackTrace();
