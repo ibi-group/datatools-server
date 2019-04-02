@@ -25,7 +25,7 @@ public abstract class DatatoolsTest {
     private static final Yaml yaml = new Yaml();
 
     @BeforeClass
-    public static void setUp() {
+    public static void setUp() throws Exception {
         if (setUpIsDone) {
             return;
         }

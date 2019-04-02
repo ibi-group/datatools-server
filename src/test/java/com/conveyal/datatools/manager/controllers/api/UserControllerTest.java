@@ -47,7 +47,7 @@ public class UserControllerTest {
      * Prepare and start a testing-specific web server
      */
     @BeforeClass
-    public static void setUp() {
+    public static void setUp() throws Exception {
         // start server if it isn't already running
         DatatoolsTest.setUp();
         // Set users URL to test domain used by wiremock.

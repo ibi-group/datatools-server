@@ -18,7 +18,7 @@ public class PersistenceTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(PersistenceTest.class);
 
     @BeforeClass
-    public static void setUp() {
+    public static void setUp() throws Exception {
         DatatoolsTest.setUp();
         LOG.info("{} setup", PersistenceTest.class.getSimpleName());
 

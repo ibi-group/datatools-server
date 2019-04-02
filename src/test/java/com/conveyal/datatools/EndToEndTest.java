@@ -1,7 +1,7 @@
 package com.conveyal.datatools;
 
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
+import org.junit.BeforeClass;
+import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -11,7 +11,7 @@ import java.nio.file.Paths;
 
 import static com.conveyal.datatools.TestUtils.getBooleanEnvVar;
 import static com.conveyal.datatools.TestUtils.isCi;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
+import static org.junit.Assume.assumeTrue;
 
 /**
  * This test suite runs the datatools-ui end-to-end tests in an effort to collect code coverage on
@@ -23,7 +23,7 @@ public class EndToEndTest {
     private static final String datatoolsUiPath =
         Paths.get("").toAbsolutePath().resolveSibling("datatools-ui").toString();
 
-    @BeforeAll
+    @BeforeClass
     public static void beforeAll () throws Exception {
         // make sure the RUN_E2E environment variable is set to true.  Otherwise, this test should
         // be skipped and the overall build should not depend on this test passing in order to save

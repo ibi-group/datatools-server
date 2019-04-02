@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.DatatoolsTest;
+import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.DataManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -18,7 +19,7 @@ public class AppInfoControllerTest extends UnitTest {
      * Prepare and start a testing-specific web server
      */
     @BeforeClass
-    public static void setUp() {
+    public static void setUp() throws Exception {
         // start server if it isn't already running
         DatatoolsTest.setUp();
     }
