@@ -6,6 +6,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.file.Paths;
 
@@ -16,7 +17,7 @@ import static org.junit.Assume.assumeTrue;
 /**
  * This test suite runs the datatools-ui end-to-end tests in an effort to collect code coverage on
  * this library during those tests.  This test is only ran if the `RUN_E2E` environment variable
- * is set to `true`.
+ * is set to `true`. This e2e test can be ran either locally or on Travis.
  */
 public class EndToEndTest {
     private static final Logger LOG = LoggerFactory.getLogger(EndToEndTest.class);
@@ -62,7 +63,11 @@ public class EndToEndTest {
         runCommand(String.format("npm run test-end-to-end --prefix %s", datatoolsUiPath));
     }
 
-    public static void runCommand (String command) throws Exception {
+    /**
+     * Run a shell command using bash. The command will be ran and the output of the command will be logged. If the
+     * command fails to run successfully an error is thrown.
+     */
+    public static void runCommand (String command) throws RuntimeException, IOException, InterruptedException {
         LOG.info(String.format("Running command: %s", command));
 
         ProcessBuilder processBuilder = new ProcessBuilder();
@@ -90,8 +95,8 @@ public class EndToEndTest {
             LOG.info(String.format("Command %s completed successfully", command));
         } else {
             String failureMessage = String.format("Command %s failed", command);
-            LOG.info(failureMessage);
-            throw new Exception(failureMessage);
+            LOG.error(failureMessage);
+            throw new RuntimeException(failureMessage);
         }
     }
 }

@@ -6,11 +6,17 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 
 public class TestUtils {
+    /**
+     * Returns true only if an environment variable exists and is set to "true".
+     */
     public static boolean getBooleanEnvVar (String var) {
-        String CI = System.getenv(var);
-        return CI != null && CI.equals("true");
+        String variable = System.getenv(var);
+        return variable != null && variable.equals("true");
     }
 
+    /**
+     * Checks whether the current environment appears to be a continuous integration environment.
+     */
     public static boolean isCi () {
         return getBooleanEnvVar("CI");
     }

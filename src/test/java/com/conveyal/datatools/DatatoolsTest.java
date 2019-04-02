@@ -17,20 +17,53 @@ import java.util.Map;
 import static com.conveyal.datatools.TestUtils.isCi;
 
 /**
- * Created by landon on 2/24/17.
+ * This abstract class contains is used to start a test instance of datatools-server that other tests can use to perform
+ * various tests.
+ *
+ * A majority of the test involves setting up the proper config files for performing tests - especially the e2e tests.
  */
 public abstract class DatatoolsTest {
     private static final Logger LOG = LoggerFactory.getLogger(DatatoolsTest.class);
     private static boolean setUpIsDone = false;
-    private static final Yaml yaml = new Yaml();
+    private static final Yaml yaml = new Yaml(); // needed for writing config files on Travis for the e2e tests
 
     @BeforeClass
-    public static void setUp() throws Exception {
+    public static void setUp() throws RuntimeException, IOException {
         if (setUpIsDone) {
             return;
         }
         LOG.info("DatatoolsTest setup");
 
+        setupConfigFiles();
+
+        // This test (and all those that depend on it) assume that the env.yml and server.yml
+        // files have been properly configured.  In a CI environment, these files are setup
+        // automatically, but the setup must be done manually locally.
+        String[] args = {"configurations/default/env.yml", "configurations/default/server.yml"};
+
+        // fail this test and others if the above files do not exist
+        for (String arg : args) {
+            File f = new File(arg);
+            if (!f.exists() || f.isDirectory()) {
+                throw new IOException(String.format("Required config file %s does not exist!", f.getName()));
+            }
+        }
+
+        LOG.info("Starting server");
+        try {
+            DataManager.main(args);
+            setUpIsDone = true;
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+    }
+
+    /**
+     * Creates config files for datatools-server if being ran on Travis. These special config files are needed in order
+     * to run e2e tests. Some of the config files contain sensitive information that cannot be checked into the repo,
+     * so that data is obtained from environment variables in Travis.
+     */
+    private static void setupConfigFiles() throws RuntimeException, IOException {
         if (isCi()) {
             LOG.info("Setting up server in CI environment");
 
@@ -55,7 +88,7 @@ public abstract class DatatoolsTest {
             }
 
             if (missingVars.size() > 0) {
-                throw new Exception(
+                throw new RuntimeException(
                     String.format(
                         "Required environment variables missing: %s",
                         String.join(", ", missingVars)
@@ -111,27 +144,6 @@ public abstract class DatatoolsTest {
             LOG.info("Writing YAML config files");
             yaml.dump(envConfig, new FileWriter("configurations/default/env.yml"));
             yaml.dump(serverConfig, new FileWriter("configurations/default/server.yml"));
-        }
-
-        // This test (and all those that depend on it) assume that the env.yml and server.yml
-        // files have been properly configured.  In a CI environment, these files are setup
-        // automatically, but the setup must be done manually locally.
-        String[] args = {"configurations/default/env.yml", "configurations/default/server.yml"};
-
-        // fail this test and others if the above files do not exist
-        for (String arg : args) {
-            File f = new File(arg);
-            if (!f.exists() || f.isDirectory()) {
-                throw new Exception(String.format("Required config file %s does not exist!"));
-            }
-        }
-
-        LOG.info("Starting server");
-        try {
-            DataManager.main(args);
-            setUpIsDone = true;
-        } catch (IOException e) {
-            e.printStackTrace();
         }
     }
 }
