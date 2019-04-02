@@ -1,7 +1,7 @@
 package com.conveyal.datatools;
 
 import com.conveyal.datatools.manager.DataManager;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.BeforeClass;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.yaml.snakeyaml.Yaml;
@@ -24,8 +24,8 @@ public abstract class DatatoolsTest {
     private static boolean setUpIsDone = false;
     private static final Yaml yaml = new Yaml();
 
-    @BeforeAll
-    public static void setUp() throws Exception {
+    @BeforeClass
+    public static void setUp() {
         if (setUpIsDone) {
             return;
         }
@@ -117,7 +117,7 @@ public abstract class DatatoolsTest {
         // files have been properly configured.  In a CI environment, these files are setup
         // automatically, but the setup must be done manually locally.
         String[] args = {"configurations/default/env.yml", "configurations/default/server.yml"};
-        
+
         // fail this test and others if the above files do not exist
         for (String arg : args) {
             File f = new File(arg);

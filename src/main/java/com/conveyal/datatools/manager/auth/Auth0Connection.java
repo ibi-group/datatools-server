@@ -20,6 +20,7 @@ import java.util.Map;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
 import static com.conveyal.datatools.manager.DataManager.hasConfigProperty;
+import static com.conveyal.datatools.manager.controllers.api.UserController.inTestingEnvironment;
 
 /**
  * This handles verifying the Auth0 token passed in the Auth header of Spark HTTP requests.
@@ -43,8 +44,9 @@ public class Auth0Connection {
      * @param req Spark request object
      */
     public static void checkUser(Request req) {
-        if (authDisabled()) {
-            // If in a development environment, assign a mock profile to request attribute and skip authentication.
+        if (authDisabled() || inTestingEnvironment()) {
+            // If in a development or testing environment, assign a mock profile to request attribute and skip
+            // authentication.
             req.attribute("user", new Auth0UserProfile("mock@example.com", "user_id:string"));
             return;
         }
@@ -132,8 +134,11 @@ public class Auth0Connection {
      * tables in the database.
      */
     public static void checkEditPrivileges(Request request) {
-        if (authDisabled()) {
-            // If in a development environment, skip privileges check.
+        if (authDisabled() || inTestingEnvironment()) {
+            // If in a development or testing environment, skip privileges check. This is done so that basically any API
+            // endpoint can function.
+            // TODO: make unit tests of the below items or do some more stuff as mentioned in PR review here:
+            // https://github.com/conveyal/datatools-server/pull/187#discussion_r262714708
             return;
         }
         Auth0UserProfile userProfile = request.attribute("user");

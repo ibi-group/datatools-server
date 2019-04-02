@@ -27,8 +27,9 @@ public class FeedValidationResultSummary implements Serializable {
     // statistics
     public int agencyCount;
     public int routeCount;
-    public int tripCount;
+    public int stopCount;
     public int stopTimesCount;
+    public int tripCount;
     public long avgDailyRevenueTime;
 
     /** The first date the feed has service, either in calendar.txt or calendar_dates.txt */
@@ -59,6 +60,7 @@ public class FeedValidationResultSummary implements Serializable {
                 this.errorCount = validationResult.errorCount;
                 this.agencyCount = feedLoadResult.agency.rowCount;
                 this.routeCount = feedLoadResult.routes.rowCount;
+                this.stopCount = feedLoadResult.stops.rowCount;
                 this.tripCount = feedLoadResult.trips.rowCount;
                 this.stopTimesCount = feedLoadResult.stopTimes.rowCount;
                 this.startDate = validationResult.firstCalendarDate;

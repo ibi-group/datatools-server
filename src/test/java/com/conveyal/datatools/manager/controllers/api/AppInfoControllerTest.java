@@ -1,11 +1,11 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.DatatoolsTest;
-import com.conveyal.datatools.UnitTest;
+import com.conveyal.datatools.manager.DataManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.Test;
+import org.junit.BeforeClass;
+import org.junit.Test;
 
 import java.io.IOException;
 
@@ -17,8 +17,8 @@ public class AppInfoControllerTest extends UnitTest {
     /**
      * Prepare and start a testing-specific web server
      */
-    @BeforeAll
-    public static void setUp() throws Exception {
+    @BeforeClass
+    public static void setUp() {
         // start server if it isn't already running
         DatatoolsTest.setUp();
     }
@@ -27,9 +27,9 @@ public class AppInfoControllerTest extends UnitTest {
      * Make sure the app info endpoint can load and return expected data.
      */
     @Test
-    public void canReturnApprInfo() throws IOException {
+    public void canReturnAppInfo() throws IOException {
         String jsonString = given()
-            .port(4000)
+            .port(DataManager.PORT)
             .get("/api/manager/public/appinfo")
         .then()
             // make sure the repoUrl matches what is found in the pom.xml
