@@ -23,7 +23,7 @@ before_install:
 - mkdir ~/.aws && printf '%s\n' '[default]' 'aws_access_key_id=foo' 'aws_secret_access_key=bar' 'region=us-east-1' > ~/.aws/config
 - cp configurations/default/server.yml.tmp configurations/default/server.yml
 # create database for tests
-- if [ "$SHOULD_RUN_E2E" = "true" ]; then psql -U postgres -c 'CREATE DATABASE catalogue;'; fi
+- psql -U postgres -c 'CREATE DATABASE catalogue;'
 script:
 # package jar
 - mvn package
