@@ -318,8 +318,8 @@ public class FeedSource extends Model implements Cloneable {
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
-    @JsonProperty("publishedValidation")
-    private FeedValidationResultSummary publishedValidation() {
+    @JsonProperty("publishedValidationSummary")
+    private FeedValidationResultSummary publishedValidationSummary() {
         FeedVersion publishedVersion = retrievePublished();
         return publishedVersion != null ? new FeedValidationResultSummary(publishedVersion) : null;
     }
