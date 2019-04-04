@@ -304,6 +304,26 @@ public class FeedSource extends Model implements Cloneable {
         return newestVersion;
     }
 
+    public FeedVersion retrievePublished() {
+        if (this.publishedVersionId == null) return null;
+        FeedVersion publishedVersion = Persistence.feedVersions
+            // Sort is unnecessary here.
+            .getOneFiltered(eq("namespace", this.publishedVersionId), Sorts.descending("version"));
+        if (publishedVersion == null) {
+            // Is this what happens if there are none?
+            return null;
+        }
+        return publishedVersion;
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonView(JsonViews.UserInterface.class)
+    @JsonProperty("publishedValidation")
+    private FeedValidationResultSummary publishedValidation() {
+        FeedVersion publishedVersion = retrievePublished();
+        return publishedVersion != null ? new FeedValidationResultSummary(publishedVersion) : null;
+    }
+
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("latestVersionId")
@@ -332,8 +352,7 @@ public class FeedSource extends Model implements Cloneable {
     @JsonProperty("latestValidation")
     public FeedValidationResultSummary latestValidation() {
         FeedVersion latest = retrieveLatest();
-        ValidationResult result = latest != null ? latest.validationResult : null;
-        return result != null ?new FeedValidationResultSummary(result, latest.feedLoadResult) : null;
+        return latest != null ? new FeedValidationResultSummary(latest) : null;
     }
 
     // TODO: figure out some way to indicate whether feed has been edited since last snapshot (i.e, there exist changes)
