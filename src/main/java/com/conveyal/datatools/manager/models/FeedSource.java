@@ -110,6 +110,15 @@ public class FeedSource extends Model implements Cloneable {
      */
     public String snapshotVersion;
 
+    /**
+     * The SQL namespace for the most recently verified published {@link FeedVersion}.
+     *
+     * FIXME During migration to RDBMS for GTFS data, this field changed to map to the SQL unique ID,
+     *  however the name of the field suggests it maps to the feed version ID stored in MongoDB. Now
+     *  that both published namespace/version ID are available in {@link #publishedValidationSummary()}
+     *  it might make sense to migrate this field back to the versionID for MTC (or rename it to
+     *  publishedNamespace). Both efforts would require some level of db migration + code changes.
+     */
     public String publishedVersionId;
 
     public String editorNamespace;
@@ -303,6 +312,10 @@ public class FeedSource extends Model implements Cloneable {
         return newestVersion;
     }
 
+    /**
+     * Fetches the published {@link FeedVersion} for this feed source according to the
+     * {@link #publishedVersionId} field (which currently maps to {@link FeedVersion#namespace}.
+     */
     public FeedVersion retrievePublishedVersion() {
         if (this.publishedVersionId == null) return null;
         FeedVersion publishedVersion = Persistence.feedVersions
