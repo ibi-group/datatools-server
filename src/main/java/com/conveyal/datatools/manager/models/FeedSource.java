@@ -9,7 +9,6 @@ import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
-import com.conveyal.gtfs.validator.ValidationResult;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -304,7 +303,7 @@ public class FeedSource extends Model implements Cloneable {
         return newestVersion;
     }
 
-    public FeedVersion retrievePublished() {
+    public FeedVersion retrievePublishedVersion() {
         if (this.publishedVersionId == null) return null;
         FeedVersion publishedVersion = Persistence.feedVersions
             // Sort is unnecessary here.
@@ -320,7 +319,7 @@ public class FeedSource extends Model implements Cloneable {
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("publishedValidationSummary")
     private FeedValidationResultSummary publishedValidationSummary() {
-        FeedVersion publishedVersion = retrievePublished();
+        FeedVersion publishedVersion = retrievePublishedVersion();
         return publishedVersion != null ? new FeedValidationResultSummary(publishedVersion) : null;
     }
 
