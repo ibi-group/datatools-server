@@ -168,7 +168,7 @@ public class FeedVersion extends Model implements Serializable {
     @JsonView(JsonViews.UserInterface.class)
     @BsonProperty("validationSummary")
     public FeedValidationResultSummary validationSummary() {
-        return new FeedValidationResultSummary(validationResult, feedLoadResult);
+        return new FeedValidationResultSummary(this);
     }
 
 
