@@ -49,11 +49,11 @@ public class Auth0Users {
         builder.setParameter("page", Integer.toString(page));
         builder.setParameter("include_totals", Boolean.toString(includeTotals));
         if (searchQuery != null) {
-            builder.setParameter("search_engine", "v2");
+            builder.setParameter("search_engine", "v3");
             builder.setParameter("q", searchQuery + " AND " + defaultQuery);
         }
         else {
-            builder.setParameter("search_engine", "v2");
+            builder.setParameter("search_engine", "v3");
             builder.setParameter("q", defaultQuery);
         }
 
