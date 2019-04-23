@@ -8,6 +8,8 @@ import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import org.junit.BeforeClass;
 import org.junit.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -23,10 +25,13 @@ import static org.junit.Assert.assertEquals;
  * Tests for the various {@link MergeFeedsJob} merge types.
  */
 public class MergeFeedsJobTest {
+    private static final Logger LOG = LoggerFactory.getLogger(MergeFeedsJobTest.class);
     private static FeedVersion bartVersion1;
     private static FeedVersion bartVersion2;
     private static FeedVersion calTrainVersion;
     private static Project project;
+    private static FeedVersion napaVersion;
+
     /**
      * Prepare and start a testing-specific web server
      */
@@ -47,6 +52,10 @@ public class MergeFeedsJobTest {
         caltrain.projectId = project.id;
         Persistence.feedSources.create(caltrain);
         calTrainVersion = createFeedVersion(caltrain, "caltrain_gtfs.zip");
+        FeedSource napa = new FeedSource("Napa");
+        napa.projectId = project.id;
+        Persistence.feedSources.create(napa);
+        napaVersion = createFeedVersion(napa, "napa-no-agency-id.zip");
     }
 
     /**
@@ -54,9 +63,11 @@ public class MergeFeedsJobTest {
      */
     @Test
     public void canMergeRegional() {
+        // Set up list of feed versions to merge.
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(bartVersion1);
         versions.add(calTrainVersion);
+        versions.add(napaVersion);
         MergeFeedsJob mergeFeedsJob = new MergeFeedsJob("test", versions, project.id, MergeFeedsType.REGIONAL);
         // Run the job in this thread (we're not concerned about concurrency here).
         mergeFeedsJob.run();
@@ -65,42 +76,43 @@ public class MergeFeedsJobTest {
         source.projectId = project.id;
         Persistence.feedSources.create(source);
         File feed = FeedVersion.feedStore.getFeed(project.id + ".zip");
+        LOG.info("Regional merged file: {}", feed.getAbsolutePath());
         FeedVersion mergedVersion = createFeedVersion(source, feed);
         // Ensure the feed has the row counts we expect.
         assertEquals(
             "trips count for merged feed should equal sum of trips for versions merged.",
-            bartVersion1.feedLoadResult.trips.rowCount + calTrainVersion.feedLoadResult.trips.rowCount,
+            bartVersion1.feedLoadResult.trips.rowCount + calTrainVersion.feedLoadResult.trips.rowCount + napaVersion.feedLoadResult.trips.rowCount,
             mergedVersion.feedLoadResult.trips.rowCount
         );
         assertEquals(
             "routes count for merged feed should equal sum of routes for versions merged.",
-            bartVersion1.feedLoadResult.routes.rowCount + calTrainVersion.feedLoadResult.routes.rowCount,
+            bartVersion1.feedLoadResult.routes.rowCount + calTrainVersion.feedLoadResult.routes.rowCount + napaVersion.feedLoadResult.routes.rowCount,
             mergedVersion.feedLoadResult.routes.rowCount
             );
         assertEquals(
             "stops count for merged feed should equal sum of stops for versions merged.",
             mergedVersion.feedLoadResult.stops.rowCount,
-            bartVersion1.feedLoadResult.stops.rowCount + calTrainVersion.feedLoadResult.stops.rowCount
+            bartVersion1.feedLoadResult.stops.rowCount + calTrainVersion.feedLoadResult.stops.rowCount + napaVersion.feedLoadResult.stops.rowCount
         );
         assertEquals(
             "agency count for merged feed should equal sum of agency for versions merged.",
             mergedVersion.feedLoadResult.agency.rowCount,
-            bartVersion1.feedLoadResult.agency.rowCount + calTrainVersion.feedLoadResult.agency.rowCount
+            bartVersion1.feedLoadResult.agency.rowCount + calTrainVersion.feedLoadResult.agency.rowCount + napaVersion.feedLoadResult.agency.rowCount
         );
         assertEquals(
             "stopTimes count for merged feed should equal sum of stopTimes for versions merged.",
             mergedVersion.feedLoadResult.stopTimes.rowCount,
-            bartVersion1.feedLoadResult.stopTimes.rowCount + calTrainVersion.feedLoadResult.stopTimes.rowCount
+            bartVersion1.feedLoadResult.stopTimes.rowCount + calTrainVersion.feedLoadResult.stopTimes.rowCount + napaVersion.feedLoadResult.stopTimes.rowCount
         );
         assertEquals(
             "calendar count for merged feed should equal sum of calendar for versions merged.",
             mergedVersion.feedLoadResult.calendar.rowCount,
-            bartVersion1.feedLoadResult.calendar.rowCount + calTrainVersion.feedLoadResult.calendar.rowCount
+            bartVersion1.feedLoadResult.calendar.rowCount + calTrainVersion.feedLoadResult.calendar.rowCount + napaVersion.feedLoadResult.calendar.rowCount
         );
         assertEquals(
             "calendarDates count for merged feed should equal sum of calendarDates for versions merged.",
             mergedVersion.feedLoadResult.calendarDates.rowCount,
-            bartVersion1.feedLoadResult.calendarDates.rowCount + calTrainVersion.feedLoadResult.calendarDates.rowCount
+            bartVersion1.feedLoadResult.calendarDates.rowCount + calTrainVersion.feedLoadResult.calendarDates.rowCount + napaVersion.feedLoadResult.calendarDates.rowCount
         );
     }
 
@@ -140,12 +152,12 @@ public class MergeFeedsJobTest {
         // Result should succeed this time.
         assertEquals(
             "Merged feed trip count should equal expected value.",
-            4552,
+            4552, // Magic number represents the number of trips in the merged BART feed.
             mergeFeedsJob.mergedVersion.feedLoadResult.trips.rowCount
         );
         assertEquals(
             "Merged feed route count should equal expected value.",
-            9,
+            9, // Magic number represents the number of routes in the merged BART feed.
             mergeFeedsJob.mergedVersion.feedLoadResult.routes.rowCount
         );
     }

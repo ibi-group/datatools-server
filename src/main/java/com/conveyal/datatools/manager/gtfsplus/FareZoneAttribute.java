@@ -12,9 +12,9 @@ public class FareZoneAttribute extends Entity {
     public String zone_id;
     public String zone_name;
 
-    // TODO
     @Override
     public void setStatementParameters(PreparedStatement statement, boolean setDefaultId) throws SQLException {
-
+        throw new UnsupportedOperationException(
+            "Cannot call setStatementParameters because loading a GTFS+ table into RDBMS is unsupported.");
     }
 }

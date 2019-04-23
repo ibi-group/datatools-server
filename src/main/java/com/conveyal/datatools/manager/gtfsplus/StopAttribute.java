@@ -15,9 +15,9 @@ public class StopAttribute extends Entity {
     public String relative_position;
     public String stop_city;
 
-    // TODO
     @Override
     public void setStatementParameters(PreparedStatement statement, boolean setDefaultId) throws SQLException {
-
+        throw new UnsupportedOperationException(
+            "Cannot call setStatementParameters because loading a GTFS+ table into RDBMS is unsupported.");
     }
 }

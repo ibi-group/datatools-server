@@ -16,9 +16,9 @@ public class FareRiderCategory extends Entity {
     public LocalDate expiration_date;
     public LocalDate commencement_date;
 
-    // TODO
     @Override
     public void setStatementParameters(PreparedStatement statement, boolean setDefaultId) throws SQLException {
-
+        throw new UnsupportedOperationException(
+            "Cannot call setStatementParameters because loading a GTFS+ table into RDBMS is unsupported.");
     }
 }

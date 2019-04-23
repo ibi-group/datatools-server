@@ -14,9 +14,9 @@ public class Direction extends Entity {
     public String direction;
 
 
-    // TODO
     @Override
     public void setStatementParameters(PreparedStatement statement, boolean setDefaultId) throws SQLException {
-
+        throw new UnsupportedOperationException(
+            "Cannot call setStatementParameters because loading a GTFS+ table into RDBMS is unsupported.");
     }
 }

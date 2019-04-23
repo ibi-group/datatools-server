@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.gtfsplus;
 
 import com.conveyal.gtfs.model.Entity;
 
+import javax.naming.OperationNotSupportedException;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 
@@ -12,9 +13,8 @@ public class CalendarAttribute extends Entity {
     public String service_id;
     public String service_description;
 
-    // TODO
-    @Override
-    public void setStatementParameters(PreparedStatement statement, boolean setDefaultId) throws SQLException {
-
+    @Override public void setStatementParameters(PreparedStatement statement, boolean setDefaultId) {
+        throw new UnsupportedOperationException(
+            "Cannot call setStatementParameters because loading a GTFS+ table into RDBMS is unsupported.");
     }
 }

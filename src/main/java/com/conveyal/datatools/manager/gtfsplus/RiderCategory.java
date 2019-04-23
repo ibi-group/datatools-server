@@ -12,9 +12,9 @@ public class RiderCategory extends Entity {
     public int rider_category_id;
     public String rider_category_description;
 
-    // TODO
     @Override
     public void setStatementParameters(PreparedStatement statement, boolean setDefaultId) throws SQLException {
-
+        throw new UnsupportedOperationException(
+            "Cannot call setStatementParameters because loading a GTFS+ table into RDBMS is unsupported.");
     }
 }

@@ -11,6 +11,12 @@ import static com.conveyal.gtfs.loader.Requirement.OPTIONAL;
 import static com.conveyal.gtfs.loader.Requirement.PROPRIETARY;
 import static com.conveyal.gtfs.loader.Requirement.REQUIRED;
 
+/**
+ * This class contains GTFS+ table definitions that are based on gtfs-lib's {@link Table} constants.
+ * Currently, these are only used when operating on tables being merged within
+ * {@link com.conveyal.datatools.manager.jobs.MergeFeedsJob}. The definition of these tables can be
+ * found at https://www.transitwiki.org/TransitWiki/images/e/e7/GTFS%2B_Additional_Files_Format_Ver_1.7.pdf.
+ */
 public class GtfsPlusTable {
     public static final Table REALTIME_ROUTES = new Table("realtime_routes", RealtimeRoute.class, PROPRIETARY,
         new StringField("route_id", REQUIRED).isReferenceTo(Table.ROUTES),
@@ -72,6 +78,10 @@ public class GtfsPlusTable {
         new StringField("zone_name", REQUIRED)
     );
 
+    /**
+     * List of tables in the order such that internal references can be appropriately checked as
+     * tables are loaded/encountered.
+     */
     public static final Table[] tables = new Table[] {
         REALTIME_ROUTES,
         REALTIME_STOPS,

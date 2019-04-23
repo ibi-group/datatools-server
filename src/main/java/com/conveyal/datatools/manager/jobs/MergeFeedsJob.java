@@ -16,13 +16,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -31,6 +31,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -46,21 +47,70 @@ import static com.conveyal.gtfs.loader.Field.getFieldIndex;
  * This job handles merging two or more feed versions according to logic specific to the specified merge type.
  * The current merge types handled here are:
  * - {@link MergeFeedsType#REGIONAL}: this is essentially a "dumb" merge. For each feed version, each primary key is
- *                                    scoped so that there is no possibility that it will conflict with other IDs
- *                                    found in any other feed version. Note: There is absoluately no attempt to merge
- *                                    entities based on either expected shared IDs or entity location (e.g., stop
- *                                    coordinates).
+ * scoped so that there is no possibility that it will conflict with other IDs
+ * found in any other feed version. Note: There is absolutely no attempt to merge
+ * entities based on either expected shared IDs or entity location (e.g., stop
+ * coordinates).
  * - {@link MergeFeedsType#MTC}:      this strategy is defined in detail at https://github.com/conveyal/datatools-server/issues/185,
- *                                    but in essence, this strategy attempts to merge a current and future feed into
- *                                    a combined file. For certain entities (specifically stops and routes) it uses
- *                                    alternate fields as primary keys (stop_code and route_short_name) if they are
- *                                    available. There is some complexity related to this in {@link #constructMergedTable(Table, List)}.
- *                                    Another defining characteristic is to prefer entities defined in the "future"
- *                                    file if there are matching entities in the current file.
+ * but in essence, this strategy attempts to merge a current and future feed into
+ * a combined file. For certain entities (specifically stops and routes) it uses
+ * alternate fields as primary keys (stop_code and route_short_name) if they are
+ * available. There is some complexity related to this in {@link #constructMergedTable(Table, List, ZipOutputStream)}.
+ * Another defining characteristic is to prefer entities defined in the "future"
+ * file if there are matching entities in the current file.
  * Future merge strategies could be added here. For example, some potential customers have mentioned a desire to
  * prefer entities from the "current" version, so that entities edited in Data Tools would override the values found
  * in the "future" file, which may have limited data attributes due to being exported from scheduling software with
  * limited GTFS support.
+ *
+ * Reproduced from https://github.com/conveyal/datatools-server/issues/185 on 2019/04/23:
+ *
+ * 1. When a new GTFS+ feed is loaded in TDM, check as part of the loading and validation process if
+ *    the dataset is for a future date. (If all services start in the future, consider the dataset
+ *    to be for the future).
+ * 2. If it is a future dataset, automatically notify the user that the feed needs to be merged with
+ *    most recent active version or a selected one in order to further process the feed.
+ * 3. Use the chosen version to merge the future feed. The merging process needs to be efficient so
+ *    that the user doesn’t need to wait more than a tolerable time.
+ * 4. The merge process shall compare the current and future datasets, validate the following rules
+ *    and generate the Merge Validation Report:
+ *    i. Merging will be based on route_short_name in the current and future datasets. All matching
+ *     route_short_names between the datasets shall be considered same route. Any route_short_name
+ *     in active data not present in the future will be appended to the future routes file.
+ *    ii. Future feed_info.txt file should get priority over active feed file when difference is
+ *     identified.
+ *    iii. When difference is found in agency.txt file between active and future feeds, the future
+ *     agency.txt file data should be used. Possible issue with missing agency_id referenced by routes
+ *    iv. When stop_code is included, stop merging will be based on that. If stop_code is not
+ *     included, it will be based on stop_id. All stops in future data will be carried forward and
+ *     any stops found in active data that are not in the future data shall be appended. If one
+ *     of the feed is missing stop_code, merge fails with a notification to the user with
+ *     suggestion that the feed with missing stop_code must be fixed with stop_code.
+ *    v. If any service_id in the active feed matches with the future feed, it should be modified
+ *     and all associated trip records must also be changed with the modified service_id.
+ *     If a service_id from the active calendar has both the start_date and end_date in the
+ *     future, the service shall not be appended to the merged file. Records in trips,
+ *     calendar_dates, and calendar_attributes referencing this service_id shall also be
+ *     removed/ignored. Stop_time records for the ignored trips shall also be removed.
+ *     If a service_id from the active calendar has only the end_date in the future, the end_date
+ *     shall be set to one day prior to the earliest start_date in future dataset before appending
+ *     the calendar record to the merged file.
+ *     trip_ids between active and future datasets must not match. If any trip_id is found to be
+ *     matching, the merge should fail with appropriate notification to user with the cause of the
+ *     failure. Notification should include all matched trip_ids.
+ *    vi. New shape_ids in the future datasets should be appended in the merged feed.
+ *    vii. Merging fare_attributes will be based on fare_id in the current and future datasets. All
+ *     matching fare_ids between the datasets shall be considered same fare. Any fare_id in active
+ *     data not present in the future will be appended to the future fare_attributes file.
+ *    viii. All fare rules from the future dataset will be included. Any identical fare rules from
+ *     the current dataset will be discarded. Any fare rules unique to the current dataset will be
+ *     appended to the future file.
+ *    ix. All transfers.txt entries with unique stop pairs (from - to) from both the future and
+ *     current datasets will be included in the merged file. Entries with duplicate stop pairs from
+ *     the current dataset will be discarded.
+ *    x. All GTFS+ files should be merged based on how the associated base GTFS file is merged. For
+ *     example, directions for routes that are not in the future routes.txt file should be appended
+ *     to the future directions.txt file in the merged feed.
  */
 public class MergeFeedsJob extends MonitorableJob {
 
@@ -78,16 +128,19 @@ public class MergeFeedsJob extends MonitorableJob {
     public boolean failOnDuplicateTripId = true;
 
     /**
-     * @param owner         user ID that initiated job
-     * @param feedVersions  set of feed versions to merge
-     * @param file          resulting merge filename (without .zip)
-     * @param mergeType     the type of merge to perform (@link MergeFeedsType)
+     * @param owner        user ID that initiated job
+     * @param feedVersions set of feed versions to merge
+     * @param file         resulting merge filename (without .zip)
+     * @param mergeType    the type of merge to perform (@link MergeFeedsType)
      */
-    public MergeFeedsJob(String owner, Set<FeedVersion> feedVersions, String file, MergeFeedsType mergeType) {
-        super(owner, mergeType.equals(REGIONAL) ? "Merging project feeds" : "Merging feed versions", JobType.MERGE_FEED_VERSIONS);
+    public MergeFeedsJob(String owner, Set<FeedVersion> feedVersions, String file,
+        MergeFeedsType mergeType) {
+        super(owner, mergeType.equals(REGIONAL) ? "Merging project feeds" : "Merging feed versions",
+            JobType.MERGE_FEED_VERSIONS);
         this.feedVersions = feedVersions;
         // Grab parent feed source if performing non-regional merge (each version should share the same feed source).
-        this.feedSource = mergeType.equals(REGIONAL) ? null : feedVersions.iterator().next().parentFeedSource();
+        this.feedSource =
+            mergeType.equals(REGIONAL) ? null : feedVersions.iterator().next().parentFeedSource();
         // Construct full filename with extension
         this.filename = String.format("%s.zip", file);
         // If the merge type is regional, the file string should be equivalent to projectId, which is used by the client
@@ -108,7 +161,9 @@ public class MergeFeedsJob extends MonitorableJob {
         // permanently.
         if (!mergedTempFile.delete()) {
             // FIXME: send to bugsnag?
-            LOG.error("Merged feed file {} not deleted. This may contribute to storage space shortages.", mergedTempFile.getAbsolutePath());
+            LOG.error(
+                "Merged feed file {} not deleted. This may contribute to storage space shortages.",
+                mergedTempFile.getAbsolutePath());
         }
     }
 
@@ -116,8 +171,7 @@ public class MergeFeedsJob extends MonitorableJob {
      * Primary job logic handles collecting and sorting versions, creating a merged table for all versions, and writing
      * the resulting zip file to storage.
      */
-    @Override
-    public void jobLogic() throws IOException {
+    @Override public void jobLogic() throws IOException {
         // Create temp zip file to add merged feed content to.
         mergedTempFile = File.createTempFile(filename, null);
         mergedTempFile.deleteOnExit();
@@ -127,9 +181,9 @@ public class MergeFeedsJob extends MonitorableJob {
         List<FeedToMerge> feedsToMerge = collectAndSortFeeds(feedVersions);
 
         // Determine which tables to merge (only merge GTFS+ tables for MTC extension).
-        final List<Table> tablesToMerge = Arrays.stream(Table.tablesInOrder)
-                                                .filter(Table::isSpecTable)
-                                                .collect(Collectors.toList());
+        final List<Table> tablesToMerge =
+            Arrays.stream(Table.tablesInOrder).filter(Table::isSpecTable)
+                .collect(Collectors.toList());
         if (DataManager.isExtensionEnabled("mtc")) {
             // Merge GTFS+ tables only if MTC extension is enabled. We should do this for both regional and MTC merge
             // strategies.
@@ -140,31 +194,21 @@ public class MergeFeedsJob extends MonitorableJob {
         for (int i = 0; i < numberOfTables; i++) {
             Table table = tablesToMerge.get(i);
             double percentComplete = Math.round((double) i / numberOfTables * 10000d) / 100d;
-            status.update( "Merging " + table.name, percentComplete);
+            status.update("Merging " + table.name, percentComplete);
             // Perform the merge.
-            byte[] tableOut = constructMergedTable(table, feedsToMerge);
-            // If at least one feed has the table (i.e., tableOut is not null), include it in the merged feed.
-            if (tableOut != null) {
-                // Create entry for zip file.
-                ZipEntry tableEntry = new ZipEntry(table.name + ".txt");
-                LOG.info("Writing {} to merged feed", table.name);
-                try {
-                    out.putNextEntry(tableEntry);
-                    out.write(tableOut);
-                    out.closeEntry();
-                } catch (IOException e) {
-                    String message = String.format("Error writing to table %s", table.name);
-                    LOG.error(message, e);
-                    status.fail(message, e);
-                }
-            } else {
+            LOG.info("Writing {} to merged feed", table.name);
+            int mergedLineNumber = constructMergedTable(table, feedsToMerge, out);
+            if (mergedLineNumber == 0) {
                 LOG.info("Skipping {} table. No entries found in zip files.", table.name);
+            } else if (mergedLineNumber == -1) {
+                LOG.error("Merge {} table failed!", table.name);
             }
         }
         // Close output stream for zip file.
         out.close();
         // Handle writing file to storage (local or s3).
-        if (mergeFeedsResult.failed) status.fail("Merging feed versions failed.");
+        if (mergeFeedsResult.failed)
+            status.fail("Merging feed versions failed.");
         else {
             storeMergedFeed();
             status.update(false, "Merged feed created successfully.", 100, true);
@@ -174,7 +218,8 @@ public class MergeFeedsJob extends MonitorableJob {
             // Handle the processing of the new version for non-regional merges (note: s3 upload is handled within this job).
             // We must add this job in jobLogic (rather than jobFinished) because jobFinished is called after this job's
             // subJobs are run.
-            ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(mergedVersion, owner, true);
+            ProcessSingleFeedJob processSingleFeedJob =
+                new ProcessSingleFeedJob(mergedVersion, owner, true);
             addNextJob(processSingleFeedJob);
         }
     }
@@ -185,21 +230,20 @@ public class MergeFeedsJob extends MonitorableJob {
      * required for the MTC merge strategy which prefers entities from the future dataset over past entities.
      */
     private List<FeedToMerge> collectAndSortFeeds(Set<FeedVersion> feedVersions) {
-        return feedVersions
-            .stream()
-            .map(version -> {
-                try {
-                    return new FeedToMerge(version);
-                } catch (Exception e) {
-                    LOG.error("Could not create zip file for version {}:", version.parentFeedSource(), version.version);
-                    return null;
-                }
-            })
-            .filter(Objects::nonNull)
+        return feedVersions.stream().map(version -> {
+            try {
+                return new FeedToMerge(version);
+            } catch (Exception e) {
+                LOG.error("Could not create zip file for version {}:", version.parentFeedSource(),
+                    version.version);
+                return null;
+            }
+        }).filter(Objects::nonNull).filter(entry -> entry.version.validationResult != null
+            && entry.version.validationResult.firstCalendarDate != null)
             // MTC-specific sort mentioned in above comment.
             // TODO: If another merge strategy requires a different sort order, a merge type check should be added.
-            .sorted(Comparator.comparing(entry -> entry.version.validationResult.firstCalendarDate, Comparator.reverseOrder()))
-            .collect(Collectors.toList());
+            .sorted(Comparator.comparing(entry -> entry.version.validationResult.firstCalendarDate,
+                Comparator.reverseOrder())).collect(Collectors.toList());
     }
 
     /**
@@ -213,10 +257,12 @@ public class MergeFeedsJob extends MonitorableJob {
             if (DataManager.useS3) {
                 String s3Key = String.join("/", "project", filename);
                 FeedStore.s3Client.putObject(DataManager.feedBucket, s3Key, mergedTempFile);
-                LOG.info("Storing merged project feed at s3://{}/{}", DataManager.feedBucket, s3Key);
+                LOG.info("Storing merged project feed at s3://{}/{}", DataManager.feedBucket,
+                    s3Key);
             } else {
                 try {
-                    FeedVersion.feedStore.newFeed(filename, new FileInputStream(mergedTempFile), null);
+                    FeedVersion.feedStore
+                        .newFeed(filename, new FileInputStream(mergedTempFile), null);
                 } catch (IOException e) {
                     e.printStackTrace();
                     LOG.error("Could not store feed for project {}", filename);
@@ -226,7 +272,8 @@ public class MergeFeedsJob extends MonitorableJob {
         } else {
             // Store the zip file for the merged feed version.
             try {
-                FeedVersion.feedStore.newFeed(mergedVersion.id, new FileInputStream(mergedTempFile), feedSource);
+                FeedVersion.feedStore
+                    .newFeed(mergedVersion.id, new FileInputStream(mergedTempFile), feedSource);
             } catch (IOException e) {
                 LOG.error("Could not store merged feed for new version");
                 throw e;
@@ -236,11 +283,14 @@ public class MergeFeedsJob extends MonitorableJob {
 
     /**
      * Merge the specified table for multiple GTFS feeds.
-     * @param table table to merge
+     *
+     * @param table        table to merge
      * @param feedsToMerge map of feedSources to zipFiles from which to extract the .txt tables
-     * @return single merged table for feeds or null if the table did not exist for any feed
+     * @param out          output stream to write table into
+     * @return number of lines in merged table
      */
-    private byte[] constructMergedTable(Table table, List<FeedToMerge> feedsToMerge) throws IOException {
+    private int constructMergedTable(Table table, List<FeedToMerge> feedsToMerge,
+        ZipOutputStream out) throws IOException {
         String keyField = table.getKeyFieldName();
         String orderField = table.getOrderFieldName();
         if (mergeType.equals(MTC)) {
@@ -257,9 +307,8 @@ public class MergeFeedsJob extends MonitorableJob {
                     break;
             }
         }
-        // Set up objects for outputting the data and tracking the rows encountered
-        ByteArrayOutputStream tableOut = new ByteArrayOutputStream();
-        Map<String, String[]> rowValuesForKeys = new HashMap<>();
+        // Set up objects for tracking the rows encountered
+        Map<String, String[]> rowValuesForStopOrRouteId = new HashMap<>();
         Set<String> rowStrings = new HashSet<>();
         int mergedLineNumber = 0;
         // Get the spec fields to export
@@ -268,14 +317,22 @@ public class MergeFeedsJob extends MonitorableJob {
         try {
             // Iterate over each zip file.
             for (int feedIndex = 0; feedIndex < feedsToMerge.size(); feedIndex++) {
+                boolean keyFieldMissing = false;
+                // Use for a new agency ID for use if the feed does not contain one. Initialize to
+                // null. If the value becomes non-null, the agency_id is missing and needs to be
+                // replaced with the generated value stored in this variable.
+                String newAgencyId = null;
                 mergeFeedsResult.feedCount++;
-                // FIXME add check for merge type.
-                if (feedIndex > 0 && (table.name.equals("agency") || table.name.equals("feed_info")) && mergeType.equals(MTC)) {
-                    // Always prefer future file for agency and feed_info tables, which means that we can skip
-                    // iterations following the first one.
-                    // FIXME: This could cause issues with routes or fares that reference an agency_id that no longer
-                    //  exists.
-                    LOG.warn("Skipping {} file for feed {}/{} (future file preferred)", table.name, feedIndex, feedsToMerge.size());
+                if (feedIndex > 0 && (table.name.equals("feed_info") ||
+                    (mergeType.equals(MTC) && table.name.equals("agency")))) {
+                    // Always prefer the "future" file for the feed_info table, which means
+                    // we can skip any iterations following the first one. If merging the agency
+                    // table, we should only skip the following feeds if performing an MTC merge
+                    // because that logic assumes the two feeds share the same agency (or agencies).
+                    // FIXME: This could cause issues with routes or fares that reference an
+                    //  agency_id that no longer exists.
+                    LOG.warn("Skipping {} file for feed {}/{} (future file preferred)", table.name,
+                        feedIndex, feedsToMerge.size());
                     continue;
                 }
                 FeedToMerge feed = feedsToMerge.get(feedIndex);
@@ -284,47 +341,78 @@ public class MergeFeedsJob extends MonitorableJob {
                 // Generate ID prefix to scope GTFS identifiers to avoid conflicts.
                 String idScope = getCleanName(feedSource.name) + version.version;
                 CsvReader csvReader = table.getCsvReader(feed.zipFile, null);
-                // If csv reader is null, the table was not found in the zip file. There is no need to handle merging
-                // this table for the current zip file.
+                // If csv reader is null, the table was not found in the zip file. There is no need
+                // to handle merging this table for the current zip file.
                 if (csvReader == null) {
-                    LOG.warn("Table {} not found in the zip file for {}{}", table.name, feedSource.name, version.version);
+                    LOG.warn("Table {} not found in the zip file for {}{}", table.name,
+                        feedSource.name, version.version);
                     continue;
                 }
                 LOG.info("Adding {} table for {}{}", table.name, feedSource.name, version.version);
 
-                Field[] fieldsFoundInZip = table.getFieldsFromFieldHeaders(csvReader.getHeaders(), null);
+                Field[] fieldsFoundInZip =
+                    table.getFieldsFromFieldHeaders(csvReader.getHeaders(), null);
                 List<Field> fieldsFoundList = Arrays.asList(fieldsFoundInZip);
                 // Determine the index of the key field for this version's table.
                 int keyFieldIndex = getFieldIndex(fieldsFoundInZip, keyField);
+                if (keyFieldIndex == -1) {
+                    LOG.error("No {} field exists for {} table (feed={})", keyField, table.name,
+                        feed.version.id);
+                    keyFieldMissing = true;
+                    // If there is no agency_id for agency table, create one and ensure that
+                    // route#agency_id gets set.
+                }
                 int lineNumber = 0;
                 // Iterate over rows in table, writing them to the out file.
                 while (csvReader.readRecord()) {
                     String keyValue = csvReader.get(keyFieldIndex);
-                    // FIXME add check for merge type?
-                    if (mergeType.equals(MTC) && lineNumber == 0 && table.name.equals("stops")) {
-                        // For the first line of the stops table, check that the alt. key
-                        // field (stop_code) is present. If it is not, revert to the original key field.
-                        if (feedIndex == 0) {
-                            // Check that the first file contains stop_code values.
-                            if ("".equals(keyValue)) {
-                                LOG.warn("stop_code is not present in file {}/{}. Reverting to stop_id", feedIndex, feedsToMerge.size());
-                                // If the key value for stop_code is not present, revert to stop_id.
-                                keyField = table.getKeyFieldName();
-                                keyFieldIndex = table.getKeyFieldIndex(fieldsFoundInZip);
-                                keyValue = csvReader.get(keyFieldIndex);
-                                stopCodeMissingFromFirstTable = true;
+                    // Check certain initial conditions on the first line of the file.
+                    if (lineNumber == 0) {
+                        if (table.name.equals(Table.AGENCY.name) && (keyFieldMissing || keyValue
+                            .equals(""))) {
+                            // agency_id is optional if only one agency is present, but that will
+                            // cause issues for the feed merge, so we need to insert an agency_id
+                            // for the single entry.
+                            newAgencyId = UUID.randomUUID().toString();
+                            if (keyFieldMissing) {
+
+                                // Only add agency_id field if it is missing in table.
+                                List<Field> fieldsList =
+                                    new ArrayList<>(Arrays.asList(fieldsFoundInZip));
+                                fieldsList.add(Table.AGENCY.fields[0]);
+                                fieldsFoundInZip = fieldsList.toArray(fieldsFoundInZip);
                             }
-                        } else {
-                            // Check whether stop_code exists for the subsequent files.
-                            String firstStopCodeValue = csvReader.get(getFieldIndex(fieldsFoundInZip, "stop_code"));
-                            if (stopCodeMissingFromFirstTable && !"".equals(firstStopCodeValue)) {
-                                // If stop_code was missing from the first file and exists for the second, we consider
-                                // that a failing error.
-                                mergeFeedsResult.failed = true;
-                                mergeFeedsResult.errorCount++;
-                                mergeFeedsResult.failureReasons.add(
-                                    "If one stops.txt file contains stop_codes, both feed versions must stop_codes."
-                                );
+                            fieldsFoundList = Arrays.asList(fieldsFoundInZip);
+                        }
+                        if (mergeType.equals(MTC) && table.name.equals("stops")) {
+                            // For the first line of the stops table, check that the alt. key
+                            // field (stop_code) is present. If it is not, revert to the original
+                            // key field. This is only pertinent for the MTC merge type.
+                            if (feedIndex == 0) {
+                                // Check that the first file contains stop_code values.
+                                if ("".equals(keyValue)) {
+                                    LOG.warn(
+                                        "stop_code is not present in file {}/{}. Reverting to stop_id",
+                                        feedIndex, feedsToMerge.size());
+                                    // If the key value for stop_code is not present, revert to stop_id.
+                                    keyField = table.getKeyFieldName();
+                                    keyFieldIndex = table.getKeyFieldIndex(fieldsFoundInZip);
+                                    keyValue = csvReader.get(keyFieldIndex);
+                                    stopCodeMissingFromFirstTable = true;
+                                }
+                            } else {
+                                // Check whether stop_code exists for the subsequent files.
+                                String firstStopCodeValue =
+                                    csvReader.get(getFieldIndex(fieldsFoundInZip, "stop_code"));
+                                if (stopCodeMissingFromFirstTable && !""
+                                    .equals(firstStopCodeValue)) {
+                                    // If stop_code was missing from the first file and exists for
+                                    // the second, we consider that a failing error.
+                                    mergeFeedsResult.failed = true;
+                                    mergeFeedsResult.errorCount++;
+                                    mergeFeedsResult.failureReasons.add(
+                                        "If one stops.txt file contains stop_codes, both feed versions must stop_codes.");
+                                }
                             }
                         }
                     }
@@ -337,154 +425,225 @@ public class MergeFeedsJob extends MonitorableJob {
                     }
                     // Piece together the row to write, which should look practically identical to the original
                     // row except for the identifiers receiving a prefix to avoid ID conflicts.
-                    for (int specFieldIndex = 0; specFieldIndex < specFields.size(); specFieldIndex++) {
+                    for (int specFieldIndex = 0;
+                         specFieldIndex < specFields.size(); specFieldIndex++) {
                         Field field = specFields.get(specFieldIndex);
                         // Get index of field from GTFS spec as it appears in feed
                         int index = fieldsFoundList.indexOf(field);
                         String val = csvReader.get(index);
-                        // Determine if field is a GTFS identifier.
-                        boolean isKeyField = field.isForeignReference() || keyField.equals(field.name);
-                        Set<NewGTFSError> idErrors = table.checkReferencesAndUniqueness(keyValue, lineNumber, field, val, referenceTracker, keyField, orderField);
-                        // Store values for key fields that have been encountered.
-                        switch (table.name) {
-                            // case "calendar_dates":
-                            case "calendar":
-                                // If any service_id in the active feed matches with the future feed, it should be
-                                // modified and all associated trip records must also be changed with the modified
-                                // service_id.
-                                // TODO How can we check that calendar_dates entries are duplicates? I think we would
-                                //  need to consider the service_id:exception_type:date as the unique key and include any
-                                //  all entries as long as they are unique on this key.
-                                for (NewGTFSError error : idErrors) {
-                                    if (error.errorType.equals(NewGTFSErrorType.DUPLICATE_ID)) {
-                                        String key = String.join(":", table.name, idScope, val);
-                                        // Modify service_id and ensure that referencing trips have service_id updated.
-                                        val = String.join(":", idScope, val);
-                                        mergeFeedsResult.remappedIds.put(key, val);
-                                    }
-                                }
-                                // If a service_id from the active calendar has both the start_date and end_date in the
-                                // future, the service will be excluded from the merged file. Records in trips,
-                                // calendar_dates, and calendar_attributes referencing this service_id shall also be
-                                // removed/ignored. Stop_time records for the ignored trips shall also be removed.
-                                if (feedIndex > 0) {
-                                    int startDateIndex = getFieldIndex(fieldsFoundInZip, "start_date");
-                                    LocalDate startDate = LocalDate.parse(csvReader.get(startDateIndex), GTFS_DATE_FORMATTER);
-                                    if (startDate.isAfter(LocalDate.now())) {
-                                        LOG.warn("Skipping calendar entry {} because it operates in the future.", keyValue);
-                                        String key = String.join(":", table.name, idScope, keyValue);
-                                        mergeFeedsResult.skippedIds.add(key);
-                                        skipRecord = true;
-                                        continue;
-                                    }
-                                    // If a service_id from the active calendar has only the end_date in the future, the
-                                    // end_date shall be set to one day prior to the earliest start_date in future
-                                    // dataset before appending the calendar record to the merged file.
-                                    int endDateIndex = getFieldIndex(fieldsFoundInZip, "end_date");
-                                    if (index == endDateIndex) {
-                                        LocalDate endDate = LocalDate.parse(csvReader.get(endDateIndex), GTFS_DATE_FORMATTER);
-                                        if (endDate.isAfter(LocalDate.now())) {
-                                            val = feedsToMerge.get(0).version.validationResult.firstCalendarDate
-                                                .minus(1, ChronoUnit.DAYS)
-                                                .format(GTFS_DATE_FORMATTER);
-                                        }
-                                    }
-                                }
-                                break;
-                            case "trips":
-                                // trip_ids between active and future datasets must not match. If any trip_id is found
-                                // to be matching, the merge should fail with appropriate notification to user with the
-                                // cause of the failure. Merge result should include all conflicting trip_ids.
-                                for (NewGTFSError error : idErrors) {
-                                    if (error.errorType.equals(NewGTFSErrorType.DUPLICATE_ID)) {
-                                        mergeFeedsResult.failureReasons.add("Trip ID conflict caused merge failure.");
-                                        mergeFeedsResult.idConflicts.add(error.badValue);
-                                        mergeFeedsResult.errorCount++;
-                                        if (failOnDuplicateTripId) mergeFeedsResult.failed = true;
-                                        skipRecord = true;
-                                    }
-                                }
-                                break;
-                            case "stops":
-                                // When stop_code is included, stop merging will be based on that. If stop_code is not
-                                // included, it will be based on stop_id. All stops in future data will be carried
-                                // forward and any stops found in active data that are not in the future data shall be
-                                // appended. If one of the feed is missing stop_code, merge fails with a notification to
-                                // the user with suggestion that the feed with missing stop_code must be fixed with
-                                // stop_code.
-                            case "routes":
-                                String primaryKeyValue = csvReader.get(table.getKeyFieldIndex(fieldsFoundInZip));
-                                Set<NewGTFSError> primaryKeyErrors = table.checkReferencesAndUniqueness(primaryKeyValue, lineNumber, field, val, referenceTracker);
-                                // Merging will be based on route_short_name in the current and future datasets. All
-                                // matching route_short_names between the datasets shall be considered same route. Any
-                                // route_short_name in active data not present in the future will be appended to the
-                                // future routes file.
-                                if (keyField.equals("stop_code") || keyField.equals("route_short_name")) {
-                                    for (NewGTFSError error : idErrors) {
-                                        if (error.errorType.equals(NewGTFSErrorType.DUPLICATE_ID)) {
-                                            // If we encounter a route that shares its short name with a previous route,
-                                            // we need to remap its route_id field so that references point to the previous
-                                            // route_id.
-                                            String currentId = index == 0 ? val : rowValues[0];
-                                            String key = String.join(":", table.name, idScope, currentId);
-                                            // Extract the route_id value used for the route with matching short name.
-                                            String[] strings = rowValuesForKeys.get(val);
-                                            String id = strings[0];
-                                            if (!id.equals(currentId)) {
-                                                // Remap this row's route_id to ensure that referencing trips have their
-                                                // route_id updated.
-                                                mergeFeedsResult.remappedIds.put(key, id);
-                                            }
-                                            skipRecord = true;
-                                        }
-                                    }
-                                    // Next check for regular ID conflicts (e.g., on route_id or stop_id) because any
-                                    // conflicts here will actually break the feed. This essentially handles the case
-                                    // where two routes have different short_names, but share the same route_id. We want
-                                    // both of these routes two end up in the merged feed in this case because we're
-                                    // matching on short name, so we must modify the route_id.
-                                    if (!skipRecord && !referenceTracker.transitIds.contains(String.join(":", keyField, keyValue))) {
-                                        for (NewGTFSError error : primaryKeyErrors) {
-                                            if (error.errorType.equals(NewGTFSErrorType.DUPLICATE_ID)) {
-                                                String key = String.join(":", table.name, idScope, val);
-                                                // Modify route_id and ensure that referencing trips have route_id updated.
-                                                val = String.join(":", idScope, val);
-                                                mergeFeedsResult.remappedIds.put(key, val);
-                                            }
-                                        }
-                                    }
-                                } else {
-                                    // Key field has defaulted to the standard primary key field (stop_id or route_id),
-                                    // which makes the check much simpler (just skip the duplicate record).
-                                    for (NewGTFSError error : idErrors) {
-                                        if (error.errorType.equals(NewGTFSErrorType.DUPLICATE_ID)) {
-                                            skipRecord = true;
-                                        }
-                                    }
-                                }
-                                break;
-                            case "transfers":
-                                // For any other table, skip any duplicate record.
-                                for (NewGTFSError error : idErrors) {
-                                    if (error.errorType.equals(NewGTFSErrorType.DUPLICATE_ID)) {
-                                        skipRecord = true;
-                                    }
-                                }
-                                break;
-                            default:
-                                // For any other table, skip any duplicate record.
-                                for (NewGTFSError error : idErrors) {
-                                    if (error.errorType.equals(NewGTFSErrorType.DUPLICATE_ID)) {
-                                        skipRecord = true;
-                                    }
-                                }
-                                break;
-                        }
+                        // Default value to write is unchanged from value found in csv.
                         String valueToWrite = val;
+                        // Handle filling in agency_id if missing when merging regional feeds.
+                        if (newAgencyId != null && field.name.equals("agency_id") && mergeType
+                            .equals(REGIONAL)) {
+                            if (val.equals("") && table.name.equals("agency") && lineNumber > 0) {
+                                // If there is no agency_id value for a second (or greater) agency
+                                // record, fail the merge feed job.
+                                String message = String.format(
+                                    "Feed %s has multiple agency records but no agency_id values.",
+                                    feed.version.id);
+                                mergeFeedsResult.failed = true;
+                                mergeFeedsResult.failureReasons.add(message);
+                                LOG.error(message);
+                                return -1;
+                            }
+                            LOG.info("Updating {}#agency_id to (auto-generated) {} for ID {}",
+                                table.name, newAgencyId, keyValue);
+                            val = newAgencyId;
+                        }
+                        // Determine if field is a GTFS identifier.
+                        boolean isKeyField =
+                            field.isForeignReference() || keyField.equals(field.name);
+                        if (this.mergeType.equals(REGIONAL) && isKeyField && !val.isEmpty()) {
+                            // For regional merge, if field is a GTFS identifier (e.g., route_id,
+                            // stop_id, etc.), add scoped prefix.
+                            valueToWrite = String.join(":", idScope, val);
+                        }
+                        // Only need to check for merge conflicts if using MTC merge type because
+                        // the regional merge type scopes all identifiers by default. Also, the
+                        // reference tracker will get far too large if we attempt to use it to
+                        // track references for a large number of feeds (e.g., every feed in New
+                        // York State).
+                        if (mergeType.equals(MTC)) {
+                            Set<NewGTFSError> idErrors = table
+                                .checkReferencesAndUniqueness(keyValue, lineNumber, field, val,
+                                    referenceTracker, keyField, orderField);
+                            // Store values for key fields that have been encountered.
+                            // TODO Consider using Strategy Pattern https://en.wikipedia.org/wiki/Strategy_pattern
+                            //  instead of a switch statement.
+                            switch (table.name) {
+                                case "calendar":
+                                    // If any service_id in the active feed matches with the future
+                                    // feed, it should be modified and all associated trip records
+                                    // must also be changed with the modified service_id.
+                                    // TODO How can we check that calendar_dates entries are
+                                    //  duplicates? I think we would need to consider the
+                                    //  service_id:exception_type:date as the unique key and include any
+                                    //  all entries as long as they are unique on this key.
+                                    for (NewGTFSError error : idErrors) {
+                                        if (error.errorType.equals(NewGTFSErrorType.DUPLICATE_ID)) {
+                                            String key = getFieldScopedValue(table, idScope, val);
+                                            // Modify service_id and ensure that referencing trips
+                                            // have service_id updated.
+                                            val = String.join(":", idScope, val);
+                                            mergeFeedsResult.remappedIds.put(key, val);
+                                        }
+                                    }
+                                    // If a service_id from the active calendar has both the
+                                    // start_date and end_date in the future, the service will be
+                                    // excluded from the merged file. Records in trips,
+                                    // calendar_dates, and calendar_attributes referencing this
+                                    // service_id shall also be removed/ignored. Stop_time records
+                                    // for the ignored trips shall also be removed.
+                                    if (feedIndex > 0) {
+                                        int startDateIndex =
+                                            getFieldIndex(fieldsFoundInZip, "start_date");
+                                        LocalDate startDate = LocalDate
+                                            .parse(csvReader.get(startDateIndex),
+                                                GTFS_DATE_FORMATTER);
+                                        if (startDate.isAfter(LocalDate.now())) {
+                                            LOG.warn(
+                                                "Skipping calendar entry {} because it operates in the future.",
+                                                keyValue);
+                                            String key =
+                                                getFieldScopedValue(table, idScope, keyValue);
+                                            mergeFeedsResult.skippedIds.add(key);
+                                            skipRecord = true;
+                                            continue;
+                                        }
+                                        // If a service_id from the active calendar has only the
+                                        // end_date in the future, the end_date shall be set to one
+                                        // day prior to the earliest start_date in future dataset
+                                        // before appending the calendar record to the merged file.
+                                        int endDateIndex =
+                                            getFieldIndex(fieldsFoundInZip, "end_date");
+                                        if (index == endDateIndex) {
+                                            LocalDate endDate = LocalDate
+                                                .parse(csvReader.get(endDateIndex),
+                                                    GTFS_DATE_FORMATTER);
+                                            if (endDate.isAfter(LocalDate.now())) {
+                                                val = feedsToMerge.get(
+                                                    0).version.validationResult.firstCalendarDate
+                                                    .minus(1, ChronoUnit.DAYS)
+                                                    .format(GTFS_DATE_FORMATTER);
+                                            }
+                                        }
+                                    }
+                                    break;
+                                case "trips":
+                                    // trip_ids between active and future datasets must not match. If any trip_id is found
+                                    // to be matching, the merge should fail with appropriate notification to user with the
+                                    // cause of the failure. Merge result should include all conflicting trip_ids.
+                                    for (NewGTFSError error : idErrors) {
+                                        if (error.errorType.equals(NewGTFSErrorType.DUPLICATE_ID)) {
+                                            mergeFeedsResult.failureReasons
+                                                .add("Trip ID conflict caused merge failure.");
+                                            mergeFeedsResult.idConflicts.add(error.badValue);
+                                            mergeFeedsResult.errorCount++;
+                                            if (failOnDuplicateTripId)
+                                                mergeFeedsResult.failed = true;
+                                            skipRecord = true;
+                                        }
+                                    }
+                                    break;
+                                case "stops":
+                                    // When stop_code is included, stop merging will be based on that. If stop_code is not
+                                    // included, it will be based on stop_id. All stops in future data will be carried
+                                    // forward and any stops found in active data that are not in the future data shall be
+                                    // appended. If one of the feed is missing stop_code, merge fails with a notification to
+                                    // the user with suggestion that the feed with missing stop_code must be fixed with
+                                    // stop_code.
+                                    // NOTE: route case is also used by the stops case, so the route
+                                    // case must follow this block.
+                                case "routes":
+                                    // First, check uniqueness of primary key value (i.e., stop or route ID)
+                                    // in case the stop_code or route_short_name are being used. This
+                                    // must occur unconditionally because each record must be tracked
+                                    // by the reference tracker.
+                                    String primaryKeyValue =
+                                        csvReader.get(table.getKeyFieldIndex(fieldsFoundInZip));
+                                    Set<NewGTFSError> primaryKeyErrors = table
+                                        .checkReferencesAndUniqueness(primaryKeyValue, lineNumber,
+                                            field, val, referenceTracker);
+                                    // Merging will be based on route_short_name/stop_code in the current and future datasets. All
+                                    // matching route_short_names/stop_codes between the datasets shall be considered same route/stop. Any
+                                    // route_short_name/stop_code in active data not present in the future will be appended to the
+                                    // future routes/stops file.
+                                    if (keyField.equals("stop_code") || keyField
+                                        .equals("route_short_name")) {
+                                        for (NewGTFSError error : idErrors) {
+                                            if (error.errorType
+                                                .equals(NewGTFSErrorType.DUPLICATE_ID)) {
+                                                // If we encounter a route/stop that shares its alt. ID with a previous route/stop,
+                                                // we need to remap its route_id/stop_id field so that references point to the previous
+                                                // route_id/stop_id.
+                                                String currentId = index == 0 ? val : rowValues[0];
+                                                String key =
+                                                    getFieldScopedValue(table, idScope, currentId);
+                                                // Extract the route_id/stop_id value used for the route/stop with matching alt ID.
+                                                String[] strings =
+                                                    rowValuesForStopOrRouteId.get(val);
+                                                String id = strings[0];
+                                                if (!id.equals(currentId)) {
+                                                    // Remap this row's route_id/stop_id to ensure
+                                                    // that referencing entities (trips, stop_times) have their
+                                                    // references updated.
+                                                    mergeFeedsResult.remappedIds.put(key, id);
+                                                }
+                                                skipRecord = true;
+                                            }
+                                        }
+                                        // Next check for regular ID conflicts (e.g., on route_id or stop_id) because any
+                                        // conflicts here will actually break the feed. This essentially handles the case
+                                        // where two routes have different short_names, but share the same route_id. We want
+                                        // both of these routes to end up in the merged feed in this case because we're
+                                        // matching on short name, so we must modify the route_id.
+                                        if (!skipRecord && !referenceTracker.transitIds
+                                            .contains(String.join(":", keyField, keyValue))) {
+                                            for (NewGTFSError error : primaryKeyErrors) {
+                                                if (error.errorType
+                                                    .equals(NewGTFSErrorType.DUPLICATE_ID)) {
+                                                    String key =
+                                                        getFieldScopedValue(table, idScope, val);
+                                                    // Modify route_id and ensure that referencing trips have route_id updated.
+                                                    val = String.join(":", idScope, val);
+                                                    mergeFeedsResult.remappedIds.put(key, val);
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        // Key field has defaulted to the standard primary key field (stop_id or route_id),
+                                        // which makes the check much simpler (just skip the duplicate record).
+                                        for (NewGTFSError error : idErrors) {
+                                            if (error.errorType
+                                                .equals(NewGTFSErrorType.DUPLICATE_ID)) {
+                                                skipRecord = true;
+                                            }
+                                        }
+                                    }
+
+                                    if (newAgencyId != null && field.name.equals("agency_id")) {
+                                        LOG.info(
+                                            "Updating route#agency_id to (auto-generated) {} for route={}",
+                                            newAgencyId, keyValue);
+                                        val = newAgencyId;
+                                    }
+                                    break;
+                                default:
+                                    // For any other table, skip any duplicate record.
+                                    for (NewGTFSError error : idErrors) {
+                                        if (error.errorType.equals(NewGTFSErrorType.DUPLICATE_ID)) {
+                                            skipRecord = true;
+                                        }
+                                    }
+                                    break;
+                            }
+                        }
+
                         if (field.isForeignReference()) {
                             // If the field is a foreign reference, check to see whether the reference has been
                             // remapped due to a conflicting ID from another feed (e.g., calendar#service_id).
-                            String key = String.join(":", field.referenceTable.name, idScope, val);
+                            String key = getFieldScopedValue(field.referenceTable, idScope, val);
                             if (mergeFeedsResult.remappedIds.containsKey(key)) {
                                 mergeFeedsResult.remappedReferences++;
                                 // If the value has been remapped update the value to write.
@@ -494,28 +653,17 @@ public class MergeFeedsJob extends MonitorableJob {
                             // record and add its primary key to the list of skipped IDs (so that other references can
                             // be properly omitted).
                             if (mergeFeedsResult.skippedIds.contains(key)) {
-                                String skippedKey = String.join(":", table.name, idScope, keyValue);
+                                String skippedKey = getFieldScopedValue(table, idScope, keyValue);
                                 if (orderField != null) {
-                                    skippedKey = String.join(":",
-                                                             skippedKey,
-                                                             csvReader.get(getFieldIndex(fieldsFoundInZip, orderField))
-                                    );
+                                    skippedKey = String.join(":", skippedKey,
+                                        csvReader.get(getFieldIndex(fieldsFoundInZip, orderField)));
                                 }
                                 mergeFeedsResult.skippedIds.add(skippedKey);
                                 skipRecord = true;
                                 continue;
                             }
                         }
-                        if (this.mergeType.equals(REGIONAL) && isKeyField && !val.isEmpty()) {
-                            // For regional merge, if field is a GTFS identifier (e.g., route_id, stop_id, etc.),
-                            // add scoped prefix.
-                            valueToWrite = String.join(":", idScope, val);
-                        }
-
                         rowValues[specFieldIndex] = valueToWrite;
-                    }
-                    if (table.name.equals("routes") && rowValues[0].contains("BART")) {
-                        LOG.info("Route record: {}", rowValues[0]);
                     }
                     // Do not write rows that are designated to be skipped.
                     if (skipRecord && this.mergeType.equals(MTC)) {
@@ -523,50 +671,68 @@ public class MergeFeedsJob extends MonitorableJob {
                         continue;
                     }
                     String newLine = String.join(",", rowValues);
-                    if (!rowStrings.add(newLine)) {
-                        // The line already exists in the output file, do not append it again. This prevents duplicate
-                        // entries for certain files that do not contain primary keys (e.g., fare_rules and transfers) and
-                        // do not otherwise have convenient ways to track uniqueness (like an order field).
-                        // FIXME: add ordinal field/compound keys for transfers (from/to_stop_id) and fare_rules (?).
-                        //  Perhaps it makes sense to include all unique fare rules rows, but transfers that share the
-                        //  same from/to stop IDs but different transfer times or other values should not both be
-                        //  included in the merged feed (yet this strategy would fail to filter those out).
-                        mergeFeedsResult.recordsSkipCount++;
-                        continue;
+                    switch (table.name) {
+                        // Store row values for route or stop ID in order to check for ID conflicts. NOTE:
+                        // This is only intended to be used for routes and stops. Otherwise, this might
+                        // consume too much memory.
+                        case "stops":
+                        case "routes":
+                            // FIXME: This should be revised for tables with order fields, but it should work fine for its
+                            //  primary purposes: to detect exact copy rows and to temporarily hold the data in case a reference
+                            //  needs to be looked up in order to remap an entity to that key.
+                            rowValuesForStopOrRouteId.put(rowValues[keyFieldIndex], rowValues);
+                            break;
+                        case "transfers":
+                        case "fare_rules":
+                            if (!rowStrings.add(newLine)) {
+                                // The line already exists in the output file, do not append it again. This prevents duplicate
+                                // entries for certain files that do not contain primary keys (e.g., fare_rules and transfers) and
+                                // do not otherwise have convenient ways to track uniqueness (like an order field).
+                                // FIXME: add ordinal field/compound keys for transfers (from/to_stop_id) and fare_rules (?).
+                                //  Perhaps it makes sense to include all unique fare rules rows, but transfers that share the
+                                //  same from/to stop IDs but different transfer times or other values should not both be
+                                //  included in the merged feed (yet this strategy would fail to filter those out).
+                                mergeFeedsResult.recordsSkipCount++;
+                                continue;
+                            }
+                            break;
+                        default:
+                            // Do nothing.
+                            break;
+
                     }
-                    // FIXME: This should be revised for tables with order fields, but it should work fine for its
-                    //  primary purposes: to detect exact copy rows and to temporarily hold the data in case a reference
-                    //  needs to be looked up in order to remap an entity to that key.
-                    rowValuesForKeys.put(rowValues[keyFieldIndex], rowValues);
+                    // Finally, handle writing lines to zip entry.
                     if (mergedLineNumber == 0) {
+                        // Create entry for zip file.
+                        ZipEntry tableEntry = new ZipEntry(table.name + ".txt");
+                        out.putNextEntry(tableEntry);
                         // Write headers to table.
-                        String headers = specFields.stream().map(field -> field.name).collect(Collectors.joining(","));
-                        tableOut.write(headers.getBytes());
-                        tableOut.write("\n".getBytes());
+                        String headers = specFields.stream().map(field -> field.name)
+                            .collect(Collectors.joining(","));
+                        out.write(headers.getBytes());
+                        out.write("\n".getBytes());
                     }
                     // Write line to table (plus new line char).
-                    tableOut.write(newLine.getBytes());
-                    tableOut.write("\n".getBytes());
+                    out.write(newLine.getBytes());
+                    out.write("\n".getBytes());
                     lineNumber++;
                     mergedLineNumber++;
                 }
             }
+            out.closeEntry();
         } catch (Exception e) {
-            LOG.error(
-                "Error merging feed sources: {}",
-                feedVersions.stream()
-                            .map(version -> version.parentFeedSource().name)
-                            .collect(Collectors.toList())
-                            .toString()
-            );
+            LOG.error("Error merging feed sources: {}",
+                feedVersions.stream().map(version -> version.parentFeedSource().name)
+                    .collect(Collectors.toList()).toString());
             throw e;
         }
-        // If no rows were ever written, return null (there is no need to generate the empty file).
-        if (tableOut.size() == 0) return null;
-        // Track the number of lines in the merged table.
+        // Track the number of lines in the merged table and return final number.
         mergeFeedsResult.linesPerTable.put(table.name, mergedLineNumber);
-        // Otherwise, return the output stream as a byte array.
-        return tableOut.toByteArray();
+        return mergedLineNumber;
+    }
+
+    private static String getFieldScopedValue(Table table, String prefix, String id) {
+        return String.join(":", table.name, prefix, id);
     }
 
     /**
@@ -576,7 +742,8 @@ public class MergeFeedsJob extends MonitorableJob {
     private class FeedToMerge {
         public FeedVersion version;
         public ZipFile zipFile;
-        FeedToMerge (FeedVersion version) throws IOException {
+
+        FeedToMerge(FeedVersion version) throws IOException {
             this.version = version;
             this.zipFile = new ZipFile(version.retrieveGtfsFile());
         }

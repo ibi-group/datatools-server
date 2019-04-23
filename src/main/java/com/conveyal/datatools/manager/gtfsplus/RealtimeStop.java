@@ -13,9 +13,9 @@ public class RealtimeStop extends Entity {
     public String stop_id;
     public String realtime_stop_id;
 
-    // TODO
     @Override
     public void setStatementParameters(PreparedStatement statement, boolean setDefaultId) throws SQLException {
-
+        throw new UnsupportedOperationException(
+            "Cannot call setStatementParameters because loading a GTFS+ table into RDBMS is unsupported.");
     }
 }
