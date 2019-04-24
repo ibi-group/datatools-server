@@ -1,0 +1,6 @@
+# jmeter stuff
+apache-jmeter*
+*.log
+
+# test output
+output/*

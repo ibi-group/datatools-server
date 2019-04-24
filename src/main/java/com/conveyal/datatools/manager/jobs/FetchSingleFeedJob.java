@@ -4,54 +4,69 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
-
-import java.util.Map;
+import com.fasterxml.jackson.annotation.JsonProperty;
 
 public class FetchSingleFeedJob extends MonitorableJob {
 
     private FeedSource feedSource;
-    public FeedVersion result;
-    private Status status;
+    private FeedVersion result;
+    private boolean continueThread;
 
-    public FetchSingleFeedJob (FeedSource feedSource, String owner) {
+    /**
+     * Fetch a single feed source by URL
+     * @param feedSource feed source to be fetched
+     * @param owner user who owns job
+     */
+    public FetchSingleFeedJob (FeedSource feedSource, String owner, boolean continueThread) {
         super(owner, "Fetching feed for " + feedSource.name, JobType.FETCH_SINGLE_FEED);
         this.feedSource = feedSource;
         this.result = null;
-        this.status = new Status();
+        this.continueThread = continueThread;
         status.message = "Fetching...";
         status.percentComplete = 0.0;
         status.uploading = true;
     }
 
+    /**
+     * Getter that allows a client to know the ID of the feed version that will be created as soon as the upload is
+     * initiated; however, we will not store the FeedVersion in the mongo application database until the upload and
+     * processing is completed. This prevents clients from manipulating GTFS data before it is entirely imported.
+     */
+    @JsonProperty
+    public String getFeedVersionId () {
+        // Feed version result is null unless (and until) fetch is successful.
+        return result != null ? result.id : null;
+    }
+
+    @JsonProperty
+    public String getFeedSourceId () {
+        // Feed version result is null unless (and until) fetch is successful.
+        return result != null ? result.parentFeedSource().id : null;
+    }
+
     @Override
-    public void run() {
+    public void jobLogic () {
         // TODO: fetch automatically vs. manually vs. in-house
-        try {
-            result = feedSource.fetch(eventBus, owner);
-            jobFinished();
-        } catch (Exception e) {
-            jobFinished();
-            // throw any halts that may have prevented this job from finishing
-            throw e;
-        }
+        result = feedSource.fetch(status);
+
+        // Null result indicates that a fetch was not needed (GTFS has not been modified)
+        // True failures will throw exceptions.
         if (result != null) {
-            new ProcessSingleFeedJob(result, this.owner).run();
+            // FetchSingleFeedJob should typically be run in a lightExecutor because it is a fairly lightweight task.
+            // ProcessSingleFeedJob often follows a fetch and requires significant time to complete,
+            // so FetchSingleFeedJob ought to be run in the heavyExecutor. Technically, the "fetch" completes
+            // quickly and the "processing" happens over time. So, we run the processing in a separate thread in order
+            // to match this user and system expectation.
+            //
+            // The exception (continueThread = true) is provided for FetchProjectFeedsJob, when we want the feeds to
+            // fetch and then process in sequence.
+            ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(result, this.owner, true);
+            if (continueThread) {
+                addNextJob(processSingleFeedJob);
+            } else {
+                DataManager.heavyExecutor.execute(processSingleFeedJob);
+            }
         }
     }
 
-    @Override
-    public Status getStatus() {
-        synchronized (status) {
-            return status.clone();
-        }
-    }
-
-    @Override
-    public void handleStatusEvent(Map statusMap) {
-        synchronized (status) {
-            status.message = (String) statusMap.get("message");
-            status.percentComplete = (double) statusMap.get("percentComplete");
-            status.error = (boolean) statusMap.get("error");
-        }
-    }
 }

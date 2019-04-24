@@ -1,5 +1,6 @@
 package com.conveyal.datatools.editor.models.transit;
 
+import com.conveyal.gtfs.model.Entity;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.conveyal.datatools.editor.datastore.FeedTx;
@@ -95,6 +96,12 @@ public class Route extends Model implements Cloneable, Serializable {
 
     public Route () {}
 
+    /**
+     * Construct editor route from gtfs-lib representation.
+     * @param route
+     * @param feed
+     * @param agency
+     */
     public Route(com.conveyal.gtfs.model.Route route, EditorFeed feed, Agency agency) {
         this.gtfsRouteId = route.route_id;
         this.routeShortName = route.route_short_name;
@@ -108,7 +115,7 @@ public class Route extends Model implements Cloneable, Serializable {
         this.routeTextColor = route.route_text_color;
 
         this.feedId = feed.id;
-        this.agencyId = agency.id;
+        this.agencyId = agency != null ? agency.id : null;
     }
 
 
@@ -122,7 +129,7 @@ public class Route extends Model implements Cloneable, Serializable {
         this.agencyId = agency != null ? agency.id : null;
     }
 
-    public com.conveyal.gtfs.model.Route toGtfs(com.conveyal.gtfs.model.Agency a, GlobalTx tx) {
+    public com.conveyal.gtfs.model.Route toGtfs(com.conveyal.gtfs.model.Agency a) {
         com.conveyal.gtfs.model.Route ret = new com.conveyal.gtfs.model.Route();
         ret.agency_id = a != null ? a.agency_id : "";
         ret.route_color = routeColor;
@@ -131,7 +138,7 @@ public class Route extends Model implements Cloneable, Serializable {
         ret.route_long_name = routeLongName;
         ret.route_short_name = routeShortName;
         ret.route_text_color = routeTextColor;
-        ret.route_type = gtfsRouteType.toGtfs();
+        ret.route_type = gtfsRouteType != null ? gtfsRouteType.toGtfs() : Entity.INT_MISSING;
         try {
             ret.route_url = routeUrl == null ? null : new URL(routeUrl);
         } catch (MalformedURLException e) {

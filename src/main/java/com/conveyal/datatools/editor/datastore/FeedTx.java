@@ -1,9 +1,18 @@
 package com.conveyal.datatools.editor.datastore;
 
 import com.conveyal.datatools.editor.models.transit.*;
+import com.conveyal.datatools.editor.utils.GeoUtils;
+import com.conveyal.gtfs.GTFSFeed;
+import com.conveyal.gtfs.model.CalendarDate;
+import com.conveyal.gtfs.model.Entity;
+import com.conveyal.gtfs.model.Frequency;
+import com.conveyal.gtfs.model.ShapePoint;
 import com.google.common.base.Function;
 import com.google.common.collect.Iterators;
 import java.time.LocalDate;
+
+import com.google.common.collect.Maps;
+import com.vividsolutions.jts.geom.Coordinate;
 import org.mapdb.Atomic;
 import org.mapdb.BTreeMap;
 import org.mapdb.Bind;
@@ -11,17 +20,23 @@ import org.mapdb.DB;
 import org.mapdb.Fun;
 import org.mapdb.Fun.Tuple2;
 import com.conveyal.datatools.editor.utils.BindUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.Iterator;
+import java.util.Map;
 import java.util.NavigableSet;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
 
+import static com.conveyal.datatools.editor.jobs.ProcessGtfsSnapshotExport.toGtfsDate;
+
 /** a transaction in an agency database */
 public class FeedTx extends DatabaseTx {
+    private static final Logger LOG = LoggerFactory.getLogger(FeedTx.class);
     // primary com.conveyal.datatools.editor.datastores
     // if you add another, you MUST update SnapshotTx.java
     // if you don't, not only will your new data not be backed up, IT WILL BE THROWN AWAY WHEN YOU RESTORE!
@@ -165,7 +180,29 @@ public class FeedTx extends DatabaseTx {
         tripCountByPatternAndCalendar = getMap("tripCountByPatternAndCalendar");
         Bind.histogram(trips, tripCountByPatternAndCalendar, (tripId, trip) -> new Tuple2(trip.patternId, trip.calendarId));
 
-        scheduleExceptionCountByDate = getMap("scheduleExceptionCountByDate");
+        // getting schedule exception map appears to be causing issues for some feeds
+        // The names of the code writers have been changed to protect the innocent.
+        try {
+            scheduleExceptionCountByDate = getMap("scheduleExceptionCountByDate");
+        } catch (RuntimeException e1) {
+            LOG.error("Error getting scheduleExceptionCountByDate map. Getting a new one.");
+            int count = 0;
+            final int NEW_MAP_LIMIT = 100;
+            while (true) {
+                try {
+                    scheduleExceptionCountByDate = getMap("scheduleExceptionCountByDateMapDBIsTheWORST" + count);
+                } catch (RuntimeException e2) {
+                    LOG.error("Error getting {} scheduleExceptionCountByDateMapDBIsTheWORST map. Getting a new one.", count);
+                    count++;
+                    if (count > NEW_MAP_LIMIT) {
+                        LOG.error("Cannot create new map. Reached limit of {}", NEW_MAP_LIMIT);
+                        throw e2;
+                    }
+                    continue;
+                }
+                break;
+            }
+        }
         BindUtils.multiHistogram(exceptions, scheduleExceptionCountByDate, (id, ex) -> ex.dates.toArray(new LocalDate[ex.dates.size()]));
 
         tripCountByCalendar = getMap("tripCountByCalendar");
@@ -269,7 +306,7 @@ public class FeedTx extends DatabaseTx {
         }
 
         feedCopy.id = newId;
-//        a2.name = Messages.get("agency.copy-of", a2.name);
+//        a2.name = Messages.retrieveById("agency.copy-of", a2.name);
 
         gtx.feeds.put(feedCopy.id, feedCopy);
 
@@ -419,5 +456,238 @@ public class FeedTx extends DatabaseTx {
             feedTx.rollback();
             throw new RuntimeException(e);
         }
+    }
+
+    /**
+     * Convert Editor MapDB database (snapshot or active buffer) into a {@link com.conveyal.gtfs.GTFSFeed} object. This
+     * should be run in an asynchronously executed {@link com.conveyal.datatools.common.status.MonitorableJob}
+     * (see {@link com.conveyal.datatools.editor.jobs.ProcessGtfsSnapshotExport} to avoid consuming resources.
+     * @return
+     */
+    public GTFSFeed toGTFSFeed(boolean ignoreRouteStatus) {
+        GTFSFeed feed = new GTFSFeed();
+        if (agencies != null) {
+            LOG.info("Exporting {} agencies", agencies.size());
+            for (Agency agency : agencies.values()) {
+                // if agencyId is null (allowed if there is only a single agency), set to empty string
+                if (agency.agencyId == null) {
+                    if (feed.agency.containsKey("")) {
+                        LOG.error("Agency with empty id field already exists. Skipping agency {}", agency);
+                        continue;
+                    } else {
+                        agency.agencyId = "";
+                    }
+                }
+                // write the agency.txt entry
+                feed.agency.put(agency.agencyId, agency.toGtfs());
+            }
+        } else {
+            LOG.error("Agency table should not be empty!");
+        }
+
+        if (fares != null) {
+            LOG.info("Exporting {} fares", fares.values().size());
+            for (Fare fare : fares.values()) {
+                com.conveyal.gtfs.model.Fare gtfsFare = fare.toGtfs();
+
+                // write the fares.txt entry
+                feed.fares.put(fare.gtfsFareId, gtfsFare);
+            }
+        }
+
+        // write all of the calendars and calendar dates
+        if (calendars != null) {
+            for (ServiceCalendar cal : calendars.values()) {
+
+                int start = toGtfsDate(cal.startDate);
+                int end = toGtfsDate(cal.endDate);
+                com.conveyal.gtfs.model.Service gtfsService = cal.toGtfs(start, end);
+                // note: not using user-specified IDs
+
+                // add calendar dates
+                if (exceptions != null) {
+                    for (ScheduleException ex : exceptions.values()) {
+                        if (ex.equals(ScheduleException.ExemplarServiceDescriptor.SWAP) && !ex.addedService.contains(cal.id) && !ex.removedService.contains(cal.id))
+                            // skip swap exception if cal is not referenced by added or removed service
+                            // this is not technically necessary, but the output is cleaner/more intelligible
+                            continue;
+
+                        for (LocalDate date : ex.dates) {
+                            if (date.isBefore(cal.startDate) || date.isAfter(cal.endDate))
+                                // no need to write dates that do not apply
+                                continue;
+
+                            CalendarDate cd = new CalendarDate();
+                            cd.date = date;
+                            cd.service_id = gtfsService.service_id;
+                            cd.exception_type = ex.serviceRunsOn(cal) ? 1 : 2;
+
+                            if (gtfsService.calendar_dates.containsKey(date))
+                                throw new IllegalArgumentException("Duplicate schedule exceptions on " + date.toString());
+
+                            gtfsService.calendar_dates.put(date, cd);
+                        }
+                    }
+                }
+                feed.services.put(gtfsService.service_id, gtfsService);
+            }
+        }
+
+        Map<String, com.conveyal.gtfs.model.Route> gtfsRoutes = Maps.newHashMap();
+
+        // write the routes
+        if(routes != null) {
+            LOG.info("Exporting {} routes", routes.size());
+            for (Route route : routes.values()) {
+                // only export approved routes
+                // TODO: restore route approval check?
+                if (ignoreRouteStatus || route.status == StatusType.APPROVED) {
+                    com.conveyal.gtfs.model.Agency agency = route.agencyId != null ? agencies.get(route.agencyId).toGtfs() : null;
+                    com.conveyal.gtfs.model.Route gtfsRoute = route.toGtfs(agency);
+                    feed.routes.put(route.getGtfsId(), gtfsRoute);
+                    gtfsRoutes.put(route.id, gtfsRoute);
+                } else {
+                    LOG.warn("Route {} not approved", route.gtfsRouteId);
+                }
+            }
+        }
+
+        // write the trips on those routes
+        // we can't use the trips-by-route index because we may be exporting a snapshot database without indices
+        if(trips != null) {
+            LOG.info("Exporting {} trips", trips.size());
+            for (Trip trip : trips.values()) {
+                if (!gtfsRoutes.containsKey(trip.routeId)) {
+                    LOG.warn("Trip {} has no matching route. This may be because route {} was not approved", trip, trip.routeId);
+                    continue;
+                }
+
+                com.conveyal.gtfs.model.Route gtfsRoute = gtfsRoutes.get(trip.routeId);
+                Route route = routes.get(trip.routeId);
+
+                com.conveyal.gtfs.model.Trip gtfsTrip = new com.conveyal.gtfs.model.Trip();
+
+                gtfsTrip.block_id = trip.blockId;
+                gtfsTrip.route_id = gtfsRoute.route_id;
+                gtfsTrip.trip_id = trip.getGtfsId();
+                // TODO: figure out where a "" trip_id might have come from
+                if (gtfsTrip.trip_id == null || gtfsTrip.trip_id.equals("")) {
+                    LOG.warn("Trip {} has no id for some reason (trip_id = {}). Skipping.", trip, gtfsTrip.trip_id);
+                    continue;
+                }
+                // not using custom ids for calendars
+                gtfsTrip.service_id = feed.services.get(trip.calendarId).service_id;
+                gtfsTrip.trip_headsign = trip.tripHeadsign;
+                gtfsTrip.trip_short_name = trip.tripShortName;
+
+                TripPattern pattern = tripPatterns.get(trip.patternId);
+
+                // assign pattern direction if not null
+                if (pattern.patternDirection != null) {
+                    gtfsTrip.direction_id = pattern.patternDirection.toGtfs();
+                }
+                else if (trip.tripDirection != null) {
+                    gtfsTrip.direction_id = trip.tripDirection.toGtfs();
+                }
+                Tuple2<String, Integer> nextKey = feed.shape_points.ceilingKey(new Tuple2(pattern.id, null));
+                if ((nextKey == null || !pattern.id.equals(nextKey.a)) && pattern.shape != null && !pattern.useStraightLineDistances) {
+                    // this shape has not yet been saved
+                    double[] coordDistances = GeoUtils.getCoordDistances(pattern.shape);
+
+                    for (int i = 0; i < coordDistances.length; i++) {
+                        Coordinate coord = pattern.shape.getCoordinateN(i);
+                        ShapePoint shape = new ShapePoint(pattern.id, coord.y, coord.x, i + 1, coordDistances[i]);
+                        feed.shape_points.put(new Tuple2(pattern.id, shape.shape_pt_sequence), shape);
+                    }
+                }
+
+                if (pattern.shape != null && !pattern.useStraightLineDistances)
+                    gtfsTrip.shape_id = pattern.id;
+
+                // prefer trip wheelchair boarding value if available and not UNKNOWN
+                if (trip.wheelchairBoarding != null && !trip.wheelchairBoarding.equals(AttributeAvailabilityType.UNKNOWN)) {
+                    gtfsTrip.wheelchair_accessible = trip.wheelchairBoarding.toGtfs();
+                } else if (route.wheelchairBoarding != null) {
+                    gtfsTrip.wheelchair_accessible = route.wheelchairBoarding.toGtfs();
+                }
+
+                feed.trips.put(gtfsTrip.trip_id, gtfsTrip);
+
+                TripPattern patt = tripPatterns.get(trip.patternId);
+
+                Iterator<TripPatternStop> psi = patt.patternStops.iterator();
+
+                int stopSequence = 1;
+
+                // write the stop times
+                int cumulativeTravelTime = 0;
+                for (StopTime st : trip.stopTimes) {
+                    // FIXME: set ID field
+                    TripPatternStop ps = psi.hasNext() ? psi.next() : null;
+                    if (st == null)
+                        continue;
+
+                    Stop stop = stops.get(st.stopId);
+
+                    if (!st.stopId.equals(ps.stopId)) {
+                        throw new IllegalStateException("Trip " + trip.id + " does not match its pattern!");
+                    }
+
+                    com.conveyal.gtfs.model.StopTime gst = new com.conveyal.gtfs.model.StopTime();
+                    if (pattern.useFrequency) {
+                        // If parent pattern uses frequencies, use absolute travel/dwell times from pattern
+                        // stops for arrival/departure times.
+                        gst.arrival_time = cumulativeTravelTime = cumulativeTravelTime + ps.defaultTravelTime;
+                        gst.departure_time = cumulativeTravelTime = cumulativeTravelTime + ps.defaultDwellTime;
+                    } else {
+                        // Otherwise, apply trip's stop time arrival/departure times.
+                        gst.arrival_time = st.arrivalTime != null ? st.arrivalTime : Entity.INT_MISSING;
+                        gst.departure_time = st.departureTime != null ? st.departureTime : Entity.INT_MISSING;
+                    }
+
+                    if (st.dropOffType != null)
+                        gst.drop_off_type = st.dropOffType.toGtfsValue();
+                    else if (stop.dropOffType != null)
+                        gst.drop_off_type = stop.dropOffType.toGtfsValue();
+
+                    if (st.pickupType != null)
+                        gst.pickup_type = st.pickupType.toGtfsValue();
+                    else if (stop.dropOffType != null)
+                        gst.drop_off_type = stop.dropOffType.toGtfsValue();
+
+                    gst.shape_dist_traveled = ps.shapeDistTraveled;
+                    gst.stop_headsign = st.stopHeadsign;
+                    gst.stop_id = stop.getGtfsId();
+
+                    // write the stop as needed
+                    if (!feed.stops.containsKey(gst.stop_id)) {
+                        feed.stops.put(gst.stop_id, stop.toGtfs());
+                    }
+
+                    gst.stop_sequence = stopSequence++;
+
+                    if (ps.timepoint != null)
+                        gst.timepoint = ps.timepoint ? 1 : 0;
+                    else
+                        gst.timepoint = Entity.INT_MISSING;
+
+                    gst.trip_id = gtfsTrip.trip_id;
+
+                    feed.stop_times.put(new Tuple2(gtfsTrip.trip_id, gst.stop_sequence), gst);
+                }
+
+                // create frequencies as needed
+                if (trip.useFrequency != null && trip.useFrequency) {
+                    Frequency f = new Frequency();
+                    f.trip_id = gtfsTrip.trip_id;
+                    f.start_time = trip.startTime;
+                    f.end_time = trip.endTime;
+                    f.exact_times = 0;
+                    f.headway_secs = trip.headway;
+                    feed.frequencies.add(Fun.t2(gtfsTrip.trip_id, f));
+                }
+            }
+        }
+        return feed;
     }
 }

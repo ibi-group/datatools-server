@@ -15,4 +15,15 @@ public enum AttributeAvailabilityType {
                 return 0;
         }
     }
+
+    public static AttributeAvailabilityType fromGtfs (int availabilityType) {
+        switch (availabilityType) {
+            case 1:
+                return AVAILABLE;
+            case 2:
+                return UNAVAILABLE;
+            default: // if value is UNKNOWN or missing
+                return UNKNOWN;
+        }
+    }
 }

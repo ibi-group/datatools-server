@@ -1,711 +1,305 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.conveyal.datatools.common.utils.Consts;
-import com.conveyal.datatools.common.utils.SparkUtils;
+import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.FetchProjectFeedsJob;
 import com.conveyal.datatools.manager.jobs.MakePublicJob;
-import com.conveyal.datatools.manager.models.FeedSource;
+import com.conveyal.datatools.manager.jobs.MergeProjectFeedsJob;
+import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
-import com.conveyal.datatools.manager.models.Organization;
-import com.conveyal.datatools.manager.models.OtpBuildConfig;
-import com.conveyal.datatools.manager.models.OtpRouterConfig;
-import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.persistence.FeedStore;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
-import org.apache.http.concurrent.Cancellable;
+import org.bson.Document;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.BufferedReader;
-import java.io.ByteArrayOutputStream;
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.time.Instant;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
-import java.time.format.DateTimeFormatter;
-import java.util.*;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
-import java.util.zip.ZipOutputStream;
-
 import spark.Request;
 import spark.Response;
 
-import javax.servlet.http.HttpServletResponse;
+import java.util.Collection;
+import java.util.stream.Collectors;
 
-import static spark.Spark.*;
+import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
+import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
+import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
+import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
+import static com.conveyal.datatools.manager.DataManager.publicPath;
+import static spark.Spark.delete;
+import static spark.Spark.get;
+import static spark.Spark.post;
+import static spark.Spark.put;
 
 /**
- * Created by demory on 3/14/16.
+ * Handlers for HTTP API requests that affect Projects.
+ * These methods are mapped to API endpoints by Spark.
+ * TODO we could probably have one generic controller for all data types, and use path elements from the URL to route to different typed persistence instances.
  */
-
+@SuppressWarnings({"unused", "ThrowableNotThrown"})
 public class ProjectController {
 
+    // TODO We can probably replace this with something from Mongo so we use one JSON serializer / deserializer throughout
     public static JsonManager<Project> json =
             new JsonManager<>(Project.class, JsonViews.UserInterface.class);
 
     public static final Logger LOG = LoggerFactory.getLogger(ProjectController.class);
-    private static ObjectMapper mapper = new ObjectMapper();
-    public static Collection<Project> getAllProjects(Request req, Response res) throws JsonProcessingException {
 
+    /**
+     * @return a list of all projects that are public or visible given the current user and organization.
+     */
+    private static Collection<Project> getAllProjects(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
-        Collection<Project> filteredProjects = new ArrayList<Project>();
-
-        LOG.info("found projects: " + Project.getAll().size());
-        for (Project proj : Project.getAll()) {
-            // Get feedSources if making a public call
-            if (req.pathInfo().contains("public")) {
-                proj.feedSources = proj.getProjectFeedSources().stream().filter(fs -> fs != null && fs.isPublic).collect(Collectors.toList());
-            }
-            else {
-                proj.feedSources = null;
-            }
-            if (req.pathInfo().contains("public") || userProfile.canAdministerApplication() || userProfile.hasProject(proj.id, proj.organizationId)) {
-                filteredProjects.add(proj);
-            }
-        }
-
-        return filteredProjects;
+        // TODO: move this filtering into database query to reduce traffic / memory
+        return Persistence.projects.getAll().stream()
+                .filter(p -> req.pathInfo().matches(publicPath) || userProfile.hasProject(p.id, p.organizationId))
+                .map(p -> checkProjectPermissions(req, p, "view"))
+                .collect(Collectors.toList());
     }
 
-    public static Project getProject(Request req, Response res) {
-        String id = req.params("id");
-        Project proj = Project.get(id);
-        if (proj == null) {
-            halt(404, "No project with id: " + id);
-        }
-        // Get feedSources if making a public call
-        if (req.pathInfo().contains("public")) {
-            Collection<FeedSource> feeds = proj.getProjectFeedSources().stream().filter(fs -> fs.isPublic).collect(Collectors.toList());
-            proj.feedSources = feeds;
-        }
-        else {
-            proj.feedSources = null;
-        }
-        return proj;
+    /**
+     * @return a Project object for the UUID included in the request.
+     */
+    private static Project getProject(Request req, Response res) {
+        return requestProjectById(req, "view");
     }
 
-    public static Project createProject(Request req, Response res) throws IOException {
-        Project proj = new Project();
-
-        applyJsonToProject(proj, req.body());
-        proj.save();
-
-        return proj;
-    }
-
-    public static Project updateProject(Request req, Response res) throws IOException {
-        Project proj = requestProjectById(req, "manage");
-
-        applyJsonToProject(proj, req.body());
-        proj.save();
-
-        return proj;
-    }
-
-    public static Project deleteProject(Request req, Response res) throws IOException {
-        Project proj = requestProjectById(req, "manage");
-        proj.delete();
-
-        return proj;
-
-    }
-
-    public static Boolean fetch(Request req, Response res) {
+    /**
+     * Create a new Project and store it, setting fields according to the JSON in the request body.
+     * @return the newly created Project with all the supplied fields, as it appears in the database.
+     */
+    private static Project createProject(Request req, Response res) {
+        // TODO error handling when request is bogus
+        // TODO factor out user profile fetching, permissions checks etc.
         Auth0UserProfile userProfile = req.attribute("user");
-        Project proj = requestProjectById(req, "manage");
-
-        FetchProjectFeedsJob fetchProjectFeedsJob = new FetchProjectFeedsJob(proj, userProfile.getUser_id());
-        new Thread(fetchProjectFeedsJob).start();
-        return true;
-    }
-
-    public static void applyJsonToProject(Project proj, String json) throws IOException {
-        JsonNode node = mapper.readTree(json);
-        boolean updateFetchSchedule = false;
-        Iterator<Map.Entry<String, JsonNode>> fieldsIter = node.fields();
-        while (fieldsIter.hasNext()) {
-            Map.Entry<String, JsonNode> entry = fieldsIter.next();
-            if(entry.getKey().equals("name")) {
-                proj.name = entry.getValue().asText();
-            }
-            else if(entry.getKey().equals("defaultLocationLat")) {
-                proj.defaultLocationLat = entry.getValue().asDouble();
-                LOG.info("updating default lat");
-            }
-            else if(entry.getKey().equals("defaultLocationLon")) {
-                proj.defaultLocationLon = entry.getValue().asDouble();
-                LOG.info("updating default lon");
-            }
-            else if(entry.getKey().equals("north")) {
-                proj.north = entry.getValue().asDouble();
-            }
-            else if(entry.getKey().equals("south")) {
-                proj.south = entry.getValue().asDouble();
-            }
-            else if(entry.getKey().equals("east")) {
-                proj.east = entry.getValue().asDouble();
-            }
-            else if(entry.getKey().equals("west")) {
-                proj.west = entry.getValue().asDouble();
-            }
-            else if(entry.getKey().equals("organizationId")) {
-                proj.organizationId = entry.getValue().asText();
-            }
-            else if(entry.getKey().equals("osmNorth")) {
-                proj.osmNorth = entry.getValue().asDouble();
-            }
-            else if(entry.getKey().equals("osmSouth")) {
-                proj.osmSouth = entry.getValue().asDouble();
-            }
-            else if(entry.getKey().equals("osmEast")) {
-                proj.osmEast = entry.getValue().asDouble();
-            }
-            else if(entry.getKey().equals("osmWest")) {
-                proj.osmWest = entry.getValue().asDouble();
-            }
-            else if(entry.getKey().equals("useCustomOsmBounds")) {
-                proj.useCustomOsmBounds = entry.getValue().asBoolean();
-            }
-            else if(entry.getKey().equals("defaultLanguage")) {
-                proj.defaultLanguage = entry.getValue().asText();
-            }
-            else if(entry.getKey().equals("defaultTimeZone")) {
-                proj.defaultTimeZone = entry.getValue().asText();
-            }
-            else if(entry.getKey().equals("autoFetchHour")) {
-                proj.autoFetchHour = entry.getValue().asInt();
-                updateFetchSchedule = true;
-            }
-            else if(entry.getKey().equals("autoFetchMinute")) {
-                proj.autoFetchMinute = entry.getValue().asInt();
-                updateFetchSchedule = true;
-            }
-            else if(entry.getKey().equals("autoFetchFeeds")) {
-                proj.autoFetchFeeds = entry.getValue().asBoolean();
-                updateFetchSchedule = true;
-            }
-            else if(entry.getKey().equals("otpServers")) {
-                updateOtpServers(proj, entry.getValue());
-            }
-            else if (entry.getKey().equals("buildConfig")) {
-                updateBuildConfig(proj, entry.getValue());
-            }
-            else if (entry.getKey().equals("routerConfig")) {
-                updateRouterConfig(proj, entry.getValue());
-            }
-        }
-        if (updateFetchSchedule) {
-            // If auto fetch flag is turned on
-            if (proj.autoFetchFeeds){
-                int interval = 1; // once per day interval
-                DataManager.autoFetchMap.put(proj.id, scheduleAutoFeedFetch(proj.id, proj.autoFetchHour, proj.autoFetchMinute, interval, proj.defaultTimeZone));
-            }
-            // otherwise, cancel any existing task for this id
-            else{
-                cancelAutoFetch(proj.id);
-            }
-        }
-    }
-
-    private static void updateOtpServers(Project proj, JsonNode otpServers) {
-        if (otpServers.isArray()) {
-            proj.otpServers = new ArrayList<>();
-            for (int i = 0; i < otpServers.size(); i++) {
-                JsonNode otpServer = otpServers.get(i);
-
-                OtpServer otpServerObj = new OtpServer();
-                if (otpServer.has("name")) {
-                    JsonNode name = otpServer.get("name");
-                    otpServerObj.name = name.isNull() ? null : name.asText();
-                }
-                if (otpServer.has("admin")) {
-                    JsonNode admin = otpServer.get("admin");
-                    otpServerObj.admin = admin.isNull() ? false : admin.asBoolean();
-                }
-                if (otpServer.has("publicUrl")) {
-                    JsonNode publicUrl = otpServer.get("publicUrl");
-                    otpServerObj.publicUrl = publicUrl.isNull() ? null : publicUrl.asText();
-                }
-                if (otpServer.has("s3Bucket")) {
-                    JsonNode s3Bucket = otpServer.get("s3Bucket");
-                    otpServerObj.s3Bucket = s3Bucket.isNull() ? null : s3Bucket.asText();
-                }
-                if (otpServer.has("s3Credentials")) {
-                    JsonNode s3Credentials = otpServer.get("s3Credentials");
-                    otpServerObj.s3Credentials = s3Credentials.isNull() ? null : s3Credentials.asText();
-                }
-                if (otpServer.has("internalUrl") && otpServer.get("internalUrl").isArray()) {
-                    JsonNode internalUrl = otpServer.get("internalUrl");
-                    for (int j = 0; j < internalUrl.size(); j++) {
-                        if (internalUrl.get(j).isNull()) {
-                            continue;
-                        }
-                        String url = internalUrl.get(j).asText();
-                        if (otpServerObj.internalUrl == null) {
-                            otpServerObj.internalUrl = new ArrayList<>();
-                        }
-                        otpServerObj.internalUrl.add(url);
-                    }
-                }
-                proj.otpServers.add(otpServerObj);
-            }
-        }
-    }
-
-    private static void updateBuildConfig(Project proj, JsonNode buildConfig) {
-        if(proj.buildConfig == null) proj.buildConfig = new OtpBuildConfig();
-        if(buildConfig.has("subwayAccessTime")) {
-            JsonNode subwayAccessTime = buildConfig.get("subwayAccessTime");
-            // allow client to un-set option via 'null' value
-            proj.buildConfig.subwayAccessTime = subwayAccessTime.isNull() || subwayAccessTime.asText().equals("") ? null : subwayAccessTime.asDouble();
-        }
-        if(buildConfig.has("fetchElevationUS")) {
-            JsonNode fetchElevationUS = buildConfig.get("fetchElevationUS");
-            proj.buildConfig.fetchElevationUS = fetchElevationUS.isNull() || fetchElevationUS.asText().equals("") ? null : fetchElevationUS.asBoolean();
-        }
-        if(buildConfig.has("stationTransfers")) {
-            JsonNode stationTransfers = buildConfig.get("stationTransfers");
-            proj.buildConfig.stationTransfers = stationTransfers.isNull() || stationTransfers.asText().equals("") ? null : stationTransfers.asBoolean();
-        }
-        if (buildConfig.has("fares")) {
-            JsonNode fares = buildConfig.get("fares");
-            proj.buildConfig.fares = fares.isNull() || fares.asText().equals("") ? null : fares.asText();
+        Document newProjectFields = Document.parse(req.body());
+        String organizationId = (String) newProjectFields.get("organizationId");
+        boolean allowedToCreate = userProfile.canAdministerApplication() || userProfile.canAdministerOrganization(organizationId);
+        // Data manager can operate without organizations for now, so we (hackishly/insecurely) deactivate permissions here
+        if (organizationId == null) allowedToCreate = true;
+        if (allowedToCreate) {
+            Project newlyStoredProject = Persistence.projects.create(req.body());
+            Scheduler.scheduleAutoFeedFetch(newlyStoredProject);
+            return newlyStoredProject;
+        } else {
+            logMessageAndHalt(req, 403, "Not authorized to create a project on organization " + organizationId);
+            return null;
         }
     }
 
     /**
-     * Helper function returns feed source if user has permission for specified action.
+     * Update fields in the Project with the given UUID. The fields to be updated are supplied as JSON in the request
+     * body.
+     * @return the Project as it appears in the database after the update.
+     */
+    private static Project updateProject(Request req, Response res) {
+        // Fetch the project once to check permissions
+        requestProjectById(req, "manage");
+        try {
+            String id = req.params("id");
+            Document updateDocument = Document.parse(req.body());
+            Project updatedProject = Persistence.projects.update(id, req.body());
+            // Catch updates to auto-fetch params, and update the autofetch schedule accordingly.
+            // TODO factor out into generic update hooks, or at least separate method
+            Scheduler.scheduleAutoFeedFetch(updatedProject);
+            return updatedProject;
+        } catch (Exception e) {
+            logMessageAndHalt(req, 500, "Error updating project", e);
+            return null;
+        }
+    }
+
+    /**
+     * Delete the project for the UUID given in the request.
+     */
+    private static Project deleteProject(Request req, Response res) {
+        // Fetch project first to check permissions, and so we can return the deleted project after deletion.
+        Project project = requestProjectById(req, "manage");
+        boolean successfullyDeleted = project.delete();
+        if (!successfullyDeleted) {
+            logMessageAndHalt(req, 500, "Did not delete project.", new Exception("Delete unsuccessful"));
+        }
+        return project;
+    }
+
+    /**
+     * Manually fetch a feed all feeds in the project as a one-off operation, when the user clicks a button to request it.
+     */
+    public static Boolean fetch(Request req, Response res) {
+        Auth0UserProfile userProfile = req.attribute("user");
+        Project p = requestProjectById(req, "manage");
+        FetchProjectFeedsJob fetchProjectFeedsJob = new FetchProjectFeedsJob(p, userProfile.getUser_id());
+        // This job is runnable because sometimes we schedule the task for a later time, but here we call it immediately
+        // because it is short lived and just cues up more work.
+        fetchProjectFeedsJob.run();
+        return true;
+    }
+
+    /**
+     * Public helper function that returns the requested object if the user has permissions for the specified action.
+     * FIXME why can't we do this checking by passing in the project ID rather than the whole request?
+     * FIXME: eliminate all stringly typed variables (action)
      * @param req spark Request object from API request
      * @param action action type (either "view" or "manage")
-     * @return
+     * @return requested project
      */
-    private static Project requestProjectById(Request req, String action) {
+    private static Project requestProjectById (Request req, String action) {
         String id = req.params("id");
         if (id == null) {
-            halt("Please specify id param");
+            logMessageAndHalt(req, 400, "Please specify id param");
         }
-        return requestProject(req, Project.get(id), action);
+        return checkProjectPermissions(req, Persistence.projects.getById(id), action);
     }
-    public static Project requestProject(Request req, Project p, String action) {
-        Auth0UserProfile userProfile = req.attribute("user");
-        Boolean publicFilter = Boolean.valueOf(req.queryParams("public"));
 
-        // check for null feedsource
-        if (p == null)
-            halt(400, "Feed source ID does not exist");
+    /**
+     * Given a project object, this checks the user's permissions to take some specific action on it.
+     * If the user does not have permission the Spark request is halted with an error.
+     * TODO: remove all Spark halt calls from data manipulation functions, API implementation is leaking into data model
+     * If the user does have permission we return the same project object that was input, but with the feedSources nulled out.
+     * In the special case that the user is not logged in and is therefore only looking at public objects, the feed
+     * sources list is replaced with one that only contains publicly visible feed sources.
+     * This is because the UI only uses Project objects with embedded feedSources in the landing page, nowhere else.
+     * That fetch with embedded feedSources should be done with something like GraphQL generating multiple backend
+     * fetches, not with a field that's only populated and returned in special cases.
+     * FIXME: this is a method with side effects and no clear single purpose, in terms of transformation of input to output.
+     */
+    private static Project checkProjectPermissions(Request req, Project project, String action) {
+
+        Auth0UserProfile userProfile = req.attribute("user");
+        // Check if request was made by a user that is not logged in
+        boolean publicFilter = req.pathInfo().matches(publicPath);
+
+        // check for null project
+        if (project == null) {
+            logMessageAndHalt(req, 400, "Project ID does not exist");
+            return null;
+        }
 
         boolean authorized;
         switch (action) {
+            // TODO: limit create action to app/org admins? see code currently in createProject.
+//            case "create":
+//                authorized = userProfile.canAdministerOrganization(p.organizationId);
+//                break;
             case "manage":
-                authorized = userProfile.canAdministerProject(p.id, p.organizationId);
+                authorized = userProfile.canAdministerProject(project.id, project.organizationId);
                 break;
             case "view":
-                authorized = false; // userProfile.canViewProject(p.id, p.id);
+                // request only authorized if not via public path and user can view
+                authorized = !publicFilter && userProfile.hasProject(project.id, project.organizationId);
                 break;
             default:
                 authorized = false;
                 break;
         }
 
-        // if requesting public sources
-//        if (publicFilter){
-//            // if feed not public and user not authorized, halt
-//            if (!p.isPublic && !authorized)
-//                halt(403, "User not authorized to perform action on feed source");
-//                // if feed is public, but action is managerial, halt (we shouldn't ever get here, but just in case)
-//            else if (p.isPublic && action.equals("manage"))
-//                halt(403, "User not authorized to perform action on feed source");
-//
-//        }
-//        else {
-//            if (!authorized)
-//                halt(403, "User not authorized to perform action on feed source");
-//        }
-
-        // if we make it here, user has permission and it's a valid feedsource
-        return p;
-    }
-
-    private static void updateRouterConfig(Project proj, JsonNode routerConfig) {
-        if (proj.routerConfig == null) proj.routerConfig = new OtpRouterConfig();
-
-        if (routerConfig.has("numItineraries")) {
-            JsonNode numItineraries = routerConfig.get("numItineraries");
-            proj.routerConfig.numItineraries = numItineraries.isNull() ? null : numItineraries.asInt();
-        }
-
-        if (routerConfig.has("walkSpeed")) {
-            JsonNode walkSpeed = routerConfig.get("walkSpeed");
-            proj.routerConfig.walkSpeed = walkSpeed.isNull() ? null : walkSpeed.asDouble();
-        }
-
-        if (routerConfig.has("carDropoffTime")) {
-            JsonNode carDropoffTime = routerConfig.get("carDropoffTime");
-            proj.routerConfig.carDropoffTime = carDropoffTime.isNull() ? null : carDropoffTime.asDouble();
-        }
-
-        if (routerConfig.has("stairsReluctance")) {
-            JsonNode stairsReluctance = routerConfig.get("stairsReluctance");
-            proj.routerConfig.stairsReluctance = stairsReluctance.isNull() ? null : stairsReluctance.asDouble();
-        }
-
-        if (routerConfig.has("requestLogFile")) {
-            JsonNode requestLogFile = routerConfig.get("requestLogFile");
-            proj.routerConfig.requestLogFile = requestLogFile.isNull() || requestLogFile.asText().equals("") ? null : requestLogFile.asText();
-        }
-
-        if (routerConfig.has("updaters")) {
-            updateProjectUpdaters(proj, routerConfig.get("updaters"));
-        }
-    }
-
-    private static void updateProjectUpdaters(Project proj, JsonNode updaters) {
-        if (updaters.isArray()) {
-            proj.routerConfig.updaters = new ArrayList<>();
-            for (int i = 0; i < updaters.size(); i++) {
-                JsonNode updater = updaters.get(i);
-
-                OtpRouterConfig.Updater updaterObj = new OtpRouterConfig.Updater();
-                if(updater.has("type")) {
-                    JsonNode type = updater.get("type");
-                    updaterObj.type = type.isNull() ? null : type.asText();
-                }
-
-                if(updater.has("sourceType")) {
-                    JsonNode sourceType = updater.get("sourceType");
-                    updaterObj.sourceType = sourceType.isNull() ? null : sourceType.asText();
-                }
-
-                if(updater.has("defaultAgencyId")) {
-                    JsonNode defaultAgencyId = updater.get("defaultAgencyId");
-                    updaterObj.defaultAgencyId = defaultAgencyId.isNull() ? null : defaultAgencyId.asText();
-                }
-
-                if(updater.has("url")) {
-                    JsonNode url = updater.get("url");
-                    updaterObj.url = url.isNull() ? null : url.asText();
-                }
-
-                if(updater.has("frequencySec")) {
-                    JsonNode frequencySec = updater.get("frequencySec");
-                    updaterObj.frequencySec = frequencySec.isNull() ? null : frequencySec.asInt();
-                }
-
-                proj.routerConfig.updaters.add(updaterObj);
+        // If the user is not logged in, include only public feed sources
+        if (publicFilter){
+            project.feedSources = project.retrieveProjectFeedSources().stream()
+                    .filter(fs -> fs.isPublic)
+                    .collect(Collectors.toList());
+        } else {
+            project.feedSources = null;
+            if (!authorized) {
+                logMessageAndHalt(req, 403, "User not authorized to perform action on project");
+                return null;
             }
         }
-    }
-
-    private static HttpServletResponse downloadMergedFeed(Request req, Response res) throws IOException {
-        String id = req.params("id");
-        Project p = Project.get(id);
-
-        if(p == null) halt(500, "Project is null");
-
-        // get feed sources in project
-        Collection<FeedSource> feeds = p.getProjectFeedSources();
-
-        // create temp merged zip file to add feed content to
-        File mergedFile = null;
-        try {
-            mergedFile = File.createTempFile(p.id + "-merged", ".zip");
-            mergedFile.deleteOnExit();
-
-        } catch (IOException e) {
-            LOG.error("Could not create temp file");
-            e.printStackTrace();
-
-            halt(400, SparkUtils.formatJSON("Unknown error while merging feeds.", 400));
-        }
-
-        // create the zipfile
-        ZipOutputStream out;
-        try {
-            out = new ZipOutputStream(new FileOutputStream(mergedFile));
-        } catch (FileNotFoundException e) {
-            throw new RuntimeException(e);
-        }
-
-        LOG.info("Created project merge file: " + mergedFile.getAbsolutePath());
-
-        // map of feed versions to table entries contained within version's GTFS
-        Map<FeedSource, ZipFile> feedSourceMap = new HashMap<>();
-
-        // collect zipFiles for each feedSource before merging tables
-        for (FeedSource fs : feeds) {
-            // check if feed source has version (use latest)
-            FeedVersion version = fs.getLatest();
-            if (version == null) {
-                LOG.info("Skipping {} because it has no feed versions", fs.name);
-                continue;
-            }
-            // modify feed version to use prepended feed id
-            LOG.info("Adding {} feed to merged zip", fs.name);
-            try {
-                File file = version.getGtfsFile();
-                ZipFile zipFile = new ZipFile(file);
-                feedSourceMap.put(fs, zipFile);
-            } catch(Exception e) {
-                e.printStackTrace();
-                LOG.error("Zipfile for version {} not found", version.id);
-            }
-        }
-
-        // loop through GTFS tables
-        for(int i = 0; i < DataManager.gtfsConfig.size(); i++) {
-            JsonNode tableNode = DataManager.gtfsConfig.get(i);
-            byte[] tableOut = mergeTables(tableNode, feedSourceMap);
-
-            // if at least one feed has the table, include it
-            if (tableOut != null) {
-                String tableName = tableNode.get("name").asText();
-
-                // create entry for zip file
-                ZipEntry tableEntry = new ZipEntry(tableName);
-                out.putNextEntry(tableEntry);
-                LOG.info("Writing {} to merged feed", tableEntry.getName());
-                out.write(tableOut);
-                out.closeEntry();
-            }
-        }
-        out.close();
-
-        // Deliver zipfile
-        res.raw().setContentType("application/octet-stream");
-        res.raw().setHeader("Content-Disposition", "attachment; filename=" + mergedFile.getName());
-
-
-        try {
-            BufferedOutputStream bufferedOutputStream = new BufferedOutputStream(res.raw().getOutputStream());
-            BufferedInputStream bufferedInputStream = new BufferedInputStream(new FileInputStream(mergedFile));
-
-            byte[] buffer = new byte[1024];
-            int len;
-            while ((len = bufferedInputStream.read(buffer)) > 0) {
-                bufferedOutputStream.write(buffer, 0, len);
-            }
-
-            bufferedOutputStream.flush();
-            bufferedOutputStream.close();
-        } catch (Exception e) {
-            halt(500, "Error serving GTFS file");
-        }
-
-        return res.raw();
+        // if we make it here, user has permission and this is a valid project.
+        return project;
     }
 
     /**
-     * Merge the specified table for multiple GTFS feeds.
-     * @param tableNode tableNode to merge
-     * @param feedSourceMap map of feedSources to zipFiles from which to extract the .txt tables
-     * @return
-     * @throws IOException
+     * HTTP endpoint to initialize a merge project feeds operation. Client should check the job status endpoint for the
+     * completion of merge project feeds job. On successful completion of the job, the client should make a GET request
+     * to getFeedDownloadCredentials with the project ID to obtain either temporary S3 credentials or a download token
+     * (depending on application configuration "application.data.use_s3_storage") to download the zip file.
      */
-    private static byte[] mergeTables(JsonNode tableNode, Map<FeedSource, ZipFile> feedSourceMap) throws IOException {
-
-        String tableName = tableNode.get("name").asText();
-        ByteArrayOutputStream tableOut = new ByteArrayOutputStream();
-
-        int feedIndex = 0;
-
-        ArrayNode fieldsNode = (ArrayNode) tableNode.get("fields");
-        List<String> headers = new ArrayList<>();
-        for (int i = 0; i < fieldsNode.size(); i++) {
-            JsonNode fieldNode = fieldsNode.get(i);
-            String fieldName = fieldNode.get("name").asText();
-            Boolean notInSpec = fieldNode.has("datatools") && fieldNode.get("datatools").asBoolean();
-            if (notInSpec) {
-                fieldsNode.remove(i);
-            }
-            headers.add(fieldName);
-        }
-
-        // write headers to table
-        tableOut.write(String.join(",", headers).getBytes());
-        tableOut.write("\n".getBytes());
-
-        for ( Map.Entry<FeedSource, ZipFile> mapEntry : feedSourceMap.entrySet()) {
-            FeedSource fs = mapEntry.getKey();
-            ZipFile zipFile = mapEntry.getValue();
-            final Enumeration<? extends ZipEntry> entries = zipFile.entries();
-            while (entries.hasMoreElements()) {
-                final ZipEntry entry = entries.nextElement();
-                if(tableName.equals(entry.getName())) {
-                    LOG.info("Adding {} table for {}", entry.getName(), fs.name);
-
-                    InputStream inputStream = zipFile.getInputStream(entry);
-
-                    BufferedReader in = new BufferedReader(new InputStreamReader(inputStream));
-                    String line = in.readLine();
-                    String[] fields = line.split(",");
-
-                    List<String> fieldList = Arrays.asList(fields);
-
-                    int rowIndex = 0;
-                    while((line = in.readLine()) != null) {
-                        String[] newValues = new String[fieldsNode.size()];
-                        String[] values = line.split(Consts.COLUMN_SPLIT, -1);
-                        if (values.length == 1) {
-                            LOG.warn("Found blank line. Skipping...");
-                            continue;
-                        }
-                        for(int v = 0; v < fieldsNode.size(); v++) {
-                            JsonNode fieldNode = fieldsNode.get(v);
-                            String fieldName = fieldNode.get("name").asText();
-
-                            // get index of field from GTFS spec as it appears in feed
-                            int index = fieldList.indexOf(fieldName);
-                            String val = "";
-                            try {
-                                index = fieldList.indexOf(fieldName);
-                                if(index != -1) {
-                                    val = values[index];
-                                }
-                            } catch (ArrayIndexOutOfBoundsException e) {
-                                LOG.warn("Index {} out of bounds for file {} and feed {}", index, entry.getName(), fs.name);
-                                continue;
-                            }
-
-                            String fieldType = fieldNode.get("inputType").asText();
-
-                            // if field is a gtfs identifier, prepend with feed id/name
-                            if (fieldType.contains("GTFS") && !val.isEmpty()) {
-                                newValues[v] = fs.name + ":" + val;
-                            }
-                            else {
-                                newValues[v] = val;
-                            }
-                        }
-                        String newLine = String.join(",", newValues);
-                        tableOut.write(newLine.getBytes());
-                        tableOut.write("\n".getBytes());
-                        rowIndex++;
-                    }
-                }
-            }
-            feedIndex++;
-        }
-        return tableOut.toByteArray();
+    private static String downloadMergedFeed(Request req, Response res) {
+        Project project = requestProjectById(req, "view");
+        Auth0UserProfile userProfile = req.attribute("user");
+        // TODO: make this an authenticated call?
+        MergeProjectFeedsJob mergeProjectFeedsJob = new MergeProjectFeedsJob(project, userProfile.getUser_id());
+        DataManager.heavyExecutor.execute(mergeProjectFeedsJob);
+        // Return job ID to requester for monitoring job status.
+        return formatJobMessage(mergeProjectFeedsJob.jobId, "Merge operation is processing.");
     }
 
-    public static boolean deployPublic (Request req, Response res) {
+    /**
+     * Returns credentials that a client may use to then download a feed version. Functionality
+     * changes depending on whether application.data.use_s3_storage config property is true.
+     */
+    public static Object getFeedDownloadCredentials(Request req, Response res) {
+        Project project = requestProjectById(req, "view");
+
+        // if storing feeds on s3, return temporary s3 credentials for that zip file
+        if (DataManager.useS3) {
+            // Return presigned download link if using S3.
+            String key = String.format("project/%s.zip", project.id);
+            return downloadFromS3(FeedStore.s3Client, DataManager.feedBucket, key, false, res);
+        } else {
+            // when feeds are stored locally, single-use download token will still be used
+            FeedDownloadToken token = new FeedDownloadToken(project);
+            Persistence.tokens.create(token);
+            return token;
+        }
+    }
+
+    /**
+     * Copy all the latest feed versions for all public feed sources in this project to a bucket on S3.
+     * Updates the index.html document that serves as a listing of those objects on S3.
+     * This is often referred to as "deploying" the project.
+     */
+    private static boolean publishPublicFeeds(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         String id = req.params("id");
         if (id == null) {
-            halt(400, "must provide project id!");
+            logMessageAndHalt(req, 400, "must provide project id!");
         }
-        Project proj = Project.get(id);
-
-        if (proj == null)
-            halt(400, "no such project!");
-
-        // run as sync job; if it gets too slow change to async
-        new MakePublicJob(proj, userProfile.getUser_id()).run();
+        Project p = Persistence.projects.getById(id);
+        if (p == null) {
+            logMessageAndHalt(req, 400, "no such project!");
+        }
+        // Run this as a synchronous job; if it proves to be too slow we will change to asynchronous.
+        new MakePublicJob(p, userProfile.getUser_id()).run();
         return true;
     }
 
-    public static Project thirdPartySync(Request req, Response res) throws Exception {
+    /**
+     * Spark endpoint to synchronize this project's feed sources with another website or service that maintains an
+     * index of GTFS data. This action is triggered manually by a UI button and for now never happens automatically.
+     * An ExternalFeedResource of the specified type must be present in DataManager.feedResources
+     */
+    private static Project thirdPartySync(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         String id = req.params("id");
-        Project proj = Project.get(id);
+        Project proj = Persistence.projects.getById(id);
 
         String syncType = req.params("type");
 
-        if (!userProfile.canAdministerProject(proj.id, proj.organizationId))
-            halt(403);
+        if (!userProfile.canAdministerProject(proj.id, proj.organizationId)) {
+            logMessageAndHalt(req, 403, "Third-party sync not permitted for user.");
+        }
 
         LOG.info("syncing with third party " + syncType);
-
         if(DataManager.feedResources.containsKey(syncType)) {
-            DataManager.feedResources.get(syncType).importFeedsForProject(proj, req.headers("Authorization"));
+            try {
+                DataManager.feedResources.get(syncType).importFeedsForProject(proj, req.headers("Authorization"));
+            } catch (Exception e) {
+                logMessageAndHalt(req, 500, "An error occurred while trying to sync", e);
+            }
             return proj;
         }
 
-        halt(404);
+        logMessageAndHalt(req, 404, syncType + " sync type not enabled for application.");
         return null;
     }
 
-    public static ScheduledFuture scheduleAutoFeedFetch (String id, int hour, int minute, int intervalInDays, String timezoneId){
-        TimeUnit minutes = TimeUnit.MINUTES;
-        try {
-            // First cancel any already scheduled auto fetch task for this project id.
-            cancelAutoFetch(id);
-
-            Project p = Project.get(id);
-            if (p == null)
-                return null;
-
-            Cancellable task = null;
-
-            ZoneId timezone;
-            try {
-                timezone = ZoneId.of(timezoneId);
-            }catch(Exception e){
-                timezone = ZoneId.of("America/New_York");
-            }
-            LOG.info("Scheduling autofetch for projectID: {}", p.id);
-
-            long delayInMinutes = 0;
-
-
-            // NOW in default timezone
-            ZonedDateTime now = ZonedDateTime.ofInstant(Instant.now(), timezone);
-
-            // SCHEDULED START TIME
-            ZonedDateTime startTime = LocalDateTime.of(LocalDate.now(), LocalTime.of(hour, minute)).atZone(timezone);
-            LOG.info("Now: {}", now.format(DateTimeFormatter.ISO_ZONED_DATE_TIME));
-            LOG.info("Scheduled start time: {}", startTime.format(DateTimeFormatter.ISO_ZONED_DATE_TIME));
-
-            // Get diff between start time and current time
-            long diffInMinutes = (startTime.toEpochSecond() - now.toEpochSecond()) / 60;
-            if ( diffInMinutes >= 0 ){
-                delayInMinutes = diffInMinutes; // delay in minutes
-            }
-            else{
-                delayInMinutes = 24 * 60 + diffInMinutes; // wait for one day plus difference (which is negative)
-            }
-
-            LOG.info("Auto fetch begins in {} hours and runs every {} hours", String.valueOf(delayInMinutes / 60.0), TimeUnit.DAYS.toHours(intervalInDays));
-
-            FetchProjectFeedsJob fetchProjectFeedsJob = new FetchProjectFeedsJob(p, null);
-
-            return DataManager.scheduler.scheduleAtFixedRate(fetchProjectFeedsJob, delayInMinutes, TimeUnit.DAYS.toMinutes(intervalInDays), minutes);
-        } catch (Exception e) {
-            e.printStackTrace();
-            return null;
-        }
-    }
-
-    public static void cancelAutoFetch(String id){
-        Project p = Project.get(id);
-        if ( p != null && DataManager.autoFetchMap.get(p.id) != null) {
-            LOG.info("Cancelling autofetch for projectID: {}", p.id);
-            DataManager.autoFetchMap.get(p.id).cancel(true);
-        }
-    }
-
+    /**
+     * This connects all the above HTTP API handlers to URL paths (registers them with the Spark framework).
+     * A bit too static/global for an OO language, but that's how Spark works.
+     */
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/project/:id", ProjectController::getProject, json::write);
         get(apiPrefix + "secure/project", ProjectController::getAllProjects, json::write);
@@ -714,12 +308,32 @@ public class ProjectController {
         delete(apiPrefix + "secure/project/:id", ProjectController::deleteProject, json::write);
         get(apiPrefix + "secure/project/:id/thirdPartySync/:type", ProjectController::thirdPartySync, json::write);
         post(apiPrefix + "secure/project/:id/fetch", ProjectController::fetch, json::write);
-        post(apiPrefix + "secure/project/:id/deployPublic", ProjectController::deployPublic, json::write);
+        post(apiPrefix + "secure/project/:id/deployPublic", ProjectController::publishPublicFeeds, json::write);
 
-        get(apiPrefix + "public/project/:id/download", ProjectController::downloadMergedFeed);
+        get(apiPrefix + "secure/project/:id/download", ProjectController::downloadMergedFeed);
+        get(apiPrefix + "secure/project/:id/downloadtoken", ProjectController::getFeedDownloadCredentials, json::write);
 
         get(apiPrefix + "public/project/:id", ProjectController::getProject, json::write);
         get(apiPrefix + "public/project", ProjectController::getAllProjects, json::write);
+        get(apiPrefix + "downloadprojectfeed/:token", ProjectController::downloadMergedFeedWithToken);
+    }
+
+    /**
+     * HTTP endpoint that allows the requester to download a merged project feeds file stored locally (it should only
+     * be invoked if the application is not using S3 storage) given that the requester supplies a valid token.
+     */
+    private static Object downloadMergedFeedWithToken(Request req, Response res) {
+        FeedDownloadToken token = Persistence.tokens.getById(req.params("token"));
+
+        if(token == null || !token.isValid()) {
+            logMessageAndHalt(req, 400, "Feed download token not valid");
+        }
+
+        Project project = token.retrieveProject();
+
+        Persistence.tokens.removeById(token.id);
+        String fileName = project.id + ".zip";
+        return downloadFile(FeedVersion.feedStore.getFeed(fileName), fileName, req, res);
     }
 
 }

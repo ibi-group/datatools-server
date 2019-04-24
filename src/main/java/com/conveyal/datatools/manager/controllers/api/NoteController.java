@@ -2,9 +2,13 @@ package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
-import com.conveyal.datatools.manager.models.*;
+import com.conveyal.datatools.manager.models.FeedSource;
+import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.models.JsonViews;
+import com.conveyal.datatools.manager.models.Model;
+import com.conveyal.datatools.manager.models.Note;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import spark.Request;
@@ -14,7 +18,9 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.Date;
 
-import static spark.Spark.*;
+import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
+import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Updates.push;
 import static spark.Spark.get;
 import static spark.Spark.post;
 
@@ -26,36 +32,36 @@ public class NoteController {
     private static JsonManager<Note> json =
             new JsonManager<Note>(Note.class, JsonViews.UserInterface.class);
 
-    public static Collection<Note> getAllNotes (Request req, Response res) throws JsonProcessingException {
+    public static Collection<Note> getAllNotes (Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
-        if(userProfile == null) halt(401);
+        if (userProfile == null) logMessageAndHalt(req, 401, "User not authorized to perform this action");
 
         String typeStr = req.queryParams("type");
         String objectId = req.queryParams("objectId");
 
         if (typeStr == null || objectId == null) {
-            halt(400, "Please specify objectId and type");
+            logMessageAndHalt(req, 400, "Please specify objectId and type");
         }
 
         Note.NoteType type = null;
         try {
             type = Note.NoteType.valueOf(typeStr);
         } catch (IllegalArgumentException e) {
-            halt(400, "Please specify a valid type");
+            logMessageAndHalt(req, 400, "Please specify a valid type");
         }
 
         Model model = null;
 
         switch (type) {
             case FEED_SOURCE:
-                model = FeedSource.get(objectId);
+                model = Persistence.feedSources.getById(objectId);
                 break;
             case FEED_VERSION:
-                model = FeedVersion.get(objectId);
+                model = Persistence.feedVersions.getById(objectId);
                 break;
             default:
                 // this shouldn't ever happen, but Java requires that every case be covered somehow so model can't be used uninitialized
-                halt(400, "Unsupported type for notes");
+                logMessageAndHalt(req, 400, "Unsupported type for notes");
         }
 
         FeedSource s;
@@ -64,15 +70,15 @@ public class NoteController {
             s = (FeedSource) model;
         }
         else {
-            s = ((FeedVersion) model).getFeedSource();
+            s = ((FeedVersion) model).parentFeedSource();
         }
-        String orgId = s.getOrganizationId();
+        String orgId = s.organizationId();
         // check if the user has permission
         if (userProfile.canAdministerProject(s.projectId, orgId) || userProfile.canViewFeed(orgId, s.projectId, s.id)) {
-            return model.getNotes();
+            return model.retrieveNotes();
         }
         else {
-            halt(401);
+            logMessageAndHalt(req, 401, "User not authorized to perform this action");
         }
 
         return null;
@@ -80,7 +86,7 @@ public class NoteController {
 
     public static Note createNote (Request req, Response res) throws IOException {
         Auth0UserProfile userProfile = req.attribute("user");
-        if(userProfile == null) halt(401);
+        if(userProfile == null) logMessageAndHalt(req, 401, "User not authorized to perform this action");
 
         String typeStr = req.queryParams("type");
         String objectId = req.queryParams("objectId");
@@ -89,57 +95,71 @@ public class NoteController {
         try {
             type = Note.NoteType.valueOf(typeStr);
         } catch (IllegalArgumentException e) {
-            halt(400, "Please specify a valid type");
+            logMessageAndHalt(req, 400, "Please specify a valid type");
         }
 
-        Model model = null;
+        Model objectWithNote = null;
 
         switch (type) {
             case FEED_SOURCE:
-                model = FeedSource.get(objectId);
+                objectWithNote = Persistence.feedSources.getById(objectId);
                 break;
             case FEED_VERSION:
-                model = FeedVersion.get(objectId);
+                objectWithNote = Persistence.feedVersions.getById(objectId);
                 break;
             default:
                 // this shouldn't ever happen, but Java requires that every case be covered somehow so model can't be used uninitialized
-                halt(400, "Unsupported type for notes");
+                logMessageAndHalt(req, 400, "Unsupported type for notes");
         }
 
-        FeedSource s;
+        FeedSource feedSource;
 
-        if (model instanceof FeedSource) {
-            s = (FeedSource) model;
+        if (objectWithNote instanceof FeedSource) {
+            feedSource = (FeedSource) objectWithNote;
+        } else {
+            feedSource = ((FeedVersion) objectWithNote).parentFeedSource();
         }
-        else {
-            s = ((FeedVersion) model).getFeedSource();
-        }
-        String orgId = s.getOrganizationId();
-        // check if the user has permission
-        if (userProfile.canAdministerProject(s.projectId, orgId) || userProfile.canViewFeed(orgId, s.projectId, s.id)) {
-            Note n = new Note();
-            n.setUser(userProfile);
+        String orgId = feedSource.organizationId();
+        boolean allowedToCreate = userProfile.canAdministerProject(feedSource.projectId, orgId) ||
+                userProfile.canViewFeed(orgId, feedSource.projectId, feedSource.id);
+        if (allowedToCreate) {
+            Note note = new Note();
+            note.storeUser(userProfile);
 
             ObjectMapper mapper = new ObjectMapper();
             JsonNode node = mapper.readTree(req.body());
-            n.body = node.get("body").asText();
+            note.body = node.get("body").asText();
 
-            n.userEmail = userProfile.getEmail();
-            n.date = new Date();
-            n.type = type;
-            model.addNote(n);
-            n.save();
-            model.save();
+            note.userEmail = userProfile.getEmail();
+            note.date = new Date();
+            note.type = type;
 
-            // send notifications
-            NotifyUsersForSubscriptionJob notifyFeedJob = new NotifyUsersForSubscriptionJob("feed-commented-on", s.id, n.userEmail + " commented on " + s.name + " at " + n.date.toString() + ":<blockquote>" + n.body + "</blockquote>");
-            Thread notifyThread = new Thread(notifyFeedJob);
-            notifyThread.start();
+            Persistence.notes.create(note);
 
-            return n;
+            // TODO: figure out a cleaner way to handle this update
+            if (objectWithNote instanceof FeedSource) {
+                Persistence.feedSources.getMongoCollection().updateOne(eq(objectWithNote.id), push("noteIds", note.id));
+            } else {
+                Persistence.feedVersions.getMongoCollection().updateOne(eq(objectWithNote.id), push("noteIds", note.id));
+            }
+            String message = String.format(
+                    "%s commented on %s at %s:<blockquote>%s</blockquote>",
+                    note.userEmail,
+                    feedSource.name,
+                    note.date.toString(),
+                    note.body);
+            // Send notifications to comment subscribers.
+            // TODO: feed-commented-on has been merged into feed-updated subscription type. This should be clarified
+            // in the subject line/URL of the notification email.
+            NotifyUsersForSubscriptionJob.createNotification(
+                    "feed-updated",
+                    feedSource.id,
+                    message
+            );
+            return note;
         }
         else {
-            halt(401);
+            logMessageAndHalt(req, 401, "User not authorized to perform this action");
         }
 
         return null;

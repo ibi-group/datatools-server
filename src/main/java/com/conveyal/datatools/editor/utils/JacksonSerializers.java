@@ -1,27 +1,27 @@
 package com.conveyal.datatools.editor.utils;
 
 import com.conveyal.datatools.editor.models.transit.GtfsRouteType;
-import com.conveyal.datatools.editor.models.transit.TripDirection;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationContext;
-import com.fasterxml.jackson.databind.JsonMappingException;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.deser.std.StdScalarDeserializer;
 import com.fasterxml.jackson.databind.ser.std.StdScalarSerializer;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import com.google.common.io.BaseEncoding;
+import org.mapdb.Fun.Tuple2;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
-import org.mapdb.Fun.Tuple2;
-
-import java.io.IOException;
-import java.io.UnsupportedEncodingException;
 
 public class JacksonSerializers {
+    private static final Logger LOG = LoggerFactory.getLogger(JacksonSerializers.class);
     private static final BaseEncoding encoder = BaseEncoding.base64Url();
 
     public static class Tuple2Serializer extends StdScalarSerializer<Tuple2<String, String>> {
@@ -139,17 +139,19 @@ public class JacksonSerializers {
         @Override
         public LocalDate deserialize(JsonParser jp, DeserializationContext arg1) throws IOException {
             LocalDate date;
+            String dateText = jp.getText();
             try {
-                date = LocalDate.parse(jp.getText(), DateTimeFormatter.BASIC_ISO_DATE);
+                date = LocalDate.parse(dateText, DateTimeFormatter.BASIC_ISO_DATE);
                 return date;
             } catch (Exception jsonException) {
                 // This is here to catch any loads of database dumps that happen to have the old java.util.Date
                 // field type in validationResult.  God help us.
-                System.out.println("Error parsing date value, trying legacy java.util.Date date format");
+                LOG.warn("Error parsing date value: `{}`, trying legacy java.util.Date date format", dateText);
                 try {
                     date = Instant.ofEpochMilli(jp.getValueAsLong()).atZone(ZoneOffset.UTC).toLocalDate();
                     return date;
                 } catch (Exception e) {
+                    LOG.warn("Error parsing date value: `{}`", dateText);
                     e.printStackTrace();
                 }
             }
@@ -169,9 +171,9 @@ public class JacksonSerializers {
         }
 
         @Override
-        public void serialize(GtfsRouteType gtfsRouteType, JsonGenerator jgen,
+        public void serialize(GtfsRouteType gtfsRouteType, JsonGenerator jsonGenerator,
                               SerializerProvider arg2) throws IOException {
-            jgen.writeNumber(gtfsRouteType.toGtfs());
+            jsonGenerator.writeNumber(gtfsRouteType.toGtfs());
         }
     }
 
@@ -205,34 +207,6 @@ public class JacksonSerializers {
         public void serialize(Object nullKey, JsonGenerator jsonGenerator, SerializerProvider unused)
                 throws IOException {
             jsonGenerator.writeFieldName("");
-        }
-    }
-
-    /** serialize GtfsRouteType as GTFS integer value */
-    public static class TripDirectionSerializer extends StdScalarSerializer<TripDirection> {
-        private static final long serialVersionUID = -5149227247056620599L;
-
-        public TripDirectionSerializer() {
-            super(TripDirection.class, false);
-        }
-
-        @Override
-        public void serialize(TripDirection gtfsRouteType, JsonGenerator jgen,
-                              SerializerProvider arg2) throws IOException {
-            jgen.writeNumber(gtfsRouteType.toGtfs());
-        }
-    }
-
-    /** serialize GTFS integer value  to TripDirection */
-    public static class TripDirectionDeserializer extends StdScalarDeserializer<TripDirection> {
-        private static final long serialVersionUID = 2351921879598816469L;
-
-        public TripDirectionDeserializer () { super(TripDirection.class); }
-
-        @Override
-        public TripDirection deserialize(JsonParser jp,
-                                         DeserializationContext arg1) throws IOException {
-            return TripDirection.fromGtfs(jp.getValueAsInt());
         }
     }
 

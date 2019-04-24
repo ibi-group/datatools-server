@@ -6,6 +6,7 @@ import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
@@ -17,6 +18,8 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+
+import static com.conveyal.datatools.manager.models.ExternalFeedSourceProperty.constructId;
 
 /**
  * Created by demory on 3/31/16.
@@ -38,7 +41,7 @@ public class TransitFeedsFeedResource implements ExternalFeedResource {
     }
 
     @Override
-    public void importFeedsForProject(Project project, String authHeader) {
+    public void importFeedsForProject(Project project, String authHeader) throws IOException {
         LOG.info("Importing feeds from TransitFeeds");
 
         URL url;
@@ -52,7 +55,7 @@ public class TransitFeedsFeedResource implements ExternalFeedResource {
                 url = new URL(api + "?key=" + apiKey + "&limit=100" + "&page=" + String.valueOf(count));
             } catch (MalformedURLException ex) {
                 LOG.error("Could not construct URL for TransitFeeds API");
-                return;
+                throw ex;
             }
 
 
@@ -81,7 +84,7 @@ public class TransitFeedsFeedResource implements ExternalFeedResource {
                 in.close();
             } catch (IOException ex) {
                 LOG.error("Could not read from Transit Feeds API");
-                return;
+                throw ex;
             }
 
             String json = response.toString();
@@ -90,7 +93,7 @@ public class TransitFeedsFeedResource implements ExternalFeedResource {
                 transitFeedNode = mapper.readTree(json);
             } catch (IOException ex) {
                 LOG.error("Error parsing TransitFeeds JSON response");
-                return;
+                throw ex;
             }
 
             for (JsonNode feed : transitFeedNode.get("results").get("feeds")) {
@@ -101,10 +104,10 @@ public class TransitFeedsFeedResource implements ExternalFeedResource {
                 }
 
                 // test that feed falls in bounding box (if box exists)
-                if (project.north != null) {
+                if (project.bounds != null) {
                     Double lat = feed.get("l").get("lat").asDouble();
                     Double lng = feed.get("l").get("lng").asDouble();
-                    if (lat < project.south || lat > project.north || lng < project.west || lng > project.east) {
+                    if (lat < project.bounds.south || lat > project.bounds.north || lng < project.bounds.west || lng > project.bounds.east) {
                         continue;
                     }
                 }
@@ -113,9 +116,9 @@ public class TransitFeedsFeedResource implements ExternalFeedResource {
                 String tfId = feed.get("id").asText();
 
                 // check if a feed already exists with this id
-                for (FeedSource existingSource : project.getProjectFeedSources()) {
+                for (FeedSource existingSource : project.retrieveProjectFeedSources()) {
                     ExternalFeedSourceProperty idProp =
-                            ExternalFeedSourceProperty.find(existingSource, this.getResourceType(), "id");
+                            Persistence.externalFeedSourceProperties.getById(constructId(existingSource, this.getResourceType(), "id"));
                     if (idProp != null && idProp.value.equals(tfId)) {
                         source = existingSource;
                     }
@@ -128,7 +131,7 @@ public class TransitFeedsFeedResource implements ExternalFeedResource {
                 else source.name = feedName;
 
                 source.retrievalMethod = FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
-                source.setName(feedName);
+                source.name = feedName;
                 System.out.println(source.name);
 
                 try {
@@ -141,13 +144,16 @@ public class TransitFeedsFeedResource implements ExternalFeedResource {
                     }
                 } catch (MalformedURLException ex) {
                     LOG.error("Error constructing URLs from TransitFeeds API response");
+                    throw ex;
                 }
 
-                source.setProject(project);
-                source.save();
+                source.projectId = project.id;
+                // FIXME: Store feed source
+//                source.save();
 
                 // create/update the external props
-                ExternalFeedSourceProperty.updateOrCreate(source, this.getResourceType(), "id", tfId);
+                // FIXME: Add this back in
+//                ExternalFeedSourceProperty.updateOrCreate(source, this.getResourceType(), "id", tfId);
 
             }
             if (transitFeedNode.get("results").get("page") == transitFeedNode.get("results").get("numPages")){

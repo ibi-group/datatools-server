@@ -42,8 +42,8 @@ public class ServiceCalendar extends Model implements Cloneable, Serializable {
         this.friday = calendar.friday == 1;
         this.saturday = calendar.saturday == 1;
         this.sunday = calendar.sunday == 1;
-        this.startDate = fromGtfs(calendar.start_date);
-        this.endDate = fromGtfs(calendar.end_date);
+        this.startDate = calendar.start_date;
+        this.endDate = calendar.end_date;
         inferName();
         this.feedId = feed.id;
     }
@@ -155,8 +155,8 @@ public class ServiceCalendar extends Model implements Cloneable, Serializable {
         Service ret = new Service(id);
         ret.calendar = new Calendar();
         ret.calendar.service_id = ret.service_id;
-        ret.calendar.start_date = startDate;
-        ret.calendar.end_date = endDate;
+        ret.calendar.start_date = fromGtfs(startDate);
+        ret.calendar.end_date = fromGtfs(endDate);
         ret.calendar.sunday     = sunday    ? 1 : 0;
         ret.calendar.monday     = monday    ? 1 : 0;
         ret.calendar.tuesday    = tuesday   ? 1 : 0;

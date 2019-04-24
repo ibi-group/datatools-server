@@ -1,11 +1,11 @@
 package com.conveyal.datatools.manager.models;
 
-import java.awt.geom.Rectangle2D;
 import java.io.Serializable;
 import java.time.LocalDate;
 import java.util.Collection;
 
-import com.conveyal.gtfs.validator.json.LoadStatus;
+import com.conveyal.gtfs.loader.FeedLoadResult;
+import com.conveyal.gtfs.validator.ValidationResult;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 
@@ -15,7 +15,10 @@ import com.fasterxml.jackson.annotation.JsonInclude.Include;
  */
 public class FeedValidationResultSummary implements Serializable {
     private static final long serialVersionUID = 1L;
-
+    // Include feed ID and namespace here so the client can trace back to the full feed version if this is nested under
+    // a feed source.
+    public String feedVersionId;
+    public String namespace;
     public LoadStatus loadStatus;
 
     @JsonInclude(Include.ALWAYS)
@@ -27,8 +30,9 @@ public class FeedValidationResultSummary implements Serializable {
     // statistics
     public int agencyCount;
     public int routeCount;
-    public int tripCount;
+    public int stopCount;
     public int stopTimesCount;
+    public int tripCount;
     public long avgDailyRevenueTime;
 
     /** The first date the feed has service, either in calendar.txt or calendar_dates.txt */
@@ -40,30 +44,46 @@ public class FeedValidationResultSummary implements Serializable {
     public LocalDate endDate;
 
     @JsonInclude(Include.ALWAYS)
-    public Rectangle2D bounds;
+    public Bounds bounds;
 
     /**
      * Construct a summarized version of the given FeedValidationResult.
-     * @param result
      */
-    public FeedValidationResultSummary (FeedValidationResult result) {
-        if (result != null) {
-            this.loadStatus = result.loadStatus;
-            this.loadFailureReason = result.loadFailureReason;
-            this.agencies = result.agencies;
-
+    public FeedValidationResultSummary (FeedVersion version) {
+        this.feedVersionId = version.id;
+        this.namespace = version.namespace;
+        // If feed load failed (and is null), construct an empty result to avoid NPEs.
+        if (version.feedLoadResult == null) {
+            version.feedLoadResult = new FeedLoadResult(true);
+        }
+        if (version.validationResult != null) {
+            this.loadStatus = version.validationResult.fatalException == null
+                    ? LoadStatus.SUCCESS
+                    : LoadStatus.OTHER_FAILURE;
+            this.loadFailureReason = version.validationResult.fatalException;
             if (loadStatus == LoadStatus.SUCCESS) {
-                this.errorCount = result.errorCount;
-                this.agencyCount = result.agencyCount;
-                this.routeCount = result.routeCount;
-                this.tripCount = result.tripCount;
-                this.stopTimesCount = result.stopTimesCount;
-                this.startDate = result.startDate;
-                this.endDate = result.endDate;
-                this.bounds = result.bounds;
-                this.avgDailyRevenueTime = result.avgDailyRevenueTime;
+                this.errorCount = version.validationResult.errorCount;
+                this.agencyCount = version.feedLoadResult.agency.rowCount;
+                this.routeCount = version.feedLoadResult.routes.rowCount;
+                this.stopCount = version.feedLoadResult.stops.rowCount;
+                this.tripCount = version.feedLoadResult.trips.rowCount;
+                this.stopTimesCount = version.feedLoadResult.stopTimes.rowCount;
+                this.startDate = version.validationResult.firstCalendarDate;
+                this.endDate = version.validationResult.lastCalendarDate;
+                this.bounds = boundsFromValidationResult(version.validationResult);
+                // FIXME: compute avg revenue time
+//                this.avgDailyRevenueTime = validationResult.avgDailyRevenueTime;
             }
         }
 
+    }
+
+    private static Bounds boundsFromValidationResult (ValidationResult result) {
+        Bounds bounds = new Bounds();
+        bounds.north = result.fullBounds.maxLat;
+        bounds.south = result.fullBounds.minLat;
+        bounds.east = result.fullBounds.maxLon;
+        bounds.west = result.fullBounds.minLon;
+        return bounds;
     }
 }

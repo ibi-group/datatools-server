@@ -1,7 +1,7 @@
 package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.manager.DataManager;
-import com.conveyal.datatools.manager.persistence.DataStore;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.StringUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -23,19 +23,24 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
 import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
 import java.net.URL;
+import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+import com.mongodb.client.FindIterable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static com.mongodb.client.model.Filters.and;
+import static com.mongodb.client.model.Filters.eq;
 
 /**
  * A deployment of (a given version of) OTP on a given set of feeds.
@@ -47,37 +52,29 @@ import org.slf4j.LoggerFactory;
 public class Deployment extends Model implements Serializable {
     private static final long serialVersionUID = 1L;
     private static final Logger LOG = LoggerFactory.getLogger(Deployment.class);
-    private static DataStore<Deployment> deploymentStore = new DataStore<Deployment>("deployments");
 
     public String name;
 
     /** What server is this currently deployed to? */
     public String deployedTo;
 
-    public Date dateCreated;
-
     @JsonView(JsonViews.DataDump.class)
     public String projectId;
 
-    @JsonView(JsonViews.UserInterface.class)
-    public Project getProject () {
-        return Project.get(projectId);
-    }
-
-    public void setProject (Project project) {
-        this.projectId = project.id;
+    @JsonProperty("project")
+    public Project parentProject() {
+        return Persistence.projects.getById(projectId);
     }
 
     @JsonView(JsonViews.DataDump.class)
     public Collection<String> feedVersionIds;
 
     /** All of the feed versions used in this deployment */
-    @JsonIgnore
-    public List<FeedVersion> getFullFeedVersions () {
-        ArrayList<FeedVersion> ret = new ArrayList<FeedVersion>(feedVersionIds.size());
+    public List<FeedVersion> retrieveFullFeedVersions() {
+        ArrayList<FeedVersion> ret = new ArrayList<>(feedVersionIds.size());
 
         for (String id : feedVersionIds) {
-            FeedVersion v = FeedVersion.get(id);
+            FeedVersion v = Persistence.feedVersions.getById(id);
             if (v != null)
                 ret.add(v);
             else
@@ -88,16 +85,19 @@ public class Deployment extends Model implements Serializable {
     }
 
     /** All of the feed versions used in this deployment, summarized so that the Internet won't break */
-    @JsonView(JsonViews.UserInterface.class)
-    public List<SummarizedFeedVersion> getFeedVersions () {
-        ArrayList<SummarizedFeedVersion> ret = new ArrayList<SummarizedFeedVersion>(feedVersionIds.size());
+    @JsonProperty("feedVersions")
+    public List<SummarizedFeedVersion> retrieveFeedVersions() {
+        // return empty array if feedVersionIds is null
+        if (feedVersionIds == null) return new ArrayList<>();
+
+        ArrayList<SummarizedFeedVersion> ret = new ArrayList<>(feedVersionIds.size());
 
         for (String id : feedVersionIds) {
-            FeedVersion v = FeedVersion.get(id);
+            FeedVersion v = Persistence.feedVersions.getById(id);
 
             // should never happen but can if someone monkeyed around with dump/restore
             if (v != null)
-                ret.add(new SummarizedFeedVersion(FeedVersion.get(id)));
+                ret.add(new SummarizedFeedVersion(Persistence.feedVersions.getById(id)));
             else
                 LOG.error("Reference integrity error for deployment {} ({}), feed version {} does not exist", this.name, this.id, id);
         }
@@ -105,8 +105,8 @@ public class Deployment extends Model implements Serializable {
         return ret;
     }
 
-    public void setFeedVersions (Collection<FeedVersion> versions) {
-        feedVersionIds = new ArrayList<String>(versions.size());
+    public void storeFeedVersions(Collection<FeedVersion> versions) {
+        feedVersionIds = new ArrayList<>(versions.size());
 
         for (FeedVersion version : versions) {
             feedVersionIds.add(version.id);
@@ -119,10 +119,16 @@ public class Deployment extends Model implements Serializable {
     /** The commit of OTP being used on this deployment */
     public String otpCommit;
 
+    /** Date when the deployment was last deployed to a server */
+    public Date lastDeployed;
+
     /**
      * The routerId of this deployment
      */
     public String routerId;
+
+    public String customBuildConfig;
+    public String customRouterConfig;
 
     /**
      * If this deployment is for a single feed source, the feed source this deployment is for.
@@ -141,14 +147,15 @@ public class Deployment extends Model implements Serializable {
      */
     @JsonView(JsonViews.UserInterface.class)
     @JsonInclude(Include.ALWAYS)
-    public List<FeedSource> getInvalidFeedSources () {
+    @JsonProperty("invalidFeedSources")
+    public List<FeedSource> invalidFeedSources () {
         if (invalidFeedSourceIds == null)
             return null;
 
         ArrayList<FeedSource> ret = new ArrayList<FeedSource>(invalidFeedSourceIds.size());
 
         for (String id : invalidFeedSourceIds) {
-            ret.add(FeedSource.get(id));
+            ret.add(Persistence.feedSources.getById(id));
         }
 
         return ret;
@@ -159,16 +166,15 @@ public class Deployment extends Model implements Serializable {
         super();
 
         this.feedSourceId = feedSource.id;
-        this.setProject(feedSource.getProject());
-        this.dateCreated = new Date();
-        this.feedVersionIds = new ArrayList<String>();
+        this.projectId = feedSource.projectId;
+        this.feedVersionIds = new ArrayList<>();
 
         DateFormat df = new SimpleDateFormat("yyyyMMdd");
 
         this.name = StringUtils.getCleanName(feedSource.name) + "_" + df.format(dateCreated);
 
         // always use the latest, no matter how broken it is, so we can at least see how broken it is
-        this.feedVersionIds.add(feedSource.getLatestVersionId());
+        this.feedVersionIds.add(feedSource.latestVersionId());
 
         this.routerId = StringUtils.getCleanName(feedSource.name) + "_" + feedSourceId;
 
@@ -181,17 +187,15 @@ public class Deployment extends Model implements Serializable {
 
         this.feedSourceId = null;
 
-        this.setProject(project);
+        this.projectId = project.id;
 
-        this.dateCreated = new Date();
+        this.feedVersionIds = new ArrayList<>();
+        this.invalidFeedSourceIds = new ArrayList<>();
 
-        this.feedVersionIds = new ArrayList<String>();
-        this.invalidFeedSourceIds = new ArrayList<String>();
-
-        FEEDSOURCE: for (FeedSource s : project.getProjectFeedSources()) {
+        FEEDSOURCE: for (FeedSource s : project.retrieveProjectFeedSources()) {
             // only include deployable feeds
             if (s.deployable) {
-                FeedVersion latest = s.getLatest();
+                FeedVersion latest = s.retrieveLatest();
 
                 // find the newest version that can be deployed
                 while (true) {
@@ -204,7 +208,7 @@ public class Deployment extends Model implements Serializable {
                         break;
                     }
 
-                    latest = latest.getPreviousVersion();
+                    latest = latest.previousVersion();
                 }
 
                 // this version is the latest good version
@@ -222,38 +226,13 @@ public class Deployment extends Model implements Serializable {
         // do nothing.
     }
 
-    /** Get a deployment by ID */
-    public static Deployment get (String id) {
-        return deploymentStore.getById(id);
-    }
-
-    /** Save this deployment and commit it */
-    public void save () {
-        this.save(true);
-    }
-
-    /** Save this deployment */
-    public void save (boolean commit) {
-        if (commit)
-            deploymentStore.save(id, this);
-        else
-            deploymentStore.saveWithoutCommit(id, this);
-    }
-
-    /**
-     * Delete this deployment and everything that it contains.
-     */
-    public void delete() {
-        deploymentStore.delete(this.id);
-    }
-
     /** Dump this deployment to the given file
      * @param output the output file
      * @param includeOsm should an osm.pbf file be included in the dump?
      * @param includeOtpConfig should OTP build-config.json and router-config.json be included?
      */
     public void dump (File output, boolean includeManifest, boolean includeOsm, boolean includeOtpConfig) throws IOException {
-        // create the zipfile
+        // Create the zipfile.
         ZipOutputStream out;
         try {
             out = new ZipOutputStream(new FileOutputStream(output));
@@ -265,170 +244,122 @@ public class Deployment extends Model implements Serializable {
             // save the manifest at the beginning of the file, for read/seek efficiency
             ZipEntry manifestEntry = new ZipEntry("manifest.json");
             out.putNextEntry(manifestEntry);
-
             // create the json manifest
-            JsonManager<Deployment> jsonManifest = new JsonManager<Deployment>(Deployment.class,
-                    JsonViews.UserInterface.class);
+            JsonManager<Deployment> jsonManifest = new JsonManager<>(Deployment.class, JsonViews.UserInterface.class);
             // this mixin gives us full feed validation results, not summarized
             jsonManifest.addMixin(Deployment.class, DeploymentFullFeedVersionMixin.class);
-
             byte[] manifest = jsonManifest.write(this).getBytes();
-
+            // Write manifest and close entry.
             out.write(manifest);
-
             out.closeEntry();
         }
 
-        // write each of the GTFS feeds
-        for (FeedVersion v : this.getFullFeedVersions()) {
-            File feed = v.getGtfsFile();
-
+        // Write each of the feed version GTFS files into the zip.
+        for (FeedVersion v : this.retrieveFullFeedVersions()) {
+            File gtfsFile = v.retrieveGtfsFile();
             FileInputStream in;
-
             try {
-                in = new FileInputStream(feed);
+                in = new FileInputStream(gtfsFile);
             } catch (FileNotFoundException e1) {
                 LOG.error("Could not retrieve file for {}", v.name);
                 throw new RuntimeException(e1);
             }
-
-            ZipEntry e = new ZipEntry(feed.getName());
+            ZipEntry e = new ZipEntry(gtfsFile.getName());
             out.putNextEntry(e);
-
-            // copy the zipfile 100k at a time
-            int bufSize = 100 * 1024;
-            byte[] buff = new byte[bufSize];
-            int readBytes;
-
-            while (true) {
-                try {
-                    readBytes = in.read(buff);
-                } catch (IOException e1) {
-                    try {
-                        in.close();
-                    } catch (IOException e2) {
-                        throw new RuntimeException(e2);
-                    }
-                    throw new RuntimeException(e1);
-                }
-
-                if (readBytes == -1)
-                    // we've copied the whole file
-                    break;
-
-                out.write(buff, 0, readBytes);
-            }
-
+            ByteStreams.copy(in, out);
             try {
                 in.close();
             } catch (IOException e1) {
-                throw new RuntimeException(e1);
+                LOG.warn("Could not close GTFS file input stream {}", gtfsFile.getName());
+                e1.printStackTrace();
             }
-
             out.closeEntry();
         }
 
         if (includeOsm) {
-            // extract OSM and insert it into the deployment bundle
+            // Extract OSM and insert it into the deployment bundle
             ZipEntry e = new ZipEntry("osm.pbf");
             out.putNextEntry(e);
-            InputStream is = getOsmExtract(getProjectBounds());
+            InputStream is = downloadOsmExtract(retrieveProjectBounds());
             ByteStreams.copy(is, out);
             try {
                 is.close();
             } catch (IOException e1) {
+                LOG.warn("Could not close OSM input stream");
                 e1.printStackTrace();
             }
-
             out.closeEntry();
         }
 
         if (includeOtpConfig) {
-            // write build-config.json and router-config.json
-            Project proj = this.getProject();
-
-            if (proj.buildConfig != null) {
+            // Write build-config.json and router-config.json
+            Project project = this.parentProject();
+            ObjectMapper mapper = new ObjectMapper();
+            // Use custom build config if it is not null, otherwise default to project build config.
+            byte[] buildConfigAsBytes = customBuildConfig != null
+                ? customBuildConfig.getBytes(StandardCharsets.UTF_8)
+                : project.buildConfig != null
+                    ? mapper.writer().writeValueAsBytes(project.buildConfig)
+                    : null;
+            if (buildConfigAsBytes != null) {
+                // Include build config if not null.
                 ZipEntry buildConfigEntry = new ZipEntry("build-config.json");
                 out.putNextEntry(buildConfigEntry);
-
-                ObjectMapper mapper = new ObjectMapper();
                 mapper.setSerializationInclusion(Include.NON_NULL);
-                byte[] buildConfig = mapper.writer().writeValueAsBytes(proj.buildConfig);
-                out.write(buildConfig);
-
+                out.write(buildConfigAsBytes);
                 out.closeEntry();
             }
-            // TODO: remove branding url root here and from config.yml
-            String brandingUrlRoot = DataManager.getConfigPropertyAsText("application.data.branding_public");
-            OtpRouterConfig routerConfig = proj.routerConfig;
-            if (routerConfig == null && brandingUrlRoot != null) {
-                routerConfig = new OtpRouterConfig();
-            }
-            if (routerConfig != null) {
-                routerConfig.brandingUrlRoot = brandingUrlRoot;
+            // Use custom router config if it is not null, otherwise default to project router config.
+            byte[] routerConfigAsBytes = customRouterConfig != null
+                ? customRouterConfig.getBytes(StandardCharsets.UTF_8)
+                : project.routerConfig != null
+                    ? mapper.writer().writeValueAsBytes(project.routerConfig)
+                    : null;
+            if (routerConfigAsBytes != null) {
+                // Include router config if not null.
                 ZipEntry routerConfigEntry = new ZipEntry("router-config.json");
                 out.putNextEntry(routerConfigEntry);
-
-                ObjectMapper mapper = new ObjectMapper();
                 mapper.setSerializationInclusion(Include.NON_NULL);
-                out.write(mapper.writer().writeValueAsBytes(routerConfig));
-
+                out.write(routerConfigAsBytes);
                 out.closeEntry();
             }
         }
-
+        // Finally close the zip output stream. The dump file is now complete.
         out.close();
     }
 
-    // Get OSM extract
-    public static InputStream getOsmExtract(Rectangle2D bounds) {
-        // call vex server
-        URL vexUrl = null;
-        try {
-            vexUrl = new URL(String.format("%s/?n=%.6f&e=%.6f&s=%.6f&w=%.6f",
-                    DataManager.getConfigPropertyAsText("OSM_VEX"),
-                    bounds.getMaxY(), bounds.getMaxX(), bounds.getMinY(), bounds.getMinX()));
-        } catch (MalformedURLException e1) {
-            e1.printStackTrace();
+    /**
+     * Get OSM extract from OSM vex server as input stream.
+     */
+    public static InputStream downloadOsmExtract(Rectangle2D rectangle2D) throws IOException {
+        Bounds bounds = new Bounds(rectangle2D);
+        if (!bounds.areValid()) {
+            throw new IllegalArgumentException(String.format("Provided bounds %s are not valid", bounds.toVexString()));
         }
-        LOG.info("Getting OSM extract at " + vexUrl.toString());
-        HttpURLConnection conn = null;
-        try {
-            conn = (HttpURLConnection) vexUrl.openConnection();
-        } catch (IOException e1) {
-            e1.printStackTrace();
-        }
-        try {
-            conn.connect();
-        } catch (IOException e1) {
-            e1.printStackTrace();
-        }
-
-        InputStream is = null;
-        try {
-            is = conn.getInputStream();
-        } catch (IOException e1) {
-            e1.printStackTrace();
-        }
-        return is;
+        URL vexUrl = new URL(String.format(Locale.ROOT, "%s/%s.pbf",
+                DataManager.getConfigPropertyAsText("OSM_VEX"),
+                bounds.toVexString()));
+        LOG.info("Getting OSM extract at {}", vexUrl.toString());
+        HttpURLConnection conn = (HttpURLConnection) vexUrl.openConnection();
+        conn.connect();
+        return conn.getInputStream();
     }
 
-    public static Rectangle2D getFeedVersionBounds(FeedVersion version) {
-        return null;
-    }
-
-    // Get the union of the bounds of all the feeds in this deployment
+    /**
+     * Get the union of the bounds of all the feed versions in this deployment or if using custom bounds, return the
+     * project's custom bounds.
+     */
     @JsonView(JsonViews.UserInterface.class)
-    public Rectangle2D getProjectBounds() {
+    @JsonProperty("projectBounds")
+    public Rectangle2D retrieveProjectBounds() {
 
-        Project proj = this.getProject();
-        if(proj.useCustomOsmBounds != null && proj.useCustomOsmBounds) {
-            Rectangle2D bounds = new Rectangle2D.Double(proj.osmWest, proj.osmSouth,
-                    proj.osmEast - proj.osmWest, proj.osmNorth - proj.osmSouth);
-            return bounds;
+        Project project = this.parentProject();
+        if(project.useCustomOsmBounds && project.bounds != null) {
+            // Simply return the project's custom bounds if not determining bounds via feed version bounds.
+            return project.bounds.toRectangle2D();
         }
 
-        List<SummarizedFeedVersion> versions = getFeedVersions();
+        List<SummarizedFeedVersion> versions = retrieveFeedVersions();
 
         if (versions.size() == 0)
             return null;
@@ -439,18 +370,19 @@ public class Deployment extends Model implements Serializable {
         // i = 1 because we've already included bounds 0
         for (int i = 0; i < versions.size(); i++) {
             SummarizedFeedVersion version = versions.get(i);
-//            return getFeedVersionBounds(version);
-            if (version.validationResult != null && version.validationResult.bounds != null) {
+
+            // set version bounds from validation result
+            if (version.boundsAreValid()) {
                 if (!boundsSet) {
                     // set the bounds, don't expand the null bounds
-                    bounds.setRect(versions.get(0).validationResult.bounds);
+                    bounds.setRect(versions.get(0).validationResult.bounds.toRectangle2D());
                     boundsSet = true;
                 } else {
-                    bounds.add(version.validationResult.bounds);
+                    bounds.add(version.validationResult.bounds.toRectangle2D());
                 }
+            } else {
+                LOG.warn("Feed version {} has no bounds", version.id);
             }
-            else
-                LOG.warn("Feed version %s has no bounds", version);
         }
 
         // expand the bounds by (about) 10 km in every direction
@@ -484,37 +416,23 @@ public class Deployment extends Model implements Serializable {
     }
 
     /**
-     * Commit changes to the datastore
+     * Get the deployments currently deployed to a particular server and router combination.
      */
-    public static void commit () {
-        deploymentStore.commit();
+    public static FindIterable<Deployment> retrieveDeploymentForServerAndRouterId(String server, String routerId) {
+        return Persistence.deployments.getMongoCollection().find(and(
+                eq("deployedTo", server),
+                eq("routerId", routerId)
+        ));
     }
 
-    /**
-     * Get all of the deployments.
-     */
-    public static Collection<Deployment> getAll () {
-        return deploymentStore.getAll();
-    }
-
-    /**
-     * Get the deployment currently deployed to a particular server.
-     */
-    public static Deployment getDeploymentForServerAndRouterId (String server, String routerId) {
-        for (Deployment d : getAll()) {
-            if (d.deployedTo != null && d.deployedTo.equals(server)) {
-                if ((routerId != null && routerId.equals(d.routerId)) || d.routerId == routerId) {
-                    return d;
-                }
-            }
-        }
-
-        return null;
-    }
-
-    public String getOrganizationId () {
-        Project project = getProject();
+    @JsonProperty("organizationId")
+    public String organizationId() {
+        Project project = parentProject();
         return project == null ? null : project.organizationId;
+    }
+
+    public boolean delete() {
+        return Persistence.deployments.removeById(this.id);
     }
 
     /**
@@ -530,13 +448,20 @@ public class Deployment extends Model implements Serializable {
         public int version;
 
         public SummarizedFeedVersion (FeedVersion version) {
-            this.validationResult = new FeedValidationResultSummary(version.validationResult);
-            this.feedSource = version.getFeedSource();
+            this.validationResult = new FeedValidationResultSummary(version);
+            this.feedSource = version.parentFeedSource();
             this.updated = version.updated;
             this.id = version.id;
-            this.nextVersionId = version.getNextVersionId();
-            this.previousVersionId = version.getPreviousVersionId();
+            this.nextVersionId = version.nextVersionId();
+            this.previousVersionId = version.previousVersionId();
             this.version = version.version;
+        }
+
+        /**
+         * Determine if the bounds for the summary version exist and are valid.
+         */
+        public boolean boundsAreValid () {
+            return validationResult != null && validationResult.bounds != null && validationResult.bounds.areValid();
         }
     }
 
@@ -549,10 +474,10 @@ public class Deployment extends Model implements Serializable {
      */
     public abstract static class DeploymentFullFeedVersionMixin {
         @JsonIgnore
-        public abstract Collection<SummarizedFeedVersion> getFeedVersions();
+        public abstract Collection<SummarizedFeedVersion> retrievefeedVersions();
 
-        @JsonProperty("feedVersions")
+//        @JsonProperty("feedVersions")
         @JsonIgnore(false)
-        public abstract Collection<FeedVersion> getFullFeedVersions ();
+        public abstract Collection<FeedVersion> retrieveFullFeedVersions ();
     }
 }
