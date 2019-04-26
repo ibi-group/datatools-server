@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.controllers.api;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.CreateFeedVersionFromSnapshotJob;
+import com.conveyal.datatools.manager.jobs.GisExportJob;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -21,8 +22,12 @@ import spark.Response;
 
 import javax.servlet.http.HttpServletResponse;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Date;
+import java.util.List;
 
 import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
 import static com.conveyal.datatools.common.utils.SparkUtils.copyRequestStreamIntoFile;
@@ -260,6 +265,26 @@ public class FeedVersionController  {
             logMessageAndHalt(req, 500, "Could not publish feed.", e);
             return null;
         }
+    }
+
+    public static FileInputStream exportGis (Request req, Response res) throws IOException {
+        String type = req.queryParams("type");
+        List<String> feedIds = Arrays.asList(req.queryParams("feedId").split(","));
+        File temp = File.createTempFile("gis_" + type, ".zip");
+
+        GisExportJob gisExportJob = new GisExportJob(GisExportJob.Type.valueOf(type), temp, feedIds);
+        gisExportJob.run();
+
+        FileInputStream fis = new FileInputStream(temp);
+
+        res.type("application/zip");
+        res.header("Content-Disposition", "attachment;filename=" + temp.getName().replaceAll("[^a-zA-Z0-9]", "") + ".zip");
+
+        // will not actually be deleted until download has completed
+        // http://stackoverflow.com/questions/24372279
+        temp.delete();
+
+        return fis;
     }
 
     /**

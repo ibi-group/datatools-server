@@ -52,6 +52,7 @@
     </scm>
     <properties>
         <jackson.version>2.9.8</jackson.version>
+        <geotools.version>20.3</geotools.version>
     </properties>
     <build>
         <resources>
@@ -310,7 +311,18 @@
         <dependency>
             <groupId>org.geotools</groupId>
             <artifactId>gt-shapefile</artifactId>
-            <version>19.2</version>
+            <version>${geotools.version}</version>
+        </dependency>
+        <!-- gt-metadata and gt-api contains some dependencies required by gt-shapefile -->
+        <dependency>
+            <groupId>org.geotools</groupId>
+            <artifactId>gt-metadata</artifactId>
+            <version>${geotools.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.geotools</groupId>
+            <artifactId>gt-api</artifactId>
+            <version>${geotools.version}</version>
         </dependency>
 
         <!-- Unit testing -->

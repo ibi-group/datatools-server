@@ -6,7 +6,6 @@ import com.conveyal.datatools.common.utils.CorsFilter;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.editor.controllers.EditorLockController;
 import com.conveyal.datatools.editor.controllers.api.EditorControllerImpl;
-import com.conveyal.datatools.editor.controllers.api.GisController;
 import com.conveyal.datatools.editor.controllers.api.SnapshotController;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.controllers.DumpController;
@@ -240,7 +239,6 @@ public class DataManager {
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.STOPS, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.TRIPS, DataManager.GTFS_DATA_SOURCE);
             // TODO: Add transfers.txt controller?
-            GisController.register(EDITOR_API_PREFIX);
         }
 
         // log all exceptions to system.out
