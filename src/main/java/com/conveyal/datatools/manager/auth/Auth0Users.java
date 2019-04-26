@@ -167,7 +167,7 @@ public class Auth0Users {
      * Sets uri builder scheme port and host according to whether a test environment is in effect
      */
     private static void setSchemePortAndHost(URIBuilder builder) {
-        if (AUTH0_DOMAIN.equals("localhost:8089")) {
+        if (AUTH0_DOMAIN.equals("your-auth0-domain")) {
             // set items for testing purposes assuming use of a Wiremock server
             builder.setScheme("http");
             builder.setPort(8089);
