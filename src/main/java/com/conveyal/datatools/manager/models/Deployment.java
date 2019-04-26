@@ -448,7 +448,7 @@ public class Deployment extends Model implements Serializable {
         public int version;
 
         public SummarizedFeedVersion (FeedVersion version) {
-            this.validationResult = new FeedValidationResultSummary(version.validationResult, version.feedLoadResult);
+            this.validationResult = new FeedValidationResultSummary(version);
             this.feedSource = version.parentFeedSource();
             this.updated = version.updated;
             this.id = version.id;

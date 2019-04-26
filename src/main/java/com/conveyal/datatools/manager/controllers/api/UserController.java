@@ -53,19 +53,19 @@ import static spark.Spark.put;
  */
 public class UserController {
 
-    private static String AUTH0_DOMAIN = DataManager.getConfigPropertyAsText("AUTH0_DOMAIN");
-    private static String AUTH0_CLIENT_ID = DataManager.getConfigPropertyAsText("AUTH0_CLIENT_ID");
-    private static String AUTH0_API_TOKEN = DataManager.getConfigPropertyAsText("AUTH0_TOKEN");
+    private static final String AUTH0_DOMAIN = DataManager.getConfigPropertyAsText("AUTH0_DOMAIN");
+    private static final String AUTH0_CLIENT_ID = DataManager.getConfigPropertyAsText("AUTH0_CLIENT_ID");
+    private static final String AUTH0_API_TOKEN = DataManager.getConfigPropertyAsText("AUTH0_TOKEN");
+    static final int TEST_AUTH0_PORT = 8089;
+    static final String TEST_AUTH0_DOMAIN = String.format("localhost:%d", TEST_AUTH0_PORT);
     private static Logger LOG = LoggerFactory.getLogger(UserController.class);
     private static ObjectMapper mapper = new ObjectMapper();
-    private static final String charset = "UTF-8";
-    // set the base users URL based on whether the domain is the test environment
-    private static String baseUsersUrl = (
-        AUTH0_DOMAIN.equals("localhost:8089")
-            ? "http://localhost:8089"
-            : "https://" + AUTH0_DOMAIN
-    ) + "/api/v2/users";
-    public static JsonManager<Project> json = new JsonManager<>(Project.class, JsonViews.UserInterface.class);
+    private static final String UTF_8 = "UTF-8";
+    static final String USERS_PATH = "/api/v2/users";
+    static final String DEFAULT_BASE_USERS_URL = "https://" + AUTH0_DOMAIN  + USERS_PATH;
+    /** Users URL uses Auth0 domain by default, but can be overridden with {@link #setBaseUsersUrl(String)} for testing. */
+    private static String baseUsersUrl = DEFAULT_BASE_USERS_URL;
+    private static final JsonManager<Project> json = new JsonManager<>(Project.class, JsonViews.UserInterface.class);
 
     /**
      * HTTP endpoint to get a single Auth0 user for the application (by specified ID param). Note, this uses a different
@@ -75,6 +75,14 @@ public class UserController {
         HttpGet request = new HttpGet(getUserIdUrl(req));
         setHeaders(request);
         return executeRequestAndGetResult(request, req);
+    }
+
+    /**
+     * Determines whether the user controller is being run in a testing environment by checking if the users URL contains
+     * the {@link #TEST_AUTH0_DOMAIN}.
+     */
+    public static boolean inTestingEnvironment() {
+        return baseUsersUrl.contains(TEST_AUTH0_DOMAIN);
     }
 
     /**
@@ -177,7 +185,11 @@ public class UserController {
         Auth0UserProfile user = getUserById(userId);
 
         if (user == null) {
-            logMessageAndHalt(req, 404, "User not found");
+            logMessageAndHalt(
+                req,
+                404,
+                String.format("Could not update user: User with id %s not found", userId)
+            );
         }
 
         LOG.info("Updating user {}", user.getEmail());
@@ -293,7 +305,7 @@ public class UserController {
      */
     private static void setHeaders(HttpRequestBase request) {
         request.addHeader("Authorization", "Bearer " + AUTH0_API_TOKEN);
-        request.setHeader("Accept-Charset", charset);
+        request.setHeader("Accept-Charset", UTF_8);
         request.setHeader("Content-Type", "application/json");
     }
 
@@ -344,7 +356,7 @@ public class UserController {
     private static void setRequestEntityUsingJson(HttpEntityEnclosingRequestBase request, String json, Request req) {
         HttpEntity entity = null;
         try {
-            entity = new ByteArrayEntity(json.getBytes(charset));
+            entity = new ByteArrayEntity(json.getBytes(UTF_8));
         } catch (UnsupportedEncodingException e) {
             logMessageAndHalt(
                 req,
@@ -514,6 +526,14 @@ public class UserController {
             this.feedVersionIndex = version.version;
             this.feedVersionName = version.name;
         }
+    }
+
+    /**
+     * Used to override the base url for making requests to Auth0. This is primarily used for testing purposes to set
+     * the url to something that is stubbed with WireMock.
+     */
+    public static void setBaseUsersUrl (String url) {
+        baseUsersUrl = url;
     }
 
     public static void register (String apiPrefix) {
