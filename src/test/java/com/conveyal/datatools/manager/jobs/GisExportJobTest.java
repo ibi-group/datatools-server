@@ -84,7 +84,7 @@ public class GisExportJobTest {
                     LOG.info("{}: {}", name, property.getValue());
                     if ("the_geom".equals(name)) {
                         // Check that the geometry was exported properly.
-//                        assertThat(property.getValue(), notNullValue());
+                        assertThat(property.getValue(), notNullValue());
                     }
                 }
             }
