@@ -40,8 +40,7 @@ public class Auth0Users {
     private static URI getUrl(String searchQuery, int page, int perPage, boolean includeTotals) {
         // always filter users by datatools client_id
         String defaultQuery = "app_metadata.datatools.client_id:" + clientId;
-        URIBuilder builder = new URIBuilder();
-        setSchemePortAndHost(builder);
+        URIBuilder builder = getURIBuilder();
         builder.setPath("/api/v2/users");
         builder.setParameter("sort", "email:1");
         builder.setParameter("per_page", Integer.toString(perPage));
@@ -141,8 +140,7 @@ public class Auth0Users {
      * Get a single Auth0 user for the specified ID.
      */
     public static Auth0UserProfile getUserById(String id) {
-        URIBuilder builder = new URIBuilder();
-        setSchemePortAndHost(builder);
+        URIBuilder builder = getURIBuilder();
         builder.setPath("/api/v2/users/" + id);
         URI uri = null;
         try {
@@ -164,9 +162,10 @@ public class Auth0Users {
     }
 
     /**
-     * Sets uri builder scheme port and host according to whether a test environment is in effect
+     * Creates a new uri builder and sets the scheme, port and host according to whether a test environment is in effect
      */
-    private static void setSchemePortAndHost(URIBuilder builder) {
+    private static URIBuilder getURIBuilder() {
+        URIBuilder builder = new URIBuilder();
         if (AUTH0_DOMAIN.equals("your-auth0-domain")) {
             // set items for testing purposes assuming use of a Wiremock server
             builder.setScheme("http");
@@ -177,6 +176,7 @@ public class Auth0Users {
             builder.setScheme("https");
             builder.setHost(AUTH0_DOMAIN);
         }
+        return builder;
     }
 
     /**
