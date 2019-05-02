@@ -1,3 +1,4 @@
+dist: trusty # jdk 8 not available on xenial
 language: java
 jdk:
 - oraclejdk8
