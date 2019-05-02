@@ -15,11 +15,14 @@ import com.csvreader.CsvReader;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.supercsv.io.CsvListWriter;
+import org.supercsv.prefs.CsvPreference;
 
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -201,7 +204,12 @@ public class MergeFeedsJob extends MonitorableJob {
                 // a single agency feed.
                 // TODO: Perhaps future work can generate a special feed_info file for the merged
                 //  file.
-                LOG.info("Skipping feed_info table for regional merge.");
+                LOG.warn("Skipping feed_info table for regional merge.");
+                continue;
+            }
+            if (table.name.equals(Table.PATTERNS.name) || table.name.equals(Table.PATTERN_STOP.name)) {
+                LOG.warn("Skipping editor-only table {}.", table.name);
+                continue;
             }
             double percentComplete = Math.round((double) i / numberOfTables * 10000d) / 100d;
             status.update("Merging " + table.name, percentComplete);
@@ -209,7 +217,7 @@ public class MergeFeedsJob extends MonitorableJob {
             LOG.info("Writing {} to merged feed", table.name);
             int mergedLineNumber = constructMergedTable(table, feedsToMerge, out);
             if (mergedLineNumber == 0) {
-                LOG.info("Skipping {} table. No entries found in zip files.", table.name);
+                LOG.warn("Skipping {} table. No entries found in zip files.", table.name);
             } else if (mergedLineNumber == -1) {
                 LOG.error("Merge {} table failed!", table.name);
             }
@@ -301,6 +309,8 @@ public class MergeFeedsJob extends MonitorableJob {
      */
     private int constructMergedTable(Table table, List<FeedToMerge> feedsToMerge,
         ZipOutputStream out) throws IOException {
+        // CSV writer used to write to zip file.
+        CsvListWriter writer = new CsvListWriter(new OutputStreamWriter(out), CsvPreference.STANDARD_PREFERENCE);
         String keyField = table.getKeyFieldName();
         String orderField = table.getOrderFieldName();
         if (mergeType.equals(MTC)) {
@@ -414,6 +424,8 @@ public class MergeFeedsJob extends MonitorableJob {
                             // For the first line of the stops table, check that the alt. key
                             // field (stop_code) is present. If it is not, revert to the original
                             // key field. This is only pertinent for the MTC merge type.
+                            // TODO: Use more sophisticated check for missing stop_codes than
+                            //  simply the first line containing the value.
                             if (feedIndex == 0) {
                                 // Check that the first file contains stop_code values.
                                 if ("".equals(keyValue)) {
@@ -504,14 +516,12 @@ public class MergeFeedsJob extends MonitorableJob {
                                     //  duplicates? I think we would need to consider the
                                     //  service_id:exception_type:date as the unique key and include any
                                     //  all entries as long as they are unique on this key.
-                                    for (NewGTFSError error : idErrors) {
-                                        if (error.errorType.equals(NewGTFSErrorType.DUPLICATE_ID)) {
-                                            String key = getFieldScopedValue(table, idScope, val);
-                                            // Modify service_id and ensure that referencing trips
-                                            // have service_id updated.
-                                            val = String.join(":", idScope, val);
-                                            mergeFeedsResult.remappedIds.put(key, val);
-                                        }
+                                    if (hasDuplicateError(idErrors)) {
+                                        String key = getTableScopedValue(table, idScope, val);
+                                        // Modify service_id and ensure that referencing trips
+                                        // have service_id updated.
+                                        valueToWrite = String.join(":", idScope, val);
+                                        mergeFeedsResult.remappedIds.put(key, valueToWrite);
                                     }
                                     // If a service_id from the active calendar has both the
                                     // start_date and end_date in the future, the service will be
@@ -530,7 +540,7 @@ public class MergeFeedsJob extends MonitorableJob {
                                                 "Skipping calendar entry {} because it operates in the future.",
                                                 keyValue);
                                             String key =
-                                                getFieldScopedValue(table, idScope, keyValue);
+                                                getTableScopedValue(table, idScope, keyValue);
                                             mergeFeedsResult.skippedIds.add(key);
                                             skipRecord = true;
                                             continue;
@@ -580,6 +590,8 @@ public class MergeFeedsJob extends MonitorableJob {
                                     // NOTE: route case is also used by the stops case, so the route
                                     // case must follow this block.
                                 case "routes":
+                                    boolean useAltKey =
+                                        keyField.equals("stop_code") || keyField.equals("route_short_name");
                                     // First, check uniqueness of primary key value (i.e., stop or route ID)
                                     // in case the stop_code or route_short_name are being used. This
                                     // must occur unconditionally because each record must be tracked
@@ -593,29 +605,47 @@ public class MergeFeedsJob extends MonitorableJob {
                                     // matching route_short_names/stop_codes between the datasets shall be considered same route/stop. Any
                                     // route_short_name/stop_code in active data not present in the future will be appended to the
                                     // future routes/stops file.
-                                    if (keyField.equals("stop_code") || keyField
-                                        .equals("route_short_name")) {
-                                        for (NewGTFSError error : idErrors) {
-                                            if (error.errorType
-                                                .equals(NewGTFSErrorType.DUPLICATE_ID)) {
-                                                // If we encounter a route/stop that shares its alt. ID with a previous route/stop,
-                                                // we need to remap its route_id/stop_id field so that references point to the previous
-                                                // route_id/stop_id.
-                                                String currentId = index == 0 ? val : rowValues[0];
-                                                String key =
-                                                    getFieldScopedValue(table, idScope, currentId);
-                                                // Extract the route_id/stop_id value used for the route/stop with matching alt ID.
-                                                String[] strings =
-                                                    rowValuesForStopOrRouteId.get(val);
-                                                String id = strings[0];
-                                                if (!id.equals(currentId)) {
-                                                    // Remap this row's route_id/stop_id to ensure
-                                                    // that referencing entities (trips, stop_times) have their
-                                                    // references updated.
-                                                    mergeFeedsResult.remappedIds.put(key, id);
-                                                }
+                                    if (useAltKey) {
+                                        if ("".equals(val)) {
+                                            // If alt key is empty (which is permitted), skip
+                                            // checking of alt key dupe errors/re-mapping values and
+                                            // simply use the primary key (route_id/stop_id).
+                                            if (hasDuplicateError(primaryKeyErrors)) {
                                                 skipRecord = true;
                                             }
+                                        } else if (hasDuplicateError(idErrors)) {
+                                            // If we encounter a route/stop that shares its alt.
+                                            // ID with a previous route/stop, we need to
+                                            // remap its route_id/stop_id field so that
+                                            // references point to the previous
+                                            // route_id/stop_id. For example,
+                                            // route_short_name in both feeds is "ABC" but
+                                            // each route has a different route_id (123 and
+                                            // 456). This block will map references to 456 to
+                                            // 123 so that ABC/123 is the route of record.
+                                            ////////////////////////////////////////////////////////
+                                            // Get current route/stop ID. (Note: primary
+                                            // ID index is always zero because we're
+                                            // iterating over the spec fields).
+                                            String currentPrimaryKey = rowValues[0];
+                                            // Get unique key to check for remapped ID when
+                                            // writing values to file.
+                                            String key =
+                                                getTableScopedValue(table, idScope, currentPrimaryKey);
+                                            // Extract the route/stop ID value used for the
+                                            // route/stop with already encountered matching
+                                            // short name/stop code.
+                                            String[] strings =
+                                                rowValuesForStopOrRouteId.get(String.join(
+                                                    ":", keyField, val));
+                                            String keyForMatchingAltId = strings[0];
+                                            if (!keyForMatchingAltId.equals(currentPrimaryKey)) {
+                                                // Remap this row's route_id/stop_id to ensure
+                                                // that referencing entities (trips, stop_times)
+                                                // have their references updated.
+                                                mergeFeedsResult.remappedIds.put(key, keyForMatchingAltId);
+                                            }
+                                            skipRecord = true;
                                         }
                                         // Next check for regular ID conflicts (e.g., on route_id or stop_id) because any
                                         // conflicts here will actually break the feed. This essentially handles the case
@@ -624,26 +654,19 @@ public class MergeFeedsJob extends MonitorableJob {
                                         // matching on short name, so we must modify the route_id.
                                         if (!skipRecord && !referenceTracker.transitIds
                                             .contains(String.join(":", keyField, keyValue))) {
-                                            for (NewGTFSError error : primaryKeyErrors) {
-                                                if (error.errorType
-                                                    .equals(NewGTFSErrorType.DUPLICATE_ID)) {
-                                                    String key =
-                                                        getFieldScopedValue(table, idScope, val);
-                                                    // Modify route_id and ensure that referencing trips have route_id updated.
-                                                    val = String.join(":", idScope, val);
-                                                    mergeFeedsResult.remappedIds.put(key, val);
-                                                }
+                                            if (hasDuplicateError(primaryKeyErrors)) {
+                                                String key = getTableScopedValue(table, idScope, val);
+                                                // Modify route_id and ensure that referencing trips
+                                                // have route_id updated.
+                                                valueToWrite = String.join(":", idScope, val);
+                                                mergeFeedsResult.remappedIds.put(key, valueToWrite);
                                             }
                                         }
                                     } else {
-                                        // Key field has defaulted to the standard primary key field (stop_id or route_id),
-                                        // which makes the check much simpler (just skip the duplicate record).
-                                        for (NewGTFSError error : idErrors) {
-                                            if (error.errorType
-                                                .equals(NewGTFSErrorType.DUPLICATE_ID)) {
-                                                skipRecord = true;
-                                            }
-                                        }
+                                        // Key field has defaulted to the standard primary key field
+                                        // (stop_id or route_id), which makes the check much
+                                        // simpler (just skip the duplicate record).
+                                        if (hasDuplicateError(idErrors)) skipRecord = true;
                                     }
 
                                     if (newAgencyId != null && field.name.equals("agency_id")) {
@@ -655,22 +678,18 @@ public class MergeFeedsJob extends MonitorableJob {
                                     break;
                                 default:
                                     // For any other table, skip any duplicate record.
-                                    for (NewGTFSError error : idErrors) {
-                                        if (error.errorType.equals(NewGTFSErrorType.DUPLICATE_ID)) {
-                                            skipRecord = true;
-                                        }
-                                    }
+                                    if (hasDuplicateError(idErrors)) skipRecord = true;
                                     break;
                             }
                         }
 
                         if (field.isForeignReference()) {
-                            String key = getFieldScopedValue(field.referenceTable, idScope, val);
+                            String key = getTableScopedValue(field.referenceTable, idScope, val);
                             // If the current foreign ref points to another record that has been skipped, skip this
                             // record and add its primary key to the list of skipped IDs (so that other references can
                             // be properly omitted).
                             if (mergeFeedsResult.skippedIds.contains(key)) {
-                                String skippedKey = getFieldScopedValue(table, idScope, keyValue);
+                                String skippedKey = getTableScopedValue(table, idScope, keyValue);
                                 if (orderField != null) {
                                     skippedKey = String.join(":", skippedKey,
                                         csvReader.get(getFieldIndex(fieldsFoundInZip, orderField)));
@@ -688,7 +707,7 @@ public class MergeFeedsJob extends MonitorableJob {
                             }
                         }
                         rowValues[specFieldIndex] = valueToWrite;
-                    }
+                    } // End of iteration over each field for a row.
                     // Do not write rows that are designated to be skipped.
                     if (skipRecord && this.mergeType.equals(MTC)) {
                         mergeFeedsResult.recordsSkipCount++;
@@ -696,15 +715,22 @@ public class MergeFeedsJob extends MonitorableJob {
                     }
                     String newLine = String.join(",", rowValues);
                     switch (table.name) {
-                        // Store row values for route or stop ID in order to check for ID conflicts. NOTE:
-                        // This is only intended to be used for routes and stops. Otherwise, this might
-                        // consume too much memory.
+                        // Store row values for route or stop ID (or alternative ID field) in order
+                        // to check for ID conflicts. NOTE: This is only intended to be used for
+                        // routes and stops. Otherwise, this might (will) consume too much memory.
                         case "stops":
                         case "routes":
                             // FIXME: This should be revised for tables with order fields, but it should work fine for its
                             //  primary purposes: to detect exact copy rows and to temporarily hold the data in case a reference
                             //  needs to be looked up in order to remap an entity to that key.
-                            rowValuesForStopOrRouteId.put(rowValues[keyFieldIndex], rowValues);
+                            // Here we need to get the key field index according to the spec
+                            // table definition. Otherwise, if we use the keyFieldIndex variable
+                            // defined above, we will be using the found fields index, which will
+                            // cause major issues when trying to put and get values into the
+                            // below map.
+                            String key = String.join(
+                                ":", keyField, rowValues[table.getFieldIndex(keyField)]);
+                            rowValuesForStopOrRouteId.put(key, rowValues);
                             break;
                         case "transfers":
                         case "fare_rules":
@@ -731,23 +757,24 @@ public class MergeFeedsJob extends MonitorableJob {
                         ZipEntry tableEntry = new ZipEntry(table.name + ".txt");
                         out.putNextEntry(tableEntry);
                         // Write headers to table.
-                        String headers = specFields.stream().map(field -> field.name)
-                            .collect(Collectors.joining(","));
-                        out.write(headers.getBytes());
-                        out.write("\n".getBytes());
+                        String[] headers = specFields.stream()
+                            .map(field -> field.name)
+                            .toArray(String[]::new);
+                        writer.write(headers);
                     }
                     // Write line to table (plus new line char).
-                    out.write(newLine.getBytes());
-                    out.write("\n".getBytes());
+                    writer.write(rowValues);
                     lineNumber++;
                     mergedLineNumber++;
-                }
+                } // End of iteration over each row.
             }
+            writer.flush();
             out.closeEntry();
         } catch (Exception e) {
             LOG.error("Error merging feed sources: {}",
                 feedVersions.stream().map(version -> version.parentFeedSource().name)
                     .collect(Collectors.toList()).toString());
+            e.printStackTrace();
             throw e;
         }
         // Track the number of lines in the merged table and return final number.
@@ -755,8 +782,20 @@ public class MergeFeedsJob extends MonitorableJob {
         return mergedLineNumber;
     }
 
-    private static String getFieldScopedValue(Table table, String prefix, String id) {
-        return String.join(":", table.name, prefix, id);
+    /** Checks that any of a set of errors is of the type {@link NewGTFSErrorType#DUPLICATE_ID}. */
+    private boolean hasDuplicateError(Set<NewGTFSError> errors) {
+        for (NewGTFSError error : errors) {
+            if (error.errorType.equals(NewGTFSErrorType.DUPLICATE_ID)) return true;
+        }
+        return false;
+    }
+
+    /** Get table-scoped value used for key when remapping references for a particular feed. */
+    private static String getTableScopedValue(Table table, String prefix, String id) {
+        return String.join(":",
+            table.name,
+            prefix,
+            id);
     }
 
     /**

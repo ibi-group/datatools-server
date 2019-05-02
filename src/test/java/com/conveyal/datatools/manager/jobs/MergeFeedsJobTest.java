@@ -2,10 +2,12 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.LoadFeedTest;
+import com.conveyal.datatools.TestUtils;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.gtfs.error.NewGTFSErrorType;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.slf4j.Logger;
@@ -15,6 +17,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.sql.SQLException;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;
@@ -62,7 +65,7 @@ public class MergeFeedsJobTest {
      * Ensures that a regional feed merge will produce a feed that includes all entities from each feed.
      */
     @Test
-    public void canMergeRegional() {
+    public void canMergeRegional() throws SQLException {
         // Set up list of feed versions to merge.
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(bartVersion1);
@@ -114,6 +117,14 @@ public class MergeFeedsJobTest {
             mergedVersion.feedLoadResult.calendarDates.rowCount,
             bartVersion1.feedLoadResult.calendarDates.rowCount + calTrainVersion.feedLoadResult.calendarDates.rowCount + napaVersion.feedLoadResult.calendarDates.rowCount
         );
+        // Ensure there are no referential integrity errors, duplicate ID, or wrong number of
+        // fields errors.
+        TestUtils.assertThatFeedHasNoErrorsOfType(
+            mergedVersion.namespace,
+            NewGTFSErrorType.REFERENTIAL_INTEGRITY.toString(),
+            NewGTFSErrorType.DUPLICATE_ID.toString(),
+            NewGTFSErrorType.WRONG_NUMBER_OF_FIELDS.toString()
+        );
     }
 
     /**
@@ -141,7 +152,7 @@ public class MergeFeedsJobTest {
      * trips contained within.
      */
     @Test
-    public void canMergeBARTFeeds() {
+    public void canMergeBARTFeeds() throws SQLException {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(bartVersion1);
         versions.add(bartVersion2);
@@ -159,6 +170,12 @@ public class MergeFeedsJobTest {
             "Merged feed route count should equal expected value.",
             9, // Magic number represents the number of routes in the merged BART feed.
             mergeFeedsJob.mergedVersion.feedLoadResult.routes.rowCount
+        );
+        // Ensure there are no referential integrity errors or duplicate ID errors.
+        TestUtils.assertThatFeedHasNoErrorsOfType(
+            mergeFeedsJob.mergedVersion.namespace,
+            NewGTFSErrorType.REFERENTIAL_INTEGRITY.toString(),
+            NewGTFSErrorType.DUPLICATE_ID.toString()
         );
     }
 
