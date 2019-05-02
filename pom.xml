@@ -353,7 +353,7 @@
         <dependency>
             <groupId>com.github.conveyal</groupId>
             <artifactId>java-snapshot-matcher</artifactId>
-            <version>e6a78d3af9d67f6f6240261fcba497d3b50f9399</version>
+            <version>3495b32f7b4d3f82590e0a2284029214070b6984</version>
             <scope>test</scope>
         </dependency>
         <!-- wiremock is used to mock http requests -->
