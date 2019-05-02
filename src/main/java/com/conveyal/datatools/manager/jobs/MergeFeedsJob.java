@@ -393,8 +393,16 @@ public class MergeFeedsJob extends MonitorableJob {
                             // value as the first feed.
                             String agencyId = String.join(":", keyField, keyValue);
                             if (!"".equals(keyValue) && !referenceTracker.transitIds.contains(agencyId)) {
-                                String message = "MTC merge detected mismatching agency_id values "
-                                    + "between two feeds. Failing merge operation.";
+                                String otherAgencyId = referenceTracker.transitIds.stream()
+                                    .filter(transitId -> transitId.startsWith("agency_id"))
+                                    .findAny()
+                                    .orElse(null);
+                                String message = String.format(
+                                    "MTC merge detected mismatching agency_id values between two "
+                                        + "feeds (%s and %s). Failing merge operation.",
+                                    agencyId,
+                                    otherAgencyId
+                                );
                                 LOG.error(message);
                                 mergeFeedsResult.failed = true;
                                 mergeFeedsResult.failureReasons.add(message);
