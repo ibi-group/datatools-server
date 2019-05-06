@@ -18,6 +18,8 @@ before_install:
 # set region in AWS config for S3 setup
 - mkdir ~/.aws && printf '%s\n' '[default]' 'aws_access_key_id=foo' 'aws_secret_access_key=bar' 'region=us-east-1' > ~/.aws/config
 - cp configurations/default/server.yml.tmp configurations/default/server.yml
+# create database for tests
+- psql -U postgres -c 'CREATE DATABASE catalogue;'
 script:
 # package jar
 - mvn package
