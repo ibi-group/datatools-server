@@ -280,7 +280,9 @@ public class FeedVersionController  {
         MergeFeedsType mergeType;
         try {
             mergeType = MergeFeedsType.valueOf(req.queryParams("mergeType"));
-            if (mergeType.equals(REGIONAL)) throw new IllegalArgumentException();
+            if (mergeType.equals(REGIONAL)) {
+                throw new IllegalArgumentException("Regional merge type is not permitted for this endpoint.");
+            }
         } catch (IllegalArgumentException e) {
             logMessageAndHalt(req, 400, "Must provide valid merge type.", e);
             return null;
