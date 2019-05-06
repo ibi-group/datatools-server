@@ -166,6 +166,11 @@ public class TypedPersistence<T extends Model> {
             return mongoCollection.find(filter).first();
     }
 
+    /** Convenience wrapper for #getOneFiltered that supplies null for sortBy arg. */
+    public T getOneFiltered (Bson filter) {
+        return getOneFiltered(filter, null);
+    }
+
     public boolean removeById (String id) {
         DeleteResult result = mongoCollection.deleteOne(eq(id));
         if (result.getDeletedCount() == 1) {

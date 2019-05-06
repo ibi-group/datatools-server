@@ -62,8 +62,7 @@ public class ConvertEditorMapDBToSQL extends MonitorableJob {
                 and(
                     eq("version", versionNumber),
                     eq(Snapshot.FEED_SOURCE_REF, feedId)
-                ),
-                null
+                )
             );
             boolean snapshotExists = true;
             if (matchingSnapshot == null) {

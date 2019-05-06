@@ -66,7 +66,7 @@ public class GisExportJobTest {
         File zipFile = File.createTempFile("stops", ".zip");
         Set<String> ids = new HashSet<>();
         ids.add(calTrainVersion.id);
-        GisExportJob gisExportJob = new GisExportJob(GisExportJob.Type.STOPS, zipFile, ids);
+        GisExportJob gisExportJob = new GisExportJob(GisExportJob.ExportType.STOPS, zipFile, ids, "test");
         gisExportJob.run();
         assertThat(gisExportJob.status.error, equalTo(false));
         FeatureCollection collection = getFeatureCollectionFromZippedShapefile(zipFile);
@@ -99,7 +99,7 @@ public class GisExportJobTest {
         File zipFile = File.createTempFile("routes", ".zip");
         Set<String> ids = new HashSet<>();
         ids.add(calTrainVersion.id);
-        GisExportJob gisExportJob = new GisExportJob(GisExportJob.Type.ROUTES, zipFile, ids);
+        GisExportJob gisExportJob = new GisExportJob(GisExportJob.ExportType.ROUTES, zipFile, ids, "test");
         gisExportJob.run();
         assertThat(gisExportJob.status.error, equalTo(false));
         FeatureCollection collection = getFeatureCollectionFromZippedShapefile(zipFile);

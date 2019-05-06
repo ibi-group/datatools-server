@@ -20,12 +20,11 @@ import org.apache.commons.dbutils.DbUtils;
 import org.geotools.data.DataUtilities;
 import org.geotools.data.DefaultTransaction;
 import org.geotools.data.Transaction;
-import org.geotools.data.collection.ListFeatureCollection;
 import org.geotools.data.shapefile.ShapefileDataStore;
 import org.geotools.data.shapefile.ShapefileDataStoreFactory;
-import org.geotools.data.simple.SimpleFeatureCollection;
 import org.geotools.data.simple.SimpleFeatureSource;
 import org.geotools.data.simple.SimpleFeatureStore;
+import org.geotools.feature.DefaultFeatureCollection;
 import org.geotools.feature.simple.SimpleFeatureBuilder;
 import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
 import org.geotools.referencing.crs.DefaultGeographicCRS;
@@ -48,14 +47,19 @@ import java.util.Map;
 /** Export routes or stops for a GTFS feed version as a shapefile. */
 public class GisExportJob extends MonitorableJob {
     public static final Logger LOG = LoggerFactory.getLogger(GisExportJob.class);
-    private File file;
-    public Type type;
+    public ExportType exportType;
     public Collection<String> feedIds;
 
-    public GisExportJob(Type type, File file, Collection<String> feedIds) {
-        this.type = type;
+    public GisExportJob(ExportType exportType, File file, Collection<String> feedIds, String owner) {
+        super(
+            owner,
+            String.format("Export %s GIS for feed", exportType.toString().toLowerCase()),
+            JobType.EXPORT_GIS
+        );
+        this.exportType = exportType;
         this.file = file;
         this.feedIds = feedIds;
+        status.update("Beginning export", 5);
     }
 
     @Override public void jobLogic() {
@@ -70,24 +74,24 @@ public class GisExportJob extends MonitorableJob {
 
             Map<String, Serializable> params = new HashMap<>();
             params.put("url", outShp.toURI().toURL());
-            params.put("create spatial index", Boolean.TRUE);
 
             ShapefileDataStore datastore = (ShapefileDataStore) dataStoreFactory.createNewDataStore(params);
             datastore.forceSchemaCRS(DefaultGeographicCRS.WGS84);
 
-            final SimpleFeatureType STOP_TYPE = DataUtilities.createType(
-                "Stop",
-                String.join(",",
-                    // Geometry must be the first attribute for a shapefile (and must be named
-                    // "the_geom").
-                    "the_geom:Point:srid=4326",
-                    "name:String",
-                    "code:String",
-                    "desc:String",
-                    "id:String",
-                    "agency:String"
-                )
-            );
+            final SimpleFeatureType STOP_TYPE = // createStopFeatureType();
+                DataUtilities.createType(
+                    "Stop",
+                    String.join(",",
+                        // Geometry must be the first attribute for a shapefile (and must be named
+                        // "the_geom").
+                        "the_geom:Point",
+                        "name:String",
+                        "code:String",
+                        "desc:String",
+                        "id:String",
+                        "agency:String"
+                    )
+                );
 
             final SimpleFeatureType ROUTE_TYPE = DataUtilities.createType(
                 "Route", // <- the name for our feature type
@@ -105,14 +109,8 @@ public class GisExportJob extends MonitorableJob {
                     "agency:String"
                 )
             );
-
-            SimpleFeatureCollection collection;
-
-            SimpleFeatureType collectionType = null;
-
             SimpleFeatureBuilder featureBuilder;
-            
-            List<SimpleFeature> features = new ArrayList<>();
+            DefaultFeatureCollection features = new DefaultFeatureCollection();
             // Get connection for use in fetching patterns. This is outside of for loop so we're
             // not connecting multiple times.
             connection = DataManager.GTFS_DATA_SOURCE.getConnection();
@@ -127,13 +125,21 @@ public class GisExportJob extends MonitorableJob {
                 String agencyName = agency != null
                     ? agency.agency_name
                     : version.parentFeedSource().name;
-                if (type.equals(Type.STOPS)) {
-                    collectionType = STOP_TYPE;
+                status.update(
+                    String.format(
+                        "Exporting %s for %s",
+                        exportType.toString().toLowerCase(),
+                        agencyName),
+                    40
+                );
+                if (exportType.equals(ExportType.STOPS)) {
                     datastore.createSchema(STOP_TYPE);
                     featureBuilder = new SimpleFeatureBuilder(STOP_TYPE);
                     for (Stop stop : feed.stops) {
-                        Point point = geometryFactory.createPoint(new Coordinate(stop.stop_lon, stop.stop_lat));
-                        LOG.info(stop.stop_lon + ":" + stop.stop_lat);
+                        Point point = geometryFactory.createPoint(
+                            new Coordinate(stop.stop_lon, stop.stop_lat)
+                        );
+                        LOG.info(point.toString());
                         featureBuilder.add(point);
                         featureBuilder.add(stop.stop_name);
                         featureBuilder.add(stop.stop_code);
@@ -144,8 +150,7 @@ public class GisExportJob extends MonitorableJob {
                         SimpleFeature feature = featureBuilder.buildFeature(null);
                         features.add(feature);
                     }
-                } else if (type.equals(Type.ROUTES)) {
-                    collectionType = ROUTE_TYPE;
+                } else if (exportType.equals(ExportType.ROUTES)) {
                     datastore.createSchema(ROUTE_TYPE);
                     featureBuilder = new SimpleFeatureBuilder(ROUTE_TYPE);
                     // There is not a clean way to fetch patterns out of the RDBMS and it may not
@@ -227,7 +232,6 @@ public class GisExportJob extends MonitorableJob {
                 throw new IllegalStateException("Cannot write shapefile with zero features!");
             }
             // Save the file
-            collection = new ListFeatureCollection(collectionType, features);
 
             Transaction transaction = new DefaultTransaction("create");
 
@@ -239,7 +243,8 @@ public class GisExportJob extends MonitorableJob {
                 SimpleFeatureStore featureStore = (SimpleFeatureStore) featureSource;
                 featureStore.setTransaction(transaction);
                 try {
-                    featureStore.addFeatures(collection);
+                    LOG.info("Adding {} features to shapefile.", features.size());
+                    featureStore.addFeatures(features);
                     transaction.commit();
                 } catch (Exception e)  {
                     e.printStackTrace();
@@ -255,16 +260,17 @@ public class GisExportJob extends MonitorableJob {
                 throw new Exception(typeName + " does not support read/write access (or other "
                     + "unknown issue).");
             }
-
+            LOG.info("Zipping shapefile {}", file.getAbsolutePath());
             // zip the file
             DirectoryZip.zip(outDir, file);
 
             // Clean up temporary files.
-//            for (File f : outDir.listFiles()) {
-//                f.delete();
-//            }
-//            outDir.delete();
-
+            for (File f : outDir.listFiles()) {
+                f.delete();
+            }
+            outDir.delete();
+            status.update(false, "Export complete!", 100);
+            status.completed = true;
         } catch (Exception e) {
             String message = "An exception occurred during the GIS export";
             LOG.error(message);
@@ -275,37 +281,5 @@ public class GisExportJob extends MonitorableJob {
         }
     }
 
-    public enum Type { ROUTES, STOPS }
-
-    private static SimpleFeatureType createStopFeatureType() {
-
-        SimpleFeatureTypeBuilder builder = new SimpleFeatureTypeBuilder();
-        builder.setName("Stop");
-        builder.setCRS(DefaultGeographicCRS.WGS84); // <- Coordinate reference system
-//        builder.setg
-
-
-        // add attributes in order
-        builder.add("the_geom", Point.class);
-        builder.add("name", String.class); // <- 15 chars width for name field
-        builder.add("code", String.class);
-        builder.add("desc", String.class);
-        builder.add("id", String.class);
-        builder.add("agency", String.class);
-        String.join(",",
-            // Geometry must be the first attribute for a shapefile (and must be named
-            // "the_geom").
-            "the_geom:Point:srid=4326",
-            "name:String",
-            "code:String",
-            "desc:String",
-            "id:String",
-            "agency:String"
-        );
-
-        // build the type
-        final SimpleFeatureType LOCATION = builder.buildFeatureType();
-
-        return LOCATION;
-    }
+    public enum ExportType { ROUTES, STOPS }
 }
