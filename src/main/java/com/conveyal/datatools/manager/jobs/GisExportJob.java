@@ -191,12 +191,15 @@ public class GisExportJob extends MonitorableJob {
                             coords = coordinates.toArray(coords);
                             shape = geometryFactory.createLineString(coords);
                         } else {
+                            LOG.info("Building pattern {} from stops", pattern_id);
                             // Build the shape from the pattern stops if there is no shape for
                             // pattern.
                             PreparedStatement stopsStatement = connection.prepareStatement(
                                 String.format(
-                                    "select stop_lon, stop_lat, stops.stop_id, stop_sequence, pattern_id from %s.stops as stops, %s.pattern_stops as ps where pattern_id = ? "
-                                        + "order by pattern_id, stop_sequence",
+                                    "select stop_lon, stop_lat, stops.stop_id, stop_sequence, pattern_id"
+                                        + " from %s.stops as stops, %s.pattern_stops as ps"
+                                        + " where pattern_id = ? and stops.stop_id = ps.stop_id"
+                                        + " order by pattern_id, stop_sequence",
                                     version.namespace, version.namespace
                                 ));
                             stopsStatement.setString(1, pattern_id);

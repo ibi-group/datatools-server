@@ -7,6 +7,7 @@ import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.google.common.io.Files;
+import com.vividsolutions.jts.geom.MultiLineString;
 import org.geotools.data.DataStore;
 import org.geotools.data.DataStoreFinder;
 import org.geotools.data.FeatureSource;
@@ -44,6 +45,7 @@ public class GisExportJobTest {
     private static final Logger LOG = LoggerFactory.getLogger(GisExportJobTest.class);
     private static Project project;
     private static FeedVersion calTrainVersion;
+    private static FeedVersion hawaiiVersion;
 
     @BeforeClass
     public static void setUp() {
@@ -57,7 +59,9 @@ public class GisExportJobTest {
         FeedSource caltrain = new FeedSource("Caltrain");
         Persistence.feedSources.create(caltrain);
         calTrainVersion = createFeedVersion(caltrain, "caltrain_gtfs.zip");
-        caltrain.projectId = project.id;
+        FeedSource hawaii = new FeedSource("Hawaii");
+        Persistence.feedSources.create(hawaii);
+        hawaiiVersion = createFeedVersion(hawaii, "hawaii_fake_no_shapes.zip");
     }
 
     @Test
@@ -125,6 +129,58 @@ public class GisExportJobTest {
         PreparedStatement preparedStatement = DataManager.GTFS_DATA_SOURCE.getConnection()
             .prepareStatement(
                 String.format("select count(*) from %s" + ".patterns", calTrainVersion.namespace));
+        ResultSet resultSet = preparedStatement.executeQuery();
+        int patternCount = 0;
+        while (resultSet.next()) {
+            patternCount = resultSet.getInt(1);
+        }
+        // Check that feature count = pattern count from SQL query.
+        assertThat(featureCount, equalTo(patternCount));
+    }
+
+    /**
+     * Verifies that a route shapefile can be generated from its constituent pattern stops.
+     */
+    @Test
+    public void canExportRoutesFromPatternStops() throws IOException, SQLException {
+        // Run the GIS export job for stops.
+        File zipFile = File.createTempFile("routes", ".zip");
+        Set<String> ids = new HashSet<>();
+        ids.add(hawaiiVersion.id);
+        GisExportJob gisExportJob = new GisExportJob(GisExportJob.ExportType.ROUTES, zipFile, ids, "test");
+        gisExportJob.run();
+        assertThat(gisExportJob.status.error, equalTo(false));
+        FeatureCollection collection = getFeatureCollectionFromZippedShapefile(zipFile);
+        // Iterate over features.
+        int featureCount = 0;
+        try (FeatureIterator iterator = collection.features()) {
+            while (iterator.hasNext()) {
+                featureCount++;
+                Feature feature = iterator.next();
+                // GeometryAttribute sourceGeometry = feature.getDefaultGeometryProperty();
+                Collection<Property> properties = feature.getProperties();
+                // Iterate over feature properties and verify everything looks OK.
+                for (Property property : properties) {
+                    String name = property.getName().toString();
+                    Object value = property.getValue();
+                    LOG.info("{}: {}", name, value);
+                    if ("the_geom".equals(name)) {
+                        MultiLineString shape = (MultiLineString) value;
+                        // Check that the geometry was exported properly.
+                        assertThat(shape, notNullValue());
+                        // Fake Hawaii feed has only 5 stops and each is used in the single pattern
+                        // shape, so we expect the coordinates length to be equal to stops row count.
+                        assertThat(
+                            shape.getCoordinates().length,
+                            equalTo(hawaiiVersion.feedLoadResult.stops.rowCount)
+                        );
+                    }
+                }
+            }
+        }
+        PreparedStatement preparedStatement = DataManager.GTFS_DATA_SOURCE.getConnection()
+            .prepareStatement(
+                String.format("select count(*) from %s" + ".patterns", hawaiiVersion.namespace));
         ResultSet resultSet = preparedStatement.executeQuery();
         int patternCount = 0;
         while (resultSet.next()) {
