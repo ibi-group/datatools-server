@@ -191,17 +191,25 @@ public class GisExportJob extends MonitorableJob {
                             coords = coordinates.toArray(coords);
                             shape = geometryFactory.createLineString(coords);
                         } else {
-                            // build the shape from the stops
-                            // FIXME add back generating shape from stops
-//                            Coordinate[] coords = new Coordinate[tp.patternStops.size()];
-//
-//                            for (int i = 0; i < coords.length; i++) {
-//                                coords[i] =
-//                                    feed.stops.get(tp.patternStops.get(i).stopId).location.getCoordinate();
-//                            }
-//
-//                            shape = geometryFactory.createLineString(coords);
-                            shape = null;
+                            // Build the shape from the pattern stops if there is no shape for
+                            // pattern.
+                            PreparedStatement stopsStatement = connection.prepareStatement(
+                                String.format(
+                                    "select stop_lon, stop_lat, stops.stop_id, stop_sequence, pattern_id from %s.stops as stops, %s.pattern_stops as ps where pattern_id = ? "
+                                        + "order by pattern_id, stop_sequence",
+                                    version.namespace, version.namespace
+                                ));
+                            stopsStatement.setString(1, pattern_id);
+                            List<Coordinate> coordinates = new ArrayList<>();
+                            ResultSet stopsResultSet = stopsStatement.executeQuery();
+                            while (stopsResultSet.next()) {
+                                double lon = stopsResultSet.getDouble(1);
+                                double lat = stopsResultSet.getDouble(2);
+                                coordinates.add(new Coordinate(lon, lat));
+                            }
+                            Coordinate[] coords = new Coordinate[coordinates.size()];
+                            coords = coordinates.toArray(coords);
+                            shape = geometryFactory.createLineString(coords);
                         }
 
                         Route route = feed.routes.get(route_id);
