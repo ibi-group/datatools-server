@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.controllers.api;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.auth.Actions;
 import com.conveyal.datatools.manager.jobs.CreateFeedVersionFromSnapshotJob;
 import com.conveyal.datatools.manager.jobs.GisExportJob;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
@@ -43,11 +44,6 @@ import static spark.Spark.put;
 
 public class FeedVersionController  {
 
-    // TODO use this instead of stringly typed permissions
-    enum Permission {
-        VIEW, MANAGE
-    }
-
     public static final Logger LOG = LoggerFactory.getLogger(FeedVersionController.class);
     public static JsonManager<FeedVersion> json = new JsonManager<>(FeedVersion.class, JsonViews.UserInterface.class);
 
@@ -56,7 +52,7 @@ public class FeedVersionController  {
      * If you pass in ?summarized=true, don't include the full tree of validation results, only the counts.
      */
     private static FeedVersion getFeedVersion (Request req, Response res) {
-        return requestFeedVersion(req, "view");
+        return requestFeedVersion(req, Actions.VIEW);
     }
 
     /**
@@ -64,11 +60,11 @@ public class FeedVersionController  {
      */
     private static Collection<FeedVersion> getAllFeedVersionsForFeedSource(Request req, Response res) {
         // Check permissions and get the FeedSource whose FeedVersions we want.
-        FeedSource feedSource = requestFeedSourceById(req, "view");
+        FeedSource feedSource = requestFeedSourceById(req, Actions.VIEW);
         return feedSource.retrieveFeedVersions();
     }
 
-    public static FeedSource requestFeedSourceById(Request req, String action, String paramName) {
+    public static FeedSource requestFeedSourceById(Request req, Actions action, String paramName) {
         String id = req.queryParams(paramName);
         if (id == null) {
             logMessageAndHalt(req, 400, "Please specify feedSourceId param");
@@ -76,7 +72,7 @@ public class FeedVersionController  {
         return checkFeedSourcePermissions(req, Persistence.feedSources.getById(id), action);
     }
 
-    private static FeedSource requestFeedSourceById(Request req, String action) {
+    private static FeedSource requestFeedSourceById(Request req, Actions action) {
         return requestFeedSourceById(req, action, "feedSourceId");
     }
 
@@ -94,7 +90,7 @@ public class FeedVersionController  {
     public static String createFeedVersionViaUpload(Request req, Response res) {
 
         Auth0UserProfile userProfile = req.attribute("user");
-        FeedSource feedSource = requestFeedSourceById(req, "manage");
+        FeedSource feedSource = requestFeedSourceById(req, Actions.MANAGE);
         FeedVersion latestVersion = feedSource.retrieveLatest();
         FeedVersion newFeedVersion = new FeedVersion(feedSource);
         newFeedVersion.retrievalMethod = FeedSource.FeedRetrievalMethod.MANUALLY_UPLOADED;
@@ -156,7 +152,7 @@ public class FeedVersionController  {
 
         Auth0UserProfile userProfile = req.attribute("user");
         // TODO: Should the ability to create a feedVersion from snapshot be controlled by the 'edit-gtfs' privilege?
-        FeedSource feedSource = requestFeedSourceById(req, "manage");
+        FeedSource feedSource = requestFeedSourceById(req, Actions.MANAGE);
         Snapshot snapshot = Persistence.snapshots.getById(req.queryParams("snapshotId"));
         if (snapshot == null) {
             logMessageAndHalt(req, 400, "Must provide valid snapshot ID");
@@ -173,16 +169,16 @@ public class FeedVersionController  {
      * Spark HTTP API handler that deletes a single feed version based on the ID in the request.
      */
     private static FeedVersion deleteFeedVersion(Request req, Response res) {
-        FeedVersion version = requestFeedVersion(req, "manage");
+        FeedVersion version = requestFeedVersion(req, Actions.MANAGE);
         version.delete();
         return version;
     }
 
-    private static FeedVersion requestFeedVersion(Request req, String action) {
+    private static FeedVersion requestFeedVersion(Request req, Actions action) {
         return requestFeedVersion(req, action, req.params("id"));
     }
 
-    public static FeedVersion requestFeedVersion(Request req, String action, String feedVersionId) {
+    public static FeedVersion requestFeedVersion(Request req, Actions action, String feedVersionId) {
         FeedVersion version = Persistence.feedVersions.getById(feedVersionId);
         if (version == null) {
             logMessageAndHalt(req, 404, "Feed version ID does not exist");
@@ -193,7 +189,7 @@ public class FeedVersionController  {
     }
 
     private static boolean renameFeedVersion (Request req, Response res) {
-        FeedVersion v = requestFeedVersion(req, "manage");
+        FeedVersion v = requestFeedVersion(req, Actions.MANAGE);
 
         String name = req.queryParams("name");
         if (name == null) {
@@ -205,7 +201,7 @@ public class FeedVersionController  {
     }
 
     private static HttpServletResponse downloadFeedVersionDirectly(Request req, Response res) {
-        FeedVersion version = requestFeedVersion(req, "view");
+        FeedVersion version = requestFeedVersion(req, Actions.VIEW);
         return downloadFile(version.retrieveGtfsFile(), version.id, req, res);
     }
 
@@ -213,8 +209,8 @@ public class FeedVersionController  {
      * Returns credentials that a client may use to then download a feed version. Functionality
      * changes depending on whether application.data.use_s3_storage config property is true.
      */
-        FeedVersion version = requestFeedVersion(req, "view");
     private static Object getDownloadCredentials(Request req, Response res) {
+        FeedVersion version = requestFeedVersion(req, Actions.VIEW);
 
         if (DataManager.useS3) {
             // Return pre-signed download link if using S3.
@@ -232,7 +228,7 @@ public class FeedVersionController  {
      * FIXME!
      */
     private static JsonNode validate (Request req, Response res) {
-        FeedVersion version = requestFeedVersion(req, "manage");
+        FeedVersion version = requestFeedVersion(req, Actions.MANAGE);
         logMessageAndHalt(req, 400, "Validate endpoint not currently configured!");
         // FIXME: Update for sql-loader validation process?
         return null;
@@ -240,7 +236,7 @@ public class FeedVersionController  {
     }
 
     private static FeedVersion publishToExternalResource (Request req, Response res) {
-        FeedVersion version = requestFeedVersion(req, "manage");
+        FeedVersion version = requestFeedVersion(req, Actions.MANAGE);
 
         // notify any extensions of the change
         try {
