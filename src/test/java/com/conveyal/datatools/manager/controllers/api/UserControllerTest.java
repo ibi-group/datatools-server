@@ -36,6 +36,9 @@ import static org.hamcrest.MatcherAssert.assertThat;
  * certain responses needed to verify functionality.
  */
 public class UserControllerTest {
+    private String emailForExistingAccount = "test-existing-user@test.com";
+    private ObjectMapper mapper = new ObjectMapper();
+
     /**
      * This sets up a mock server that accepts requests and sends predefined responses to mock an Auth0 server.
      */
@@ -101,26 +104,26 @@ public class UserControllerTest {
      */
     @Test
     public void canCreateUser() throws IOException {
+        String newUserEmail = "test-new-user@test.com";
+
         // create wiremock stub for create users endpoint
         stubFor(
             post(urlPathEqualTo("/api/v2/users"))
-                .withRequestBody(matchingJsonPath("$.email", equalTo("test-new-user@test.com")))
+                .withRequestBody(matchingJsonPath("$.email", equalTo(newUserEmail)))
                 .willReturn(
                     aResponse()
                         .withBodyFile("createNewUserResponse.json")
                 )
         );
 
+        ObjectNode requestJson = getBaseUserObject();
+        requestJson.put("email", newUserEmail);
 
         // make request and parse the json response
         JsonNode createUserResponse = parseJson(
             given()
                 .port(4000)
-                .body("{\n" +
-                    "  \"email\" : \"test-new-user@test.com\",\n" +
-                    "  \"password\" : \"password\",\n" +
-                    "  \"permissions\" : {}\n" +
-                    "}")
+                .body(requestJson)
                 .post("/api/manager/secure/user")
             .then()
                 .extract()
@@ -137,8 +140,6 @@ public class UserControllerTest {
      */
     @Test
     public void canReturnMeaningfulAuth0Error() throws IOException {
-        String emailForExistingAccount = "test-existing-user@test.com";
-
         // create wiremock stub for create users endpoint that responds with a message saying a user with the email
         // already exists
         stubFor(
@@ -151,19 +152,11 @@ public class UserControllerTest {
                 )
         );
 
-
-        // create a request body of a user that the above stub will recognize as an existing user
-        ObjectMapper mapper = new ObjectMapper();
-        ObjectNode requestJson = mapper.createObjectNode();
-        requestJson.put("email", emailForExistingAccount);
-        requestJson.put("password", "password");
-        requestJson.putObject("permissions");
-
         // make request and parse the json response
         JsonNode createUserResponse = parseJson(
             given()
                 .port(DataManager.PORT)
-                .body(requestJson)
+                .body(getBaseUserObject())
                 .post(DataManager.API_PREFIX + "secure/user")
             .then()
                 .extract()
@@ -204,20 +197,25 @@ public class UserControllerTest {
                 )
         );
 
+        ObjectNode requestJson = mapper.createObjectNode();
+        requestJson.put("email", emailForExistingAccount);
+
+        ObjectNode testClientPermissions = mapper.createObjectNode();
+        testClientPermissions.put("type", "administer-application");
+
+        ObjectNode testClientData = mapper.createObjectNode();
+        testClientData.putArray("permissions").add(testClientPermissions);
+        testClientData.putArray("projects");
+        testClientData.putArray("organizations");
+        testClientData.put("client_id", "testing-client-id");
+
+        requestJson.putArray("data").add(testClientData);
 
         // make request and parse the json response
         JsonNode createUserResponse = parseJson(
             given()
                 .port(4000)
-                .body("{" +
-                    "\"user_id\": \"auth0|test-existing-user\"" +
-                    ",\"data\": [{" +
-                    "\"permissions\": [{\"type\": \"administer-application\"}]," +
-                    "\"projects\": []," +
-                    "\"organizations\": []," +
-                    "\"client_id\":\"testing-client-id\"" +
-                    "}]" +
-                    "}")
+                .body(requestJson)
                 .put("/api/manager/secure/user/auth0|test-existing-user")
             .then()
                 .extract()
@@ -254,5 +252,16 @@ public class UserControllerTest {
 
         // make sure the response matches the saved snapshot
         assertThat(deleteUserResponse, matchesSnapshot());
+    }
+
+    /**
+     * create a request body of a user that the above stub will recognize as an existing user
+     */
+    private ObjectNode getBaseUserObject() {
+        ObjectNode requestJson = mapper.createObjectNode();
+        requestJson.put("email", emailForExistingAccount);
+        requestJson.put("password", "password");
+        requestJson.putObject("permissions");
+        return requestJson;
     }
 }

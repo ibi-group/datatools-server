@@ -73,6 +73,8 @@ public class Auth0UserProfile {
         public void setDatatoolsInfo(DatatoolsInfo datatools) {
             if (Auth0Connection.authDisabled()) return;
 
+            // check if the datatools field hasn't yet been created. Although new users that get created automatically
+            // have this set, when running in a test environment, this won't be set, so it should be created.
             if (this.datatools == null) {
                 this.datatools = new ArrayList<>();
                 this.datatools.add(datatools);
