@@ -1,7 +1,6 @@
 package com.conveyal.datatools.manager.auth;
 
 import com.conveyal.datatools.manager.DataManager;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.http.HttpResponse;
@@ -16,7 +15,6 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -42,8 +40,8 @@ public class Auth0Users {
     private static URI getUrl(String searchQuery, int page, int perPage, boolean includeTotals) {
         // always filter users by datatools client_id
         String defaultQuery = "app_metadata.datatools.client_id:" + clientId;
-        URIBuilder builder = new URIBuilder();
-        builder.setScheme("https").setHost(AUTH0_DOMAIN).setPath("/api/v2/users");
+        URIBuilder builder = getURIBuilder();
+        builder.setPath("/api/v2/users");
         builder.setParameter("sort", "email:1");
         builder.setParameter("per_page", Integer.toString(perPage));
         builder.setParameter("page", Integer.toString(page));
@@ -82,20 +80,40 @@ public class Auth0Users {
 
         request.addHeader("Authorization", "Bearer " + AUTH0_API_TOKEN);
         request.setHeader("Accept-Charset", charset);
-        HttpResponse response = null;
+        HttpResponse response;
+
+        LOG.info("Making request: ({})", request.toString());
 
         try {
             response = client.execute(request);
         } catch (IOException e) {
+            LOG.error("An exception occurred while making a request to Auth0");
             e.printStackTrace();
+            return null;
         }
 
         String result = null;
 
-        try {
-            result = EntityUtils.toString(response.getEntity());
-        } catch (IOException e) {
-            e.printStackTrace();
+        if (response.getEntity() != null) {
+            try {
+                result = EntityUtils.toString(response.getEntity());
+            } catch (IOException e) {
+                LOG.error("An exception occurred while parsing a response from Auth0");
+                e.printStackTrace();
+            }
+        } else {
+            LOG.warn("No response body available to parse from Auth0 request");
+        }
+
+        int statusCode = response.getStatusLine().getStatusCode();
+        if(statusCode >= 300) {
+            LOG.warn(
+                "HTTP request to Auth0 returned error code >= 300: ({}). Body: {}",
+                request.toString(),
+                result != null ? result : ""
+            );
+        } else {
+            LOG.info("Successfully made request: ({})", request.toString());
         }
 
         return result;
@@ -119,34 +137,16 @@ public class Auth0Users {
     }
 
     /**
-     * Get all users for this application (using the default search).
-     */
-    public static Collection<Auth0UserProfile> getAll () {
-        Collection<Auth0UserProfile> users = new HashSet<>();
-
-        // limited to the first 100
-        URI uri = getUrl(null, 0, 100, false);
-        String response = doRequest(uri);
-        try {
-            users = mapper.readValue(response, new TypeReference<Collection<Auth0UserProfile>>(){});
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        return users;
-    }
-
-    /**
      * Get a single Auth0 user for the specified ID.
      */
     public static Auth0UserProfile getUserById(String id) {
-
-        URIBuilder builder = new URIBuilder();
-        builder.setScheme("https").setHost(AUTH0_DOMAIN).setPath("/api/v2/users/" + id);
+        URIBuilder builder = getURIBuilder();
+        builder.setPath("/api/v2/users/" + id);
         URI uri = null;
         try {
             uri = builder.build();
-
         } catch (URISyntaxException e) {
+            LOG.error("Unable to build URI to getUserById");
             e.printStackTrace();
             return null;
         }
@@ -155,9 +155,28 @@ public class Auth0Users {
         try {
             user = mapper.readValue(response, Auth0UserProfile.class);
         } catch (IOException e) {
+            LOG.error("Unable to parse user profile response from Auth0! Response: {}", response);
             e.printStackTrace();
         }
         return user;
+    }
+
+    /**
+     * Creates a new uri builder and sets the scheme, port and host according to whether a test environment is in effect
+     */
+    private static URIBuilder getURIBuilder() {
+        URIBuilder builder = new URIBuilder();
+        if (AUTH0_DOMAIN.equals("your-auth0-domain")) {
+            // set items for testing purposes assuming use of a Wiremock server
+            builder.setScheme("http");
+            builder.setPort(8089);
+            builder.setHost("localhost");
+        } else {
+            // use live Auth0 domain
+            builder.setScheme("https");
+            builder.setHost(AUTH0_DOMAIN);
+        }
+        return builder;
     }
 
     /**
@@ -165,13 +184,6 @@ public class Auth0Users {
      */
     public static String getUsersBySubscription(String subscriptionType, String target) {
         return getAuth0Users("app_metadata.datatools.subscriptions.type:" + subscriptionType + " AND app_metadata.datatools.subscriptions.target:" + target);
-    }
-
-    /**
-     * Get users belong to a specified organization.
-     */
-    public static String getUsersForOrganization(String organizationId) {
-        return getAuth0Users("app_metadata.datatools.organizations.organization_id:" + organizationId);
     }
 
     public static Set<String> getVerifiedEmailsBySubscription(String subscriptionType, String target) {
