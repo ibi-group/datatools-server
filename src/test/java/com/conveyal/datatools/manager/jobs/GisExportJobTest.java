@@ -7,7 +7,9 @@ import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.google.common.io.Files;
+import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.MultiLineString;
+import com.vividsolutions.jts.geom.Point;
 import org.geotools.data.DataStore;
 import org.geotools.data.DataStoreFinder;
 import org.geotools.data.FeatureSource;
@@ -39,6 +41,8 @@ import java.util.zip.ZipInputStream;
 import static com.conveyal.datatools.TestUtils.createFeedVersion;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.greaterThan;
+import static org.hamcrest.Matchers.lessThan;
 import static org.hamcrest.Matchers.notNullValue;
 
 public class GisExportJobTest {
@@ -47,10 +51,16 @@ public class GisExportJobTest {
     private static FeedVersion calTrainVersion;
     private static FeedVersion hawaiiVersion;
 
+    // Bounding box for Caltrain is approximately:
+    private static final double CALTRAIN_WEST = -122.5918;
+    private static final double CALTRAIN_EAST = -121.5523;
+    private static final double CALTRAIN_NORTH = 37.8499;
+    private static final double CALTRAIN_SOUTH = 37.002;
+
     @BeforeClass
     public static void setUp() {
         DatatoolsTest.setUp();
-        LOG.info("ProcessGtfsSnapshotMergeTest setup");
+        LOG.info("{} setup", GisExportJobTest.class.getSimpleName());
 
         // Create a project, feed sources, and feed versions to merge.
         project = new Project();
@@ -64,6 +74,10 @@ public class GisExportJobTest {
         hawaiiVersion = createFeedVersion(hawaii, "hawaii_fake_no_shapes.zip");
     }
 
+    /**
+     * Ensures that a shapefile containing stop features for a feed version can be exported and
+     * contains geometry for each stop.
+     */
     @Test
     public void canExportStops () throws IOException {
         // Run the GIS export job for stops.
@@ -85,10 +99,19 @@ public class GisExportJobTest {
                 // Iterate over feature properties and verify everything looks OK.
                 for (Property property : properties) {
                     String name = property.getName().toString();
-                    LOG.info("{}: {}", name, property.getValue());
+                    Object value = property.getValue();
+                    LOG.info("{}: {}", name, value);
                     if ("the_geom".equals(name)) {
                         // Check that the geometry was exported properly.
-                        assertThat(property.getValue(), notNullValue());
+                        Point point = (Point) value;
+                        Coordinate coordinate = point.getCoordinate();
+                        // Check that the geometry was exported properly.
+                        assertThat(point, notNullValue());
+                        // Check that coordinates are in the right spot.
+                        assertThat(coordinate.x, greaterThan(CALTRAIN_WEST));
+                        assertThat(coordinate.x, lessThan(CALTRAIN_EAST));
+                        assertThat(coordinate.y, greaterThan(CALTRAIN_SOUTH));
+                        assertThat(coordinate.y, lessThan(CALTRAIN_NORTH));
                     }
                 }
             }
@@ -97,6 +120,10 @@ public class GisExportJobTest {
         assertThat(featureCount, equalTo(calTrainVersion.feedLoadResult.stops.rowCount));
     }
 
+    /**
+     * Ensures that a shapefile containing route (pattern) features for a feed version can be
+     * exported and contains geometry for each pattern.
+     */
     @Test
     public void canExportRoutes () throws IOException, SQLException {
         // Run the GIS export job for stops.
@@ -118,10 +145,22 @@ public class GisExportJobTest {
                 // Iterate over feature properties and verify everything looks OK.
                 for (Property property : properties) {
                     String name = property.getName().toString();
-                    LOG.info("{}: {}", name, property.getValue());
+                    Object value = property.getValue();
+                    LOG.info("{}: {}", name, value);
                     if ("the_geom".equals(name)) {
+                        MultiLineString shape = (MultiLineString) value;
                         // Check that the geometry was exported properly.
-                        assertThat(property.getValue(), notNullValue());
+                        assertThat(shape, notNullValue());
+                        Coordinate[] coordinates = shape.getCoordinates();
+                        // Check that shape has coordinates and the values are (generally) in the
+                        // right place.
+                        assertThat(coordinates.length, greaterThan(0));
+                        for (Coordinate coordinate : coordinates) {
+                            assertThat(coordinate.x, greaterThan(CALTRAIN_WEST));
+                            assertThat(coordinate.x, lessThan(CALTRAIN_EAST));
+                            assertThat(coordinate.y, greaterThan(CALTRAIN_SOUTH));
+                            assertThat(coordinate.y, lessThan(CALTRAIN_NORTH));
+                        }
                     }
                 }
             }
@@ -190,6 +229,9 @@ public class GisExportJobTest {
         assertThat(featureCount, equalTo(patternCount));
     }
 
+    /**
+     * Utility method to extract a {@link FeatureCollection} from a zipped shapefile during tests.
+     */
     private FeatureCollection getFeatureCollectionFromZippedShapefile(File zipFile) throws IOException {
         // Unzip the shapefile and read the stop features to verify they are valid.
         File destDir = Files.createTempDir();
@@ -222,7 +264,9 @@ public class GisExportJobTest {
                     // Create feature collection from data.
                     FeatureSource featureSource = dataStore.getFeatureSource(typeName);
                     return featureSource.getFeatures();
-                } catch (Throwable e) {}
+                } catch (Throwable e) {
+                    e.printStackTrace();
+                }
             }
         }
         return null;
