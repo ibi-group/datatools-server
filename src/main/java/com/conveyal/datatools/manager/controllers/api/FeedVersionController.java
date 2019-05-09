@@ -6,6 +6,8 @@ import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.auth.Actions;
 import com.conveyal.datatools.manager.jobs.CreateFeedVersionFromSnapshotJob;
 import com.conveyal.datatools.manager.jobs.GisExportJob;
+import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
+import com.conveyal.datatools.manager.jobs.MergeFeedsType;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -16,6 +18,7 @@ import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
+
 import com.fasterxml.jackson.databind.JsonNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,6 +32,8 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Date;
 import java.util.List;
+import java.util.HashSet;
+import java.util.Set;
 
 import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
 import static com.conveyal.datatools.common.utils.SparkUtils.copyRequestStreamIntoFile;
@@ -37,6 +42,7 @@ import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.controllers.api.FeedSourceController.checkFeedSourcePermissions;
 import static com.mongodb.client.model.Filters.eq;
+import static com.conveyal.datatools.manager.jobs.MergeFeedsType.REGIONAL;
 import static spark.Spark.delete;
 import static spark.Spark.get;
 import static spark.Spark.post;
@@ -299,7 +305,8 @@ public class FeedVersionController  {
         try {
             return downloadFile(file, file.getName(), req, res);
         } catch (Exception e) {
-            logMessageAndHalt(req, 500, "Unknown error occurred while downloading feed version shapefile", e);
+            logMessageAndHalt(req, 500,
+                "Unknown error occurred while downloading feed version shapefile", e);
         } finally {
             if (!file.delete()) {
                 LOG.error("Could not delete shapefile {}. Storage issues may occur.", token.filePath);
@@ -310,6 +317,52 @@ public class FeedVersionController  {
             Persistence.tokens.removeById(token.id);
         }
         return null;
+    }
+
+    /**
+     * HTTP controller that handles merging multiple feed versions for a given feed source, with version IDs specified
+     * in a comma-separated string in the feedVersionIds query parameter and merge type specified in mergeType query
+     * parameter. NOTE: REGIONAL merge type should only be handled through {@link ProjectController#mergeProjectFeeds(Request, Response)}.
+     */
+    private static String mergeFeedVersions(Request req, Response res) {
+        String[] versionIds = req.queryParams("feedVersionIds").split(",");
+        // Try to parse merge type (null or bad value throws IllegalArgumentException).
+        MergeFeedsType mergeType;
+        try {
+            mergeType = MergeFeedsType.valueOf(req.queryParams("mergeType"));
+            if (mergeType.equals(REGIONAL)) {
+                throw new IllegalArgumentException("Regional merge type is not permitted for this endpoint.");
+            }
+        } catch (IllegalArgumentException e) {
+            logMessageAndHalt(req, 400, "Must provide valid merge type.", e);
+            return null;
+        }
+        // Collect versions to merge (must belong to same feed source).
+        Set<FeedVersion> versions = new HashSet<>();
+        String feedSourceId = null;
+        for (String id : versionIds) {
+            FeedVersion v = Persistence.feedVersions.getById(id);
+            if (v == null) {
+                logMessageAndHalt(req,
+                                  400,
+                                  String.format("Must provide valid version ID. (No version exists for id=%s.)", id)
+                );
+            }
+            // Store feed source id and check other versions for matching.
+            if (feedSourceId == null) feedSourceId = v.feedSourceId;
+            else if (!v.feedSourceId.equals(feedSourceId)) {
+                logMessageAndHalt(req, 400, "Cannot merge versions with different parent feed sources.");
+            }
+            versions.add(v);
+        }
+        if (versionIds.length != 2) {
+            logMessageAndHalt(req, 400, "Merging more than two versions is not currently supported.");
+        }
+        // Kick off merge feeds job.
+        Auth0UserProfile userProfile = req.attribute("user");
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(userProfile.getUser_id(), versions, "merged", mergeType);
+        DataManager.heavyExecutor.execute(mergeFeedsJob);
+        return SparkUtils.formatJobMessage(mergeFeedsJob.jobId, "Merging feed versions...");
     }
 
     /**
@@ -351,6 +404,7 @@ public class FeedVersionController  {
         post(apiPrefix + "secure/feedversion/shapes", FeedVersionController::exportGis, json::write);
         post(apiPrefix + "secure/feedversion/fromsnapshot", FeedVersionController::createFeedVersionFromSnapshot, json::write);
         put(apiPrefix + "secure/feedversion/:id/rename", FeedVersionController::renameFeedVersion, json::write);
+        put(apiPrefix + "secure/feedversion/merge", FeedVersionController::mergeFeedVersions, json::write);
         post(apiPrefix + "secure/feedversion/:id/publish", FeedVersionController::publishToExternalResource, json::write);
         delete(apiPrefix + "secure/feedversion/:id", FeedVersionController::deleteFeedVersion, json::write);
 

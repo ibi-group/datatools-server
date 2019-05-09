@@ -30,7 +30,7 @@ public class PersistenceTest {
         String id = feedSource.id;
         Persistence.feedSources.create(feedSource);
         String retrievedId = Persistence.feedSources.getById(id).id;
-        assertEquals("Found FeedSource ID should equal inserted ID.", retrievedId, id);
+        assertEquals("Found FeedSource ID should equal inserted ID.", id, retrievedId);
     }
 
 //    @Test
@@ -59,7 +59,7 @@ public class PersistenceTest {
         String id = project.id;
         Persistence.projects.create(project);
         String retrievedId = Persistence.projects.getById(id).id;
-        assertEquals("Found Project ID should equal inserted ID.", retrievedId, id);
+        assertEquals("Found Project ID should equal inserted ID.", id, retrievedId);
     }
 //
 //    @Test

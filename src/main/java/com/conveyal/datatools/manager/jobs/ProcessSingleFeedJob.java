@@ -50,7 +50,7 @@ public class ProcessSingleFeedJob extends MonitorableJob {
     public void jobLogic () {
         LOG.info("Processing feed for {}", feedVersion.id);
 
-        // First, load the feed into database.
+        // First, load the feed into database. During this stage, the GTFS file will be uploaded to S3 (and deleted locally).
         addNextJob(new LoadFeedJob(feedVersion, owner, isNewVersion));
 
         // Next, validate the feed.
