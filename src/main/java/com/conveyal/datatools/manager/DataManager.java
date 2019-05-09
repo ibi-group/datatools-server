@@ -239,7 +239,6 @@ public class DataManager {
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.STOPS, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.TRIPS, DataManager.GTFS_DATA_SOURCE);
             // TODO: Add transfers.txt controller?
-//            GisController.register(EDITOR_API_PREFIX);
         }
 
         // log all exceptions to system.out

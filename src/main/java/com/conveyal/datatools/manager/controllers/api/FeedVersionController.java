@@ -3,7 +3,9 @@ package com.conveyal.datatools.manager.controllers.api;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.auth.Actions;
 import com.conveyal.datatools.manager.jobs.CreateFeedVersionFromSnapshotJob;
+import com.conveyal.datatools.manager.jobs.GisExportJob;
 import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
 import com.conveyal.datatools.manager.jobs.MergeFeedsType;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
@@ -25,8 +27,11 @@ import spark.Response;
 
 import javax.servlet.http.HttpServletResponse;
 import java.io.File;
+import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Date;
+import java.util.List;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -36,6 +41,7 @@ import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.controllers.api.FeedSourceController.checkFeedSourcePermissions;
+import static com.mongodb.client.model.Filters.eq;
 import static com.conveyal.datatools.manager.jobs.MergeFeedsType.REGIONAL;
 import static spark.Spark.delete;
 import static spark.Spark.get;
@@ -43,11 +49,6 @@ import static spark.Spark.post;
 import static spark.Spark.put;
 
 public class FeedVersionController  {
-
-    // TODO use this instead of stringly typed permissions
-    enum Permission {
-        VIEW, MANAGE
-    }
 
     public static final Logger LOG = LoggerFactory.getLogger(FeedVersionController.class);
     public static JsonManager<FeedVersion> json = new JsonManager<>(FeedVersion.class, JsonViews.UserInterface.class);
@@ -57,7 +58,7 @@ public class FeedVersionController  {
      * If you pass in ?summarized=true, don't include the full tree of validation results, only the counts.
      */
     private static FeedVersion getFeedVersion (Request req, Response res) {
-        return requestFeedVersion(req, "view");
+        return requestFeedVersion(req, Actions.VIEW);
     }
 
     /**
@@ -65,11 +66,11 @@ public class FeedVersionController  {
      */
     private static Collection<FeedVersion> getAllFeedVersionsForFeedSource(Request req, Response res) {
         // Check permissions and get the FeedSource whose FeedVersions we want.
-        FeedSource feedSource = requestFeedSourceById(req, "view");
+        FeedSource feedSource = requestFeedSourceById(req, Actions.VIEW);
         return feedSource.retrieveFeedVersions();
     }
 
-    public static FeedSource requestFeedSourceById(Request req, String action, String paramName) {
+    public static FeedSource requestFeedSourceById(Request req, Actions action, String paramName) {
         String id = req.queryParams(paramName);
         if (id == null) {
             logMessageAndHalt(req, 400, "Please specify feedSourceId param");
@@ -77,7 +78,7 @@ public class FeedVersionController  {
         return checkFeedSourcePermissions(req, Persistence.feedSources.getById(id), action);
     }
 
-    private static FeedSource requestFeedSourceById(Request req, String action) {
+    private static FeedSource requestFeedSourceById(Request req, Actions action) {
         return requestFeedSourceById(req, action, "feedSourceId");
     }
 
@@ -95,7 +96,7 @@ public class FeedVersionController  {
     public static String createFeedVersionViaUpload(Request req, Response res) {
 
         Auth0UserProfile userProfile = req.attribute("user");
-        FeedSource feedSource = requestFeedSourceById(req, "manage");
+        FeedSource feedSource = requestFeedSourceById(req, Actions.MANAGE);
         FeedVersion latestVersion = feedSource.retrieveLatest();
         FeedVersion newFeedVersion = new FeedVersion(feedSource);
         newFeedVersion.retrievalMethod = FeedSource.FeedRetrievalMethod.MANUALLY_UPLOADED;
@@ -157,7 +158,7 @@ public class FeedVersionController  {
 
         Auth0UserProfile userProfile = req.attribute("user");
         // TODO: Should the ability to create a feedVersion from snapshot be controlled by the 'edit-gtfs' privilege?
-        FeedSource feedSource = requestFeedSourceById(req, "manage");
+        FeedSource feedSource = requestFeedSourceById(req, Actions.MANAGE);
         Snapshot snapshot = Persistence.snapshots.getById(req.queryParams("snapshotId"));
         if (snapshot == null) {
             logMessageAndHalt(req, 400, "Must provide valid snapshot ID");
@@ -174,16 +175,16 @@ public class FeedVersionController  {
      * Spark HTTP API handler that deletes a single feed version based on the ID in the request.
      */
     private static FeedVersion deleteFeedVersion(Request req, Response res) {
-        FeedVersion version = requestFeedVersion(req, "manage");
+        FeedVersion version = requestFeedVersion(req, Actions.MANAGE);
         version.delete();
         return version;
     }
 
-    private static FeedVersion requestFeedVersion(Request req, String action) {
+    private static FeedVersion requestFeedVersion(Request req, Actions action) {
         return requestFeedVersion(req, action, req.params("id"));
     }
 
-    public static FeedVersion requestFeedVersion(Request req, String action, String feedVersionId) {
+    public static FeedVersion requestFeedVersion(Request req, Actions action, String feedVersionId) {
         FeedVersion version = Persistence.feedVersions.getById(feedVersionId);
         if (version == null) {
             logMessageAndHalt(req, 404, "Feed version ID does not exist");
@@ -194,7 +195,7 @@ public class FeedVersionController  {
     }
 
     private static boolean renameFeedVersion (Request req, Response res) {
-        FeedVersion v = requestFeedVersion(req, "manage");
+        FeedVersion v = requestFeedVersion(req, Actions.MANAGE);
 
         String name = req.queryParams("name");
         if (name == null) {
@@ -206,7 +207,7 @@ public class FeedVersionController  {
     }
 
     private static HttpServletResponse downloadFeedVersionDirectly(Request req, Response res) {
-        FeedVersion version = requestFeedVersion(req, "view");
+        FeedVersion version = requestFeedVersion(req, Actions.VIEW);
         return downloadFile(version.retrieveGtfsFile(), version.id, req, res);
     }
 
@@ -214,8 +215,8 @@ public class FeedVersionController  {
      * Returns credentials that a client may use to then download a feed version. Functionality
      * changes depending on whether application.data.use_s3_storage config property is true.
      */
-    private static Object getFeedDownloadCredentials(Request req, Response res) {
-        FeedVersion version = requestFeedVersion(req, "view");
+    private static Object getDownloadCredentials(Request req, Response res) {
+        FeedVersion version = requestFeedVersion(req, Actions.VIEW);
 
         if (DataManager.useS3) {
             // Return pre-signed download link if using S3.
@@ -233,7 +234,7 @@ public class FeedVersionController  {
      * FIXME!
      */
     private static JsonNode validate (Request req, Response res) {
-        FeedVersion version = requestFeedVersion(req, "manage");
+        FeedVersion version = requestFeedVersion(req, Actions.MANAGE);
         logMessageAndHalt(req, 400, "Validate endpoint not currently configured!");
         // FIXME: Update for sql-loader validation process?
         return null;
@@ -241,7 +242,7 @@ public class FeedVersionController  {
     }
 
     private static FeedVersion publishToExternalResource (Request req, Response res) {
-        FeedVersion version = requestFeedVersion(req, "manage");
+        FeedVersion version = requestFeedVersion(req, Actions.MANAGE);
 
         // notify any extensions of the change
         try {
@@ -267,6 +268,55 @@ public class FeedVersionController  {
             logMessageAndHalt(req, 500, "Could not publish feed.", e);
             return null;
         }
+    }
+
+    /**
+     * HTTP endpoint to initiate an export of a shapefile containing the stops or routes of one or
+     * more feed versions. NOTE: the job ID returned must be used by the requester to download the
+     * zipped shapefile once the job has completed.
+     */
+    private static String exportGis (Request req, Response res) throws IOException {
+        String type = req.queryParams("type");
+        Auth0UserProfile userProfile = req.attribute("user");
+        List<String> feedIds = Arrays.asList(req.queryParams("feedId").split(","));
+        File temp = File.createTempFile("gis_" + type, ".zip");
+        // Create and run shapefile export.
+        GisExportJob gisExportJob = new GisExportJob(
+            GisExportJob.ExportType.valueOf(type),
+            temp,
+            feedIds,
+            userProfile.getUser_id()
+        );
+        DataManager.heavyExecutor.execute(gisExportJob);
+        // Do not use S3 to store the file, which should only be stored ephemerally (until requesting
+        // user has downloaded file).
+        FeedDownloadToken token = new FeedDownloadToken(gisExportJob);
+        Persistence.tokens.create(token);
+        return SparkUtils.formatJobMessage(gisExportJob.jobId, "Generating shapefile.");
+    }
+
+    /**
+     * Public HTTP endpoint to download a zipped shapefile of routes or stops for a set of feed
+     * versions using the job ID that was used for initially creating the exported shapes.
+     */
+    private static HttpServletResponse downloadFeedVersionGis (Request req, Response res) {
+        FeedDownloadToken token = Persistence.tokens.getOneFiltered(eq("jobId", req.params("jobId")));
+        File file = new File(token.filePath);
+        try {
+            return downloadFile(file, file.getName(), req, res);
+        } catch (Exception e) {
+            logMessageAndHalt(req, 500,
+                "Unknown error occurred while downloading feed version shapefile", e);
+        } finally {
+            if (!file.delete()) {
+                LOG.error("Could not delete shapefile {}. Storage issues may occur.", token.filePath);
+            } else {
+                LOG.info("Deleted shapefile {} following download.", token.filePath);
+            }
+            // Delete token.
+            Persistence.tokens.removeById(token.id);
+        }
+        return null;
     }
 
     /**
@@ -347,10 +397,11 @@ public class FeedVersionController  {
         // previous version of data tools.
         get(apiPrefix + "secure/feedversion/:id", FeedVersionController::getFeedVersion, json::write);
         get(apiPrefix + "secure/feedversion/:id/download", FeedVersionController::downloadFeedVersionDirectly);
-        get(apiPrefix + "secure/feedversion/:id/downloadtoken", FeedVersionController::getFeedDownloadCredentials, json::write);
+        get(apiPrefix + "secure/feedversion/:id/downloadtoken", FeedVersionController::getDownloadCredentials, json::write);
         post(apiPrefix + "secure/feedversion/:id/validate", FeedVersionController::validate, json::write);
         get(apiPrefix + "secure/feedversion", FeedVersionController::getAllFeedVersionsForFeedSource, json::write);
         post(apiPrefix + "secure/feedversion", FeedVersionController::createFeedVersionViaUpload, json::write);
+        post(apiPrefix + "secure/feedversion/shapes", FeedVersionController::exportGis, json::write);
         post(apiPrefix + "secure/feedversion/fromsnapshot", FeedVersionController::createFeedVersionFromSnapshot, json::write);
         put(apiPrefix + "secure/feedversion/:id/rename", FeedVersionController::renameFeedVersion, json::write);
         put(apiPrefix + "secure/feedversion/merge", FeedVersionController::mergeFeedVersions, json::write);
@@ -358,9 +409,10 @@ public class FeedVersionController  {
         delete(apiPrefix + "secure/feedversion/:id", FeedVersionController::deleteFeedVersion, json::write);
 
         get(apiPrefix + "public/feedversion", FeedVersionController::getAllFeedVersionsForFeedSource, json::write);
-        get(apiPrefix + "public/feedversion/:id/downloadtoken", FeedVersionController::getFeedDownloadCredentials, json::write);
+        get(apiPrefix + "public/feedversion/:id/downloadtoken", FeedVersionController::getDownloadCredentials, json::write);
 
         get(apiPrefix + "downloadfeed/:token", FeedVersionController::downloadFeedVersionWithToken);
+        get(apiPrefix + "downloadshapes/:jobId", FeedVersionController::downloadFeedVersionGis, json::write);
 
     }
 }
