@@ -51,7 +51,7 @@
         <url>https://github.com/conveyal/datatools-server.git</url>
     </scm>
     <properties>
-        <jackson.version>2.9.8</jackson.version>
+        <jackson.version>2.9.9</jackson.version>
         <!-- Using the latest version of geotools (e.g, 20) seems to cause issues with the shapefile
         plugin where the_geom for each feature is null. -->
         <geotools.version>17.5</geotools.version>
