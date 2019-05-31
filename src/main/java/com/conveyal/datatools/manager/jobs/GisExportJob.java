@@ -78,13 +78,12 @@ public class GisExportJob extends MonitorableJob {
             ShapefileDataStore datastore = (ShapefileDataStore) dataStoreFactory.createNewDataStore(params);
             datastore.forceSchemaCRS(DefaultGeographicCRS.WGS84);
 
-            final SimpleFeatureType STOP_TYPE = // createStopFeatureType();
-                DataUtilities.createType(
+            final SimpleFeatureType STOP_TYPE = DataUtilities.createType(
                     "Stop",
                     String.join(",",
                         // Geometry must be the first attribute for a shapefile (and must be named
-                        // "the_geom").
-                        "the_geom:Point",
+                        // "the_geom"). We must include SRID, otherwise the projection will be undefined.
+                        "the_geom:Point:srid=4326",
                         "name:String",
                         "code:String",
                         "desc:String",
@@ -96,6 +95,8 @@ public class GisExportJob extends MonitorableJob {
             final SimpleFeatureType ROUTE_TYPE = DataUtilities.createType(
                 "Route", // <- the name for our feature type
                 String.join(",",
+                    // Geometry must be the first attribute for a shapefile (and must be named
+                    // "the_geom"). We must include SRID, otherwise the projection will be undefined.
                     "the_geom:LineString:srid=4326",
                     "pattName:String",
                     "shortName:String",
@@ -158,7 +159,9 @@ public class GisExportJob extends MonitorableJob {
                     // exporting a shapefile. If there are future similar cases, we may need to
                     // refactor this into a more structured operation using Java objects or
                     // com.conveyal.gtfs.loader.Feed
-                    String patternsSql = Table.PATTERNS.generateSelectSql(version.namespace, Requirement.EDITOR);
+                    // Note: we use generateSelectAllSql because we encountered an issue with some feeds (perhaps legacy)
+                    // not containing the column patterns#direction_id. See https://github.com/ibi-group/datatools-server/issues/203
+                    String patternsSql = Table.PATTERNS.generateSelectAllSql(version.namespace);
                     PreparedStatement statement = connection.prepareStatement(patternsSql);
                     ResultSet resultSet = statement.executeQuery();
                     // we loop over trip patterns. Note that this will yield several lines for routes that have
