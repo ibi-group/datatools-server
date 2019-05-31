@@ -10,15 +10,19 @@ import com.google.common.io.Files;
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.MultiLineString;
 import com.vividsolutions.jts.geom.Point;
+import org.apache.commons.io.FileUtils;
 import org.geotools.data.DataStore;
 import org.geotools.data.DataStoreFinder;
 import org.geotools.data.FeatureSource;
 import org.geotools.feature.FeatureCollection;
 import org.geotools.feature.FeatureIterator;
+import org.geotools.referencing.CRS;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.opengis.feature.Feature;
 import org.opengis.feature.Property;
+import org.opengis.referencing.FactoryException;
+import org.opengis.referencing.crs.CoordinateReferenceSystem;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -87,7 +91,10 @@ public class GisExportJobTest {
         GisExportJob gisExportJob = new GisExportJob(GisExportJob.ExportType.STOPS, zipFile, ids, "test");
         gisExportJob.run();
         assertThat(gisExportJob.status.error, equalTo(false));
-        FeatureCollection collection = getFeatureCollectionFromZippedShapefile(zipFile);
+        File[] files = getFilesFromZippedShapefile(zipFile);
+        FeatureCollection collection = getFeatureCollectionFromZippedShapefile(files);
+        CoordinateReferenceSystem crs = getCRSFromShapefiles(files);
+        assertThat("Coordinate reference system is not null.", crs, notNullValue());
         // Iterate over features.
         int featureCount = 0;
         try (FeatureIterator iterator = collection.features()) {
@@ -133,7 +140,10 @@ public class GisExportJobTest {
         GisExportJob gisExportJob = new GisExportJob(GisExportJob.ExportType.ROUTES, zipFile, ids, "test");
         gisExportJob.run();
         assertThat(gisExportJob.status.error, equalTo(false));
-        FeatureCollection collection = getFeatureCollectionFromZippedShapefile(zipFile);
+        File[] files = getFilesFromZippedShapefile(zipFile);
+        FeatureCollection collection = getFeatureCollectionFromZippedShapefile(files);
+        CoordinateReferenceSystem crs = getCRSFromShapefiles(files);
+        assertThat("Coordinate reference system is not null.", crs, notNullValue());
         // Iterate over features.
         int featureCount = 0;
         try (FeatureIterator iterator = collection.features()) {
@@ -189,7 +199,10 @@ public class GisExportJobTest {
         GisExportJob gisExportJob = new GisExportJob(GisExportJob.ExportType.ROUTES, zipFile, ids, "test");
         gisExportJob.run();
         assertThat(gisExportJob.status.error, equalTo(false));
-        FeatureCollection collection = getFeatureCollectionFromZippedShapefile(zipFile);
+        File[] files = getFilesFromZippedShapefile(zipFile);
+        FeatureCollection collection = getFeatureCollectionFromZippedShapefile(files);
+        CoordinateReferenceSystem crs = getCRSFromShapefiles(files);
+        assertThat("Coordinate reference system is not null.", crs, notNullValue());
         // Iterate over features.
         int featureCount = 0;
         try (FeatureIterator iterator = collection.features()) {
@@ -229,11 +242,8 @@ public class GisExportJobTest {
         assertThat(featureCount, equalTo(patternCount));
     }
 
-    /**
-     * Utility method to extract a {@link FeatureCollection} from a zipped shapefile during tests.
-     */
-    private FeatureCollection getFeatureCollectionFromZippedShapefile(File zipFile) throws IOException {
-        // Unzip the shapefile and read the stop features to verify they are valid.
+    /** Unzip the shapefile into a temp directory and return a list of its files. */
+    private File[] getFilesFromZippedShapefile(File zipFile) throws IOException {
         File destDir = Files.createTempDir();
         byte[] buffer = new byte[1024];
         ZipInputStream zis = new ZipInputStream(new FileInputStream(zipFile));
@@ -250,8 +260,37 @@ public class GisExportJobTest {
         }
         zis.closeEntry();
         zis.close();
-        for (File file : destDir.listFiles()) {
-            // Find the shapefile and
+        return destDir.listFiles();
+    }
+
+    /**
+     * Get the coordinate reference system (contained in the .prj file) from a set of files representing an unzipped
+     * shapefile.
+     */
+    private CoordinateReferenceSystem getCRSFromShapefiles(File[] files) throws IOException {
+        for (File file : files) {
+            if (file.getName().endsWith(".prj")) {
+                LOG.info("Found projection entry: {}", file.getAbsolutePath());
+                String wkt = FileUtils.readFileToString(file, "UTF-8");
+                try {
+                    CoordinateReferenceSystem crs = CRS.parseWKT(wkt);
+                    LOG.info("CRS is {}", crs.getCoordinateSystem().toString());
+                    return crs;
+                } catch (FactoryException e) {
+                    e.printStackTrace();
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Utility method to extract a {@link FeatureCollection} from a zipped shapefile during tests. This also asserts
+     * that the projection file included in the shapefile (.prj) contains a valid/parseable coordinate reference system.
+     */
+    private FeatureCollection getFeatureCollectionFromZippedShapefile(File[] files) throws IOException {
+        for (File file : files) {
+            // Find the shapefile and return its features
             if (file.getName().endsWith(".shp")) {
                 LOG.info("Found shapefile entry: {}", file.getAbsolutePath());
                 try {
