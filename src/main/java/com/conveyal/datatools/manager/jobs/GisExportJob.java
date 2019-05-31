@@ -159,9 +159,11 @@ public class GisExportJob extends MonitorableJob {
                     // exporting a shapefile. If there are future similar cases, we may need to
                     // refactor this into a more structured operation using Java objects or
                     // com.conveyal.gtfs.loader.Feed
-                    // Note: we use generateSelectAllSql because we encountered an issue with some feeds (perhaps legacy)
-                    // not containing the column patterns#direction_id. See https://github.com/ibi-group/datatools-server/issues/203
-                    String patternsSql = Table.PATTERNS.generateSelectAllSql(version.namespace);
+                    // Note: we use generateSelectSql for PROPRIETARY because we encountered an issue with some feeds
+                    // (perhaps legacy) not containing the column patterns#direction_id.
+                    // See https://github.com/ibi-group/datatools-server/issues/203
+                    // TODO: replace with Table#generateSelectAllSql
+                    String patternsSql = Table.PATTERNS.generateSelectSql(version.namespace, Requirement.PROPRIETARY);
                     PreparedStatement statement = connection.prepareStatement(patternsSql);
                     ResultSet resultSet = statement.executeQuery();
                     // we loop over trip patterns. Note that this will yield several lines for routes that have
