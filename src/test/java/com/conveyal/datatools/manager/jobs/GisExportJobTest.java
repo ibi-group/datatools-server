@@ -93,8 +93,7 @@ public class GisExportJobTest {
         assertThat(gisExportJob.status.error, equalTo(false));
         File[] files = getFilesFromZippedShapefile(zipFile);
         FeatureCollection collection = getFeatureCollectionFromZippedShapefile(files);
-        CoordinateReferenceSystem crs = getCRSFromShapefiles(files);
-        assertThat("Coordinate reference system is not null.", crs, notNullValue());
+        assertCrsIsNotNull(files);
         // Iterate over features.
         int featureCount = 0;
         try (FeatureIterator iterator = collection.features()) {
@@ -127,6 +126,12 @@ public class GisExportJobTest {
         assertThat(featureCount, equalTo(calTrainVersion.feedLoadResult.stops.rowCount));
     }
 
+    /** Get CRS from unzipped shapefile set of files and ensure it's not null. */
+    private void assertCrsIsNotNull(File[] files) throws IOException {
+        CoordinateReferenceSystem crs = getCRSFromShapefiles(files);
+        assertThat("Coordinate reference system is not null.", crs, notNullValue());
+    }
+
     /**
      * Ensures that a shapefile containing route (pattern) features for a feed version can be
      * exported and contains geometry for each pattern.
@@ -142,8 +147,7 @@ public class GisExportJobTest {
         assertThat(gisExportJob.status.error, equalTo(false));
         File[] files = getFilesFromZippedShapefile(zipFile);
         FeatureCollection collection = getFeatureCollectionFromZippedShapefile(files);
-        CoordinateReferenceSystem crs = getCRSFromShapefiles(files);
-        assertThat("Coordinate reference system is not null.", crs, notNullValue());
+        assertCrsIsNotNull(files);
         // Iterate over features.
         int featureCount = 0;
         try (FeatureIterator iterator = collection.features()) {
@@ -201,8 +205,7 @@ public class GisExportJobTest {
         assertThat(gisExportJob.status.error, equalTo(false));
         File[] files = getFilesFromZippedShapefile(zipFile);
         FeatureCollection collection = getFeatureCollectionFromZippedShapefile(files);
-        CoordinateReferenceSystem crs = getCRSFromShapefiles(files);
-        assertThat("Coordinate reference system is not null.", crs, notNullValue());
+        assertCrsIsNotNull(files);
         // Iterate over features.
         int featureCount = 0;
         try (FeatureIterator iterator = collection.features()) {
