@@ -29,3 +29,6 @@ extensions:
     enabled: true
     api: http://api.transitfeeds.com/v1/getFeeds
     key: your-api-key
+  # Enable MTC for testing purposes
+  mtc:
+    enabled: true

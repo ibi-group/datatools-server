@@ -614,7 +614,7 @@ public class MergeFeedsJob extends MonitorableJob {
                                     // route_short_name/stop_code in active data not present in the future will be appended to the
                                     // future routes/stops file.
                                     if (useAltKey) {
-                                        if ("".equals(val)) {
+                                        if ("".equals(keyValue) && field.name.equals(table.getKeyFieldName())) {
                                             // If alt key is empty (which is permitted), skip
                                             // checking of alt key dupe errors/re-mapping values and
                                             // simply use the primary key (route_id/stop_id).
@@ -742,6 +742,7 @@ public class MergeFeedsJob extends MonitorableJob {
                             break;
                         case "transfers":
                         case "fare_rules":
+                        case "directions": // GTFS+ table
                             if (!rowStrings.add(newLine)) {
                                 // The line already exists in the output file, do not append it again. This prevents duplicate
                                 // entries for certain files that do not contain primary keys (e.g., fare_rules and transfers) and
