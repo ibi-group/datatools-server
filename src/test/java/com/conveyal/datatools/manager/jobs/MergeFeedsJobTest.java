@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.jobs;
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.LoadFeedTest;
 import com.conveyal.datatools.TestUtils;
+import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
@@ -161,6 +162,11 @@ public class MergeFeedsJobTest {
         mergeFeedsJob.failOnDuplicateTripId = false;
         mergeFeedsJob.run();
         // Result should succeed this time.
+        assertEquals(
+            "Merged directions count should equal expected value.",
+            2, // Magic number represents expected number of lines after merge.
+            mergeFeedsJob.mergeFeedsResult.linesPerTable.get("directions").intValue()
+        );
         assertEquals(
             "Merged feed trip count should equal expected value.",
             4552, // Magic number represents the number of trips in the merged BART feed.

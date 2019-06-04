@@ -34,8 +34,9 @@ public class GtfsPlusTable {
     public static final Table DIRECTIONS = new Table("directions", Direction.class, PROPRIETARY,
         new StringField("route_id", REQUIRED).isReferenceTo(Table.ROUTES),
         new ShortField("direction_id", REQUIRED, 1),
-        new StringField("direction", REQUIRED)
-    ).keyFieldIsNotUnique();
+        new StringField("direction", REQUIRED))
+        .keyFieldIsNotUnique()
+        .hasCompoundKey();
 
     public static final Table REALTIME_TRIPS = new Table("realtime_trips", RealtimeTrip.class, PROPRIETARY,
         new StringField("trip_id", REQUIRED).isReferenceTo(Table.TRIPS),
