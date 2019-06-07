@@ -303,23 +303,32 @@ public class GtfsPlusController {
      */
     private static void validateTable(
         Collection<ValidationIssue> issues,
-        JsonNode tableNode,
-        InputStream inputStream,
+        JsonNode specTable,
+        InputStream inputStreamToValidate,
         GTFSFeed gtfsFeed
     ) throws IOException {
-        String tableId = tableNode.get("id").asText();
-        BufferedReader in = new BufferedReader(new InputStreamReader(inputStream));
+        String tableId = specTable.get("id").asText();
+        // Read in table data from input stream.
+        BufferedReader in = new BufferedReader(new InputStreamReader(inputStreamToValidate));
         String line = in.readLine();
-        String[] fields = line.split(",");
-        List<String> fieldList = Arrays.asList(fields);
-        JsonNode[] fieldNodes = new JsonNode[fields.length];
-        JsonNode fieldsNode = tableNode.get("fields");
-        for(int i = 0; i < fieldsNode.size(); i++) {
-            JsonNode fieldNode = fieldsNode.get(i);
-            int index = fieldList.indexOf(fieldNode.get("name").asText());
-            if(index != -1) fieldNodes[index] = fieldNode;
+        String[] inputHeaders = line.split(",");
+        List<String> fieldList = Arrays.asList(inputHeaders);
+        JsonNode[] fieldsFounds = new JsonNode[inputHeaders.length];
+        JsonNode specFields = specTable.get("fields");
+        // Iterate over spec fields and check that there are no missing required fields.
+        for (int i = 0; i < specFields.size(); i++) {
+            JsonNode specField = specFields.get(i);
+            String fieldName = specField.get("name").asText();
+            int index = fieldList.indexOf(fieldName);
+            if (index != -1) {
+                // Add spec field for each field found.
+                fieldsFounds[index] = specField;
+            } else if (isRequired(specField)) {
+                // If spec field not found, check that missing field was not required.
+                issues.add(new ValidationIssue(tableId, fieldName, -1, "Required column missing."));
+            }
         }
-
+        // Iterate over each row and validate each field value.
         int rowIndex = 0;
         while((line = in.readLine()) != null) {
             String[] values = line.split(Consts.COLUMN_SPLIT, -1);
@@ -330,9 +339,22 @@ public class GtfsPlusController {
         }
     }
 
-    private static void validateTableValue(Collection<ValidationIssue> issues, String tableId, int rowIndex, String value, JsonNode fieldNode, GTFSFeed gtfsFeed) {
-        if(fieldNode == null) return;
-        String fieldName = fieldNode.get("name").asText();
+    /** Determine if a GTFS+ spec field is required. */
+    private static boolean isRequired(JsonNode specField) {
+        return specField.get("required") != null && specField.get("required").asBoolean();
+    }
+
+    /** Validate a single value for a GTFS+ table. */
+    private static void validateTableValue(
+        Collection<ValidationIssue> issues,
+        String tableId,
+        int rowIndex,
+        String value,
+        JsonNode specField,
+        GTFSFeed gtfsFeed
+    ) {
+        if (specField == null) return;
+        String fieldName = specField.get("name").asText();
 
         if(fieldNode.get("required") != null && fieldNode.get("required").asBoolean()) {
             if(value == null || value.length() == 0) {
@@ -398,6 +420,7 @@ public class GtfsPlusController {
 
     }
 
+    /** A validation issue for a GTFS+ field. Use rowIndex = -1 for a table level issue. */
     public static class ValidationIssue implements Serializable {
         private static final long serialVersionUID = 1L;
         public String tableId;
