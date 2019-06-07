@@ -1,19 +1,19 @@
-package com.conveyal.datatools.manager.gtfsplus;
+package com.conveyal.datatools.manager.gtfsplus.tables;
 
 import com.conveyal.gtfs.model.Entity;
 
-import javax.naming.OperationNotSupportedException;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 
-public class CalendarAttribute extends Entity {
+public class RealtimeTrip extends Entity {
 
     private static final long serialVersionUID = 1L;
 
-    public String service_id;
-    public String service_description;
+    public String trip_id;
+    public String realtime_trip_id;
 
-    @Override public void setStatementParameters(PreparedStatement statement, boolean setDefaultId) {
+    @Override
+    public void setStatementParameters(PreparedStatement statement, boolean setDefaultId) throws SQLException {
         throw new UnsupportedOperationException(
             "Cannot call setStatementParameters because loading a GTFS+ table into RDBMS is unsupported.");
     }

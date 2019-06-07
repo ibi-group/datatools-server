@@ -1,4 +1,4 @@
-package com.conveyal.datatools.manager.gtfsplus;
+package com.conveyal.datatools.manager.gtfsplus.tables;
 
 import com.conveyal.gtfs.loader.DateField;
 import com.conveyal.gtfs.loader.DoubleField;
