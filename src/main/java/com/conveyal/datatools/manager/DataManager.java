@@ -68,6 +68,7 @@ import static spark.Spark.port;
  * referenced throughout the application.
  */
 public class DataManager {
+    public static final String GTFS_PLUS_SUBDIR = "gtfsplus";
     private static final Logger LOG = LoggerFactory.getLogger(DataManager.class);
 
     // These fields hold YAML files that represent the server configuration.

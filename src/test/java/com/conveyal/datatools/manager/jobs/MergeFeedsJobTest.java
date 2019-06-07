@@ -1,9 +1,7 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.DatatoolsTest;
-import com.conveyal.datatools.LoadFeedTest;
 import com.conveyal.datatools.TestUtils;
-import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
@@ -15,14 +13,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
-import java.io.InputStream;
 import java.sql.SQLException;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;
 
+import static com.conveyal.datatools.TestUtils.createFeedVersion;
 import static org.junit.Assert.assertEquals;
 
 /**
@@ -184,33 +180,4 @@ public class MergeFeedsJobTest {
             NewGTFSErrorType.DUPLICATE_ID.toString()
         );
     }
-
-    /**
-     * Utility function to create a feed version during tests. Note: this is intended to run the job in the same thread,
-     * so that tasks can run synchronously.
-     */
-    public static FeedVersion createFeedVersion(FeedSource source, String gtfsFileName) {
-        File gtfsFile = new File(LoadFeedTest.class.getResource(gtfsFileName).getFile());
-        return createFeedVersion(source, gtfsFile);
-    }
-
-    /**
-     * Utility function to create a feed version during tests. Note: this is intended to run the job in the same thread,
-     * so that tasks can run synchronously.
-     */
-    public static FeedVersion createFeedVersion(FeedSource source, File gtfsFile) {
-        FeedVersion version = new FeedVersion(source);
-        InputStream is;
-        try {
-            is = new FileInputStream(gtfsFile);
-            version.newGtfsFile(is);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
-        ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(version, "test", true);
-        // Run in same thread.
-        processSingleFeedJob.run();
-        return version;
-    }
-
 }

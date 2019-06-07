@@ -15,6 +15,9 @@ modules:
     enabled: false
   user_admin:
     enabled: true
+  # Enable GTFS+ module for testing purposes
+  gtfsplus:
+    enabled: true
   gtfsapi:
     enabled: true
     load_on_fetch: false
