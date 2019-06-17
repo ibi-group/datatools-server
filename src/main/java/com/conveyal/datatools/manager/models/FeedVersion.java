@@ -191,6 +191,12 @@ public class FeedVersion extends Model implements Serializable {
     public String namespace;
 
     /**
+     * Indicates the namespace from which this version originated. For example, if it was published from a snapshot
+     * namespace or a GTFS+ feed, this field will reference that source namespace.
+     */
+    public String originNamespace;
+
+    /**
      * Indicates when a feed version was published to an external source. If null, the version has not been sent. This
      * field is currently in use only for the MTC extension and is reset to null after the published version has been
      * registered externally.
