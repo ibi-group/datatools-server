@@ -181,7 +181,7 @@ public class MergeFeedsJob extends MonitorableJob {
         mergedTempFile.deleteOnExit();
         // Create the zipfile.
         ZipOutputStream out = new ZipOutputStream(new FileOutputStream(mergedTempFile));
-        LOG.info("Created project merge file: " + mergedTempFile.getAbsolutePath());
+        LOG.info("Created merge file: " + mergedTempFile.getAbsolutePath());
         List<FeedToMerge> feedsToMerge = collectAndSortFeeds(feedVersions);
 
         // Determine which tables to merge (only merge GTFS+ tables for MTC extension).
@@ -333,6 +333,21 @@ public class MergeFeedsJob extends MonitorableJob {
         int mergedLineNumber = 0;
         // Get the spec fields to export
         List<Field> specFields = table.specFields();
+        if (DataManager.isExtensionEnabled("mtc")) {
+            // Remove route and agency branding URL from field list.
+            // Nothing to do for other tables.
+            if ("agency".equals(table.name) || "routes".equals(table.name)) {
+                int indexToRemove = -1;
+                for (int i = 0; i < specFields.size(); i++) {
+                    if (specFields.get(i).name.endsWith("_branding_url")) {
+                        indexToRemove = i;
+                        break;
+                    }
+                }
+                // Remove item outside of loop to prevent concurrent modification exception.
+                if (indexToRemove != -1) specFields.remove(indexToRemove);
+            }
+        }
         boolean stopCodeMissingFromFirstTable = false;
         try {
             // Iterate over each zip file.
