@@ -22,6 +22,7 @@ import java.lang.reflect.Field;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.Collection;
 
 import static com.conveyal.datatools.manager.models.ExternalFeedSourceProperty.constructId;
 
@@ -74,33 +75,17 @@ public class MtcFeedResource implements ExternalFeedResource {
         }
 
         try {
-            HttpURLConnection con = (HttpURLConnection) url.openConnection();
-
-            // optional default is GET
-            con.setRequestMethod("GET");
-
+            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
             //add request header
-            con.setRequestProperty("User-Agent", "User-Agent");
-
+            conn.setRequestProperty("User-Agent", "User-Agent");
             // add auth header
-            con.setRequestProperty("Authorization", authHeader);
+            conn.setRequestProperty("Authorization", authHeader);
 
-            LOG.info("Sending 'GET' request to URL : " + url);
-            int responseCode = con.getResponseCode();
-            LOG.info("Response Code : " + responseCode);
+            LOG.info("Sending 'GET' request to URL : {}", url);
+            LOG.info("Response Code : {}", conn.getResponseCode());
 
-            BufferedReader in = new BufferedReader(
-                    new InputStreamReader(con.getInputStream()));
-            String inputLine;
-            StringBuffer response = new StringBuffer();
-
-            while ((inputLine = in.readLine()) != null) {
-                response.append(inputLine);
-            }
-            in.close();
-
-            String json = response.toString();
-            RtdCarrier[] carriers = mapper.readValue(json, RtdCarrier[].class);
+            RtdCarrier[] carriers = mapper.readValue(conn.getInputStream(), RtdCarrier[].class);
+            Collection<FeedSource> projectFeedSources = project.retrieveProjectFeedSources();
             // Iterate over carriers found in response and update properties. Also, create a feed source for any carriers
             // found in the response that do not correspond to an agency ID found in the external feed source properties.
             for (int i = 0; i < carriers.length; i++) {
@@ -108,12 +93,11 @@ public class MtcFeedResource implements ExternalFeedResource {
                 FeedSource source = null;
 
                 // Check if a FeedSource with this AgencyId already exists.
-                for (FeedSource existingSource : project.retrieveProjectFeedSources()) {
+                for (FeedSource existingSource : projectFeedSources) {
                     ExternalFeedSourceProperty agencyIdProp;
                     String propertyId = constructId(existingSource, this.getResourceType(), AGENCY_ID_FIELDNAME);
                     agencyIdProp = Persistence.externalFeedSourceProperties.getById(propertyId);
                     if (agencyIdProp != null && agencyIdProp.value != null && agencyIdProp.value.equals(carrier.AgencyId)) {
-                        LOG.info("Feed source {} exists", existingSource.name);
                         source = existingSource;
                     }
                 }
