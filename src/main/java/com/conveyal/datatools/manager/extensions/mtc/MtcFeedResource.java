@@ -30,6 +30,11 @@ import static com.conveyal.datatools.manager.models.ExternalFeedSourceProperty.c
  * operators) and allows the Data Tools application to read and sync the list of carriers to a set of feed sources for a
  * given project.
  *
+ * This is generally intended as an initialization step to importing feed sources into a project; however, it should
+ * support subsequent sync requests (e.g., if new agencies are expected in the external feed resource, syncing should
+ * import those OR if feed properties are expected to have changed in the external feed resource, they should be updated
+ * accordingly in Data Tools).
+ *
  * Created by demory on 3/30/16.
  */
 public class MtcFeedResource implements ExternalFeedResource {
