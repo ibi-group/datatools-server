@@ -318,6 +318,27 @@
     columnWidth: 12
     helpContent:
 
+- id: shape
+  name: shapes.txt
+  helpContent: Shapes describe the physical path that a vehicle takes, and are defined in the file shapes.txt. Shapes belong to Trips, and consist of a sequence of points. Tracing the points in order provides the path of the vehicle. The points do not need to match stop locations.
+  fields:
+  - name: shape_id
+    required: true
+    inputType: GTFS_ID
+    helpContent: The shape_id field contains an ID that uniquely identifies a shape.
+  - name: shape_pt_lat
+    required: true
+    inputType: LATITUDE
+  - name: shape_pt_lon
+    required: true
+    inputType: LONGITUDE
+  - name: shape_pt_sequence
+    required: true
+    inputType: POSITIVE_INT
+  - name: shape_dist_traveled
+    inputType: POSITIVE_NUM
+    required: false
+
 - id: trip
   name: trips.txt
   helpContent: Trips for each route. A trip is a sequence of two or more stops that occurs at specific time.

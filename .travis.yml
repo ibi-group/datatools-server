@@ -1,6 +1,7 @@
+dist: trusty # jdk 8 not available on xenial
 language: java
-jdk:
-- oraclejdk8
+java:
+  - oraclejdk8
 install: true
 sudo: false
 # Install mongoDB to perform persistence tests
@@ -11,21 +12,25 @@ addons:
   postgresql: 9.6
 cache:
   directories:
-  - $HOME/.m2
-  - $HOME/.cache/yarn
+    - $HOME/.m2
+    - $HOME/.cache/yarn
 # Install semantic-release
 before_script:
   - yarn global add @conveyal/maven-semantic-release semantic-release@15
+  # Create dir for GTFS+ files (used during testing)
+  - mkdir /tmp/gtfsplus
 before_install:
   #- sed -i.bak -e 's|https://nexus.codehaus.org/snapshots/|https://oss.sonatype.org/content/repositories/codehaus-snapshots/|g' ~/.m2/settings.xml
   # run a script to see if the e2e tests should be ran. This script will set the environment variable SHOULD_RUN_E2E
   # which is used in later travis commands.
   - source ./scripts/check-if-e2e-tests-should-run-on-travis.sh
   # set region in AWS config for S3 setup
+  # - mkdir ~/.aws && printf '%s\n' '[default]' 'aws_access_key_id=foo' 'aws_secret_access_key=bar' 'region=us-east-1' > ~/.aws/config
   # add aws credentials for datatools-server
   - if [ "$SHOULD_RUN_E2E" = "true" ]; then mkdir ~/.aws && printf '%s\n' '[default]' 'aws_access_key_id=${AWS_ACCESS_KEY_ID}' 'aws_secret_access_key=${AWS_SECRET_ACCESS_KEY}' 'region=us-east-1' > ~/.aws/config; else mkdir ~/.aws && printf '%s\n' '[default]' 'aws_access_key_id=foo' 'aws_secret_access_key=bar' 'region=us-east-1' > ~/.aws/config; fi
-  # create database for e2e tests
-  - if [ "$SHOULD_RUN_E2E" = "true" ]; then psql -U postgres -c 'CREATE DATABASE catalogue;'; fi
+  - cp configurations/default/server.yml.tmp configurations/default/server.yml
+  # create database for e2e (and unit) tests
+  - psql -U postgres -c 'CREATE DATABASE catalogue;'
   # install node v8 for datatools-ui e2e tests
   - nvm install 8
 script:
@@ -95,5 +100,5 @@ deploy:
   local-dir: deploy
   acl: public_read
   on:
-    repo: conveyal/datatools-server
+    repo: ibi-group/datatools-server
     all_branches: true

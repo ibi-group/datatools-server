@@ -37,11 +37,9 @@ modules:
     url: /signs # eventually remove this
   user_admin:
     enabled: true
-    url: /admin # eventually remove this
-  r5_network:
+  # Enable GTFS+ module for testing purposes
+  gtfsplus:
     enabled: true
-  validator:
-    enabled: false
   gtfsapi:
     enabled: true
     load_on_fetch: false
@@ -62,3 +60,6 @@ extensions:
     enabled: true
     api: http://api.transitfeeds.com/v1/getFeeds
     key: your-api-key
+  # Enable MTC for testing purposes
+  mtc:
+    enabled: true

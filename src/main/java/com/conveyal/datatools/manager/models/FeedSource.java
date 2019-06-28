@@ -9,7 +9,6 @@ import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
-import com.conveyal.gtfs.validator.ValidationResult;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -31,6 +30,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
+import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 
 /**
@@ -111,6 +111,15 @@ public class FeedSource extends Model implements Cloneable {
      */
     public String snapshotVersion;
 
+    /**
+     * The SQL namespace for the most recently verified published {@link FeedVersion}.
+     *
+     * FIXME During migration to RDBMS for GTFS data, this field changed to map to the SQL unique ID,
+     *  however the name of the field suggests it maps to the feed version ID stored in MongoDB. Now
+     *  that both published namespace/version ID are available in {@link #publishedValidationSummary()}
+     *  it might make sense to migrate this field back to the versionID for MTC (or rename it to
+     *  publishedNamespace). Both efforts would require some level of db migration + code changes.
+     */
     public String publishedVersionId;
 
     public String editorNamespace;
@@ -304,6 +313,30 @@ public class FeedSource extends Model implements Cloneable {
         return newestVersion;
     }
 
+    /**
+     * Fetches the published {@link FeedVersion} for this feed source according to the
+     * {@link #publishedVersionId} field (which currently maps to {@link FeedVersion#namespace}.
+     */
+    public FeedVersion retrievePublishedVersion() {
+        if (this.publishedVersionId == null) return null;
+        FeedVersion publishedVersion = Persistence.feedVersions
+            // Sort is unnecessary here.
+            .getOneFiltered(eq("namespace", this.publishedVersionId), Sorts.descending("version"));
+        if (publishedVersion == null) {
+            // Is this what happens if there are none?
+            return null;
+        }
+        return publishedVersion;
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonView(JsonViews.UserInterface.class)
+    @JsonProperty("publishedValidationSummary")
+    private FeedValidationResultSummary publishedValidationSummary() {
+        FeedVersion publishedVersion = retrievePublishedVersion();
+        return publishedVersion != null ? new FeedValidationResultSummary(publishedVersion) : null;
+    }
+
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("latestVersionId")
@@ -332,8 +365,7 @@ public class FeedSource extends Model implements Cloneable {
     @JsonProperty("latestValidation")
     public FeedValidationResultSummary latestValidation() {
         FeedVersion latest = retrieveLatest();
-        ValidationResult result = latest != null ? latest.validationResult : null;
-        return result != null ?new FeedValidationResultSummary(result, latest.feedLoadResult) : null;
+        return latest != null ? new FeedValidationResultSummary(latest) : null;
     }
 
     // TODO: figure out some way to indicate whether feed has been edited since last snapshot (i.e, there exist changes)
@@ -360,10 +392,10 @@ public class FeedSource extends Model implements Cloneable {
         for(String resourceType : DataManager.feedResources.keySet()) {
             Map<String, String> propTable = new HashMap<>();
 
-            // FIXME: use mongo filters instead
-            Persistence.externalFeedSourceProperties.getAll().stream()
-                    .filter(prop -> prop.feedSourceId.equals(this.id))
-                    .forEach(prop -> propTable.put(prop.name, prop.value));
+            // Get all external properties for the feed source/resource type and fill prop table.
+            Persistence.externalFeedSourceProperties
+                .getFiltered(and(eq("feedSourceId", this.id), eq("resourceType", resourceType)))
+                .forEach(prop -> propTable.put(prop.name, prop.value));
 
             resourceTable.put(resourceType, propTable);
         }

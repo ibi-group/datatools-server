@@ -51,7 +51,10 @@
         <url>https://github.com/conveyal/datatools-server.git</url>
     </scm>
     <properties>
-        <jackson.version>2.9.8</jackson.version>
+        <jackson.version>2.9.9</jackson.version>
+        <!-- Using the latest version of geotools (e.g, 20) seems to cause issues with the shapefile
+        plugin where the_geom for each feature is null. -->
+        <geotools.version>17.5</geotools.version>
     </properties>
     <build>
         <resources>
@@ -243,11 +246,22 @@
             <version>2.1.0</version>
         </dependency>
 
-        <!-- Used for loading/fetching/writing GTFS entities (also provides access to commons-io and AWS S3 SDK). -->
+        <!-- Used for testing (note: this should match the version in gtfs-lib). -->
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.12</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Used for loading/fetching/writing GTFS entities. gtfs-lib also provides access to:
+         - commons-io - generic utilities
+         - AWS S3 SDK - putting/getting objects into/out of S3.
+         -->
         <dependency>
             <groupId>com.conveyal</groupId>
             <artifactId>gtfs-lib</artifactId>
-            <version>4.3.1</version>
+            <version>4.3.6</version>
         </dependency>
 
         <!-- Used for data-tools application database -->
@@ -310,15 +324,18 @@
         <dependency>
             <groupId>org.geotools</groupId>
             <artifactId>gt-shapefile</artifactId>
-            <version>19.2</version>
+            <version>${geotools.version}</version>
         </dependency>
-
-        <!-- Unit testing -->
+        <!-- gt-metadata and gt-api contains some dependencies required by gt-shapefile -->
         <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <version>4.12</version>
-            <scope>test</scope>
+            <groupId>org.geotools</groupId>
+            <artifactId>gt-metadata</artifactId>
+            <version>${geotools.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.geotools</groupId>
+            <artifactId>gt-api</artifactId>
+            <version>${geotools.version}</version>
         </dependency>
 
         <!-- Error reporting -->
@@ -353,7 +370,7 @@
         <dependency>
             <groupId>com.github.conveyal</groupId>
             <artifactId>java-snapshot-matcher</artifactId>
-            <version>e6a78d3af9d67f6f6240261fcba497d3b50f9399</version>
+            <version>3495b32f7b4d3f82590e0a2284029214070b6984</version>
             <scope>test</scope>
         </dependency>
         <!-- wiremock is used to mock http requests -->
@@ -368,6 +385,16 @@
             <groupId>org.yaml</groupId>
             <artifactId>snakeyaml</artifactId>
             <version>1.23</version>
+        </dependency>
+        <!-- Used for writing csv for merged feeds. Note: this appears to be one of the only
+          CSV libraries that will only quote values when necessary (e.g., there is a comma character
+          contained within the value) and that will work with an output stream writer when writing
+          directly to a zip output stream.
+          -->
+        <dependency>
+            <groupId>net.sf.supercsv</groupId>
+            <artifactId>super-csv</artifactId>
+            <version>2.4.0</version>
         </dependency>
     </dependencies>
 
