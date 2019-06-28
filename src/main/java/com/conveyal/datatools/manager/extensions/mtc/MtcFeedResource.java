@@ -120,16 +120,7 @@ public class MtcFeedResource implements ExternalFeedResource {
 
                 // Create / update the properties
                 LOG.info("Updating props for {}", source.name);
-                for(Field carrierField : carrier.getClass().getDeclaredFields()) {
-                    String fieldName = carrierField.getName();
-                    String fieldValue = carrierField.get(carrier) != null ? carrierField.get(carrier).toString() : null;
-                    ExternalFeedSourceProperty prop = new ExternalFeedSourceProperty(source, this.getResourceType(), fieldName, fieldValue);
-                    if (Persistence.externalFeedSourceProperties.getById(prop.id) == null) {
-                        Persistence.externalFeedSourceProperties.create(prop);
-                    } else {
-                        Persistence.externalFeedSourceProperties.updateField(prop.id, fieldName, fieldValue);
-                    }
-                }
+                carrier.updateFields(source);
             }
         } catch(Exception ex) {
             LOG.error("Could not read feeds from MTC RTD API");
@@ -138,12 +129,15 @@ public class MtcFeedResource implements ExternalFeedResource {
     }
 
     /**
-     * Do nothing for now. Creating a new agency for RTD requires adding the AgencyId property (when it was previously
-     * null. See {@link #propertyUpdated(ExternalFeedSourceProperty, String, String)}.
+     * Generate blank external feed resource properties when a new feed source is created. Creating a new agency for RTD
+     * requires adding the AgencyId property (when it was previously null. See {@link #propertyUpdated(ExternalFeedSourceProperty, String, String)}.
      */
     @Override
-    public void feedSourceCreated(FeedSource source, String authHeader) {
-        LOG.info("Processing new FeedSource {} for RTD. (No action taken.)", source.name);
+    public void feedSourceCreated(FeedSource source, String authHeader) throws IllegalAccessException {
+        LOG.info("Processing new FeedSource {} for RTD. Empty external feed properties being generated.", source.name);
+        // Create a blank carrier and update fields (will initialize all fields to null).
+        RtdCarrier carrier = new RtdCarrier();
+        carrier.updateFields(source);
     }
 
     /**

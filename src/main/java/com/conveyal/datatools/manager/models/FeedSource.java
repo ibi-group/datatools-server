@@ -30,6 +30,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
+import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 
 /**
@@ -391,10 +392,10 @@ public class FeedSource extends Model implements Cloneable {
         for(String resourceType : DataManager.feedResources.keySet()) {
             Map<String, String> propTable = new HashMap<>();
 
-            // FIXME: use mongo filters instead
-            Persistence.externalFeedSourceProperties.getAll().stream()
-                    .filter(prop -> prop.feedSourceId.equals(this.id))
-                    .forEach(prop -> propTable.put(prop.name, prop.value));
+            // Get all external properties for the feed source/resource type and fill prop table.
+            Persistence.externalFeedSourceProperties
+                .getFiltered(and(eq("feedSourceId", this.id), eq("resourceType", resourceType)))
+                .forEach(prop -> propTable.put(prop.name, prop.value));
 
             resourceTable.put(resourceType, propTable);
         }
