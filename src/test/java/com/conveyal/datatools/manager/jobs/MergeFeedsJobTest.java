@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Date;
 import java.util.HashSet;
@@ -36,7 +37,7 @@ public class MergeFeedsJobTest {
      * Prepare and start a testing-specific web server
      */
     @BeforeClass
-    public static void setUp() {
+    public static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
         // Create a project, feed sources, and feed versions to merge.

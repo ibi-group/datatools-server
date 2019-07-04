@@ -62,7 +62,7 @@ public class GisExportJobTest {
     private static final double CALTRAIN_SOUTH = 37.002;
 
     @BeforeClass
-    public static void setUp() {
+    public static void setUp() throws IOException {
         DatatoolsTest.setUp();
         LOG.info("{} setup", GisExportJobTest.class.getSimpleName());
 

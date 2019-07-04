@@ -29,7 +29,7 @@ public class GtfsPlusValidationTest {
      * Create feed version for GTFS+ validation test.
      */
     @BeforeClass
-    public static void setUp() {
+    public static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
         // Create a project, feed sources, and feed versions to merge.
