@@ -22,8 +22,6 @@ modules:
     enabled: false
   deployment:
     enabled: true
-  gtfsplus:
-    enabled: false
   editor:
     enabled: true
     url: http://localhost:9001
