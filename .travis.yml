@@ -20,8 +20,6 @@ before_script:
   # Create dir for GTFS+ files (used during testing)
   - mkdir /tmp/gtfsplus
 before_install:
-  # install node v12 here in order to run the e2e tests
-  - nvm install '12'
   #- sed -i.bak -e 's|https://nexus.codehaus.org/snapshots/|https://oss.sonatype.org/content/repositories/codehaus-snapshots/|g' ~/.m2/settings.xml
   # run a script to see if the e2e tests should be ran. This script will set the environment variable SHOULD_RUN_E2E
   # which is used in later travis commands.
@@ -33,8 +31,8 @@ before_install:
   - cp configurations/default/server.yml.tmp configurations/default/server.yml
   # create database for e2e (and unit) tests
   - psql -U postgres -c 'CREATE DATABASE catalogue;'
-  # install node v8 for datatools-ui e2e tests
-  - nvm install 8
+  # install node v12 here in order to run the e2e tests
+  - nvm install '12'
 script:
   # run mvn package to make sure unit tests and packaging can work
   - mvn package
