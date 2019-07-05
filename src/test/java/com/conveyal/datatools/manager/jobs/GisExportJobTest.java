@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.DatatoolsTest;
+import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -49,7 +50,7 @@ import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.lessThan;
 import static org.hamcrest.Matchers.notNullValue;
 
-public class GisExportJobTest {
+public class GisExportJobTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(GisExportJobTest.class);
     private static Project project;
     private static FeedVersion calTrainVersion;

@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.DatatoolsTest;
+import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.DataManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -35,7 +36,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
  * These tests verify that various Auth0 API calls behave as expected. The Auth0 server is mocked in order to return
  * certain responses needed to verify functionality.
  */
-public class UserControllerTest {
+public class UserControllerTest extends UnitTest {
     private String emailForExistingAccount = "test-existing-user@test.com";
     private ObjectMapper mapper = new ObjectMapper();
 

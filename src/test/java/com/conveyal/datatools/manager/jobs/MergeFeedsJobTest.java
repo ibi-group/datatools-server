@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.TestUtils;
+import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
@@ -25,7 +26,7 @@ import static org.junit.Assert.assertEquals;
 /**
  * Tests for the various {@link MergeFeedsJob} merge types.
  */
-public class MergeFeedsJobTest {
+public class MergeFeedsJobTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(MergeFeedsJobTest.class);
     private static FeedVersion bartVersion1;
     private static FeedVersion bartVersion2;
