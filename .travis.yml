@@ -2,6 +2,8 @@ dist: trusty # jdk 8 not available on xenial
 language: java
 java:
   - oraclejdk8
+node_js:
+  - '12' # must be at least v10 for mastarm 5
 install: true
 sudo: false
 # Install mongoDB to perform persistence tests
