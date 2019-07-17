@@ -14,6 +14,8 @@ import java.util.List;
 import java.util.UUID;
 
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import javax.persistence.MappedSuperclass;
 
@@ -25,6 +27,7 @@ import javax.persistence.MappedSuperclass;
 @MappedSuperclass // applies mapping information to the subclassed entities FIXME remove?
 public abstract class Model implements Serializable {
     private static final long serialVersionUID = 1L;
+    private static final Logger LOG = LoggerFactory.getLogger(Model.class);
 
     public Model () {
         // This autogenerates an ID
@@ -96,7 +99,17 @@ public abstract class Model implements Serializable {
     public void storeUser(String id) {
         userId = id;
         if (!Auth0Connection.authDisabled()) {
-            Auth0UserProfile profile = Auth0Users.getUserById(userId);
+            Auth0UserProfile profile = null;
+            // Try to fetch Auth0 user to store email address. This is surrounded by a try/catch because in the event of
+            // a failure we do not want to cause issues from this low-level operation.
+            try {
+                profile = Auth0Users.getUserById(userId);
+            } catch (Exception e) {
+                LOG.warn(
+                    "Could not find user profile {} from Auth0. This may be due to testing conditions or simply a bad user ID.",
+                    id);
+                e.printStackTrace();
+            }
             userEmail = profile != null ? profile.getEmail() : null;
         } else {
             userEmail = "no_auth@conveyal.com";

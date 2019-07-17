@@ -56,6 +56,7 @@ import java.util.concurrent.Executors;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.common.utils.SparkUtils.logRequest;
 import static com.conveyal.datatools.common.utils.SparkUtils.logResponse;
+import static spark.Service.SPARK_DEFAULT_PORT;
 import static spark.Spark.after;
 import static spark.Spark.before;
 import static spark.Spark.exception;
@@ -67,6 +68,7 @@ import static spark.Spark.port;
  * referenced throughout the application.
  */
 public class DataManager {
+    public static final String GTFS_PLUS_SUBDIR = "gtfsplus";
     private static final Logger LOG = LoggerFactory.getLogger(DataManager.class);
 
     // These fields hold YAML files that represent the server configuration.
@@ -104,7 +106,9 @@ public class DataManager {
     public static String commit = "";
 
     public static boolean useS3;
-    private static final String API_PREFIX = "/api/manager/";
+    public static final String API_PREFIX = "/api/manager/";
+    // Application port defaults to Spark's default.
+    public static int PORT = SPARK_DEFAULT_PORT;
     private static final String GTFS_API_PREFIX = API_PREFIX + "secure/gtfs/";
     private static final String EDITOR_API_PREFIX = "/api/editor/";
     public static final String publicPath = "(" + API_PREFIX + "|" + EDITOR_API_PREFIX + ")public/.*";
@@ -132,8 +136,9 @@ public class DataManager {
         LOG.info(FeedStore.class.getSimpleName());
 
         // Optionally set port for server. Otherwise, Spark defaults to 4567.
-        if (getConfigProperty("application.port") != null) {
-            port(Integer.parseInt(getConfigPropertyAsText("application.port")));
+        if (hasConfigProperty("application.port")) {
+            PORT = Integer.parseInt(getConfigPropertyAsText("application.port"));
+            port(PORT);
         }
         useS3 = "true".equals(getConfigPropertyAsText("application.data.use_s3_storage"));
 
@@ -235,7 +240,6 @@ public class DataManager {
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.STOPS, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.TRIPS, DataManager.GTFS_DATA_SOURCE);
             // TODO: Add transfers.txt controller?
-//            GisController.register(EDITOR_API_PREFIX);
         }
 
         // log all exceptions to system.out

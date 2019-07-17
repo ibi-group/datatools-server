@@ -1,0 +1,6 @@
+{
+  "statusCode": 409,
+  "error": "Conflict",
+  "message": "The user already exists.",
+  "errorCode": "auth0_idp_error"
+}

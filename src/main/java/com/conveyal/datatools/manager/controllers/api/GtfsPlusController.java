@@ -1,33 +1,27 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.conveyal.datatools.common.utils.Consts;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.gtfsplus.ValidationIssue;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
-import com.conveyal.gtfs.GTFSFeed;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
 import spark.Response;
 
 import javax.servlet.http.HttpServletResponse;
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.Serializable;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Enumeration;
 import java.util.HashSet;
@@ -41,6 +35,7 @@ import java.util.zip.ZipOutputStream;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.copyRequestStreamIntoFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
+import static com.conveyal.datatools.manager.gtfsplus.GtfsPlusValidation.validateGtfsPlus;
 import static spark.Spark.get;
 import static spark.Spark.post;
 
@@ -60,7 +55,7 @@ public class GtfsPlusController {
 
     public static final Logger LOG = LoggerFactory.getLogger(GtfsPlusController.class);
 
-    private static FeedStore gtfsPlusStore = new FeedStore("gtfsplus");
+    private static final FeedStore gtfsPlusStore = new FeedStore(DataManager.GTFS_PLUS_SUBDIR);
 
     /**
      * Upload a GTFS+ file based on a specific feed version and replace (or create)
@@ -83,7 +78,7 @@ public class GtfsPlusController {
 
         // check for saved
         File file = gtfsPlusStore.getFeed(feedVersionId);
-        if(file == null) {
+        if (file == null) {
             return getGtfsPlusFromGtfs(feedVersionId, req, res);
         }
         LOG.info("Returning updated GTFS+ data");
@@ -101,7 +96,7 @@ public class GtfsPlusController {
 
         // create a set of valid GTFS+ table names
         Set<String> gtfsPlusTables = new HashSet<>();
-        for(int i = 0; i < DataManager.gtfsPlusConfig.size(); i++) {
+        for (int i = 0; i < DataManager.gtfsPlusConfig.size(); i++) {
             JsonNode tableNode = DataManager.gtfsPlusConfig.get(i);
             gtfsPlusTables.add(tableNode.get("name").asText());
         }
@@ -117,7 +112,7 @@ public class GtfsPlusController {
             byte[] buffer = new byte[512];
             while (entries.hasMoreElements()) {
                 final ZipEntry entry = entries.nextElement();
-                if(!gtfsPlusTables.contains(entry.getName())) continue;
+                if (!gtfsPlusTables.contains(entry.getName())) continue;
 
                 // create a new empty ZipEntry and copy the contents
                 ZipEntry newEntry = new ZipEntry(entry.getName());
@@ -170,7 +165,7 @@ public class GtfsPlusController {
         String feedVersionId = req.params("versionid");
         LOG.info("Publishing GTFS+ for " + feedVersionId);
         File plusFile = gtfsPlusStore.getFeed(feedVersionId);
-        if(plusFile == null || !plusFile.exists()) {
+        if (plusFile == null || !plusFile.exists()) {
             logMessageAndHalt(req, 400, "No saved GTFS+ data for version");
         }
 
@@ -178,7 +173,7 @@ public class GtfsPlusController {
 
         // create a set of valid GTFS+ table names
         Set<String> gtfsPlusTables = new HashSet<>();
-        for(int i = 0; i < DataManager.gtfsPlusConfig.size(); i++) {
+        for (int i = 0; i < DataManager.gtfsPlusConfig.size(); i++) {
             JsonNode tableNode = DataManager.gtfsPlusConfig.get(i);
             gtfsPlusTables.add(tableNode.get("name").asText());
         }
@@ -196,7 +191,8 @@ public class GtfsPlusController {
             byte[] buffer = new byte[512];
             while (entries.hasMoreElements()) {
                 final ZipEntry entry = entries.nextElement();
-                if(gtfsPlusTables.contains(entry.getName()) || entry.getName().startsWith("_")) continue; // skip GTFS+ and non-standard tables
+                // skip GTFS+ and non-standard tables
+                if (gtfsPlusTables.contains(entry.getName()) || entry.getName().startsWith("_")) continue;
 
                 // create a new empty ZipEntry and copy the contents
                 ZipEntry newEntry = new ZipEntry(entry.getName());
@@ -255,162 +251,16 @@ public class GtfsPlusController {
 
     /**
      * HTTP endpoint that validates GTFS+ tables for a specific feed version (or its saved/edited GTFS+).
-     * FIXME: For now this uses the MapDB-backed GTFSFeed class. Which actually suggests that this might
-     * should be contained within a MonitorableJob.
      */
     private static Collection<ValidationIssue> getGtfsPlusValidation(Request req, Response res) {
         String feedVersionId = req.params("versionid");
-        LOG.info("Validating GTFS+ for " + feedVersionId);
-        FeedVersion feedVersion = Persistence.feedVersions.getById(feedVersionId);
-
         List<ValidationIssue> issues = new LinkedList<>();
-
-
-        // load the main GTFS
-        // FIXME: Swap MapDB-backed GTFSFeed for use of SQL data?
-        GTFSFeed gtfsFeed = GTFSFeed.fromFile(feedVersion.retrieveGtfsFile().getAbsolutePath());
-        // check for saved GTFS+ data
-        File file = gtfsPlusStore.getFeed(feedVersionId);
-        if (file == null) {
-            LOG.warn("GTFS+ file not found, loading from main version GTFS.");
-            file = feedVersion.retrieveGtfsFile();
-        }
-        int gtfsPlusTableCount = 0;
         try {
-            ZipFile zipFile = new ZipFile(file);
-            final Enumeration<? extends ZipEntry> entries = zipFile.entries();
-            while (entries.hasMoreElements()) {
-                final ZipEntry entry = entries.nextElement();
-                for(int i = 0; i < DataManager.gtfsPlusConfig.size(); i++) {
-                    JsonNode tableNode = DataManager.gtfsPlusConfig.get(i);
-                    if(tableNode.get("name").asText().equals(entry.getName())) {
-                        LOG.info("Validating GTFS+ table: " + entry.getName());
-                        gtfsPlusTableCount++;
-                        validateTable(issues, tableNode, zipFile.getInputStream(entry), gtfsFeed);
-                    }
-                }
-            }
-
+            issues = validateGtfsPlus(feedVersionId);
         } catch(IOException e) {
             logMessageAndHalt(req, 500, "Could not read GTFS+ zip file", e);
         }
-        LOG.info("GTFS+ tables found: {}/{}", gtfsPlusTableCount, DataManager.gtfsPlusConfig.size());
         return issues;
-    }
-
-    /**
-     * Validate a single GTFS+ table using the table specification found in gtfsplus.yml.
-     */
-    private static void validateTable(
-        Collection<ValidationIssue> issues,
-        JsonNode tableNode,
-        InputStream inputStream,
-        GTFSFeed gtfsFeed
-    ) throws IOException {
-        String tableId = tableNode.get("id").asText();
-        BufferedReader in = new BufferedReader(new InputStreamReader(inputStream));
-        String line = in.readLine();
-        String[] fields = line.split(",");
-        List<String> fieldList = Arrays.asList(fields);
-        JsonNode[] fieldNodes = new JsonNode[fields.length];
-        JsonNode fieldsNode = tableNode.get("fields");
-        for(int i = 0; i < fieldsNode.size(); i++) {
-            JsonNode fieldNode = fieldsNode.get(i);
-            int index = fieldList.indexOf(fieldNode.get("name").asText());
-            if(index != -1) fieldNodes[index] = fieldNode;
-        }
-
-        int rowIndex = 0;
-        while((line = in.readLine()) != null) {
-            String[] values = line.split(Consts.COLUMN_SPLIT, -1);
-            for(int v=0; v < values.length; v++) {
-                validateTableValue(issues, tableId, rowIndex, values[v], fieldNodes[v], gtfsFeed);
-            }
-            rowIndex++;
-        }
-    }
-
-    private static void validateTableValue(Collection<ValidationIssue> issues, String tableId, int rowIndex, String value, JsonNode fieldNode, GTFSFeed gtfsFeed) {
-        if(fieldNode == null) return;
-        String fieldName = fieldNode.get("name").asText();
-
-        if(fieldNode.get("required") != null && fieldNode.get("required").asBoolean()) {
-            if(value == null || value.length() == 0) {
-                issues.add(new ValidationIssue(tableId, fieldName, rowIndex, "Required field missing value"));
-            }
-        }
-
-        switch(fieldNode.get("inputType").asText()) {
-            case "DROPDOWN":
-                boolean invalid = true;
-                ArrayNode options = (ArrayNode) fieldNode.get("options");
-                for (JsonNode option : options) {
-                    String optionValue = option.get("value").asText();
-
-                    // NOTE: per client's request, this check has been made case insensitive
-                    boolean valuesAreEqual = optionValue.equalsIgnoreCase(value);
-
-                    // if value is found in list of options, break out of loop
-                    if (valuesAreEqual || (!fieldNode.get("required").asBoolean() && value.equals(""))) {
-                        invalid = false;
-                        break;
-                    }
-                }
-                if (invalid) {
-                    issues.add(new ValidationIssue(tableId, fieldName, rowIndex, "Value: " + value + " is not a valid option."));
-                }
-                break;
-            case "TEXT":
-                // check if value exceeds max length requirement
-                if(fieldNode.get("maxLength") != null) {
-                    int maxLength = fieldNode.get("maxLength").asInt();
-                    if(value.length() > maxLength) {
-                        issues.add(new ValidationIssue(tableId, fieldName, rowIndex, "Text value exceeds the max. length of "+maxLength));
-                    }
-                }
-                break;
-            case "GTFS_ROUTE":
-                if(!gtfsFeed.routes.containsKey(value)) {
-                    issues.add(new ValidationIssue(tableId, fieldName, rowIndex, "Route ID "+ value + " not found in GTFS"));
-                }
-                break;
-            case "GTFS_STOP":
-                if(!gtfsFeed.stops.containsKey(value)) {
-                    issues.add(new ValidationIssue(tableId, fieldName, rowIndex, "Stop ID "+ value + " not found in GTFS"));
-                }
-                break;
-            case "GTFS_TRIP":
-                if(!gtfsFeed.trips.containsKey(value)) {
-                    issues.add(new ValidationIssue(tableId, fieldName, rowIndex, "Trip ID "+ value + " not found in GTFS"));
-                }
-                break;
-            case "GTFS_FARE":
-                if(!gtfsFeed.fares.containsKey(value)) {
-                    issues.add(new ValidationIssue(tableId, fieldName, rowIndex, "Fare ID "+ value + " not found in GTFS"));
-                }
-                break;
-            case "GTFS_SERVICE":
-                if(!gtfsFeed.services.containsKey(value)) {
-                    issues.add(new ValidationIssue(tableId, fieldName, rowIndex, "Service ID "+ value + " not found in GTFS"));
-                }
-                break;
-        }
-
-    }
-
-    public static class ValidationIssue implements Serializable {
-        private static final long serialVersionUID = 1L;
-        public String tableId;
-        public String fieldName;
-        public int rowIndex;
-        public String description;
-
-        public ValidationIssue(String tableId, String fieldName, int rowIndex, String description) {
-            this.tableId = tableId;
-            this.fieldName = fieldName;
-            this.rowIndex = rowIndex;
-            this.description = description;
-        }
     }
 
     public static void register(String apiPrefix) {

@@ -4,6 +4,7 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.gtfs.validator.ValidationResult;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -71,6 +72,16 @@ public class ValidateFeedJob extends MonitorableJob {
     @JsonProperty
     public String getFeedSourceId () {
         return feedVersion.parentFeedSource().id;
+    }
+
+    /**
+     * Getter that returns the validationResult so that once the job finishes, the client can optionally provide
+     * directions to users based on the success of the validation or other validation data (e.g., "The feed you have
+     * loaded is only valid for future dates.").
+     */
+    @JsonProperty
+    public ValidationResult getValidationResult () {
+        return feedVersion.validationResult;
     }
 
 }

@@ -6,6 +6,7 @@ import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -19,10 +20,11 @@ import java.util.concurrent.TimeUnit;
  */
 public abstract class MonitorableJob implements Runnable {
     private static final Logger LOG = LoggerFactory.getLogger(MonitorableJob.class);
-    protected final String owner;
+    public final String owner;
 
     // Public fields will be serialized over HTTP API and visible to the web client
     public final JobType type;
+    public File file;
     public String parentJobId;
     public JobType parentJobType;
     // Status is not final to allow some jobs to have extra status fields.
@@ -48,6 +50,7 @@ public abstract class MonitorableJob implements Runnable {
         LOAD_FEED,
         VALIDATE_FEED,
         DEPLOY_TO_OTP,
+        EXPORT_GIS,
         FETCH_PROJECT_FEEDS,
         FETCH_SINGLE_FEED,
         MAKE_PROJECT_PUBLIC,
@@ -57,7 +60,7 @@ public abstract class MonitorableJob implements Runnable {
         EXPORT_SNAPSHOT_TO_GTFS,
         CONVERT_EDITOR_MAPDB_TO_SQL,
         VALIDATE_ALL_FEEDS,
-        MERGE_PROJECT_FEEDS
+        MERGE_FEED_VERSIONS
     }
 
     public MonitorableJob(String owner, String name, JobType type) {
@@ -88,6 +91,10 @@ public abstract class MonitorableJob implements Runnable {
         userJobs.add(this);
 
         DataManager.userJobsMap.put(this.owner, userJobs);
+    }
+
+    public File retrieveFile () {
+        return file;
     }
 
     /**
