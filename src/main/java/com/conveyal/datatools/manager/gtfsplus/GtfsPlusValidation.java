@@ -211,31 +211,6 @@ public class GtfsPlusValidation implements Serializable {
 
     }
 
-//    public static long getGtfsPlusFileTimestamp(String feedVersionId) {
-//        // check for saved GTFS+ data
-//        File file = getGtfsPlusFile(feedVersionId);
-//        if (file != null) {
-//            LOG.info("Found modified GTFS+ timestamp");
-//            return file.lastModified();
-//        } else {
-//            throw new IllegalStateException("Feed version file not found");
-//        }
-//    }
-//
-//    public static File getGtfsPlusFile (String feedVersionId) {
-//        File file = gtfsPlusStore.getFeed(feedVersionId);
-//        if (file == null) {
-//            // If there is no edited/saved GTFS+ data, revert to original file.
-//            FeedVersion feedVersion = Persistence.feedVersions.getById(feedVersionId);
-//            if (feedVersion != null) {
-//                file = feedVersion.retrieveGtfsFile();
-//            } else {
-//                throw new IllegalArgumentException("Feed version ID is not valid");
-//            }
-//        }
-//        return file;
-//    }
-
     /** Construct missing ID text for validation issue description. */
     private static String missingIdText(String value, String entity) {
         return String.join(" ", entity, "ID", value, NOT_FOUND);
