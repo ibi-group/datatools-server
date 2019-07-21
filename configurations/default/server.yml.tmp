@@ -12,7 +12,7 @@ application:
     editor_mapdb: /tmp/editor/mapdb
     mapdb: /tmp/mapdb
     gtfs: /tmp
-    use_s3_storage: true
+    use_s3_storage: false
     s3_region: us-east-1
     gtfs_s3_bucket: bucket-name
 modules:

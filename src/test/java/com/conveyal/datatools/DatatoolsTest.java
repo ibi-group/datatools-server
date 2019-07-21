@@ -16,6 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
+import static com.conveyal.datatools.TestUtils.getBooleanEnvVar;
 import static com.conveyal.datatools.TestUtils.isCi;
 
 /**
@@ -38,10 +39,11 @@ public abstract class DatatoolsTest {
 
         setupConfigFiles();
 
-        // This test (and all those that depend on it) assume that the env.yml and server.yml
-        // files have been properly configured.  In a CI environment, these files are setup
-        // automatically, but the setup must be done manually locally.
-        String[] args = {"configurations/default/env.yml", "configurations/default/server.yml"};
+        // If in the e2e environment, use the secret env.yml and server.yml files to start the server. When ran on
+        // Travis CI, these files will automatically be setup.
+        String[] args = getBooleanEnvVar("RUN_E2E")
+            ? new String[] { "configurations/default/env.yml", "configurations/default/server.yml" }
+            : new String[] { "configurations/default/env.yml.tmp", "configurations/default/server.yml.tmp" };
 
         // fail this test and others if the above files do not exist
         for (String arg : args) {
@@ -61,12 +63,12 @@ public abstract class DatatoolsTest {
     }
 
     /**
-     * Creates config files for datatools-server if being ran on Travis. These special config files are needed in order
-     * to run e2e tests. Some of the config files contain sensitive information that cannot be checked into the repo,
-     * so that data is obtained from environment variables in Travis.
+     * Creates config files for datatools-server if being ran on Travis and the e2e environment variable is activated.
+     * These special config files are needed in order to run e2e tests. Some of the config files contain sensitive
+     * information that cannot be checked into the repo, so that data is obtained from environment variables in Travis.
      */
     private static void setupConfigFiles() throws RuntimeException, IOException {
-        if (isCi()) {
+        if (isCi() && getBooleanEnvVar("RUN_E2E")) {
             LOG.info("Setting up server in CI environment");
 
             // first make sure all the necessary environment varaibles are defined
@@ -140,6 +142,7 @@ public abstract class DatatoolsTest {
 
             applicationConfig.put("assets_bucket", s3Bucket);
             applicationDataConfig.put("gtfs_s3_bucket", s3Bucket);
+            applicationDataConfig.put("use_s3_storage", false);
             transitFeedsConfig.put("key", transitFeedsKey);
 
             // write files to disk
