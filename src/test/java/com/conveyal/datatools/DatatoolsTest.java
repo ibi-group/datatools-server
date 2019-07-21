@@ -142,7 +142,7 @@ public abstract class DatatoolsTest {
 
             applicationConfig.put("assets_bucket", s3Bucket);
             applicationDataConfig.put("gtfs_s3_bucket", s3Bucket);
-            applicationDataConfig.put("use_s3_storage", false);
+            applicationDataConfig.put("use_s3_storage", true);
             transitFeedsConfig.put("key", transitFeedsKey);
 
             // write files to disk
