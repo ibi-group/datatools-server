@@ -33,7 +33,7 @@ public class AppInfoControllerTest {
             .get("/api/manager/public/appinfo")
         .then()
             // make sure the repoUrl matches what is found in the pom.xml
-            .body("repoUrl", equalTo("https://github.com/ibi-transit/datatools-server.git"))
+            .body("repoUrl", equalTo("https://github.com/ibi-group/datatools-server.git"))
             .extract().response().asString();
 
         // parse the json and make sure the commit is the length of characters that a commit hash would be
