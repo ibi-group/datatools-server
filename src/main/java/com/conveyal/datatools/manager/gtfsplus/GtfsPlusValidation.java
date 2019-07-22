@@ -16,30 +16,47 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Collection;
+import java.util.Date;
 import java.util.Enumeration;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
-public class GtfsPlusValidation {
-    public static final Logger LOG = LoggerFactory.getLogger(GtfsPlusValidation.class);
+/** Generates a GTFS+ validation report for a file. */
+public class GtfsPlusValidation implements Serializable {
+    private static final long serialVersionUID = 1L;
+    private static final Logger LOG = LoggerFactory.getLogger(GtfsPlusValidation.class);
     private static final FeedStore gtfsPlusStore = new FeedStore(DataManager.GTFS_PLUS_SUBDIR);
     private static final String NOT_FOUND = "not found in GTFS";
+
+    // Public fields to appear in validation JSON.
+    public final String feedVersionId;
+    /** Indicates whether GTFS+ validation applies to user-edited feed or original published GTFS feed */
+    public boolean published;
+    public long lastModified;
+    /** Issues found for this GTFS+ feed */
+    public List<ValidationIssue> issues = new LinkedList<>();
+
+    private GtfsPlusValidation (String feedVersionId) {
+        this.feedVersionId = feedVersionId;
+    }
 
     /**
      * Validate a GTFS+ feed and return a list of issues encountered.
      * FIXME: For now this uses the MapDB-backed GTFSFeed class. Which actually suggests that this might
      *   should be contained within a MonitorableJob.
      */
-    public static List<ValidationIssue> validateGtfsPlus (String feedVersionId) throws IOException {
+    public static GtfsPlusValidation validate(String feedVersionId) throws IOException {
+        GtfsPlusValidation validation = new GtfsPlusValidation(feedVersionId);
         if (!DataManager.isModuleEnabled("gtfsplus")) {
             throw new IllegalStateException("GTFS+ module must be enabled in server.yml to run GTFS+ validation.");
         }
-        List<ValidationIssue> issues = new LinkedList<>();
         LOG.info("Validating GTFS+ for " + feedVersionId);
+
         FeedVersion feedVersion = Persistence.feedVersions.getById(feedVersionId);
         // Load the main GTFS file.
         // FIXME: Swap MapDB-backed GTFSFeed for use of SQL data?
@@ -47,8 +64,12 @@ public class GtfsPlusValidation {
         // check for saved GTFS+ data
         File file = gtfsPlusStore.getFeed(feedVersionId);
         if (file == null) {
-            LOG.warn("GTFS+ file not found, loading from main version GTFS.");
+            validation.published = true;
+            LOG.warn("GTFS+ Validation -- Modified GTFS+ file not found, loading from main version GTFS.");
             file = feedVersion.retrieveGtfsFile();
+        } else {
+            validation.published = false;
+            LOG.info("GTFS+ Validation -- Validating user-saved GTFS+ data (unpublished)");
         }
         int gtfsPlusTableCount = 0;
         ZipFile zipFile = new ZipFile(file);
@@ -60,12 +81,12 @@ public class GtfsPlusValidation {
                 if (tableNode.get("name").asText().equals(entry.getName())) {
                     LOG.info("Validating GTFS+ table: " + entry.getName());
                     gtfsPlusTableCount++;
-                    validateTable(issues, tableNode, zipFile.getInputStream(entry), gtfsFeed);
+                    validateTable(validation.issues, tableNode, zipFile.getInputStream(entry), gtfsFeed);
                 }
             }
         }
         LOG.info("GTFS+ tables found: {}/{}", gtfsPlusTableCount, DataManager.gtfsPlusConfig.size());
-        return issues;
+        return validation;
     }
 
     /**
