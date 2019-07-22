@@ -364,6 +364,10 @@ public class DataManager {
         return node != null;
     }
 
+    public static JsonNode getPublicConfig() {
+        return serverConfig;
+    }
+
     /**
      * Convenience function to get a config property (nested fields defined by dot notation "data.use_s3_storage") as
      * JsonNode. Checks server.yml, then env.yml, and finally returns null if property is not found.
