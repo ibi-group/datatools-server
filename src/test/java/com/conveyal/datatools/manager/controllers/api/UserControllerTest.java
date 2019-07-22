@@ -14,9 +14,9 @@ import org.junit.Test;
 import java.io.IOException;
 
 import static com.conveyal.datatools.TestUtils.parseJson;
+import static com.conveyal.datatools.manager.auth.Auth0Users.USERS_API_PATH;
 import static com.conveyal.datatools.manager.controllers.api.UserController.TEST_AUTH0_DOMAIN;
 import static com.conveyal.datatools.manager.controllers.api.UserController.TEST_AUTH0_PORT;
-import static com.conveyal.datatools.manager.controllers.api.UserController.USERS_PATH;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.delete;
 import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
@@ -57,7 +57,7 @@ public class UserControllerTest {
         // start server if it isn't already running
         DatatoolsTest.setUp();
         // Set users URL to test domain used by wiremock.
-        UserController.setBaseUsersUrl("http://" + TEST_AUTH0_DOMAIN + USERS_PATH);
+        UserController.setBaseUsersUrl("http://" + TEST_AUTH0_DOMAIN + USERS_API_PATH);
     }
 
     /**
@@ -75,7 +75,7 @@ public class UserControllerTest {
     public void canListFirstTenUsers() throws IOException {
         // create wiremock stub for get users endpoint
         stubFor(
-            get(urlPathEqualTo("/api/v2/users"))
+            get(urlPathEqualTo(USERS_API_PATH))
                 .withQueryParam("page", equalTo("1"))
                 .willReturn(
                     aResponse()
@@ -108,7 +108,7 @@ public class UserControllerTest {
 
         // create wiremock stub for create users endpoint
         stubFor(
-            post(urlPathEqualTo("/api/v2/users"))
+            post(urlPathEqualTo(USERS_API_PATH))
                 .withRequestBody(matchingJsonPath("$.email", equalTo(newUserEmail)))
                 .willReturn(
                     aResponse()
@@ -143,7 +143,7 @@ public class UserControllerTest {
         // create wiremock stub for create users endpoint that responds with a message saying a user with the email
         // already exists
         stubFor(
-            post(urlPathEqualTo(USERS_PATH))
+            post(urlPathEqualTo(USERS_API_PATH))
                 .withRequestBody(matchingJsonPath("$.email", equalTo(emailForExistingAccount)))
                 .willReturn(
                     aResponse()
@@ -175,7 +175,7 @@ public class UserControllerTest {
     public void canUpdateUser() throws IOException {
         // create wiremock stub for update users endpoint
         stubFor(
-            patch(urlPathEqualTo("/api/v2/users/auth0%7Ctest-existing-user"))
+            patch(urlPathEqualTo(USERS_API_PATH + "/auth0%7Ctest-existing-user"))
                 .withRequestBody(
                     matchingJsonPath(
                         "$.app_metadata.datatools[0].permissions[0].type",
@@ -188,9 +188,18 @@ public class UserControllerTest {
                 )
         );
 
-        // create wiremock stub for get user by id endpoint
+        // Create wiremock stub for get API access token. NOTE: This must be performed in the first test that is run.
         stubFor(
-            get(urlPathEqualTo("/api/v2/users/auth0%7Ctest-existing-user"))
+            post(urlPathEqualTo("/oauth/token"))
+                .willReturn(
+                    aResponse()
+                        .withBodyFile("getAccessToken.json")
+                )
+        );
+
+        // Create wiremock stub for get user by id endpoint.
+        stubFor(
+            get(urlPathEqualTo(USERS_API_PATH + "/auth0%7Ctest-existing-user"))
                 .willReturn(
                     aResponse()
                         .withBodyFile("getExistingUserResponse.json")
@@ -232,9 +241,9 @@ public class UserControllerTest {
      */
     @Test
     public void canDeleteUser() throws IOException {
-        // create wiremock stub for the delate users endpoint
+        // create wiremock stub for the delete users endpoint
         stubFor(
-            delete(urlPathEqualTo("/api/v2/users/auth0%7Ctest-existing-user"))
+            delete(urlPathEqualTo(USERS_API_PATH + "/auth0%7Ctest-existing-user"))
                 .willReturn(aResponse())
         );
 

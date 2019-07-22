@@ -42,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
+import static com.conveyal.datatools.manager.auth.Auth0Users.USERS_API_PATH;
 import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
 import static spark.Spark.delete;
 import static spark.Spark.get;
@@ -61,8 +62,7 @@ public class UserController {
     private static Logger LOG = LoggerFactory.getLogger(UserController.class);
     private static ObjectMapper mapper = new ObjectMapper();
     private static final String UTF_8 = "UTF-8";
-    static final String USERS_PATH = "/api/v2/users";
-    static final String DEFAULT_BASE_USERS_URL = "https://" + AUTH0_DOMAIN  + USERS_PATH;
+    static final String DEFAULT_BASE_USERS_URL = "https://" + AUTH0_DOMAIN  + USERS_API_PATH;
     /** Users URL uses Auth0 domain by default, but can be overridden with {@link #setBaseUsersUrl(String)} for testing. */
     private static String baseUsersUrl = DEFAULT_BASE_USERS_URL;
     private static final JsonManager<Project> json = new JsonManager<>(Project.class, JsonViews.UserInterface.class);
