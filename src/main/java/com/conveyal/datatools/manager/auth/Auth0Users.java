@@ -91,8 +91,8 @@ public class Auth0Users {
 
         HttpClient client = HttpClientBuilder.create().build();
         HttpGet request = new HttpGet(uri);
-        String apiToken = inTestMode() ? "test-token" : getApiToken();
-        request.addHeader("Authorization", "Bearer " + apiToken);
+
+        request.addHeader("Authorization", "Bearer " + getApiToken());
         request.setHeader("Accept-Charset", charset);
         HttpResponse response;
 
@@ -228,7 +228,7 @@ public class Auth0Users {
      */
     private static URIBuilder getURIBuilder() {
         URIBuilder builder = new URIBuilder();
-        if (inTestMode()) {
+        if (AUTH0_DOMAIN.equals("your-auth0-domain")) {
             // set items for testing purposes assuming use of a Wiremock server
             builder.setScheme("http");
             builder.setPort(8089);
@@ -239,11 +239,6 @@ public class Auth0Users {
             builder.setHost(AUTH0_DOMAIN);
         }
         return builder;
-    }
-
-    /** Helper method to determine if app is running tests or in dev/production. */
-    private static boolean inTestMode() {
-        return AUTH0_DOMAIN.equals("your-auth0-domain");
     }
 
     /**
