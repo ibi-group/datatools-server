@@ -91,8 +91,12 @@ public class Auth0Users {
 
         HttpClient client = HttpClientBuilder.create().build();
         HttpGet request = new HttpGet(uri);
-
-        request.addHeader("Authorization", "Bearer " + getApiToken());
+        String apiToken = getApiToken();
+        if (apiToken == null) {
+            LOG.error("API access token is null, aborting Auth0 request");
+            return null;
+        }
+        request.addHeader("Authorization", "Bearer " + apiToken);
         request.setHeader("Accept-Charset", charset);
         HttpResponse response;
 
@@ -150,12 +154,12 @@ public class Auth0Users {
         // Create client and build URL.
         HttpClient client = HttpClientBuilder.create().build();
         URIBuilder builder = getURIBuilder();
+        String responseString;
         try {
             // First get base url for use in audience URL param. (Trailing slash required.)
             final String audienceUrl = builder.setPath(API_PATH + "/").build().toString();
             URI uri = builder.setPath("/oauth/token").build();
-            LOG.info(uri.toString());
-            LOG.info(audienceUrl);
+            // Make POST request to Auth0 for new token.
             HttpPost post = new HttpPost(uri);
             post.setHeader("content-type", "application/x-www-form-urlencoded");
             List<NameValuePair> urlParameters = new ArrayList<>();
@@ -165,20 +169,28 @@ public class Auth0Users {
             urlParameters.add(new BasicNameValuePair("audience", audienceUrl));
             post.setEntity(new UrlEncodedFormEntity(urlParameters));
             HttpResponse response = client.execute(post);
+            // Read response code/entity.
             int code = response.getStatusLine().getStatusCode();
-            if (code >= 300) LOG.error("Could not get Auth0 API token");
-            String token = EntityUtils.toString(response.getEntity());
-            LOG.info(token);
-            Auth0AccessToken auth0AccessToken = mapper.readValue(token, Auth0AccessToken.class);
-            LOG.info("Scope: {}", auth0AccessToken.scope);
-            LOG.info("Token type: {}", auth0AccessToken.token_type);
-            // Cache token for later use.
-            cachedToken = auth0AccessToken;
-            return cachedToken.access_token;
+            responseString = EntityUtils.toString(response.getEntity());
+            if (code >= 300) {
+                LOG.error("Could not get Auth0 API token {}", responseString);
+                throw new IllegalStateException("Bad response for Auth0 token");
+            }
         } catch (IllegalStateException | URISyntaxException | IOException e) {
             e.printStackTrace();
+            return null;
         }
-        return null;
+        // Parse API Token.
+        Auth0AccessToken auth0AccessToken;
+        try {
+            auth0AccessToken = mapper.readValue(responseString, Auth0AccessToken.class);
+        } catch (IOException e) {
+            LOG.error("Error parsing Auth0 API access token.", e);
+            return null;
+        }
+        // Cache token for later use and return token string.
+        cachedToken = auth0AccessToken;
+        return cachedToken.access_token;
     }
 
     /**
