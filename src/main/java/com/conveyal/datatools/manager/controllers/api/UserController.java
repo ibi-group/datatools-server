@@ -71,9 +71,9 @@ public class UserController {
      * Auth0 API (get user) than the other get methods (user search query).
      */
     private static String getUser(Request req, Response res) {
-        HttpGet request = new HttpGet(getUserIdUrl(req));
-        setHeaders(req, request);
-        return executeRequestAndGetResult(request, req);
+        HttpGet getUserRequest = new HttpGet(getUserIdUrl(req));
+        setHeaders(req, getUserRequest);
+        return executeRequestAndGetResult(getUserRequest, req);
     }
 
     /**
@@ -145,8 +145,8 @@ public class UserController {
      * injecting permissions somehow into the create user request.
      */
     private static String createPublicUser(Request req, Response res) {
-        HttpPost request = new HttpPost(baseUsersUrl);
-        setHeaders(req, request);
+        HttpPost createUserRequest = new HttpPost(baseUsersUrl);
+        setHeaders(req, createUserRequest);
 
         JsonNode jsonNode = parseJsonFromBody(req);
         String json = String.format("{" +
@@ -155,17 +155,17 @@ public class UserController {
                 "\"password\": %s," +
                 "\"app_metadata\": {\"datatools\": [{\"permissions\": [], \"projects\": [], \"subscriptions\": [], \"client_id\": \"%s\" }] } }",
                 jsonNode.get("email"), jsonNode.get("password"), AUTH0_CLIENT_ID);
-        setRequestEntityUsingJson(request, json, req);
+        setRequestEntityUsingJson(createUserRequest, json, req);
 
-        return executeRequestAndGetResult(request, req);
+        return executeRequestAndGetResult(createUserRequest, req);
     }
 
     /**
      * HTTP endpoint to create new Auth0 user for the application.
      */
     private static String createUser(Request req, Response res) {
-        HttpPost request = new HttpPost(baseUsersUrl);
-        setHeaders(req, request);
+        HttpPost createUserRequest = new HttpPost(baseUsersUrl);
+        setHeaders(req, createUserRequest);
 
         JsonNode jsonNode = parseJsonFromBody(req);
         String json = String.format("{" +
@@ -174,9 +174,9 @@ public class UserController {
                 "\"password\": %s," +
                 "\"app_metadata\": {\"datatools\": [%s] } }"
                 , jsonNode.get("email"), jsonNode.get("password"), jsonNode.get("permissions"));
-        setRequestEntityUsingJson(request, json, req);
+        setRequestEntityUsingJson(createUserRequest, json, req);
 
-        return executeRequestAndGetResult(request, req);
+        return executeRequestAndGetResult(createUserRequest, req);
     }
 
     private static String updateUser(Request req, Response res) {
@@ -193,8 +193,8 @@ public class UserController {
 
         LOG.info("Updating user {}", user.getEmail());
 
-        HttpPatch request = new HttpPatch(getUserIdUrl(req));
-        setHeaders(req, request);
+        HttpPatch updateUserRequest = new HttpPatch(getUserIdUrl(req));
+        setHeaders(req, updateUserRequest);
 
         JsonNode jsonNode = parseJsonFromBody(req);
 
@@ -210,15 +210,15 @@ public class UserController {
 //        }
         String json = "{ \"app_metadata\": { \"datatools\" : " + data + " }}";
 
-        setRequestEntityUsingJson(request, json, req);
+        setRequestEntityUsingJson(updateUserRequest, json, req);
 
-        return executeRequestAndGetResult(request, req);
+        return executeRequestAndGetResult(updateUserRequest, req);
     }
 
     private static Object deleteUser(Request req, Response res) {
-        HttpDelete request = new HttpDelete(getUserIdUrl(req));
-        setHeaders(req, request);
-        executeRequestAndGetResult(request, req);
+        HttpDelete deleteUserRequest = new HttpDelete(getUserIdUrl(req));
+        setHeaders(req, deleteUserRequest);
+        executeRequestAndGetResult(deleteUserRequest, req);
         return true;
     }
 
