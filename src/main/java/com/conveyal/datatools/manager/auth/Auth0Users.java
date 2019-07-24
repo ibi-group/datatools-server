@@ -4,10 +4,14 @@ import com.conveyal.datatools.manager.DataManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.http.HttpResponse;
+import org.apache.http.NameValuePair;
 import org.apache.http.client.HttpClient;
+import org.apache.http.client.entity.UrlEncodedFormEntity;
 import org.apache.http.client.methods.HttpGet;
+import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.utils.URIBuilder;
 import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.message.BasicNameValuePair;
 import org.apache.http.util.EntityUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,7 +19,10 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
+import java.util.ArrayList;
+import java.util.Date;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -24,8 +31,17 @@ import java.util.Set;
  */
 public class Auth0Users {
     private static final String AUTH0_DOMAIN = DataManager.getConfigPropertyAsText("AUTH0_DOMAIN");
-    private static final String AUTH0_API_TOKEN = DataManager.getConfigPropertyAsText("AUTH0_TOKEN");
+    // This client/secret pair is for making requests for an API access token used with the Management API.
+    private static final String AUTH0_API_CLIENT = DataManager.getConfigPropertyAsText("AUTH0_API_CLIENT");
+    private static final String AUTH0_API_SECRET = DataManager.getConfigPropertyAsText("AUTH0_API_SECRET");
+    // This is the UI client ID which is currently used to synchronize the user permissions object between server and UI.
     private static final String clientId = DataManager.getConfigPropertyAsText("AUTH0_CLIENT_ID");
+    private static final String MANAGEMENT_API_VERSION = "v2";
+    private static final String SEARCH_API_VERSION = "v3";
+    private static final String API_PATH = "/api/" + MANAGEMENT_API_VERSION;
+    public static final String USERS_API_PATH = API_PATH + "/users";
+    // Cached API token so that we do not have to request a new one each time a Management API request is made.
+    private static Auth0AccessToken cachedToken = null;
     private static final ObjectMapper mapper = new ObjectMapper();
     private static final Logger LOG = LoggerFactory.getLogger(Auth0Users.class);
 
@@ -41,31 +57,29 @@ public class Auth0Users {
         // always filter users by datatools client_id
         String defaultQuery = "app_metadata.datatools.client_id:" + clientId;
         URIBuilder builder = getURIBuilder();
-        builder.setPath("/api/v2/users");
+        builder.setPath(USERS_API_PATH);
         builder.setParameter("sort", "email:1");
         builder.setParameter("per_page", Integer.toString(perPage));
         builder.setParameter("page", Integer.toString(page));
         builder.setParameter("include_totals", Boolean.toString(includeTotals));
         if (searchQuery != null) {
-            builder.setParameter("search_engine", "v3");
+            builder.setParameter("search_engine", SEARCH_API_VERSION);
             builder.setParameter("q", searchQuery + " AND " + defaultQuery);
         }
         else {
-            builder.setParameter("search_engine", "v3");
+            builder.setParameter("search_engine", SEARCH_API_VERSION);
             builder.setParameter("q", defaultQuery);
         }
 
-        URI uri = null;
+        URI uri;
 
         try {
             uri = builder.build();
-
+            return uri;
         } catch (URISyntaxException e) {
             e.printStackTrace();
             return null;
         }
-
-        return uri;
     }
 
     /**
@@ -77,8 +91,12 @@ public class Auth0Users {
 
         HttpClient client = HttpClientBuilder.create().build();
         HttpGet request = new HttpGet(uri);
-
-        request.addHeader("Authorization", "Bearer " + AUTH0_API_TOKEN);
+        String apiToken = getApiToken();
+        if (apiToken == null) {
+            LOG.error("API access token is null, aborting Auth0 request");
+            return null;
+        }
+        request.addHeader("Authorization", "Bearer " + apiToken);
         request.setHeader("Accept-Charset", charset);
         HttpResponse response;
 
@@ -120,6 +138,79 @@ public class Auth0Users {
     }
 
     /**
+     * Gets an Auth0 API access token for authenticating requests to the Auth0 Management API. This will either create
+     * a new token using the oauth token endpoint or grab a cached token that it has already created (if it has not
+     * expired). More information on setting this up is here: https://auth0.com/docs/api/management/v2/get-access-tokens-for-production
+     */
+    public static String getApiToken() {
+        long nowInMillis = new Date().getTime();
+        // If cached token has not expired, use it instead of requesting a new one.
+        if (cachedToken != null && cachedToken.getExpirationTime() > nowInMillis) {
+            long minutesToExpiration = (cachedToken.getExpirationTime() - nowInMillis) / 1000 / 60;
+            LOG.info("Using cached token (expires in {} minutes)", minutesToExpiration);
+            return cachedToken.access_token;
+        }
+        LOG.info("Getting new Auth0 API access token (cached token does not exist or has expired).");
+        // Create client and build URL.
+        HttpClient client = HttpClientBuilder.create().build();
+        URIBuilder builder = getURIBuilder();
+        String responseString;
+        try {
+            // First get base url for use in audience URL param. (Trailing slash required.)
+            final String audienceUrl = builder.setPath(API_PATH + "/").build().toString();
+            URI uri = builder.setPath("/oauth/token").build();
+            // Make POST request to Auth0 for new token.
+            HttpPost post = new HttpPost(uri);
+            post.setHeader("content-type", "application/x-www-form-urlencoded");
+            List<NameValuePair> urlParameters = new ArrayList<>();
+            urlParameters.add(new BasicNameValuePair("grant_type", "client_credentials"));
+            urlParameters.add(new BasicNameValuePair("client_id", AUTH0_API_CLIENT));
+            urlParameters.add(new BasicNameValuePair("client_secret", AUTH0_API_SECRET));
+            urlParameters.add(new BasicNameValuePair("audience", audienceUrl));
+            post.setEntity(new UrlEncodedFormEntity(urlParameters));
+            HttpResponse response = client.execute(post);
+            // Read response code/entity.
+            int code = response.getStatusLine().getStatusCode();
+            responseString = EntityUtils.toString(response.getEntity());
+            if (code >= 300) {
+                LOG.error("Could not get Auth0 API token {}", responseString);
+                throw new IllegalStateException("Bad response for Auth0 token");
+            }
+        } catch (IllegalStateException | URISyntaxException | IOException e) {
+            e.printStackTrace();
+            return null;
+        }
+        // Parse API Token.
+        Auth0AccessToken auth0AccessToken;
+        try {
+            auth0AccessToken = mapper.readValue(responseString, Auth0AccessToken.class);
+        } catch (IOException e) {
+            LOG.error("Error parsing Auth0 API access token.", e);
+            return null;
+        }
+        if (auth0AccessToken.scope == null) {
+            // TODO: Somehow verify that the scope of the token supports the original request's operation? Right now
+            //  we expect that the scope covers fully all of the operations handled by this application (i.e., update
+            //  user, delete user, etc.), which is something that must be configured in the Auth0 dashboard.
+            LOG.error("API access token has invalid scope.");
+            return null;
+        }
+        // Cache token for later use and return token string.
+        setCachedApiToken(auth0AccessToken);
+        return getCachedApiToken().access_token;
+    }
+
+    /** Set the cached API token to the input parameter. */
+    public static void setCachedApiToken(Auth0AccessToken accessToken) {
+        cachedToken = accessToken;
+    }
+
+    /** Set the cached API token to the input parameter. */
+    public static Auth0AccessToken getCachedApiToken() {
+        return cachedToken;
+    }
+
+    /**
      * Wrapper method for performing user search with default per page count.
      * @return JSON string of users matching search query
      */
@@ -141,7 +232,7 @@ public class Auth0Users {
      */
     public static Auth0UserProfile getUserById(String id) {
         URIBuilder builder = getURIBuilder();
-        builder.setPath("/api/v2/users/" + id);
+        builder.setPath(String.join("/", USERS_API_PATH, id));
         URI uri = null;
         try {
             uri = builder.build();
@@ -151,6 +242,10 @@ public class Auth0Users {
             return null;
         }
         String response = doRequest(uri);
+        if (response == null) {
+            LOG.error("Auth0 request aborted due to issues during request.");
+            return null;
+        }
         Auth0UserProfile user = null;
         try {
             user = mapper.readValue(response, Auth0UserProfile.class);
