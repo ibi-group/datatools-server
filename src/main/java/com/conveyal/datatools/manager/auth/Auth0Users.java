@@ -142,7 +142,7 @@ public class Auth0Users {
      * a new token using the oauth token endpoint or grab a cached token that it has already created (if it has not
      * expired). More information on setting this up is here: https://auth0.com/docs/api/management/v2/get-access-tokens-for-production
      */
-    private static String getApiToken() {
+    public static String getApiToken() {
         long nowInMillis = new Date().getTime();
         // If cached token has not expired, use it instead of requesting a new one.
         if (cachedToken != null && cachedToken.getExpirationTime() > nowInMillis) {
@@ -188,9 +188,26 @@ public class Auth0Users {
             LOG.error("Error parsing Auth0 API access token.", e);
             return null;
         }
+        if (auth0AccessToken.scope == null) {
+            // TODO: Somehow verify that the scope of the token supports the original request's operation? Right now
+            //  we expect that the scope covers fully all of the operations handled by this application (i.e., update
+            //  user, delete user, etc.), which is something that must be configured in the Auth0 dashboard.
+            LOG.error("API access token has invalid scope.");
+            return null;
+        }
         // Cache token for later use and return token string.
-        cachedToken = auth0AccessToken;
-        return cachedToken.access_token;
+        setCachedApiToken(auth0AccessToken);
+        return getCachedApiToken().access_token;
+    }
+
+    /** Set the cached API token to the input parameter. */
+    public static void setCachedApiToken(Auth0AccessToken accessToken) {
+        cachedToken = accessToken;
+    }
+
+    /** Set the cached API token to the input parameter. */
+    public static Auth0AccessToken getCachedApiToken() {
+        return cachedToken;
     }
 
     /**
@@ -225,6 +242,10 @@ public class Auth0Users {
             return null;
         }
         String response = doRequest(uri);
+        if (response == null) {
+            LOG.error("Auth0 request aborted due to issues during request.");
+            return null;
+        }
         Auth0UserProfile user = null;
         try {
             user = mapper.readValue(response, Auth0UserProfile.class);
