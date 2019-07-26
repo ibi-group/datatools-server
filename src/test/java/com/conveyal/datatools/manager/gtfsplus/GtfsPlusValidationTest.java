@@ -43,7 +43,7 @@ public class GtfsPlusValidationTest {
     }
 
     @Test
-    public void canValidateCleanGtfsPlus() throws IOException {
+    public void canValidateCleanGtfsPlus() throws Exception {
         LOG.info("Validation BART GTFS+");
         GtfsPlusValidation validation = GtfsPlusValidation.validate(bartVersion1.id);
         // Expect issues to be zero.
