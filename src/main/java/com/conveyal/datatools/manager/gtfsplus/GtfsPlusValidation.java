@@ -19,7 +19,6 @@ import java.io.InputStreamReader;
 import java.io.Serializable;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Date;
 import java.util.Enumeration;
 import java.util.LinkedList;
 import java.util.List;
@@ -50,7 +49,7 @@ public class GtfsPlusValidation implements Serializable {
      * FIXME: For now this uses the MapDB-backed GTFSFeed class. Which actually suggests that this might
      *   should be contained within a MonitorableJob.
      */
-    public static GtfsPlusValidation validate(String feedVersionId) throws IOException {
+    public static GtfsPlusValidation validate(String feedVersionId) throws Exception {
         GtfsPlusValidation validation = new GtfsPlusValidation(feedVersionId);
         if (!DataManager.isModuleEnabled("gtfsplus")) {
             throw new IllegalStateException("GTFS+ module must be enabled in server.yml to run GTFS+ validation.");
@@ -60,7 +59,31 @@ public class GtfsPlusValidation implements Serializable {
         FeedVersion feedVersion = Persistence.feedVersions.getById(feedVersionId);
         // Load the main GTFS file.
         // FIXME: Swap MapDB-backed GTFSFeed for use of SQL data?
-        GTFSFeed gtfsFeed = GTFSFeed.fromFile(feedVersion.retrieveGtfsFile().getAbsolutePath());
+        String gtfsFeedDbFilePath = gtfsPlusStore.getPathToFeed(feedVersionId + ".db");
+        GTFSFeed gtfsFeed;
+        try {
+            // This check for existence must occur before GTFSFeed is instantiated (and the file must be discarded
+            // immediately).
+            boolean dbExists = new File(gtfsFeedDbFilePath).isFile();
+            gtfsFeed = new GTFSFeed(gtfsFeedDbFilePath);
+            if (!dbExists) {
+                LOG.info("Loading GTFS file into new MapDB file (.db).");
+                gtfsFeed.loadFromFile(new ZipFile(feedVersion.retrieveGtfsFile().getAbsolutePath()));
+            }
+        } catch (Exception e) {
+            LOG.error("MapDB file for GTFSFeed appears to be corrupted. Deleting and trying to load from zip file.", e);
+            // Error loading MapDB file. Delete and try to reload.
+            String[] extensions = {".db", ".db.p"};
+            // delete local cache files (including zip) when feed removed from cache
+            for (String type : extensions) {
+                File file = new File(gtfsPlusStore.getPathToFeed(feedVersionId + type));
+                file.delete();
+            }
+            LOG.info("Attempt #2 to load GTFS file into new MapDB file (.db).");
+            gtfsFeed = new GTFSFeed(gtfsFeedDbFilePath);
+            gtfsFeed.loadFromFile(new ZipFile(feedVersion.retrieveGtfsFile().getAbsolutePath()));
+        }
+
         // check for saved GTFS+ data
         File file = gtfsPlusStore.getFeed(feedVersionId);
         if (file == null) {
@@ -85,6 +108,7 @@ public class GtfsPlusValidation implements Serializable {
                 }
             }
         }
+        gtfsFeed.close();
         LOG.info("GTFS+ tables found: {}/{}", gtfsPlusTableCount, DataManager.gtfsPlusConfig.size());
         return validation;
     }

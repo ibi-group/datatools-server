@@ -255,7 +255,7 @@ public class GtfsPlusController {
         GtfsPlusValidation gtfsPlusValidation = null;
         try {
             gtfsPlusValidation = GtfsPlusValidation.validate(feedVersionId);
-        } catch(IOException e) {
+        } catch(Exception e) {
             logMessageAndHalt(req, 500, "Could not read GTFS+ zip file", e);
         }
         return gtfsPlusValidation;

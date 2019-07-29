@@ -249,7 +249,7 @@
         <dependency>
             <groupId>com.conveyal</groupId>
             <artifactId>gtfs-lib</artifactId>
-            <version>4.3.6</version>
+            <version>5.0.0</version>
         </dependency>
 
         <!-- Used for data-tools application database -->
