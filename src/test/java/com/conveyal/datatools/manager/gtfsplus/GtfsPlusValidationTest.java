@@ -43,10 +43,10 @@ public class GtfsPlusValidationTest {
     }
 
     @Test
-    public void canValidateCleanGtfsPlus() throws IOException {
+    public void canValidateCleanGtfsPlus() throws Exception {
         LOG.info("Validation BART GTFS+");
-        List<ValidationIssue> issues = GtfsPlusValidation.validateGtfsPlus(bartVersion1.id);
+        GtfsPlusValidation validation = GtfsPlusValidation.validate(bartVersion1.id);
         // Expect issues to be zero.
-        assertThat("Issues count for clean BART feed is zero", issues.size(), equalTo(0));
+        assertThat("Issues count for clean BART feed is zero", validation.issues.size(), equalTo(0));
     }
 }

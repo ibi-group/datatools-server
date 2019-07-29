@@ -42,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
+import static com.conveyal.datatools.manager.auth.Auth0Users.USERS_API_PATH;
 import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
 import static spark.Spark.delete;
 import static spark.Spark.get;
@@ -55,14 +56,12 @@ public class UserController {
 
     private static final String AUTH0_DOMAIN = DataManager.getConfigPropertyAsText("AUTH0_DOMAIN");
     private static final String AUTH0_CLIENT_ID = DataManager.getConfigPropertyAsText("AUTH0_CLIENT_ID");
-    private static final String AUTH0_API_TOKEN = DataManager.getConfigPropertyAsText("AUTH0_TOKEN");
-    static final int TEST_AUTH0_PORT = 8089;
-    static final String TEST_AUTH0_DOMAIN = String.format("localhost:%d", TEST_AUTH0_PORT);
+    public static final int TEST_AUTH0_PORT = 8089;
+    public static final String TEST_AUTH0_DOMAIN = String.format("localhost:%d", TEST_AUTH0_PORT);
     private static Logger LOG = LoggerFactory.getLogger(UserController.class);
     private static ObjectMapper mapper = new ObjectMapper();
     private static final String UTF_8 = "UTF-8";
-    static final String USERS_PATH = "/api/v2/users";
-    static final String DEFAULT_BASE_USERS_URL = "https://" + AUTH0_DOMAIN  + USERS_PATH;
+    public static final String DEFAULT_BASE_USERS_URL = "https://" + AUTH0_DOMAIN  + USERS_API_PATH;
     /** Users URL uses Auth0 domain by default, but can be overridden with {@link #setBaseUsersUrl(String)} for testing. */
     private static String baseUsersUrl = DEFAULT_BASE_USERS_URL;
     private static final JsonManager<Project> json = new JsonManager<>(Project.class, JsonViews.UserInterface.class);
@@ -72,9 +71,9 @@ public class UserController {
      * Auth0 API (get user) than the other get methods (user search query).
      */
     private static String getUser(Request req, Response res) {
-        HttpGet request = new HttpGet(getUserIdUrl(req));
-        setHeaders(request);
-        return executeRequestAndGetResult(request, req);
+        HttpGet getUserRequest = new HttpGet(getUserIdUrl(req));
+        setHeaders(req, getUserRequest);
+        return executeRequestAndGetResult(getUserRequest, req);
     }
 
     /**
@@ -146,8 +145,8 @@ public class UserController {
      * injecting permissions somehow into the create user request.
      */
     private static String createPublicUser(Request req, Response res) {
-        HttpPost request = new HttpPost(baseUsersUrl);
-        setHeaders(request);
+        HttpPost createUserRequest = new HttpPost(baseUsersUrl);
+        setHeaders(req, createUserRequest);
 
         JsonNode jsonNode = parseJsonFromBody(req);
         String json = String.format("{" +
@@ -156,17 +155,17 @@ public class UserController {
                 "\"password\": %s," +
                 "\"app_metadata\": {\"datatools\": [{\"permissions\": [], \"projects\": [], \"subscriptions\": [], \"client_id\": \"%s\" }] } }",
                 jsonNode.get("email"), jsonNode.get("password"), AUTH0_CLIENT_ID);
-        setRequestEntityUsingJson(request, json, req);
+        setRequestEntityUsingJson(createUserRequest, json, req);
 
-        return executeRequestAndGetResult(request, req);
+        return executeRequestAndGetResult(createUserRequest, req);
     }
 
     /**
      * HTTP endpoint to create new Auth0 user for the application.
      */
     private static String createUser(Request req, Response res) {
-        HttpPost request = new HttpPost(baseUsersUrl);
-        setHeaders(request);
+        HttpPost createUserRequest = new HttpPost(baseUsersUrl);
+        setHeaders(req, createUserRequest);
 
         JsonNode jsonNode = parseJsonFromBody(req);
         String json = String.format("{" +
@@ -175,9 +174,9 @@ public class UserController {
                 "\"password\": %s," +
                 "\"app_metadata\": {\"datatools\": [%s] } }"
                 , jsonNode.get("email"), jsonNode.get("password"), jsonNode.get("permissions"));
-        setRequestEntityUsingJson(request, json, req);
+        setRequestEntityUsingJson(createUserRequest, json, req);
 
-        return executeRequestAndGetResult(request, req);
+        return executeRequestAndGetResult(createUserRequest, req);
     }
 
     private static String updateUser(Request req, Response res) {
@@ -188,14 +187,14 @@ public class UserController {
             logMessageAndHalt(
                 req,
                 404,
-                String.format("Could not update user: User with id %s not found", userId)
+                String.format("Could not update user: User with id %s not found (or there are issues with the Auth0 configuration)", userId)
             );
         }
 
         LOG.info("Updating user {}", user.getEmail());
 
-        HttpPatch request = new HttpPatch(getUserIdUrl(req));
-        setHeaders(request);
+        HttpPatch updateUserRequest = new HttpPatch(getUserIdUrl(req));
+        setHeaders(req, updateUserRequest);
 
         JsonNode jsonNode = parseJsonFromBody(req);
 
@@ -211,15 +210,15 @@ public class UserController {
 //        }
         String json = "{ \"app_metadata\": { \"datatools\" : " + data + " }}";
 
-        setRequestEntityUsingJson(request, json, req);
+        setRequestEntityUsingJson(updateUserRequest, json, req);
 
-        return executeRequestAndGetResult(request, req);
+        return executeRequestAndGetResult(updateUserRequest, req);
     }
 
     private static Object deleteUser(Request req, Response res) {
-        HttpDelete request = new HttpDelete(getUserIdUrl(req));
-        setHeaders(request);
-        executeRequestAndGetResult(request, req);
+        HttpDelete deleteUserRequest = new HttpDelete(getUserIdUrl(req));
+        setHeaders(req, deleteUserRequest);
+        executeRequestAndGetResult(deleteUserRequest, req);
         return true;
     }
 
@@ -301,12 +300,21 @@ public class UserController {
     }
 
     /**
-     * Set some common headers on the request
+     * Set some common headers on the request, including the API access token, which must be obtained via token request
+     * to Auth0.
      */
-    private static void setHeaders(HttpRequestBase request) {
-        request.addHeader("Authorization", "Bearer " + AUTH0_API_TOKEN);
-        request.setHeader("Accept-Charset", UTF_8);
-        request.setHeader("Content-Type", "application/json");
+    private static void setHeaders(Request sparkRequest, HttpRequestBase auth0Request) {
+        String apiToken = Auth0Users.getApiToken();
+        if (apiToken == null) {
+            logMessageAndHalt(
+                sparkRequest,
+                400,
+                "Failed to obtain Auth0 API token for request"
+            );
+        }
+        auth0Request.addHeader("Authorization", "Bearer " + apiToken);
+        auth0Request.setHeader("Accept-Charset", UTF_8);
+        auth0Request.setHeader("Content-Type", "application/json");
     }
 
     /**
