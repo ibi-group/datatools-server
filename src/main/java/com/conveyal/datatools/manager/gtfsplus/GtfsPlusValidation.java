@@ -60,14 +60,30 @@ public class GtfsPlusValidation implements Serializable {
         // Load the main GTFS file.
         // FIXME: Swap MapDB-backed GTFSFeed for use of SQL data?
         String gtfsFeedDbFilePath = gtfsPlusStore.getPathToFeed(feedVersionId + ".db");
-        // This check for existence must occur before GTFSFeed is instantiated (and the file must be discarded
-        // immediately).
-        boolean dbExists = new File(gtfsFeedDbFilePath).isFile();
-        GTFSFeed gtfsFeed = new GTFSFeed(gtfsFeedDbFilePath);
-        if (!dbExists) {
-            LOG.info("Loading GTFS file into new MapDB file (.db).");
+        GTFSFeed gtfsFeed;
+        try {
+            // This check for existence must occur before GTFSFeed is instantiated (and the file must be discarded
+            // immediately).
+            boolean dbExists = new File(gtfsFeedDbFilePath).isFile();
+            gtfsFeed = new GTFSFeed(gtfsFeedDbFilePath);
+            if (!dbExists) {
+                LOG.info("Loading GTFS file into new MapDB file (.db).");
+                gtfsFeed.loadFromFile(new ZipFile(feedVersion.retrieveGtfsFile().getAbsolutePath()));
+            }
+        } catch (Exception e) {
+            LOG.error("MapDB file for GTFSFeed appears to be corrupted. Deleting and trying to load from zip file.", e);
+            // Error loading MapDB file. Delete and try to reload.
+            String[] extensions = {".db", ".db.p"};
+            // delete local cache files (including zip) when feed removed from cache
+            for (String type : extensions) {
+                File file = new File(gtfsPlusStore.getPathToFeed(feedVersionId + type));
+                file.delete();
+            }
+            LOG.info("Attempt #2 to load GTFS file into new MapDB file (.db).");
+            gtfsFeed = new GTFSFeed(gtfsFeedDbFilePath);
             gtfsFeed.loadFromFile(new ZipFile(feedVersion.retrieveGtfsFile().getAbsolutePath()));
         }
+
         // check for saved GTFS+ data
         File file = gtfsPlusStore.getFeed(feedVersionId);
         if (file == null) {
