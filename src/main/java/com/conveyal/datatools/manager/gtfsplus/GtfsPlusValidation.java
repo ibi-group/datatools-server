@@ -162,6 +162,12 @@ public class GtfsPlusValidation implements Serializable {
             rowIndex++;
         }
         // Add issue for wrong number of columns after processing all rows.
+        // Note: We considered adding an issue for each row, but opted for the single error approach because there's no
+        // concept of a row-level issue in the UI right now. So we would potentially need to add that to the UI
+        // somewhere. Also, there's the trouble of reporting the issue at the row level, but not really giving the user
+        // a great way to resolve the issue in the GTFS+ editor. Essentially, all of the rows with the wrong number of
+        // columns can be resolved simply by clicking the "Save and Revalidate" button -- so the resolution is more at
+        // the table level than the row level (like, for example, a bad value for a field would be).
         if (rowsWithWrongNumberOfColumns > 0) {
             issues.add(new ValidationIssue(tableId, null, -1, rowsWithWrongNumberOfColumns + " row(s) do not contain the same number of fields as there are headers. (File may need to be edited manually.)"));
         }
