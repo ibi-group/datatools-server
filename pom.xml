@@ -217,7 +217,7 @@
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
-            <version>1.1.3</version>
+            <version>1.2.3</version>
         </dependency>
 
         <!-- Used to connect to and import legacy editor MapDBs -->
@@ -250,6 +250,15 @@
             <groupId>com.conveyal</groupId>
             <artifactId>gtfs-lib</artifactId>
             <version>5.0.2</version>
+            <!-- Exclusions added in order to silence SLF4J warnings about multiple bindings:
+                http://www.slf4j.org/codes.html#multiple_bindings
+            -->
+            <exclusions>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-simple</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- Used for data-tools application database -->
