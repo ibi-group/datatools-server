@@ -22,7 +22,7 @@ import spark.Response;
 import java.util.Collections;
 import java.util.List;
 
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
+import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static spark.Spark.delete;
 import static spark.Spark.get;
 import static spark.Spark.options;
@@ -46,12 +46,12 @@ public class ServerController {
         String serverId = req.params("id");
         OtpServer server = Persistence.servers.getById(serverId);
         if (server == null) {
-            haltWithMessage(req, HttpStatus.BAD_REQUEST_400, "Server does not exist.");
+            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Server does not exist.");
         }
         boolean isProjectAdmin = userProfile.canAdministerProject(server.projectId, server.organizationId());
         if (!isProjectAdmin && !userProfile.getUser_id().equals(server.user())) {
             // If user is not a project admin and did not create the deployment, access to the deployment is denied.
-            haltWithMessage(req, HttpStatus.UNAUTHORIZED_401, "User not authorized for deployment.");
+            logMessageAndHalt(req, HttpStatus.UNAUTHORIZED_401, "User not authorized for deployment.");
         }
         return server;
     }
@@ -88,7 +88,7 @@ public class ServerController {
             Persistence.servers.create(newServer);
             return Persistence.servers.update(newServer.id, req.body());
         } else {
-            haltWithMessage(req, 403, "Not authorized to create a server for project " + projectId);
+            logMessageAndHalt(req, 403, "Not authorized to create a server for project " + projectId);
             return null;
         }
     }
@@ -102,7 +102,7 @@ public class ServerController {
         Auth0UserProfile userProfile = req.attribute("user");
         if (projectId != null) {
             Project project = Persistence.projects.getById(projectId);
-            if (project == null) haltWithMessage(req, 400, "Must provide a valid project ID.");
+            if (project == null) logMessageAndHalt(req, 400, "Must provide a valid project ID.");
             else if (userProfile.canAdministerProject(projectId, null)) return project.availableOtpServers();
         }
         else if (userProfile.canAdministerApplication()) return Persistence.servers.getAll();
@@ -118,7 +118,7 @@ public class ServerController {
         Document updateDocument = Document.parse(req.body());
         Auth0UserProfile user = req.attribute("user");
         if ((serverToUpdate.admin || serverToUpdate.projectId == null) && !user.canAdministerApplication()) {
-            haltWithMessage(req, 401, "User cannot modify admin-only or application-wide server.");
+            logMessageAndHalt(req, 401, "User cannot modify admin-only or application-wide server.");
         }
         validateFields(req, updateDocument);
         OtpServer updatedServer = Persistence.servers.update(serverToUpdate.id, updateDocument);
@@ -138,7 +138,7 @@ public class ServerController {
         serverDocument.remove("dateCreated");
         if (serverDocument.containsKey("projectId") && serverDocument.get("projectId") != null) {
             Project project = Persistence.projects.getById(serverDocument.get("projectId").toString());
-            if (project == null) haltWithMessage(req, 400, "Must specify valid project ID.");
+            if (project == null) logMessageAndHalt(req, 400, "Must specify valid project ID.");
         }
         if (serverDocument.containsKey("targetGroupArn") && serverDocument.get("targetGroupArn") != null) {
             // Validate that the Target Group ARN is valid.
@@ -148,10 +148,10 @@ public class ServerController {
                 AmazonElasticLoadBalancing elb = AmazonElasticLoadBalancingClient.builder().build();
                 List<TargetGroup> targetGroups = elb.describeTargetGroups(describeTargetGroupsRequest).getTargetGroups();
                 if (targetGroups.size() == 0) {
-                    haltWithMessage(req, 400, "Invalid value for Target Group ARN. Could not locate Target Group.");
+                    logMessageAndHalt(req, 400, "Invalid value for Target Group ARN. Could not locate Target Group.");
                 }
             } catch (AmazonElasticLoadBalancingException e) {
-                haltWithMessage(req, 400, "Invalid value for Target Group ARN.");
+                logMessageAndHalt(req, 400, "Invalid value for Target Group ARN.");
             }
         }
     }

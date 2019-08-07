@@ -252,13 +252,8 @@ public class DeploymentController {
         Project project = Persistence.projects.getById(deployment.projectId);
         if (project == null)
             logMessageAndHalt(req, 400, "Internal reference error. Deployment's project ID is invalid");
-
-        // FIXME: Currently the otp server to deploy to is determined by the string name field (with special characters
-        // replaced with underscores). This should perhaps be replaced with an immutable server ID so that there is
-        // no risk that these values can overlap. This may be over engineering this system though. The user deploying
-        // a set of feeds would likely not create two deployment targets with the same name (and the name is unlikely
-        // to change often).
-        OtpServer otpServer = project.retrieveServer(target);
+        // Get server by ID
+        OtpServer otpServer = Persistence.servers.getById(target);
         if (otpServer == null) logMessageAndHalt(req, 400, "Must provide valid OTP server target ID.");
 
         // Check that permissions of user allow them to deploy to target.
