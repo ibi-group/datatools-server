@@ -1,15 +1,17 @@
 package com.conveyal.datatools.common.status;
 
 import com.conveyal.datatools.manager.DataManager;
+import com.google.common.collect.Sets;
 import org.apache.commons.lang3.exception.ExceptionUtils;
-import org.eclipse.jetty.util.ConcurrentHashSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -18,10 +20,11 @@ import java.util.concurrent.TimeUnit;
  */
 public abstract class MonitorableJob implements Runnable {
     private static final Logger LOG = LoggerFactory.getLogger(MonitorableJob.class);
-    protected final String owner;
+    public final String owner;
 
     // Public fields will be serialized over HTTP API and visible to the web client
     public final JobType type;
+    public File file;
     public String parentJobId;
     public JobType parentJobType;
     // Status is not final to allow some jobs to have extra status fields.
@@ -47,16 +50,18 @@ public abstract class MonitorableJob implements Runnable {
         LOAD_FEED,
         VALIDATE_FEED,
         DEPLOY_TO_OTP,
+        EXPORT_GIS,
         FETCH_PROJECT_FEEDS,
         FETCH_SINGLE_FEED,
         MAKE_PROJECT_PUBLIC,
         PROCESS_FEED,
+        SYSTEM_JOB,
         CREATE_SNAPSHOT,
         EXPORT_SNAPSHOT_TO_GTFS,
         CONVERT_EDITOR_MAPDB_TO_SQL,
         VALIDATE_ALL_FEEDS,
-        MERGE_PROJECT_FEEDS,
-        MONITOR_SERVER_STATUS
+        MONITOR_SERVER_STATUS,
+        MERGE_FEED_VERSIONS
     }
 
     public MonitorableJob(String owner, String name, JobType type) {
@@ -66,18 +71,31 @@ public abstract class MonitorableJob implements Runnable {
         registerJob();
     }
 
+    public MonitorableJob(String owner) {
+        this(owner, "Unnamed Job", JobType.UNKNOWN_TYPE);
+    }
+
+    /** Constructor for a usually unmonitored system job (but still something we want to conform to our model). */
+    public MonitorableJob () {
+        this("system", "System job", JobType.SYSTEM_JOB);
+    }
+
     /**
      * This method should never be called directly or overridden.
      * It is a standard start-up stage for all monitorable jobs.
      */
     private void registerJob() {
-        ConcurrentHashSet<MonitorableJob> userJobs = DataManager.userJobsMap.get(this.owner);
-        if (userJobs == null) {
-            userJobs = new ConcurrentHashSet<>();
-        }
+        Set<MonitorableJob> userJobs = DataManager.userJobsMap.get(this.owner);
+        // If there are no current jobs for the user, create a new empty set. NOTE: this should be a concurrent hash
+        // set so that it is threadsafe.
+        if (userJobs == null) userJobs = Sets.newConcurrentHashSet();
         userJobs.add(this);
 
         DataManager.userJobsMap.put(this.owner, userJobs);
+    }
+
+    public File retrieveFile () {
+        return file;
     }
 
     /**
@@ -86,7 +104,7 @@ public abstract class MonitorableJob implements Runnable {
      */
     private void unRegisterJob () {
         // remove this job from the user-job map
-        ConcurrentHashSet<MonitorableJob> userJobs = DataManager.userJobsMap.get(this.owner);
+        Set<MonitorableJob> userJobs = DataManager.userJobsMap.get(this.owner);
         if (userJobs != null) userJobs.remove(this);
     }
 

@@ -6,6 +6,7 @@ import com.conveyal.datatools.editor.jobs.CreateSnapshotJob;
 import com.conveyal.datatools.editor.jobs.ExportSnapshotToGTFSJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.auth.Actions;
 import com.conveyal.datatools.manager.controllers.api.FeedVersionController;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -26,7 +27,7 @@ import java.util.Collection;
 import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
+import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static spark.Spark.delete;
 import static spark.Spark.get;
 import static spark.Spark.options;
@@ -55,9 +56,9 @@ public class SnapshotController {
      */
     private static Snapshot getSnapshotFromRequest(Request req) {
         String id = req.params("id");
-        if (id == null) haltWithMessage(req, 400, "Must provide valid snapshot ID");
+        if (id == null) logMessageAndHalt(req, 400, "Must provide valid snapshot ID");
         // Check user permissions on feed source.
-        FeedVersionController.requestFeedSourceById(req, "view", "feedId");
+        FeedVersionController.requestFeedSourceById(req, Actions.VIEW, "feedId");
         return Persistence.snapshots.getById(id);
     }
 
@@ -66,7 +67,7 @@ public class SnapshotController {
      */
     private static Collection<Snapshot> getSnapshots(Request req, Response res) {
         // Get feed source and check user permissions.
-        FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, "view", "feedId");
+        FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, Actions.VIEW, "feedId");
         // FIXME Do we need a way to return all snapshots?
         // Is this used in GTFS Data Manager to retrieveById snapshots in bulk?
 
@@ -79,7 +80,7 @@ public class SnapshotController {
      */
     private static String createSnapshot (Request req, Response res) throws IOException {
         Auth0UserProfile userProfile = req.attribute("user");
-        FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, "edit", "feedId");
+        FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, Actions.EDIT, "feedId");
         // Take fields from request body for creating snapshot.
         Snapshot snapshot = json.read(req.body());
         // Ensure feed source ID and snapshotOf namespace is correct
@@ -104,7 +105,7 @@ public class SnapshotController {
         Auth0UserProfile userProfile = req.attribute("user");
         // Get feed version from request (and check permissions).
         String feedVersionId = req.queryParams("feedVersionId");
-        FeedVersion feedVersion = FeedVersionController.requestFeedVersion(req, "edit", feedVersionId);
+        FeedVersion feedVersion = FeedVersionController.requestFeedVersion(req, Actions.EDIT, feedVersionId);
         FeedSource feedSource = feedVersion.parentFeedSource();
         // Create and run snapshot job
         Snapshot snapshot = new Snapshot("Snapshot of " + feedVersion.name, feedSource.id, feedVersion.namespace);
@@ -121,7 +122,7 @@ public class SnapshotController {
     // FIXME: Is this method used anywhere? Can we delete?
     private static Object updateSnapshot (Request req, Response res) {
         // FIXME
-        haltWithMessage(req, 400, "Method not implemented");
+        logMessageAndHalt(req, 400, "Method not implemented");
         return null;
     }
 
@@ -135,14 +136,14 @@ public class SnapshotController {
         String id = req.params("id");
         // FIXME Ensure namespace id exists in database?
         // Retrieve feed source.
-        FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, "edit", "feedId");
+        FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, Actions.EDIT, "feedId");
         Snapshot snapshotToRestore = Persistence.snapshots.getById(id);
         if (snapshotToRestore == null) {
-            haltWithMessage(req, 400, "Must specify valid snapshot ID");
+            logMessageAndHalt(req, 400, "Must specify valid snapshot ID");
         }
         // Update editor namespace pointer.
         if (snapshotToRestore.namespace == null) {
-            haltWithMessage(req, 400, "Failed to restore snapshot. No namespace found.");
+            logMessageAndHalt(req, 400, "Failed to restore snapshot. No namespace found.");
         }
         // Preserve existing editor buffer if requested. FIXME: should the request body also contain name and comments?
         boolean preserveBuffer = "true".equals(req.queryParams("preserveBuffer"));
@@ -187,7 +188,12 @@ public class SnapshotController {
         // FIXME: use new FeedStore.
         if (DataManager.useS3) {
             if (!FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, key)) {
-                haltWithMessage(req, 400, String.format("Error downloading snapshot from S3. Object %s does not exist.", key));
+                logMessageAndHalt(
+                    req,
+                    500,
+                    String.format("Error downloading snapshot from S3. Object %s does not exist.", key),
+                    new Exception("s3 object does not exist")
+                );
             }
             // Return presigned download link if using S3.
             return downloadFromS3(FeedStore.s3Client, DataManager.feedBucket, key, false, res);
@@ -207,10 +213,10 @@ public class SnapshotController {
         String id = req.params("id");
         // FIXME Ensure namespace id exists in database.
         // Check feed source permissions.
-        FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, "edit", "feedId");
+        FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, Actions.EDIT, "feedId");
         // Retrieve snapshot
         Snapshot snapshot = Persistence.snapshots.getById(id);
-        if (snapshot == null) haltWithMessage(req, 400, "Must provide valid snapshot ID.");
+        if (snapshot == null) logMessageAndHalt(req, 400, "Must provide valid snapshot ID.");
         try {
             // Remove the snapshot and then renumber the snapshots
             snapshot.delete();
@@ -219,8 +225,7 @@ public class SnapshotController {
             // FIXME delete tables from database?
             return snapshot;
         } catch (Exception e) {
-            e.printStackTrace();
-            haltWithMessage(req, 400, "Unknown error deleting snapshot.", e);
+            logMessageAndHalt(req, 500, "Unknown error occurred while deleting snapshot.", e);
             return null;
         }
     }
@@ -235,7 +240,7 @@ public class SnapshotController {
         FeedDownloadToken token = Persistence.tokens.getById(id);
 
         if(token == null || !token.isValid()) {
-            haltWithMessage(req, 400, "Feed download token not valid");
+            logMessageAndHalt(req, 400, "Feed download token not valid");
         }
 
         Snapshot snapshot = token.retrieveSnapshot();

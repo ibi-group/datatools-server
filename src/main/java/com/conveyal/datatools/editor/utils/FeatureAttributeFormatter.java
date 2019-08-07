@@ -31,14 +31,12 @@ public class FeatureAttributeFormatter {
 
             Integer fieldPosition = Integer.parseInt(sub.replace("#", ""));
 
-            try
-            {
+            try {
                 String attributeString = feature.getAttribute(fieldPosition).toString();
-
                 output = output.replace(sub, attributeString);
-            }
-            catch(Exception e) {
+            } catch (Exception e) {
                 LOG.warn("Index out of range.");
+                e.printStackTrace();
             }
 
         }

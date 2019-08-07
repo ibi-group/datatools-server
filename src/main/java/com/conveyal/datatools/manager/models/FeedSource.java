@@ -32,6 +32,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
+import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 
 /**
@@ -50,7 +51,6 @@ public class FeedSource extends Model implements Cloneable {
     //@JsonView(JsonViews.DataDump.class)
     public String projectId;
 
-//    public String[] regions = {"1"};
     /**
      * Get the Project of which this feed is a part
      */
@@ -113,6 +113,15 @@ public class FeedSource extends Model implements Cloneable {
      */
     public String snapshotVersion;
 
+    /**
+     * The SQL namespace for the most recently verified published {@link FeedVersion}.
+     *
+     * FIXME During migration to RDBMS for GTFS data, this field changed to map to the SQL unique ID,
+     *  however the name of the field suggests it maps to the feed version ID stored in MongoDB. Now
+     *  that both published namespace/version ID are available in {@link #publishedValidationSummary()}
+     *  it might make sense to migrate this field back to the versionID for MTC (or rename it to
+     *  publishedNamespace). Both efforts would require some level of db migration + code changes.
+     */
     public String publishedVersionId;
 
     public String editorNamespace;
@@ -149,8 +158,6 @@ public class FeedSource extends Model implements Cloneable {
     public FeedVersion fetch (MonitorableJob.Status status, String optionalUrlOverride) {
         status.message = "Downloading file";
 
-        FeedVersion latest = retrieveLatest();
-
         // We create a new FeedVersion now, so that the fetched date is (milliseconds) before
         // fetch occurs. That way, in the highly unlikely event that a feed is updated while we're
         // fetching it, we will not miss a new feed.
@@ -178,7 +185,7 @@ public class FeedSource extends Model implements Cloneable {
                     "User-Agent",
                     "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.95 Safari/537.11"
             );
-        } catch (Exception e) {
+        } catch (IOException e) {
             String message = String.format("Unable to open connection to %s; not fetching feed %s", url, this.name);
             LOG.error(message);
             // TODO use this update function throughout this class
@@ -187,7 +194,8 @@ public class FeedSource extends Model implements Cloneable {
         }
 
         conn.setDefaultUseCaches(true);
-
+        // Get latest version to check that the fetched version does not duplicate a feed already loaded.
+        FeedVersion latest = retrieveLatest();
         // lastFetched is set to null when the URL changes and when latest feed version is deleted
         if (latest != null && this.lastFetched != null)
             conn.setIfModifiedSince(Math.min(latest.updated.getTime(), this.lastFetched.getTime()));
@@ -307,6 +315,30 @@ public class FeedSource extends Model implements Cloneable {
         return newestVersion;
     }
 
+    /**
+     * Fetches the published {@link FeedVersion} for this feed source according to the
+     * {@link #publishedVersionId} field (which currently maps to {@link FeedVersion#namespace}.
+     */
+    public FeedVersion retrievePublishedVersion() {
+        if (this.publishedVersionId == null) return null;
+        FeedVersion publishedVersion = Persistence.feedVersions
+            // Sort is unnecessary here.
+            .getOneFiltered(eq("namespace", this.publishedVersionId), Sorts.descending("version"));
+        if (publishedVersion == null) {
+            // Is this what happens if there are none?
+            return null;
+        }
+        return publishedVersion;
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonView(JsonViews.UserInterface.class)
+    @JsonProperty("publishedValidationSummary")
+    private FeedValidationResultSummary publishedValidationSummary() {
+        FeedVersion publishedVersion = retrievePublishedVersion();
+        return publishedVersion != null ? new FeedValidationResultSummary(publishedVersion) : null;
+    }
+
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("latestVersionId")
@@ -335,8 +367,7 @@ public class FeedSource extends Model implements Cloneable {
     @JsonProperty("latestValidation")
     public FeedValidationResultSummary latestValidation() {
         FeedVersion latest = retrieveLatest();
-        ValidationResult result = latest != null ? latest.validationResult : null;
-        return result != null ?new FeedValidationResultSummary(result, latest.feedLoadResult) : null;
+        return latest != null ? new FeedValidationResultSummary(latest) : null;
     }
 
     // TODO: figure out some way to indicate whether feed has been edited since last snapshot (i.e, there exist changes)
@@ -363,10 +394,10 @@ public class FeedSource extends Model implements Cloneable {
         for(String resourceType : DataManager.feedResources.keySet()) {
             Map<String, String> propTable = new HashMap<>();
 
-            // FIXME: use mongo filters instead
-            Persistence.externalFeedSourceProperties.getAll().stream()
-                    .filter(prop -> prop.feedSourceId.equals(this.id))
-                    .forEach(prop -> propTable.put(prop.name, prop.value));
+            // Get all external properties for the feed source/resource type and fill prop table.
+            Persistence.externalFeedSourceProperties
+                .getFiltered(and(eq("feedSourceId", this.id), eq("resourceType", resourceType)))
+                .forEach(prop -> propTable.put(prop.name, prop.value));
 
             resourceTable.put(resourceType, propTable);
         }
@@ -540,5 +571,4 @@ public class FeedSource extends Model implements Cloneable {
     public FeedSource clone () throws CloneNotSupportedException {
         return (FeedSource) super.clone();
     }
-
 }

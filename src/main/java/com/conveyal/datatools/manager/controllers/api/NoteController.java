@@ -18,7 +18,7 @@ import java.io.IOException;
 import java.util.Collection;
 import java.util.Date;
 
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
+import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.mongodb.client.model.Filters.eq;
 import static com.mongodb.client.model.Updates.push;
 import static spark.Spark.get;
@@ -34,20 +34,20 @@ public class NoteController {
 
     public static Collection<Note> getAllNotes (Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
-        if (userProfile == null) haltWithMessage(req, 401, "User not authorized to perform this action");
+        if (userProfile == null) logMessageAndHalt(req, 401, "User not authorized to perform this action");
 
         String typeStr = req.queryParams("type");
         String objectId = req.queryParams("objectId");
 
         if (typeStr == null || objectId == null) {
-            haltWithMessage(req, 400, "Please specify objectId and type");
+            logMessageAndHalt(req, 400, "Please specify objectId and type");
         }
 
         Note.NoteType type = null;
         try {
             type = Note.NoteType.valueOf(typeStr);
         } catch (IllegalArgumentException e) {
-            haltWithMessage(req, 400, "Please specify a valid type");
+            logMessageAndHalt(req, 400, "Please specify a valid type");
         }
 
         Model model = null;
@@ -61,7 +61,7 @@ public class NoteController {
                 break;
             default:
                 // this shouldn't ever happen, but Java requires that every case be covered somehow so model can't be used uninitialized
-                haltWithMessage(req, 400, "Unsupported type for notes");
+                logMessageAndHalt(req, 400, "Unsupported type for notes");
         }
 
         FeedSource s;
@@ -78,7 +78,7 @@ public class NoteController {
             return model.retrieveNotes();
         }
         else {
-            haltWithMessage(req, 401, "User not authorized to perform this action");
+            logMessageAndHalt(req, 401, "User not authorized to perform this action");
         }
 
         return null;
@@ -86,7 +86,7 @@ public class NoteController {
 
     public static Note createNote (Request req, Response res) throws IOException {
         Auth0UserProfile userProfile = req.attribute("user");
-        if(userProfile == null) haltWithMessage(req, 401, "User not authorized to perform this action");
+        if(userProfile == null) logMessageAndHalt(req, 401, "User not authorized to perform this action");
 
         String typeStr = req.queryParams("type");
         String objectId = req.queryParams("objectId");
@@ -95,7 +95,7 @@ public class NoteController {
         try {
             type = Note.NoteType.valueOf(typeStr);
         } catch (IllegalArgumentException e) {
-            haltWithMessage(req, 400, "Please specify a valid type");
+            logMessageAndHalt(req, 400, "Please specify a valid type");
         }
 
         Model objectWithNote = null;
@@ -109,7 +109,7 @@ public class NoteController {
                 break;
             default:
                 // this shouldn't ever happen, but Java requires that every case be covered somehow so model can't be used uninitialized
-                haltWithMessage(req, 400, "Unsupported type for notes");
+                logMessageAndHalt(req, 400, "Unsupported type for notes");
         }
 
         FeedSource feedSource;
@@ -159,7 +159,7 @@ public class NoteController {
             return note;
         }
         else {
-            haltWithMessage(req, 401, "User not authorized to perform this action");
+            logMessageAndHalt(req, 401, "User not authorized to perform this action");
         }
 
         return null;

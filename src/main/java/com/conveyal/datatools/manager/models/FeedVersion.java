@@ -1,17 +1,7 @@
 package com.conveyal.datatools.manager.models;
 
-
-import java.awt.geom.Rectangle2D;
-import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.Serializable;
-import java.text.DateFormat;
-import java.text.SimpleDateFormat;
-import java.time.LocalDate;
-import java.util.Date;
-
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -22,14 +12,23 @@ import com.conveyal.gtfs.loader.Feed;
 import com.conveyal.gtfs.loader.FeedLoadResult;
 import com.conveyal.gtfs.validator.ValidationResult;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.annotation.JsonProperty;
-import org.bson.codecs.pojo.annotations.BsonProperty;
-
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
+import org.bson.codecs.pojo.annotations.BsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.awt.geom.Rectangle2D;
+import java.io.File;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.Serializable;
+import java.text.DateFormat;
+import java.text.SimpleDateFormat;
+import java.time.LocalDate;
+import java.util.Date;
 
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.mongodb.client.model.Filters.and;
@@ -141,7 +140,7 @@ public class FeedVersion extends Model implements Serializable {
         return feedStore.getFeed(id);
     }
 
-    public File newGtfsFile(InputStream inputStream) {
+    public File newGtfsFile(InputStream inputStream) throws IOException {
         File file = feedStore.newFeed(id, inputStream, parentFeedSource());
         // fileSize field will not be stored until new FeedVersion is stored in MongoDB (usually in
         // the final steps of ValidateFeedJob).
@@ -169,7 +168,7 @@ public class FeedVersion extends Model implements Serializable {
     @JsonView(JsonViews.UserInterface.class)
     @BsonProperty("validationSummary")
     public FeedValidationResultSummary validationSummary() {
-        return new FeedValidationResultSummary(validationResult, feedLoadResult);
+        return new FeedValidationResultSummary(this);
     }
 
 
@@ -192,10 +191,24 @@ public class FeedVersion extends Model implements Serializable {
     public String namespace;
 
     /**
-     * Indicates whether a feed version is pending published status, a check that is currently performed in
-     * {@link com.conveyal.datatools.manager.jobs.FeedUpdater}. This field is currently in use only for the MTC extension.
+     * Indicates the namespace from which this version originated. For example, if it was published from a snapshot
+     * namespace or a GTFS+ feed, this field will reference that source namespace.
+     */
+    public String originNamespace;
+
+    /**
+     * Indicates when a feed version was published to an external source. If null, the version has not been sent. This
+     * field is currently in use only for the MTC extension and is reset to null after the published version has been
+     * registered externally.
      * */
-    public boolean processing;
+    public Date sentToExternalPublisher;
+
+    /**
+     * Indicates when a feed version was published to an external source. If null, the version has not been processed by
+     * the external publisher or has not been sent (see {@link #sentToExternalPublisher}. This field is currently in use
+     * only for the MTC extension and is reset to null after the published version has been registered externally.
+     * */
+    public Date processedByExternalPublisher;
 
     public String formattedTimestamp() {
         SimpleDateFormat format = new SimpleDateFormat(HUMAN_READABLE_TIMESTAMP_FORMAT);
@@ -393,6 +406,10 @@ public class FeedVersion extends Model implements Serializable {
                     pull("feedVersionIds", this.id));
             Persistence.feedVersions.removeById(this.id);
             this.parentFeedSource().renumberFeedVersions();
+
+            // recalculate feed expiration notifications in case the latest version has changed
+            Scheduler.scheduleExpirationNotifications(fs);
+
             LOG.info("Version {} deleted", id);
         } catch (Exception e) {
             LOG.warn("Error deleting version", e);

@@ -16,7 +16,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
+import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static spark.Spark.delete;
 import static spark.Spark.get;
 import static spark.Spark.post;
@@ -32,7 +32,7 @@ public class OrganizationController {
     public static Organization getOrganization (Request req, Response res) {
         String id = req.params("id");
         if (id == null) {
-            haltWithMessage(req, 400, "Must specify valid organization id");
+            logMessageAndHalt(req, 400, "Must specify valid organization id");
         }
         Organization org = Persistence.organizations.getById(id);
         return org;
@@ -49,7 +49,7 @@ public class OrganizationController {
             LOG.info("returning org {}", orgs);
             return orgs;
         } else {
-            haltWithMessage(req, 401, "Must be application admin to view organizations");
+            logMessageAndHalt(req, 401, "Must be application admin to view organizations");
         }
         return null;
     }
@@ -61,7 +61,7 @@ public class OrganizationController {
             Organization org = Persistence.organizations.create(req.body());
             return org;
         } else {
-            haltWithMessage(req, 401, "Must be application admin to view organizations");
+            logMessageAndHalt(req, 401, "Must be application admin to view organizations");
         }
         return null;
     }
@@ -108,7 +108,7 @@ public class OrganizationController {
         Organization org = requestOrganizationById(req);
         Collection<Project> organizationProjects = org.projects();
         if (organizationProjects != null && organizationProjects.size() > 0) {
-            haltWithMessage(req, 400, "Cannot delete organization that is referenced by projects.");
+            logMessageAndHalt(req, 400, "Cannot delete organization that is referenced by projects.");
         }
         Persistence.organizations.removeById(org.id);
         return org;
@@ -118,16 +118,16 @@ public class OrganizationController {
         Auth0UserProfile userProfile = req.attribute("user");
         String id = req.params("id");
         if (id == null) {
-            haltWithMessage(req, 400, "Must specify valid organization id");
+            logMessageAndHalt(req, 400, "Must specify valid organization id");
         }
         if (userProfile.canAdministerApplication()) {
             Organization org = Persistence.organizations.getById(id);
             if (org == null) {
-                haltWithMessage(req, 400, "Organization does not exist");
+                logMessageAndHalt(req, 400, "Organization does not exist");
             }
             return org;
         } else {
-            haltWithMessage(req, 401, "Must be application admin to modify organization");
+            logMessageAndHalt(req, 401, "Must be application admin to modify organization");
         }
         return null;
     }

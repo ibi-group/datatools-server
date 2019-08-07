@@ -164,6 +164,16 @@ public class DeployJob extends MonitorableJob {
 
         // Upload to S3, if specifically required by the OTPServer or needed for servers in the target group to fetch.
         if (otpServer.s3Bucket != null || otpServer.targetGroupArn != null) {
+            if (!DataManager.useS3) {
+                String message = "Cannot upload deployment to S3. Application not configured for s3 storage.";
+                LOG.error(message);
+                status.fail(message);
+                return;
+            }
+            status.message = "Uploading to S3";
+            status.uploadingS3 = true;
+            LOG.info("Uploading deployment {} to s3", deployment.name);
+            String key = null;
             try {
                 uploadBundleToS3();
             } catch (AmazonClientException | InterruptedException e) {

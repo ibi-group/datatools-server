@@ -1,5 +1,7 @@
 package com.conveyal.datatools.common.utils;
 
+import com.bugsnag.Bugsnag;
+import com.bugsnag.Report;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -12,13 +14,17 @@ import spark.HaltException;
 import spark.Request;
 import spark.Response;
 
+import javax.servlet.ServletInputStream;
 import javax.servlet.ServletOutputStream;
+import javax.servlet.ServletRequestWrapper;
 import javax.servlet.http.HttpServletResponse;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
 
+import static com.conveyal.datatools.manager.DataManager.getBugsnag;
 import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
 import static spark.Spark.halt;
 
@@ -30,12 +36,13 @@ public class SparkUtils {
     private static final ObjectMapper mapper = new ObjectMapper();
     private static final String BASE_URL = getConfigPropertyAsText("application.public_url");
     private static final int DEFAULT_LINES_TO_PRINT = 10;
+    private static final int MAX_CHARACTERS_TO_PRINT = 500;
 
     /**
      * Write out the supplied file to the Spark response as an octet-stream.
      */
     public static HttpServletResponse downloadFile(File file, String filename, Request req, Response res) {
-        if (file == null) haltWithMessage(req, 404, "File is null");
+        if (file == null) logMessageAndHalt(req, 404, "File is null");
         HttpServletResponse raw = res.raw();
         raw.setContentType("application/octet-stream");
         raw.setHeader("Content-Disposition", "attachment; filename=" + filename);
@@ -49,10 +56,8 @@ public class SparkUtils {
             ByteStreams.copy(fileInputStream, outputStream);
             // TODO: Is flushing the stream necessary?
             outputStream.flush();
-        } catch (Exception e) {
-            LOG.error("Could not write file to output stream", e);
-            e.printStackTrace();
-            haltWithMessage(req, 500, "Error serving GTFS file", e);
+        } catch (IOException e) {
+            logMessageAndHalt(req, 500, "Could not write file to output stream", e);
         }
         return raw;
     }
@@ -90,19 +95,40 @@ public class SparkUtils {
     /**
      * Wrapper around Spark halt method that formats message as JSON using {@link SparkUtils#formatJSON}.
      */
-    public static void haltWithMessage(Request request, int statusCode, String message) throws HaltException {
-        haltWithMessage(request, statusCode, message, null);
+    public static void logMessageAndHalt(Request request, int statusCode, String message) throws HaltException {
+        logMessageAndHalt(request, statusCode, message, null);
     }
 
     /**
-     * Wrapper around Spark halt method that formats message as JSON using {@link SparkUtils#formatJSON}. Exception
+     * Wrapper around Spark halt method that formats message as JSON using {@link SparkUtils#formatJSON}.
+     * Extra logic occurs for when the status code is >= 500.  A Bugsnag report is created if
+     * Bugsnag is configured.
      */
-    public static void haltWithMessage(
+    public static void logMessageAndHalt(
         Request request,
         int statusCode,
         String message,
         Exception e
     ) throws HaltException {
+        // Note that halting occurred, also print error stacktrace if applicable
+        if (e != null) e.printStackTrace();
+        LOG.info("Halting with status code {}.  Error message: {}.", statusCode, message);
+
+        if (statusCode >= 500) {
+            LOG.error(message);
+
+            // create report to notify bugsnag if configured
+            Bugsnag bugsnag = getBugsnag();
+            if (bugsnag != null && e != null) {
+                // create report to send to bugsnag
+                Report report = bugsnag.buildReport(e);
+                Auth0UserProfile userProfile = request.attribute("user");
+                String userEmail = userProfile != null ? userProfile.getEmail() : "no-auth";
+                report.setUserEmail(userEmail);
+                bugsnag.notify(report);
+            }
+        }
+
         JsonNode json = getObjectNode(message, statusCode, e);
         String logString = null;
         try {
@@ -162,13 +188,19 @@ public class SparkUtils {
             }
             if ("application/json".equals(contentType)) {
                 bodyString = logRequest ? request.body() : response.body();
-                if (bodyString != null) {
+                if (bodyString == null) {
+                    bodyString = "{body content is null}";
+                } else if (bodyString.length() > MAX_CHARACTERS_TO_PRINT) {
+                    bodyString = new StringBuilder()
+                        .append("body content is longer than 500 characters, printing first 500 characters here:\n")
+                        .append(bodyString, 0, MAX_CHARACTERS_TO_PRINT)
+                        .append("\n...and " + (bodyString.length() - MAX_CHARACTERS_TO_PRINT) + " more characters")
+                        .toString();
+                } else {
                     // Pretty print JSON if ContentType is JSON and body is not empty
                     JsonNode jsonNode = mapper.readTree(bodyString);
                     // Add new line for legibility when printing
                     bodyString = "\n" + mapper.writerWithDefaultPrettyPrinter().writeValueAsString(jsonNode);
-                } else {
-                    bodyString = "{body content is null}";
                 }
             } else if (contentType != null) {
                 bodyString = String.format("\nnon-JSON body type: %s", contentType);
@@ -199,6 +231,30 @@ public class SparkUtils {
             queryString,
             trimLines(bodyString)
         );
+    }
+
+    /**
+     * Bypass Spark's request wrapper which always caches the request body in memory that may be a very large
+     * GTFS file. Also, the body of the request is the GTFS file instead of using multipart form data because
+     * multipart form handling code also caches the request body.
+     */
+    public static void copyRequestStreamIntoFile(Request req, File file) {
+        try {
+            ServletInputStream inputStream = ((ServletRequestWrapper) req.raw()).getRequest().getInputStream();
+            FileOutputStream fileOutputStream = new FileOutputStream(file);
+            // Guava's ByteStreams.copy uses a 4k buffer (no need to wrap output stream), but does not close streams.
+            ByteStreams.copy(inputStream, fileOutputStream);
+            fileOutputStream.close();
+            inputStream.close();
+            if (file.length() == 0) {
+                // Throw IO exception to be caught and returned to user via halt.
+                throw new IOException("No file found in request body.");
+            }
+            LOG.info("Saving file {} from upload", file.getName());
+        } catch (Exception e) {
+            LOG.error("Unable to open input stream from upload");
+            logMessageAndHalt(req, 500, "Unable to read uploaded file.", e);
+        }
     }
 
     private static String trimLines(String str) {

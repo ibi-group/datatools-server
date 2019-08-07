@@ -1,6 +1,7 @@
 package com.conveyal.datatools.editor.controllers.api;
 
 import com.conveyal.datatools.common.utils.S3Utils;
+import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.editor.controllers.EditorLockController;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -10,6 +11,7 @@ import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.gtfs.loader.JdbcTableWriter;
 import com.conveyal.gtfs.loader.Table;
 import com.conveyal.gtfs.model.Entity;
+import com.conveyal.gtfs.util.InvalidNamespaceException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.commons.dbutils.DbUtils;
@@ -20,12 +22,13 @@ import spark.Request;
 import spark.Response;
 
 import javax.sql.DataSource;
+import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJSON;
-import static com.conveyal.datatools.common.utils.SparkUtils.haltWithMessage;
+import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.editor.controllers.EditorLockController.sessionsForFeedIds;
 import static spark.Spark.delete;
 import static spark.Spark.options;
@@ -84,6 +87,7 @@ public abstract class EditorController<T extends Entity> {
         // Handle update useFrequency field. Hitting this endpoint will delete all trips for a pattern and update the
         // useFrequency field.
         if ("pattern".equals(classToLowercase)) {
+            put(ROOT_ROUTE + ID_PARAM + "/stop_times", this::updateStopTimesFromPatternStops, json::write);
             delete(ROOT_ROUTE + ID_PARAM + "/trips", this::deleteTripsForPattern, json::write);
         }
     }
@@ -97,18 +101,20 @@ public abstract class EditorController<T extends Entity> {
         // NOTE: This is a string pattern ID, not the integer ID that all other HTTP endpoints use.
         String patternId = req.params("id");
         if (patternId == null) {
-            haltWithMessage(req, 400, "Must provide valid pattern_id");
+            logMessageAndHalt(req, 400, "Must provide valid pattern_id");
         }
         try {
             JdbcTableWriter tableWriter = new JdbcTableWriter(Table.TRIPS, datasource, namespace);
             int deletedCount = tableWriter.deleteWhere("pattern_id", patternId, true);
             return formatJSON(String.format("Deleted %d.", deletedCount), 200);
+        } catch (InvalidNamespaceException e) {
+            logMessageAndHalt(req, 400, "Invalid namespace");
+            return null;
         } catch (Exception e) {
-            e.printStackTrace();
-            haltWithMessage(req, 400, "Error deleting entity", e);
+            logMessageAndHalt(req, 500, "Error deleting entity", e);
             return null;
         } finally {
-            LOG.info("Delete operation took {} msec", System.currentTimeMillis() - startTime);
+            LOG.info("Delete trips for pattern operation took {} msec", System.currentTimeMillis() - startTime);
         }
     }
 
@@ -120,8 +126,9 @@ public abstract class EditorController<T extends Entity> {
         long startTime = System.currentTimeMillis();
         String namespace = getNamespaceAndValidateSession(req);
         String[] tripIds = req.queryParams("tripIds").split(",");
+        JdbcTableWriter tableWriter = null;
         try {
-            JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
+            tableWriter = new JdbcTableWriter(table, datasource, namespace);
             for (String tripId: tripIds) {
                 // Delete each trip ID found in query param WITHOUT auto-committing.
                 int result = tableWriter.delete(Integer.parseInt(tripId), false);
@@ -131,13 +138,15 @@ public abstract class EditorController<T extends Entity> {
                     throw new SQLException(message);
                 }
             }
-            // Commit the transaction after iterating over trip IDs (because the deletes where made without autocommit).
+            // Commit the transaction after iterating over trip IDs (because the deletes were made without autocommit).
             tableWriter.commit();
             LOG.info("Deleted {} trips", tripIds.length);
+        } catch (InvalidNamespaceException e) {
+            logMessageAndHalt(req, 400, "Invalid namespace");
         } catch (Exception e) {
-            e.printStackTrace();
-            haltWithMessage(req, 400, "Error deleting entity", e);
+            logMessageAndHalt(req, 500, "Error deleting entity", e);
         } finally {
+            if (tableWriter != null) tableWriter.close();
             LOG.info("Delete operation took {} msec", System.currentTimeMillis() - startTime);
         }
         return formatJSON(String.format("Deleted %d.", tripIds.length), 200);
@@ -154,15 +163,36 @@ public abstract class EditorController<T extends Entity> {
             JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
             if (tableWriter.delete(id, true) == 1) {
                 // FIXME: change return message based on result value
-                return formatJSON(String.valueOf("Deleted one."), 200);
+                return formatJSON("Deleted one.", 200);
             }
         } catch (Exception e) {
-            e.printStackTrace();
-            haltWithMessage(req, 400, "Error deleting entity", e);
+            logMessageAndHalt(req, 400, "Error deleting entity", e);
         } finally {
             LOG.info("Delete operation took {} msec", System.currentTimeMillis() - startTime);
         }
         return null;
+    }
+
+    /**
+     * For a given pattern ID, update all its trips' stop times to conform to the default travel and dwell times. This
+     * is used, for instance, when a new pattern stop is added or inserted into an existing pattern that has trips which
+     * need the updated travel times applied in bulk.
+     */
+    private String updateStopTimesFromPatternStops (Request req, Response res) {
+        long startTime = System.currentTimeMillis();
+        String namespace = getNamespaceAndValidateSession(req);
+        int patternId = getIdFromRequest(req);
+        try {
+            int beginStopSequence = Integer.parseInt(req.queryParams("stopSequence"));
+            JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
+            int stopTimesUpdated = tableWriter.normalizeStopTimesForPattern(patternId, beginStopSequence);
+            return SparkUtils.formatJSON("updateResult", stopTimesUpdated + " stop times updated.");
+        } catch (Exception e) {
+            logMessageAndHalt(req, 400, "Error normalizing stop times", e);
+            return null;
+        } finally {
+            LOG.info("Normalize stop times operation took {} msec", System.currentTimeMillis() - startTime);
+        }
     }
 
     /**
@@ -171,20 +201,12 @@ public abstract class EditorController<T extends Entity> {
      */
     private String uploadEntityBranding (Request req, Response res) {
         int id = getIdFromRequest(req);
-        String url = null;
+        String url;
         try {
-            // FIXME: remove cast to string.
-            String idAsString = String.valueOf(id);
-            url = S3Utils.uploadBranding(req, String.join("_", classToLowercase, idAsString));
+            url = S3Utils.uploadBranding(req, String.format("%s_%d", classToLowercase, id));
         } catch (HaltException e) {
             // Do not re-catch halts thrown for exceptions that have already been caught.
-            LOG.error("Halt encountered", e);
             throw e;
-        } catch (Exception e) {
-            String message = String.format("Could not upload branding for %s id=%d", classToLowercase, id);
-            LOG.error(message);
-            e.printStackTrace();
-            haltWithMessage(req, 400, message, e);
         }
         String namespace = getNamespaceAndValidateSession(req);
         // Prepare json object for response. (Note: this is not the full entity object, but just the URL field).
@@ -201,9 +223,8 @@ public abstract class EditorController<T extends Entity> {
             preparedStatement.executeUpdate();
             connection.commit();
             return jsonObject.toString();
-        } catch (SQLException e) {
-            e.printStackTrace();
-            haltWithMessage(req, 400, "Could not update branding url", e);
+        } catch (Exception e) {
+            logMessageAndHalt(req, 500, "Could not update branding url", e);
             return null;
         } finally {
             DbUtils.closeQuietly(connection);
@@ -220,22 +241,26 @@ public abstract class EditorController<T extends Entity> {
         // Check if an update or create operation depending on presence of id param
         // This needs to be final because it is used in a lambda operation below.
         if (req.params("id") == null && req.requestMethod().equals("PUT")) {
-            haltWithMessage(req, 400, "Must provide id");
+            logMessageAndHalt(req, 400, "Must provide id");
         }
         final boolean isCreating = req.params("id") == null;
         String namespace = getNamespaceAndValidateSession(req);
         Integer id = getIdFromRequest(req);
-        // Get the JsonObject
+        // Save or update to database
         try {
             JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
+            String jsonBody = req.body();
             if (isCreating) {
-                return tableWriter.create(req.body(), true);
+                return tableWriter.create(jsonBody, true);
             } else {
-                return tableWriter.update(id, req.body(), true);
+                return tableWriter.update(id, jsonBody, true);
             }
+        } catch (InvalidNamespaceException e) {
+            logMessageAndHalt(req, 400, "Invalid namespace");
+        } catch (IOException e) {
+            logMessageAndHalt(req, 400, "Invalid json", e);
         } catch (Exception e) {
-            e.printStackTrace();
-            haltWithMessage(req, 400, "Operation failed.", e);
+            logMessageAndHalt(req, 500, "An error was encountered while trying to save to the database", e);
         } finally {
             String operation = isCreating ? "Create" : "Update";
             LOG.info("{} operation took {} msec", operation, System.currentTimeMillis() - startTime);
@@ -252,23 +277,23 @@ public abstract class EditorController<T extends Entity> {
         String sessionId = req.queryParams("sessionId");
         FeedSource feedSource = Persistence.feedSources.getById(feedId);
         if (feedSource == null) {
-            haltWithMessage(req, 400, "Feed ID is invalid");
+            logMessageAndHalt(req, 400, "Feed ID is invalid");
         }
         // FIXME: Switch to using spark session IDs rather than query parameter?
 //        String sessionId = req.session().id();
         EditorLockController.EditorSession currentSession = sessionsForFeedIds.get(feedId);
         if (currentSession == null) {
-            haltWithMessage(req, 400, "There is no active editing session for user.");
+            logMessageAndHalt(req, 400, "There is no active editing session for user.");
         }
         if (!currentSession.sessionId.equals(sessionId)) {
             // This session does not match the current active session for the feed.
             Auth0UserProfile userProfile = req.attribute("user");
             if (currentSession.userEmail.equals(userProfile.getEmail())) {
                 LOG.warn("User {} already has editor session {} for feed {}. Same user cannot make edits on session {}.", currentSession.userEmail, currentSession.sessionId, feedId, req.session().id());
-                haltWithMessage(req, 400, "You have another editing session open for " + feedSource.name);
+                logMessageAndHalt(req, 400, "You have another editing session open for " + feedSource.name);
             } else {
                 LOG.warn("User {} already has editor session {} for feed {}. User {} cannot make edits on session {}.", currentSession.userEmail, currentSession.sessionId, feedId, userProfile.getEmail(), req.session().id());
-                haltWithMessage(req, 400, "Somebody else is editing the " + feedSource.name + " feed.");
+                logMessageAndHalt(req, 400, "Somebody else is editing the " + feedSource.name + " feed.");
             }
         } else {
             currentSession.lastEdit = System.currentTimeMillis();
@@ -276,7 +301,7 @@ public abstract class EditorController<T extends Entity> {
         }
         String namespace = feedSource.editorNamespace;
         if (namespace == null) {
-            haltWithMessage(req, 400, "Cannot edit feed that has not been snapshotted (namespace is null).");
+            logMessageAndHalt(req, 400, "Cannot edit feed that has not been snapshotted (namespace is null).");
         }
         return namespace;
     }
@@ -294,15 +319,9 @@ public abstract class EditorController<T extends Entity> {
                 id = Integer.valueOf(req.params("id"));
             } catch (NumberFormatException e) {
                 LOG.error("ID provided must be an integer", e);
-                haltWithMessage(req, 400, "ID provided is not a number");
+                logMessageAndHalt(req, 400, "ID provided is not a number");
             }
         }
         return id;
     }
-
-    // TODO add hooks
-    abstract void getEntityHook(T entity);
-    abstract void createEntityHook(T entity);
-    abstract void updateEntityHook(T entity);
-    abstract void deleteEntityHook(T entity);
 }

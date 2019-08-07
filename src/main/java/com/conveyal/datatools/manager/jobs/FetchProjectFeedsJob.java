@@ -1,9 +1,9 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
-import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import org.slf4j.Logger;
@@ -12,8 +12,6 @@ import org.slf4j.LoggerFactory;
 import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.util.Collection;
-import java.util.HashMap;
-import java.util.Map;
 
 /**
  * Created by landon on 3/25/16.
@@ -30,11 +28,25 @@ public class FetchProjectFeedsJob extends MonitorableJob {
     @Override
     public void jobLogic() {
         Project project = Persistence.projects.getById(projectId);
+        if (project == null) {
+            LOG.error("Fetch feeds job failed because project {} does not exist in database. Clearing the project's scheduled fetch jobs.");
+            Scheduler.removeProjectJobsOfType(projectId, FetchProjectFeedsJob.class, true);
+            return;
+        }
         LOG.info("Fetch job running for {} project at {}", project.name, ZonedDateTime.now(ZoneId.of("America/New_York")));
         Collection<FeedSource> projectFeeds = project.retrieveProjectFeedSources();
         for(FeedSource feedSource : projectFeeds) {
             // skip feed if not fetched automatically
             if (!FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.equals(feedSource.retrievalMethod)) {
+                continue;
+            }
+            // warn if a feed is setup to be fetched automatically, but doesn't have a url defined
+            if (feedSource.url == null) {
+                LOG.warn(
+                    "Feed '{}' ({}) is set to be fetched automatically, but lacks a url!",
+                    feedSource.name,
+                    feedSource.id
+                );
                 continue;
             }
             // No need to track overall status on this FetchProjectFeedsJob. All "child" jobs execute in threadpool,

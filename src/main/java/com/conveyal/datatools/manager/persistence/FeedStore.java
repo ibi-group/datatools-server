@@ -171,6 +171,10 @@ public class FeedStore {
         return s3Prefix + id;
     }
 
+    public String getPathToFeed (String id) {
+        return new File(path, id).getAbsolutePath();
+    }
+
     /**
      * Get the feed with the given ID.
      */
@@ -186,18 +190,24 @@ public class FeedStore {
         // s3 storage
         if (DataManager.useS3) {
             String key = getS3Key(id);
-            try {
-                LOG.info("Downloading feed from s3://{}/{}", s3Bucket, key);
-                S3Object object = s3Client.getObject(
-                        new GetObjectRequest(s3Bucket, key));
-                InputStream objectData = object.getObjectContent();
 
-                // FIXME: Figure out how to manage temp files created here. Currently, deleteOnExit is called in createTempFile
-                return createTempFile(id, objectData);
+            LOG.info("Downloading feed from s3://{}/{}", s3Bucket, key);
+            InputStream objectData = null;
+            try {
+                S3Object object = s3Client.getObject(
+                    new GetObjectRequest(s3Bucket, key));
+                objectData = object.getObjectContent();
             } catch (AmazonServiceException ase) {
                 LOG.error("Error downloading s3://{}/{}", s3Bucket, key);
                 ase.printStackTrace();
+                return null;
+            }
+
+            // FIXME: Figure out how to manage temp files created here. Currently, deleteOnExit is called in createTempFile
+            try {
+                return createTempFile(id, objectData);
             } catch (IOException e) {
+                LOG.error("Error creating temp file");
                 e.printStackTrace();
             }
         }
@@ -205,68 +215,49 @@ public class FeedStore {
     }
 
     /**
-     * Create a new feed with the given ID.
+     * Store GTFS file locally. This method is used when a new feed version or generated GTFS file
+     * (e.g., the product of merging multiple GTFS files from a project) needs to be stored locally for
+     * future use. Note: uploading the file to S3 is handled elsewhere as a finishing step, e.g., at the
+     * conclusion of a successful feed processing/validation step.
      */
-    public File newFeed (String id, InputStream inputStream, FeedSource feedSource) {
-        // For s3 storage (store locally and let gtfsCache handle loading feed to s3)
-        return storeFeedLocally(id, inputStream, feedSource);
-    }
-    private File storeFeedLocally(String id, InputStream inputStream, FeedSource feedSource) {
-        File feed = null;
-        try {
-            // write feed to specified ID.
-            // NOTE: depending on the feed store, there may not be a feedSource provided (e.g., gtfsplus)
-            feed = writeFileUsingInputStream(id, inputStream);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+    public File newFeed (String id, InputStream inputStream, FeedSource feedSource) throws IOException {
+        // write feed to specified ID.
+        // NOTE: depending on the feed store, there may not be a feedSource provided (e.g., gtfsplus)
+
+        File feed = writeFileUsingInputStream(id, inputStream);
         if (feedSource != null && !DataManager.useS3) {
             // Store latest as feed-source-id.zip if feedSource provided and if not using s3
-            try {
-                copyVersionToLatest(feed, feedSource);
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
+            copyVersionToLatest(feed, feedSource);
         }
         return feed;
     }
 
-    private void copyVersionToLatest(File version, FeedSource feedSource) {
+    private void copyVersionToLatest(File version, FeedSource feedSource) throws IOException {
         File latest = new File(String.valueOf(path), feedSource.id + ".zip");
-        try {
-            FileUtils.copyFile(version, latest, true);
-            LOG.info("Copying version to latest {}", feedSource);
-        } catch (IOException e) {
-            e.printStackTrace();
-            LOG.error("Unable to save latest at {}", feedSource);
-        }
+        LOG.info("Copying version to latest {}", feedSource);
+        FileUtils.copyFile(version, latest, true);
     }
 
     private File writeFileUsingInputStream(String filename, InputStream inputStream) throws IOException {
         File out = new File(path, filename);
         LOG.info("Writing file to {}/{}", path, filename);
-        try (OutputStream output = new FileOutputStream(out)) {
-            byte[] buf = new byte[1024];
-            int bytesRead;
-            while ((bytesRead = inputStream.read(buf)) > 0) {
-                output.write(buf, 0, bytesRead);
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
-        } finally {
-            inputStream.close();
+        OutputStream output = new FileOutputStream(out);
+        byte[] buf = new byte[1024];
+        int bytesRead;
+        while ((bytesRead = inputStream.read(buf)) > 0) {
+            output.write(buf, 0, bytesRead);
         }
+        inputStream.close();
+        output.close();
         return out;
     }
 
     private File createTempFile (String name, InputStream in) throws IOException {
         final File tempFile = new File(new File(System.getProperty("java.io.tmpdir")), name);
         tempFile.deleteOnExit();
-        try (FileOutputStream out = new FileOutputStream(tempFile)) {
-            IOUtils.copy(in, out);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        FileOutputStream out = new FileOutputStream(tempFile);
+        IOUtils.copy(in, out);
+        out.close();
         return tempFile;
     }
 

@@ -262,8 +262,7 @@ public class Deployment extends Model implements Serializable {
             ZipEntry manifestEntry = new ZipEntry("manifest.json");
             out.putNextEntry(manifestEntry);
             // create the json manifest
-            JsonManager<Deployment> jsonManifest = new JsonManager<Deployment>(Deployment.class,
-                    JsonViews.UserInterface.class);
+            JsonManager<Deployment> jsonManifest = new JsonManager<>(Deployment.class, JsonViews.UserInterface.class);
             // this mixin gives us full feed validation results, not summarized
             jsonManifest.addMixin(Deployment.class, DeploymentFullFeedVersionMixin.class);
             byte[] manifest = jsonManifest.write(this).getBytes();
@@ -466,7 +465,7 @@ public class Deployment extends Model implements Serializable {
         public int version;
 
         public SummarizedFeedVersion (FeedVersion version) {
-            this.validationResult = new FeedValidationResultSummary(version.validationResult, version.feedLoadResult);
+            this.validationResult = new FeedValidationResultSummary(version);
             this.feedSource = version.parentFeedSource();
             this.updated = version.updated;
             this.id = version.id;

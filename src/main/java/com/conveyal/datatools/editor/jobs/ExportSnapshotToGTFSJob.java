@@ -13,7 +13,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 
 public class ExportSnapshotToGTFSJob extends MonitorableJob {
@@ -67,10 +66,10 @@ public class ExportSnapshotToGTFSJob extends MonitorableJob {
         } else {
             try {
                 FeedVersion.feedStore.newFeed(filename, new FileInputStream(tempFile), null);
-            } catch (FileNotFoundException e) {
+            } catch (IOException e) {
+                LOG.error("Could not store feed for snapshot {}", snapshot.id);
                 e.printStackTrace();
                 status.fail("Could not export snapshot to GTFS.");
-                LOG.error("Could not store feed for snapshot {}", snapshot.id);
             }
         }
         // Delete snapshot temp file.

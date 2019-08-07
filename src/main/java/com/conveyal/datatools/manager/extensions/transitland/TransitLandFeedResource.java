@@ -13,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
+import java.io.IOException;
 import java.io.InputStreamReader;
 import java.lang.reflect.Field;
 import java.net.HttpURLConnection;
@@ -41,7 +42,7 @@ public class TransitLandFeedResource implements ExternalFeedResource {
     }
 
     @Override
-    public void importFeedsForProject(Project project, String authHeader) {
+    public void importFeedsForProject(Project project, String authHeader) throws IOException, IllegalAccessException {
         LOG.info("Importing TransitLand feeds");
         URL url = null;
         ObjectMapper mapper = new ObjectMapper();
@@ -62,6 +63,7 @@ public class TransitLandFeedResource implements ExternalFeedResource {
                 url = new URL(api + "?total=true&per_page=" + perPage + "&offset=" + offset + locationFilter);
             } catch (MalformedURLException ex) {
                 LOG.error("Error constructing TransitLand API URL");
+                throw ex;
             }
 
             try {
@@ -74,8 +76,8 @@ public class TransitLandFeedResource implements ExternalFeedResource {
                 con.setRequestProperty("User-Agent", "User-Agent");
 
                 int responseCode = con.getResponseCode();
-                System.out.println("\nSending 'GET' request to URL : " + url);
-                System.out.println("Response Code : " + responseCode);
+                LOG.info("Sending 'GET' request to URL : " + url);
+                LOG.info("Response Code : " + responseCode);
 
                 BufferedReader in = new BufferedReader(
                         new InputStreamReader(con.getInputStream()));
@@ -117,7 +119,7 @@ public class TransitLandFeedResource implements ExternalFeedResource {
                         try {
                             source.url = new URL(tlFeed.url);
                         } catch (MalformedURLException e) {
-                            e.printStackTrace();
+                            throw e;
                         }
                         Persistence.feedSources.create(source);
                         LOG.info("Creating new feed source: {}", source.name);
@@ -129,7 +131,7 @@ public class TransitLandFeedResource implements ExternalFeedResource {
                             feedUrl = new URL(tlFeed.url);
                             Persistence.feedSources.updateField(source.id, "url", feedUrl);
                         } catch (MalformedURLException e) {
-                            e.printStackTrace();
+                            throw e;
                         }
                         // FIXME: These shouldn't be separate updates.
                         Persistence.feedSources.updateField(source.id, "name", feedName);
@@ -149,7 +151,7 @@ public class TransitLandFeedResource implements ExternalFeedResource {
                 }
             } catch (Exception ex) {
                 LOG.error("Error reading from TransitLand API");
-                ex.printStackTrace();
+                throw ex;
             }
             count++;
         }
