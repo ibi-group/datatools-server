@@ -16,9 +16,11 @@ import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
 import org.apache.http.client.methods.HttpDelete;
+import org.apache.http.client.methods.HttpEntityEnclosingRequestBase;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPatch;
 import org.apache.http.client.methods.HttpPost;
+import org.apache.http.client.methods.HttpRequestBase;
 import org.apache.http.entity.ByteArrayEntity;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.util.EntityUtils;
@@ -29,6 +31,7 @@ import spark.Response;
 
 import java.io.IOException;
 import java.io.Serializable;
+import java.io.UnsupportedEncodingException;
 import java.net.URLEncoder;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
@@ -39,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
+import static com.conveyal.datatools.manager.auth.Auth0Users.USERS_API_PATH;
 import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
 import static spark.Spark.delete;
 import static spark.Spark.get;
@@ -50,37 +54,40 @@ import static spark.Spark.put;
  */
 public class UserController {
 
-    private static String AUTH0_DOMAIN = DataManager.getConfigPropertyAsText("AUTH0_DOMAIN");
-    private static String AUTH0_CLIENT_ID = DataManager.getConfigPropertyAsText("AUTH0_CLIENT_ID");
-    private static String AUTH0_API_TOKEN = DataManager.getConfigPropertyAsText("AUTH0_TOKEN");
+    private static final String AUTH0_DOMAIN = DataManager.getConfigPropertyAsText("AUTH0_DOMAIN");
+    private static final String AUTH0_CLIENT_ID = DataManager.getConfigPropertyAsText("AUTH0_CLIENT_ID");
+    public static final int TEST_AUTH0_PORT = 8089;
+    public static final String TEST_AUTH0_DOMAIN = String.format("localhost:%d", TEST_AUTH0_PORT);
     private static Logger LOG = LoggerFactory.getLogger(UserController.class);
     private static ObjectMapper mapper = new ObjectMapper();
-    public static JsonManager<Project> json =
-            new JsonManager<>(Project.class, JsonViews.UserInterface.class);
+    private static final String UTF_8 = "UTF-8";
+    public static final String DEFAULT_BASE_USERS_URL = "https://" + AUTH0_DOMAIN  + USERS_API_PATH;
+    /** Users URL uses Auth0 domain by default, but can be overridden with {@link #setBaseUsersUrl(String)} for testing. */
+    private static String baseUsersUrl = DEFAULT_BASE_USERS_URL;
+    private static final JsonManager<Project> json = new JsonManager<>(Project.class, JsonViews.UserInterface.class);
 
     /**
      * HTTP endpoint to get a single Auth0 user for the application (by specified ID param). Note, this uses a different
      * Auth0 API (get user) than the other get methods (user search query).
      */
-    private static String getUser(Request req, Response res) throws IOException {
-        String url = "https://" + AUTH0_DOMAIN + "/api/v2/users/" + URLEncoder.encode(req.params("id"), "UTF-8");
-        String charset = "UTF-8";
+    private static String getUser(Request req, Response res) {
+        HttpGet getUserRequest = new HttpGet(getUserIdUrl(req));
+        setHeaders(req, getUserRequest);
+        return executeRequestAndGetResult(getUserRequest, req);
+    }
 
-        HttpGet request = new HttpGet(url);
-        request.addHeader("Authorization", "Bearer " + AUTH0_API_TOKEN);
-        request.setHeader("Accept-Charset", charset);
-
-        HttpClient client = HttpClientBuilder.create().build();
-        HttpResponse response = client.execute(request);
-        String result = EntityUtils.toString(response.getEntity());
-
-        return result;
+    /**
+     * Determines whether the user controller is being run in a testing environment by checking if the users URL contains
+     * the {@link #TEST_AUTH0_DOMAIN}.
+     */
+    public static boolean inTestingEnvironment() {
+        return baseUsersUrl.contains(TEST_AUTH0_DOMAIN);
     }
 
     /**
      * HTTP endpoint to get all users for the application (using a filtered search on all users for the Auth0 tenant).
      */
-    private static String getAllUsers(Request req, Response res) throws IOException {
+    private static String getAllUsers(Request req, Response res) {
         res.type("application/json");
         int page = Integer.parseInt(req.queryParams("page"));
         String queryString = filterUserSearchQuery(req);
@@ -120,10 +127,15 @@ public class UserController {
     /**
      * Gets the total count of users that match the filtered user search query.
      */
-    private static int getUserCount(Request req, Response res) throws IOException {
+    private static int getUserCount(Request req, Response res) {
         res.type("application/json");
         String queryString = filterUserSearchQuery(req);
-        return Auth0Users.getAuth0UserCount(queryString);
+        try {
+            return Auth0Users.getAuth0UserCount(queryString);
+        } catch (IOException e) {
+            logMessageAndHalt(req, 500, "Failed to get user count", e);
+            return 0;
+        }
     }
 
     /**
@@ -132,121 +144,81 @@ public class UserController {
      * Note, this passes a "blank" app_metadata object to the newly created user, so there is no risk of someone
      * injecting permissions somehow into the create user request.
      */
-    private static String createPublicUser(Request req, Response res) throws IOException {
-        String url = "https://" + AUTH0_DOMAIN + "/api/v2/users";
-        String charset = "UTF-8";
+    private static String createPublicUser(Request req, Response res) {
+        HttpPost createUserRequest = new HttpPost(baseUsersUrl);
+        setHeaders(req, createUserRequest);
 
-        HttpPost request = new HttpPost(url);
-        request.addHeader("Authorization", "Bearer " + AUTH0_API_TOKEN);
-        request.setHeader("Accept-Charset", charset);
-        request.setHeader("Content-Type", "application/json");
-        JsonNode jsonNode = mapper.readTree(req.body());
+        JsonNode jsonNode = parseJsonFromBody(req);
         String json = String.format("{" +
                 "\"connection\": \"Username-Password-Authentication\"," +
                 "\"email\": %s," +
                 "\"password\": %s," +
                 "\"app_metadata\": {\"datatools\": [{\"permissions\": [], \"projects\": [], \"subscriptions\": [], \"client_id\": \"%s\" }] } }",
                 jsonNode.get("email"), jsonNode.get("password"), AUTH0_CLIENT_ID);
-        HttpEntity entity = new ByteArrayEntity(json.getBytes(charset));
-        request.setEntity(entity);
+        setRequestEntityUsingJson(createUserRequest, json, req);
 
-        HttpClient client = HttpClientBuilder.create().build();
-        HttpResponse response = client.execute(request);
-        String result = EntityUtils.toString(response.getEntity());
-        int statusCode = response.getStatusLine().getStatusCode();
-        if(statusCode >= 300) logMessageAndHalt(req, statusCode, response.toString());
-
-        return result;
+        return executeRequestAndGetResult(createUserRequest, req);
     }
 
     /**
      * HTTP endpoint to create new Auth0 user for the application.
-     *
-     * FIXME: This endpoint fails if the user's email already exists in the Auth0 tenant.
      */
-    private static String createUser(Request req, Response res) throws IOException {
-        String url = "https://" + AUTH0_DOMAIN + "/api/v2/users";
-        String charset = "UTF-8";
+    private static String createUser(Request req, Response res) {
+        HttpPost createUserRequest = new HttpPost(baseUsersUrl);
+        setHeaders(req, createUserRequest);
 
-        HttpPost request = new HttpPost(url);
-        request.addHeader("Authorization", "Bearer " + AUTH0_API_TOKEN);
-        request.setHeader("Accept-Charset", charset);
-        request.setHeader("Content-Type", "application/json");
-        JsonNode jsonNode = mapper.readTree(req.body());
+        JsonNode jsonNode = parseJsonFromBody(req);
         String json = String.format("{" +
                 "\"connection\": \"Username-Password-Authentication\"," +
                 "\"email\": %s," +
                 "\"password\": %s," +
                 "\"app_metadata\": {\"datatools\": [%s] } }"
                 , jsonNode.get("email"), jsonNode.get("password"), jsonNode.get("permissions"));
-        HttpEntity entity = new ByteArrayEntity(json.getBytes(charset));
-        request.setEntity(entity);
+        setRequestEntityUsingJson(createUserRequest, json, req);
 
-        HttpClient client = HttpClientBuilder.create().build();
-        HttpResponse response = client.execute(request);
-        String result = EntityUtils.toString(response.getEntity());
-
-        int statusCode = response.getStatusLine().getStatusCode();
-        if(statusCode >= 300) logMessageAndHalt(req, statusCode, response.toString());
-
-        System.out.println(result);
-
-        return result;
+        return executeRequestAndGetResult(createUserRequest, req);
     }
 
-    private static Object updateUser(Request req, Response res) throws IOException {
+    private static String updateUser(Request req, Response res) {
         String userId = req.params("id");
         Auth0UserProfile user = getUserById(userId);
 
+        if (user == null) {
+            logMessageAndHalt(
+                req,
+                404,
+                String.format("Could not update user: User with id %s not found (or there are issues with the Auth0 configuration)", userId)
+            );
+        }
+
         LOG.info("Updating user {}", user.getEmail());
 
-        String url = "https://" + AUTH0_DOMAIN + "/api/v2/users/" + URLEncoder.encode(userId, "UTF-8");
-        String charset = "UTF-8";
+        HttpPatch updateUserRequest = new HttpPatch(getUserIdUrl(req));
+        setHeaders(req, updateUserRequest);
 
+        JsonNode jsonNode = parseJsonFromBody(req);
 
-        HttpPatch request = new HttpPatch(url);
-
-        request.addHeader("Authorization", "Bearer " + AUTH0_API_TOKEN);
-        request.setHeader("Accept-Charset", charset);
-        request.setHeader("Content-Type", "application/json");
-
-        JsonNode jsonNode = mapper.readTree(req.body());
 //        JsonNode data = mapper.readValue(jsonNode.retrieveById("data"), Auth0UserProfile.DatatoolsInfo.class); //jsonNode.retrieveById("data");
         JsonNode data = jsonNode.get("data");
-        System.out.println(data.asText());
+
         Iterator<Map.Entry<String, JsonNode>> fieldsIter = data.fields();
         while (fieldsIter.hasNext()) {
             Map.Entry<String, JsonNode> entry = fieldsIter.next();
-            System.out.println(entry.getValue());
         }
 //        if (!data.has("client_id")) {
 //            ((ObjectNode)data).put("client_id", DataManager.config.retrieveById("auth0").retrieveById("client_id").asText());
 //        }
         String json = "{ \"app_metadata\": { \"datatools\" : " + data + " }}";
-        System.out.println(json);
-        HttpEntity entity = new ByteArrayEntity(json.getBytes(charset));
-        request.setEntity(entity);
 
-        HttpClient client = HttpClientBuilder.create().build();
-        HttpResponse response = client.execute(request);
-        String result = EntityUtils.toString(response.getEntity());
+        setRequestEntityUsingJson(updateUserRequest, json, req);
 
-        return mapper.readTree(result);
+        return executeRequestAndGetResult(updateUserRequest, req);
     }
 
-    private static Object deleteUser(Request req, Response res) throws IOException {
-        String url = "https://" + AUTH0_DOMAIN + "/api/v2/users/" + URLEncoder.encode(req.params("id"), "UTF-8");
-        String charset = "UTF-8";
-
-        HttpDelete request = new HttpDelete(url);
-        request.addHeader("Authorization", "Bearer " + AUTH0_API_TOKEN);
-        request.setHeader("Accept-Charset", charset);
-
-        HttpClient client = HttpClientBuilder.create().build();
-        HttpResponse response = client.execute(request);
-        int statusCode = response.getStatusLine().getStatusCode();
-        if(statusCode >= 300) logMessageAndHalt(req, statusCode, response.getStatusLine().getReasonPhrase());
-
+    private static Object deleteUser(Request req, Response res) {
+        HttpDelete deleteUserRequest = new HttpDelete(getUserIdUrl(req));
+        setHeaders(req, deleteUserRequest);
+        executeRequestAndGetResult(deleteUserRequest, req);
         return true;
     }
 
@@ -325,6 +297,155 @@ public class UserController {
         }
 
         return activityList;
+    }
+
+    /**
+     * Set some common headers on the request, including the API access token, which must be obtained via token request
+     * to Auth0.
+     */
+    private static void setHeaders(Request sparkRequest, HttpRequestBase auth0Request) {
+        String apiToken = Auth0Users.getApiToken();
+        if (apiToken == null) {
+            logMessageAndHalt(
+                sparkRequest,
+                400,
+                "Failed to obtain Auth0 API token for request"
+            );
+        }
+        auth0Request.addHeader("Authorization", "Bearer " + apiToken);
+        auth0Request.setHeader("Accept-Charset", UTF_8);
+        auth0Request.setHeader("Content-Type", "application/json");
+    }
+
+    /**
+     * Safely parse the userId and create an Auth0 url.
+     *
+     * @param req The initating request that came into datatools-server
+     */
+    private static String getUserIdUrl(Request req) {
+        try {
+            return String.format(
+                "%s/%s",
+                baseUsersUrl,
+                URLEncoder.encode(req.params("id"), "UTF-8")
+            );
+        } catch (UnsupportedEncodingException e) {
+            logMessageAndHalt(
+                req,
+                400,
+                "Failed to encode user id",
+                e
+            );
+        }
+        return null;
+    }
+
+    /**
+     * Safely parse the request body into a JsonNode.
+     *
+     * @param req The initating request that came into datatools-server
+     */
+    private static JsonNode parseJsonFromBody(Request req) {
+        try {
+            return mapper.readTree(req.body());
+        } catch (IOException e) {
+            logMessageAndHalt(req, 400, "Failed to parse request body", e);
+            return null;
+        }
+    }
+
+    /**
+     * Safely set the HTTP request body with a json string.
+     *
+     * @param request the outgoing HTTP post request
+     * @param json The json to set in the request body
+     * @param req The initating request that came into datatools-server
+     */
+    private static void setRequestEntityUsingJson(HttpEntityEnclosingRequestBase request, String json, Request req) {
+        HttpEntity entity = null;
+        try {
+            entity = new ByteArrayEntity(json.getBytes(UTF_8));
+        } catch (UnsupportedEncodingException e) {
+            logMessageAndHalt(
+                req,
+                500,
+                "Failed to set entity body due to encoding issue.",
+                e
+            );
+        }
+        request.setEntity(entity);
+    }
+
+    /**
+     * Executes and logs an outgoing HTTP request, makes sure it worked and then returns the
+     * stringified response body.
+     *
+     * @param httpRequest The outgoing HTTP request
+     * @param req The initating request that came into datatools-server
+     */
+    private static String executeRequestAndGetResult(HttpRequestBase httpRequest, Request req) {
+        // execute outside http request
+        HttpClient client = HttpClientBuilder.create().build();
+        HttpResponse response = null;
+        try {
+            LOG.info("Making request: ({})", httpRequest.toString());
+            response = client.execute(httpRequest);
+        } catch (IOException e) {
+            LOG.error("HTTP request failed: ({})", httpRequest.toString());
+            logMessageAndHalt(
+                req,
+                500,
+                "Failed to make external HTTP request.",
+                e
+            );
+        }
+
+        // parse response body if there is one
+        HttpEntity entity = response.getEntity();
+        String result = null;
+        if (entity != null) {
+            try {
+                result = EntityUtils.toString(entity);
+            } catch (IOException e) {
+                logMessageAndHalt(
+                    req,
+                    500,
+                    String.format(
+                        "Failed to parse result of http request (%s).",
+                        httpRequest.toString()
+                    ),
+                    e
+                );
+            }
+        }
+
+        int statusCode = response.getStatusLine().getStatusCode();
+        if(statusCode >= 300) {
+            LOG.error(
+                "HTTP request returned error code >= 300: ({}). Body: {}",
+                httpRequest.toString(),
+                result != null ? result : ""
+            );
+            // attempt to parse auth0 response to respond with an error message
+            String auth0Message = "An Auth0 error occurred";
+            JsonNode jsonResponse = null;
+            try {
+                jsonResponse = mapper.readTree(result);
+            } catch (IOException e) {
+                LOG.warn("Could not parse json from auth0 error message. Body: {}", result != null ? result : "");
+                e.printStackTrace();
+            }
+
+            if (jsonResponse != null && jsonResponse.has("message")) {
+                auth0Message = String.format("%s: %s", auth0Message, jsonResponse.get("message").asText());
+            }
+
+            logMessageAndHalt(req, statusCode, auth0Message);
+        }
+
+        LOG.info("Successfully made request: ({})", httpRequest.toString());
+
+        return result;
     }
 
     private static ZonedDateTime toZonedDateTime (Date date) {
@@ -413,6 +534,14 @@ public class UserController {
             this.feedVersionIndex = version.version;
             this.feedVersionName = version.name;
         }
+    }
+
+    /**
+     * Used to override the base url for making requests to Auth0. This is primarily used for testing purposes to set
+     * the url to something that is stubbed with WireMock.
+     */
+    public static void setBaseUsersUrl (String url) {
+        baseUsersUrl = url;
     }
 
     public static void register (String apiPrefix) {

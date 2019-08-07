@@ -1,0 +1,24 @@
+{
+  "app_metadata" : {
+    "datatools" : [ {
+      "client_id" : "testing-client-id",
+      "organizations" : [ ],
+      "permissions" : [ ],
+      "projects" : [ ]
+    } ]
+  },
+  "created_at" : "2019-02-16T01:27:19.810Z",
+  "email" : "test-new-user@test.com",
+  "email_verified" : false,
+  "identities" : [ {
+    "connection" : "Username-Password-Authentication",
+    "isSocial" : false,
+    "provider" : "auth0",
+    "user_id" : "test-new-user"
+  } ],
+  "name" : "test-new-user@test.com",
+  "nickname" : "test-new-user",
+  "picture" : "https://i0.wp.com/cdn.auth0.com/avatars/tu.png?ssl=1",
+  "updated_at" : "2019-02-16T01:27:19.810Z",
+  "user_id" : "auth0|test-new-user"
+}

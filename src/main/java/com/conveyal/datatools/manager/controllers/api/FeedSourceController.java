@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.auth.Actions;
 import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
 import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
@@ -45,7 +46,7 @@ public class FeedSourceController {
     private static ObjectMapper mapper = new ObjectMapper();
 
     public static FeedSource getFeedSource(Request req, Response res) {
-        return requestFeedSourceById(req, "view");
+        return requestFeedSourceById(req, Actions.VIEW);
     }
 
     public static Collection<FeedSource> getAllFeedSources(Request req, Response res) {
@@ -142,7 +143,7 @@ public class FeedSourceController {
         // call this method just for null and permissions check
         // TODO: it's wasteful to request the entire feed source here, need to factor out permissions checks. However,
         // we need the URL to see if it has been updated in order to then set the lastFetched value to null.
-        FeedSource formerFeedSource = requestFeedSourceById(req, "manage");
+        FeedSource formerFeedSource = requestFeedSourceById(req, Actions.MANAGE);
         Document fieldsToUpdate = Document.parse(req.body());
         if (fieldsToUpdate.containsKey("url") && formerFeedSource.url != null) {
             // Reset last fetched timestamp if the URL has been updated.
@@ -174,7 +175,7 @@ public class FeedSourceController {
      * storage? This might should be refactored in the future, but it isn't really hurting anything at the moment.
      */
     public static FeedSource updateExternalFeedResource(Request req, Response res) {
-        FeedSource source = requestFeedSourceById(req, "manage");
+        FeedSource source = requestFeedSourceById(req, Actions.MANAGE);
         String resourceType = req.queryParams("resourceType");
         JsonNode node = null;
         try {
@@ -219,7 +220,7 @@ public class FeedSourceController {
      * FIXME: Should this just set a "deleted" flag instead of removing from the database entirely?
      */
     private static FeedSource deleteFeedSource(Request req, Response res) {
-        FeedSource source = requestFeedSourceById(req, "manage");
+        FeedSource source = requestFeedSourceById(req, Actions.MANAGE);
 
         try {
             source.delete();
@@ -234,7 +235,7 @@ public class FeedSourceController {
      * Re-fetch this feed from the feed source URL.
      */
     public static String fetch (Request req, Response res) {
-        FeedSource s = requestFeedSourceById(req, "manage");
+        FeedSource s = requestFeedSourceById(req, Actions.MANAGE);
 
         LOG.info("Fetching feed for source {}", s.name);
 
@@ -250,10 +251,10 @@ public class FeedSourceController {
     /**
      * Helper function returns feed source if user has permission for specified action.
      * @param req spark Request object from API request
-     * @param action action type (either "view" or "manage")
+     * @param action action type (either "view" or Permission.MANAGE)
      * @return feedsource object for ID
      */
-    public static FeedSource requestFeedSourceById(Request req, String action) {
+    public static FeedSource requestFeedSourceById(Request req, Actions action) {
         String id = req.params("id");
         if (id == null) {
             logMessageAndHalt(req, 400, "Please specify id param");
@@ -261,7 +262,7 @@ public class FeedSourceController {
         return checkFeedSourcePermissions(req, Persistence.feedSources.getById(id), action);
     }
 
-    public static FeedSource checkFeedSourcePermissions(Request req, FeedSource feedSource, String action) {
+    public static FeedSource checkFeedSourcePermissions(Request req, FeedSource feedSource, Actions action) {
         Auth0UserProfile userProfile = req.attribute("user");
         Boolean publicFilter = Boolean.valueOf(req.queryParams("public")) ||
                 req.url().split("/api/*/")[1].startsWith("public");
@@ -272,16 +273,16 @@ public class FeedSourceController {
         String orgId = feedSource.organizationId();
         boolean authorized;
         switch (action) {
-            case "create":
+            case CREATE:
                 authorized = userProfile.canAdministerProject(feedSource.projectId, orgId);
                 break;
-            case "manage":
+            case MANAGE:
                 authorized = userProfile.canManageFeed(orgId, feedSource.projectId, feedSource.id);
                 break;
-            case "edit":
+            case EDIT:
                 authorized = userProfile.canEditGTFS(orgId, feedSource.projectId, feedSource.id);
                 break;
-            case "view":
+            case VIEW:
                 if (!publicFilter) {
                     authorized = userProfile.canViewFeed(orgId, feedSource.projectId, feedSource.id);
                 } else {
@@ -299,7 +300,7 @@ public class FeedSourceController {
             if (!feedSource.isPublic && !authorized)
                 logMessageAndHalt(req, 403, "User not authorized to perform action on feed source");
                 // if feed is public, but action is managerial, halt (we shouldn't ever retrieveById here, but just in case)
-            else if (feedSource.isPublic && action.equals("manage"))
+            else if (feedSource.isPublic && action.equals(Actions.MANAGE))
                 logMessageAndHalt(req, 403, "User not authorized to perform action on feed source");
 
         }

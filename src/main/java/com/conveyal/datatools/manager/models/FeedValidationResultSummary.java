@@ -15,7 +15,10 @@ import com.fasterxml.jackson.annotation.JsonInclude.Include;
  */
 public class FeedValidationResultSummary implements Serializable {
     private static final long serialVersionUID = 1L;
-
+    // Include feed ID and namespace here so the client can trace back to the full feed version if this is nested under
+    // a feed source.
+    public String feedVersionId;
+    public String namespace;
     public LoadStatus loadStatus;
 
     @JsonInclude(Include.ALWAYS)
@@ -27,8 +30,9 @@ public class FeedValidationResultSummary implements Serializable {
     // statistics
     public int agencyCount;
     public int routeCount;
-    public int tripCount;
+    public int stopCount;
     public int stopTimesCount;
+    public int tripCount;
     public long avgDailyRevenueTime;
 
     /** The first date the feed has service, either in calendar.txt or calendar_dates.txt */
@@ -44,26 +48,29 @@ public class FeedValidationResultSummary implements Serializable {
 
     /**
      * Construct a summarized version of the given FeedValidationResult.
-     * @param validationResult
      */
-    public FeedValidationResultSummary (ValidationResult validationResult, FeedLoadResult feedLoadResult) {
-        if (validationResult != null) {
-            this.loadStatus = validationResult.fatalException == null
+    public FeedValidationResultSummary (FeedVersion version) {
+        this.feedVersionId = version.id;
+        this.namespace = version.namespace;
+        // If feed load failed (and is null), construct an empty result to avoid NPEs.
+        if (version.feedLoadResult == null) {
+            version.feedLoadResult = new FeedLoadResult(true);
+        }
+        if (version.validationResult != null) {
+            this.loadStatus = version.validationResult.fatalException == null
                     ? LoadStatus.SUCCESS
                     : LoadStatus.OTHER_FAILURE;
-            this.loadFailureReason = validationResult.fatalException;
+            this.loadFailureReason = version.validationResult.fatalException;
             if (loadStatus == LoadStatus.SUCCESS) {
-                if (feedLoadResult == null) {
-                    feedLoadResult = new FeedLoadResult(true);
-                }
-                this.errorCount = validationResult.errorCount;
-                this.agencyCount = feedLoadResult.agency.rowCount;
-                this.routeCount = feedLoadResult.routes.rowCount;
-                this.tripCount = feedLoadResult.trips.rowCount;
-                this.stopTimesCount = feedLoadResult.stopTimes.rowCount;
-                this.startDate = validationResult.firstCalendarDate;
-                this.endDate = validationResult.lastCalendarDate;
-                this.bounds = boundsFromValidationResult(validationResult);
+                this.errorCount = version.validationResult.errorCount;
+                this.agencyCount = version.feedLoadResult.agency.rowCount;
+                this.routeCount = version.feedLoadResult.routes.rowCount;
+                this.stopCount = version.feedLoadResult.stops.rowCount;
+                this.tripCount = version.feedLoadResult.trips.rowCount;
+                this.stopTimesCount = version.feedLoadResult.stopTimes.rowCount;
+                this.startDate = version.validationResult.firstCalendarDate;
+                this.endDate = version.validationResult.lastCalendarDate;
+                this.bounds = boundsFromValidationResult(version.validationResult);
                 // FIXME: compute avg revenue time
 //                this.avgDailyRevenueTime = validationResult.avgDailyRevenueTime;
             }

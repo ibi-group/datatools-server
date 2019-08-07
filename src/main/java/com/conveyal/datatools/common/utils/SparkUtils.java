@@ -14,10 +14,13 @@ import spark.HaltException;
 import spark.Request;
 import spark.Response;
 
+import javax.servlet.ServletInputStream;
 import javax.servlet.ServletOutputStream;
+import javax.servlet.ServletRequestWrapper;
 import javax.servlet.http.HttpServletResponse;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.util.Arrays;
 
@@ -228,6 +231,30 @@ public class SparkUtils {
             queryString,
             trimLines(bodyString)
         );
+    }
+
+    /**
+     * Bypass Spark's request wrapper which always caches the request body in memory that may be a very large
+     * GTFS file. Also, the body of the request is the GTFS file instead of using multipart form data because
+     * multipart form handling code also caches the request body.
+     */
+    public static void copyRequestStreamIntoFile(Request req, File file) {
+        try {
+            ServletInputStream inputStream = ((ServletRequestWrapper) req.raw()).getRequest().getInputStream();
+            FileOutputStream fileOutputStream = new FileOutputStream(file);
+            // Guava's ByteStreams.copy uses a 4k buffer (no need to wrap output stream), but does not close streams.
+            ByteStreams.copy(inputStream, fileOutputStream);
+            fileOutputStream.close();
+            inputStream.close();
+            if (file.length() == 0) {
+                // Throw IO exception to be caught and returned to user via halt.
+                throw new IOException("No file found in request body.");
+            }
+            LOG.info("Saving file {} from upload", file.getName());
+        } catch (Exception e) {
+            LOG.error("Unable to open input stream from upload");
+            logMessageAndHalt(req, 500, "Unable to read uploaded file.", e);
+        }
     }
 
     private static String trimLines(String str) {

@@ -6,6 +6,7 @@ import com.conveyal.datatools.editor.jobs.CreateSnapshotJob;
 import com.conveyal.datatools.editor.jobs.ExportSnapshotToGTFSJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.auth.Actions;
 import com.conveyal.datatools.manager.controllers.api.FeedVersionController;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -57,7 +58,7 @@ public class SnapshotController {
         String id = req.params("id");
         if (id == null) logMessageAndHalt(req, 400, "Must provide valid snapshot ID");
         // Check user permissions on feed source.
-        FeedVersionController.requestFeedSourceById(req, "view", "feedId");
+        FeedVersionController.requestFeedSourceById(req, Actions.VIEW, "feedId");
         return Persistence.snapshots.getById(id);
     }
 
@@ -66,7 +67,7 @@ public class SnapshotController {
      */
     private static Collection<Snapshot> getSnapshots(Request req, Response res) {
         // Get feed source and check user permissions.
-        FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, "view", "feedId");
+        FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, Actions.VIEW, "feedId");
         // FIXME Do we need a way to return all snapshots?
         // Is this used in GTFS Data Manager to retrieveById snapshots in bulk?
 
@@ -79,7 +80,7 @@ public class SnapshotController {
      */
     private static String createSnapshot (Request req, Response res) throws IOException {
         Auth0UserProfile userProfile = req.attribute("user");
-        FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, "edit", "feedId");
+        FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, Actions.EDIT, "feedId");
         // Take fields from request body for creating snapshot.
         Snapshot snapshot = json.read(req.body());
         // Ensure feed source ID and snapshotOf namespace is correct
@@ -104,7 +105,7 @@ public class SnapshotController {
         Auth0UserProfile userProfile = req.attribute("user");
         // Get feed version from request (and check permissions).
         String feedVersionId = req.queryParams("feedVersionId");
-        FeedVersion feedVersion = FeedVersionController.requestFeedVersion(req, "edit", feedVersionId);
+        FeedVersion feedVersion = FeedVersionController.requestFeedVersion(req, Actions.EDIT, feedVersionId);
         FeedSource feedSource = feedVersion.parentFeedSource();
         // Create and run snapshot job
         Snapshot snapshot = new Snapshot("Snapshot of " + feedVersion.name, feedSource.id, feedVersion.namespace);
@@ -135,7 +136,7 @@ public class SnapshotController {
         String id = req.params("id");
         // FIXME Ensure namespace id exists in database?
         // Retrieve feed source.
-        FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, "edit", "feedId");
+        FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, Actions.EDIT, "feedId");
         Snapshot snapshotToRestore = Persistence.snapshots.getById(id);
         if (snapshotToRestore == null) {
             logMessageAndHalt(req, 400, "Must specify valid snapshot ID");
@@ -212,7 +213,7 @@ public class SnapshotController {
         String id = req.params("id");
         // FIXME Ensure namespace id exists in database.
         // Check feed source permissions.
-        FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, "edit", "feedId");
+        FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, Actions.EDIT, "feedId");
         // Retrieve snapshot
         Snapshot snapshot = Persistence.snapshots.getById(id);
         if (snapshot == null) logMessageAndHalt(req, 400, "Must provide valid snapshot ID.");

@@ -1,0 +1,66 @@
+[ {
+  "app_metadata" : {
+    "datatools" : [ {
+      "client_id" : "your-auth0-client-id",
+      "organizations" : [ ],
+      "permissions" : [ ],
+      "projects" : [ {
+        "defaultFeeds" : [ ],
+        "permissions" : [ {
+          "feeds" : [ "*" ],
+          "type" : "view-feed"
+        } ],
+        "project_id" : "test-project-id"
+      } ],
+      "subscriptions" : [ {
+        "target" : [ "test-feed-id" ],
+        "type" : "feed-updated"
+      } ]
+    } ]
+  },
+  "created_at" : "2017-06-22T19:19:41.404Z",
+  "email" : "test1@test.com",
+  "email_verified" : true,
+  "identities" : [ {
+    "connection" : "Username-Password-Authentication",
+    "isSocial" : false,
+    "provider" : "auth0",
+    "user_id" : "test1"
+  } ],
+  "last_ip" : "1.1.1.1",
+  "last_login" : "2017-07-12T19:09:28.400Z",
+  "last_password_reset" : "2017-07-12T19:08:52.507Z",
+  "logins_count" : 1,
+  "name" : "test1",
+  "nickname" : "test1",
+  "picture" : "https://i0.wp.com/cdn.auth0.com/avatars/tu.png?ssl=1",
+  "updated_at" : "2017-07-12T19:16:11.699Z",
+  "user_id" : "auth0|test1"
+}, {
+  "app_metadata" : {
+    "datatools" : [ {
+      "client_id" : "your-auth0-client-id",
+      "permissions" : [ {
+        "type" : "administer-application"
+      } ],
+      "projects" : [ ]
+    } ]
+  },
+  "created_at" : "2018-12-27T16:46:32.864Z",
+  "email" : "test2@test.com",
+  "email_verified" : true,
+  "identities" : [ {
+    "connection" : "Username-Password-Authentication",
+    "isSocial" : false,
+    "provider" : "auth0",
+    "user_id" : "test2"
+  } ],
+  "last_ip" : "1.1.1.1",
+  "last_login" : "2019-02-10T18:24:03.719Z",
+  "logins_count" : 49,
+  "name" : "test2",
+  "nickname" : "test2",
+  "picture" : "https://i0.wp.com/cdn.auth0.com/avatars/tu.png?ssl=1",
+  "updated_at" : "2019-02-10T18:24:03.719Z",
+  "user_id" : "auth0|test2"
+} ]

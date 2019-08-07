@@ -1,11 +1,13 @@
 package com.conveyal.datatools;
 
 import com.conveyal.datatools.manager.DataManager;
-import org.junit.jupiter.api.BeforeAll;
+import org.junit.BeforeClass;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.SQLException;
 
 /**
  * Created by landon on 2/24/17.
@@ -14,7 +16,7 @@ public abstract class DatatoolsTest {
     private static final Logger LOG = LoggerFactory.getLogger(DatatoolsTest.class);
     private static boolean setUpIsDone = false;
 
-    @BeforeAll
+    @BeforeClass
     public static void setUp() {
         if (setUpIsDone) {
             return;

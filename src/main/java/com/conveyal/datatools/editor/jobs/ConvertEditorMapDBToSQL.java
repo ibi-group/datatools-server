@@ -11,6 +11,7 @@ import com.conveyal.datatools.editor.models.transit.TripPattern;
 import com.conveyal.datatools.editor.models.transit.TripPatternStop;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
+import com.conveyal.datatools.manager.models.Snapshot;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.GTFSFeed;
 import com.conveyal.gtfs.loader.FeedLoadResult;
@@ -26,8 +27,12 @@ import java.sql.Connection;
 import java.sql.JDBCType;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.Iterator;
+import java.util.List;
 
 import static com.conveyal.gtfs.loader.DateField.GTFS_DATE_FORMATTER;
+import static com.mongodb.client.model.Filters.and;
+import static com.mongodb.client.model.Filters.eq;
 
 public class ConvertEditorMapDBToSQL extends MonitorableJob {
     private final String feedId;
@@ -53,6 +58,17 @@ public class ConvertEditorMapDBToSQL extends MonitorableJob {
                 LOG.warn("Not converting snapshot. Feed source Id {} does not exist in application data", feedId);
                 return;
             }
+            Snapshot matchingSnapshot = Persistence.snapshots.getOneFiltered(
+                and(
+                    eq("version", versionNumber),
+                    eq(Snapshot.FEED_SOURCE_REF, feedId)
+                )
+            );
+            boolean snapshotExists = true;
+            if (matchingSnapshot == null) {
+                snapshotExists = false;
+                matchingSnapshot = new Snapshot("Imported", feedId, "mapdb_editor");
+            }
             FeedTx feedTx;
             // FIXME: This needs to share a connection with the snapshotter.
             // Create connection for each snapshot
@@ -74,19 +90,19 @@ public class ConvertEditorMapDBToSQL extends MonitorableJob {
             LOG.info("Converting {}.{} to SQL", feedId, versionNumber);
             // Convert mapdb to SQL
             FeedLoadResult convertFeedResult = convertFeed(feedId, versionNumber, feedTx);
-            // Create manager snapshot for storing in feed source.
-            com.conveyal.datatools.manager.models.Snapshot managerSnapshot =
-                    new com.conveyal.datatools.manager.models.Snapshot(
-                            feedId, versionNumber != null ? versionNumber : 0, "mapdb_editor", convertFeedResult);
-//                managerSnapshot.dateCreated =
-            LOG.info("Storing snapshot {}", managerSnapshot.id);
-            Persistence.snapshots.create(managerSnapshot);
+            // Update manager snapshot with result details.
+            matchingSnapshot.snapshotOf = "mapdb_editor";
+            matchingSnapshot.namespace = convertFeedResult.uniqueIdentifier;
+            matchingSnapshot.feedLoadResult = convertFeedResult;
+            LOG.info("Storing snapshot {}", matchingSnapshot.id);
+            if (snapshotExists) Persistence.snapshots.replace(matchingSnapshot.id, matchingSnapshot);
+            else Persistence.snapshots.create(matchingSnapshot);
             if (setEditorBuffer) {
                 // If there is no version, that indicates that this was from the editor buffer for that feedId.
                 // Make this snapshot the editor namespace buffer.
-                LOG.info("Updating active snapshot to {}", managerSnapshot.id);
+                LOG.info("Updating active snapshot to {}", matchingSnapshot.id);
                 FeedSource updatedFeedSource = Persistence.feedSources.updateField(
-                        feedSource.id, "editorNamespace", managerSnapshot.namespace);
+                        feedSource.id, "editorNamespace", matchingSnapshot.namespace);
                 LOG.info("Editor namespace: {}", updatedFeedSource.editorNamespace);
             }
             connection.commit();

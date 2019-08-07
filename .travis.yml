@@ -1,39 +1,69 @@
+dist: trusty # jdk 8 not available on xenial
 language: java
-jdk:
-- oraclejdk8
+java:
+  - oraclejdk8
 install: true
 sudo: false
 # Install mongoDB to perform persistence tests
-services: mongodb
+services:
+  - mongodb
+  - postgresql
+addons:
+  postgresql: 9.6
 cache:
   directories:
-  - "$HOME/.m2"
+    - $HOME/.m2
+    - $HOME/.cache/yarn
 # Install semantic-release
 before_script:
-  - yarn global add @conveyal/maven-semantic-release semantic-release
+  - yarn global add @conveyal/maven-semantic-release semantic-release@15
+  # Create dir for GTFS+ files (used during testing)
+  - mkdir /tmp/gtfsplus
 before_install:
 #- sed -i.bak -e 's|https://nexus.codehaus.org/snapshots/|https://oss.sonatype.org/content/repositories/codehaus-snapshots/|g' ~/.m2/settings.xml
 # set region in AWS config for S3 setup
 - mkdir ~/.aws && printf '%s\n' '[default]' 'aws_access_key_id=foo' 'aws_secret_access_key=bar' 'region=us-east-1' > ~/.aws/config
 - cp configurations/default/server.yml.tmp configurations/default/server.yml
+# create database for tests
+- psql -U postgres -c 'CREATE DATABASE catalogue;'
 script:
 # package jar
 - mvn package
 after_success:
-  - semantic-release --prepare @conveyal/maven-semantic-release --publish @semantic-release/github,@conveyal/maven-semantic-release --verify-conditions @semantic-release/github,@conveyal/maven-semantic-release --verify-release @conveyal/maven-semantic-release --use-conveyal-workflow --dev-branch=dev --skip-maven-deploy
-  # Run codecov after semantic-release because maven-semantic-release creates extra commits that
-  # codecov will need a report on to reference in future PRs to the release branch
+  # this first codecov run will upload a report associated with the commit set through Travis CI environment variables
   - bash <(curl -s https://codecov.io/bash)
-# notify slack channel of build status
+  # run maven-semantic-release to potentially create a new release of datatools-server. The flag --skip-maven-deploy is
+  # used to avoid deploying to maven central. So essentially, this just creates a release with a changelog on github.
+  #
+  # If maven-semantic-release finishes successfully and the current branch is master, upload coverage reports for the
+  # commits that maven-semantic-release generated. Since the above codecov run is associated with the commit that
+  # initiated the Travis build, the report will not be associated with the commits that maven-semantic-release performed
+  # (if it ended up creating a release and the two commits that were a part of that workflow). Therefore, if on master
+  # codecov needs to be ran two more times to create codecov reports for the commits made by maven-semantic-release.
+  # See https://github.com/conveyal/gtfs-lib/issues/193.
+  #
+  # The git commands get the commit hash of the HEAD commit and the commit just before HEAD.
+  - |
+    semantic-release --prepare @conveyal/maven-semantic-release --publish @semantic-release/github,@conveyal/maven-semantic-release --verify-conditions @semantic-release/github,@conveyal/maven-semantic-release --verify-release @conveyal/maven-semantic-release --use-conveyal-workflow --dev-branch=dev --skip-maven-deploy
+    if [[ "$TRAVIS_BRANCH" = "master" ]]; then
+      bash <(curl -s https://codecov.io/bash) -C "$(git rev-parse HEAD)"
+      bash <(curl -s https://codecov.io/bash) -C "$(git rev-parse HEAD^)"
+    fi
 notifications:
+  # notify slack channel of build status
   slack: conveyal:WQxmWiu8PdmujwLw4ziW72Gc
 before_deploy:
 # get branch name of current branch for use in jar name: https://graysonkoonce.com/getting-the-current-branch-name-during-a-pull-request-in-travis-ci/
 - export BRANCH=$(if [ "$TRAVIS_PULL_REQUEST" == "false" ]; then echo $TRAVIS_BRANCH; else echo $TRAVIS_PULL_REQUEST_BRANCH; fi)
-# copy packaged jars over to deploy dir
+# Create directory that will contain artifacts to deploy to s3.
 - mkdir deploy
+# Display contents of target directory (for logging purposes only).
+- ls target/*.jar
+# Copy packaged jars over to deploy dir.
 - cp target/dt-*.jar deploy/
-- cp "target/dt-$(git describe --always).jar" "deploy/dt-latest-${BRANCH}.jar"
+# FIXME: Do not create a branch-specific jar for now. Having a jar that changes contents but keeps the same name
+#   may cause confusion down the road and may be undesirable.
+# - cp "target/dt-$(git describe --always).jar" "deploy/dt-latest-${BRANCH}.jar"
 deploy:
   provider: s3
   skip_cleanup: true
@@ -45,5 +75,5 @@ deploy:
   local-dir: deploy
   acl: public_read
   on:
-    repo: conveyal/datatools-server
+    repo: ibi-group/datatools-server
     all_branches: true

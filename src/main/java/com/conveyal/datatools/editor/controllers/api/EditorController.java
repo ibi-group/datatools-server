@@ -1,6 +1,7 @@
 package com.conveyal.datatools.editor.controllers.api;
 
 import com.conveyal.datatools.common.utils.S3Utils;
+import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.editor.controllers.EditorLockController;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -86,6 +87,7 @@ public abstract class EditorController<T extends Entity> {
         // Handle update useFrequency field. Hitting this endpoint will delete all trips for a pattern and update the
         // useFrequency field.
         if ("pattern".equals(classToLowercase)) {
+            put(ROOT_ROUTE + ID_PARAM + "/stop_times", this::updateStopTimesFromPatternStops, json::write);
             delete(ROOT_ROUTE + ID_PARAM + "/trips", this::deleteTripsForPattern, json::write);
         }
     }
@@ -112,7 +114,7 @@ public abstract class EditorController<T extends Entity> {
             logMessageAndHalt(req, 500, "Error deleting entity", e);
             return null;
         } finally {
-            LOG.info("Delete operation took {} msec", System.currentTimeMillis() - startTime);
+            LOG.info("Delete trips for pattern operation took {} msec", System.currentTimeMillis() - startTime);
         }
     }
 
@@ -124,8 +126,9 @@ public abstract class EditorController<T extends Entity> {
         long startTime = System.currentTimeMillis();
         String namespace = getNamespaceAndValidateSession(req);
         String[] tripIds = req.queryParams("tripIds").split(",");
+        JdbcTableWriter tableWriter = null;
         try {
-            JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
+            tableWriter = new JdbcTableWriter(table, datasource, namespace);
             for (String tripId: tripIds) {
                 // Delete each trip ID found in query param WITHOUT auto-committing.
                 int result = tableWriter.delete(Integer.parseInt(tripId), false);
@@ -135,7 +138,7 @@ public abstract class EditorController<T extends Entity> {
                     throw new SQLException(message);
                 }
             }
-            // Commit the transaction after iterating over trip IDs (because the deletes where made without autocommit).
+            // Commit the transaction after iterating over trip IDs (because the deletes were made without autocommit).
             tableWriter.commit();
             LOG.info("Deleted {} trips", tripIds.length);
         } catch (InvalidNamespaceException e) {
@@ -143,6 +146,7 @@ public abstract class EditorController<T extends Entity> {
         } catch (Exception e) {
             logMessageAndHalt(req, 500, "Error deleting entity", e);
         } finally {
+            if (tableWriter != null) tableWriter.close();
             LOG.info("Delete operation took {} msec", System.currentTimeMillis() - startTime);
         }
         return formatJSON(String.format("Deleted %d.", tripIds.length), 200);
@@ -159,7 +163,7 @@ public abstract class EditorController<T extends Entity> {
             JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
             if (tableWriter.delete(id, true) == 1) {
                 // FIXME: change return message based on result value
-                return formatJSON(String.valueOf("Deleted one."), 200);
+                return formatJSON("Deleted one.", 200);
             }
         } catch (Exception e) {
             logMessageAndHalt(req, 400, "Error deleting entity", e);
@@ -170,16 +174,36 @@ public abstract class EditorController<T extends Entity> {
     }
 
     /**
+     * For a given pattern ID, update all its trips' stop times to conform to the default travel and dwell times. This
+     * is used, for instance, when a new pattern stop is added or inserted into an existing pattern that has trips which
+     * need the updated travel times applied in bulk.
+     */
+    private String updateStopTimesFromPatternStops (Request req, Response res) {
+        long startTime = System.currentTimeMillis();
+        String namespace = getNamespaceAndValidateSession(req);
+        int patternId = getIdFromRequest(req);
+        try {
+            int beginStopSequence = Integer.parseInt(req.queryParams("stopSequence"));
+            JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
+            int stopTimesUpdated = tableWriter.normalizeStopTimesForPattern(patternId, beginStopSequence);
+            return SparkUtils.formatJSON("updateResult", stopTimesUpdated + " stop times updated.");
+        } catch (Exception e) {
+            logMessageAndHalt(req, 400, "Error normalizing stop times", e);
+            return null;
+        } finally {
+            LOG.info("Normalize stop times operation took {} msec", System.currentTimeMillis() - startTime);
+        }
+    }
+
+    /**
      * HTTP endpoint to upload branding image to S3 for either agency or route entities. The endpoint also handles
      * updating the branding URL field to match the S3 URL.
      */
     private String uploadEntityBranding (Request req, Response res) {
         int id = getIdFromRequest(req);
-        String url = null;
+        String url;
         try {
-            // FIXME: remove cast to string.
-            String idAsString = String.valueOf(id);
-            url = S3Utils.uploadBranding(req, String.join("_", classToLowercase, idAsString));
+            url = S3Utils.uploadBranding(req, String.format("%s_%d", classToLowercase, id));
         } catch (HaltException e) {
             // Do not re-catch halts thrown for exceptions that have already been caught.
             throw e;
@@ -300,10 +324,4 @@ public abstract class EditorController<T extends Entity> {
         }
         return id;
     }
-
-    // TODO add hooks
-    abstract void getEntityHook(T entity);
-    abstract void createEntityHook(T entity);
-    abstract void updateEntityHook(T entity);
-    abstract void deleteEntityHook(T entity);
 }

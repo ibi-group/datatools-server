@@ -168,7 +168,7 @@ public class FeedVersion extends Model implements Serializable {
     @JsonView(JsonViews.UserInterface.class)
     @BsonProperty("validationSummary")
     public FeedValidationResultSummary validationSummary() {
-        return new FeedValidationResultSummary(validationResult, feedLoadResult);
+        return new FeedValidationResultSummary(this);
     }
 
 
@@ -189,6 +189,12 @@ public class FeedVersion extends Model implements Serializable {
 
     /** SQL namespace for GTFS data */
     public String namespace;
+
+    /**
+     * Indicates the namespace from which this version originated. For example, if it was published from a snapshot
+     * namespace or a GTFS+ feed, this field will reference that source namespace.
+     */
+    public String originNamespace;
 
     /**
      * Indicates when a feed version was published to an external source. If null, the version has not been sent. This
