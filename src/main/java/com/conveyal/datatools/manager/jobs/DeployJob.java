@@ -170,10 +170,6 @@ public class DeployJob extends MonitorableJob {
                 status.fail(message);
                 return;
             }
-            status.message = "Uploading to S3";
-            status.uploadingS3 = true;
-            LOG.info("Uploading deployment {} to s3", deployment.name);
-            String key = null;
             try {
                 uploadBundleToS3();
             } catch (AmazonClientException | InterruptedException e) {
@@ -210,7 +206,7 @@ public class DeployJob extends MonitorableJob {
     }
 
     private void uploadBundleToS3() throws InterruptedException, AmazonClientException {
-        status.message = "Uploading to S3";
+        status.message = "Uploading to s3://" + s3Bucket;
         status.uploadingS3 = true;
         String key = getS3BundleKey();
         LOG.info("Uploading deployment {} to s3://{}/{}", deployment.name, s3Bucket, key);
@@ -562,7 +558,7 @@ public class DeployJob extends MonitorableJob {
     }
 
     private String constructUserData(boolean r5) {
-        // Prefix/name of JAR file (WITHOUT .jar) FIXME: make this configurable.
+        // Prefix/name of JAR file (WITHOUT .jar)
         String jarName = r5 ? deployment.r5Version : deployment.otpVersion;
         if (jarName == null) {
             // If there is no version specified, use the default (and persist value).
@@ -571,8 +567,8 @@ public class DeployJob extends MonitorableJob {
         }
         String tripPlanner = r5 ? "r5" : "otp";
         String s3JarBucket = r5 ? "r5-builds" : "opentripplanner-builds";
-        String s3JarUrl = String.format("s3://%s/%s.jar", s3JarBucket, jarName);
-        // FIXME Check that jar URL exists.
+        String s3JarUrl = String.format("https://%s.s3.amazonaws.com/%s.jar", s3JarBucket, jarName);
+        // TODO Check that jar URL exists?
         String jarDir = String.format("/opt/%s", tripPlanner);
         String s3BundlePath = String.format("s3://%s/%s", s3Bucket, getS3BundleKey());
         boolean graphAlreadyBuilt = FeedStore.s3Client.doesObjectExist(s3Bucket, getS3GraphKey());
@@ -600,10 +596,7 @@ public class DeployJob extends MonitorableJob {
         }
         // Download trip planner JAR.
         lines.add(String.format("mkdir -p %s", jarDir));
-        String region = deployment.r5 ? "eu-west-1" : "us-east-1";
-        lines.add(String.format("aws s3 cp --region %s %s %s/%s.jar", region, s3JarUrl, jarDir, jarName));
-        // Kill any running java process FIXME Currently the AMI we're using starts up OTP on startup, so we need to kill the java process in order to follow the below instructions
-        lines.add("sudo pkill -9 -f java");
+        lines.add(String.format("wget %s -O %s/%s.jar", s3JarUrl, jarDir, jarName));
         if (graphAlreadyBuilt) {
             lines.add("echo 'downloading graph from s3'");
             // Download Graph from S3 and spin up trip planner.
@@ -621,7 +614,7 @@ public class DeployJob extends MonitorableJob {
             lines.add("sudo poweroff");
         } else {
             lines.add("echo 'kicking off trip planner (logs at $LOGFILE)'");
-            // Kick off the application. FIXME use sudo service opentripplanner start?
+            // Kick off the application.
             if (deployment.r5) lines.add(String.format("sudo -H -u ubuntu nohup java -Xmx6G -Djava.util.Arrays.useLegacyMergeSort=true -jar %s/%s.jar point --isochrones %s > /var/log/r5.out 2>&1&", jarDir, jarName, routerDir));
             else lines.add(String.format("sudo -H -u ubuntu nohup java -jar %s/%s.jar --server --bindAddress 127.0.0.1 --router default > $LOGFILE 2>&1 &", jarDir, jarName));
         }

@@ -59,7 +59,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
 //            FeedStore.s3Client.doesObjectExist(otpServer.s3Bucket, );
         }
         // First, check that OTP has started up.
-        status.update("Instance status is OK.", 20);
+        status.update("Instance status is OK. Waiting for OTP...", 20);
         while (!otpIsRunning) {
             LOG.info("Checking that OTP is running on server at {}.", otpUrl);
             // If the request is successful, the OTP instance has started.
