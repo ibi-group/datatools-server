@@ -1,16 +1,20 @@
 package com.conveyal.datatools.manager.controllers.api;
 
+import com.amazonaws.services.ec2.model.InstanceType;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancing;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClient;
 import com.amazonaws.services.elasticloadbalancingv2.model.AmazonElasticLoadBalancingException;
 import com.amazonaws.services.elasticloadbalancingv2.model.DescribeTargetGroupsRequest;
 import com.amazonaws.services.elasticloadbalancingv2.model.TargetGroup;
+import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.bson.Document;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
@@ -19,10 +23,15 @@ import spark.HaltException;
 import spark.Request;
 import spark.Response;
 
+import java.io.File;
+import java.io.IOException;
+import java.nio.file.Files;
 import java.util.Collections;
 import java.util.List;
+import java.util.UUID;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
+import static com.conveyal.datatools.manager.jobs.DeployJob.DEFAULT_INSTANCE_TYPE;
 import static spark.Spark.delete;
 import static spark.Spark.get;
 import static spark.Spark.options;
@@ -36,6 +45,7 @@ import static spark.Spark.put;
 public class ServerController {
     private static JsonManager<OtpServer> json = new JsonManager<>(OtpServer.class, JsonViews.UserInterface.class);
     private static final Logger LOG = LoggerFactory.getLogger(ServerController.class);
+    private static final ObjectMapper mapper = new ObjectMapper();
 
     /**
      * Gets the server specified by the request's id parameter and ensure that user has access to the
@@ -67,8 +77,6 @@ public class ServerController {
      * deployment.
      */
     private static OtpServer createServer(Request req, Response res) {
-        // TODO error handling when request is bogus
-        // TODO factor out user profile fetching, permissions checks etc.
         Auth0UserProfile userProfile = req.attribute("user");
         Document newServerFields = Document.parse(req.body());
         String projectId = newServerFields.getString("projectId");
@@ -78,15 +86,17 @@ public class ServerController {
         boolean allowedToCreate = projectId == null
             ? userProfile.canAdministerApplication()
             : userProfile.canAdministerProject(projectId, organizationId);
-
         if (allowedToCreate) {
-            OtpServer newServer = new OtpServer();
             validateFields(req, newServerFields);
-            // FIXME: Here we are creating a deployment and updating it with the JSON string (two db operations)
-            // We do this because there is not currently apply JSON directly to an object (outside of Mongo codec
-            // operations)
+            OtpServer newServer;
+            try {
+                newServer = mapper.readValue(newServerFields.toJson(), OtpServer.class);
+            } catch (IOException e) {
+                logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Error parsing OTP server JSON.");
+                return null;
+            }
             Persistence.servers.create(newServer);
-            return Persistence.servers.update(newServer.id, req.body());
+            return newServer;
         } else {
             logMessageAndHalt(req, 403, "Not authorized to create a server for project " + projectId);
             return null;
@@ -118,7 +128,7 @@ public class ServerController {
         Document updateDocument = Document.parse(req.body());
         Auth0UserProfile user = req.attribute("user");
         if ((serverToUpdate.admin || serverToUpdate.projectId == null) && !user.canAdministerApplication()) {
-            logMessageAndHalt(req, 401, "User cannot modify admin-only or application-wide server.");
+            logMessageAndHalt(req, HttpStatus.UNAUTHORIZED_401, "User cannot modify admin-only or application-wide server.");
         }
         validateFields(req, updateDocument);
         OtpServer updatedServer = Persistence.servers.update(serverToUpdate.id, updateDocument);
@@ -136,10 +146,12 @@ public class ServerController {
         // speaks to the fragility of this system currently.
         serverDocument.remove("lastUpdated");
         serverDocument.remove("dateCreated");
+        // Check that projectId is valid.
         if (serverDocument.containsKey("projectId") && serverDocument.get("projectId") != null) {
             Project project = Persistence.projects.getById(serverDocument.get("projectId").toString());
-            if (project == null) logMessageAndHalt(req, 400, "Must specify valid project ID.");
+            if (project == null) logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Must specify valid project ID.");
         }
+        // If server has a target group specified, it must have a few other fields as well (e.g., instance type).
         if (serverDocument.containsKey("targetGroupArn") && serverDocument.get("targetGroupArn") != null) {
             // Validate that the Target Group ARN is valid.
             try {
@@ -148,10 +160,41 @@ public class ServerController {
                 AmazonElasticLoadBalancing elb = AmazonElasticLoadBalancingClient.builder().build();
                 List<TargetGroup> targetGroups = elb.describeTargetGroups(describeTargetGroupsRequest).getTargetGroups();
                 if (targetGroups.size() == 0) {
-                    logMessageAndHalt(req, 400, "Invalid value for Target Group ARN. Could not locate Target Group.");
+                    logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Invalid value for Target Group ARN. Could not locate Target Group.");
                 }
             } catch (AmazonElasticLoadBalancingException e) {
-                logMessageAndHalt(req, 400, "Invalid value for Target Group ARN.");
+                logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Invalid value for Target Group ARN.");
+            }
+            // Validate instance type
+            if (serverDocument.get("instanceType") != null) {
+                try {
+                    InstanceType.fromValue(serverDocument.get("instanceType").toString());
+                } catch (IllegalArgumentException e) {
+                    String message = String.format("Must provide valid instance type (if none provided, defaults to %s).", DEFAULT_INSTANCE_TYPE);
+                    logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message);
+                }
+            }
+        }
+        // Server must have name.
+        if (serverDocument.get("name") == null || "".equals(serverDocument.get("name").toString())) {
+            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Server must have valid name.");
+        }
+        // Server must have an internal URL (for build graph over wire) or an s3 bucket (for auto deploy ec2).
+        if (serverDocument.get("s3Bucket") == null || "".equals(serverDocument.get("s3Bucket").toString())) {
+            if (!serverDocument.containsKey("internalUrl") || ((List) serverDocument.get("internalUrl")).size() == 0) {
+                logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Server must contain either internal URL(s) or s3 bucket name.");
+            }
+        } else {
+            // Verify that application has permission to write to/delete from S3 bucket.
+            String key = UUID.randomUUID().toString();
+            String bucket = serverDocument.get("s3Bucket").toString();
+            try {
+                FeedStore.s3Client.putObject(bucket, key, File.createTempFile("test", ".zip"));
+                FeedStore.s3Client.deleteObject(bucket, key);
+            } catch (IOException | AmazonS3Exception e) {
+                String message = "Cannot write to specified S3 bucket " + bucket;
+                LOG.error(message, e);
+                logMessageAndHalt(req, 400, message);
             }
         }
     }

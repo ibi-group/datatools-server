@@ -73,6 +73,7 @@ public class DeployJob extends MonitorableJob {
 
     private static final Logger LOG = LoggerFactory.getLogger(DeployJob.class);
     private static final String bundlePrefix = "bundles";
+    public static final String DEFAULT_INSTANCE_TYPE = "t2.medium";
     /** 
      * S3 bucket to upload deployment to. If not null, uses {@link OtpServer#s3Bucket}. Otherwise, defaults to 
      * {@link DataManager#feedBucket}
@@ -474,6 +475,7 @@ public class DeployJob extends MonitorableJob {
     }
 
     private List<Instance> startEC2Instances(int count) {
+        String instanceType = otpServer.instanceType == null ? DEFAULT_INSTANCE_TYPE : otpServer.instanceType;
         // User data should contain info about:
         // 1. Downloading GTFS/OSM info (s3)
         // 2. Time to live until shutdown/termination (for test servers)
