@@ -20,8 +20,6 @@ public class OtpServer extends Model {
     public String publicUrl;
     public boolean admin;
     public String s3Bucket;
-    public String s3Credentials;
-    public boolean createServer;
 
     /** Empty constructor for serialization. */
     public OtpServer () {}

@@ -88,15 +88,14 @@ public class ServerController {
             : userProfile.canAdministerProject(projectId, organizationId);
         if (allowedToCreate) {
             validateFields(req, newServerFields);
-            OtpServer newServer;
             try {
-                newServer = mapper.readValue(newServerFields.toJson(), OtpServer.class);
+                OtpServer newServer = mapper.readValue(newServerFields.toJson(), OtpServer.class);
+                Persistence.servers.create(newServer);
+                return newServer;
             } catch (IOException e) {
                 logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Error parsing OTP server JSON.");
                 return null;
             }
-            Persistence.servers.create(newServer);
-            return newServer;
         } else {
             logMessageAndHalt(req, 403, "Not authorized to create a server for project " + projectId);
             return null;
