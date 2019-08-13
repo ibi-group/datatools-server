@@ -183,7 +183,10 @@ public class ServerController {
                 logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Server must contain either internal URL(s) or s3 bucket name.");
             }
         } else {
-            // Verify that application has permission to write to/delete from S3 bucket.
+            // Verify that application has permission to write to/delete from S3 bucket. We're following the recommended
+            // approach from https://stackoverflow.com/a/17284647/915811, but perhaps there is a way to do this
+            // effectively without incurring AWS costs (although writing/deleting an empty file to S3 is probably
+            // miniscule).
             String key = UUID.randomUUID().toString();
             String bucket = serverDocument.get("s3Bucket").toString();
             try {
