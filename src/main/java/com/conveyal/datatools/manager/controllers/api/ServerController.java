@@ -92,7 +92,7 @@ public class ServerController {
                 Persistence.servers.create(newServer);
                 return newServer;
             } catch (IOException e) {
-                logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Error parsing OTP server JSON.");
+                logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Error parsing OTP server JSON.", e);
                 return null;
             }
         } else {
@@ -161,7 +161,7 @@ public class ServerController {
                     logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Invalid value for Target Group ARN. Could not locate Target Group.");
                 }
             } catch (AmazonElasticLoadBalancingException e) {
-                logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Invalid value for Target Group ARN.");
+                logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Invalid value for Target Group ARN.", e);
             }
             // Validate instance type
             if (serverDocument.get("instanceType") != null) {
@@ -169,7 +169,7 @@ public class ServerController {
                     InstanceType.fromValue(serverDocument.get("instanceType").toString());
                 } catch (IllegalArgumentException e) {
                     String message = String.format("Must provide valid instance type (if none provided, defaults to %s).", DEFAULT_INSTANCE_TYPE);
-                    logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message);
+                    logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message, e);
                 }
             }
         }
@@ -195,7 +195,7 @@ public class ServerController {
             } catch (IOException | AmazonS3Exception e) {
                 String message = "Cannot write to specified S3 bucket " + bucket;
                 LOG.error(message, e);
-                logMessageAndHalt(req, 400, message);
+                logMessageAndHalt(req, 400, message, e);
             }
         }
     }
