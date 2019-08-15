@@ -3,7 +3,7 @@ package com.conveyal.datatools.manager.controllers.api;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
-import com.conveyal.datatools.manager.gtfsplus.ValidationIssue;
+import com.conveyal.datatools.manager.gtfsplus.GtfsPlusValidation;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.FeedStore;
@@ -11,6 +11,7 @@ import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
@@ -22,11 +23,8 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.Collection;
 import java.util.Enumeration;
 import java.util.HashSet;
-import java.util.LinkedList;
-import java.util.List;
 import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -35,7 +33,7 @@ import java.util.zip.ZipOutputStream;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.copyRequestStreamIntoFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
-import static com.conveyal.datatools.manager.gtfsplus.GtfsPlusValidation.validateGtfsPlus;
+import static spark.Spark.delete;
 import static spark.Spark.get;
 import static spark.Spark.post;
 
@@ -133,6 +131,9 @@ public class GtfsPlusController {
         return SparkUtils.downloadFile(gtfsPlusFile, gtfsPlusFile.getName() + ".zip", req, res);
     }
 
+    /** HTTP endpoint used to return the last modified timestamp for a GTFS+ feed. Essentially this is used as a way to
+     * determine whether any GTFS+ edits have been made to
+     */
     private static Long getGtfsPlusFileTimestamp(Request req, Response res) {
         String feedVersionId = req.params("versionid");
 
@@ -140,18 +141,13 @@ public class GtfsPlusController {
         File file = gtfsPlusStore.getFeed(feedVersionId);
         if (file == null) {
             FeedVersion feedVersion = Persistence.feedVersions.getById(feedVersionId);
-            if (feedVersion != null) {
-                file = feedVersion.retrieveGtfsFile();
-            } else {
+            if (feedVersion == null) {
                 logMessageAndHalt(req, 400, "Feed version ID is not valid");
+                return null;
             }
-        }
-
-        if (file != null) {
-            return file.lastModified();
+            return feedVersion.fileTimestamp;
         } else {
-            logMessageAndHalt(req, 404, "Feed version file not found");
-            return null;
+            return file.lastModified();
         }
     }
 
@@ -239,6 +235,8 @@ public class GtfsPlusController {
             logMessageAndHalt(req, 500, "GTFS input file must not be null");
             return null;
         }
+        newFeedVersion.originNamespace = feedVersion.namespace;
+        newFeedVersion.fileTimestamp = newGtfsFile.lastModified();
         newFeedVersion.fileSize = newGtfsFile.length();
         newFeedVersion.hash = HashUtils.hashFile(newGtfsFile);
 
@@ -252,20 +250,36 @@ public class GtfsPlusController {
     /**
      * HTTP endpoint that validates GTFS+ tables for a specific feed version (or its saved/edited GTFS+).
      */
-    private static Collection<ValidationIssue> getGtfsPlusValidation(Request req, Response res) {
+    private static GtfsPlusValidation getGtfsPlusValidation(Request req, Response res) {
         String feedVersionId = req.params("versionid");
-        List<ValidationIssue> issues = new LinkedList<>();
+        GtfsPlusValidation gtfsPlusValidation = null;
         try {
-            issues = validateGtfsPlus(feedVersionId);
-        } catch(IOException e) {
+            gtfsPlusValidation = GtfsPlusValidation.validate(feedVersionId);
+        } catch(Exception e) {
             logMessageAndHalt(req, 500, "Could not read GTFS+ zip file", e);
         }
-        return issues;
+        return gtfsPlusValidation;
+    }
+
+    /**
+     * HTTP endpoint to delete the GTFS+ specific edits made for a feed version. In other words, this will revert to
+     * referencing the original GTFS+ files for a feed version. Note: this will not delete the feed version itself.
+     */
+    private static String deleteGtfsPlusFile(Request req, Response res) {
+        String feedVersionId = req.params("versionid");
+        File file = gtfsPlusStore.getFeed(feedVersionId);
+        if (file == null) {
+            logMessageAndHalt(req, HttpStatus.NOT_FOUND_404, "No GTFS+ file found for feed version");
+            return null;
+        }
+        file.delete();
+        return SparkUtils.formatJSON("message", "GTFS+ edits deleted successfully.");
     }
 
     public static void register(String apiPrefix) {
         post(apiPrefix + "secure/gtfsplus/:versionid", GtfsPlusController::uploadGtfsPlusFile, JsonUtil.objectMapper::writeValueAsString);
         get(apiPrefix + "secure/gtfsplus/:versionid", GtfsPlusController::getGtfsPlusFile);
+        delete(apiPrefix + "secure/gtfsplus/:versionid", GtfsPlusController::deleteGtfsPlusFile);
         get(apiPrefix + "secure/gtfsplus/:versionid/timestamp", GtfsPlusController::getGtfsPlusFileTimestamp, JsonUtil.objectMapper::writeValueAsString);
         get(apiPrefix + "secure/gtfsplus/:versionid/validation", GtfsPlusController::getGtfsPlusValidation, JsonUtil.objectMapper::writeValueAsString);
         post(apiPrefix + "secure/gtfsplus/:versionid/publish", GtfsPlusController::publishGtfsPlusFile, JsonUtil.objectMapper::writeValueAsString);

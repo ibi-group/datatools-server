@@ -28,6 +28,7 @@ public class CreateFeedVersionFromSnapshotJob extends MonitorableJob {
     @Override
     public void jobLogic() {
         // Set feed version properties.
+        feedVersion.originNamespace = snapshot.namespace;
         feedVersion.retrievalMethod = FeedSource.FeedRetrievalMethod.PRODUCED_IN_HOUSE;
         feedVersion.name = snapshot.name + " Snapshot Export";
         // FIXME: This should probably just create a new snapshot, and then validate those tables.

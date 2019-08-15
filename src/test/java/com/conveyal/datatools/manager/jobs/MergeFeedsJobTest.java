@@ -158,13 +158,20 @@ public class MergeFeedsJobTest extends UnitTest {
         MergeFeedsJob mergeFeedsJob = new MergeFeedsJob("test", versions, "merged_output", MergeFeedsType.MTC);
         // This time, turn off the failOnDuplicateTripId flag.
         mergeFeedsJob.failOnDuplicateTripId = false;
-        mergeFeedsJob.run();
         // Result should succeed this time.
+        mergeFeedsJob.run();
+        // Check GTFS+ line numbers.
         assertEquals(
             "Merged directions count should equal expected value.",
             2, // Magic number represents expected number of lines after merge.
             mergeFeedsJob.mergeFeedsResult.linesPerTable.get("directions").intValue()
         );
+        assertEquals(
+            "Merged feed stop_attributes count should equal expected value.",
+            2, // Magic number represents the number of stop_attributes in the merged BART feed.
+            mergeFeedsJob.mergeFeedsResult.linesPerTable.get("stop_attributes").intValue()
+        );
+        // Check GTFS file line numbers.
         assertEquals(
             "Merged feed trip count should equal expected value.",
             4552, // Magic number represents the number of trips in the merged BART feed.
