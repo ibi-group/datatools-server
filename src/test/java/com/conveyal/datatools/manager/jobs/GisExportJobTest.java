@@ -161,9 +161,10 @@ public class GisExportJobTest extends UnitTest {
                 for (Property property : properties) {
                     String name = property.getName().toString();
                     Object value = property.getValue();
-                    LOG.info("{}: {}", name, value);
                     if ("the_geom".equals(name)) {
                         MultiLineString shape = (MultiLineString) value;
+                        // don't log entire linestring value as it severly clutters up the logs
+                        LOG.info("{}: ({} points)", name, shape.getNumPoints());
                         // Check that the geometry was exported properly.
                         assertThat(shape, notNullValue());
                         Coordinate[] coordinates = shape.getCoordinates();
@@ -176,6 +177,8 @@ public class GisExportJobTest extends UnitTest {
                             assertThat(coordinate.y, greaterThan(CALTRAIN_SOUTH));
                             assertThat(coordinate.y, lessThan(CALTRAIN_NORTH));
                         }
+                    } else {
+                        LOG.info("{}: {}", name, value);
                     }
                 }
             }
