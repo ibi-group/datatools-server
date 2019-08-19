@@ -142,6 +142,7 @@ public abstract class DatatoolsTest {
 
             applicationConfig.put("assets_bucket", s3Bucket);
             applicationDataConfig.put("gtfs_s3_bucket", s3Bucket);
+            // make sure use_s3_storage is true so it's possible to upload/download feeds from s3
             applicationDataConfig.put("use_s3_storage", true);
             transitFeedsConfig.put("key", transitFeedsKey);
 

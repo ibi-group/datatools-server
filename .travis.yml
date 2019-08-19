@@ -74,9 +74,6 @@ after_success:
         bash <(curl -s https://codecov.io/bash) -C "$(git rev-parse HEAD^)" -s target-e2e-test-results -F end_to_end_tests;
       fi
     fi
-notifications:
-  # notify slack channel of build status
-  slack: conveyal:WQxmWiu8PdmujwLw4ziW72Gc
 before_deploy:
 # get branch name of current branch for use in jar name: https://graysonkoonce.com/getting-the-current-branch-name-during-a-pull-request-in-travis-ci/
 - export BRANCH=$(if [ "$TRAVIS_PULL_REQUEST" == "false" ]; then echo $TRAVIS_BRANCH; else echo $TRAVIS_PULL_REQUEST_BRANCH; fi)

@@ -22,8 +22,9 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.junit.Assert.assertThat;
 
 public class TestUtils {
-
     private static final Logger LOG = LoggerFactory.getLogger(TestUtils.class);
+
+    private static final ObjectMapper mapper = new ObjectMapper();
 
     /**
      * Returns true only if an environment variable exists and is set to "true".
@@ -44,7 +45,6 @@ public class TestUtils {
      * Parse a json string into an unmapped JsonNode object
      */
     public static JsonNode parseJson(String jsonString) throws IOException {
-        ObjectMapper mapper = new ObjectMapper();
         return mapper.readTree(jsonString);
     }
 
