@@ -497,12 +497,17 @@ public class DeployJob extends MonitorableJob {
                 .withInstanceType(instanceType)
                 .withMinCount(count)
                 .withMaxCount(count)
-                .withIamInstanceProfile(new IamInstanceProfileSpecification().withArn(DataManager.getConfigPropertyAsText("modules.deployment.ec2.arn")))
                 .withImageId(DataManager.getConfigPropertyAsText("modules.deployment.ec2.ami"))
                 .withKeyName(DataManager.getConfigPropertyAsText("modules.deployment.ec2.keyName"))
                 // This will have the instance terminate when it is shut down.
                 .withInstanceInitiatedShutdownBehavior("terminate")
                 .withUserData(Base64.encodeBase64String(userData.getBytes()));
+        // Add instance profile if specified.
+        if (DataManager.hasConfigProperty("modules.deployment.ec2.arn")) {
+            IamInstanceProfileSpecification instanceProfile = new IamInstanceProfileSpecification()
+                .withArn(DataManager.getConfigPropertyAsText("modules.deployment.ec2.arn"));
+            runInstancesRequest.withIamInstanceProfile(instanceProfile);
+        }
         final List<Instance> instances = ec2.runInstances(runInstancesRequest).getReservation().getInstances();
 
         List<String> instanceIds = getIds(instances);
