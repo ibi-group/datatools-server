@@ -494,7 +494,7 @@ public class DeployJob extends MonitorableJob {
 
         RunInstancesRequest runInstancesRequest = new RunInstancesRequest()
                 .withNetworkInterfaces(interfaceSpecification)
-                .withInstanceType(otpServer.instanceType)
+                .withInstanceType(instanceType)
                 .withMinCount(count)
                 .withMaxCount(count)
                 .withIamInstanceProfile(new IamInstanceProfileSpecification().withArn(DataManager.getConfigPropertyAsText("modules.deployment.ec2.arn")))
