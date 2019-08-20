@@ -19,6 +19,7 @@ import com.amazonaws.services.ec2.model.TerminateInstancesResult;
 import com.amazonaws.services.elasticloadbalancingv2.model.DeregisterTargetsRequest;
 import com.amazonaws.services.elasticloadbalancingv2.model.DeregisterTargetsResult;
 import com.amazonaws.services.elasticloadbalancingv2.model.TargetDescription;
+import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.amazonaws.services.s3.model.CopyObjectRequest;
 import com.amazonaws.services.s3.transfer.TransferManager;
 import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
@@ -573,7 +574,15 @@ public class DeployJob extends MonitorableJob {
         // TODO Check that jar URL exists?
         String jarDir = String.format("/opt/%s", tripPlanner);
         String s3BundlePath = String.format("s3://%s/%s", s3Bucket, getS3BundleKey());
-        boolean graphAlreadyBuilt = FeedStore.s3Client.doesObjectExist(s3Bucket, getS3GraphKey());
+        // Note, an AmazonS3Exception will be thrown by S3 if the object does not exist. This is a feature to avoid
+        // revealing to non-authorized users whether the object actually exists. So, as long as permissions are
+        // configured correctly a 403 indicates it does not exist.
+        boolean graphAlreadyBuilt = false;
+        try{
+            graphAlreadyBuilt = FeedStore.s3Client.doesObjectExist(s3Bucket, getS3GraphKey());
+        } catch (AmazonS3Exception e) {
+            LOG.warn("Error checking if graph object exists. This is likely because it does not exist.", e);
+        }
         List<String> lines = new ArrayList<>();
         String routerName = "default";
         String routerDir = String.format("/var/%s/graphs/%s", tripPlanner, routerName);
