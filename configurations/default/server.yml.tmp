@@ -1,5 +1,6 @@
 application:
   assets_bucket: datatools-staging # dist directory
+  cloudfront_subdomain: abc123
   public_url: http://localhost:9966
   notifications_enabled: false
   port: 4000
