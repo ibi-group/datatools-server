@@ -364,6 +364,10 @@ public class DataManager {
         return node != null;
     }
 
+    /**
+     * Public getter method for the config file that does not contain any sensitive information. On the contrary, the
+     * {@link #envConfig} file should NOT be shared outside of this class and certainly not shared with the client.
+     */
     public static JsonNode getPublicConfig() {
         return serverConfig;
     }
