@@ -14,7 +14,7 @@ cache:
     - $HOME/.m2
     - $HOME/.cache/yarn
 before_install:
-  # install node 12
+  # Install node 12 (needed for maven-semantic-release).
   - nvm install 12
   #- sed -i.bak -e 's|https://nexus.codehaus.org/snapshots/|https://oss.sonatype.org/content/repositories/codehaus-snapshots/|g' ~/.m2/settings.xml
   # set region in AWS config for S3 setup
