@@ -15,7 +15,7 @@ public abstract class LoadFeedTest {
     public static FeedVersion version;
 
     @BeforeClass
-    public void setUp() {
+    public void setUp() throws Exception {
         DatatoolsTest.setUp();
         LOG.info("ProcessGtfsSnapshotMergeTest setup");
 

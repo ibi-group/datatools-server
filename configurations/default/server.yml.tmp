@@ -1,18 +1,38 @@
 application:
-  assets_bucket: datatools-staging # dist directory
+  assets_bucket: bucket-name
   public_url: http://localhost:9966
-  notifications_enabled: false
+  notifications_enabled: true
+  cors:
+    enabled: true
+    origins: https://google.com
+    methods:
+    headers:
   port: 4000
   data:
+    editor_mapdb: /tmp/editor/mapdb
+    mapdb: /tmp/mapdb
     gtfs: /tmp
     use_s3_storage: false
     s3_region: us-east-1
     gtfs_s3_bucket: bucket-name
 modules:
+  dump:
+    enabled: true
   enterprise:
     enabled: false
+  deployment:
+    enabled: true
   editor:
-    enabled: false
+    enabled: true
+    url: http://localhost:9001
+  alerts:
+    enabled: true
+    use_extension: mtc
+    url: /alerts
+  sign_config:
+    enabled: true
+    use_extension: mtc
+    url: /signs # eventually remove this
   user_admin:
     enabled: true
   # Enable GTFS+ module for testing purposes
@@ -21,10 +41,16 @@ modules:
   gtfsapi:
     enabled: true
     load_on_fetch: false
-    load_on_startup: false
-    use_extension: xyz
-#    update_frequency: 3600 # in seconds
+    # use_extension: mtc
+    # update_frequency: 30 # in seconds
+
 extensions:
+  mtc:
+    enabled: true
+    rtd_api: http://localhost:9876/
+    s3_bucket: bucket-name
+    s3_prefix: waiting/
+    s3_download_prefix: waiting/
   transitland:
     enabled: true
     api: https://transit.land/api/v1/feeds
@@ -32,6 +58,3 @@ extensions:
     enabled: true
     api: http://api.transitfeeds.com/v1/getFeeds
     key: your-api-key
-  # Enable MTC for testing purposes
-  mtc:
-    enabled: true

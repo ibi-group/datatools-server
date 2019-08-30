@@ -1,5 +1,6 @@
 package com.conveyal.datatools.editor;
 
+import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.editor.jobs.ProcessGtfsSnapshotMerge;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -7,7 +8,7 @@ import org.slf4j.LoggerFactory;
 /**
  * Created by landon on 2/24/17.
  */
-public class ProcessGtfsSnapshotMergeTest {
+public class ProcessGtfsSnapshotMergeTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(ProcessGtfsSnapshotMergeTest.class);
     static ProcessGtfsSnapshotMerge snapshotMerge;
     private static boolean setUpIsDone = false;

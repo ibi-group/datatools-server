@@ -378,11 +378,17 @@
             <version>2.14.0</version>
             <scope>test</scope>
         </dependency>
+        <!-- Used to write YAML files -->
+        <dependency>
+            <groupId>org.yaml</groupId>
+            <artifactId>snakeyaml</artifactId>
+            <version>1.23</version>
+        </dependency>
         <!-- Used for writing csv for merged feeds. Note: this appears to be one of the only
-        CSV libraries that will only quote values when necessary (e.g., there is a comma character
-        contained within the value) and that will work with an output stream writer when writing
-        directly to a zip output stream.
-         -->
+          CSV libraries that will only quote values when necessary (e.g., there is a comma character
+          contained within the value) and that will work with an output stream writer when writing
+          directly to a zip output stream.
+          -->
         <dependency>
             <groupId>net.sf.supercsv</groupId>
             <artifactId>super-csv</artifactId>
