@@ -42,9 +42,7 @@ public class EndToEndTest {
             // clone dev datatools-ui
             runCommand(
                 String.format(
-                    // temporarily clone e2e-coverage branch until that gets merged into dev
-                    "git clone -b e2e-coverage https://github.com/conveyal/datatools-ui.git %s",
-//                    "git clone https://github.com/conveyal/datatools-ui.git %s",
+                    "git clone https://github.com/ibi-group/datatools-ui.git %s",
                     datatoolsUiPath
                 )
             );
