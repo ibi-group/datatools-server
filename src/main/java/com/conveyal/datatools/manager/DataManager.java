@@ -301,7 +301,8 @@ public class DataManager {
         });
         // load index.html
         final String index = resourceToString("/public/index.html")
-                .replace("${CLOUDFRONT_SUBDOMAIN}", getConfigPropertyAsText("application.cloudfront_subdomain"));
+            .replace("${CLIENT_ASSERTS_URL}", getConfigPropertyAsText("application.client_assets_url"))
+            .replace("${SHORTCUT_ICON_URL}", getConfigPropertyAsText("application.shortcut_icon_url"));
         final String auth0html = resourceToString("/public/auth0-silent-callback.html");
 
         // auth0 silent callback
