@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.DatatoolsTest;
+import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0Users;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -38,7 +39,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
  * These tests verify that various Auth0 API calls behave as expected. The Auth0 server is mocked in order to return
  * certain responses needed to verify functionality.
  */
-public class UserControllerTest {
+public class UserControllerTest extends UnitTest {
     private String emailForExistingAccount = "test-existing-user@test.com";
     private ObjectMapper mapper = new ObjectMapper();
 
@@ -56,7 +57,7 @@ public class UserControllerTest {
      * Prepare and start a testing-specific web server
      */
     @BeforeClass
-    public static void setUp() {
+    public static void setUp() throws Exception {
         // start server if it isn't already running
         DatatoolsTest.setUp();
         // Set users URL to test domain used by wiremock.

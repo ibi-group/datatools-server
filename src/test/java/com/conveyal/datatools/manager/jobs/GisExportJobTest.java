@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.DatatoolsTest;
+import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -49,7 +50,7 @@ import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.lessThan;
 import static org.hamcrest.Matchers.notNullValue;
 
-public class GisExportJobTest {
+public class GisExportJobTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(GisExportJobTest.class);
     private static Project project;
     private static FeedVersion calTrainVersion;
@@ -62,7 +63,7 @@ public class GisExportJobTest {
     private static final double CALTRAIN_SOUTH = 37.002;
 
     @BeforeClass
-    public static void setUp() {
+    public static void setUp() throws IOException {
         DatatoolsTest.setUp();
         LOG.info("{} setup", GisExportJobTest.class.getSimpleName());
 
@@ -160,9 +161,10 @@ public class GisExportJobTest {
                 for (Property property : properties) {
                     String name = property.getName().toString();
                     Object value = property.getValue();
-                    LOG.info("{}: {}", name, value);
                     if ("the_geom".equals(name)) {
                         MultiLineString shape = (MultiLineString) value;
+                        // don't log entire linestring value as it severly clutters up the logs
+                        LOG.info("{}: ({} points)", name, shape.getNumPoints());
                         // Check that the geometry was exported properly.
                         assertThat(shape, notNullValue());
                         Coordinate[] coordinates = shape.getCoordinates();
@@ -175,6 +177,8 @@ public class GisExportJobTest {
                             assertThat(coordinate.y, greaterThan(CALTRAIN_SOUTH));
                             assertThat(coordinate.y, lessThan(CALTRAIN_NORTH));
                         }
+                    } else {
+                        LOG.info("{}: {}", name, value);
                     }
                 }
             }
