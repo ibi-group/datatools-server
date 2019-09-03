@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.TestUtils;
+import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
@@ -13,6 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Date;
 import java.util.HashSet;
@@ -24,7 +26,7 @@ import static org.junit.Assert.assertEquals;
 /**
  * Tests for the various {@link MergeFeedsJob} merge types.
  */
-public class MergeFeedsJobTest {
+public class MergeFeedsJobTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(MergeFeedsJobTest.class);
     private static FeedVersion bartVersion1;
     private static FeedVersion bartVersion2;
@@ -36,7 +38,7 @@ public class MergeFeedsJobTest {
      * Prepare and start a testing-specific web server
      */
     @BeforeClass
-    public static void setUp() {
+    public static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
         // Create a project, feed sources, and feed versions to merge.

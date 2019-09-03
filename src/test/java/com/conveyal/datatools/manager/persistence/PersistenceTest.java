@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.persistence;
 
 import com.conveyal.datatools.DatatoolsTest;
+import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Project;
 import org.junit.BeforeClass;
@@ -13,11 +14,11 @@ import static org.junit.Assert.assertEquals;
 /**
  * Created by landon on 9/6/17.
  */
-public class PersistenceTest {
+public class PersistenceTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(PersistenceTest.class);
 
     @BeforeClass
-    public static void setUp() {
+    public static void setUp() throws Exception {
         DatatoolsTest.setUp();
         LOG.info("{} setup", PersistenceTest.class.getSimpleName());
 

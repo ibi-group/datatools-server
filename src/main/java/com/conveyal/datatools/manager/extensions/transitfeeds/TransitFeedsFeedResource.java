@@ -7,8 +7,8 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,11 +28,11 @@ public class TransitFeedsFeedResource implements ExternalFeedResource {
 
     public static final Logger LOG = LoggerFactory.getLogger(TransitFeedsFeedResource.class);
 
-    private String api, apiKey;
+    private static final String api = "http://api.transitfeeds.com/v1/getFeeds";
+    private String apiKey;
 
     public TransitFeedsFeedResource () {
-        api = DataManager.getConfigPropertyAsText("extensions.transitfeeds.api");
-        apiKey = DataManager.getConfigPropertyAsText("extensions.transitfeeds.key");
+        apiKey = DataManager.getConfigPropertyAsText("TRANSITFEEDS_KEY");
     }
 
     @Override
@@ -45,9 +45,8 @@ public class TransitFeedsFeedResource implements ExternalFeedResource {
         LOG.info("Importing feeds from TransitFeeds");
 
         URL url;
-        ObjectMapper mapper = new ObjectMapper();
         // multiple pages for transitfeeds because of 100 feed limit per page
-        Boolean nextPage = true;
+        boolean nextPage = true;
         int count = 1;
 
         do {
@@ -90,7 +89,7 @@ public class TransitFeedsFeedResource implements ExternalFeedResource {
             String json = response.toString();
             JsonNode transitFeedNode = null;
             try {
-                transitFeedNode = mapper.readTree(json);
+                transitFeedNode = JsonUtil.objectMapper.readTree(json);
             } catch (IOException ex) {
                 LOG.error("Error parsing TransitFeeds JSON response");
                 throw ex;

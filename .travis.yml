@@ -2,7 +2,6 @@ dist: trusty # jdk 8 not available on xenial
 language: java
 java:
   - oraclejdk8
-install: true
 sudo: false
 # Install mongoDB to perform persistence tests
 services:
@@ -14,24 +13,46 @@ cache:
   directories:
     - $HOME/.m2
     - $HOME/.cache/yarn
+before_install:
+  #- sed -i.bak -e 's|https://nexus.codehaus.org/snapshots/|https://oss.sonatype.org/content/repositories/codehaus-snapshots/|g' ~/.m2/settings.xml
+  # run a script to see if the e2e tests should be ran. This script will set the environment variable SHOULD_RUN_E2E
+  # which is used in later travis commands.
+  - source ./scripts/check-if-e2e-tests-should-run-on-travis.sh
+  # set region in AWS config for S3 setup
+  # - mkdir ~/.aws && printf '%s\n' '[default]' 'aws_access_key_id=foo' 'aws_secret_access_key=bar' 'region=us-east-1' > ~/.aws/config
+  # add aws credentials for datatools-server
+  - if [ "$SHOULD_RUN_E2E" = "true" ]; then mkdir ~/.aws && printf '%s\n' '[default]' 'aws_access_key_id=${AWS_ACCESS_KEY_ID}' 'aws_secret_access_key=${AWS_SECRET_ACCESS_KEY}' 'region=us-east-1' > ~/.aws/config; else mkdir ~/.aws && printf '%s\n' '[default]' 'aws_access_key_id=foo' 'aws_secret_access_key=bar' 'region=us-east-1' > ~/.aws/config; fi
+  - cp configurations/default/server.yml.tmp configurations/default/server.yml
+  # create database for e2e (and unit) tests
+  - psql -U postgres -c 'CREATE DATABASE catalogue;'
+  # install node v12 here in order to run the e2e tests (and for maven-semantic-release).
+  - nvm install '12'
+# Skip the install step (mvn install).
+install: true
 # Install semantic-release
 before_script:
   - yarn global add @conveyal/maven-semantic-release semantic-release@15
   # Create dir for GTFS+ files (used during testing)
   - mkdir /tmp/gtfsplus
-before_install:
-#- sed -i.bak -e 's|https://nexus.codehaus.org/snapshots/|https://oss.sonatype.org/content/repositories/codehaus-snapshots/|g' ~/.m2/settings.xml
-# set region in AWS config for S3 setup
-- mkdir ~/.aws && printf '%s\n' '[default]' 'aws_access_key_id=foo' 'aws_secret_access_key=bar' 'region=us-east-1' > ~/.aws/config
-- cp configurations/default/server.yml.tmp configurations/default/server.yml
-# create database for tests
-- psql -U postgres -c 'CREATE DATABASE catalogue;'
 script:
-# package jar
-- mvn package
+  # run mvn package to make sure unit tests and packaging can work
+  - mvn package
+  # recursively copy coverage results into another folder so the e2e tests don't overwrite them
+  - cp -R target target-unit-test-results
+  # run just the e2e tests
+  - if [ "$SHOULD_RUN_E2E" = "true" ]; then RUN_E2E=true mvn test; fi
+  # recursively copy coverage results into another folder so the deployment results don't overwrite them
+  - if [ "$SHOULD_RUN_E2E" = "true" ]; then cp -R target target-e2e-test-results; fi
 after_success:
-  # this first codecov run will upload a report associated with the commit set through Travis CI environment variables
-  - bash <(curl -s https://codecov.io/bash)
+  # these first codecov runs will upload a report associated with the commit set through Travis CI environment variables
+  # use codecov script flags to upload the coverage report for the unit tests
+  - bash <(curl -s https://codecov.io/bash) -s target-unit-test-results -F unit_tests
+  # use codecov script flags to upload the coverage report for the e2e tests
+  - |
+    if [ "$SHOULD_RUN_E2E" = "true" ]; then
+      bash <(curl -s https://codecov.io/bash) -s target-e2e-test-results -F end_to_end_tests;
+    fi
+
   # run maven-semantic-release to potentially create a new release of datatools-server. The flag --skip-maven-deploy is
   # used to avoid deploying to maven central. So essentially, this just creates a release with a changelog on github.
   #
@@ -40,18 +61,20 @@ after_success:
   # initiated the Travis build, the report will not be associated with the commits that maven-semantic-release performed
   # (if it ended up creating a release and the two commits that were a part of that workflow). Therefore, if on master
   # codecov needs to be ran two more times to create codecov reports for the commits made by maven-semantic-release.
-  # See https://github.com/conveyal/gtfs-lib/issues/193.
+  # See https://github.com/conveyal/gtfs-lib/issues/193. In order to create reports for both the unit and e2e tsts,
+  # the codecov scripts must be ran twice.
   #
   # The git commands get the commit hash of the HEAD commit and the commit just before HEAD.
   - |
     semantic-release --prepare @conveyal/maven-semantic-release --publish @semantic-release/github,@conveyal/maven-semantic-release --verify-conditions @semantic-release/github,@conveyal/maven-semantic-release --verify-release @conveyal/maven-semantic-release --use-conveyal-workflow --dev-branch=dev --skip-maven-deploy
     if [[ "$TRAVIS_BRANCH" = "master" ]]; then
-      bash <(curl -s https://codecov.io/bash) -C "$(git rev-parse HEAD)"
-      bash <(curl -s https://codecov.io/bash) -C "$(git rev-parse HEAD^)"
+      bash <(curl -s https://codecov.io/bash) -C "$(git rev-parse HEAD)" -s target-unit-test-results -F unit_tests
+      bash <(curl -s https://codecov.io/bash) -C "$(git rev-parse HEAD^)" -s target-unit-test-results -F unit_tests
+      if [ "$SHOULD_RUN_E2E" = "true" ]; then
+        bash <(curl -s https://codecov.io/bash) -C "$(git rev-parse HEAD)" -s target-e2e-test-results -F end_to_end_tests;
+        bash <(curl -s https://codecov.io/bash) -C "$(git rev-parse HEAD^)" -s target-e2e-test-results -F end_to_end_tests;
+      fi
     fi
-notifications:
-  # notify slack channel of build status
-  slack: conveyal:WQxmWiu8PdmujwLw4ziW72Gc
 before_deploy:
 # get branch name of current branch for use in jar name: https://graysonkoonce.com/getting-the-current-branch-name-during-a-pull-request-in-travis-ci/
 - export BRANCH=$(if [ "$TRAVIS_PULL_REQUEST" == "false" ]; then echo $TRAVIS_BRANCH; else echo $TRAVIS_PULL_REQUEST_BRANCH; fi)

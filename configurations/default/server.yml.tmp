@@ -1,5 +1,5 @@
 application:
-  assets_bucket: datatools-staging # dist directory
+  assets_bucket: bucket-name
   public_url: http://localhost:9966
   notifications_enabled: false
   port: 4000
@@ -11,6 +11,8 @@ application:
 modules:
   enterprise:
     enabled: false
+  deployment:
+    enabled: true
   editor:
     enabled: false
   deployment:
@@ -30,9 +32,8 @@ modules:
   gtfsapi:
     enabled: true
     load_on_fetch: false
-    load_on_startup: false
-    use_extension: xyz
-#    update_frequency: 3600 # in seconds
+    # use_extension: mtc
+    # update_frequency: 30 # in seconds
 extensions:
   transitland:
     enabled: true
@@ -40,7 +41,3 @@ extensions:
   transitfeeds:
     enabled: true
     api: http://api.transitfeeds.com/v1/getFeeds
-    key: your-api-key
-  # Enable MTC for testing purposes
-  mtc:
-    enabled: true

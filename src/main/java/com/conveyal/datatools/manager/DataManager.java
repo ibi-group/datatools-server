@@ -368,6 +368,14 @@ public class DataManager {
     }
 
     /**
+     * Public getter method for the config file that does not contain any sensitive information. On the contrary, the
+     * {@link #envConfig} file should NOT be shared outside of this class and certainly not shared with the client.
+     */
+    public static JsonNode getPublicConfig() {
+        return serverConfig;
+    }
+
+    /**
      * Convenience function to get a config property (nested fields defined by dot notation "data.use_s3_storage") as
      * JsonNode. Checks server.yml, then env.yml, and finally returns null if property is not found.
      */
