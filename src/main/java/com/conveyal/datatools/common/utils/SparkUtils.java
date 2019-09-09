@@ -122,7 +122,7 @@ public class SparkUtils {
             if (bugsnag != null && e != null) {
                 // create report to send to bugsnag
                 Report report = bugsnag.buildReport(e);
-                Auth0UserProfile userProfile = request.attribute("user");
+                Auth0UserProfile userProfile = request != null ? request.attribute("user") : null;
                 String userEmail = userProfile != null ? userProfile.getEmail() : "no-auth";
                 report.setUserEmail(userEmail);
                 bugsnag.notify(report);
@@ -218,11 +218,16 @@ public class SparkUtils {
         String bodyString,
         int statusCode
     ) {
+        // If request is null, log warning and exit. We do not want to hit an NPE in this method.
+        if (request == null) {
+            LOG.warn("Request object is null. Cannot log.");
+            return;
+        }
         Auth0UserProfile userProfile = request.attribute("user");
         String userEmail = userProfile != null ? userProfile.getEmail() : "no-auth";
         String queryString = request.queryParams().size() > 0 ? "?" + request.queryString() : "";
         LOG.info(
-            "{} {} {}: {}{}{}{}",
+            "{} {} {}: {}{}{} {}",
             logRequest ? "req" : String.format("res (%s)", statusCode),
             userEmail,
             request.requestMethod(),

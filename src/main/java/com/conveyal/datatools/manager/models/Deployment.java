@@ -1,6 +1,8 @@
 package com.conveyal.datatools.manager.models;
 
+import com.amazonaws.services.ec2.model.Filter;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.controllers.api.DeploymentController;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.StringUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
@@ -29,6 +31,7 @@ import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -106,6 +109,13 @@ public class Deployment extends Model implements Serializable {
         }
 
         return ret;
+    }
+
+    /** All of the feed versions used in this deployment, summarized so that the Internet won't break */
+    @JsonProperty("ec2Instances")
+    public List<EC2InstanceSummary> retrieveEC2Instances() {
+        Filter deploymentFilter = new Filter("tag:deploymentId", Collections.singletonList(id));
+        return DeploymentController.fetchEC2InstanceSummaries(deploymentFilter);
     }
 
     public void storeFeedVersions(Collection<FeedVersion> versions) {
@@ -243,7 +253,8 @@ public class Deployment extends Model implements Serializable {
         // do nothing.
     }
 
-    /** Dump this deployment to the given file
+    /**
+     * Dump this deployment to the given output file.
      * @param output the output file
      * @param includeOsm should an osm.pbf file be included in the dump?
      * @param includeOtpConfig should OTP build-config.json and router-config.json be included?
@@ -435,9 +446,9 @@ public class Deployment extends Model implements Serializable {
     /**
      * Get the deployments currently deployed to a particular server and router combination.
      */
-    public static FindIterable<Deployment> retrieveDeploymentForServerAndRouterId(String server, String routerId) {
+    public static FindIterable<Deployment> retrieveDeploymentForServerAndRouterId(String serverId, String routerId) {
         return Persistence.deployments.getMongoCollection().find(and(
-                eq("deployedTo", server),
+                eq("deployedTo", serverId),
                 eq("routerId", routerId)
         ));
     }

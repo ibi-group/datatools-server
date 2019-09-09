@@ -9,7 +9,6 @@ import com.amazonaws.services.ec2.model.TerminateInstancesResult;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancing;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClient;
 import com.amazonaws.services.elasticloadbalancingv2.model.RegisterTargetsRequest;
-import com.amazonaws.services.elasticloadbalancingv2.model.RegisterTargetsResult;
 import com.amazonaws.services.elasticloadbalancingv2.model.TargetDescription;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.models.Deployment;
@@ -25,6 +24,10 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 
+/**
+ * Job that is dispatched during a {@link DeployJob} that spins up EC2 instances. This handles waiting for the server to
+ * come online and for the OTP application/API to become available.
+ */
 public class MonitorServerStatusJob extends MonitorableJob {
     private static final Logger LOG = LoggerFactory.getLogger(MonitorServerStatusJob.class);
     private final Deployment deployment;
@@ -50,7 +53,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
     @Override
     public void jobLogic() {
         long startTime = System.currentTimeMillis();
-        // FIXME use private IP?
+        // Get OTP URL for instance to check for availability.
         String otpUrl = String.format("http://%s/otp", instance.getPublicIpAddress());
         boolean otpIsRunning = false, routerIsAvailable = false;
         // Progressively check status of OTP server
@@ -82,21 +85,16 @@ public class MonitorServerStatusJob extends MonitorableJob {
             routerIsAvailable = checkForSuccessfulRequest(routerUrl, 5);
         }
         status.update(String.format("Graph build completed on server %s (%s).", instance.getInstanceId(), routerUrl), 90);
-        if (otpServer.targetGroupArn != null) {
+        if (otpServer.ec2Info.targetGroupArn != null) {
             // After the router is available, the EC2 instance can be registered with the load balancer.
             // REGISTER INSTANCE WITH LOAD BALANCER
             AmazonElasticLoadBalancing elbClient = AmazonElasticLoadBalancingClient.builder().build();
             RegisterTargetsRequest registerTargetsRequest = new RegisterTargetsRequest()
-                    .withTargetGroupArn(otpServer.targetGroupArn)
+                    .withTargetGroupArn(otpServer.ec2Info.targetGroupArn)
                     .withTargets(new TargetDescription().withId(instance.getInstanceId()));
-            RegisterTargetsResult registerTargetsResult = elbClient.registerTargets(registerTargetsRequest);
-//            try {
-//                elbClient.waiters().targetInService().run(new WaiterParameters<>(new DescribeTargetHealthRequest().withTargetGroupArn(otpServer.targetGroupArn)));
-//            } catch (Exception e) {
-//                e.printStackTrace();
-//            }
+            elbClient.registerTargets(registerTargetsRequest);
             // FIXME how do we know it was successful?
-            String message = String.format("Server %s successfully registered with load balancer %s", instance.getInstanceId(), otpServer.targetGroupArn);
+            String message = String.format("Server %s successfully registered with load balancer %s", instance.getInstanceId(), otpServer.ec2Info.targetGroupArn);
             LOG.info(message);
             status.update(false, message, 100, true);
         } else {

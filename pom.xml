@@ -43,6 +43,7 @@
         <!-- Using the latest version of geotools (e.g, 20) seems to cause issues with the shapefile
         plugin where the_geom for each feature is null. -->
         <geotools.version>17.5</geotools.version>
+        <awsjavasdk.version>1.11.625</awsjavasdk.version>
     </properties>
     <build>
         <resources>
@@ -398,12 +399,17 @@
         <dependency>
             <groupId>com.amazonaws</groupId>
             <artifactId>aws-java-sdk-ec2</artifactId>
-            <version>1.11.410</version>
+            <version>${awsjavasdk.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.amazonaws</groupId>
+            <artifactId>aws-java-sdk-iam</artifactId>
+            <version>${awsjavasdk.version}</version>
         </dependency>
         <dependency>
             <groupId>com.amazonaws</groupId>
             <artifactId>aws-java-sdk-elasticloadbalancingv2</artifactId>
-            <version>1.11.410</version>
+            <version>${awsjavasdk.version}</version>
         </dependency>
     </dependencies>
 

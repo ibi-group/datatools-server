@@ -19,11 +19,6 @@ modules:
     enabled: false
     ec2:
       enabled: false
-      subnet: subnet-id
-      securityGroup: security-group-id
-      ami: ami-id
-      arn: arn
-      keyName: some-pem-file-without-suffix
   user_admin:
     enabled: true
   # Enable GTFS+ module for testing purposes

@@ -15,9 +15,9 @@ import com.amazonaws.services.ec2.model.Reservation;
 import com.amazonaws.services.ec2.model.RunInstancesRequest;
 import com.amazonaws.services.ec2.model.Tag;
 import com.amazonaws.services.ec2.model.TerminateInstancesRequest;
-import com.amazonaws.services.ec2.model.TerminateInstancesResult;
+import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancing;
+import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClient;
 import com.amazonaws.services.elasticloadbalancingv2.model.DeregisterTargetsRequest;
-import com.amazonaws.services.elasticloadbalancingv2.model.DeregisterTargetsResult;
 import com.amazonaws.services.elasticloadbalancingv2.model.TargetDescription;
 import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.amazonaws.services.s3.model.CopyObjectRequest;
@@ -53,7 +53,9 @@ import com.amazonaws.waiters.Waiter;
 import com.amazonaws.waiters.WaiterParameters;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.controllers.api.ServerController;
 import com.conveyal.datatools.manager.models.Deployment;
+import com.conveyal.datatools.manager.models.EC2InstanceSummary;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -62,6 +64,7 @@ import org.apache.commons.codec.binary.Base64;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.conveyal.datatools.manager.controllers.api.ServerController.getIds;
 import static com.conveyal.datatools.manager.models.Deployment.DEFAULT_OTP_VERSION;
 import static com.conveyal.datatools.manager.models.Deployment.DEFAULT_R5_VERSION;
 
@@ -75,6 +78,8 @@ public class DeployJob extends MonitorableJob {
     private static final Logger LOG = LoggerFactory.getLogger(DeployJob.class);
     private static final String bundlePrefix = "bundles";
     public static final String DEFAULT_INSTANCE_TYPE = "t2.medium";
+    private static final String AMI_CONFIG_PATH = "modules.deployment.ec2.default_ami";
+    public static final String DEFAULT_AMI_ID = DataManager.getConfigPropertyAsText(AMI_CONFIG_PATH);
     /** 
      * S3 bucket to upload deployment to. If not null, uses {@link OtpServer#s3Bucket}. Otherwise, defaults to 
      * {@link DataManager#feedBucket}
@@ -101,14 +106,16 @@ public class DeployJob extends MonitorableJob {
 
     private String statusMessage;
     private int serverCounter = 0;
-//    private String imageId;
     private String dateString = DATE_FORMAT.format(new Date());
-    List<String> amiNameFilter = Collections.singletonList("ubuntu/images/hvm-ssd/ubuntu-xenial-16.04-amd64-server-????????");
-    List<String> amiStateFilter = Collections.singletonList("available");
 
     @JsonProperty
     public String getDeploymentId () {
         return deployment.id;
+    }
+
+    @JsonProperty
+    public String getServerId () {
+        return otpServer.id;
     }
 
     public DeployJob(Deployment deployment, String owner, OtpServer otpServer) {
@@ -128,13 +135,12 @@ public class DeployJob extends MonitorableJob {
         // CONNECT TO EC2
         // FIXME Should this ec2 client be longlived?
         ec2 = AmazonEC2Client.builder().build();
-//        imageId = ec2.describeImages(new DescribeImagesRequest().withOwners("099720109477").withFilters(new Filter("name", amiNameFilter), new Filter("state", amiStateFilter))).getImages().get(0).getImageId();
     }
 
     public void jobLogic () {
         if (otpServer.s3Bucket != null) totalTasks++;
         // FIXME
-        if (otpServer.targetGroupArn != null) totalTasks++;
+        if (otpServer.ec2Info.targetGroupArn != null) totalTasks++;
         try {
             deploymentTempFile = File.createTempFile("deployment", ".zip");
         } catch (IOException e) {
@@ -165,7 +171,7 @@ public class DeployJob extends MonitorableJob {
         status.built = true;
 
         // Upload to S3, if specifically required by the OTPServer or needed for servers in the target group to fetch.
-        if (otpServer.s3Bucket != null || otpServer.targetGroupArn != null) {
+        if (otpServer.s3Bucket != null || otpServer.ec2Info.targetGroupArn != null) {
             if (!DataManager.useS3) {
                 String message = "Cannot upload deployment to S3. Application not configured for s3 storage.";
                 LOG.error(message);
@@ -183,7 +189,7 @@ public class DeployJob extends MonitorableJob {
         }
 
         // Handle spinning up new EC2 servers for the load balancer's target group.
-        if (otpServer.targetGroupArn != null) {
+        if (otpServer.ec2Info.targetGroupArn != null) {
             if ("true".equals(DataManager.getConfigPropertyAsText("modules.deployment.ec2.enabled"))) {
                 replaceEC2Servers();
                 // If creating a new server, there is no need to deploy to an existing one.
@@ -207,6 +213,9 @@ public class DeployJob extends MonitorableJob {
         status.completed = true;
     }
 
+    /**
+     * Upload to S3 the transit data bundle zip that contains GTFS zip files, OSM data, and config files.
+     */
     private void uploadBundleToS3() throws InterruptedException, AmazonClientException {
         status.message = "Uploading to s3://" + s3Bucket;
         status.uploadingS3 = true;
@@ -409,25 +418,24 @@ public class DeployJob extends MonitorableJob {
         NotifyUsersForSubscriptionJob.createNotification("deployment-updated", deployment.id, message);
     }
 
-    public void replaceEC2Servers() {
+
+    private void replaceEC2Servers() {
         try {
+            // Track any previous instances running for the server we're deploying to in order to de-register and
+            // terminate them later.
+            List<EC2InstanceSummary> previousInstances = otpServer.retrieveEC2InstanceSummaries();
             // First start graph-building instance and wait for graph to successfully build.
+            status.message = "Starting up graph building EC2 instance";
             List<Instance> instances = startEC2Instances(1);
-            if (instances.size() > 1) {
-                // FIXME is this check/shutdown entirely unnecessary?
-                status.fail("CRITICAL: More than one server initialized for graph building. Cancelling job. Please contact system administrator.");
-                // Terminate new instances.
-                // FIXME Should this ec2 client be longlived?
-                ec2.terminateInstances(new TerminateInstancesRequest(getIds(instances)));
-            }
-            // FIXME What if instances list is empty?
+            status.message = "Waiting for graph build to complete...";
             MonitorServerStatusJob monitorInitialServerJob = new MonitorServerStatusJob(owner, deployment, instances.get(0), otpServer);
             monitorInitialServerJob.run();
             status.update("Graph build is complete!", 50);
             // Spin up remaining servers which will download the graph from S3.
-            int remainingServerCount = otpServer.instanceCount <= 0 ? 0 : otpServer.instanceCount - 1;
+            int remainingServerCount = otpServer.ec2Info.instanceCount <= 0 ? 0 : otpServer.ec2Info.instanceCount - 1;
             if (remainingServerCount > 0) {
                 // Spin up remaining EC2 instances.
+                status.message = String.format("Spinning up remaining %d instance(s).", remainingServerCount);
                 List<Instance> remainingInstances = startEC2Instances(remainingServerCount);
                 instances.addAll(remainingInstances);
                 // Create new thread pool to monitor server setup so that the servers are monitored in parallel.
@@ -443,31 +451,31 @@ public class DeployJob extends MonitorableJob {
                 service.awaitTermination(4, TimeUnit.HOURS);
             }
             String finalMessage = "Server setup is complete!";
-            if (otpServer.instanceIds != null) {
+            // Get EC2 servers running that are associated with this server.
+            List<String> instanceIds = previousInstances.stream()
+                .filter(instance -> "running".equals(instance.state.getName()))
+                .map(instance -> instance.instanceId)
+                .collect(Collectors.toList());
+            if (instanceIds.size() > 0) {
                 // Deregister old instances from load balancer. (Note: new instances are registered with load balancer in
                 // MonitorServerStatusJob.)
-                LOG.info("Deregistering instances from load balancer {}", otpServer.instanceIds);
-                TargetDescription[] targetDescriptions = otpServer.instanceIds
-                        .stream()
-                        .map(id -> new TargetDescription().withId(id)).toArray(TargetDescription[]::new);
+                LOG.info("De-registering instances from load balancer {}", instanceIds);
+                TargetDescription[] targetDescriptions = instanceIds.stream()
+                    .map(id -> new TargetDescription().withId(id))
+                    .toArray(TargetDescription[]::new);
                 DeregisterTargetsRequest deregisterTargetsRequest = new DeregisterTargetsRequest()
-                        .withTargetGroupArn(otpServer.targetGroupArn)
-                        .withTargets(targetDescriptions);
-                DeregisterTargetsResult deregisterTargetsResult = com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClient.builder().build()
-                        .deregisterTargets(deregisterTargetsRequest);
-                // Terminate old instances.
-                LOG.info("Terminating instances {}", otpServer.instanceIds);
+                    .withTargetGroupArn(otpServer.ec2Info.targetGroupArn)
+                    .withTargets(targetDescriptions);
+                AmazonElasticLoadBalancing elb = AmazonElasticLoadBalancingClient.builder().build();
+                elb.deregisterTargets(deregisterTargetsRequest);
                 try {
-                    TerminateInstancesRequest terminateInstancesRequest = new TerminateInstancesRequest().withInstanceIds(otpServer.instanceIds);
-                    TerminateInstancesResult terminateInstancesResult = ec2.terminateInstances(terminateInstancesRequest);
+                    ServerController.terminateInstances(instanceIds);
                 } catch (AmazonEC2Exception e) {
-                    LOG.warn("Could not terminate EC2 instances {}", otpServer.instanceIds);
-                    finalMessage = String.format("Server setup is complete! (WARNING: Could not terminate previous EC2 instances: %s", otpServer.instanceIds);
+                    LOG.warn("Could not terminate EC2 instances {}", instanceIds);
+                    finalMessage = String.format("Server setup is complete! (WARNING: Could not terminate previous EC2 instances: %s", instanceIds);
                 }
             }
-            // Update list of instance IDs with new list.
-            Persistence.servers.updateField(otpServer.id, "instanceIds", getIds(instances));
-            // Job is complete? FIXME Do we need a status check here?
+            // Job is complete.
             status.update(false, finalMessage, 100, true);
         } catch (Exception e) {
             LOG.error("Could not deploy to EC2 server", e);
@@ -475,39 +483,52 @@ public class DeployJob extends MonitorableJob {
         }
     }
 
+    /**
+     * Start the specified number of EC2 instances based on the {@link OtpServer#ec2Info}.
+     * @param count number of EC2 instances to start
+     * @return a list of the instances is returned once the public IP addresses have been assigned
+     */
     private List<Instance> startEC2Instances(int count) {
-        String instanceType = otpServer.instanceType == null ? DEFAULT_INSTANCE_TYPE : otpServer.instanceType;
+        String instanceType = otpServer.ec2Info.instanceType == null ? DEFAULT_INSTANCE_TYPE : otpServer.ec2Info.instanceType;
         // User data should contain info about:
         // 1. Downloading GTFS/OSM info (s3)
         // 2. Time to live until shutdown/termination (for test servers)
         // 3. Hosting / nginx
         // FIXME: Allow for r5 servers to be created.
-        String userData = constructUserData(deployment.r5);
+        String userData = constructUserData();
         // The subnet ID should only change if starting up a server in some other AWS account. This is not
         // likely to be a requirement.
         // Define network interface so that a public IP can be associated with server.
         InstanceNetworkInterfaceSpecification interfaceSpecification = new InstanceNetworkInterfaceSpecification()
-                .withSubnetId(DataManager.getConfigPropertyAsText("modules.deployment.ec2.subnet"))
+                .withSubnetId(otpServer.ec2Info.subnetId)
                 .withAssociatePublicIpAddress(true)
-                .withGroups(DataManager.getConfigPropertyAsText("modules.deployment.ec2.securityGroup"))
+                .withGroups(otpServer.ec2Info.securityGroupId)
                 .withDeviceIndex(0);
-
+        // If AMI not defined, use the default AMI ID.
+        String amiId = otpServer.ec2Info.amiId;
+        if (amiId == null) {
+            amiId = DEFAULT_AMI_ID;
+            // Verify that AMI is correctly defined.
+            if (amiId == null || !ServerController.amiExists(amiId)) {
+                statusMessage = String.format(
+                    "Default AMI ID (%s) is missing or bad. Should be provided in config at %s",
+                    amiId,
+                    AMI_CONFIG_PATH);
+                LOG.error(statusMessage);
+                status.fail(statusMessage);
+            }
+        }
         RunInstancesRequest runInstancesRequest = new RunInstancesRequest()
                 .withNetworkInterfaces(interfaceSpecification)
                 .withInstanceType(instanceType)
                 .withMinCount(count)
                 .withMaxCount(count)
-                .withImageId(DataManager.getConfigPropertyAsText("modules.deployment.ec2.ami"))
-                .withKeyName(DataManager.getConfigPropertyAsText("modules.deployment.ec2.keyName"))
+                .withIamInstanceProfile(new IamInstanceProfileSpecification().withArn(otpServer.ec2Info.iamRoleArn))
+                .withImageId(amiId)
+                .withKeyName(otpServer.ec2Info.keyName)
                 // This will have the instance terminate when it is shut down.
                 .withInstanceInitiatedShutdownBehavior("terminate")
                 .withUserData(Base64.encodeBase64String(userData.getBytes()));
-        // Set IAM instance profile if specified.
-        if (DataManager.hasConfigProperty("modules.deployment.ec2.arn")) {
-            IamInstanceProfileSpecification instanceProfile = new IamInstanceProfileSpecification()
-                .withArn(DataManager.getConfigPropertyAsText("modules.deployment.ec2.arn"));
-            runInstancesRequest.setIamInstanceProfile(instanceProfile);
-        }
         final List<Instance> instances = ec2.runInstances(runInstancesRequest).getReservation().getInstances();
 
         List<String> instanceIds = getIds(instances);
@@ -515,7 +536,6 @@ public class DeployJob extends MonitorableJob {
         // Wait so that create tags request does not fail because instances not found.
         try {
             Waiter<DescribeInstanceStatusRequest> waiter = ec2.waiters().instanceStatusOk();
-//            ec2.waiters().systemStatusOk()
             long beginWaiting = System.currentTimeMillis();
             waiter.run(new WaiterParameters<>(new DescribeInstanceStatusRequest().withInstanceIds(instanceIds)));
             LOG.info("Instance status is OK after {} ms", (System.currentTimeMillis() - beginWaiting));
@@ -533,6 +553,9 @@ public class DeployJob extends MonitorableJob {
             ec2.createTags(new CreateTagsRequest()
                     .withTags(new Tag("Name", serverName))
                     .withTags(new Tag("projectId", deployment.projectId))
+                    .withTags(new Tag("deploymentId", deployment.id))
+                    .withTags(new Tag("jobId", this.jobId))
+                    .withTags(new Tag("serverId", otpServer.id))
                     .withResources(instance.getInstanceId())
             );
         }
@@ -543,8 +566,8 @@ public class DeployJob extends MonitorableJob {
             // been assigned).
             updatedInstances.clear();
             // Check that all of the instances have public IPs.
-            DescribeInstancesRequest describeInstancesRequest = new DescribeInstancesRequest().withInstanceIds(instanceIds);
-            List<Reservation> reservations = ec2.describeInstances(describeInstancesRequest).getReservations();
+            DescribeInstancesRequest request = new DescribeInstancesRequest().withInstanceIds(instanceIds);
+            List<Reservation> reservations = ec2.describeInstances(request).getReservations();
             for (Reservation reservation  : reservations) {
                 for (Instance instance : reservation.getInstances()) {
                     instanceIpAddresses.put(instance.getInstanceId(), instance.getPublicIpAddress());
@@ -552,7 +575,9 @@ public class DeployJob extends MonitorableJob {
                 }
             }
             try {
-                Thread.sleep(10000);
+                int sleepTimeMillis = 10000;
+                LOG.info("Waiting {} seconds...", sleepTimeMillis / 1000);
+                Thread.sleep(sleepTimeMillis);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -561,20 +586,20 @@ public class DeployJob extends MonitorableJob {
         return updatedInstances;
     }
 
-    private List<String> getIds (List<Instance> instances) {
-        return instances.stream().map(Instance::getInstanceId).collect(Collectors.toList());
-    }
-
-    private String constructUserData(boolean r5) {
+    /**
+     * Construct the user data script (as string) that should be provided to the AMI and executed upon EC2 instance
+     * startup.
+     */
+    private String constructUserData() {
         // Prefix/name of JAR file (WITHOUT .jar)
-        String jarName = r5 ? deployment.r5Version : deployment.otpVersion;
+        String jarName = deployment.r5 ? deployment.r5Version : deployment.otpVersion;
         if (jarName == null) {
             // If there is no version specified, use the default (and persist value).
-            jarName = r5 ? DEFAULT_R5_VERSION : DEFAULT_OTP_VERSION;
-            Persistence.deployments.updateField(deployment.id, r5 ? "r5Version" : "otpVersion", jarName);
+            jarName = deployment.r5 ? DEFAULT_R5_VERSION : DEFAULT_OTP_VERSION;
+            Persistence.deployments.updateField(deployment.id, deployment.r5 ? "r5Version" : "otpVersion", jarName);
         }
-        String tripPlanner = r5 ? "r5" : "otp";
-        String s3JarBucket = r5 ? "r5-builds" : "opentripplanner-builds";
+        String tripPlanner = deployment.r5 ? "r5" : "otp";
+        String s3JarBucket = deployment.r5 ? "r5-builds" : "opentripplanner-builds";
         String s3JarUrl = String.format("https://%s.s3.amazonaws.com/%s.jar", s3JarBucket, jarName);
         // TODO Check that jar URL exists?
         String jarDir = String.format("/opt/%s", tripPlanner);

@@ -1,10 +1,18 @@
 package com.conveyal.datatools.manager.controllers.api;
 
+import com.amazonaws.services.ec2.AmazonEC2;
+import com.amazonaws.services.ec2.AmazonEC2Client;
+import com.amazonaws.services.ec2.model.DescribeInstancesRequest;
+import com.amazonaws.services.ec2.model.DescribeInstancesResult;
+import com.amazonaws.services.ec2.model.Filter;
+import com.amazonaws.services.ec2.model.Instance;
+import com.amazonaws.services.ec2.model.Reservation;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.DeployJob;
 import com.conveyal.datatools.manager.models.Deployment;
+import com.conveyal.datatools.manager.models.EC2InstanceSummary;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
@@ -24,6 +32,7 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -44,6 +53,7 @@ public class DeploymentController {
     private static JsonManager<Deployment> json = new JsonManager<>(Deployment.class, JsonViews.UserInterface.class);
     private static final Logger LOG = LoggerFactory.getLogger(DeploymentController.class);
     private static Map<String, DeployJob> deploymentJobsByServer = new HashMap<>();
+    private static final AmazonEC2 ec2 = AmazonEC2Client.builder().build();
 
     /**
      * Gets the deployment specified by the request's id parameter and ensure that user has access to the
@@ -242,6 +252,33 @@ public class DeploymentController {
     }
 
     /**
+     * HTTP controller to fetch information about provided EC2 machines that power ELBs running a trip planner.
+     */
+    private static List<EC2InstanceSummary> fetchEC2InstanceSummaries(Request req, Response res) {
+        Deployment deployment = checkDeploymentPermissions(req, res);
+        return deployment.retrieveEC2Instances();
+    }
+
+    /**
+     * Fetches list of {@link EC2InstanceSummary} for all instances matching the provided filters.
+     */
+    public static List<EC2InstanceSummary> fetchEC2InstanceSummaries(Filter... filters) {
+        return fetchEC2Instances(filters).stream().map(EC2InstanceSummary::new).collect(Collectors.toList());
+    }
+
+    public static List<Instance> fetchEC2Instances(Filter... filters) {
+        List<Instance> instances = new ArrayList<>();
+        DescribeInstancesRequest request = new DescribeInstancesRequest().withFilters(filters);
+        DescribeInstancesResult result = ec2.describeInstances(request);
+        for (Reservation reservation : result.getReservations()) {
+            instances.addAll(reservation.getInstances());
+        }
+        // Sort by launch time (most recent first).
+        instances.sort(Comparator.comparing(Instance::getLaunchTime).reversed());
+        return instances;
+    }
+
+    /**
      * Create a deployment bundle, and send it to the specified OTP target servers (or the specified s3 bucket).
      */
     private static String deploy (Request req, Response res) {
@@ -313,6 +350,7 @@ public class DeploymentController {
         }), json::write);
         options(apiPrefix + "secure/deployments", (q, s) -> "");
         get(apiPrefix + "secure/deployments/:id/download", DeploymentController::downloadDeployment);
+        get(apiPrefix + "secure/deployments/:id/ec2", DeploymentController::fetchEC2InstanceSummaries, json::write);
         get(apiPrefix + "secure/deployments/:id", DeploymentController::getDeployment, json::write);
         delete(apiPrefix + "secure/deployments/:id", DeploymentController::deleteDeployment, json::write);
         get(apiPrefix + "secure/deployments", DeploymentController::getAllDeployments, json::write);
