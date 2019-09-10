@@ -139,8 +139,7 @@ public class DeployJob extends MonitorableJob {
 
     public void jobLogic () {
         if (otpServer.s3Bucket != null) totalTasks++;
-        // FIXME
-        if (otpServer.ec2Info.targetGroupArn != null) totalTasks++;
+        if (otpServer.ec2Info != null) totalTasks++;
         try {
             deploymentTempFile = File.createTempFile("deployment", ".zip");
         } catch (IOException e) {
@@ -171,7 +170,7 @@ public class DeployJob extends MonitorableJob {
         status.built = true;
 
         // Upload to S3, if specifically required by the OTPServer or needed for servers in the target group to fetch.
-        if (otpServer.s3Bucket != null || otpServer.ec2Info.targetGroupArn != null) {
+        if (otpServer.s3Bucket != null || otpServer.ec2Info != null) {
             if (!DataManager.useS3) {
                 String message = "Cannot upload deployment to S3. Application not configured for s3 storage.";
                 LOG.error(message);
@@ -189,7 +188,7 @@ public class DeployJob extends MonitorableJob {
         }
 
         // Handle spinning up new EC2 servers for the load balancer's target group.
-        if (otpServer.ec2Info.targetGroupArn != null) {
+        if (otpServer.ec2Info != null) {
             if ("true".equals(DataManager.getConfigPropertyAsText("modules.deployment.ec2.enabled"))) {
                 replaceEC2Servers();
                 // If creating a new server, there is no need to deploy to an existing one.

@@ -94,9 +94,11 @@ public class ServerController {
 
     private static OtpServer deleteServer(Request req, Response res) {
         OtpServer server = checkServerPermissions(req, res);
-        List<Instance> instances = server.retrieveEC2Instances();
-        if (instances.size() > 0) {
-            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Cannot delete server with active EC2 instances: " + getIds(instances));
+        List<Instance> activeInstances = server.retrieveEC2Instances().stream()
+            .filter(instance -> "running".equals(instance.getState().getName()))
+            .collect(Collectors.toList());
+        if (activeInstances.size() > 0) {
+            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Cannot delete server with active EC2 instances: " + getIds(activeInstances));
         }
         server.delete();
         return server;
