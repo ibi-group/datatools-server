@@ -13,20 +13,22 @@ import java.util.List;
  */
 public class EC2InstanceSummary implements Serializable {
     private static final long serialVersionUID = 1L;
-    public final String privateIpAddress;
-    public final String publicIpAddress;
-    public final String publicDnsName;
-    public final String instanceType;
-    public final String instanceId;
-    public final String imageId;
-    public final String projectId;
-    public final String deploymentId;
-    public final String name;
-    public final InstanceState state;
-    public final String availabilityZone;
-    public final Date launchTime;
-    public final String stateTransitionReason;
+    public String privateIpAddress;
+    public String publicIpAddress;
+    public String publicDnsName;
+    public String instanceType;
+    public String instanceId;
+    public String imageId;
+    public String projectId;
+    public String deploymentId;
+    public String name;
+    public InstanceState state;
+    public String availabilityZone;
+    public Date launchTime;
+    public String stateTransitionReason;
 
+    /** Empty constructor for serialization */
+    public EC2InstanceSummary () { }
 
     public EC2InstanceSummary (Instance ec2Instance) {
         publicIpAddress = ec2Instance.getPublicIpAddress();
