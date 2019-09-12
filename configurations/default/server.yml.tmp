@@ -1,5 +1,6 @@
 application:
-  assets_bucket: bucket-name
+  client_assets_url: https://example.com
+  shortcut_icon_url: https://d2tyb7byn1fef9.cloudfront.net/ibi-logo-original%402x.png
   public_url: http://localhost:9966
   notifications_enabled: true
   cors:
