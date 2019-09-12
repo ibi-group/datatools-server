@@ -304,7 +304,8 @@ public class DataManager {
         });
         // load index.html
         final String index = resourceToString("/public/index.html")
-                .replace("${S3BUCKET}", getConfigPropertyAsText("application.assets_bucket"));
+            .replace("${CLIENT_ASSETS_URL}", getConfigPropertyAsText("application.client_assets_url"))
+            .replace("${SHORTCUT_ICON_URL}", getConfigPropertyAsText("application.shortcut_icon_url"));
         final String auth0html = resourceToString("/public/auth0-silent-callback.html");
 
         // auth0 silent callback

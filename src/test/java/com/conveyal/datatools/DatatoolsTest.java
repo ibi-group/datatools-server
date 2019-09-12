@@ -142,7 +142,7 @@ public abstract class DatatoolsTest {
             Map applicationDataConfig = (Map) applicationConfig.get("data");
             Map transitFeedsConfig = (Map) extensionsConfig.get("transitfeeds");
 
-            applicationConfig.put("assets_bucket", s3Bucket);
+            applicationConfig.put("client_assets_url", "http://localhost:4000");
             applicationDataConfig.put("gtfs_s3_bucket", s3Bucket);
             // make sure use_s3_storage is true so it's possible to upload/download feeds from s3
             applicationDataConfig.put("use_s3_storage", true);
