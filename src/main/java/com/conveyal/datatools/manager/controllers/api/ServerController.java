@@ -37,7 +37,6 @@ import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.bson.Document;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -135,26 +134,33 @@ public class ServerController {
      */
     private static OtpServer createServer(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
-        Document newServerFields = Document.parse(req.body());
-        String projectId = newServerFields.getString("projectId");
-        String organizationId = newServerFields.getString("organizationId");
+        OtpServer newServer = getServerFromRequestBody(req);
         // If server has no project ID specified, user must be an application admin to create it. Otherwise, they must
         // be a project admin.
-        boolean allowedToCreate = projectId == null
+        boolean allowedToCreate = newServer.projectId == null
             ? userProfile.canAdministerApplication()
-            : userProfile.canAdministerProject(projectId, organizationId);
+            : userProfile.canAdministerProject(newServer.projectId, newServer.organizationId());
         if (allowedToCreate) {
             try {
-                OtpServer newServer = mapper.readValue(newServerFields.toJson(), OtpServer.class);
                 validateFields(req, newServer);
-                Persistence.servers.create(newServer);
-                return newServer;
-            } catch (IOException e) {
-                logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Error parsing OTP server JSON.", e);
-                return null;
+            } catch (Exception e) {
+                if (e instanceof HaltException) throw e;
+                else logMessageAndHalt(req, 400, "Error encountered while validating server field", e);
             }
+            Persistence.servers.create(newServer);
+            return newServer;
         } else {
-            logMessageAndHalt(req, 403, "Not authorized to create a server for project " + projectId);
+            logMessageAndHalt(req, 403, "Not authorized to create a server for project " + newServer.projectId);
+            return null;
+        }
+    }
+
+    /** Utility method to parse OtpServer object from Spark request body. */
+    private static OtpServer getServerFromRequestBody(Request req) {
+        try {
+            return mapper.readValue(req.body(), OtpServer.class);
+        } catch (IOException e) {
+            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Error parsing OTP server JSON.", e);
             return null;
         }
     }
@@ -180,12 +186,7 @@ public class ServerController {
      */
     private static OtpServer updateServer(Request req, Response res) {
         OtpServer serverToUpdate = checkServerPermissions(req, res);
-        OtpServer updatedServer = null;
-        try {
-            updatedServer = mapper.readValue(req.body(), OtpServer.class);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        OtpServer updatedServer = getServerFromRequestBody(req);
         Auth0UserProfile user = req.attribute("user");
         if ((serverToUpdate.admin || serverToUpdate.projectId == null) && !user.canAdministerApplication()) {
             logMessageAndHalt(req, HttpStatus.UNAUTHORIZED_401, "User cannot modify admin-only or application-wide server.");
