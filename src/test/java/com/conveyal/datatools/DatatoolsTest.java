@@ -43,7 +43,7 @@ public abstract class DatatoolsTest {
         // Travis CI, these files will automatically be setup.
         String[] args = getBooleanEnvVar("RUN_E2E")
             ? new String[] { "configurations/default/env.yml", "configurations/default/server.yml" }
-            : new String[] { "configurations/default/env.yml.tmp", "configurations/default/server.yml.tmp" };
+            : new String[] { "configurations/test/env.yml.tmp", "configurations/test/server.yml.tmp" };
 
         // fail this test and others if the above files do not exist
         for (String arg : args) {
