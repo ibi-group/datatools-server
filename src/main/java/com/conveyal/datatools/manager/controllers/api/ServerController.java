@@ -141,12 +141,7 @@ public class ServerController {
             ? userProfile.canAdministerApplication()
             : userProfile.canAdministerProject(newServer.projectId, newServer.organizationId());
         if (allowedToCreate) {
-            try {
-                validateFields(req, newServer);
-            } catch (Exception e) {
-                if (e instanceof HaltException) throw e;
-                else logMessageAndHalt(req, 400, "Error encountered while validating server field", e);
-            }
+            validateFields(req, newServer);
             Persistence.servers.create(newServer);
             return newServer;
         } else {
@@ -201,44 +196,51 @@ public class ServerController {
      * removing problematic date fields.
      */
     private static void validateFields(Request req, OtpServer server) throws HaltException {
-        // Check that projectId is valid.
-        if (server.projectId != null) {
-            Project project = Persistence.projects.getById(server.projectId);
-            if (project == null) logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Must specify valid project ID.");
-        }
-        // If a server's ec2 info object is not null, it must pass a few validation checks on various fields related to
-        // AWS. (e.g., target group ARN and instance type).
-        if (server.ec2Info != null) {
-            validateTargetGroup(server.ec2Info.targetGroupArn, req);
-            validateInstanceType(server.ec2Info.instanceType, req);
-            validateSubnetId(server.ec2Info.subnetId, req);
-            validateSecurityGroupId(server.ec2Info.securityGroupId, req);
-            validateIamRoleArn(server.ec2Info.iamRoleArn, req);
-            validateKeyName(server.ec2Info.keyName, req);
-            validateAmiId(server.ec2Info.amiId, req);
-            if (server.ec2Info.instanceCount < 0) server.ec2Info.instanceCount = 0;
-        }
-        // Server must have name.
-        if (isEmpty(server.name)) logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Server must have valid name.");
-        // Server must have an internal URL (for build graph over wire) or an s3 bucket (for auto deploy ec2).
-        if (isEmpty(server.s3Bucket)) {
-            if (server.internalUrl == null || server.internalUrl.size() == 0) {
-                logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Server must contain either internal URL(s) or s3 bucket name.");
+        try {
+            // Check that projectId is valid.
+            if (server.projectId != null) {
+                Project project = Persistence.projects.getById(server.projectId);
+                if (project == null)
+                    logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Must specify valid project ID.");
             }
-        } else {
-            // Verify that application has permission to write to/delete from S3 bucket. We're following the recommended
-            // approach from https://stackoverflow.com/a/17284647/915811, but perhaps there is a way to do this
-            // effectively without incurring AWS costs (although writing/deleting an empty file to S3 is probably
-            // miniscule).
-            String key = UUID.randomUUID().toString();
-            try {
-                FeedStore.s3Client.putObject(server.s3Bucket, key, File.createTempFile("test", ".zip"));
-                FeedStore.s3Client.deleteObject(server.s3Bucket, key);
-            } catch (IOException | AmazonS3Exception e) {
-                String message = "Cannot write to specified S3 bucket " + server.s3Bucket;
-                LOG.error(message, e);
-                logMessageAndHalt(req, 400, message, e);
+            // If a server's ec2 info object is not null, it must pass a few validation checks on various fields related to
+            // AWS. (e.g., target group ARN and instance type).
+            if (server.ec2Info != null) {
+                validateTargetGroup(server.ec2Info.targetGroupArn, req);
+                validateInstanceType(server.ec2Info.instanceType, req);
+                validateSubnetId(server.ec2Info.subnetId, req);
+                validateSecurityGroupId(server.ec2Info.securityGroupId, req);
+                validateIamRoleArn(server.ec2Info.iamRoleArn, req);
+                validateKeyName(server.ec2Info.keyName, req);
+                validateAmiId(server.ec2Info.amiId, req);
+                if (server.ec2Info.instanceCount < 0) server.ec2Info.instanceCount = 0;
             }
+            // Server must have name.
+            if (isEmpty(server.name))
+                logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Server must have valid name.");
+            // Server must have an internal URL (for build graph over wire) or an s3 bucket (for auto deploy ec2).
+            if (isEmpty(server.s3Bucket)) {
+                if (server.internalUrl == null || server.internalUrl.size() == 0) {
+                    logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Server must contain either internal URL(s) or s3 bucket name.");
+                }
+            } else {
+                // Verify that application has permission to write to/delete from S3 bucket. We're following the recommended
+                // approach from https://stackoverflow.com/a/17284647/915811, but perhaps there is a way to do this
+                // effectively without incurring AWS costs (although writing/deleting an empty file to S3 is probably
+                // miniscule).
+                String key = UUID.randomUUID().toString();
+                try {
+                    FeedStore.s3Client.putObject(server.s3Bucket, key, File.createTempFile("test", ".zip"));
+                    FeedStore.s3Client.deleteObject(server.s3Bucket, key);
+                } catch (IOException | AmazonS3Exception e) {
+                    String message = "Cannot write to specified S3 bucket " + server.s3Bucket;
+                    LOG.error(message, e);
+                    logMessageAndHalt(req, 400, message, e);
+                }
+            }
+        } catch (Exception e) {
+            if (e instanceof HaltException) throw e;
+            else logMessageAndHalt(req, 400, "Error encountered while validating server field", e);
         }
     }
 
