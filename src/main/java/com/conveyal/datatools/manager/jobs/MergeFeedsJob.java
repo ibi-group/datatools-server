@@ -333,19 +333,15 @@ public class MergeFeedsJob extends MonitorableJob {
         int mergedLineNumber = 0;
         // Get the spec fields to export
         List<Field> specFields = table.specFields();
+        // remove some fields that MTC doesn't want
         if (DataManager.isExtensionEnabled("mtc")) {
             // Remove route and agency branding URL from field list.
-            // Nothing to do for other tables.
             if ("agency".equals(table.name) || "routes".equals(table.name)) {
-                int indexToRemove = -1;
-                for (int i = 0; i < specFields.size(); i++) {
-                    if (specFields.get(i).name.endsWith("_branding_url")) {
-                        indexToRemove = i;
-                        break;
-                    }
-                }
-                // Remove item outside of loop to prevent concurrent modification exception.
-                if (indexToRemove != -1) specFields.remove(indexToRemove);
+                removeSpecField(specFields, "_branding_url");
+            }
+            // Remove the agency_id from the routes table
+            if ("routes".equals(table.name)) {
+                removeSpecField(specFields, "agency_id");
             }
         }
         boolean stopCodeMissingFromFirstTable = false;
@@ -752,7 +748,10 @@ public class MergeFeedsJob extends MonitorableJob {
                             // cause major issues when trying to put and get values into the
                             // below map.
                             String key = String.join(
-                                ":", keyField, rowValues[table.getFieldIndex(keyField)]);
+                                ":",
+                                keyField,
+                                rowValues[getFieldIndexUsingSuffix(specFields, keyField)]
+                            );
                             rowValuesForStopOrRouteId.put(key, rowValues);
                             break;
                         case "transfers":
@@ -804,6 +803,28 @@ public class MergeFeedsJob extends MonitorableJob {
         // Track the number of lines in the merged table and return final number.
         mergeFeedsResult.linesPerTable.put(table.name, mergedLineNumber);
         return mergedLineNumber;
+    }
+
+    /**
+     * Remove the first field from a list of spec fields where a field name ends with the specified suffix.
+     */
+    private void removeSpecField(List<Field> specFields, String fieldSuffix) {
+        int indexToRemove = getFieldIndexUsingSuffix(specFields, fieldSuffix);
+        if (indexToRemove != -1) specFields.remove(indexToRemove);
+    }
+
+    /**
+     * Find the first index of a field within a list of spec fields that matches the specified suffix.
+     */
+    private int getFieldIndexUsingSuffix(List<Field> specFields, String fieldSuffix) {
+        int index = -1;
+        for (int i = 0; i < specFields.size(); i++) {
+            if (specFields.get(i).name.endsWith(fieldSuffix)) {
+                index = i;
+                break;
+            }
+        }
+        return index;
     }
 
     /** Checks that any of a set of errors is of the type {@link NewGTFSErrorType#DUPLICATE_ID}. */
