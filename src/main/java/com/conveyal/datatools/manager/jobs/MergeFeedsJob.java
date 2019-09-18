@@ -481,10 +481,6 @@ public class MergeFeedsJob extends MonitorableJob {
                     // row except for the identifiers receiving a prefix to avoid ID conflicts.
                     for (int specFieldIndex = 0; specFieldIndex < sharedSpecFields.size(); specFieldIndex++) {
                         Field field = sharedSpecFields.get(specFieldIndex);
-                        if (!sharedFields.contains(field)) {
-//                            LOG.info("Spec field {}#{} not found in either feed. Skipping.", table.name, field.name);
-                            continue;
-                        }
                         // Get index of field from GTFS spec as it appears in feed
                         int index = fieldsFoundList.indexOf(field);
                         String val = csvReader.get(index);
