@@ -811,9 +811,13 @@ public class MergeFeedsJob extends MonitorableJob {
             if (routeRows.size() > 0) {
                 if (shouldWriteAgencyIdInRoutesTable) {
                     // agency_id should be written, proceed with all fields
+                    LOG.info("writing route table with agency_id");
                     writeZipEntryWithHeaders(out, writer, table, specFields);
-                    writer.write(routeRows);
+                    for (String[] routeRow : routeRows) {
+                        writer.write(routeRow);
+                    }
                 } else {
+                    LOG.info("writing route table without agency_id");
                     // agency_id should not be written
                     // write headers without agency_id
                     List<Field> specFieldsWithoutAgencyId = specFields.stream()
