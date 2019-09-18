@@ -215,10 +215,10 @@ public class MergeFeedsJob extends MonitorableJob {
             status.update("Merging " + table.name, percentComplete);
             // Perform the merge.
             LOG.info("Writing {} to merged feed", table.name);
-            int mergedLineNumber = constructMergedTable(table, feedsToMerge, out);
-            if (mergedLineNumber == 0) {
+            int numMergedLines = constructMergedTable(table, feedsToMerge, out);
+            if (numMergedLines == 0) {
                 LOG.warn("Skipping {} table. No entries found in zip files.", table.name);
-            } else if (mergedLineNumber == -1) {
+            } else if (numMergedLines == -1) {
                 LOG.error("Merge {} table failed!", table.name);
             }
         }
@@ -307,8 +307,11 @@ public class MergeFeedsJob extends MonitorableJob {
      * @param out          output stream to write table into
      * @return number of lines in merged table
      */
-    private int constructMergedTable(Table table, List<FeedToMerge> feedsToMerge,
-        ZipOutputStream out) throws IOException {
+    private int constructMergedTable(
+        Table table,
+        List<FeedToMerge> feedsToMerge,
+        ZipOutputStream out
+    ) throws IOException {
         // CSV writer used to write to zip file.
         CsvListWriter writer = new CsvListWriter(new OutputStreamWriter(out), CsvPreference.STANDARD_PREFERENCE);
         String keyField = table.getKeyFieldName();
@@ -330,7 +333,7 @@ public class MergeFeedsJob extends MonitorableJob {
         // Set up objects for tracking the rows encountered
         Map<String, String[]> rowValuesForStopOrRouteId = new HashMap<>();
         Set<String> rowStrings = new HashSet<>();
-        int mergedLineNumber = 0;
+        int numMergedLinesWritten = 0;
         // Get the spec fields to export
         List<Field> specFields = table.specFields();
         // remove some fields that MTC doesn't want
@@ -339,12 +342,19 @@ public class MergeFeedsJob extends MonitorableJob {
             if ("agency".equals(table.name) || "routes".equals(table.name)) {
                 removeSpecField(specFields, "_branding_url");
             }
-            // Remove the agency_id from the routes table
-            if ("routes".equals(table.name)) {
-                removeSpecField(specFields, "agency_id");
-            }
         }
         boolean stopCodeMissingFromFirstTable = false;
+        // initialize this variable to be true if there was more than one agency in the agencies table. In that case, it
+        // is required to add the agency_id in the routes file. Otherwise, it may not be needed to write the agency_id
+        // in the routes table.
+        boolean shouldWriteAgencyIdInRoutesTable = mergeFeedsResult.linesPerTable.getOrDefault(
+            Table.AGENCY.name,
+            0
+        ) > 1;
+        // Initialize a list to store rows that should be included in the routes table of the merged feed. If the
+        // agency_id is not needed to be written, then it shouldn't be written, but it won't be known whether it should
+        // be written until reading all route table records, so they are stored in memory and written later.
+        List<String[]> routeRows = new ArrayList<>();
         try {
             // Iterate over each zip file.
             for (int feedIndex = 0; feedIndex < feedsToMerge.size(); feedIndex++) {
@@ -536,7 +546,7 @@ public class MergeFeedsJob extends MonitorableJob {
                                     //  service_id:exception_type:date as the unique key and include any
                                     //  all entries as long as they are unique on this key.
                                     if (hasDuplicateError(idErrors)) {
-                                        String key = getTableScopedValue(table, idScope, val);
+                                        String key = getTableScopedKey(table, idScope, val);
                                         // Modify service_id and ensure that referencing trips
                                         // have service_id updated.
                                         valueToWrite = String.join(":", idScope, val);
@@ -559,7 +569,7 @@ public class MergeFeedsJob extends MonitorableJob {
                                                 "Skipping calendar entry {} because it operates in the future.",
                                                 keyValue);
                                             String key =
-                                                getTableScopedValue(table, idScope, keyValue);
+                                                getTableScopedKey(table, idScope, keyValue);
                                             mergeFeedsResult.skippedIds.add(key);
                                             skipRecord = true;
                                             continue;
@@ -650,7 +660,7 @@ public class MergeFeedsJob extends MonitorableJob {
                                             // Get unique key to check for remapped ID when
                                             // writing values to file.
                                             String key =
-                                                getTableScopedValue(table, idScope, currentPrimaryKey);
+                                                getTableScopedKey(table, idScope, currentPrimaryKey);
                                             // Extract the route/stop ID value used for the
                                             // route/stop with already encountered matching
                                             // short name/stop code.
@@ -674,7 +684,7 @@ public class MergeFeedsJob extends MonitorableJob {
                                         if (!skipRecord && !referenceTracker.transitIds
                                             .contains(String.join(":", keyField, keyValue))) {
                                             if (hasDuplicateError(primaryKeyErrors)) {
-                                                String key = getTableScopedValue(table, idScope, val);
+                                                String key = getTableScopedKey(table, idScope, val);
                                                 // Modify route_id and ensure that referencing trips
                                                 // have route_id updated.
                                                 valueToWrite = String.join(":", idScope, val);
@@ -703,12 +713,12 @@ public class MergeFeedsJob extends MonitorableJob {
                         }
 
                         if (field.isForeignReference()) {
-                            String key = getTableScopedValue(field.referenceTable, idScope, val);
+                            String key = getTableScopedKey(field.referenceTable, idScope, val);
                             // If the current foreign ref points to another record that has been skipped, skip this
                             // record and add its primary key to the list of skipped IDs (so that other references can
                             // be properly omitted).
                             if (mergeFeedsResult.skippedIds.contains(key)) {
-                                String skippedKey = getTableScopedValue(table, idScope, keyValue);
+                                String skippedKey = getTableScopedKey(table, idScope, keyValue);
                                 if (orderField != null) {
                                     skippedKey = String.join(":", skippedKey,
                                         csvReader.get(getFieldIndex(fieldsFoundInZip, orderField)));
@@ -753,6 +763,19 @@ public class MergeFeedsJob extends MonitorableJob {
                                 rowValues[getFieldIndexUsingSuffix(specFields, keyField)]
                             );
                             rowValuesForStopOrRouteId.put(key, rowValues);
+
+                            if (table.name.equals(Table.ROUTES.name)) {
+                                // Check if an agency_id exists and if so, that means the agency_id field should be written.
+                                String agencyIdVal = rowValues[getFieldIndexUsingSuffix(specFields, "agency_id")];
+                                if (!agencyIdVal.isEmpty()) {
+                                    shouldWriteAgencyIdInRoutesTable = true;
+                                }
+                                routeRows.add(rowValues);
+                                // postpone writing of route fields until later when it is known if the agency_id field
+                                // should be written
+                                continue;
+                            }
+
                             break;
                         case "transfers":
                         case "fare_rules":
@@ -775,21 +798,46 @@ public class MergeFeedsJob extends MonitorableJob {
 
                     }
                     // Finally, handle writing lines to zip entry.
-                    if (mergedLineNumber == 0) {
-                        // Create entry for zip file.
-                        ZipEntry tableEntry = new ZipEntry(table.name + ".txt");
-                        out.putNextEntry(tableEntry);
-                        // Write headers to table.
-                        String[] headers = specFields.stream()
-                            .map(field -> field.name)
-                            .toArray(String[]::new);
-                        writer.write(headers);
+                    if (numMergedLinesWritten == 0) {
+                        writeZipEntryWithHeaders(out, writer, table, specFields);
                     }
                     // Write line to table (plus new line char).
                     writer.write(rowValues);
                     lineNumber++;
-                    mergedLineNumber++;
+                    numMergedLinesWritten++;
                 } // End of iteration over each row.
+            }
+            // do extra processing of routes table to make sure agency_id is only written when absolutely necessary
+            if (routeRows.size() > 0) {
+                if (shouldWriteAgencyIdInRoutesTable) {
+                    // agency_id should be written, proceed with all fields
+                    writeZipEntryWithHeaders(out, writer, table, specFields);
+                    writer.write(routeRows);
+                } else {
+                    // agency_id should not be written
+                    // write headers without agency_id
+                    List<Field> specFieldsWithoutAgencyId = specFields.stream()
+                        .filter(f -> !f.name.equals("agency_id"))
+                        .collect(Collectors.toList());
+                    writeZipEntryWithHeaders(out, writer, table, specFieldsWithoutAgencyId);
+
+                    // write all rows without the agenc_id field
+                    int agencyIdFieldIndex = getFieldIndexUsingSuffix(specFields, "agency_id");
+                    for (String[] routeRow : routeRows) {
+                        // copy values minus the agency_id field
+                        String[] filteredRow = new String[specFieldsWithoutAgencyId.size()];
+                        for (int i = 0; i < routeRow.length; i++) {
+                            // skip writing agency_id field
+                            if (i == agencyIdFieldIndex) continue;
+
+                            // copy other fields
+                            filteredRow[i > agencyIdFieldIndex ? i - 1 : i] = routeRow[i];
+                        }
+                        // write to csv
+                        writer.write(filteredRow);
+                    }
+                }
+                numMergedLinesWritten = routeRows.size();
             }
             writer.flush();
             out.closeEntry();
@@ -801,8 +849,27 @@ public class MergeFeedsJob extends MonitorableJob {
             throw e;
         }
         // Track the number of lines in the merged table and return final number.
-        mergeFeedsResult.linesPerTable.put(table.name, mergedLineNumber);
-        return mergedLineNumber;
+        mergeFeedsResult.linesPerTable.put(table.name, numMergedLinesWritten);
+        return numMergedLinesWritten;
+    }
+
+    /**
+     * Begin writing a new csv file in a zipfile by writing some headers using the provided list of specFields.
+     */
+    private void writeZipEntryWithHeaders(
+        ZipOutputStream out,
+        CsvListWriter writer,
+        Table table,
+        List<Field> specFields
+    ) throws IOException {
+        // Create entry for zip file.
+        ZipEntry tableEntry = new ZipEntry(table.name + ".txt");
+        out.putNextEntry(tableEntry);
+        // Write headers to table.
+        String[] headers = specFields.stream()
+            .map(field -> field.name)
+            .toArray(String[]::new);
+        writer.write(headers);
     }
 
     /**
@@ -835,8 +902,8 @@ public class MergeFeedsJob extends MonitorableJob {
         return false;
     }
 
-    /** Get table-scoped value used for key when remapping references for a particular feed. */
-    private static String getTableScopedValue(Table table, String prefix, String id) {
+    /** Get table-scoped key to use when remapping references for a particular feed. */
+    private static String getTableScopedKey(Table table, String prefix, String id) {
         return String.join(":",
             table.name,
             prefix,
