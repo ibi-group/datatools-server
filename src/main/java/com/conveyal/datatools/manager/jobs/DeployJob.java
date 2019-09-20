@@ -65,6 +65,7 @@ import com.conveyal.datatools.manager.utils.StringUtils;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.apache.commons.codec.binary.Base64;
+import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -696,11 +697,20 @@ public class DeployJob extends MonitorableJob {
         String s3JarBucket = deployment.r5 ? "r5-builds" : "opentripplanner-builds";
         String s3JarKey = jarName + ".jar";
         // If jar does not exist in bucket, fail job.
-        if (!FeedStore.s3Client.doesObjectExist(s3JarBucket, s3JarKey)) {
-            status.fail(String.format("Requested jar does not exist at s3://%s/%s", s3JarBucket, s3JarKey));
+        String s3JarUrl = String.format("https://%s.s3.amazonaws.com/%s", s3JarBucket, s3JarKey);
+        try {
+            final URL url = new URL(s3JarUrl);
+            HttpURLConnection huc = (HttpURLConnection) url.openConnection();
+            huc.setRequestMethod("HEAD");
+            int responseCode = huc.getResponseCode();
+            if (responseCode != HttpStatus.OK_200) {
+                status.fail(String.format("Requested trip planner jar does not exist at s3://%s/%s", s3JarBucket, s3JarKey));
+                return null;
+            }
+        } catch (IOException e) {
+            status.fail(String.format("Error checking for trip planner jar: s3://%s/%s", s3JarBucket, s3JarKey));
             return null;
         }
-        String s3JarUrl = String.format("https://%s.s3.amazonaws.com/%s", s3JarBucket, s3JarKey);
         String jarDir = String.format("/opt/%s", getTripPlannerString());
         List<String> lines = new ArrayList<>();
         String routerName = "default";
