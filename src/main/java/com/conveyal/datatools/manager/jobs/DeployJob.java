@@ -831,6 +831,7 @@ public class DeployJob extends MonitorableJob {
      */
     public static class DeploySummary implements Serializable {
         private static final long serialVersionUID = 1L;
+        public String serverId;
         public long duration;
         public String s3Bucket;
         public String jobId;
@@ -845,6 +846,7 @@ public class DeployJob extends MonitorableJob {
         public DeploySummary () { }
 
         public DeploySummary (DeployJob job) {
+            this.serverId = job.otpServer.id;
             this.ec2Info = job.otpServer.ec2Info;
             this.otpVersion = job.deployment.otpVersion;
             this.jobId = job.jobId;

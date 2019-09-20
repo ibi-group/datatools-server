@@ -156,6 +156,7 @@ public class Deployment extends Model implements Serializable {
     }
 
     /** Get latest deployment summary. */
+    @JsonProperty("latest")
     public DeployJob.DeploySummary latest () {
         return deployJobSummaries.size() > 0 ? deployJobSummaries.get(0) : null;
     }
