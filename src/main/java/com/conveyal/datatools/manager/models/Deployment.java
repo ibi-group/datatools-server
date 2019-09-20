@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.models;
 import com.amazonaws.services.ec2.model.Filter;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.controllers.api.DeploymentController;
+import com.conveyal.datatools.manager.jobs.DeployJob;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.StringUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
@@ -63,6 +64,8 @@ public class Deployment extends Model implements Serializable {
 
     /** What server is this currently deployed to? */
     public String deployedTo;
+
+    public List<DeployJob.DeploySummary> deployJobSummaries = new ArrayList<>();
 
     @JsonView(JsonViews.DataDump.class)
     public String projectId;
@@ -147,7 +150,15 @@ public class Deployment extends Model implements Serializable {
     public boolean r5;
 
     /** Date when the deployment was last deployed to a server */
-    public Date lastDeployed;
+    @JsonProperty("lastDeployed")
+    public Date retrieveLastDeployed () {
+        return latest() != null ? new Date(latest().finishTime) : null;
+    }
+
+    /** Get latest deployment summary. */
+    public DeployJob.DeploySummary latest () {
+        return deployJobSummaries.size() > 0 ? deployJobSummaries.get(0) : null;
+    }
 
     /**
      * The routerId of this deployment

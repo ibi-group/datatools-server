@@ -30,8 +30,8 @@ public class Organization extends Model implements Serializable {
     public boolean active;
     public UsageTier usageTier;
     public Set<Extension> extensions = new HashSet<>();
-    public Date subscriptionBeginDate;
-    public Date subscriptionEndDate;
+    public long subscriptionBeginDate;
+    public long subscriptionEndDate;
 
     public Organization () {}
 

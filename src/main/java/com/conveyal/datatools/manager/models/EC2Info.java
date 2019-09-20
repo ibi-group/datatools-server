@@ -27,8 +27,8 @@ public class EC2Info implements Serializable {
     public String securityGroupId;
     /** The Amazon machine image (AMI) to be used for the OTP EC2 machines. */
     public String amiId;
-    /** The IAM role ARN that the OTP EC2 server should assume. */
-    public String iamRoleArn;
+    /** The IAM instance profile ARN that the OTP EC2 server should assume. For example, arn:aws:iam::123456789012:instance-profile/otp-ec2-role */
+    public String iamInstanceProfileArn;
     /** The AWS key file (.pem) that should be used to set up OTP EC2 servers (gives a way for admins to SSH into machine). */
     public String keyName;
     /** The target group to deploy new EC2 instances to. */

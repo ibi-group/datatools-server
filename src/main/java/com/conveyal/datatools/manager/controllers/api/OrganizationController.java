@@ -68,8 +68,8 @@ public class OrganizationController {
 
     public static Organization updateOrganization (Request req, Response res) throws IOException {
         String organizationId = req.params("id");
-        requestOrganizationById(req);
-        Organization organization = Persistence.organizations.update(organizationId, req.body());
+        Organization updatedOrganization = requestOrganizationById(req);
+        Persistence.organizations.replace(organizationId, updatedOrganization);
 
         // FIXME: Add back in hook after organization is updated.
         // See https://github.com/catalogueglobal/datatools-server/issues/111
@@ -101,7 +101,7 @@ public class OrganizationController {
 //            p.save();
 //        }
 
-        return organization;
+        return updatedOrganization;
     }
 
     public static Organization deleteOrganization (Request req, Response res) {

@@ -141,7 +141,7 @@ public class TypedPersistence<T extends Model> {
      * We should really have a bit more abstraction here.
      */
     public List<T> getFiltered (Bson filter) {
-        return mongoCollection.find(filter).into(new ArrayList<T>());
+        return mongoCollection.find(filter).into(new ArrayList<>());
     }
 
     /**

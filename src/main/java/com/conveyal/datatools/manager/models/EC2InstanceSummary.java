@@ -20,6 +20,7 @@ public class EC2InstanceSummary implements Serializable {
     public String instanceId;
     public String imageId;
     public String projectId;
+    public String jobId;
     public String deploymentId;
     public String name;
     public InstanceState state;
@@ -39,17 +40,12 @@ public class EC2InstanceSummary implements Serializable {
         imageId = ec2Instance.getImageId();
         List<Tag> tags = ec2Instance.getTags();
         // Set project and deployment ID if they exist.
-        String projectId = null;
-        String deploymentId = null;
-        String name = null;
         for (Tag tag : tags) {
             if (tag.getKey().equals("projectId")) projectId = tag.getValue();
             if (tag.getKey().equals("deploymentId")) deploymentId = tag.getValue();
+            if (tag.getKey().equals("jobId")) jobId = tag.getValue();
             if (tag.getKey().equals("Name")) name = tag.getValue();
         }
-        this.projectId = projectId;
-        this.deploymentId = deploymentId;
-        this.name = name;
         state = ec2Instance.getState();
         availabilityZone = ec2Instance.getPlacement().getAvailabilityZone();
         launchTime = ec2Instance.getLaunchTime();

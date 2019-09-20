@@ -7,6 +7,7 @@ import com.amazonaws.services.ec2.model.DescribeInstancesResult;
 import com.amazonaws.services.ec2.model.Filter;
 import com.amazonaws.services.ec2.model.Instance;
 import com.amazonaws.services.ec2.model.Reservation;
+import com.amazonaws.services.s3.AmazonS3URI;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
@@ -18,8 +19,10 @@ import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
+import com.mongodb.client.FindIterable;
 import org.bson.Document;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
@@ -38,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static spark.Spark.delete;
 import static spark.Spark.get;
@@ -82,6 +86,46 @@ public class DeploymentController {
         Deployment deployment = checkDeploymentPermissions(req, res);
         deployment.delete();
         return deployment;
+    }
+
+    /**
+     * HTTP endpoint for downloading a build artifact (e.g., otp build log or Graph.obj) from S3.
+     */
+    private static String downloadBuildArtifact (Request req, Response res) {
+        Deployment deployment = checkDeploymentPermissions(req, res);
+        DeployJob.DeploySummary summaryToDownload = null;
+        String uriString = null;
+        // If a jobId query param is provided, find the matching job summary.
+        String jobId = req.queryParams("jobId");
+        if (jobId != null) {
+            for (DeployJob.DeploySummary summary : deployment.deployJobSummaries) {
+                if (summary.jobId.equals(jobId)) {
+                    summaryToDownload = summary;
+                    break;
+                }
+            }
+        } else {
+            summaryToDownload = deployment.latest();
+        }
+        if (summaryToDownload == null) {
+            // Try to construct the URI string
+            OtpServer server = Persistence.servers.getById(deployment.deployedTo);
+            if (server == null) {
+                uriString = String.format("s3://%s/bundles/%s/%s/%s", "S3_BUCKET", deployment.projectId, deployment.id, jobId);
+                logMessageAndHalt(req, 400, "Cannot construct URI for build artifact. " + uriString);
+                return null;
+            }
+            uriString = String.format("s3://%s/bundles/%s/%s/%s", server.s3Bucket, deployment.projectId, deployment.id, jobId);
+            LOG.warn("Could not find deploy summary for job. Attempting to use {}", uriString);
+        } else {
+            uriString = summaryToDownload.buildArtifactsFolder;
+        }
+        AmazonS3URI uri = new AmazonS3URI(uriString);
+        String filename = req.queryParams("filename");
+        if (filename == null) {
+            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Must provide filename query param for build artifact.");
+        }
+        return downloadFromS3(FeedStore.s3Client, uri.getBucket(), String.join("/", uri.getKey(), filename), false, res);
     }
 
     /**
@@ -266,6 +310,9 @@ public class DeploymentController {
         return fetchEC2Instances(filters).stream().map(EC2InstanceSummary::new).collect(Collectors.toList());
     }
 
+    /**
+     * Fetch EC2 instances from AWS that match the provided set of filters (e.g., tags, instance ID, or other properties).
+     */
     public static List<Instance> fetchEC2Instances(Filter... filters) {
         List<Instance> instances = new ArrayList<>();
         DescribeInstancesRequest request = new DescribeInstancesRequest().withFilters(filters);
@@ -291,7 +338,10 @@ public class DeploymentController {
             logMessageAndHalt(req, 400, "Internal reference error. Deployment's project ID is invalid");
         // Get server by ID
         OtpServer otpServer = Persistence.servers.getById(target);
-        if (otpServer == null) logMessageAndHalt(req, 400, "Must provide valid OTP server target ID.");
+        if (otpServer == null) {
+            logMessageAndHalt(req, 400, "Must provide valid OTP server target ID.");
+            return null;
+        }
 
         // Check that permissions of user allow them to deploy to target.
         boolean isProjectAdmin = userProfile.canAdministerProject(deployment.projectId, deployment.organizationId());
@@ -350,7 +400,11 @@ public class DeploymentController {
         }), json::write);
         options(apiPrefix + "secure/deployments", (q, s) -> "");
         get(apiPrefix + "secure/deployments/:id/download", DeploymentController::downloadDeployment);
+        get(apiPrefix + "secure/deployments/:id/artifact", DeploymentController::downloadBuildArtifact);
         get(apiPrefix + "secure/deployments/:id/ec2", DeploymentController::fetchEC2InstanceSummaries, json::write);
+        // TODO: In the future, we may have need for terminating a single EC2 instance. For now, an admin using the AWS
+        //  console should suffice.
+//        delete(apiPrefix + "secure/deployments/:id/ec2", DeploymentController::terminateEC2Instance, json::write);
         get(apiPrefix + "secure/deployments/:id", DeploymentController::getDeployment, json::write);
         delete(apiPrefix + "secure/deployments/:id", DeploymentController::deleteDeployment, json::write);
         get(apiPrefix + "secure/deployments", DeploymentController::getAllDeployments, json::write);

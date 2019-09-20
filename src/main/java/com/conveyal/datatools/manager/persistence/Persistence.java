@@ -55,6 +55,7 @@ public class Persistence {
     public static void initialize () {
 
         PojoCodecProvider pojoCodecProvider = PojoCodecProvider.builder()
+                .register("com.conveyal.datatools.manager.jobs")
                 .register("com.conveyal.datatools.manager.models")
                 .register("com.conveyal.gtfs.loader")
                 .register("com.conveyal.gtfs.validator")

@@ -27,6 +27,7 @@ import com.amazonaws.services.identitymanagement.AmazonIdentityManagement;
 import com.amazonaws.services.identitymanagement.AmazonIdentityManagementClientBuilder;
 import com.amazonaws.services.identitymanagement.model.InstanceProfile;
 import com.amazonaws.services.identitymanagement.model.ListInstanceProfilesResult;
+import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
@@ -46,6 +47,7 @@ import spark.Response;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
@@ -76,7 +78,7 @@ public class ServerController {
      * Gets the server specified by the request's id parameter and ensure that user has access to the
      * deployment. If the user does not have permission the Spark request is halted with an error.
      */
-    private static OtpServer checkServerPermissions(Request req, Response res) {
+    private static OtpServer getServerWithPermissions(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         String serverId = req.params("id");
         OtpServer server = Persistence.servers.getById(serverId);
@@ -91,8 +93,10 @@ public class ServerController {
         return server;
     }
 
+    /** HTTP endpoint for deleting an {@link OtpServer}. */
     private static OtpServer deleteServer(Request req, Response res) {
-        OtpServer server = checkServerPermissions(req, res);
+        OtpServer server = getServerWithPermissions(req, res);
+        // Ensure that there are no active EC2 instances associated with server. Halt deletion if so.
         List<Instance> activeInstances = server.retrieveEC2Instances().stream()
             .filter(instance -> "running".equals(instance.getState().getName()))
             .collect(Collectors.toList());
@@ -104,8 +108,8 @@ public class ServerController {
     }
 
     /** HTTP method for terminating EC2 instances associated with an ELB OTP server. */
-    private static OtpServer terminateEC2Instances(Request req, Response res) {
-        OtpServer server = checkServerPermissions(req, res);
+    private static OtpServer terminateEC2InstancesForServer(Request req, Response res) {
+        OtpServer server = getServerWithPermissions(req, res);
         List<Instance> instances = server.retrieveEC2Instances();
         List<String> ids = getIds(instances);
         terminateInstances(ids);
@@ -122,10 +126,19 @@ public class ServerController {
         return instances.stream().map(Instance::getInstanceId).collect(Collectors.toList());
     }
 
+    /** Terminate the list of EC2 instance IDs. */
     public static TerminateInstancesResult terminateInstances(Collection<String> instanceIds) throws AmazonEC2Exception {
+        if (instanceIds.size() == 0) {
+            LOG.warn("No instance IDs provided in list. Skipping termination request.");
+        }
         LOG.info("Terminating EC2 instances {}", instanceIds);
         TerminateInstancesRequest request = new TerminateInstancesRequest().withInstanceIds(instanceIds);
         return ec2.terminateInstances(request);
+    }
+
+    /** Convenience method to override {@link #terminateInstances(Collection)}. */
+    public static TerminateInstancesResult terminateInstances(String... instanceIds) throws AmazonEC2Exception {
+        return terminateInstances(Arrays.asList(instanceIds));
     }
 
     /**
@@ -180,7 +193,7 @@ public class ServerController {
      * Update a single OTP server.
      */
     private static OtpServer updateServer(Request req, Response res) {
-        OtpServer serverToUpdate = checkServerPermissions(req, res);
+        OtpServer serverToUpdate = getServerWithPermissions(req, res);
         OtpServer updatedServer = getServerFromRequestBody(req);
         Auth0UserProfile user = req.attribute("user");
         if ((serverToUpdate.admin || serverToUpdate.projectId == null) && !user.canAdministerApplication()) {
@@ -210,7 +223,7 @@ public class ServerController {
                 validateInstanceType(server.ec2Info.instanceType, req);
                 validateSubnetId(server.ec2Info.subnetId, req);
                 validateSecurityGroupId(server.ec2Info.securityGroupId, req);
-                validateIamRoleArn(server.ec2Info.iamRoleArn, req);
+                validateIamInstanceProfileArn(server.ec2Info.iamInstanceProfileArn, req);
                 validateKeyName(server.ec2Info.keyName, req);
                 validateAmiId(server.ec2Info.amiId, req);
                 if (server.ec2Info.instanceCount < 0) server.ec2Info.instanceCount = 0;
@@ -224,19 +237,7 @@ public class ServerController {
                     logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Server must contain either internal URL(s) or s3 bucket name.");
                 }
             } else {
-                // Verify that application has permission to write to/delete from S3 bucket. We're following the recommended
-                // approach from https://stackoverflow.com/a/17284647/915811, but perhaps there is a way to do this
-                // effectively without incurring AWS costs (although writing/deleting an empty file to S3 is probably
-                // miniscule).
-                String key = UUID.randomUUID().toString();
-                try {
-                    FeedStore.s3Client.putObject(server.s3Bucket, key, File.createTempFile("test", ".zip"));
-                    FeedStore.s3Client.deleteObject(server.s3Bucket, key);
-                } catch (IOException | AmazonS3Exception e) {
-                    String message = "Cannot write to specified S3 bucket " + server.s3Bucket;
-                    LOG.error(message, e);
-                    logMessageAndHalt(req, 400, message, e);
-                }
+                verifyS3WritePermissions(server, req);
             }
         } catch (Exception e) {
             if (e instanceof HaltException) throw e;
@@ -244,12 +245,72 @@ public class ServerController {
         }
     }
 
+    /**
+     * Verify that application has permission to write to/delete from S3 bucket. We're following the recommended
+     * approach from https://stackoverflow.com/a/17284647/915811, but perhaps there is a way to do this
+     * effectively without incurring AWS costs (although writing/deleting an empty file to S3 is probably
+     * miniscule).
+     * @param s3Bucket
+     */
+    private static boolean verifyS3WritePermissions(AmazonS3 s3Client, String s3Bucket, Request req) {
+        String key = UUID.randomUUID().toString();
+        try {
+            s3Client.putObject(s3Bucket, key, File.createTempFile("test", ".zip"));
+            s3Client.deleteObject(s3Bucket, key);
+        } catch (IOException | AmazonS3Exception e) {
+            LOG.warn("S3 client cannot write to bucket" + s3Bucket, e);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Verify that application can write to S3 bucket.
+     *
+     * TODO: Also verify that, with AWS credentials, application can assume instance profile
+     */
+    private static void verifyS3WritePermissions(OtpServer server, Request req) {
+        // Verify first that this application can write to the S3 bucket, which is needed to write the transit bundle
+        // file to S3.
+        if (!verifyS3WritePermissions(FeedStore.s3Client, server.s3Bucket, req)) {
+            String message = "Application cannot write to specified S3 bucket: " + server.s3Bucket;
+            logMessageAndHalt(req, 400, message);
+        }
+        // TODO: If EC2 info is not null, check that the IAM role ARN is able to write to the S3 bucket. I keep running
+        //  into errors with this code, but will leave it commented out for now. LTR 2019/09/20
+//        if (server.ec2Info != null) {
+////            InstanceProfile iamInstanceProfile = getIamInstanceProfile(server.ec2Info.iamInstanceProfileArn);
+//            AWSSecurityTokenServiceClient tokenServiceClient = new
+//                AWSSecurityTokenServiceClient(FeedStore.getAWSCreds().getCredentials());
+////            AWSSecurityTokenServiceClient tokenServiceClient = new AWSSecurityTokenServiceClient();
+//            AssumeRoleRequest request = new AssumeRoleRequest()
+//                .withRoleArn(server.ec2Info.iamInstanceProfileArn)
+//                .withDurationSeconds(900)
+//                .withRoleSessionName("test");
+//            AssumeRoleResult result = tokenServiceClient.assumeRole(request);
+//            Credentials credentials = result.getCredentials();
+//            BasicSessionCredentials basicSessionCredentials = new BasicSessionCredentials(
+//                credentials.getAccessKeyId(), credentials.getSecretAccessKey(),
+//                credentials.getSessionToken());
+//            AmazonS3 temporaryS3Client = AmazonS3ClientBuilder.standard()
+//                .withCredentials(new AWSStaticCredentialsProvider(basicSessionCredentials))
+////                .withRegion(clientRegion)
+//                .build();
+//            if (!verifyS3WritePermissions(temporaryS3Client, server.s3Bucket, req)) {
+//                String message = "EC2 IAM role cannot write to specified S3 bucket " + server.s3Bucket;
+//                logMessageAndHalt(req, 400, message);
+//            }
+//        }
+    }
+
+    /** Validate that AMI exists and value is not empty. */
     private static void validateAmiId(String amiId, Request req) {
         String message = "Server must have valid AMI ID (or field must be empty)";
         if (isEmpty(amiId)) return;
         if (!amiExists(amiId)) logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message);
     }
 
+    /** Determine if AMI ID exists (and is gettable by the application's AWS credentials). */
     public static boolean amiExists(String amiId) {
         try {
             DescribeImagesRequest request = new DescribeImagesRequest().withImageIds(amiId);
@@ -257,11 +318,12 @@ public class ServerController {
             // Iterate over AMIs to find a matching ID.
             for (Image image : result.getImages()) if (image.getImageId().equals(amiId)) return true;
         } catch (AmazonEC2Exception e) {
-            LOG.info("AMI does not exist.", e);
+            LOG.warn("AMI does not exist or some error prevented proper checking of the AMI ID.", e);
         }
         return false;
     }
 
+    /** Validate that AWS key name (the first part of a .pem key) exists and is not empty. */
     private static void validateKeyName(String keyName, Request req) {
         String message = "Server must have valid key name";
         if (isEmpty(keyName)) logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message);
@@ -270,15 +332,22 @@ public class ServerController {
         logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message);
     }
 
-    private static void validateIamRoleArn(String iamRoleArn, Request req) {
-        String message = "Server must have valid IAM role ARN";
-        if (isEmpty(iamRoleArn)) logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message);
+    /** Get IAM instance profile for the provided role ARN. */
+    private static InstanceProfile getIamInstanceProfile (String iamInstanceProfileArn) {
         ListInstanceProfilesResult result = iam.listInstanceProfiles();
         // Iterate over instance profiles. If a matching ARN is found, silently return.
-        for (InstanceProfile profile: result.getInstanceProfiles()) if (profile.getArn().equals(iamRoleArn)) return;
-        logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message);
+        for (InstanceProfile profile: result.getInstanceProfiles()) if (profile.getArn().equals(iamInstanceProfileArn)) return profile;
+        return null;
     }
 
+    /** Validate IAM instance profile ARN exists and is not empty. */
+    private static void validateIamInstanceProfileArn(String iamInstanceProfileArn, Request req) {
+        String message = "Server must have valid IAM instance profile ARN (e.g., arn:aws:iam::123456789012:instance-profile/otp-ec2-role).";
+        if (isEmpty(iamInstanceProfileArn)) logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message);
+        if (getIamInstanceProfile(iamInstanceProfileArn) == null) logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message);
+    }
+
+    /** Validate that EC2 security group exists and is not empty. */
     private static void validateSecurityGroupId(String securityGroupId, Request req) {
         String message = "Server must have valid security group ID";
         if (isEmpty(securityGroupId)) logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message);
@@ -289,6 +358,7 @@ public class ServerController {
         logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message);
     }
 
+    /** Validate that subnet exists and is not empty. */
     private static void validateSubnetId(String subnetId, Request req) {
         String message = "Server must have valid subnet ID";
         if (isEmpty(subnetId)) logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message);
@@ -300,11 +370,16 @@ public class ServerController {
         } catch (AmazonEC2Exception e) {
             logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message, e);
         }
+        logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message);
     }
 
+    /**
+     * Validate that EC2 instance type (e.g., t2-medium) exists. This value can be empty and will default to
+     * {@link com.conveyal.datatools.manager.jobs.DeployJob#DEFAULT_INSTANCE_TYPE} at deploy time.
+     */
     private static void validateInstanceType(String instanceType, Request req) {
         if (instanceType == null) return;
-            try {
+        try {
             InstanceType.fromValue(instanceType);
         } catch (IllegalArgumentException e) {
             String message = String.format("Must provide valid instance type (if none provided, defaults to %s).", DEFAULT_INSTANCE_TYPE);
@@ -312,6 +387,7 @@ public class ServerController {
         }
     }
 
+    /** Validate that ELB target group exists and is not empty. */
     private static void validateTargetGroup(String targetGroupArn, Request req) {
         if (isEmpty(targetGroupArn)) logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Invalid value for Target Group ARN.");
         try {
@@ -325,6 +401,9 @@ public class ServerController {
         }
     }
 
+    /**
+     * @return false if string value is empty or null
+     */
     public static boolean isEmpty(String val) {
         return val == null || "".equals(val);
     }
@@ -335,7 +414,7 @@ public class ServerController {
     public static void register (String apiPrefix) {
         options(apiPrefix + "secure/servers", (q, s) -> "");
         delete(apiPrefix + "secure/servers/:id", ServerController::deleteServer, json::write);
-        delete(apiPrefix + "secure/servers/:id/ec2", ServerController::terminateEC2Instances, json::write);
+        delete(apiPrefix + "secure/servers/:id/ec2", ServerController::terminateEC2InstancesForServer, json::write);
         get(apiPrefix + "secure/servers", ServerController::fetchServers, json::write);
         post(apiPrefix + "secure/servers", ServerController::createServer, json::write);
         put(apiPrefix + "secure/servers/:id", ServerController::updateServer, json::write);
