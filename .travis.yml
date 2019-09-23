@@ -38,7 +38,7 @@ script:
   # run mvn package to make sure unit tests and packaging can work
   - mvn package
   # Restart/clear MongoDB so that E2E tests run on clean DB.
-  - ./restart-mongo-with-fresh-db.sh
+  - ./scripts/restart-mongo-with-fresh-db.sh
   # recursively copy coverage results into another folder so the e2e tests don't overwrite them
   - cp -R target target-unit-test-results
   # run just the e2e tests
