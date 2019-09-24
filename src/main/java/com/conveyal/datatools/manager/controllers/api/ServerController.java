@@ -130,6 +130,7 @@ public class ServerController {
     public static TerminateInstancesResult terminateInstances(Collection<String> instanceIds) throws AmazonEC2Exception {
         if (instanceIds.size() == 0) {
             LOG.warn("No instance IDs provided in list. Skipping termination request.");
+            return null;
         }
         LOG.info("Terminating EC2 instances {}", instanceIds);
         TerminateInstancesRequest request = new TerminateInstancesRequest().withInstanceIds(instanceIds);
