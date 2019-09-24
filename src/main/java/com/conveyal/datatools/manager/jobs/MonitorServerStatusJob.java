@@ -181,6 +181,10 @@ public class MonitorServerStatusJob extends MonitorableJob {
         }
     }
 
+    /**
+     * Get the S3 key for the bundle status file, which is uploaded by the graph-building EC2 instance after the graph
+     * build completes. The file contains either "SUCCESS" or "FAILURE".
+     */
     private String getBundleStatusKey () {
         return String.join("/", deployJob.getJobRelativePath(), DeployJob.BUNDLE_DOWNLOAD_COMPLETE_FILE);
     }

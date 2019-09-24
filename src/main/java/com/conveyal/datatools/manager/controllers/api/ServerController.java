@@ -141,6 +141,11 @@ public class ServerController {
         return terminateInstances(Arrays.asList(instanceIds));
     }
 
+    /** Convenience method to override {@link #terminateInstances(Collection)}. */
+    public static TerminateInstancesResult terminateInstances(List<Instance> instances) throws AmazonEC2Exception {
+        return terminateInstances(getIds(instances));
+    }
+
     /**
      * Create a new server for the project. All feed sources with a valid latest version are added to the new
      * deployment.

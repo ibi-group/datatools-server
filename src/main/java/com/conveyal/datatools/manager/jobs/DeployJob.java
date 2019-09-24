@@ -452,7 +452,7 @@ public class DeployJob extends MonitorableJob {
             List<Instance> instances = startEC2Instances(1, false);
             // Exit if an error was encountered.
             if (status.error || instances.size() == 0) {
-                ServerController.terminateInstances(getIds(instances));
+                ServerController.terminateInstances(instances);
                 return;
             }
             status.message = "Waiting for graph build to complete...";
@@ -474,7 +474,7 @@ public class DeployJob extends MonitorableJob {
                 statusMessage = "Error encountered while building graph. Inspect build logs.";
                 LOG.error(statusMessage);
                 status.fail(statusMessage);
-                ServerController.terminateInstances(getIds(instances));
+                ServerController.terminateInstances(instances);
                 return;
             }
             // Spin up remaining servers which will download the graph from S3.
@@ -486,7 +486,7 @@ public class DeployJob extends MonitorableJob {
                 status.message = String.format("Spinning up remaining %d instance(s).", remainingServerCount);
                 remainingInstances.addAll(startEC2Instances(remainingServerCount, true));
                 if (remainingInstances.size() == 0 || status.error) {
-                    ServerController.terminateInstances(getIds(remainingInstances));
+                    ServerController.terminateInstances(remainingInstances);
                     return;
                 }
                 // Create new thread pool to monitor server setup so that the servers are monitored in parallel.
@@ -639,6 +639,7 @@ public class DeployJob extends MonitorableJob {
                     .withTags(new Tag("jobId", this.jobId))
                     .withTags(new Tag("serverId", otpServer.id))
                     .withTags(new Tag("routerId", getRouterId()))
+                    .withTags(new Tag("user", this.owner))
                     .withResources(instance.getInstanceId())
             );
         }
@@ -704,11 +705,15 @@ public class DeployJob extends MonitorableJob {
             huc.setRequestMethod("HEAD");
             int responseCode = huc.getResponseCode();
             if (responseCode != HttpStatus.OK_200) {
-                status.fail(String.format("Requested trip planner jar does not exist at s3://%s/%s", s3JarBucket, s3JarKey));
+                statusMessage = String.format("Requested trip planner jar does not exist at s3://%s/%s", s3JarBucket, s3JarKey);
+                LOG.error(statusMessage);
+                status.fail(statusMessage);
                 return null;
             }
         } catch (IOException e) {
-            status.fail(String.format("Error checking for trip planner jar: s3://%s/%s", s3JarBucket, s3JarKey));
+            statusMessage = String.format("Error checking for trip planner jar: s3://%s/%s", s3JarBucket, s3JarKey);
+            LOG.error(statusMessage);
+            status.fail(statusMessage);
             return null;
         }
         String jarDir = String.format("/opt/%s", getTripPlannerString());
@@ -754,15 +759,16 @@ public class DeployJob extends MonitorableJob {
             // Build the graph if Graph object (presumably this is the first instance to be started up).
             if (deployment.r5) lines.add(String.format("sudo -H -u ubuntu java -Xmx6G -jar %s/%s.jar point --build %s", jarDir, jarName, routerDir));
             else lines.add(String.format("sudo -H -u ubuntu java -jar %s/%s.jar --build %s > $BUILDLOGFILE 2>&1", jarDir, jarName, routerDir));
-            // Upload the graph and build log file to S3.
+            // Upload the build log file and graph to S3.
             if (!deployment.r5) {
-                lines.add(String.format("aws s3 --region us-east-1 cp %s/%s %s ", routerDir, OTP_GRAPH_FILENAME, getS3GraphURI()));
                 String s3BuildLogPath = joinToS3FolderURI(getBuildLogFilename());
                 lines.add(String.format("aws s3 --region us-east-1 cp $BUILDLOGFILE %s ", s3BuildLogPath));
+                lines.add(String.format("aws s3 --region us-east-1 cp %s/%s %s ", routerDir, OTP_GRAPH_FILENAME, getS3GraphURI()));
             }
         }
-        // Upload user data log.
+        // Get the instance's instance ID from the AWS metadata endpoint.
         lines.add("instance_id=`curl http://169.254.169.254/latest/meta-data/instance-id`");
+        // Upload user data log associated with instance to a log file on S3.
         lines.add(String.format("aws s3 --region us-east-1 cp $USERDATALOG %s/${instance_id}.log", getS3FolderURI().toString()));
         if (deployment.buildGraphOnly) {
             // If building graph only, tell the instance to shut itself down after the graph build (and log upload) is

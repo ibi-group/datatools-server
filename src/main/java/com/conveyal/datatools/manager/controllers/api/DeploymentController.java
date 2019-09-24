@@ -112,7 +112,7 @@ public class DeploymentController {
             OtpServer server = Persistence.servers.getById(deployment.deployedTo);
             if (server == null) {
                 uriString = String.format("s3://%s/bundles/%s/%s/%s", "S3_BUCKET", deployment.projectId, deployment.id, jobId);
-                logMessageAndHalt(req, 400, "Cannot construct URI for build artifact. " + uriString);
+                logMessageAndHalt(req, 400, "The deployment does not have job history or associated server information to construct URI for build artifact. " + uriString);
                 return null;
             }
             uriString = String.format("s3://%s/bundles/%s/%s/%s", server.s3Bucket, deployment.projectId, deployment.id, jobId);
