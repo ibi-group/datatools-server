@@ -11,6 +11,7 @@ import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingC
 import com.amazonaws.services.elasticloadbalancingv2.model.RegisterTargetsRequest;
 import com.amazonaws.services.elasticloadbalancingv2.model.TargetDescription;
 import com.amazonaws.services.s3.AmazonS3URI;
+import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.amazonaws.services.s3.model.S3Object;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.models.Deployment;
@@ -168,7 +169,13 @@ public class MonitorServerStatusJob extends MonitorableJob {
     private boolean isGraphBuilt() {
         AmazonS3URI uri = new AmazonS3URI(deployJob.getS3GraphURI());
         LOG.info("Checking for graph at {}", uri.toString());
-        return FeedStore.s3Client.doesObjectExist(uri.getBucket(), uri.getKey());
+        // Surround with try/catch (exception thrown if object does not exist).
+        try {
+            return FeedStore.s3Client.doesObjectExist(uri.getBucket(), uri.getKey());
+        } catch (AmazonS3Exception e) {
+            LOG.warn("Object not found for key " + uri.getKey(), e);
+            return false;
+        }
     }
 
     /** Have the current thread sleep for a few seconds in order to pause during a while loop. */
@@ -193,7 +200,13 @@ public class MonitorServerStatusJob extends MonitorableJob {
     private boolean isBundleDownloaded() {
         String key = getBundleStatusKey();
         LOG.info("Checking for bundle complete at s3://{}/{}", otpServer.s3Bucket, key);
-        return FeedStore.s3Client.doesObjectExist(otpServer.s3Bucket, key);
+        // Surround with try/catch (exception thrown if object does not exist).
+        try {
+            return FeedStore.s3Client.doesObjectExist(otpServer.s3Bucket, key);
+        } catch (AmazonS3Exception e) {
+            LOG.warn("Object not found for key " + key, e);
+            return false;
+        }
     }
 
     /**
