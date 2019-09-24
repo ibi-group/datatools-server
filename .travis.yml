@@ -84,11 +84,9 @@ before_deploy:
 - mkdir deploy
 # Display contents of target directory (for logging purposes only).
 - ls target/*.jar
-# Copy packaged jars over to deploy dir.
+# Copy packaged jar over to deploy dir.
 - cp target/dt-*.jar deploy/
-# FIXME: Do not create a branch-specific jar for now. Having a jar that changes contents but keeps the same name
-#   may cause confusion down the road and may be undesirable.
-# - cp "target/dt-$(git describe --always).jar" "deploy/dt-latest-${BRANCH}.jar"
+- cp target/dt-*.jar "deploy/dt-latest-$BRANCH.jar"
 deploy:
   provider: s3
   skip_cleanup: true
