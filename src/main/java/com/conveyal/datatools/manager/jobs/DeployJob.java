@@ -428,7 +428,7 @@ public class DeployJob extends MonitorableJob {
             deployment.deployedTo = otpServer.id;
             deployment.deployJobSummaries.add(0, new DeploySummary(this));
             Persistence.deployments.replace(deployment.id, deployment);
-            long durationMinutes = TimeUnit.MILLISECONDS.toMinutes(status.duration);
+            long durationMinutes = TimeUnit.MILLISECONDS.toMinutes(System.currentTimeMillis() - status.startTime);
             message = String.format("Deployment %s successfully deployed to %s in %s minutes.", deployment.name, otpServer.publicUrl, durationMinutes);
         } else {
             message = String.format("WARNING: Deployment %s failed to deploy to %s. Error: %s", deployment.name, otpServer.publicUrl, status.message);
@@ -756,13 +756,15 @@ public class DeployJob extends MonitorableJob {
                 lines.add(String.format("printf \"{\\n  bikeRentalFile: \"bikeshare.xml\"\\n}\" >> %s/build-config.json\"", routerDir));
             }
             lines.add("echo 'starting graph build'");
-            // Build the graph if Graph object (presumably this is the first instance to be started up).
+            // Build the graph.
             if (deployment.r5) lines.add(String.format("sudo -H -u ubuntu java -Xmx6G -jar %s/%s.jar point --build %s", jarDir, jarName, routerDir));
             else lines.add(String.format("sudo -H -u ubuntu java -jar %s/%s.jar --build %s > $BUILDLOGFILE 2>&1", jarDir, jarName, routerDir));
             // Upload the build log file and graph to S3.
             if (!deployment.r5) {
                 String s3BuildLogPath = joinToS3FolderURI(getBuildLogFilename());
                 lines.add(String.format("aws s3 --region us-east-1 cp $BUILDLOGFILE %s ", s3BuildLogPath));
+                // FIXME Add check fof graph build file existence
+//                lines.add(String.format("[ -f %s/%s ] && GRAPH_BUILD_STATUS='SUCCESS' || GRAPH_BUILD_STATUS='FAILURE'", routerDir, OTP_GRAPH_FILENAME));
                 lines.add(String.format("aws s3 --region us-east-1 cp %s/%s %s ", routerDir, OTP_GRAPH_FILENAME, getS3GraphURI()));
             }
         }
