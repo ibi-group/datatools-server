@@ -3,9 +3,11 @@ package com.conveyal.datatools.manager.controllers.api;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.jobs.DeployJob;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.google.common.collect.Sets;
+import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
@@ -20,6 +22,7 @@ import java.util.stream.Collectors;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static spark.Spark.delete;
 import static spark.Spark.get;
+import static spark.Spark.post;
 
 /**
  * Created by landon on 6/13/16.
@@ -54,6 +57,43 @@ public class StatusController {
         // FIXME: refactor underscore in user_id methods
         String userId = userProfile.getUser_id();
         return getJobById(userId, jobId, true);
+    }
+
+    /**
+     * API route that allows EC2 instances (or other unauthenticated third parties) to remotely update the status of a
+     * job, especially a deploy job.
+     */
+    private static boolean updateJobStatus(Request req, Response res) {
+        String jobId = req.params("jobId");
+        // Note: this is a public endpoint, so rather than taking the user ID from the auth token, it is supplied as a
+        // query parameter.
+        String userId = req.queryParams("user");
+        if (userId == null) {
+            logMessageAndHalt(req, 400, "Must provide valid user ID.");
+        }
+        MonitorableJob job = getJobById(userId, jobId, true);
+        if (job == null) {
+            logMessageAndHalt(req, 400, "Must provide valid user ID and job ID.");
+        }
+        if (job instanceof DeployJob) {
+            DeployJob deployJob = (DeployJob) job;
+            if (!deployJob.isValidToken(req.queryParams("token"))) {
+                logMessageAndHalt(req, HttpStatus.UNAUTHORIZED_401, "Unauthorized to make this request.");
+                return false;
+            }
+            for (String param : req.queryParams()) {
+                boolean value = "true".equals(req.queryParams(param));
+                if ("graphBuildSuccess".equals(param)) {
+                    deployJob.updateGraphBuildStatus(value);
+                    return true;
+                }
+                if ("bundleDownloadSuccess".equals(param)) {
+                    deployJob.updateBundleDownloadStatus(value);
+                    return true;
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -147,6 +187,7 @@ public class StatusController {
         // FIXME Change endpoint for all jobs (to avoid overlap with jobId param)?
         get(apiPrefix + "secure/status/jobs/all", StatusController::getAllJobsRoute, json::write);
         get(apiPrefix + "secure/status/jobs/:jobId", StatusController::getOneJobRoute, json::write);
+        post(apiPrefix + "public/status/jobs/:jobId", StatusController::updateJobStatus, json::write);
         // TODO Add ability to cancel job
 //        delete(apiPrefix + "secure/status/jobs/:jobId", StatusController::cancelJob, json::write);
     }

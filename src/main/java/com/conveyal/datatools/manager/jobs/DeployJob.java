@@ -45,6 +45,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -103,6 +104,9 @@ public class DeployJob extends MonitorableJob {
     /** The deployment to deploy */
     private Deployment deployment;
 
+    /** Token supplied to EC2 instances in order to communicate status of certain deploy job stages via status HTTP endpoint. */
+    private final String token = UUID.randomUUID().toString();
+
     /** The OTP server to deploy to (also contains S3 information). */
     private final OtpServer otpServer;
 
@@ -124,6 +128,11 @@ public class DeployJob extends MonitorableJob {
     @JsonProperty
     public String getServerId () {
         return otpServer.id;
+    }
+
+    /** Checks that input token is valid (i.e., it matches the job's token). */
+    public boolean isValidToken (String tokenToCheck) {
+        return token.equals(tokenToCheck);
     }
 
     public Deployment getDeployment() {
@@ -717,6 +726,8 @@ public class DeployJob extends MonitorableJob {
             return null;
         }
         String jarDir = String.format("/opt/%s", getTripPlannerString());
+        String applicationUrl = DataManager.getConfigPropertyAsText("application.public_url");
+        String jobEndpoint = String.format("%s/api/manager/public/status/jobs/%s?token=%s&user=%s", applicationUrl, jobId, token, owner);
         List<String> lines = new ArrayList<>();
         String routerName = "default";
         String routerDir = String.format("/var/%s/graphs/%s", getTripPlannerString(), routerName);
@@ -743,11 +754,8 @@ public class DeployJob extends MonitorableJob {
         } else {
             // Download data bundle from S3.
             lines.add(String.format("aws s3 --region us-east-1 cp %s /tmp/bundle.zip", getS3BundleURI()));
-            // Determine if bundle download was successful.
-            lines.add("[ -f /tmp/bundle.zip ] && BUNDLE_STATUS='SUCCESS' || BUNDLE_STATUS='FAILURE'");
-            // Create and upload file with bundle status to notify Data Tools that download is complete.
-            lines.add(String.format("echo $BUNDLE_STATUS > /tmp/%s", BUNDLE_DOWNLOAD_COMPLETE_FILE));
-            lines.add(String.format("aws s3 --region us-east-1 cp /tmp/%s %s", BUNDLE_DOWNLOAD_COMPLETE_FILE, joinToS3FolderURI(BUNDLE_DOWNLOAD_COMPLETE_FILE)));
+            // Determine if bundle download was successful and notify Data Tools server via HTTP request.
+            lines.add(String.format("[ -f /tmp/bundle.zip ] && curl -XPOST '%s&bundleDownloadSuccess=true' || curl -XPOST '%s&bundleDownloadSuccess=false'", jobEndpoint, jobEndpoint));
             // Put unzipped bundle data into router directory.
             lines.add(String.format("unzip /tmp/bundle.zip -d %s", routerDir));
             // FIXME: Add ability to fetch custom bikeshare.xml file (CarFreeAtoZ)
@@ -763,8 +771,9 @@ public class DeployJob extends MonitorableJob {
             if (!deployment.r5) {
                 String s3BuildLogPath = joinToS3FolderURI(getBuildLogFilename());
                 lines.add(String.format("aws s3 --region us-east-1 cp $BUILDLOGFILE %s ", s3BuildLogPath));
-                // FIXME Add check fof graph build file existence
-//                lines.add(String.format("[ -f %s/%s ] && GRAPH_BUILD_STATUS='SUCCESS' || GRAPH_BUILD_STATUS='FAILURE'", routerDir, OTP_GRAPH_FILENAME));
+                // Check for graph build file existence and hit Data Tools server HTTP endpoint with the result.
+                lines.add(String.format("[ -f %s/%s ] && curl -XPOST '%s&graphBuildSuccess=true' || curl -XPOST '%s&graphBuildSuccess=false'", routerDir, OTP_GRAPH_FILENAME, jobEndpoint, jobEndpoint));
+                // NOTE: This may not work with localhost sites.
                 lines.add(String.format("aws s3 --region us-east-1 cp %s/%s %s ", routerDir, OTP_GRAPH_FILENAME, getS3GraphURI()));
             }
         }
@@ -818,6 +827,16 @@ public class DeployJob extends MonitorableJob {
         return String.join("/", pathList);
     }
 
+    public void updateBundleDownloadStatus(boolean graphBuildSucceeded) {
+        if (graphBuildSucceeded) status.bundleDownloadStatus = StageStatus.COMPLETED;
+        else status.bundleDownloadStatus = StageStatus.FAILED;
+    }
+
+    public void updateGraphBuildStatus(boolean graphBuildSucceeded) {
+        if (graphBuildSucceeded) status.graphBuildStatus = StageStatus.COMPLETED;
+        else status.graphBuildStatus = StageStatus.FAILED;
+    }
+
     /**
      * Represents the current status of this job.
      */
@@ -841,6 +860,12 @@ public class DeployJob extends MonitorableJob {
         /** Where can the user see the result? */
         public String baseUrl;
 
+        public StageStatus graphBuildStatus = StageStatus.WAITING;
+        public StageStatus bundleDownloadStatus = StageStatus.WAITING;
+    }
+
+    public enum StageStatus {
+        COMPLETED, FAILED, WAITING
     }
 
     /**

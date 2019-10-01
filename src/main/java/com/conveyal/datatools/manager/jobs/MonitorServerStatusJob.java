@@ -79,40 +79,32 @@ public class MonitorServerStatusJob extends MonitorableJob {
         boolean routerIsAvailable = false;
         // If graph was not already built by a previous server, wait for it to build.
         if (!graphAlreadyBuilt) {
-            boolean bundleIsDownloaded = false, graphBuildIsComplete = false;
             // Progressively check status of OTP server
-            if (deployment.buildGraphOnly) {
-                // No need to check that OTP is running. Just check to see that the graph is built.
-                bundleIsDownloaded = true;
-                routerIsAvailable = true;
-            }
             // First, check that OTP has started up.
             status.update("Prepping for graph build...", 20);
-            while (!bundleIsDownloaded) {
+            while (deployJob.status.bundleDownloadStatus.equals(DeployJob.StageStatus.WAITING)) {
                 // If the request is successful, the OTP instance has started.
                 wait("bundle download check");
-                bundleIsDownloaded = isBundleDownloaded();
                 if (jobHasTimedOut()) {
                     status.fail(String.format("Job timed out while checking for server bundle download status (%s)", instance.getInstanceId()));
                     return;
                 }
             }
-            // Check status of bundle download and fail job if there was a failure.
-            String bundleStatus = FeedStore.s3Client.getObjectAsString(otpServer.s3Bucket, getBundleStatusKey());
-            if (bundleStatus == null || !bundleStatus.contains("SUCCESS")) {
-                status.fail("Failure encountered while downloading transit bundle.");
-                return;
+            if (deployJob.status.bundleDownloadStatus.equals(DeployJob.StageStatus.FAILED)) {
+                status.fail("Bundle download failed. Please check graph building instance server log.");
             }
             status.update("Building graph...", 30);
             long graphBuildStartTime = System.currentTimeMillis();
-            while (!graphBuildIsComplete) {
+            while (deployJob.status.graphBuildStatus.equals(DeployJob.StageStatus.WAITING)) {
                 // If the request is successful, the OTP instance has started.
                 wait("graph build check");
-                graphBuildIsComplete = isGraphBuilt();
                 if (jobHasTimedOut()) {
                     status.fail(String.format("Job timed out while waiting for graph build (%s)", instance.getInstanceId()));
                     return;
                 }
+            }
+            if (deployJob.status.graphBuildStatus.equals(DeployJob.StageStatus.FAILED)) {
+                status.fail("Graph build failed. Please check otp build log.");
             }
             graphBuildSeconds = (System.currentTimeMillis() - graphBuildStartTime) / 1000;
             String message = String.format("Graph build completed in %d seconds!", graphBuildSeconds);
@@ -122,38 +114,41 @@ public class MonitorServerStatusJob extends MonitorableJob {
                 return;
             }
         }
-        status.update("Loading graph...", 40);
-        // Once this is confirmed, check for the existence of the router, which will indicate that the graph build is
-        // complete.
-        String routerUrl = String.format("http://%s/otp/routers/default", instance.getPublicIpAddress());
-        while (!routerIsAvailable) {
-            LOG.info("Checking that router is available (i.e., graph build or read is finished) at {}", routerUrl);
-            // If the request was successful, the graph build is complete!
-            // TODO: Substitute in specific router ID? Or just default to... default.
-            wait("trip planner to start up");
-            routerIsAvailable = checkForSuccessfulRequest(routerUrl);
-            if (jobHasTimedOut()) {
-                status.fail(String.format("Job timed out while waiting for trip planner to start up (%s)", instance.getInstanceId()));
-                return;
+        // If doing more than just building graph, wait for OTP server to start up.
+        if (!deployment.buildGraphOnly) {
+            status.update("Loading graph...", 40);
+            // Check for the availability of the router, which will indicate that the graph build is
+            // complete.
+            String routerUrl = String.format("http://%s/otp/routers/default", instance.getPublicIpAddress());
+            while (!routerIsAvailable) {
+                LOG.info("Checking that router is available (i.e., graph build or read is finished) at {}", routerUrl);
+                // If the request was successful, the graph build is complete!
+                // TODO: Substitute in specific router ID? Or just default to... default.
+                wait("trip planner to start up");
+                routerIsAvailable = checkForSuccessfulRequest(routerUrl);
+                if (jobHasTimedOut()) {
+                    status.fail(String.format("Job timed out while waiting for trip planner to start up (%s)", instance.getInstanceId()));
+                    return;
+                }
             }
-        }
-        status.update("Graph loaded!", 90);
-        if (otpServer.ec2Info != null && otpServer.ec2Info.targetGroupArn != null) {
-            // After the router is available, the EC2 instance can be registered with the load balancer.
-            // REGISTER INSTANCE WITH LOAD BALANCER
-            AmazonElasticLoadBalancing elbClient = AmazonElasticLoadBalancingClient.builder().build();
-            RegisterTargetsRequest registerTargetsRequest = new RegisterTargetsRequest()
+            status.update("Graph loaded!", 90);
+            if (otpServer.ec2Info != null && otpServer.ec2Info.targetGroupArn != null) {
+                // After the router is available, the EC2 instance can be registered with the load balancer.
+                // REGISTER INSTANCE WITH LOAD BALANCER
+                AmazonElasticLoadBalancing elbClient = AmazonElasticLoadBalancingClient.builder().build();
+                RegisterTargetsRequest registerTargetsRequest = new RegisterTargetsRequest()
                     .withTargetGroupArn(otpServer.ec2Info.targetGroupArn)
                     .withTargets(new TargetDescription().withId(instance.getInstanceId()));
-            elbClient.registerTargets(registerTargetsRequest);
-            // FIXME how do we know it was successful?
-            String message = String.format("Server successfully registered with load balancer %s. OTP running at %s", otpServer.ec2Info.targetGroupArn, routerUrl);
-            LOG.info(message);
-            status.update(false, message, 100, true);
-        } else {
-            String message = String.format("There is no load balancer under which to register ec2 instance %s.", instance.getInstanceId());
-            LOG.error(message);
-            status.fail(message);
+                elbClient.registerTargets(registerTargetsRequest);
+                // FIXME how do we know it was successful?
+                String message = String.format("Server successfully registered with load balancer %s. OTP running at %s", otpServer.ec2Info.targetGroupArn, routerUrl);
+                LOG.info(message);
+                status.update(false, message, 100, true);
+            } else {
+                String message = String.format("There is no load balancer under which to register ec2 instance %s.", instance.getInstanceId());
+                LOG.error(message);
+                status.fail(message);
+            }
         }
     }
 
