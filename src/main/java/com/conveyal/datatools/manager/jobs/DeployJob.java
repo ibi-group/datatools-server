@@ -86,9 +86,18 @@ public class DeployJob extends MonitorableJob {
     private static final String AMI_CONFIG_PATH = "modules.deployment.ec2.default_ami";
     private static final String DEFAULT_AMI_ID = DataManager.getConfigPropertyAsText(AMI_CONFIG_PATH);
     private static final String OTP_GRAPH_FILENAME = "Graph.obj";
-    public static final String BUNDLE_DOWNLOAD_COMPLETE_FILE = "BUNDLE_DOWNLOAD_COMPLETE";
+    // Use txt at the end of these filenames so that these can easily be viewed in a web browser.
+    public static final String BUNDLE_DOWNLOAD_COMPLETE_FILE = "BUNDLE_DOWNLOAD_COMPLETE.txt";
+    public static final String GRAPH_STATUS_FILE = "GRAPH_STATUS.txt";
     private static final long TEN_MINUTES_IN_MILLISECONDS = 10 * 60 * 1000;
-    /** 
+    // Note: using a cloudfront URL for these download repo URLs will greatly increase download/deploy speed.
+    private static final String R5_REPO_URL = DataManager.hasConfigProperty("modules.deployment.r5_download_url")
+        ? DataManager.getConfigPropertyAsText("modules.deployment.r5_download_url")
+        : "https://r5-builds.s3.amazonaws.com";
+    private static final String OTP_REPO_URL = DataManager.hasConfigProperty("modules.deployment.otp_download_url")
+        ? DataManager.getConfigPropertyAsText("modules.deployment.otp_download_url")
+        : "https://opentripplanner-builds.s3.amazonaws.com";
+    /**
      * S3 bucket to upload deployment to. If not null, uses {@link OtpServer#s3Bucket}. Otherwise, defaults to 
      * {@link DataManager#feedBucket}
      * */
@@ -119,6 +128,16 @@ public class DeployJob extends MonitorableJob {
     @JsonProperty
     public String getDeploymentId () {
         return deployment.id;
+    }
+
+    /** Increment the completed servers count (for use during ELB deployment) and update the job status. */
+    public void incrementCompletedServers() {
+        status.numServersCompleted++;
+        int totalServers = otpServer.ec2Info.instanceCount;
+        if (totalServers < 1) totalServers = 1;
+        int numRemaining = totalServers - status.numServersCompleted;
+        double newStatus = status.percentComplete + (100 - status.percentComplete) * numRemaining / totalServers;
+        status.update(String.format("Completed %d servers. %d remaining...", status.numServersCompleted, numRemaining), newStatus);
     }
 
     @JsonProperty
@@ -478,19 +497,19 @@ public class DeployJob extends MonitorableJob {
                 return;
             }
             // Spin up remaining servers which will download the graph from S3.
-            int remainingServerCount = otpServer.ec2Info.instanceCount <= 0 ? 0 : otpServer.ec2Info.instanceCount - 1;
+            status.numServersRemaining = otpServer.ec2Info.instanceCount <= 0 ? 0 : otpServer.ec2Info.instanceCount - 1;
             List<MonitorServerStatusJob> remainingServerMonitorJobs = new ArrayList<>();
             List<Instance> remainingInstances = new ArrayList<>();
-            if (remainingServerCount > 0) {
+            if (status.numServersRemaining > 0) {
                 // Spin up remaining EC2 instances.
-                status.message = String.format("Spinning up remaining %d instance(s).", remainingServerCount);
-                remainingInstances.addAll(startEC2Instances(remainingServerCount, true));
+                status.message = String.format("Spinning up remaining %d instance(s).", status.numServersRemaining);
+                remainingInstances.addAll(startEC2Instances(status.numServersRemaining, true));
                 if (remainingInstances.size() == 0 || status.error) {
                     ServerController.terminateInstances(remainingInstances);
                     return;
                 }
                 // Create new thread pool to monitor server setup so that the servers are monitored in parallel.
-                ExecutorService service = Executors.newFixedThreadPool(remainingServerCount);
+                ExecutorService service = Executors.newFixedThreadPool(status.numServersRemaining);
                 for (Instance instance : remainingInstances) {
                     // Note: new instances are added
                     MonitorServerStatusJob monitorServerStatusJob = new MonitorServerStatusJob(owner, this, instance, true);
@@ -630,7 +649,7 @@ public class DeployJob extends MonitorableJob {
         for (Instance instance : instances) {
             // The public IP addresses will likely be null at this point because they take a few seconds to initialize.
             instanceIpAddresses.put(instance.getInstanceId(), instance.getPublicIpAddress());
-            String serverName = String.format("%s %s (%s) %d", deployment.r5 ? "r5" : "otp", deployment.name, dateString, serverCounter++);
+            String serverName = String.format("%s %s (%s) %d %s", deployment.r5 ? "r5" : "otp", deployment.name, dateString, serverCounter++, graphAlreadyBuilt ? "clone" : "builder");
             LOG.info("Creating tags for new EC2 instance {}", serverName);
             ec2.createTags(new CreateTagsRequest()
                     .withTags(new Tag("Name", serverName))
@@ -695,24 +714,24 @@ public class DeployJob extends MonitorableJob {
             jarName = deployment.r5 ? deployment.r5Version : deployment.otpVersion;
             Persistence.deployments.replace(deployment.id, deployment);
         }
-        String s3JarBucket = deployment.r5 ? "r5-builds" : "opentripplanner-builds";
+        // Construct URL for trip planner jar and check that it exists with a lightweight HEAD request.
         String s3JarKey = jarName + ".jar";
-        // If jar does not exist in bucket, fail job.
-        String s3JarUrl = String.format("https://%s.s3.amazonaws.com/%s", s3JarBucket, s3JarKey);
+        String repoUrl = deployment.r5 ? R5_REPO_URL : OTP_REPO_URL;
+        String s3JarUrl = String.join("/", repoUrl, s3JarKey);
         try {
             final URL url = new URL(s3JarUrl);
             HttpURLConnection huc = (HttpURLConnection) url.openConnection();
             huc.setRequestMethod("HEAD");
             int responseCode = huc.getResponseCode();
             if (responseCode != HttpStatus.OK_200) {
-                statusMessage = String.format("Requested trip planner jar does not exist at s3://%s/%s", s3JarBucket, s3JarKey);
+                statusMessage = String.format("Requested trip planner jar does not exist at %s", s3JarUrl);
                 LOG.error(statusMessage);
                 status.fail(statusMessage);
                 return null;
             }
         } catch (IOException e) {
-            statusMessage = String.format("Error checking for trip planner jar: s3://%s/%s", s3JarBucket, s3JarKey);
-            LOG.error(statusMessage);
+            statusMessage = String.format("Error checking for trip planner jar: %s", s3JarUrl);
+            LOG.error(statusMessage, e);
             status.fail(statusMessage);
             return null;
         }
@@ -735,6 +754,10 @@ public class DeployJob extends MonitorableJob {
         lines.add(String.format("rm -rf %s/*", routerDir));
         // Download trip planner JAR.
         lines.add(String.format("mkdir -p %s", jarDir));
+        // Add client static file directory for uploading deploy stage status files.
+        // TODO: switch to AMI that uses /usr/share/nginx/html as static file dir so we don't have to create this new dir.
+        lines.add("WEB_DIR=/usr/share/nginx/client");
+        lines.add("sudo mkdir $WEB_DIR");
         lines.add(String.format("wget %s -O %s/%s.jar", s3JarUrl, jarDir, jarName));
         if (graphAlreadyBuilt) {
             lines.add("echo 'downloading graph from s3'");
@@ -745,9 +768,8 @@ public class DeployJob extends MonitorableJob {
             lines.add(String.format("aws s3 --region us-east-1 cp %s /tmp/bundle.zip", getS3BundleURI()));
             // Determine if bundle download was successful.
             lines.add("[ -f /tmp/bundle.zip ] && BUNDLE_STATUS='SUCCESS' || BUNDLE_STATUS='FAILURE'");
-            // Create and upload file with bundle status to notify Data Tools that download is complete.
-            lines.add(String.format("echo $BUNDLE_STATUS > /tmp/%s", BUNDLE_DOWNLOAD_COMPLETE_FILE));
-            lines.add(String.format("aws s3 --region us-east-1 cp /tmp/%s %s", BUNDLE_DOWNLOAD_COMPLETE_FILE, joinToS3FolderURI(BUNDLE_DOWNLOAD_COMPLETE_FILE)));
+            // Create file with bundle status in web dir to notify Data Tools that download is complete.
+            lines.add(String.format("sudo echo $BUNDLE_STATUS > $WEB_DIR/%s", BUNDLE_DOWNLOAD_COMPLETE_FILE));
             // Put unzipped bundle data into router directory.
             lines.add(String.format("unzip /tmp/bundle.zip -d %s", routerDir));
             // FIXME: Add ability to fetch custom bikeshare.xml file (CarFreeAtoZ)
@@ -763,11 +785,13 @@ public class DeployJob extends MonitorableJob {
             if (!deployment.r5) {
                 String s3BuildLogPath = joinToS3FolderURI(getBuildLogFilename());
                 lines.add(String.format("aws s3 --region us-east-1 cp $BUILDLOGFILE %s ", s3BuildLogPath));
-                // FIXME Add check fof graph build file existence
-//                lines.add(String.format("[ -f %s/%s ] && GRAPH_BUILD_STATUS='SUCCESS' || GRAPH_BUILD_STATUS='FAILURE'", routerDir, OTP_GRAPH_FILENAME));
                 lines.add(String.format("aws s3 --region us-east-1 cp %s/%s %s ", routerDir, OTP_GRAPH_FILENAME, getS3GraphURI()));
             }
         }
+        // Determine if graph build/download was successful.
+        lines.add(String.format("[ -f %s/%s ] && GRAPH_STATUS='SUCCESS' || GRAPH_STATUS='FAILURE'", routerDir, OTP_GRAPH_FILENAME));
+        // Create file with bundle status in web dir to notify Data Tools that download is complete.
+        lines.add(String.format("sudo echo $GRAPH_STATUS > $WEB_DIR/%s", GRAPH_STATUS_FILE));
         // Get the instance's instance ID from the AWS metadata endpoint.
         lines.add("instance_id=`curl http://169.254.169.254/latest/meta-data/instance-id`");
         // Upload user data log associated with instance to a log file on S3.
@@ -834,6 +858,8 @@ public class DeployJob extends MonitorableJob {
 
         /** To how many servers have we successfully deployed thus far? */
         public int numServersCompleted;
+
+        public int numServersRemaining;
 
         /** How many servers are we attempting to deploy to? */
         public int totalServers;
