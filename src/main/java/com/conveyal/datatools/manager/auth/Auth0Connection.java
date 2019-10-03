@@ -47,21 +47,7 @@ public class Auth0Connection {
         if (authDisabled() || inTestingEnvironment()) {
             // If in a development or testing environment, assign a mock profile of an admin user to the request
             // attribute and skip authentication.
-            Auth0UserProfile.DatatoolsInfo adminDatatoolsInfo = new Auth0UserProfile.DatatoolsInfo();
-            adminDatatoolsInfo.setPermissions(
-                new Auth0UserProfile.Permission[]{
-                    new Auth0UserProfile.Permission("administer-application", new String[]{})
-                }
-            );
-            adminDatatoolsInfo.setClientId(DataManager.getConfigPropertyAsText("AUTH0_CLIENT_ID"));
-
-            Auth0UserProfile.AppMetadata adminAppMetaData = new Auth0UserProfile.AppMetadata();
-            adminAppMetaData.setDatatoolsInfo(adminDatatoolsInfo);
-
-            Auth0UserProfile adminUser = new Auth0UserProfile("mock@example.com", "user_id:string");
-            adminUser.setApp_metadata(adminAppMetaData);
-
-            req.attribute("user", adminUser);
+            req.attribute("user", Auth0UserProfile.createTestAdminUser());
             return;
         }
         // Check that auth header is present and formatted correctly (Authorization: Bearer [token]).
