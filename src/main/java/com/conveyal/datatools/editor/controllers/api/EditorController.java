@@ -177,7 +177,7 @@ public abstract class EditorController<T extends Entity> {
                 updateSql += " where ";
                 try {
                     for (Field field : filterFields) {
-                        String[] filter = req.queryParams(field.name).split("\\.");
+                        String[] filter = req.queryParams(field.name).split("\\.", 2);
                         String operator = operators.get(filter[0]);
                         if (operator == null) {
                             logMessageAndHalt(req, 400, "Invalid operator provided: " + filter[0]);

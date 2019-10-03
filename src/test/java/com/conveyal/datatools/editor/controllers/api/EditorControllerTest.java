@@ -71,28 +71,79 @@ public class EditorControllerTest extends UnitTest {
     public void canPatchRoutes() throws IOException {
         LOG.info("Making patch routes request");
         ObjectNode jsonBody = mapper.createObjectNode();
-        String newName = "NEW";
-        jsonBody.put("route_short_name", newName);
+        String field = "route_short_name";
+        String value = "NEW";
+        jsonBody.put(field, value);
+        int count = patchTableRequest("route", feedVersion.feedSourceId, null, jsonBody);
+        // Assert that all six routes contained within BART feed were modified.
+        assertThat(count, equalTo(6));
+        // Check GraphQL to verify that route_short_name has indeed been updated.
+        // Get fresh feed source so that editor namespace was updated after snapshot.
+        FeedSource feedSource = Persistence.feedSources.getById(feedVersion.feedSourceId);
+        JsonNode graphQL = graphqlQuery(feedSource.editorNamespace, "graphql/routes.txt");
+        // Every route should now have the short name defined in the patch JSON body above.
+        for (JsonNode route : graphQL.get("data").get("feed").get("routes")) {
+            assertThat(route.get(field).asText(), equalTo(value));
+        }
+    }
+
+    /**
+     * Make sure the patch table endpoint can patch stops conditionally with query.
+     */
+    @Test
+    public void canPatchStopsConditionally() throws IOException {
+        LOG.info("Making conditional patch stops request");
+        ObjectNode jsonBody = mapper.createObjectNode();
+        String field = "stop_desc";
+        String value = "Oakland!";
+        // This query basically selects all stops that are east of the Bay Bridge (should be 34 in total).
+        String queryField = "stop_lon";
+        double queryValue = -122.374593;
+        String query = String.format("%s=gt.%.6f", queryField, queryValue);
+        jsonBody.put(field, value);
+        int count = patchTableRequest("stop", feedVersion.feedSourceId, query, jsonBody);
+        // Assert that all 34 stops in the East Bay were modified.
+        assertThat(count, equalTo(34));
+        // Check GraphQL to verify that stop_desc has indeed been updated.
+        // Get fresh feed source so that editor namespace was updated after snapshot.
+        FeedSource feedSource = Persistence.feedSources.getById(feedVersion.feedSourceId);
+        JsonNode graphQL = graphqlQuery(feedSource.editorNamespace, "graphql/stops.txt");
+        // Every stop meeting the stop_lon condition should now have the desc defined in the patch JSON body above.
+        for (JsonNode stop : graphQL.get("data").get("feed").get("stops")) {
+            double val = stop.get(queryField).asDouble();
+            if (val > queryValue) assertThat(stop.get(field).asText(), equalTo(value));
+            // stop_desc should be null if it does not meet query condition.
+            else assertThat(stop.get(field).asText(), equalTo(null));
+        }
+    }
+
+    /**
+     * Perform patch table request on the feed source ID with the requested query and patch JSON. A null query
+     */
+    private static int patchTableRequest(String entity, String feedId, String query, JsonNode oatchJSON) throws IOException {
+        String path = String.format("/api/editor/secure/%s?feedId=%s", entity, feedId);
+        if (query != null) path += "&" + query;
         String response = given()
             .port(DataManager.PORT)
-            .body(jsonBody)
-            .patch("/api/editor/secure/route?feedId=" + feedVersion.feedSourceId)
+            .body(oatchJSON)
+            .patch(path)
             .then()
             .extract()
             .response()
             .asString();
         JsonNode json = mapper.readTree(response);
-        int count = json.get("count").asInt();
-        // Assert that all six routes contained within BART feed were modified.
-        assertThat(count, equalTo(6));
-        // Check GraphQL to verify that route_short_name has indeed been updated.
+        return json.get("count").asInt();
+    }
+
+    /**
+     * Perform basic graphQL query for feed/namespace and query file.
+     */
+    private static JsonNode graphqlQuery (String namespace, String graphQLQueryFile) throws IOException {
         ObjectNode graphQLBody = mapper.createObjectNode();
         ObjectNode variables = mapper.createObjectNode();
-        // Get fresh feed source so that editor namespace was updated after snapshot.
-        FeedSource feedSource = Persistence.feedSources.getById(feedVersion.feedSourceId);
-        variables.put("namespace", feedSource.editorNamespace);
+        variables.put("namespace", namespace);
         graphQLBody.set("variables", variables);
-        String query = IOUtils.toString(EditorControllerTest.class.getClassLoader().getResourceAsStream("graphql/routes.txt"));
+        String query = IOUtils.toString(EditorControllerTest.class.getClassLoader().getResourceAsStream(graphQLQueryFile));
         graphQLBody.put("query", query);
         String graphQLString = given()
             .port(DataManager.PORT)
@@ -102,10 +153,6 @@ public class EditorControllerTest extends UnitTest {
             .extract()
             .response()
             .asString();
-        JsonNode graphQL = mapper.readTree(graphQLString);
-        // Every route should now have the short name defined in the patch JSON body above.
-        for (JsonNode route : graphQL.get("data").get("feed").get("routes")) {
-            assertThat(route.get("route_short_name").asText(), equalTo(newName));
-        }
+        return mapper.readTree(graphQLString);
     }
 }
