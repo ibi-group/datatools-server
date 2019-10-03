@@ -39,6 +39,7 @@ import java.util.stream.Stream;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJSON;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.editor.controllers.EditorLockController.sessionsForFeedIds;
+import static com.conveyal.datatools.manager.controllers.api.UserController.inTestingEnvironment;
 import static spark.Spark.delete;
 import static spark.Spark.options;
 import static spark.Spark.patch;
@@ -144,6 +145,9 @@ public abstract class EditorController<T extends Entity> {
             // First, check that the field names all conform to the GTFS snake_case convention as a guard against SQL
             // injection.
             JsonNode jsonNode = mapper.readTree(req.body());
+            if (jsonNode == null) {
+                logMessageAndHalt(req, 400, "JSON body must be provided with patch table request.");
+            }
             Iterator<Map.Entry<String, JsonNode>> fields = jsonNode.fields();
             List<Field> fieldsToPatch = new ArrayList<>();
             while (fields.hasNext()) {
@@ -404,23 +408,27 @@ public abstract class EditorController<T extends Entity> {
         }
         // FIXME: Switch to using spark session IDs rather than query parameter?
 //        String sessionId = req.session().id();
-        EditorLockController.EditorSession currentSession = sessionsForFeedIds.get(feedId);
-        if (currentSession == null) {
-            logMessageAndHalt(req, 400, "There is no active editing session for user.");
-        }
-        if (!currentSession.sessionId.equals(sessionId)) {
-            // This session does not match the current active session for the feed.
-            Auth0UserProfile userProfile = req.attribute("user");
-            if (currentSession.userEmail.equals(userProfile.getEmail())) {
-                LOG.warn("User {} already has editor session {} for feed {}. Same user cannot make edits on session {}.", currentSession.userEmail, currentSession.sessionId, feedId, req.session().id());
-                logMessageAndHalt(req, 400, "You have another editing session open for " + feedSource.name);
-            } else {
-                LOG.warn("User {} already has editor session {} for feed {}. User {} cannot make edits on session {}.", currentSession.userEmail, currentSession.sessionId, feedId, userProfile.getEmail(), req.session().id());
-                logMessageAndHalt(req, 400, "Somebody else is editing the " + feedSource.name + " feed.");
+        // Only check for editing session if not in testing environment.
+        // TODO: Add way to mock session.
+        if (!inTestingEnvironment()) {
+            EditorLockController.EditorSession currentSession = sessionsForFeedIds.get(feedId);
+            if (currentSession == null) {
+                logMessageAndHalt(req, 400, "There is no active editing session for user.");
             }
-        } else {
-            currentSession.lastEdit = System.currentTimeMillis();
-            LOG.info("Updating session {} last edit time to {}", sessionId, currentSession.lastEdit);
+            if (!currentSession.sessionId.equals(sessionId)) {
+                // This session does not match the current active session for the feed.
+                Auth0UserProfile userProfile = req.attribute("user");
+                if (currentSession.userEmail.equals(userProfile.getEmail())) {
+                    LOG.warn("User {} already has editor session {} for feed {}. Same user cannot make edits on session {}.", currentSession.userEmail, currentSession.sessionId, feedId, req.session().id());
+                    logMessageAndHalt(req, 400, "You have another editing session open for " + feedSource.name);
+                } else {
+                    LOG.warn("User {} already has editor session {} for feed {}. User {} cannot make edits on session {}.", currentSession.userEmail, currentSession.sessionId, feedId, userProfile.getEmail(), req.session().id());
+                    logMessageAndHalt(req, 400, "Somebody else is editing the " + feedSource.name + " feed.");
+                }
+            } else {
+                currentSession.lastEdit = System.currentTimeMillis();
+                LOG.info("Updating session {} last edit time to {}", sessionId, currentSession.lastEdit);
+            }
         }
         String namespace = feedSource.editorNamespace;
         if (namespace == null) {
