@@ -118,7 +118,8 @@ public class EditorControllerTest extends UnitTest {
     }
 
     /**
-     * Perform patch table request on the feed source ID with the requested query and patch JSON. A null query
+     * Perform patch table request on the feed source ID with the requested query and patch JSON. A null query will
+     * apply the patch JSON to the entire table.
      */
     private static int patchTableRequest(String entity, String feedId, String query, JsonNode oatchJSON) throws IOException {
         String path = String.format("/api/editor/secure/%s?feedId=%s", entity, feedId);
