@@ -29,6 +29,7 @@ import static com.conveyal.datatools.manager.controllers.api.UserController.TEST
 import static io.restassured.RestAssured.given;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.is;
 
 public class EditorControllerTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(EditorControllerTest.class);
@@ -110,10 +111,11 @@ public class EditorControllerTest extends UnitTest {
         JsonNode graphQL = graphqlQuery(feedSource.editorNamespace, "graphql/stops.txt");
         // Every stop meeting the stop_lon condition should now have the desc defined in the patch JSON body above.
         for (JsonNode stop : graphQL.get("data").get("feed").get("stops")) {
-            double val = stop.get(queryField).asDouble();
-            if (val > queryValue) assertThat(stop.get(field).asText(), equalTo(value));
+            double filteredValue = stop.get(queryField).asDouble();
+            JsonNode patchedValue = stop.get(field);
+            if (filteredValue > queryValue) assertThat(patchedValue.asText(), equalTo(value));
             // stop_desc should be null if it does not meet query condition.
-            else assertThat(stop.get(field).asText(), equalTo(null));
+            else assertThat(patchedValue.isNull(), is(true));
         }
     }
 
