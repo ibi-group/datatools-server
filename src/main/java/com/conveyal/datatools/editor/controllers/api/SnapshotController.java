@@ -39,7 +39,7 @@ import static spark.Spark.put;
  */
 public class SnapshotController {
 
-    public static final Logger LOG = LoggerFactory.getLogger(SnapshotController.class);
+    private static final Logger LOG = LoggerFactory.getLogger(SnapshotController.class);
     public static JsonManager<Snapshot> json =
             new JsonManager<>(Snapshot.class, JsonViews.UserInterface.class);
 
