@@ -18,6 +18,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.commons.dbutils.DbUtils;
+import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.HaltException;
@@ -37,6 +38,7 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJSON;
+import static com.conveyal.datatools.common.utils.SparkUtils.getObjectNode;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.editor.controllers.EditorLockController.sessionsForFeedIds;
 import static com.conveyal.datatools.manager.controllers.api.UserController.inTestingEnvironment;
@@ -131,7 +133,7 @@ public abstract class EditorController<T extends Entity> {
      * HTTP endpoint to patch an entire table with the provided JSON object according to the filtering criteria provided
      * in the query parameters.
      */
-    private int patchTable(Request req, Response res) {
+    private String patchTable(Request req, Response res) {
         String namespace = getNamespaceAndValidateSession(req);
         // Collect fields to filter on with where clause from the query parameters.
         List<Field> filterFields = new ArrayList<>();
@@ -155,7 +157,6 @@ public abstract class EditorController<T extends Entity> {
                 String fieldName = field.getKey();
                 if (!fieldName.matches(SNAKE_CASE_REGEX)) {
                     logMessageAndHalt(req, 400, "Field does not match GTFS snake_case convention: " + fieldName);
-                    return -1;
                 }
                 Field fieldToPatch = table.getFieldForName(fieldName);
                 if (fieldToPatch.requirement.equals(Requirement.UNKNOWN)) {
@@ -188,7 +189,6 @@ public abstract class EditorController<T extends Entity> {
                     updateSql += conditions;
                 } catch (ArrayIndexOutOfBoundsException e) {
                     logMessageAndHalt(req, 400, "Error encountered parsing filter.", e);
-                    return -1;
                 }
             }
             // Set up the db connection and set all of the patch and where clause parameters.
@@ -208,12 +208,14 @@ public abstract class EditorController<T extends Entity> {
             LOG.info(preparedStatement.toString());
             int recordsUpdated = preparedStatement.executeUpdate();
             connection.commit();
-            return recordsUpdated;
+            ObjectNode response = getObjectNode(String.format("%d %s(s) updated", recordsUpdated, classToLowercase), HttpStatus.OK_200, null);
+            response.put("count", recordsUpdated);
+            return response.toString();
         } catch (HaltException e) {
             throw e;
         } catch (Exception e) {
             logMessageAndHalt(req, 500, "Could not patch update table", e);
-            return -1;
+            return null;
         } finally {
             DbUtils.closeQuietly(connection);
         }

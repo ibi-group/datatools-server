@@ -11,13 +11,16 @@ import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.models.Snapshot;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import spark.utils.IOUtils;
 
+import java.io.IOException;
 import java.util.Date;
 
 import static com.conveyal.datatools.TestUtils.createFeedVersion;
@@ -58,17 +61,18 @@ public class EditorControllerTest extends UnitTest {
             new CreateSnapshotJob(snapshot, true, false, false);
         // Run in current thread so tests do not run until this is complete.
         createSnapshotJob.run();
-        LOG.info("EditorControllerTest setup completed in {} ms", System.currentTimeMillis() - startTime);
+        LOG.info("{} setup completed in {} ms", EditorControllerTest.class.getSimpleName(), System.currentTimeMillis() - startTime);
     }
 
     /**
      * Make sure the patch table endpoint can patch routes table.
      */
     @Test
-    public void canPatchRoutes() {
+    public void canPatchRoutes() throws IOException {
         LOG.info("Making patch routes request");
         ObjectNode jsonBody = mapper.createObjectNode();
-        jsonBody.put("route_short_name", "NEW");
+        String newName = "NEW";
+        jsonBody.put("route_short_name", newName);
         String response = given()
             .port(DataManager.PORT)
             .body(jsonBody)
@@ -77,9 +81,31 @@ public class EditorControllerTest extends UnitTest {
             .extract()
             .response()
             .asString();
-        LOG.info("{} routes patched", response);
+        JsonNode json = mapper.readTree(response);
+        int count = json.get("count").asInt();
         // Assert that all six routes contained within BART feed were modified.
-        assertThat(Integer.parseInt(response), equalTo(6));
-        // TODO: Check database (or use GraphQL) to verify that route_short_name has indeed been updated.
+        assertThat(count, equalTo(6));
+        // Check GraphQL to verify that route_short_name has indeed been updated.
+        ObjectNode graphQLBody = mapper.createObjectNode();
+        ObjectNode variables = mapper.createObjectNode();
+        // Get fresh feed source so that editor namespace was updated after snapshot.
+        FeedSource feedSource = Persistence.feedSources.getById(feedVersion.feedSourceId);
+        variables.put("namespace", feedSource.editorNamespace);
+        graphQLBody.set("variables", variables);
+        String query = IOUtils.toString(EditorControllerTest.class.getClassLoader().getResourceAsStream("graphql/routes.txt"));
+        graphQLBody.put("query", query);
+        String graphQLString = given()
+            .port(DataManager.PORT)
+            .body(graphQLBody)
+            .post("api/manager/secure/gtfs/graphql")
+            .then()
+            .extract()
+            .response()
+            .asString();
+        JsonNode graphQL = mapper.readTree(graphQLString);
+        // Every route should now have the short name defined in the patch JSON body above.
+        for (JsonNode route : graphQL.get("data").get("feed").get("routes")) {
+            assertThat(route.get("route_short_name").asText(), equalTo(newName));
+        }
     }
 }
