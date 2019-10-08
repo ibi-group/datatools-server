@@ -21,7 +21,9 @@ import com.amazonaws.services.ec2.model.TerminateInstancesResult;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancing;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClient;
 import com.amazonaws.services.elasticloadbalancingv2.model.AmazonElasticLoadBalancingException;
+import com.amazonaws.services.elasticloadbalancingv2.model.DeregisterTargetsRequest;
 import com.amazonaws.services.elasticloadbalancingv2.model.DescribeTargetGroupsRequest;
+import com.amazonaws.services.elasticloadbalancingv2.model.TargetDescription;
 import com.amazonaws.services.elasticloadbalancingv2.model.TargetGroup;
 import com.amazonaws.services.identitymanagement.AmazonIdentityManagement;
 import com.amazonaws.services.identitymanagement.AmazonIdentityManagementClientBuilder;
@@ -30,6 +32,7 @@ import com.amazonaws.services.identitymanagement.model.ListInstanceProfilesResul
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.jobs.MonitorServerStatusJob;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.OtpServer;
@@ -145,6 +148,29 @@ public class ServerController {
     /** Convenience method to override {@link #terminateInstances(Collection)}. */
     public static TerminateInstancesResult terminateInstances(List<Instance> instances) throws AmazonEC2Exception {
         return terminateInstances(getIds(instances));
+    }
+
+    /**
+     * De-register instances from the specified target group/load balancer and terminate the instances.
+     *
+     */
+    public static boolean deRegisterAndTerminateInstances(String targetGroupArn, List<String> instanceIds) {
+        LOG.info("De-registering instances from load balancer {}", instanceIds);
+        TargetDescription[] targetDescriptions = instanceIds.stream()
+            .map(id -> new TargetDescription().withId(id))
+            .toArray(TargetDescription[]::new);
+        try {
+            DeregisterTargetsRequest request = new DeregisterTargetsRequest()
+                .withTargetGroupArn(targetGroupArn)
+                .withTargets(targetDescriptions);
+            AmazonElasticLoadBalancing elb = AmazonElasticLoadBalancingClient.builder().build();
+            elb.deregisterTargets(request);
+            ServerController.terminateInstances(instanceIds);
+        } catch (AmazonEC2Exception | AmazonElasticLoadBalancingException e) {
+            LOG.warn("Could not terminate EC2 instances: " + String.join(",", instanceIds), e);
+            return false;
+        }
+        return true;
     }
 
     /**

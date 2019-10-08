@@ -539,7 +539,7 @@ public class DeployJob extends MonitorableJob {
                 .map(instance -> instance.instanceId)
                 .collect(Collectors.toList());
             if (previousInstanceIds.size() > 0) {
-                boolean success = deRegisterAndTerminateInstances(previousInstanceIds);
+                boolean success = ServerController.deRegisterAndTerminateInstances(otpServer.ec2Info.targetGroupArn, previousInstanceIds);
                 // If there was a problem during de-registration/termination, notify via status message.
                 if (!success) {
                     finalMessage = String.format("Server setup is complete! (WARNING: Could not terminate previous EC2 instances: %s", previousInstanceIds);
@@ -551,30 +551,6 @@ public class DeployJob extends MonitorableJob {
             LOG.error("Could not deploy to EC2 server", e);
             status.fail("Could not deploy to EC2 server", e);
         }
-    }
-
-    /**
-     * De-register instances from the load balancer and terminate the instanced.
-     *
-     * (Note: new instances are registered with load balancer in {@link MonitorServerStatusJob}.)
-     */
-    private boolean deRegisterAndTerminateInstances(List<String> instanceIds) {
-        LOG.info("De-registering instances from load balancer {}", instanceIds);
-        TargetDescription[] targetDescriptions = instanceIds.stream()
-            .map(id -> new TargetDescription().withId(id))
-            .toArray(TargetDescription[]::new);
-        DeregisterTargetsRequest deregisterTargetsRequest = new DeregisterTargetsRequest()
-            .withTargetGroupArn(otpServer.ec2Info.targetGroupArn)
-            .withTargets(targetDescriptions);
-        AmazonElasticLoadBalancing elb = AmazonElasticLoadBalancingClient.builder().build();
-        elb.deregisterTargets(deregisterTargetsRequest);
-        try {
-            ServerController.terminateInstances(instanceIds);
-        } catch (AmazonEC2Exception e) {
-            LOG.warn("Could not terminate EC2 instances {}", instanceIds);
-            return false;
-        }
-        return true;
     }
 
     /**
@@ -739,6 +715,7 @@ public class DeployJob extends MonitorableJob {
         List<String> lines = new ArrayList<>();
         String routerName = "default";
         String routerDir = String.format("/var/%s/graphs/%s", getTripPlannerString(), routerName);
+        String graphPath = String.join("/", routerDir, OTP_GRAPH_FILENAME);
         //////////////// BEGIN USER DATA
         lines.add("#!/bin/bash");
         // Send trip planner logs to LOGFILE
@@ -762,7 +739,7 @@ public class DeployJob extends MonitorableJob {
         if (graphAlreadyBuilt) {
             lines.add("echo 'downloading graph from s3'");
             // Download Graph from S3.
-            lines.add(String.format("aws s3 --region us-east-1 cp %s %s/%s ", getS3GraphURI(), routerDir, OTP_GRAPH_FILENAME));
+            lines.add(String.format("aws s3 --region us-east-1 cp %s %s ", getS3GraphURI(), graphPath));
         } else {
             // Download data bundle from S3.
             lines.add(String.format("aws s3 --region us-east-1 cp %s /tmp/bundle.zip", getS3BundleURI()));
@@ -785,11 +762,12 @@ public class DeployJob extends MonitorableJob {
             if (!deployment.r5) {
                 String s3BuildLogPath = joinToS3FolderURI(getBuildLogFilename());
                 lines.add(String.format("aws s3 --region us-east-1 cp $BUILDLOGFILE %s ", s3BuildLogPath));
-                lines.add(String.format("aws s3 --region us-east-1 cp %s/%s %s ", routerDir, OTP_GRAPH_FILENAME, getS3GraphURI()));
+                lines.add(String.format("aws s3 --region us-east-1 cp %s %s ", graphPath, getS3GraphURI()));
             }
         }
-        // Determine if graph build/download was successful.
-        lines.add(String.format("[ -f %s/%s ] && GRAPH_STATUS='SUCCESS' || GRAPH_STATUS='FAILURE'", routerDir, OTP_GRAPH_FILENAME));
+        // Determine if graph build/download was successful (and that Graph.obj is not zero bytes).
+        lines.add(String.format("FILESIZE=$(wc -c <%s)", graphPath));
+        lines.add(String.format("[ -f %s ] && (($FILESIZE > 0)) && GRAPH_STATUS='SUCCESS' || GRAPH_STATUS='FAILURE'", graphPath));
         // Create file with bundle status in web dir to notify Data Tools that download is complete.
         lines.add(String.format("sudo echo $GRAPH_STATUS > $WEB_DIR/%s", GRAPH_STATUS_FILE));
         // Get the instance's instance ID from the AWS metadata endpoint.

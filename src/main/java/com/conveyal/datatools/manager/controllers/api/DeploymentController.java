@@ -2,7 +2,6 @@ package com.conveyal.datatools.manager.controllers.api;
 
 import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.AmazonEC2Client;
-import com.amazonaws.services.ec2.model.AmazonEC2Exception;
 import com.amazonaws.services.ec2.model.DescribeInstancesRequest;
 import com.amazonaws.services.ec2.model.DescribeInstancesResult;
 import com.amazonaws.services.ec2.model.Filter;
@@ -34,6 +33,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -310,11 +310,11 @@ public class DeploymentController {
 //    }
 
     /**
-     * HTTP endpoint to terminate a set of instance IDs that are associated with a particular deployment. The intent here
-     * is to give the user a device by which they can terminate an EC2 instance that has started up, but is not responding
-     * or otherwise failed to successfully become an OTP instance as part of an ELB deployment (or perhaps two people
-     * somehow kicked off a deploy job for the same deployment simultaneously and one of the EC2 instances has
-     * out-of-date data).
+     * HTTP endpoint to deregister and terminate a set of instance IDs that are associated with a particular deployment.
+     * The intent here is to give the user a device by which they can terminate an EC2 instance that has started up, but
+     * is not responding or otherwise failed to successfully become an OTP instance as part of an ELB deployment (or
+     * perhaps two people somehow kicked off a deploy job for the same deployment simultaneously and one of the EC2
+     * instances has out-of-date data).
      */
     private static boolean terminateEC2InstanceForDeployment(Request req, Response res) {
         Deployment deployment = getDeploymentWithPermissions(req, res);
@@ -323,22 +323,37 @@ public class DeploymentController {
             logMessageAndHalt(req, 400, "Must provide one or more instance IDs.");
             return false;
         }
-        String[] idsToTerminate = instanceIds.split(",");
+        List<String> idsToTerminate = Arrays.asList(instanceIds.split(","));
         // Ensure that request does not contain instance IDs which are not associated with this deployment.
-        List<String> ec2InstancesForDeployment = deployment.retrieveEC2Instances().stream()
+        List<EC2InstanceSummary> instances = deployment.retrieveEC2Instances();
+        List<String> instanceIdsForDeployment = instances.stream()
             .map(ec2InstanceSummary -> ec2InstanceSummary.instanceId)
             .collect(Collectors.toList());
+        // Get the target group ARN from the latest deployment. Surround in a try/catch in case of NPEs.
+        // TODO: Perhaps provide some other way to provide the target group ARN.
+        String targetGroupArn;
+        try {
+            targetGroupArn = deployment.latest().ec2Info.targetGroupArn;
+        } catch (Exception e) {
+            logMessageAndHalt(req, 400, "Latest deploy job does not exist or is missing target group ARN.");
+            return false;
+        }
         for (String id : idsToTerminate) {
-            if (!ec2InstancesForDeployment.contains(id)) {
+            if (!instanceIdsForDeployment.contains(id)) {
                 logMessageAndHalt(req, HttpStatus.UNAUTHORIZED_401, "It is not permitted to terminate an instance that is not associated with deployment " + deployment.id);
+                return false;
+            }
+            int code = instances.get(instanceIdsForDeployment.indexOf(id)).state.getCode();
+            // 48 indicates instance is terminated, 32 indicates shutting down. Prohibit terminating an already
+            if (code == 48 || code == 32) {
+                logMessageAndHalt(req, 400, "Instance is already terminated/shutting down: " + id);
                 return false;
             }
         }
         // If checks are ok, terminate instances.
-        try {
-            ServerController.terminateInstances(idsToTerminate);
-        } catch (AmazonEC2Exception e) {
-            logMessageAndHalt(req, 400, "Could not complete termination request", e);
+        boolean success = ServerController.deRegisterAndTerminateInstances(targetGroupArn, idsToTerminate);
+        if (!success) {
+            logMessageAndHalt(req, 400, "Could not complete termination request");
             return false;
         }
         return true;
