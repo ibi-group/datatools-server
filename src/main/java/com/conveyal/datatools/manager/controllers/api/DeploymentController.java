@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.controllers.api;
 
 import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.AmazonEC2Client;
+import com.amazonaws.services.ec2.model.AmazonEC2Exception;
 import com.amazonaws.services.ec2.model.DescribeInstancesRequest;
 import com.amazonaws.services.ec2.model.DescribeInstancesResult;
 import com.amazonaws.services.ec2.model.Filter;
@@ -22,7 +23,6 @@ import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
-import com.mongodb.client.FindIterable;
 import org.bson.Document;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
@@ -63,7 +63,7 @@ public class DeploymentController {
      * Gets the deployment specified by the request's id parameter and ensure that user has access to the
      * deployment. If the user does not have permission the Spark request is halted with an error.
      */
-    private static Deployment checkDeploymentPermissions (Request req, Response res) {
+    private static Deployment getDeploymentWithPermissions(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         String deploymentId = req.params("id");
         Deployment deployment = Persistence.deployments.getById(deploymentId);
@@ -79,11 +79,11 @@ public class DeploymentController {
     }
 
     private static Deployment getDeployment (Request req, Response res) {
-        return checkDeploymentPermissions(req, res);
+        return getDeploymentWithPermissions(req, res);
     }
 
     private static Deployment deleteDeployment (Request req, Response res) {
-        Deployment deployment = checkDeploymentPermissions(req, res);
+        Deployment deployment = getDeploymentWithPermissions(req, res);
         deployment.delete();
         return deployment;
     }
@@ -92,7 +92,7 @@ public class DeploymentController {
      * HTTP endpoint for downloading a build artifact (e.g., otp build log or Graph.obj) from S3.
      */
     private static String downloadBuildArtifact (Request req, Response res) {
-        Deployment deployment = checkDeploymentPermissions(req, res);
+        Deployment deployment = getDeploymentWithPermissions(req, res);
         DeployJob.DeploySummary summaryToDownload = null;
         String uriString = null;
         // If a jobId query param is provided, find the matching job summary.
@@ -134,7 +134,7 @@ public class DeploymentController {
      * TODO: Should there be an option to download the OSM network as well?
      */
     private static FileInputStream downloadDeployment (Request req, Response res) throws IOException {
-        Deployment deployment = checkDeploymentPermissions(req, res);
+        Deployment deployment = getDeploymentWithPermissions(req, res);
         // Create temp file in order to generate input stream.
         File temp = File.createTempFile("deployment", ".zip");
         // just include GTFS, not any of the ancillary information
@@ -251,8 +251,8 @@ public class DeploymentController {
      * Update a single deployment. If the deployment's feed versions are updated, checks to ensure that each
      * version exists and is a part of the same parent project are performed before updating.
      */
-    private static Object updateDeployment (Request req, Response res) {
-        Deployment deploymentToUpdate = checkDeploymentPermissions(req, res);
+    private static Deployment updateDeployment (Request req, Response res) {
+        Deployment deploymentToUpdate = getDeploymentWithPermissions(req, res);
         Document updateDocument = Document.parse(req.body());
         // FIXME use generic update hook, also feedVersions is getting serialized into MongoDB (which is undesirable)
         // Check that feed versions in request body are OK to add to deployment, i.e., they exist and are a part of
@@ -295,11 +295,60 @@ public class DeploymentController {
         return updatedDeployment;
     }
 
+    // TODO: Add some point it may be useful to refactor DeployJob to allow adding an EC2 instance to an existing job,
+    //  but for now that can be achieved by using the AWS EC2 console: choose an EC2 instance to replicate and select
+    //  "Run more like this". Then follow the prompts to replicate the instance.
+//    private static Object addEC2InstanceToDeployment(Request req, Response res) {
+//        Deployment deployment = getDeploymentWithPermissions(req, res);
+//        List<EC2InstanceSummary> currentEC2Instances = deployment.retrieveEC2Instances();
+//        EC2InstanceSummary ec2ToClone = currentEC2Instances.get(0);
+//        RunInstancesRequest request = new RunInstancesRequest();
+//        ec2.runInstances()
+//        ec2ToClone.
+//        DeployJob.DeploySummary latestDeployJob = deployment.latest();
+//
+//    }
+
+    /**
+     * HTTP endpoint to terminate a set of instance IDs that are associated with a particular deployment. The intent here
+     * is to give the user a device by which they can terminate an EC2 instance that has started up, but is not responding
+     * or otherwise failed to successfully become an OTP instance as part of an ELB deployment (or perhaps two people
+     * somehow kicked off a deploy job for the same deployment simultaneously and one of the EC2 instances has
+     * out-of-date data).
+     */
+    private static boolean terminateEC2InstanceForDeployment(Request req, Response res) {
+        Deployment deployment = getDeploymentWithPermissions(req, res);
+        String instanceIds = req.queryParams("instanceIds");
+        if (instanceIds == null) {
+            logMessageAndHalt(req, 400, "Must provide one or more instance IDs.");
+            return false;
+        }
+        String[] idsToTerminate = instanceIds.split(",");
+        // Ensure that request does not contain instance IDs which are not associated with this deployment.
+        List<String> ec2InstancesForDeployment = deployment.retrieveEC2Instances().stream()
+            .map(ec2InstanceSummary -> ec2InstanceSummary.instanceId)
+            .collect(Collectors.toList());
+        for (String id : idsToTerminate) {
+            if (!ec2InstancesForDeployment.contains(id)) {
+                logMessageAndHalt(req, HttpStatus.UNAUTHORIZED_401, "It is not permitted to terminate an instance that is not associated with deployment " + deployment.id);
+                return false;
+            }
+        }
+        // If checks are ok, terminate instances.
+        try {
+            ServerController.terminateInstances(idsToTerminate);
+        } catch (AmazonEC2Exception e) {
+            logMessageAndHalt(req, 400, "Could not complete termination request", e);
+            return false;
+        }
+        return true;
+    }
+
     /**
      * HTTP controller to fetch information about provided EC2 machines that power ELBs running a trip planner.
      */
     private static List<EC2InstanceSummary> fetchEC2InstanceSummaries(Request req, Response res) {
-        Deployment deployment = checkDeploymentPermissions(req, res);
+        Deployment deployment = getDeploymentWithPermissions(req, res);
         return deployment.retrieveEC2Instances();
     }
 
@@ -332,7 +381,7 @@ public class DeploymentController {
         // Check parameters supplied in request for validity.
         Auth0UserProfile userProfile = req.attribute("user");
         String target = req.params("target");
-        Deployment deployment = checkDeploymentPermissions(req, res);
+        Deployment deployment = getDeploymentWithPermissions(req, res);
         Project project = Persistence.projects.getById(deployment.projectId);
         if (project == null)
             logMessageAndHalt(req, 400, "Internal reference error. Deployment's project ID is invalid");
@@ -402,13 +451,12 @@ public class DeploymentController {
         get(apiPrefix + "secure/deployments/:id/download", DeploymentController::downloadDeployment);
         get(apiPrefix + "secure/deployments/:id/artifact", DeploymentController::downloadBuildArtifact);
         get(apiPrefix + "secure/deployments/:id/ec2", DeploymentController::fetchEC2InstanceSummaries, json::write);
-        // TODO: In the future, we may have need for terminating a single EC2 instance. For now, an admin using the AWS
-        //  console should suffice.
-//        delete(apiPrefix + "secure/deployments/:id/ec2", DeploymentController::terminateEC2Instance, json::write);
+        delete(apiPrefix + "secure/deployments/:id/ec2", DeploymentController::terminateEC2InstanceForDeployment, json::write);
         get(apiPrefix + "secure/deployments/:id", DeploymentController::getDeployment, json::write);
         delete(apiPrefix + "secure/deployments/:id", DeploymentController::deleteDeployment, json::write);
         get(apiPrefix + "secure/deployments", DeploymentController::getAllDeployments, json::write);
         post(apiPrefix + "secure/deployments", DeploymentController::createDeployment, json::write);
+//        post(apiPrefix + "secure/deployments/:id/ec2", DeploymentController::addEC2InstanceToDeployment, json::write);
         put(apiPrefix + "secure/deployments/:id", DeploymentController::updateDeployment, json::write);
         post(apiPrefix + "secure/deployments/fromfeedsource/:id", DeploymentController::createDeploymentFromFeedSource, json::write);
     }
