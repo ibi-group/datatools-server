@@ -39,7 +39,7 @@
         <url>https://github.com/ibi-group/datatools-server.git</url>
     </scm>
     <properties>
-        <jackson.version>2.9.9</jackson.version>
+        <jackson.version>2.9.10</jackson.version>
         <!-- Using the latest version of geotools (e.g, 20) seems to cause issues with the shapefile
         plugin where the_geom for each feature is null. -->
         <geotools.version>17.5</geotools.version>
@@ -290,11 +290,10 @@
             <artifactId>jackson-dataformat-yaml</artifactId>
             <version>${jackson.version}</version>
         </dependency>
-        <!-- This version does not use ${jackson.version} because v2.9.9.1 does not exist for jackson-annotations. -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>2.9.9.1</version>
+            <version>${jackson.version}</version>
         </dependency>
 
         <dependency>
