@@ -29,7 +29,7 @@ import static com.conveyal.datatools.manager.DataManager.registerRoutes;
  * 5. string value (corresponding to field in arg 3) to filter feeds on (omit to use NULL as value or comma separate to
  *    include multiple values)
  * 6. boolean (optional) whether to run SQL as a test run (i.e., rollback changes and do not commit). If missing, this
- *    defaults to false.
+ *    defaults to true.
  *
  * Sample arguments:
  *
@@ -64,14 +64,10 @@ public class UpdateSQLFeedsMain {
     }
 
     /**
-     *
-     * @param updateSql
-     * @param field
-     * @param values
-     * @return
-     * @throws SQLException
+     * Applies the update SQL to feeds/namespaces based on the conditional expression provided by the field/values inputs.
+     * If testRun is true, all changes applied to database will be rolled back at the end of execution.
      */
-    private static List<String> updateFeedsWhere(String updateSql, String field, String[] values, boolean testRun)throws SQLException {
+    private static List<String> updateFeedsWhere(String updateSql, String field, String[] values, boolean testRun) throws SQLException {
         if (updateSql == null) throw new RuntimeException("Update SQL must not be null!");
         // Keep track of failed namespaces for convenient printing at end of method.
         List<String> failedNamespace = new ArrayList<>();
