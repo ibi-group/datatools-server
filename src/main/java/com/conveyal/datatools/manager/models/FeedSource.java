@@ -9,6 +9,8 @@ import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
+import com.conveyal.gtfs.GTFS;
+import com.conveyal.gtfs.validator.ValidationResult;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -537,10 +539,16 @@ public class FeedSource extends Model implements Cloneable {
      *
      * FIXME: Use a Mongo transaction to handle the deletion of these related objects.
      */
-    public boolean delete() {
+    public void delete() {
         try {
+            // Remove all feed version records for this feed source
             retrieveFeedVersions().forEach(FeedVersion::delete);
-
+            // Remove all snapshot records for this feed source
+            retrieveSnapshots().forEach(Snapshot::delete);
+            // Delete active editor buffer if exists.
+            if (this.editorNamespace != null) {
+                GTFS.delete(this.editorNamespace, DataManager.GTFS_DATA_SOURCE);
+            }
             // Delete latest copy of feed source on S3.
             if (DataManager.useS3) {
                 DeleteObjectsRequest delete = new DeleteObjectsRequest(DataManager.feedBucket);
@@ -554,10 +562,9 @@ public class FeedSource extends Model implements Cloneable {
             // editor snapshots)?
 
             // Finally, delete the feed source mongo document.
-            return Persistence.feedSources.removeById(this.id);
+            Persistence.feedSources.removeById(this.id);
         } catch (Exception e) {
             LOG.error("Could not delete feed source", e);
-            return false;
         }
     }
 

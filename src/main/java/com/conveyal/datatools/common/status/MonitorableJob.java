@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -18,7 +19,8 @@ import java.util.concurrent.TimeUnit;
 /**
  * Created by landon on 6/13/16.
  */
-public abstract class MonitorableJob implements Runnable {
+public abstract class MonitorableJob implements Runnable, Serializable {
+    private static final long serialVersionUID = 1L;
     private static final Logger LOG = LoggerFactory.getLogger(MonitorableJob.class);
     public final String owner;
 
@@ -60,6 +62,7 @@ public abstract class MonitorableJob implements Runnable {
         EXPORT_SNAPSHOT_TO_GTFS,
         CONVERT_EDITOR_MAPDB_TO_SQL,
         VALIDATE_ALL_FEEDS,
+        MONITOR_SERVER_STATUS,
         MERGE_FEED_VERSIONS
     }
 
@@ -128,7 +131,6 @@ public abstract class MonitorableJob implements Runnable {
         boolean parentJobErrored = false;
         boolean subTaskErrored = false;
         String cancelMessage = "";
-        long startTimeNanos = System.nanoTime();
         try {
             // First execute the core logic of the specific MonitorableJob subclass
             jobLogic();
@@ -187,8 +189,7 @@ public abstract class MonitorableJob implements Runnable {
             LOG.error("Job failed", ex);
             status.update(true, ex.getMessage(), 100, true);
         }
-        status.startTime = TimeUnit.NANOSECONDS.toMillis(startTimeNanos);
-        status.duration = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNanos);
+        status.duration = System.currentTimeMillis() - status.startTime;
         LOG.info("{} {} {} in {} ms", type, jobId, status.error ? "errored" : "completed", status.duration);
     }
 
@@ -242,7 +243,7 @@ public abstract class MonitorableJob implements Runnable {
         /** How much of task is complete? */
         public double percentComplete;
 
-        public long startTime;
+        public long startTime = System.currentTimeMillis();
         public long duration;
 
         // When was the job initialized?

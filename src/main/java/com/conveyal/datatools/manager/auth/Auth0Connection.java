@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.auth;
 
+import com.auth0.jwt.JWTExpiredException;
 import com.auth0.jwt.JWTVerifier;
 import com.auth0.jwt.pem.PemReader;
 import com.conveyal.datatools.manager.DataManager;
@@ -76,6 +77,9 @@ public class Auth0Connection {
             // The user attribute is used on the server side to check user permissions and does not have all of the
             // fields that the raw Auth0 profile string does.
             req.attribute("user", profile);
+        } catch (JWTExpiredException e) {
+            LOG.warn("JWT token has expired for user.");
+            logMessageAndHalt(req, 401, "User's authentication token has expired. Please re-login.");
         } catch (Exception e) {
             LOG.warn("Login failed to verify with our authorization provider.", e);
             logMessageAndHalt(req, 401, "Could not verify user's token");

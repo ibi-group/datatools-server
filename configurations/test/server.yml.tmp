@@ -24,11 +24,10 @@ modules:
     ec2:
       enabled: false
       default_ami: ami-your-ami-id
-    # Note: using a cloudfront URL for these download URLs will greatly
-    # increase download/deploy speed.
-    otp_download_url: https://optional-otp-repo.com
-    r5_download_url: https://optional-r5-repo.com
   user_admin:
+    enabled: true
+  # Enable GTFS+ module for testing purposes
+  gtfsplus:
     enabled: true
   gtfsapi:
     enabled: true
@@ -36,6 +35,13 @@ modules:
     # use_extension: mtc
     # update_frequency: 30 # in seconds
 extensions:
+  # Enable MTC extension so MTC-specific feed merge tests
+  mtc:
+    enabled: true
+    rtd_api: http://localhost:9876/
+    s3_bucket: bucket-name
+    s3_prefix: waiting/
+    s3_download_prefix: waiting/
   transitland:
     enabled: true
     api: https://transit.land/api/v1/feeds

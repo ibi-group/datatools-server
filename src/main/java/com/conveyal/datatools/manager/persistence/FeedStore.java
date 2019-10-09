@@ -158,7 +158,7 @@ public class FeedStore {
         }
     }
 
-    private static AWSCredentialsProvider getAWSCreds () {
+    public static AWSCredentialsProvider getAWSCreds () {
         if (S3_CREDENTIALS_FILENAME != null) {
             return new ProfileCredentialsProvider(S3_CREDENTIALS_FILENAME, "default");
         } else {
