@@ -30,7 +30,9 @@ public class StatusController {
     public static JsonManager<MonitorableJob.Status> json =
             new JsonManager<>(MonitorableJob.Status.class, JsonViews.UserInterface.class);
 
-    // TODO: Admin API route to return active jobs for all application users.
+    /**
+     * Admin API route to return active jobs for all application users.
+     */
     private static Set<MonitorableJob> getAllJobsRoute(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         if (!userProfile.canAdministerApplication()) {

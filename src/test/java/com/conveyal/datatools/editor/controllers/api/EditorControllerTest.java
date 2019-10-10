@@ -57,9 +57,8 @@ public class EditorControllerTest extends UnitTest {
         feedVersion = createFeedVersion(feedSource, "bart_old.zip");
         // Create and run snapshot job
         Snapshot snapshot = new Snapshot("Snapshot of " + feedVersion.name, feedSource.id, feedVersion.namespace);
-        snapshot.storeUser(Auth0UserProfile.createTestAdminUser());
         CreateSnapshotJob createSnapshotJob =
-            new CreateSnapshotJob(snapshot, true, false, false);
+            new CreateSnapshotJob(Auth0UserProfile.createTestAdminUser(), snapshot, true, false, false);
         // Run in current thread so tests do not run until this is complete.
         createSnapshotJob.run();
         LOG.info("{} setup completed in {} ms", EditorControllerTest.class.getSimpleName(), System.currentTimeMillis() - startTime);

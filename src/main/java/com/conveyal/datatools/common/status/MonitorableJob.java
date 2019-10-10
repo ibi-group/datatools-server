@@ -1,6 +1,8 @@
 package com.conveyal.datatools.common.status;
 
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.Sets;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.slf4j.Logger;
@@ -14,7 +16,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 /**
  * Created by landon on 6/13/16.
@@ -22,7 +23,7 @@ import java.util.concurrent.TimeUnit;
 public abstract class MonitorableJob implements Runnable, Serializable {
     private static final long serialVersionUID = 1L;
     private static final Logger LOG = LoggerFactory.getLogger(MonitorableJob.class);
-    public final String owner;
+    protected final Auth0UserProfile owner;
 
     // Public fields will be serialized over HTTP API and visible to the web client
     public final JobType type;
@@ -66,20 +67,20 @@ public abstract class MonitorableJob implements Runnable, Serializable {
         MERGE_FEED_VERSIONS
     }
 
-    public MonitorableJob(String owner, String name, JobType type) {
+    public MonitorableJob(Auth0UserProfile owner, String name, JobType type) {
         this.owner = owner;
         this.name = name;
         this.type = type;
         registerJob();
     }
 
-    public MonitorableJob(String owner) {
+    public MonitorableJob(Auth0UserProfile owner) {
         this(owner, "Unnamed Job", JobType.UNKNOWN_TYPE);
     }
 
     /** Constructor for a usually unmonitored system job (but still something we want to conform to our model). */
     public MonitorableJob () {
-        this("system", "System job", JobType.SYSTEM_JOB);
+        this(Auth0UserProfile.createSystemUser(), "System job", JobType.SYSTEM_JOB);
     }
 
     /**
@@ -93,7 +94,17 @@ public abstract class MonitorableJob implements Runnable, Serializable {
         if (userJobs == null) userJobs = Sets.newConcurrentHashSet();
         userJobs.add(this);
 
-        DataManager.userJobsMap.put(this.owner, userJobs);
+        DataManager.userJobsMap.put(retrieveUserId(), userJobs);
+    }
+
+    @JsonProperty("owner")
+    public String retrieveUserId() {
+        return this.owner == null ? "unknown" : this.owner.getUser_id();
+    }
+
+    @JsonProperty("email")
+    public String retrieveEmail() {
+        return this.owner == null ? "unknown" : this.owner.getEmail();
     }
 
     public File retrieveFile () {

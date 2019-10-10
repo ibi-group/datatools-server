@@ -449,7 +449,7 @@ public class DeploymentController {
         }
 
         // Execute the deployment job and keep track of it in the jobs for server map.
-        DeployJob job = new DeployJob(deployment, userProfile.getUser_id(), otpServer);
+        DeployJob job = new DeployJob(deployment, userProfile, otpServer);
         DataManager.heavyExecutor.execute(job);
         deploymentJobsByServer.put(target, job);
 

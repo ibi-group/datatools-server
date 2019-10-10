@@ -241,7 +241,7 @@ public class GtfsPlusController {
         newFeedVersion.hash = HashUtils.hashFile(newGtfsFile);
 
         // Must be handled by executor because it takes a long time.
-        ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(newFeedVersion, profile.getUser_id(), true);
+        ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(newFeedVersion, profile, true);
         DataManager.heavyExecutor.execute(processSingleFeedJob);
 
         return formatJobMessage(processSingleFeedJob.jobId, "Feed version is processing.");

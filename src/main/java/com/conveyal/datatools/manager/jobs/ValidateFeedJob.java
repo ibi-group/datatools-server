@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.Scheduler;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.validator.ValidationResult;
@@ -19,7 +20,7 @@ public class ValidateFeedJob extends MonitorableJob {
     private FeedVersion feedVersion;
     private final boolean isNewVersion;
 
-    public ValidateFeedJob(FeedVersion version, String owner, boolean isNewVersion) {
+    public ValidateFeedJob(FeedVersion version, Auth0UserProfile owner, boolean isNewVersion) {
         super(owner, "Validating Feed", JobType.VALIDATE_FEED);
         feedVersion = version;
         this.isNewVersion = isNewVersion;
@@ -29,6 +30,12 @@ public class ValidateFeedJob extends MonitorableJob {
     @Override
     public void jobLogic () {
         LOG.info("Running ValidateFeedJob for {}", feedVersion.id);
+        try {
+            // FIXME: REMOVE! This sleeps for an hour and is just for testing stuff.
+            Thread.sleep(1000 * 60 * 60);
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
         feedVersion.validate(status);
     }
 

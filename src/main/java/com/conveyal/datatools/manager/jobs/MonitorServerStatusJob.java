@@ -13,6 +13,7 @@ import com.amazonaws.services.elasticloadbalancingv2.model.TargetDescription;
 import com.amazonaws.services.s3.AmazonS3URI;
 import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.persistence.FeedStore;
@@ -50,7 +51,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
     private final long startTime;
     public long graphBuildSeconds;
 
-    public MonitorServerStatusJob(String owner, DeployJob deployJob, Instance instance, boolean graphAlreadyBuilt) {
+    public MonitorServerStatusJob(Auth0UserProfile owner, DeployJob deployJob, Instance instance, boolean graphAlreadyBuilt) {
         super(
             owner,
             String.format("Monitor server setup %s", instance.getPublicIpAddress()),
