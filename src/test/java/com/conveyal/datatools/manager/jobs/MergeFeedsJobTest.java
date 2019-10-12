@@ -21,6 +21,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import static com.conveyal.datatools.TestUtils.createFeedVersion;
+import static com.conveyal.datatools.TestUtils.zipFolderFiles;
 import static org.junit.Assert.assertEquals;
 
 /**
@@ -33,6 +34,9 @@ public class MergeFeedsJobTest extends UnitTest {
     private static FeedVersion calTrainVersion;
     private static Project project;
     private static FeedVersion napaVersion;
+    private static FeedVersion bothCalendarFilesVersion;
+    private static FeedVersion onlyCalendarVersion;
+    private static FeedVersion onlyCalendarDatesVersion;
 
     /**
      * Prepare and start a testing-specific web server
@@ -41,23 +45,47 @@ public class MergeFeedsJobTest extends UnitTest {
     public static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
+
         // Create a project, feed sources, and feed versions to merge.
         project = new Project();
         project.name = String.format("Test %s", new Date().toString());
         Persistence.projects.create(project);
+
+        // Bart
         FeedSource bart = new FeedSource("BART");
         bart.projectId = project.id;
         Persistence.feedSources.create(bart);
-        bartVersion1 = createFeedVersion(bart, "bart_old.zip");
-        bartVersion2 = createFeedVersion(bart, "bart_new.zip");
+        bartVersion1 = TestUtils.createFeedVersionFromGtfsZip(bart, "bart_old.zip");
+        bartVersion2 = TestUtils.createFeedVersionFromGtfsZip(bart, "bart_new.zip");
+
+        // Caltrain
         FeedSource caltrain = new FeedSource("Caltrain");
         caltrain.projectId = project.id;
         Persistence.feedSources.create(caltrain);
-        calTrainVersion = createFeedVersion(caltrain, "caltrain_gtfs.zip");
+        calTrainVersion = TestUtils.createFeedVersionFromGtfsZip(caltrain, "caltrain_gtfs.zip");
+
+        // Napa
         FeedSource napa = new FeedSource("Napa");
         napa.projectId = project.id;
         Persistence.feedSources.create(napa);
-        napaVersion = createFeedVersion(napa, "napa-no-agency-id.zip");
+        napaVersion = TestUtils.createFeedVersionFromGtfsZip(napa, "napa-no-agency-id.zip");
+
+        // Fake agencies (for testing calendar service_id merges with MTC strategy).
+        FeedSource fakeAgency = new FeedSource("Fake Agency");
+        fakeAgency.projectId = project.id;
+        Persistence.feedSources.create(fakeAgency);
+        bothCalendarFilesVersion = createFeedVersion(
+            fakeAgency,
+            zipFolderFiles("fake-agency-with-calendar-and-calendar-dates")
+        );
+        onlyCalendarVersion = createFeedVersion(
+            fakeAgency,
+            zipFolderFiles("fake-agency-with-only-calendar")
+        );
+        onlyCalendarDatesVersion = createFeedVersion(
+            fakeAgency,
+            zipFolderFiles("fake-agency-with-only-calendar-dates")
+        );
     }
 
     /**
@@ -188,5 +216,16 @@ public class MergeFeedsJobTest extends UnitTest {
             NewGTFSErrorType.REFERENTIAL_INTEGRITY.toString(),
             NewGTFSErrorType.DUPLICATE_ID.toString()
         );
+    }
+
+    @Test
+    public void canMergeFeedWithMTCStrategy () {
+        Set<FeedVersion> versions = new HashSet<>();
+        versions.add(bothCalendarFilesVersion);
+        versions.add(onlyCalendarVersion);
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob("test", versions, "merged_output", MergeFeedsType.MTC);
+        // Run the job in this thread (we're not concerned about concurrency here).
+        mergeFeedsJob.run();
+        // TODO assert correct service_id feed scoping has occurred
     }
 }

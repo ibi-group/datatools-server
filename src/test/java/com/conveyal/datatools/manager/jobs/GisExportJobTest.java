@@ -43,7 +43,7 @@ import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
-import static com.conveyal.datatools.TestUtils.createFeedVersion;
+import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
@@ -73,10 +73,10 @@ public class GisExportJobTest extends UnitTest {
         Persistence.projects.create(project);
         FeedSource caltrain = new FeedSource("Caltrain");
         Persistence.feedSources.create(caltrain);
-        calTrainVersion = createFeedVersion(caltrain, "caltrain_gtfs.zip");
+        calTrainVersion = createFeedVersionFromGtfsZip(caltrain, "caltrain_gtfs.zip");
         FeedSource hawaii = new FeedSource("Hawaii");
         Persistence.feedSources.create(hawaii);
-        hawaiiVersion = createFeedVersion(hawaii, "hawaii_fake_no_shapes.zip");
+        hawaiiVersion = createFeedVersionFromGtfsZip(hawaii, "hawaii_fake_no_shapes.zip");
     }
 
     /**
