@@ -755,8 +755,9 @@ public class DeployJob extends MonitorableJob {
                 lines.add(String.format("printf \"{\\n  bikeRentalFile: \"bikeshare.xml\"\\n}\" >> %s/build-config.json\"", routerDir));
             }
             lines.add("echo 'starting graph build'");
+            lines.add("TOTAL_MEM=`grep MemTotal /proc/meminfo | sed 's/[^0-9]//g'`");
             // 2097152 kb is 2GB, leave that much for the OS
-            lines.add("MEM=`echo $TOTAL_MEM - 2097152 | bc`");
+            lines.add("MEM=`echo $(($TOTAL_MEM - 2097152))`");
             // Build the graph.
             if (deployment.r5) lines.add(String.format("sudo -H -u ubuntu java -Xmx${MEM}k -jar %s/%s.jar point --build %s", jarDir, jarName, routerDir));
             else lines.add(String.format("sudo -H -u ubuntu java -jar %s/%s.jar --build %s > $BUILDLOGFILE 2>&1", jarDir, jarName, routerDir));
