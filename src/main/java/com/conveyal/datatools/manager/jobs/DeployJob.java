@@ -760,7 +760,7 @@ public class DeployJob extends MonitorableJob {
             lines.add("MEM=`echo $(($TOTAL_MEM - 2097152))`");
             // Build the graph.
             if (deployment.r5) lines.add(String.format("sudo -H -u ubuntu java -Xmx${MEM}k -jar %s/%s.jar point --build %s", jarDir, jarName, routerDir));
-            else lines.add(String.format("sudo -H -u ubuntu java -jar %s/%s.jar --build %s > $BUILDLOGFILE 2>&1", jarDir, jarName, routerDir));
+            else lines.add(String.format("sudo -H -u ubuntu java -jar -Xmx${MEM}k %s/%s.jar --build %s > $BUILDLOGFILE 2>&1", jarDir, jarName, routerDir));
             // Upload the build log file and graph to S3.
             if (!deployment.r5) {
                 String s3BuildLogPath = joinToS3FolderURI(getBuildLogFilename());
@@ -786,7 +786,7 @@ public class DeployJob extends MonitorableJob {
             // Otherwise, kick off the application.
             lines.add("echo 'kicking off trip planner (logs at $LOGFILE)'");
             if (deployment.r5) lines.add(String.format("sudo -H -u ubuntu nohup java -Xmx${MEM}k -Djava.util.Arrays.useLegacyMergeSort=true -jar %s/%s.jar point --isochrones %s > /var/log/r5.out 2>&1&", jarDir, jarName, routerDir));
-            else lines.add(String.format("sudo -H -u ubuntu nohup java -jar %s/%s.jar --server --bindAddress 127.0.0.1 --router default > $LOGFILE 2>&1 &", jarDir, jarName));
+            else lines.add(String.format("sudo -H -u ubuntu nohup java -jar -Xmx${MEM}k %s/%s.jar --server --bindAddress 127.0.0.1 --router default > $LOGFILE 2>&1 &", jarDir, jarName));
         }
         // Return the entire user data script as a single string.
         return String.join("\n", lines);
