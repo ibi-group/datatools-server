@@ -113,8 +113,9 @@ public class MonitorServerStatusJob extends MonitorableJob {
             message = String.format("Bundle downloaded in %d seconds!", bundleDownloadSeconds);
             LOG.info(message);
             status.update("Building graph...", 30);
+        } else {
+            status.update("Loading graph...", 40);
         }
-        status.update("Loading graph...", 40);
         long graphBuildStartTime = System.currentTimeMillis();
         String graphStatusUrl = String.join("/", ipUrl, GRAPH_STATUS_FILE);
         while (!graphIsAvailable) {
