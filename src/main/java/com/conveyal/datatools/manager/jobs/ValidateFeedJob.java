@@ -30,12 +30,6 @@ public class ValidateFeedJob extends MonitorableJob {
     @Override
     public void jobLogic () {
         LOG.info("Running ValidateFeedJob for {}", feedVersion.id);
-        try {
-            // FIXME: REMOVE! This sleeps for an hour and is just for testing stuff.
-            Thread.sleep(1000 * 60 * 60);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
         feedVersion.validate(status);
     }
 
