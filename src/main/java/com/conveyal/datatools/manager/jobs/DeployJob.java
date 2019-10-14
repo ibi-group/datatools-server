@@ -741,10 +741,10 @@ public class DeployJob extends MonitorableJob {
         if (graphAlreadyBuilt) {
             lines.add("echo 'downloading graph from s3'");
             // Download Graph from S3.
-            lines.add(String.format("aws s3 --region us-east-1 --debug --cli-read-timeout 0 cp %s %s ", getS3GraphURI(), graphPath));
+            lines.add(String.format("aws s3 --region us-east-1 --cli-read-timeout 0 cp %s %s ", getS3GraphURI(), graphPath));
         } else {
             // Download data bundle from S3.
-            lines.add(String.format("aws s3 --region us-east-1 --debug --cli-read-timeout 0 cp %s /tmp/bundle.zip", getS3BundleURI()));
+            lines.add(String.format("aws s3 --region us-east-1 --cli-read-timeout 0 cp %s /tmp/bundle.zip", getS3BundleURI()));
             // Determine if bundle download was successful.
             lines.add("[ -f /tmp/bundle.zip ] && BUNDLE_STATUS='SUCCESS' || BUNDLE_STATUS='FAILURE'");
             // Create file with bundle status in web dir to notify Data Tools that download is complete.
