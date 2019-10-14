@@ -639,6 +639,8 @@ public class DeployJob extends MonitorableJob {
             );
         }
         List<Instance> updatedInstances = new ArrayList<>();
+        // Store time we began checking for IP addresses for time out.
+        long beginIpCheckTime = System.currentTimeMillis();
         while (instanceIpAddresses.values().contains(null)) {
             LOG.info("Checking that public IP addresses have initialized for EC2 instances.");
             // Reset instances list so that updated instances have the latest state information (e.g., public IP has
@@ -660,7 +662,7 @@ public class DeployJob extends MonitorableJob {
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-            if (System.currentTimeMillis() - status.startTime > TEN_MINUTES_IN_MILLISECONDS) {
+            if (System.currentTimeMillis() - beginIpCheckTime > TEN_MINUTES_IN_MILLISECONDS) {
                 status.fail("Job timed out due to public IP assignment taking longer than ten minutes!");
                 return updatedInstances;
             }
