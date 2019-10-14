@@ -739,10 +739,10 @@ public class DeployJob extends MonitorableJob {
         if (graphAlreadyBuilt) {
             lines.add("echo 'downloading graph from s3'");
             // Download Graph from S3.
-            lines.add(String.format("aws s3 --region us-east-1 cp %s %s ", getS3GraphURI(), graphPath));
+            lines.add(String.format("aws s3 --region us-east-1 --cli-read-timeout 0 cp %s %s ", getS3GraphURI(), graphPath));
         } else {
             // Download data bundle from S3.
-            lines.add(String.format("aws s3 --region us-east-1 cp %s /tmp/bundle.zip", getS3BundleURI()));
+            lines.add(String.format("aws s3 --region us-east-1 --cli-read-timeout 0 cp %s /tmp/bundle.zip", getS3BundleURI()));
             // Determine if bundle download was successful.
             lines.add("[ -f /tmp/bundle.zip ] && BUNDLE_STATUS='SUCCESS' || BUNDLE_STATUS='FAILURE'");
             // Create file with bundle status in web dir to notify Data Tools that download is complete.
@@ -755,9 +755,14 @@ public class DeployJob extends MonitorableJob {
                 lines.add(String.format("printf \"{\\n  bikeRentalFile: \"bikeshare.xml\"\\n}\" >> %s/build-config.json\"", routerDir));
             }
             lines.add("echo 'starting graph build'");
+            // Get the total memory by grepping for MemTotal in meminfo file and removing non-numbers from the line
+            // (leaving just the total mem in kb).
+            lines.add("TOTAL_MEM=`grep MemTotal /proc/meminfo | sed 's/[^0-9]//g'`");
+            // 2097152 kb is 2GB, leave that much for the OS
+            lines.add("MEM=`echo $(($TOTAL_MEM - 2097152))`");
             // Build the graph.
-            if (deployment.r5) lines.add(String.format("sudo -H -u ubuntu java -Xmx6G -jar %s/%s.jar point --build %s", jarDir, jarName, routerDir));
-            else lines.add(String.format("sudo -H -u ubuntu java -jar %s/%s.jar --build %s > $BUILDLOGFILE 2>&1", jarDir, jarName, routerDir));
+            if (deployment.r5) lines.add(String.format("sudo -H -u ubuntu java -Xmx${MEM}k -jar %s/%s.jar point --build %s", jarDir, jarName, routerDir));
+            else lines.add(String.format("sudo -H -u ubuntu java -jar -Xmx${MEM}k %s/%s.jar --build %s > $BUILDLOGFILE 2>&1", jarDir, jarName, routerDir));
             // Upload the build log file and graph to S3.
             if (!deployment.r5) {
                 String s3BuildLogPath = joinToS3FolderURI(getBuildLogFilename());
@@ -782,8 +787,8 @@ public class DeployJob extends MonitorableJob {
         } else {
             // Otherwise, kick off the application.
             lines.add("echo 'kicking off trip planner (logs at $LOGFILE)'");
-            if (deployment.r5) lines.add(String.format("sudo -H -u ubuntu nohup java -Xmx6G -Djava.util.Arrays.useLegacyMergeSort=true -jar %s/%s.jar point --isochrones %s > /var/log/r5.out 2>&1&", jarDir, jarName, routerDir));
-            else lines.add(String.format("sudo -H -u ubuntu nohup java -jar %s/%s.jar --server --bindAddress 127.0.0.1 --router default > $LOGFILE 2>&1 &", jarDir, jarName));
+            if (deployment.r5) lines.add(String.format("sudo -H -u ubuntu nohup java -Xmx${MEM}k -Djava.util.Arrays.useLegacyMergeSort=true -jar %s/%s.jar point --isochrones %s > /var/log/r5.out 2>&1&", jarDir, jarName, routerDir));
+            else lines.add(String.format("sudo -H -u ubuntu nohup java -jar -Xmx${MEM}k %s/%s.jar --server --bindAddress 127.0.0.1 --router default > $LOGFILE 2>&1 &", jarDir, jarName));
         }
         // Return the entire user data script as a single string.
         return String.join("\n", lines);
