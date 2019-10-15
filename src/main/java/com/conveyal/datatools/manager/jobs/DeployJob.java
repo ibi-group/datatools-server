@@ -8,6 +8,7 @@ import com.amazonaws.services.ec2.model.AmazonEC2Exception;
 import com.amazonaws.services.ec2.model.CreateTagsRequest;
 import com.amazonaws.services.ec2.model.DescribeInstanceStatusRequest;
 import com.amazonaws.services.ec2.model.DescribeInstancesRequest;
+import com.amazonaws.services.ec2.model.Filter;
 import com.amazonaws.services.ec2.model.IamInstanceProfileSpecification;
 import com.amazonaws.services.ec2.model.Instance;
 import com.amazonaws.services.ec2.model.InstanceNetworkInterfaceSpecification;
@@ -42,9 +43,11 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -54,6 +57,7 @@ import com.amazonaws.waiters.Waiter;
 import com.amazonaws.waiters.WaiterParameters;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.controllers.api.DeploymentController;
 import com.conveyal.datatools.manager.controllers.api.ServerController;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.EC2Info;
@@ -610,7 +614,7 @@ public class DeployJob extends MonitorableJob {
         final List<Instance> instances = ec2.runInstances(runInstancesRequest).getReservation().getInstances();
 
         List<String> instanceIds = getIds(instances);
-        Map<String, String> instanceIpAddresses = new HashMap<>();
+        Set<String> instanceIpAddresses = new HashSet<>();
         // Wait so that create tags request does not fail because instances not found.
         try {
             Waiter<DescribeInstanceStatusRequest> waiter = ec2.waiters().instanceStatusOk();
@@ -624,8 +628,8 @@ public class DeployJob extends MonitorableJob {
             return Collections.EMPTY_LIST;
         }
         for (Instance instance : instances) {
-            // The public IP addresses will likely be null at this point because they take a few seconds to initialize.
-            instanceIpAddresses.put(instance.getInstanceId(), instance.getPublicIpAddress());
+            // Note: The public IP addresses will likely be null at this point because they take a few seconds to
+            // initialize.
             String serverName = String.format("%s %s (%s) %d %s", deployment.r5 ? "r5" : "otp", deployment.name, dateString, serverCounter++, graphAlreadyBuilt ? "clone" : "builder");
             LOG.info("Creating tags for new EC2 instance {}", serverName);
             ec2.createTags(new CreateTagsRequest()
@@ -639,23 +643,26 @@ public class DeployJob extends MonitorableJob {
                     .withResources(instance.getInstanceId())
             );
         }
+        // Store the instances with updated IP addresses here.
         List<Instance> updatedInstances = new ArrayList<>();
         // Store time we began checking for IP addresses for time out.
         long beginIpCheckTime = System.currentTimeMillis();
-        while (instanceIpAddresses.values().contains(null)) {
+        Filter instanceIdFilter = new Filter("instance-id", instanceIds);
+        // While all of the IPs have not been established, keep checking the EC2 instances, waiting a few seconds between
+        // each check.
+        while (instanceIpAddresses.size() < instances.size()) {
             LOG.info("Checking that public IP addresses have initialized for EC2 instances.");
-            // Reset instances list so that updated instances have the latest state information (e.g., public IP has
-            // been assigned).
-            updatedInstances.clear();
             // Check that all of the instances have public IPs.
-            DescribeInstancesRequest request = new DescribeInstancesRequest().withInstanceIds(instanceIds);
-            List<Reservation> reservations = ec2.describeInstances(request).getReservations();
-            for (Reservation reservation  : reservations) {
-                for (Instance instance : reservation.getInstances()) {
-                    instanceIpAddresses.put(instance.getInstanceId(), instance.getPublicIpAddress());
+            List<Instance> instancesWithIps = DeploymentController.fetchEC2Instances(instanceIdFilter);
+            for (Instance instance : instancesWithIps) {
+                String publicIp = instance.getPublicIpAddress();
+                // If IP has been found, store the updated instance and IP.
+                if (publicIp != null) {
+                    instanceIpAddresses.add(publicIp);
                     updatedInstances.add(instance);
                 }
             }
+
             try {
                 int sleepTimeMillis = 10000;
                 LOG.info("Waiting {} seconds to perform another public IP address check...", sleepTimeMillis / 1000);
@@ -668,7 +675,7 @@ public class DeployJob extends MonitorableJob {
                 return updatedInstances;
             }
         }
-        LOG.info("Public IP addresses have all been assigned. {}", instanceIpAddresses.values().toString());
+        LOG.info("Public IP addresses have all been assigned. {}", String.join(",", instanceIpAddresses));
         return updatedInstances;
     }
 
