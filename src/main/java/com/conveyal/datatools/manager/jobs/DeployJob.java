@@ -89,6 +89,8 @@ public class DeployJob extends MonitorableJob {
     public static final String DEFAULT_INSTANCE_TYPE = "t2.medium";
     private static final String AMI_CONFIG_PATH = "modules.deployment.ec2.default_ami";
     private static final String DEFAULT_AMI_ID = DataManager.getConfigPropertyAsText(AMI_CONFIG_PATH);
+    // Indicates whether EC2 instances should be EBS optimized.
+    private static final boolean EBS_OPTIMIZED = "true".equals(DataManager.getConfigPropertyAsText("modules.deployment.ec2.ebs_optimized"));
     private static final String OTP_GRAPH_FILENAME = "Graph.obj";
     // Use txt at the end of these filenames so that these can easily be viewed in a web browser.
     public static final String BUNDLE_DOWNLOAD_COMPLETE_FILE = "BUNDLE_DOWNLOAD_COMPLETE.txt";
@@ -605,6 +607,11 @@ public class DeployJob extends MonitorableJob {
         RunInstancesRequest runInstancesRequest = new RunInstancesRequest()
                 .withNetworkInterfaces(interfaceSpecification)
                 .withInstanceType(instanceType)
+                // TODO: Optimize for EBS to support large systems like NYSDOT.
+                //  This may incur additional costs and may need to be replaced with some other setting
+                //  if it is proves too expensive. However, it may be the easiest way to resolve the
+                //  issue where downloading a graph larger than 3GB slows to a halt.
+                .withEbsOptimized(EBS_OPTIMIZED)
                 .withMinCount(count)
                 .withMaxCount(count)
                 .withIamInstanceProfile(new IamInstanceProfileSpecification().withArn(otpServer.ec2Info.iamInstanceProfileArn))
