@@ -445,13 +445,14 @@ public class DeployJob extends MonitorableJob {
             // Store the target server in the deployedTo field and set last deployed time.
             LOG.info("Updating deployment target and deploy time.");
             deployment.deployedTo = otpServer.id;
-            deployment.deployJobSummaries.add(0, new DeploySummary(this));
-            Persistence.deployments.replace(deployment.id, deployment);
-            long durationMinutes = TimeUnit.MILLISECONDS.toMinutes(System.currentTimeMillis() - status.startTime);
+            long durationMinutes = TimeUnit.MILLISECONDS.toMinutes(status.duration);
             message = String.format("Deployment %s successfully deployed to %s in %s minutes.", deployment.name, otpServer.publicUrl, durationMinutes);
         } else {
             message = String.format("WARNING: Deployment %s failed to deploy to %s. Error: %s", deployment.name, otpServer.publicUrl, status.message);
         }
+        // Unconditionally add deploy summary. If the job fails, we should still record the summary.
+        deployment.deployJobSummaries.add(0, new DeploySummary(this));
+        Persistence.deployments.replace(deployment.id, deployment);
         // Send notification to those subscribed to updates for the deployment.
         NotifyUsersForSubscriptionJob.createNotification("deployment-updated", deployment.id, message);
     }
@@ -726,6 +727,11 @@ public class DeployJob extends MonitorableJob {
         lines.add("USERDATALOG=/var/log/user-data.log");
         // Log user data setup to /var/log/user-data.log
         lines.add("exec > >(tee $USERDATALOG|logger -t user-data -s 2>/dev/console) 2>&1");
+        // Get the total memory by grepping for MemTotal in meminfo file and removing non-numbers from the line
+        // (leaving just the total mem in kb). This is used for starting up the OTP build/run processes.
+        lines.add("TOTAL_MEM=`grep MemTotal /proc/meminfo | sed 's/[^0-9]//g'`");
+        // 2097152 kb is 2GB, leave that much for the OS
+        lines.add("MEM=`echo $(($TOTAL_MEM - 2097152))`");
         // Create the directory for the graph inputs.
         lines.add(String.format("mkdir -p %s", routerDir));
         lines.add(String.format("chown ubuntu %s", routerDir));
@@ -757,11 +763,6 @@ public class DeployJob extends MonitorableJob {
                 lines.add(String.format("printf \"{\\n  bikeRentalFile: \"bikeshare.xml\"\\n}\" >> %s/build-config.json\"", routerDir));
             }
             lines.add("echo 'starting graph build'");
-            // Get the total memory by grepping for MemTotal in meminfo file and removing non-numbers from the line
-            // (leaving just the total mem in kb).
-            lines.add("TOTAL_MEM=`grep MemTotal /proc/meminfo | sed 's/[^0-9]//g'`");
-            // 2097152 kb is 2GB, leave that much for the OS
-            lines.add("MEM=`echo $(($TOTAL_MEM - 2097152))`");
             // Build the graph.
             if (deployment.r5) lines.add(String.format("sudo -H -u ubuntu java -Xmx${MEM}k -jar %s/%s.jar point --build %s", jarDir, jarName, routerDir));
             else lines.add(String.format("sudo -H -u ubuntu java -jar -Xmx${MEM}k %s/%s.jar --build %s > $BUILDLOGFILE 2>&1", jarDir, jarName, routerDir));
@@ -860,15 +861,14 @@ public class DeployJob extends MonitorableJob {
      */
     public static class DeploySummary implements Serializable {
         private static final long serialVersionUID = 1L;
+        public DeployStatus status;
         public String serverId;
-        public long duration;
         public String s3Bucket;
         public String jobId;
         /** URL for build log file from latest deploy job. */
         public String buildArtifactsFolder;
         public String otpVersion;
         public EC2Info ec2Info;
-        public long startTime;
         public long finishTime = System.currentTimeMillis();
 
         /** Empty constructor for serialization */
@@ -880,8 +880,7 @@ public class DeployJob extends MonitorableJob {
             this.otpVersion = job.deployment.otpVersion;
             this.jobId = job.jobId;
             this.s3Bucket = job.s3Bucket;
-            this.startTime = job.status.startTime;
-            this.duration = job.status.duration;
+            this.status = job.status;
             this.buildArtifactsFolder = job.getS3FolderURI().toString();
         }
     }
