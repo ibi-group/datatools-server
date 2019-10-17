@@ -347,14 +347,15 @@ public class Auth0UserProfile {
         return false;
     }
 
+    /** Check that user can administer project. Organization ID is drawn from persisted project. */
     public boolean canAdministerProject(String projectId) {
-        if(canAdministerApplication()) return true;
+        if (canAdministerApplication()) return true;
         com.conveyal.datatools.manager.models.Project p = Persistence.projects.getById(projectId);
-        if(canAdministerOrganization(p.organizationId)) return true;
-        for(Project project : app_metadata.getDatatoolsInfo().projects) {
+        if (p != null && canAdministerOrganization(p.organizationId)) return true;
+        for (Project project : app_metadata.getDatatoolsInfo().projects) {
             if (project.project_id.equals(projectId)) {
-                for(Permission permission : project.permissions) {
-                    if(permission.type.equals("administer-project")) {
+                for (Permission permission : project.permissions) {
+                    if (permission.type.equals("administer-project")) {
                         return true;
                     }
                 }
@@ -375,6 +376,7 @@ public class Auth0UserProfile {
         return false;
     }
 
+    /** Check that user has manage feed or view feed permissions. */
     public boolean canManageOrViewFeed(String organizationId, String projectID, String feedID) {
         return canManageFeed(organizationId, projectID, feedID) || canViewFeed(organizationId, projectID, feedID);
     }
