@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.auth;
 
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -346,6 +347,22 @@ public class Auth0UserProfile {
         return false;
     }
 
+    public boolean canAdministerProject(String projectId) {
+        if(canAdministerApplication()) return true;
+        com.conveyal.datatools.manager.models.Project p = Persistence.projects.getById(projectId);
+        if(canAdministerOrganization(p.organizationId)) return true;
+        for(Project project : app_metadata.getDatatoolsInfo().projects) {
+            if (project.project_id.equals(projectId)) {
+                for(Permission permission : project.permissions) {
+                    if(permission.type.equals("administer-project")) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
     public boolean canViewFeed(String organizationId, String projectID, String feedID) {
         if (canAdministerApplication() || canAdministerProject(projectID, organizationId)) {
             return true;
@@ -356,6 +373,10 @@ public class Auth0UserProfile {
             }
         }
         return false;
+    }
+
+    public boolean canManageOrViewFeed(String organizationId, String projectID, String feedID) {
+        return canManageFeed(organizationId, projectID, feedID) || canViewFeed(organizationId, projectID, feedID);
     }
 
     public boolean canManageFeed(String organizationId, String projectID, String feedID) {

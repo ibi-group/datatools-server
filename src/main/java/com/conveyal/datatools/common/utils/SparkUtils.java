@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.io.ByteStreams;
+import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.HaltException;
@@ -97,6 +98,16 @@ public class SparkUtils {
      */
     public static void logMessageAndHalt(Request request, int statusCode, String message) throws HaltException {
         logMessageAndHalt(request, statusCode, message, null);
+    }
+
+    /** Utility method to parse generic object from Spark request body. */
+    public static <T> T getPOJOFromRequestBody(Request req, Class<T> clazz) throws IOException {
+        try {
+            return mapper.readValue(req.body(), clazz);
+        } catch (IOException e) {
+            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Error parsing JSON for " + clazz.getSimpleName(), e);
+            throw e;
+        }
     }
 
     /**
