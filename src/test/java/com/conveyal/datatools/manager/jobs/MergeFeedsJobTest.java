@@ -44,7 +44,7 @@ public class MergeFeedsJobTest extends UnitTest {
      * Prepare and start a testing-specific web server
      */
     @BeforeClass
-    public static void setUp() throws IOException {
+    public static void setUp() throws IOException, InterruptedException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
 
@@ -80,14 +80,17 @@ public class MergeFeedsJobTest extends UnitTest {
             fakeAgency,
             zipFolderFiles("fake-agency-with-calendar-and-calendar-dates")
         );
+        Thread.sleep(1000); // sleep 1s so a duplicate FeedVersionID is not generated
         onlyCalendarVersion = createFeedVersion(
             fakeAgency,
             zipFolderFiles("fake-agency-with-only-calendar")
         );
+        Thread.sleep(1000); // sleep 1s so a duplicate FeedVersionID is not generated
         onlyCalendarDatesVersion = createFeedVersion(
             fakeAgency,
             zipFolderFiles("fake-agency-with-only-calendar-dates")
         );
+        Thread.sleep(1000); // sleep 1s so a duplicate FeedVersionID is not generated
     }
 
     /**
