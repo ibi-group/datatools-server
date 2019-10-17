@@ -62,7 +62,7 @@ public class TestUtils {
     }
 
     private static String getGtfsResourcePath(String gtfsFileName) {
-        return TestUtils.class.getResource("gtfs" + gtfsFileName).getFile();
+        return TestUtils.class.getResource("gtfs/" + gtfsFileName).getFile();
     }
 
     /**
@@ -131,13 +131,33 @@ public class TestUtils {
         return String.join(File.separator, directory, filename);
     }
 
-    public static void assertThatSqlQueryYieldsRowCount(String sql, int expectedRowCount) throws
-        SQLException {
+    public static ResultSet executeSql (String sql) throws SQLException {
         LOG.info(sql);
+        return GTFS_DATA_SOURCE.getConnection().prepareStatement(sql).executeQuery();
+    }
+
+    public static void assertThatSqlCountQueryYieldsExpectedCount(String sql, int expectedCount) throws SQLException {
+        int count = 0;
+        ResultSet resultSet = executeSql(sql);
+        while (resultSet.next()) {
+            count = resultSet.getInt(1);
+        }
+        assertThat(
+            "Records matching query should equal expected count.",
+            count,
+            equalTo(expectedCount)
+        );
+    }
+
+    public static void assertThatSqlQueryYieldsRowCount(String sql, int expectedRowCount) throws SQLException {
         int recordCount = 0;
-        ResultSet rs = GTFS_DATA_SOURCE.getConnection().prepareStatement(sql).executeQuery();
+        ResultSet rs = executeSql(sql);
         while (rs.next()) recordCount++;
-        assertThat("Records matching query should equal expected count.", recordCount, equalTo(expectedRowCount));
+        assertThat(
+            "Records matching query should equal expected count.",
+            recordCount,
+            equalTo(expectedRowCount)
+        );
     }
 
     public static void assertThatFeedHasNoErrorsOfType (String namespace, String... errorTypes) throws SQLException {

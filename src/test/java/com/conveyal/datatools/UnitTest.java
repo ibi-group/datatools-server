@@ -1,6 +1,9 @@
 package com.conveyal.datatools;
 
+import com.conveyal.datatools.editor.controllers.api.EditorControllerTest;
 import org.junit.BeforeClass;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import static com.conveyal.datatools.TestUtils.getBooleanEnvVar;
 import static org.junit.Assume.assumeFalse;
@@ -11,8 +14,10 @@ import static org.junit.Assume.assumeFalse;
  * code coverage reports.
  */
 public abstract class UnitTest {
+    private static final Logger LOG = LoggerFactory.getLogger(UnitTest.class);
     @BeforeClass
     public static void beforeAll () {
+        LOG.info(String.valueOf(getBooleanEnvVar("RUN_E2E")));
         // make sure the RUN_E2E environment variable is set to true.  Otherwise, this test suite should be skipped and
         // the overall build should not depend on inheriting test suites passing in order to save time.
         assumeFalse(getBooleanEnvVar("RUN_E2E"));

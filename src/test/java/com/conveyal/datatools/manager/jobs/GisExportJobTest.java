@@ -43,6 +43,8 @@ import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
+import static com.conveyal.datatools.TestUtils.assertThatSqlCountQueryYieldsExpectedCount;
+import static com.conveyal.datatools.TestUtils.assertThatSqlQueryYieldsRowCount;
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
@@ -183,16 +185,11 @@ public class GisExportJobTest extends UnitTest {
                 }
             }
         }
-        PreparedStatement preparedStatement = DataManager.GTFS_DATA_SOURCE.getConnection()
-            .prepareStatement(
-                String.format("select count(*) from %s" + ".patterns", calTrainVersion.namespace));
-        ResultSet resultSet = preparedStatement.executeQuery();
-        int patternCount = 0;
-        while (resultSet.next()) {
-            patternCount = resultSet.getInt(1);
-        }
         // Check that feature count = pattern count from SQL query.
-        assertThat(featureCount, equalTo(patternCount));
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("select count(*) from %s" + ".patterns", calTrainVersion.namespace),
+            featureCount
+        );
     }
 
     /**
@@ -237,16 +234,11 @@ public class GisExportJobTest extends UnitTest {
                 }
             }
         }
-        PreparedStatement preparedStatement = DataManager.GTFS_DATA_SOURCE.getConnection()
-            .prepareStatement(
-                String.format("select count(*) from %s" + ".patterns", hawaiiVersion.namespace));
-        ResultSet resultSet = preparedStatement.executeQuery();
-        int patternCount = 0;
-        while (resultSet.next()) {
-            patternCount = resultSet.getInt(1);
-        }
         // Check that feature count = pattern count from SQL query.
-        assertThat(featureCount, equalTo(patternCount));
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("select count(*) from %s" + ".patterns", hawaiiVersion.namespace),
+            featureCount
+        );
     }
 
     /** Unzip the shapefile into a temp directory and return a list of its files. */

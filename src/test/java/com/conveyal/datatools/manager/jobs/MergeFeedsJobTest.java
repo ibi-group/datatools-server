@@ -20,6 +20,8 @@ import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;
 
+import static com.conveyal.datatools.TestUtils.assertThatSqlCountQueryYieldsExpectedCount;
+import static com.conveyal.datatools.TestUtils.assertThatSqlQueryYieldsRowCount;
 import static com.conveyal.datatools.TestUtils.createFeedVersion;
 import static com.conveyal.datatools.TestUtils.zipFolderFiles;
 import static org.junit.Assert.assertEquals;
@@ -219,13 +221,20 @@ public class MergeFeedsJobTest extends UnitTest {
     }
 
     @Test
-    public void canMergeFeedWithMTCStrategy () {
+    public void canMergeFeedWithMTCStrategy () throws SQLException {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(bothCalendarFilesVersion);
         versions.add(onlyCalendarVersion);
         MergeFeedsJob mergeFeedsJob = new MergeFeedsJob("test", versions, "merged_output", MergeFeedsType.MTC);
         // Run the job in this thread (we're not concerned about concurrency here).
         mergeFeedsJob.run();
-        // TODO assert correct service_id feed scoping has occurred
+        // assert correct service_id feed scoping has occurred
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format(
+                "SELECT count(*) FROM %s.calendar WHERE service_id='scoped:both_id'",
+                mergeFeedsJob.mergedVersion.namespace
+            ),
+            1
+        );
     }
 }
