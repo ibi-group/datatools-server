@@ -46,7 +46,9 @@ public class MonitorServerStatusJob extends MonitorableJob {
     private final CloseableHttpClient httpClient = HttpClients.createDefault();
     // If the job takes longer than XX seconds, fail the job.
     private static final int TIMEOUT_MILLIS = 60 * 60 * 1000; // One hour
-    private static final int DELAY_SECONDS = 5;
+    // Delay checks by twenty seconds to give user-data script time to upload the instance's user data log if part of the
+    // script fails (e.g., uploading or downloading a file).
+    private static final int DELAY_SECONDS = 20;
     private final long startTime;
     public long graphBuildSeconds;
 
