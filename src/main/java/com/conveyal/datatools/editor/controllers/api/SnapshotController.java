@@ -200,7 +200,7 @@ public class SnapshotController {
         } else {
             // If not storing on s3, just use the token download method.
             token = new FeedDownloadToken(snapshot);
-            Persistence.tokens.create(token);
+            Persistence.feedDownloadTokens.create(token);
             return token;
         }
     }
@@ -237,14 +237,14 @@ public class SnapshotController {
     private static Object downloadSnapshotWithToken (Request req, Response res) {
         // FIXME: Update for refactored FeedStore
         String id = req.params("token");
-        FeedDownloadToken token = Persistence.tokens.getById(id);
+        FeedDownloadToken token = Persistence.feedDownloadTokens.getById(id);
 
         if(token == null || !token.isValid()) {
             logMessageAndHalt(req, 400, "Feed download token not valid");
         }
 
         Snapshot snapshot = token.retrieveSnapshot();
-        Persistence.tokens.removeById(token.id);
+        Persistence.feedDownloadTokens.removeById(token.id);
         String fileName = snapshot.id + ".zip";
         return downloadFile(FeedVersion.feedStore.getFeed(fileName), fileName, req, res);
     }

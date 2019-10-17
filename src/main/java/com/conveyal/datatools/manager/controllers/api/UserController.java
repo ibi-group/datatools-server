@@ -8,6 +8,7 @@ import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Note;
 import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.models.User;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -36,6 +37,7 @@ import java.net.URLEncoder;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
@@ -44,6 +46,7 @@ import java.util.Map;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.auth.Auth0Users.USERS_API_PATH;
 import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
+import static com.mongodb.client.model.Projections.excludeId;
 import static spark.Spark.delete;
 import static spark.Spark.get;
 import static spark.Spark.post;
@@ -67,16 +70,6 @@ public class UserController {
     private static final JsonManager<Project> json = new JsonManager<>(Project.class, JsonViews.UserInterface.class);
 
     /**
-     * HTTP endpoint to get a single Auth0 user for the application (by specified ID param). Note, this uses a different
-     * Auth0 API (get user) than the other get methods (user search query).
-     */
-    private static String getUser(Request req, Response res) {
-        HttpGet getUserRequest = new HttpGet(getUserIdUrl(req));
-        setHeaders(req, getUserRequest);
-        return executeRequestAndGetResult(getUserRequest, req);
-    }
-
-    /**
      * Determines whether the user controller is being run in a testing environment by checking if the users URL contains
      * the {@link #TEST_AUTH0_DOMAIN}.
      */
@@ -87,12 +80,20 @@ public class UserController {
     /**
      * HTTP endpoint to get all users for the application (using a filtered search on all users for the Auth0 tenant).
      */
-    private static String getAllUsers(Request req, Response res) {
+    private static Collection<User> getAllUsers(Request req, Response res) {
+        checkUserGetPermissions(req);
         res.type("application/json");
         int page = Integer.parseInt(req.queryParams("page"));
         String queryString = filterUserSearchQuery(req);
         String users = Auth0Users.getAuth0Users(queryString, page);
-        return users;
+        return Persistence.users.getMongoCollection().find().limit(10).skip(page * 10).into(new ArrayList<>());
+    }
+
+    private static void checkUserGetPermissions(Request req) {
+        Auth0UserProfile userProfile = req.attribute("user");
+        if (userProfile == null || !userProfile.canAdministerApplication()) {
+            logMessageAndHalt(req, 401, "Must be application admin to view users");
+        }
     }
 
     /**
@@ -545,7 +546,6 @@ public class UserController {
     }
 
     public static void register (String apiPrefix) {
-        get(apiPrefix + "secure/user/:id", UserController::getUser, json::write);
         get(apiPrefix + "secure/user/:id/recentactivity", UserController::getRecentActivity, json::write);
         get(apiPrefix + "secure/user", UserController::getAllUsers, json::write);
         get(apiPrefix + "secure/usercount", UserController::getUserCount, json::write);

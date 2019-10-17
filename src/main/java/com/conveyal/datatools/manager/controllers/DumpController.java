@@ -12,6 +12,7 @@ import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Note;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.models.Snapshot;
+import com.conveyal.datatools.manager.models.User;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.gtfs.validator.ValidationResult;
@@ -53,15 +54,14 @@ public class DumpController {
      * This shouldn't be an issue, though, as the feeds are stored separately. This is only metadata.
      */
     public static class DatabaseState {
-        public Collection<Project> projects;
+        public Collection<Deployment> deployments;
+        public Collection<ExternalFeedSourceProperty> externalProperties;
         public Collection<FeedSource> feedSources;
         public Collection<FeedVersion> feedVersions;
         public Collection<Note> notes;
-        // Users are maintained in Auth0 database.
-        // public Collection<Auth0UserProfile> users;
-        public Collection<Deployment> deployments;
-        public Collection<ExternalFeedSourceProperty> externalProperties;
+        public Collection<Project> projects;
         public Collection<Snapshot> snapshots;
+        public Collection<User> users;
     }
 //
     private static JsonManager<DatabaseState> json =
@@ -89,13 +89,14 @@ public class DumpController {
     public static DatabaseState dump (Request req, Response res) throws JsonProcessingException {
 //        // FIXME this appears to be capable of using unbounded amounts of memory (it copies an entire database into memory)
         DatabaseState db = new DatabaseState();
-        db.projects = Persistence.projects.getAll();
+        db.deployments = Persistence.deployments.getAll();
+        db.externalProperties = Persistence.externalFeedSourceProperties.getAll();
         db.feedSources = Persistence.feedSources.getAll();
         db.feedVersions = Persistence.feedVersions.getAll();
         db.notes = Persistence.notes.getAll();
-        db.deployments = Persistence.deployments.getAll();
-        db.externalProperties = Persistence.externalFeedSourceProperties.getAll();
+        db.projects = Persistence.projects.getAll();
         db.snapshots = Persistence.snapshots.getAll();
+        db.users = Persistence.users.getAll();
         return db;
     }
     // FIXME: This can now be authenticated because users are stored in Auth0.
@@ -152,6 +153,11 @@ public class DumpController {
         for (Snapshot snapshot : db.snapshots) {
             LOG.info("loading snapshot {}", snapshot.id);
             Persistence.snapshots.create(snapshot);
+        }
+
+        for (User user : db.users) {
+            LOG.info("loading user {}", user.id);
+            Persistence.users.create(user);
         }
 
         LOG.info("load completed.");

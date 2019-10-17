@@ -224,7 +224,7 @@ public class FeedVersionController  {
         } else {
             // when feeds are stored locally, single-use download token will still be used
             FeedDownloadToken token = new FeedDownloadToken(version);
-            Persistence.tokens.create(token);
+            Persistence.feedDownloadTokens.create(token);
             return token;
         }
     }
@@ -291,7 +291,7 @@ public class FeedVersionController  {
         // Do not use S3 to store the file, which should only be stored ephemerally (until requesting
         // user has downloaded file).
         FeedDownloadToken token = new FeedDownloadToken(gisExportJob);
-        Persistence.tokens.create(token);
+        Persistence.feedDownloadTokens.create(token);
         return SparkUtils.formatJobMessage(gisExportJob.jobId, "Generating shapefile.");
     }
 
@@ -300,7 +300,7 @@ public class FeedVersionController  {
      * versions using the job ID that was used for initially creating the exported shapes.
      */
     private static HttpServletResponse downloadFeedVersionGis (Request req, Response res) {
-        FeedDownloadToken token = Persistence.tokens.getOneFiltered(eq("jobId", req.params("jobId")));
+        FeedDownloadToken token = Persistence.feedDownloadTokens.getOneFiltered(eq("jobId", req.params("jobId")));
         File file = new File(token.filePath);
         try {
             return downloadFile(file, file.getName(), req, res);
@@ -314,7 +314,7 @@ public class FeedVersionController  {
                 LOG.info("Deleted shapefile {} following download.", token.filePath);
             }
             // Delete token.
-            Persistence.tokens.removeById(token.id);
+            Persistence.feedDownloadTokens.removeById(token.id);
         }
         return null;
     }
@@ -371,7 +371,7 @@ public class FeedVersionController  {
      */
     private static HttpServletResponse downloadFeedVersionWithToken (Request req, Response res) {
         String tokenValue = req.params("token");
-        FeedDownloadToken token = Persistence.tokens.getById(tokenValue);
+        FeedDownloadToken token = Persistence.feedDownloadTokens.getById(tokenValue);
 
         if(token == null || !token.isValid()) {
             LOG.error("Feed download token is invalid: {}", token);
@@ -384,7 +384,7 @@ public class FeedVersionController  {
         }
         LOG.info("Using token {} to download feed version {}", token.id, version.id);
         // Remove token so that it cannot be used again for feed download
-        Persistence.tokens.removeById(tokenValue);
+        Persistence.feedDownloadTokens.removeById(tokenValue);
         File file = version.retrieveGtfsFile();
         return downloadFile(file, version.id, req, res);
     }

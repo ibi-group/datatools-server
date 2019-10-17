@@ -259,7 +259,7 @@ public class ProjectController {
         } else {
             // when feeds are stored locally, single-use download token will still be used
             FeedDownloadToken token = new FeedDownloadToken(project);
-            Persistence.tokens.create(token);
+            Persistence.feedDownloadTokens.create(token);
             return token;
         }
     }
@@ -341,7 +341,7 @@ public class ProjectController {
      * be invoked if the application is not using S3 storage) given that the requester supplies a valid token.
      */
     private static Object downloadMergedFeedWithToken(Request req, Response res) {
-        FeedDownloadToken token = Persistence.tokens.getById(req.params("token"));
+        FeedDownloadToken token = Persistence.feedDownloadTokens.getById(req.params("token"));
 
         if(token == null || !token.isValid()) {
             logMessageAndHalt(req, 400, "Feed download token not valid");
@@ -349,7 +349,7 @@ public class ProjectController {
 
         Project project = token.retrieveProject();
 
-        Persistence.tokens.removeById(token.id);
+        Persistence.feedDownloadTokens.removeById(token.id);
         String fileName = project.id + ".zip";
         return downloadFile(FeedVersion.feedStore.getFeed(fileName), fileName, req, res);
     }

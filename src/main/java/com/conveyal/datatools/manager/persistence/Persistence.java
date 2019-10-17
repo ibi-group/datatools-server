@@ -13,6 +13,7 @@ import com.conveyal.datatools.manager.models.Note;
 import com.conveyal.datatools.manager.models.Organization;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.models.Snapshot;
+import com.conveyal.datatools.manager.models.User;
 import com.mongodb.MongoClient;
 import com.mongodb.MongoClientOptions;
 import com.mongodb.MongoClientURI;
@@ -40,15 +41,16 @@ public class Persistence {
     private static CodecRegistry pojoCodecRegistry;
 
     // One abstracted Mongo collection for each class of persisted objects
-    public static TypedPersistence<FeedSource> feedSources;
     public static TypedPersistence<Deployment> deployments;
-    public static TypedPersistence<Project> projects;
+    public static TypedPersistence<ExternalFeedSourceProperty> externalFeedSourceProperties;
+    public static TypedPersistence<FeedDownloadToken> feedDownloadTokens;
+    public static TypedPersistence<FeedSource> feedSources;
     public static TypedPersistence<FeedVersion> feedVersions;
     public static TypedPersistence<Note> notes;
     public static TypedPersistence<Organization> organizations;
-    public static TypedPersistence<ExternalFeedSourceProperty> externalFeedSourceProperties;
-    public static TypedPersistence<FeedDownloadToken> tokens;
+    public static TypedPersistence<Project> projects;
     public static TypedPersistence<Snapshot> snapshots;
+    public static TypedPersistence<User> users;
 
     public static void initialize () {
 
@@ -83,15 +85,16 @@ public class Persistence {
 
         mongoDatabase = mongo.getDatabase(DataManager.getConfigPropertyAsText(MONGO_DB_NAME));
 
-        feedSources = new TypedPersistence(mongoDatabase, FeedSource.class);
-        projects = new TypedPersistence(mongoDatabase, Project.class);
-        feedVersions = new TypedPersistence(mongoDatabase, FeedVersion.class);
         deployments = new TypedPersistence(mongoDatabase, Deployment.class);
+        externalFeedSourceProperties = new TypedPersistence(mongoDatabase, ExternalFeedSourceProperty.class);
+        feedDownloadTokens = new TypedPersistence(mongoDatabase, FeedDownloadToken.class);
+        feedSources = new TypedPersistence(mongoDatabase, FeedSource.class);
+        feedVersions = new TypedPersistence(mongoDatabase, FeedVersion.class);
         notes = new TypedPersistence(mongoDatabase, Note.class);
         organizations = new TypedPersistence(mongoDatabase, Organization.class);
-        externalFeedSourceProperties = new TypedPersistence(mongoDatabase, ExternalFeedSourceProperty.class);
-        tokens = new TypedPersistence(mongoDatabase, FeedDownloadToken.class);
+        projects = new TypedPersistence(mongoDatabase, Project.class);
         snapshots = new TypedPersistence(mongoDatabase, Snapshot.class);
+        users = new TypedPersistence(mongoDatabase, User.class);
 
         // TODO: Set up indexes on feed versions by feedSourceId, version #? deployments, feedSources by projectId.
 //        deployments.getMongoCollection().createIndex(Indexes.descending("projectId"));
