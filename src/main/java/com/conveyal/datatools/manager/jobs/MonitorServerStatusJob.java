@@ -125,7 +125,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
             wait("graph build/download check: " + graphStatusUrl);
             graphIsAvailable = checkForSuccessfulRequest(graphStatusUrl);
             if (jobHasTimedOut()) {
-                message = String.format("Job timed out while waiting for graph build/download (%s)", instance.getInstanceId());
+                message = String.format("Job timed out while waiting for graph build/download (%s). If this was a graph building machine, it may have run out of memory.", instance.getInstanceId());
                 LOG.error(message);
                 status.fail(message);
                 return;
@@ -147,6 +147,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
             status.update(false, message, 100);
             return;
         }
+        status.update("Loading graph...", 70);
         // Once this is confirmed, check for the existence of the router, which will indicate that the graph build is
         // complete.
         String routerUrl = String.join("/", ipUrl, "otp/routers/default");
