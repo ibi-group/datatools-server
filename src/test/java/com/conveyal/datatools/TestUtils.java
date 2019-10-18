@@ -61,6 +61,9 @@ public class TestUtils {
         return createFeedVersion(source, gtfsFile);
     }
 
+    /**
+     * Helper to get a File for the given file or folder that should be in the gtfs folder of the test resources
+     */
     private static String getGtfsResourcePath(String gtfsFileName) {
         return TestUtils.class.getResource("gtfs/" + gtfsFileName).getFile();
     }
@@ -98,6 +101,14 @@ public class TestUtils {
         return tempFile;
     }
 
+    /**
+     * Compresses a folder into a zip file.
+     *
+     * @param sourceDir The directory to compress
+     * @param outputFile The path to write the resulting zipfile to
+     * @param nestDirectory whether nested folders should be preserved as subdirectories
+     * @throws IOException
+     */
     private static void compressZipfile(String sourceDir, String outputFile, boolean nestDirectory) throws IOException {
         ZipOutputStream zipFile = new ZipOutputStream(new FileOutputStream(outputFile));
         compressDirectoryToZipfile(sourceDir, sourceDir, zipFile, nestDirectory);
@@ -105,8 +116,18 @@ public class TestUtils {
     }
 
     /**
-     * Convenience method for zipping a directory.
+     *
+     * @param sourceDir The directory to compress
+     * @param outputFile The path to write the resulting zipfile to
      * @param nestDirectory whether nested folders should be preserved as subdirectories
+     */
+    /**
+     * Convenience method for zipping a directory.
+     *
+     * @param rootDir The root directory to zip
+     * @param sourceDir The current directory of files to look through and add to the zip
+     * @param out The ZipOutputStream to write to
+     * @param nestDirectory Whether or not to preserve the nested directories in the zip file
      */
     private static void compressDirectoryToZipfile(String rootDir, String sourceDir, ZipOutputStream out, boolean nestDirectory) throws IOException {
         for (File file : new File(sourceDir).listFiles()) {
@@ -127,15 +148,27 @@ public class TestUtils {
         }
     }
 
+    /**
+     * Convenience method to join a directory path with a filename
+     */
     public static String fileNameWithDir(String directory, String filename) {
         return String.join(File.separator, directory, filename);
     }
 
+    /**
+     * Get a connection to the database and execute the given sql query
+     */
     public static ResultSet executeSql (String sql) throws SQLException {
         LOG.info(sql);
         return GTFS_DATA_SOURCE.getConnection().prepareStatement(sql).executeQuery();
     }
 
+    /**
+     * Asserts that the result of a SQL count statement is equal to an expected value
+     *
+     * @param sql A SQL statement in the form of `SELECT count(*) FROM ...`
+     * @param expectedCount The expected count that is returned from the result of the SQL statement.
+     */
     public static void assertThatSqlCountQueryYieldsExpectedCount(String sql, int expectedCount) throws SQLException {
         int count = 0;
         ResultSet resultSet = executeSql(sql);
@@ -149,6 +182,12 @@ public class TestUtils {
         );
     }
 
+    /**
+     * Asserts that the number of rows found in a SQL query matches an expected value
+     *
+     * @param sql A SQL statement to be executed
+     * @param expectedRowCount The number of rows that are expected to be found in the result
+     */
     public static void assertThatSqlQueryYieldsRowCount(String sql, int expectedRowCount) throws SQLException {
         int recordCount = 0;
         ResultSet rs = executeSql(sql);
@@ -160,6 +199,12 @@ public class TestUtils {
         );
     }
 
+    /**
+     * Asserts that there aren't any errors in a given namespace's errors table that match any of the given errorTypes
+     *
+     * @param namespace The namespace of the postgres database to look in
+     * @param errorTypes Arguments of Strings of possible `error_type` values to check for
+     */
     public static void assertThatFeedHasNoErrorsOfType (String namespace, String... errorTypes) throws SQLException {
         assertThatSqlQueryYieldsRowCount(
             String.format(

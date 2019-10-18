@@ -20,9 +20,11 @@ import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;
 
+import static com.conveyal.datatools.TestUtils.assertThatFeedHasNoErrorsOfType;
 import static com.conveyal.datatools.TestUtils.assertThatSqlCountQueryYieldsExpectedCount;
 import static com.conveyal.datatools.TestUtils.assertThatSqlQueryYieldsRowCount;
 import static com.conveyal.datatools.TestUtils.createFeedVersion;
+import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static com.conveyal.datatools.TestUtils.zipFolderFiles;
 import static org.junit.Assert.assertEquals;
 
@@ -56,20 +58,20 @@ public class MergeFeedsJobTest extends UnitTest {
         FeedSource bart = new FeedSource("BART");
         bart.projectId = project.id;
         Persistence.feedSources.create(bart);
-        bartVersion1 = TestUtils.createFeedVersionFromGtfsZip(bart, "bart_old.zip");
-        bartVersion2 = TestUtils.createFeedVersionFromGtfsZip(bart, "bart_new.zip");
+        bartVersion1 = createFeedVersionFromGtfsZip(bart, "bart_old.zip");
+        bartVersion2 = createFeedVersionFromGtfsZip(bart, "bart_new.zip");
 
         // Caltrain
         FeedSource caltrain = new FeedSource("Caltrain");
         caltrain.projectId = project.id;
         Persistence.feedSources.create(caltrain);
-        calTrainVersion = TestUtils.createFeedVersionFromGtfsZip(caltrain, "caltrain_gtfs.zip");
+        calTrainVersion = createFeedVersionFromGtfsZip(caltrain, "caltrain_gtfs.zip");
 
         // Napa
         FeedSource napa = new FeedSource("Napa");
         napa.projectId = project.id;
         Persistence.feedSources.create(napa);
-        napaVersion = TestUtils.createFeedVersionFromGtfsZip(napa, "napa-no-agency-id.zip");
+        napaVersion = createFeedVersionFromGtfsZip(napa, "napa-no-agency-id.zip");
 
         // Fake agencies (for testing calendar service_id merges with MTC strategy).
         FeedSource fakeAgency = new FeedSource("Fake Agency");
@@ -145,7 +147,7 @@ public class MergeFeedsJobTest extends UnitTest {
         );
         // Ensure there are no referential integrity errors, duplicate ID, or wrong number of
         // fields errors.
-        TestUtils.assertThatFeedHasNoErrorsOfType(
+        assertThatFeedHasNoErrorsOfType(
             mergedVersion.namespace,
             NewGTFSErrorType.REFERENTIAL_INTEGRITY.toString(),
             NewGTFSErrorType.DUPLICATE_ID.toString(),
@@ -210,7 +212,7 @@ public class MergeFeedsJobTest extends UnitTest {
             mergeFeedsJob.mergedVersion.feedLoadResult.routes.rowCount
         );
         // Ensure there are no referential integrity errors or duplicate ID errors.
-        TestUtils.assertThatFeedHasNoErrorsOfType(
+        assertThatFeedHasNoErrorsOfType(
             mergeFeedsJob.mergedVersion.namespace,
             NewGTFSErrorType.REFERENTIAL_INTEGRITY.toString(),
             NewGTFSErrorType.DUPLICATE_ID.toString()

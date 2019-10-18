@@ -55,7 +55,7 @@ public class EditorControllerTest extends UnitTest {
         FeedSource feedSource = new FeedSource("BART");
         feedSource.projectId = project.id;
         Persistence.feedSources.create(feedSource);
-        feedVersion = createFeedVersionFromGtfsZip(feedSource,  "bart_old.zip");
+        feedVersion = createFeedVersionFromGtfsZip(feedSource, "bart_old.zip");
         // Create and run snapshot job
         Snapshot snapshot = new Snapshot("Snapshot of " + feedVersion.name, feedSource.id, feedVersion.namespace);
         snapshot.storeUser(Auth0UserProfile.createTestAdminUser());
