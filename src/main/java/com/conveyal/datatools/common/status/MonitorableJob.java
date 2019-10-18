@@ -183,7 +183,8 @@ public abstract class MonitorableJob implements Runnable, Serializable {
                 // because the error presumably already occurred and has a better error message.
                 cancel(cancelMessage);
             }
-
+            // Set duration of job in case it is needed by finishing step (e.g., storing the job duration in a database).
+            status.duration = System.currentTimeMillis() - status.startTime;
             // Run final steps of job pending completion or error. Note: any tasks that depend on job success should
             // check job status to determine if final step should be executed (e.g., storing feed version in MongoDB).
             // TODO: should we add separate hooks depending on state of job/sub-tasks (e.g., success, catch, finally)
@@ -199,8 +200,8 @@ public abstract class MonitorableJob implements Runnable, Serializable {
             // so the job continues to exist in the failed state and the user can see it.
             LOG.error("Job failed", ex);
             status.update(true, ex.getMessage(), 100, true);
+            status.duration = System.currentTimeMillis() - status.startTime;
         }
-        status.duration = System.currentTimeMillis() - status.startTime;
         LOG.info("{} {} {} in {} ms", type, jobId, status.error ? "errored" : "completed", status.duration);
     }
 

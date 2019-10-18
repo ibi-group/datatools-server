@@ -25,10 +25,10 @@ import static spark.Spark.get;
  * Created by landon on 6/13/16.
  */
 public class StatusController {
-    public static final Logger LOG = LoggerFactory.getLogger(ProjectController.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ProjectController.class);
 
-    public static JsonManager<MonitorableJob.Status> json =
-            new JsonManager<>(MonitorableJob.Status.class, JsonViews.UserInterface.class);
+    private static JsonManager<MonitorableJob.Status> json =
+        new JsonManager<>(MonitorableJob.Status.class, JsonViews.UserInterface.class);
 
     /**
      * Admin API route to return active jobs for all application users.
@@ -71,6 +71,12 @@ public class StatusController {
 //        MonitorableJob job = getJobById(userId, jobId, true);
 //        return job;
 //    }
+
+    /** Shorthand method for getting a single job by job ID. */
+    public static MonitorableJob getJobByJobId(String jobId) {
+        for (MonitorableJob job : getAllJobs()) if (job.jobId.equals(jobId)) return job;
+        return null;
+    }
 
     /**
      * Gets a job by user ID and job ID.

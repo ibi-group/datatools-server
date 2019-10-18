@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.models;
 
 import com.amazonaws.services.ec2.model.Filter;
 import com.amazonaws.services.ec2.model.Instance;
+import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.controllers.api.DeploymentController;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -56,6 +57,7 @@ public class OtpServer extends Model {
     }
 
     public List<Instance> retrieveEC2Instances() {
+        if (!"true".equals(DataManager.getConfigPropertyAsText("modules.deployment.ec2.enabled"))) return Collections.EMPTY_LIST;
         Filter serverFilter = new Filter("tag:serverId", Collections.singletonList(id));
         return DeploymentController.fetchEC2Instances(serverFilter);
     }

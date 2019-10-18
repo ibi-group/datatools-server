@@ -8,6 +8,7 @@ import com.amazonaws.services.ec2.model.AmazonEC2Exception;
 import com.amazonaws.services.ec2.model.CreateTagsRequest;
 import com.amazonaws.services.ec2.model.DescribeInstanceStatusRequest;
 import com.amazonaws.services.ec2.model.DescribeInstancesRequest;
+import com.amazonaws.services.ec2.model.Filter;
 import com.amazonaws.services.ec2.model.IamInstanceProfileSpecification;
 import com.amazonaws.services.ec2.model.Instance;
 import com.amazonaws.services.ec2.model.InstanceNetworkInterfaceSpecification;
@@ -42,9 +43,11 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Scanner;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -55,6 +58,7 @@ import com.amazonaws.waiters.WaiterParameters;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.controllers.api.DeploymentController;
 import com.conveyal.datatools.manager.controllers.api.ServerController;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.EC2Info;
@@ -86,6 +90,8 @@ public class DeployJob extends MonitorableJob {
     public static final String DEFAULT_INSTANCE_TYPE = "t2.medium";
     private static final String AMI_CONFIG_PATH = "modules.deployment.ec2.default_ami";
     private static final String DEFAULT_AMI_ID = DataManager.getConfigPropertyAsText(AMI_CONFIG_PATH);
+    // Indicates whether EC2 instances should be EBS optimized.
+    private static final boolean EBS_OPTIMIZED = "true".equals(DataManager.getConfigPropertyAsText("modules.deployment.ec2.ebs_optimized"));
     private static final String OTP_GRAPH_FILENAME = "Graph.obj";
     // Use txt at the end of these filenames so that these can easily be viewed in a web browser.
     public static final String BUNDLE_DOWNLOAD_COMPLETE_FILE = "BUNDLE_DOWNLOAD_COMPLETE.txt";
@@ -440,19 +446,22 @@ public class DeployJob extends MonitorableJob {
             LOG.error("Deployment {} not deleted! Disk space in danger of filling up.", deployment.id);
         }
         String message;
+        // TODO: For some reason status duration is not getting set properly in MonitorableJob.
+        status.duration = System.currentTimeMillis() - status.startTime;
         if (!status.error) {
             // Update status with successful completion state only if no error was encountered.
             status.update(false, "Deployment complete!", 100, true);
             // Store the target server in the deployedTo field and set last deployed time.
             LOG.info("Updating deployment target and deploy time.");
             deployment.deployedTo = otpServer.id;
-            deployment.deployJobSummaries.add(0, new DeploySummary(this));
-            Persistence.deployments.replace(deployment.id, deployment);
-            long durationMinutes = TimeUnit.MILLISECONDS.toMinutes(System.currentTimeMillis() - status.startTime);
+            long durationMinutes = TimeUnit.MILLISECONDS.toMinutes(status.duration);
             message = String.format("Deployment %s successfully deployed to %s in %s minutes.", deployment.name, otpServer.publicUrl, durationMinutes);
         } else {
             message = String.format("WARNING: Deployment %s failed to deploy to %s. Error: %s", deployment.name, otpServer.publicUrl, status.message);
         }
+        // Unconditionally add deploy summary. If the job fails, we should still record the summary.
+        deployment.deployJobSummaries.add(0, new DeploySummary(this));
+        Persistence.deployments.replace(deployment.id, deployment);
         // Send notification to those subscribed to updates for the deployment.
         NotifyUsersForSubscriptionJob.createNotification("deployment-updated", deployment.id, message);
     }
@@ -599,6 +608,11 @@ public class DeployJob extends MonitorableJob {
         RunInstancesRequest runInstancesRequest = new RunInstancesRequest()
                 .withNetworkInterfaces(interfaceSpecification)
                 .withInstanceType(instanceType)
+                // TODO: Optimize for EBS to support large systems like NYSDOT.
+                //  This may incur additional costs and may need to be replaced with some other setting
+                //  if it is proves too expensive. However, it may be the easiest way to resolve the
+                //  issue where downloading a graph larger than 3GB slows to a halt.
+                .withEbsOptimized(EBS_OPTIMIZED)
                 .withMinCount(count)
                 .withMaxCount(count)
                 .withIamInstanceProfile(new IamInstanceProfileSpecification().withArn(otpServer.ec2Info.iamInstanceProfileArn))
@@ -610,7 +624,7 @@ public class DeployJob extends MonitorableJob {
         final List<Instance> instances = ec2.runInstances(runInstancesRequest).getReservation().getInstances();
 
         List<String> instanceIds = getIds(instances);
-        Map<String, String> instanceIpAddresses = new HashMap<>();
+        Set<String> instanceIpAddresses = new HashSet<>();
         // Wait so that create tags request does not fail because instances not found.
         try {
             Waiter<DescribeInstanceStatusRequest> waiter = ec2.waiters().instanceStatusOk();
@@ -624,8 +638,8 @@ public class DeployJob extends MonitorableJob {
             return Collections.EMPTY_LIST;
         }
         for (Instance instance : instances) {
-            // The public IP addresses will likely be null at this point because they take a few seconds to initialize.
-            instanceIpAddresses.put(instance.getInstanceId(), instance.getPublicIpAddress());
+            // Note: The public IP addresses will likely be null at this point because they take a few seconds to
+            // initialize.
             String serverName = String.format("%s %s (%s) %d %s", deployment.r5 ? "r5" : "otp", deployment.name, dateString, serverCounter++, graphAlreadyBuilt ? "clone" : "builder");
             LOG.info("Creating tags for new EC2 instance {}", serverName);
             ec2.createTags(new CreateTagsRequest()
@@ -639,21 +653,26 @@ public class DeployJob extends MonitorableJob {
                     .withResources(instance.getInstanceId())
             );
         }
+        // Store the instances with updated IP addresses here.
         List<Instance> updatedInstances = new ArrayList<>();
-        while (instanceIpAddresses.values().contains(null)) {
+        // Store time we began checking for IP addresses for time out.
+        long beginIpCheckTime = System.currentTimeMillis();
+        Filter instanceIdFilter = new Filter("instance-id", instanceIds);
+        // While all of the IPs have not been established, keep checking the EC2 instances, waiting a few seconds between
+        // each check.
+        while (instanceIpAddresses.size() < instances.size()) {
             LOG.info("Checking that public IP addresses have initialized for EC2 instances.");
-            // Reset instances list so that updated instances have the latest state information (e.g., public IP has
-            // been assigned).
-            updatedInstances.clear();
             // Check that all of the instances have public IPs.
-            DescribeInstancesRequest request = new DescribeInstancesRequest().withInstanceIds(instanceIds);
-            List<Reservation> reservations = ec2.describeInstances(request).getReservations();
-            for (Reservation reservation  : reservations) {
-                for (Instance instance : reservation.getInstances()) {
-                    instanceIpAddresses.put(instance.getInstanceId(), instance.getPublicIpAddress());
+            List<Instance> instancesWithIps = DeploymentController.fetchEC2Instances(instanceIdFilter);
+            for (Instance instance : instancesWithIps) {
+                String publicIp = instance.getPublicIpAddress();
+                // If IP has been found, store the updated instance and IP.
+                if (publicIp != null) {
+                    instanceIpAddresses.add(publicIp);
                     updatedInstances.add(instance);
                 }
             }
+
             try {
                 int sleepTimeMillis = 10000;
                 LOG.info("Waiting {} seconds to perform another public IP address check...", sleepTimeMillis / 1000);
@@ -661,12 +680,12 @@ public class DeployJob extends MonitorableJob {
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-            if (System.currentTimeMillis() - status.startTime > TEN_MINUTES_IN_MILLISECONDS) {
+            if (System.currentTimeMillis() - beginIpCheckTime > TEN_MINUTES_IN_MILLISECONDS) {
                 status.fail("Job timed out due to public IP assignment taking longer than ten minutes!");
                 return updatedInstances;
             }
         }
-        LOG.info("Public IP addresses have all been assigned. {}", instanceIpAddresses.values().toString());
+        LOG.info("Public IP addresses have all been assigned. {}", String.join(",", instanceIpAddresses));
         return updatedInstances;
     }
 
@@ -715,6 +734,7 @@ public class DeployJob extends MonitorableJob {
         String jarDir = String.format("/opt/%s", getTripPlannerString());
         List<String> lines = new ArrayList<>();
         String routerName = "default";
+        final String uploadUserDataLogCommand = String.format("aws s3 --region us-east-1 cp $USERDATALOG %s/${instance_id}.log", getS3FolderURI().toString());
         String routerDir = String.format("/var/%s/graphs/%s", getTripPlannerString(), routerName);
         String graphPath = String.join("/", routerDir, OTP_GRAPH_FILENAME);
         //////////////// BEGIN USER DATA
@@ -723,8 +743,15 @@ public class DeployJob extends MonitorableJob {
         lines.add(String.format("BUILDLOGFILE=/var/log/%s", getBuildLogFilename()));
         lines.add(String.format("LOGFILE=/var/log/%s.log", getTripPlannerString()));
         lines.add("USERDATALOG=/var/log/user-data.log");
+        // Get the instance's instance ID from the AWS metadata endpoint.
+        lines.add("instance_id=`curl http://169.254.169.254/latest/meta-data/instance-id`");
         // Log user data setup to /var/log/user-data.log
         lines.add("exec > >(tee $USERDATALOG|logger -t user-data -s 2>/dev/console) 2>&1");
+        // Get the total memory by grepping for MemTotal in meminfo file and removing non-numbers from the line
+        // (leaving just the total mem in kb). This is used for starting up the OTP build/run processes.
+        lines.add("TOTAL_MEM=`grep MemTotal /proc/meminfo | sed 's/[^0-9]//g'`");
+        // 2097152 kb is 2GB, leave that much for the OS
+        lines.add("MEM=`echo $(($TOTAL_MEM - 2097152))`");
         // Create the directory for the graph inputs.
         lines.add(String.format("mkdir -p %s", routerDir));
         lines.add(String.format("chown ubuntu %s", routerDir));
@@ -740,12 +767,14 @@ public class DeployJob extends MonitorableJob {
         if (graphAlreadyBuilt) {
             lines.add("echo 'downloading graph from s3'");
             // Download Graph from S3.
-            lines.add(String.format("aws s3 --region us-east-1 cp %s %s ", getS3GraphURI(), graphPath));
+            lines.add(String.format("aws s3 --region us-east-1 --cli-read-timeout 0 cp %s %s ", getS3GraphURI(), graphPath));
         } else {
             // Download data bundle from S3.
-            lines.add(String.format("aws s3 --region us-east-1 cp %s /tmp/bundle.zip", getS3BundleURI()));
+            lines.add(String.format("aws s3 --region us-east-1 --cli-read-timeout 0 cp %s /tmp/bundle.zip", getS3BundleURI()));
             // Determine if bundle download was successful.
             lines.add("[ -f /tmp/bundle.zip ] && BUNDLE_STATUS='SUCCESS' || BUNDLE_STATUS='FAILURE'");
+            // Upload user data log after bundle download.
+            lines.add(uploadUserDataLogCommand);
             // Create file with bundle status in web dir to notify Data Tools that download is complete.
             lines.add(String.format("sudo echo $BUNDLE_STATUS > $WEB_DIR/%s", BUNDLE_DOWNLOAD_COMPLETE_FILE));
             // Put unzipped bundle data into router directory.
@@ -757,8 +786,10 @@ public class DeployJob extends MonitorableJob {
             }
             lines.add("echo 'starting graph build'");
             // Build the graph.
-            if (deployment.r5) lines.add(String.format("sudo -H -u ubuntu java -Xmx6G -jar %s/%s.jar point --build %s", jarDir, jarName, routerDir));
-            else lines.add(String.format("sudo -H -u ubuntu java -jar %s/%s.jar --build %s > $BUILDLOGFILE 2>&1", jarDir, jarName, routerDir));
+            if (deployment.r5) lines.add(String.format("sudo -H -u ubuntu java -Xmx${MEM}k -jar %s/%s.jar point --build %s", jarDir, jarName, routerDir));
+            else lines.add(String.format("sudo -H -u ubuntu java -jar -Xmx${MEM}k %s/%s.jar --build %s > $BUILDLOGFILE 2>&1", jarDir, jarName, routerDir));
+            // Re-upload user data log after build command.
+            lines.add(uploadUserDataLogCommand);
             // Upload the build log file and graph to S3.
             if (!deployment.r5) {
                 String s3BuildLogPath = joinToS3FolderURI(getBuildLogFilename());
@@ -771,10 +802,8 @@ public class DeployJob extends MonitorableJob {
         lines.add(String.format("[ -f %s ] && (($FILESIZE > 0)) && GRAPH_STATUS='SUCCESS' || GRAPH_STATUS='FAILURE'", graphPath));
         // Create file with bundle status in web dir to notify Data Tools that download is complete.
         lines.add(String.format("sudo echo $GRAPH_STATUS > $WEB_DIR/%s", GRAPH_STATUS_FILE));
-        // Get the instance's instance ID from the AWS metadata endpoint.
-        lines.add("instance_id=`curl http://169.254.169.254/latest/meta-data/instance-id`");
-        // Upload user data log associated with instance to a log file on S3.
-        lines.add(String.format("aws s3 --region us-east-1 cp $USERDATALOG %s/${instance_id}.log", getS3FolderURI().toString()));
+        // Re-upload user data log before final command (and before optional shutdown statement).
+        lines.add(uploadUserDataLogCommand);
         if (deployment.buildGraphOnly) {
             // If building graph only, tell the instance to shut itself down after the graph build (and log upload) is
             // complete.
@@ -783,8 +812,8 @@ public class DeployJob extends MonitorableJob {
         } else {
             // Otherwise, kick off the application.
             lines.add("echo 'kicking off trip planner (logs at $LOGFILE)'");
-            if (deployment.r5) lines.add(String.format("sudo -H -u ubuntu nohup java -Xmx6G -Djava.util.Arrays.useLegacyMergeSort=true -jar %s/%s.jar point --isochrones %s > /var/log/r5.out 2>&1&", jarDir, jarName, routerDir));
-            else lines.add(String.format("sudo -H -u ubuntu nohup java -jar %s/%s.jar --server --bindAddress 127.0.0.1 --router default > $LOGFILE 2>&1 &", jarDir, jarName));
+            if (deployment.r5) lines.add(String.format("sudo -H -u ubuntu nohup java -Xmx${MEM}k -Djava.util.Arrays.useLegacyMergeSort=true -jar %s/%s.jar point --isochrones %s > /var/log/r5.out 2>&1&", jarDir, jarName, routerDir));
+            else lines.add(String.format("sudo -H -u ubuntu nohup java -jar -Xmx${MEM}k %s/%s.jar --server --bindAddress 127.0.0.1 --router default > $LOGFILE 2>&1 &", jarDir, jarName));
         }
         // Return the entire user data script as a single string.
         return String.join("\n", lines);
@@ -854,15 +883,14 @@ public class DeployJob extends MonitorableJob {
      */
     public static class DeploySummary implements Serializable {
         private static final long serialVersionUID = 1L;
+        public DeployStatus status;
         public String serverId;
-        public long duration;
         public String s3Bucket;
         public String jobId;
         /** URL for build log file from latest deploy job. */
         public String buildArtifactsFolder;
         public String otpVersion;
         public EC2Info ec2Info;
-        public long startTime;
         public long finishTime = System.currentTimeMillis();
 
         /** Empty constructor for serialization */
@@ -874,8 +902,7 @@ public class DeployJob extends MonitorableJob {
             this.otpVersion = job.deployment.otpVersion;
             this.jobId = job.jobId;
             this.s3Bucket = job.s3Bucket;
-            this.startTime = job.status.startTime;
-            this.duration = job.status.duration;
+            this.status = job.status;
             this.buildArtifactsFolder = job.getS3FolderURI().toString();
         }
     }

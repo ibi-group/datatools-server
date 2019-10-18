@@ -47,7 +47,9 @@ public class MonitorServerStatusJob extends MonitorableJob {
     private final CloseableHttpClient httpClient = HttpClients.createDefault();
     // If the job takes longer than XX seconds, fail the job.
     private static final int TIMEOUT_MILLIS = 60 * 60 * 1000; // One hour
-    private static final int DELAY_SECONDS = 5;
+    // Delay checks by twenty seconds to give user-data script time to upload the instance's user data log if part of the
+    // script fails (e.g., uploading or downloading a file).
+    private static final int DELAY_SECONDS = 20;
     private final long startTime;
     public long graphBuildSeconds;
 
@@ -114,8 +116,9 @@ public class MonitorServerStatusJob extends MonitorableJob {
             message = String.format("Bundle downloaded in %d seconds!", bundleDownloadSeconds);
             LOG.info(message);
             status.update("Building graph...", 30);
+        } else {
+            status.update("Loading graph...", 40);
         }
-        status.update("Loading graph...", 40);
         long graphBuildStartTime = System.currentTimeMillis();
         String graphStatusUrl = String.join("/", ipUrl, GRAPH_STATUS_FILE);
         while (!graphIsAvailable) {
@@ -123,7 +126,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
             wait("graph build/download check: " + graphStatusUrl);
             graphIsAvailable = checkForSuccessfulRequest(graphStatusUrl);
             if (jobHasTimedOut()) {
-                message = String.format("Job timed out while waiting for graph build/download (%s)", instance.getInstanceId());
+                message = String.format("Job timed out while waiting for graph build/download (%s). If this was a graph building machine, it may have run out of memory.", instance.getInstanceId());
                 LOG.error(message);
                 status.fail(message);
                 return;
@@ -145,6 +148,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
             status.update(false, message, 100);
             return;
         }
+        status.update("Loading graph...", 70);
         // Once this is confirmed, check for the existence of the router, which will indicate that the graph build is
         // complete.
         String routerUrl = String.join("/", ipUrl, "otp/routers/default");
