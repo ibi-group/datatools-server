@@ -37,12 +37,14 @@ import java.net.URLEncoder;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
+import static com.conveyal.datatools.manager.auth.Auth0Connection.authDisabled;
 import static com.conveyal.datatools.manager.auth.Auth0Users.USERS_API_PATH;
 import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
 import static spark.Spark.delete;
@@ -223,21 +225,18 @@ public class UserController {
         return true;
     }
 
-    private static Object getRecentActivity(Request req, Response res) {
+    /** HTTP endpoint to get recent activity summary based on requesting user's subscriptions/notifications. */
+    private static List<Activity> getRecentActivity(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
-
-        /* TODO: Allow custom from/to range
-        String fromStr = req.queryParams("from");
-        String toStr = req.queryParams("to"); */
-
-        // Default range: past 7 days
+        // Default range: past 7 days, TODO: Allow custom from/to range based on query params?
         ZonedDateTime from = ZonedDateTime.now(ZoneOffset.UTC).minusDays(7);
         ZonedDateTime to = ZonedDateTime.now(ZoneOffset.UTC);
 
         List<Activity> activityList = new ArrayList<>();
         Auth0UserProfile.DatatoolsInfo datatools = userProfile.getApp_metadata().getDatatoolsInfo();
+        // NOTE: this condition will also occur if DISABLE_AUTH is set to true
         if (datatools == null) {
-            // NOTE: this condition will also occur if DISABLE_AUTH is set to true
+            if (authDisabled()) return Collections.emptyList();
             logMessageAndHalt(req, 403, "User does not have permission to access to this application");
         }
 
