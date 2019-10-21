@@ -10,8 +10,10 @@ import com.conveyal.datatools.manager.models.Note;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
+import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
@@ -43,6 +45,8 @@ import java.util.List;
 import java.util.Map;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
+import static com.conveyal.datatools.manager.DataManager.repoUrl;
+import static com.conveyal.datatools.manager.auth.Auth0Users.API_PATH;
 import static com.conveyal.datatools.manager.auth.Auth0Users.USERS_API_PATH;
 import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
 import static spark.Spark.delete;
@@ -301,6 +305,45 @@ public class UserController {
     }
 
     /**
+     * Resends the user confirmation email for a given user
+     */
+    private static ObjectNode resendEmailConfirmation(Request req, Response res) {
+        // verify if the request is legit. Should only come from an application administrator or the user for which the
+        // account belongs to.
+        Auth0UserProfile userProfile = req.attribute("user");
+        if (userProfile.canAdministerApplication() || userProfile.getUser_id().equals(req.params("id"))) {
+            // authorized. Create request to resend email verification
+            HttpPost resendEmailVerificationRequest = new HttpPost(
+                "https://" + AUTH0_DOMAIN + API_PATH + "/jobs/verification-email"
+            );
+            setHeaders(req, resendEmailVerificationRequest);
+            setRequestEntityUsingJson(
+                resendEmailVerificationRequest,
+                JsonUtil.objectMapper.createObjectNode()
+                    .put("user_id", userProfile.getUser_id())
+                    .put("client_id", AUTH0_CLIENT_ID)
+                    .toString(),
+                req
+            );
+
+            // Execute request. If a HTTP response other than 200 occurs, an error will be returned.
+            executeRequestAndGetResult(resendEmailVerificationRequest, req);
+
+            // Email verification successfully sent! Return successful response.
+            return JsonUtil.objectMapper.createObjectNode()
+                .put("emailSent", true);
+        } else {
+            logMessageAndHalt(
+                req,
+                401,
+                "Not authorized to resend confirmation email"
+            );
+            // doesn't actually return null since above line sends a 401 response
+            return null;
+        }
+    }
+
+    /**
      * Set some common headers on the request, including the API access token, which must be obtained via token request
      * to Auth0.
      */
@@ -548,6 +591,7 @@ public class UserController {
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/user/:id", UserController::getUser, json::write);
         get(apiPrefix + "secure/user/:id/recentactivity", UserController::getRecentActivity, json::write);
+        get(apiPrefix + "secure/user/:id/resendEmailConfirmation", UserController::resendEmailConfirmation, json::write);
         get(apiPrefix + "secure/user", UserController::getAllUsers, json::write);
         get(apiPrefix + "secure/usercount", UserController::getUserCount, json::write);
         post(apiPrefix + "secure/user", UserController::createUser, json::write);
