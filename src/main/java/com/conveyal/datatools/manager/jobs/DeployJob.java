@@ -446,7 +446,7 @@ public class DeployJob extends MonitorableJob {
             LOG.error("Deployment {} not deleted! Disk space in danger of filling up.", deployment.id);
         }
         String message;
-        // TODO: For some reason status duration is not getting set properly in MonitorableJob.
+        // FIXME: For some reason status duration is not getting set properly in MonitorableJob.
         status.duration = System.currentTimeMillis() - status.startTime;
         if (!status.error) {
             // Update status with successful completion state only if no error was encountered.

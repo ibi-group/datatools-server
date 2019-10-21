@@ -53,7 +53,7 @@ public class StatusController {
             logMessageAndHalt(req, 401, "User not authorized to view all requests");
         }
         return DataManager.lastRequestForUser.values().stream()
-            .sorted(Comparator.comparing(r -> r.time))
+            .sorted(Comparator.comparingLong(RequestSummary::getTime).reversed())
             .collect(Collectors.toList());
     }
 
@@ -128,21 +128,28 @@ public class StatusController {
         return getJobsByUserId(userId, true);
     }
 
-    public static Set<MonitorableJob> filterJobsByType (MonitorableJob.JobType ...jobType) {
-        return getAllJobs().stream()
-                .filter(job -> Arrays.asList(jobType).contains(job.type))
-                .collect(Collectors.toSet());
+    /**
+     * Convenience wrapper method to retrieve all jobs for {@link Auth0UserProfile}.
+     */
+    public static Set<MonitorableJob> getJobsForUser(Auth0UserProfile user) {
+        if (user == null) {
+            LOG.warn("Null user passed to getJobsForUser!");
+            return Sets.newConcurrentHashSet();
+        }
+        return getJobsByUserId(user.getUser_id(), false);
     }
 
     /**
-     * Get set of active jobs by user ID.
+     * Get set of active jobs by user ID. If there are no active jobs, return a new set.
+     *
+     * NOTE: this should be a concurrent hash set so that it is threadsafe.
      *
      * @param clearCompleted if true, remove all completed and errored jobs for this user.
      */
     private static Set<MonitorableJob> getJobsByUserId(String userId, boolean clearCompleted) {
         Set<MonitorableJob> allJobsForUser = DataManager.userJobsMap.get(userId);
         if (allJobsForUser == null) {
-            return Collections.EMPTY_SET;
+            return Sets.newConcurrentHashSet();
         }
         if (clearCompleted) {
             // Any active jobs will still have their status updated, so they need to be retrieved again with any status

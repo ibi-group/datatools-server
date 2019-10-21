@@ -17,6 +17,8 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
+import static com.conveyal.datatools.manager.controllers.api.StatusController.getJobsForUser;
+
 /**
  * Created by landon on 6/13/16.
  */
@@ -68,6 +70,10 @@ public abstract class MonitorableJob implements Runnable, Serializable {
     }
 
     public MonitorableJob(Auth0UserProfile owner, String name, JobType type) {
+        // Prevent the creation of a job if the user is null.
+        if (owner == null) {
+            throw new IllegalArgumentException("MonitorableJob must be registered with a non-null user/owner.");
+        }
         this.owner = owner;
         this.name = name;
         this.type = type;
@@ -88,37 +94,25 @@ public abstract class MonitorableJob implements Runnable, Serializable {
      * It is a standard start-up stage for all monitorable jobs.
      */
     private void registerJob() {
-        Set<MonitorableJob> userJobs = DataManager.userJobsMap.get(this.owner);
-        // If there are no current jobs for the user, create a new empty set. NOTE: this should be a concurrent hash
-        // set so that it is threadsafe.
-        if (userJobs == null) userJobs = Sets.newConcurrentHashSet();
+        // Get all active jobs and add the latest active job. Note: Removal of job from user's set of jobs is handled
+        // in the StatusController when a user requests their active jobs and the job has finished/errored.
+        Set<MonitorableJob> userJobs = getJobsForUser(this.owner);
         userJobs.add(this);
-
         DataManager.userJobsMap.put(retrieveUserId(), userJobs);
     }
 
     @JsonProperty("owner")
     public String retrieveUserId() {
-        return this.owner == null ? "unknown" : this.owner.getUser_id();
+        return this.owner.getUser_id();
     }
 
     @JsonProperty("email")
     public String retrieveEmail() {
-        return this.owner == null ? "unknown" : this.owner.getEmail();
+        return this.owner.getEmail();
     }
 
     public File retrieveFile () {
         return file;
-    }
-
-    /**
-     * This method should never be called directly or overridden. It is a standard clean up stage for all
-     * monitorable jobs.
-     */
-    private void unRegisterJob () {
-        // remove this job from the user-job map
-        Set<MonitorableJob> userJobs = DataManager.userJobsMap.get(this.owner);
-        if (userJobs != null) userJobs.remove(this);
     }
 
     /**
@@ -131,7 +125,8 @@ public abstract class MonitorableJob implements Runnable, Serializable {
      * all sub-jobs have completed.
      */
     public void jobFinished () {
-        // do nothing by default.
+        // Do nothing by default. Note: job is only removed from active jobs set only when a user requests the latest jobs
+        // via the StatusController HTTP endpoint.
     }
 
     /**
@@ -196,8 +191,6 @@ public abstract class MonitorableJob implements Runnable, Serializable {
             // could be displayed by the client.
         } catch (Exception ex) {
             // Set job status to failed
-            // Note that when an exception occurs during job execution we do not call unRegisterJob,
-            // so the job continues to exist in the failed state and the user can see it.
             LOG.error("Job failed", ex);
             status.update(true, ex.getMessage(), 100, true);
             status.duration = System.currentTimeMillis() - status.startTime;
