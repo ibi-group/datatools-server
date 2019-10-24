@@ -1,5 +1,6 @@
 package com.conveyal.datatools.common.utils;
 
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.FeedExpirationNotificationJob;
 import com.conveyal.datatools.manager.jobs.FetchProjectFeedsJob;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -164,7 +165,7 @@ public class Scheduler {
             LOG.info("Auto fetch begins in {} hours and runs every {} hours", String.valueOf(delayInMinutes / 60.0), TimeUnit.DAYS.toHours(intervalInDays));
             long intervalInMinutes = TimeUnit.DAYS.toMinutes(intervalInDays);
             // system is defined as owner because owner field must not be null
-            FetchProjectFeedsJob fetchProjectFeedsJob = new FetchProjectFeedsJob(project, "system");
+            FetchProjectFeedsJob fetchProjectFeedsJob = new FetchProjectFeedsJob(project, Auth0UserProfile.createSystemUser());
             ScheduledFuture scheduledFuture = schedulerService.scheduleAtFixedRate(
                 fetchProjectFeedsJob,
                 delayInMinutes,

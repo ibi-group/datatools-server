@@ -57,6 +57,7 @@ import com.amazonaws.waiters.Waiter;
 import com.amazonaws.waiters.WaiterParameters;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.controllers.api.DeploymentController;
 import com.conveyal.datatools.manager.controllers.api.ServerController;
 import com.conveyal.datatools.manager.models.Deployment;
@@ -159,7 +160,7 @@ public class DeployJob extends MonitorableJob {
         return otpServer;
     }
 
-    public DeployJob(Deployment deployment, String owner, OtpServer otpServer) {
+    public DeployJob(Deployment deployment, Auth0UserProfile owner, OtpServer otpServer) {
         // TODO add new job type or get rid of enum in favor of just using class names
         super(owner, "Deploying " + deployment.name, JobType.DEPLOY_TO_OTP);
         this.deployment = deployment;
@@ -445,7 +446,7 @@ public class DeployJob extends MonitorableJob {
             LOG.error("Deployment {} not deleted! Disk space in danger of filling up.", deployment.id);
         }
         String message;
-        // TODO: For some reason status duration is not getting set properly in MonitorableJob.
+        // FIXME: For some reason status duration is not getting set properly in MonitorableJob.
         status.duration = System.currentTimeMillis() - status.startTime;
         if (!status.error) {
             // Update status with successful completion state only if no error was encountered.
@@ -648,7 +649,7 @@ public class DeployJob extends MonitorableJob {
                     .withTags(new Tag("jobId", this.jobId))
                     .withTags(new Tag("serverId", otpServer.id))
                     .withTags(new Tag("routerId", getRouterId()))
-                    .withTags(new Tag("user", this.owner))
+                    .withTags(new Tag("user", retrieveEmail()))
                     .withResources(instance.getInstanceId())
             );
         }

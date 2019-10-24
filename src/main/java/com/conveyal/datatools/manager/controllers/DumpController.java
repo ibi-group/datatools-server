@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.controllers;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.jobs.ValidateFeedJob;
 import com.conveyal.datatools.manager.models.Deployment;
@@ -357,10 +358,11 @@ public class DumpController {
                 // Skip all feeds except Cortland for now.
                 continue;
             }
+            Auth0UserProfile systemUser = Auth0UserProfile.createSystemUser();
             if (load) {
-                job = new ProcessSingleFeedJob(version, "system", false);
+                job = new ProcessSingleFeedJob(version, systemUser, false);
             } else {
-                job = new ValidateFeedJob(version, "system", false);
+                job = new ValidateFeedJob(version, systemUser, false);
             }
             DataManager.heavyExecutor.execute(job);
         }

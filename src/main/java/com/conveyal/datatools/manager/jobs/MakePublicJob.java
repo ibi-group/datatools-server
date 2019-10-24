@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.jobs;
 import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.FeedStore;
@@ -23,7 +24,7 @@ public class MakePublicJob extends MonitorableJob {
     public Project project;
     private static final Logger LOG = LoggerFactory.getLogger(MakePublicJob.class);
 
-    public MakePublicJob(Project project, String owner) {
+    public MakePublicJob(Project project, Auth0UserProfile owner) {
         super(owner, "Generating public html for " + project.name, JobType.MAKE_PROJECT_PUBLIC);
         this.project = project;
         status.update(false, "Waiting to begin validation...", 0);

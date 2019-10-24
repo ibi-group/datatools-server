@@ -1,5 +1,6 @@
 package com.conveyal.datatools;
 
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -70,7 +71,8 @@ public class TestUtils {
         } catch (IOException e) {
             e.printStackTrace();
         }
-        ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(version, "test", true);
+        Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
+        ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(version, user, true);
         // Run in same thread to keep things synchronous.
         processSingleFeedJob.run();
         return version;

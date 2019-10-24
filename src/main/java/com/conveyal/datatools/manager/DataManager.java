@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager;
 import com.bugsnag.Bugsnag;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.CorsFilter;
+import com.conveyal.datatools.common.utils.RequestSummary;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.editor.controllers.EditorLockController;
 import com.conveyal.datatools.editor.controllers.api.EditorControllerImpl;
@@ -33,11 +34,13 @@ import com.conveyal.gtfs.loader.Table;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.google.common.collect.EvictingQueue;
 import com.google.common.collect.Sets;
 import com.google.common.io.Resources;
 import org.apache.commons.io.Charsets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import spark.Request;
 import spark.utils.IOUtils;
 
 import javax.sql.DataSource;
@@ -116,6 +119,7 @@ public class DataManager {
     private static final String DEFAULT_ENV = "configurations/default/env.yml";
     private static final String DEFAULT_CONFIG = "configurations/default/server.yml";
     public static DataSource GTFS_DATA_SOURCE;
+    public static final Map<String, RequestSummary> lastRequestForUser = new HashMap<>();
 
     public static void main(String[] args) throws IOException {
 
@@ -331,6 +335,8 @@ public class DataManager {
 
         // add logger
         before((request, response) -> {
+            RequestSummary summary = RequestSummary.fromRequest(request);
+            lastRequestForUser.put(summary.user, summary);
             logRequest(request, response);
         });
 
