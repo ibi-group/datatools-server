@@ -523,6 +523,10 @@ public class MergeFeedsJob extends MonitorableJob {
                             // See https://github.com/ibi-group/datatools-server/issues/244
                             if (feedIndex == 1 && field.name.equals("service_id")) {
                                 valueToWrite = String.join(":", idScope, val);
+                                mergeFeedsResult.remappedIds.put(
+                                    getTableScopedValue(table, idScope, val),
+                                    valueToWrite
+                                );
                                 idErrors = referenceTracker
                                     .checkReferencesAndUniqueness(keyValue, lineNumber, field, valueToWrite,
                                         table, keyField, orderField);
