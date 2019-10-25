@@ -130,7 +130,7 @@ public class ProjectController {
     public static Boolean fetch(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         Project p = requestProjectById(req, "manage");
-        FetchProjectFeedsJob fetchProjectFeedsJob = new FetchProjectFeedsJob(p, userProfile.getUser_id());
+        FetchProjectFeedsJob fetchProjectFeedsJob = new FetchProjectFeedsJob(p, userProfile);
         // This job is runnable because sometimes we schedule the task for a later time, but here we call it immediately
         // because it is short lived and just cues up more work.
         fetchProjectFeedsJob.run();
@@ -235,7 +235,7 @@ public class ProjectController {
             LOG.info("Adding {} feed to merged zip", fs.name);
             feedVersions.add(version);
         }
-        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(userProfile.getUser_id(), feedVersions, project.id, REGIONAL);
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(userProfile, feedVersions, project.id, REGIONAL);
         DataManager.heavyExecutor.execute(mergeFeedsJob);
         // Return job ID to requester for monitoring job status.
         return formatJobMessage(mergeFeedsJob.jobId, "Merge operation is processing.");
@@ -277,7 +277,7 @@ public class ProjectController {
             logMessageAndHalt(req, 400, "no such project!");
         }
         // Run this as a synchronous job; if it proves to be too slow we will change to asynchronous.
-        new MakePublicJob(p, userProfile.getUser_id()).run();
+        new MakePublicJob(p, userProfile).run();
         return true;
     }
 

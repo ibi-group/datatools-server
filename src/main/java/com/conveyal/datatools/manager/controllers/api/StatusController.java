@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.utils.RequestSummary;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.JsonViews;
@@ -14,6 +15,8 @@ import spark.Response;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -30,13 +33,28 @@ public class StatusController {
     private static JsonManager<MonitorableJob.Status> json =
         new JsonManager<>(MonitorableJob.Status.class, JsonViews.UserInterface.class);
 
-    // TODO: Admin API route to return active jobs for all application users.
+    /**
+     * Admin API route to return active jobs for all application users.
+     */
     private static Set<MonitorableJob> getAllJobsRoute(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         if (!userProfile.canAdministerApplication()) {
             logMessageAndHalt(req, 401, "User not authorized to view all jobs");
         }
         return getAllJobs();
+    }
+
+    /**
+     * Admin API route to return latest requests made to applications.
+     */
+    private static List<RequestSummary> getAllRequestsRoute(Request req, Response res) {
+        Auth0UserProfile userProfile = req.attribute("user");
+        if (!userProfile.canAdministerApplication()) {
+            logMessageAndHalt(req, 401, "User not authorized to view all requests");
+        }
+        return DataManager.lastRequestForUser.values().stream()
+            .sorted(Comparator.comparingLong(RequestSummary::getTime).reversed())
+            .collect(Collectors.toList());
     }
 
     public static Set<MonitorableJob> getAllJobs() {
@@ -110,21 +128,28 @@ public class StatusController {
         return getJobsByUserId(userId, true);
     }
 
-    public static Set<MonitorableJob> filterJobsByType (MonitorableJob.JobType ...jobType) {
-        return getAllJobs().stream()
-                .filter(job -> Arrays.asList(jobType).contains(job.type))
-                .collect(Collectors.toSet());
+    /**
+     * Convenience wrapper method to retrieve all jobs for {@link Auth0UserProfile}.
+     */
+    public static Set<MonitorableJob> getJobsForUser(Auth0UserProfile user) {
+        if (user == null) {
+            LOG.warn("Null user passed to getJobsForUser!");
+            return Sets.newConcurrentHashSet();
+        }
+        return getJobsByUserId(user.getUser_id(), false);
     }
 
     /**
-     * Get set of active jobs by user ID.
+     * Get set of active jobs by user ID. If there are no active jobs, return a new set.
+     *
+     * NOTE: this should be a concurrent hash set so that it is threadsafe.
      *
      * @param clearCompleted if true, remove all completed and errored jobs for this user.
      */
     private static Set<MonitorableJob> getJobsByUserId(String userId, boolean clearCompleted) {
         Set<MonitorableJob> allJobsForUser = DataManager.userJobsMap.get(userId);
         if (allJobsForUser == null) {
-            return Collections.EMPTY_SET;
+            return Sets.newConcurrentHashSet();
         }
         if (clearCompleted) {
             // Any active jobs will still have their status updated, so they need to be retrieved again with any status
@@ -148,6 +173,7 @@ public class StatusController {
 
     public static void register (String apiPrefix) {
 
+        get(apiPrefix + "secure/status/requests", StatusController::getAllRequestsRoute, json::write);
         // These endpoints return all jobs for the current user, all application jobs, or a specific job
         get(apiPrefix + "secure/status/jobs", StatusController::getUserJobsRoute, json::write);
         // FIXME Change endpoint for all jobs (to avoid overlap with jobId param)?
