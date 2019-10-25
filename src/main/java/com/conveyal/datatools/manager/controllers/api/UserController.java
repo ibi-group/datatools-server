@@ -308,31 +308,11 @@ public class UserController {
      * Resends the user confirmation email for a given user
      */
     private static ObjectNode resendEmailConfirmation(Request req, Response res) {
-        // verify if the request is legit. Should only come from an application administrator or the user for which the
-        // account belongs to.
+        // verify if the request is legit. Should only come from the user for which the account belongs to.
         Auth0UserProfile userProfile = req.attribute("user");
-        if (userProfile.canAdministerApplication() || userProfile.getUser_id().equals(req.params("id"))) {
-            // authorized. Create request to resend email verification
-            HttpPost resendEmailVerificationRequest = new HttpPost(
-                "https://" + AUTH0_DOMAIN + API_PATH + "/jobs/verification-email"
-            );
-            setHeaders(req, resendEmailVerificationRequest);
-            setRequestEntityUsingJson(
-                resendEmailVerificationRequest,
-                JsonUtil.objectMapper.createObjectNode()
-                    .put("user_id", userProfile.getUser_id())
-                    .put("client_id", AUTH0_CLIENT_ID)
-                    .toString(),
-                req
-            );
-
-            // Execute request. If a HTTP response other than 200 occurs, an error will be returned.
-            executeRequestAndGetResult(resendEmailVerificationRequest, req);
-
-            // Email verification successfully sent! Return successful response.
-            return JsonUtil.objectMapper.createObjectNode()
-                .put("emailSent", true);
-        } else {
+        if (!userProfile.getUser_id().equals(req.params("id"))) {
+            // user is not authorized because they're either not an application admin and are not the user that email
+            // verfiication is being requested for
             logMessageAndHalt(
                 req,
                 401,
@@ -341,6 +321,26 @@ public class UserController {
             // doesn't actually return null since above line sends a 401 response
             return null;
         }
+        // authorized. Create request to resend email verification
+        HttpPost resendEmailVerificationRequest = new HttpPost(
+            "https://" + AUTH0_DOMAIN + API_PATH + "/jobs/verification-email"
+        );
+        setHeaders(req, resendEmailVerificationRequest);
+        setRequestEntityUsingJson(
+            resendEmailVerificationRequest,
+            JsonUtil.objectMapper.createObjectNode()
+                .put("user_id", userProfile.getUser_id())
+                .put("client_id", AUTH0_CLIENT_ID)
+                .toString(),
+            req
+        );
+
+        // Execute request. If a HTTP response other than 200 occurs, an error will be returned.
+        executeRequestAndGetResult(resendEmailVerificationRequest, req);
+
+        // Email verification successfully sent! Return successful response.
+        return JsonUtil.objectMapper.createObjectNode()
+            .put("emailSent", true);
     }
 
     /**
