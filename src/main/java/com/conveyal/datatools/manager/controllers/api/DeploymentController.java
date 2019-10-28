@@ -8,6 +8,7 @@ import com.amazonaws.services.ec2.model.Filter;
 import com.amazonaws.services.ec2.model.Instance;
 import com.amazonaws.services.ec2.model.Reservation;
 import com.amazonaws.services.s3.AmazonS3URI;
+import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
@@ -94,7 +95,11 @@ public class DeploymentController {
     private static String downloadBuildArtifact (Request req, Response res) {
         Deployment deployment = getDeploymentWithPermissions(req, res);
         DeployJob.DeploySummary summaryToDownload = null;
-        String uriString = null;
+        String uriString;
+        String filename = req.queryParams("filename");
+        if (filename == null) {
+            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Must provide filename query param for build artifact.");
+        }
         // If a jobId query param is provided, find the matching job summary.
         String jobId = req.queryParams("jobId");
         if (jobId != null) {
@@ -108,23 +113,26 @@ public class DeploymentController {
             summaryToDownload = deployment.latest();
         }
         if (summaryToDownload == null) {
-            // Try to construct the URI string
-            OtpServer server = Persistence.servers.getById(deployment.deployedTo);
-            if (server == null) {
-                uriString = String.format("s3://%s/bundles/%s/%s/%s", "S3_BUCKET", deployment.projectId, deployment.id, jobId);
-                logMessageAndHalt(req, 400, "The deployment does not have job history or associated server information to construct URI for build artifact. " + uriString);
-                return null;
+            // See if there is an ongoing job for the provided jobId.
+            MonitorableJob job = StatusController.getJobByJobId(jobId);
+            if (job instanceof DeployJob) {
+                uriString = ((DeployJob) job).getS3FolderURI().toString();
+            } else {
+                // Try to construct the URI string
+                OtpServer server = Persistence.servers.getById(deployment.deployedTo);
+                if (server == null) {
+                    uriString = String.format("s3://%s/bundles/%s/%s/%s", "S3_BUCKET", deployment.projectId, deployment.id, jobId);
+                    logMessageAndHalt(req, 400, "The deployment does not have job history or associated server information to construct URI for build artifact. " + uriString);
+                    return null;
+                }
+                uriString = String.format("s3://%s/bundles/%s/%s/%s", server.s3Bucket, deployment.projectId, deployment.id, jobId);
+                LOG.warn("Could not find deploy summary for job. Attempting to use {}", uriString);
             }
-            uriString = String.format("s3://%s/bundles/%s/%s/%s", server.s3Bucket, deployment.projectId, deployment.id, jobId);
-            LOG.warn("Could not find deploy summary for job. Attempting to use {}", uriString);
         } else {
+            // If summary is readily available, just use the ready-to-use build artifacts field.
             uriString = summaryToDownload.buildArtifactsFolder;
         }
         AmazonS3URI uri = new AmazonS3URI(uriString);
-        String filename = req.queryParams("filename");
-        if (filename == null) {
-            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Must provide filename query param for build artifact.");
-        }
         return downloadFromS3(FeedStore.s3Client, uri.getBucket(), String.join("/", uri.getKey(), filename), false, res);
     }
 
@@ -449,7 +457,7 @@ public class DeploymentController {
         }
 
         // Execute the deployment job and keep track of it in the jobs for server map.
-        DeployJob job = new DeployJob(deployment, userProfile.getUser_id(), otpServer);
+        DeployJob job = new DeployJob(deployment, userProfile, otpServer);
         DataManager.heavyExecutor.execute(job);
         deploymentJobsByServer.put(target, job);
 

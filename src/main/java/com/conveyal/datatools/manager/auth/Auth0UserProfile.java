@@ -53,6 +53,26 @@ public class Auth0UserProfile {
         return adminUser;
     }
 
+    /**
+     * Utility method for creating a system user (for autonomous server jobs).
+     */
+    public static Auth0UserProfile createSystemUser() {
+        Auth0UserProfile.DatatoolsInfo adminDatatoolsInfo = new Auth0UserProfile.DatatoolsInfo();
+        adminDatatoolsInfo.setPermissions(
+            new Auth0UserProfile.Permission[]{
+                new Auth0UserProfile.Permission("administer-application", new String[]{})
+            }
+        );
+        adminDatatoolsInfo.setClientId(DataManager.getConfigPropertyAsText("AUTH0_CLIENT_ID"));
+
+        Auth0UserProfile.AppMetadata adminAppMetaData = new Auth0UserProfile.AppMetadata();
+        adminAppMetaData.setDatatoolsInfo(adminDatatoolsInfo);
+
+        Auth0UserProfile adminUser = new Auth0UserProfile("system", "user_id:system");
+        adminUser.setApp_metadata(adminAppMetaData);
+        return adminUser;
+    }
+
     public String getUser_id() {
         return user_id;
     }

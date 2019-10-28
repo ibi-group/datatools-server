@@ -230,7 +230,7 @@ public class FeedSourceController {
         LOG.info("Fetching feed at {} for source {}", s.url, s.name);
         Auth0UserProfile userProfile = req.attribute("user");
         // Run in heavyExecutor because ProcessSingleFeedJob is chained to this job (if update finds new version).
-        FetchSingleFeedJob fetchSingleFeedJob = new FetchSingleFeedJob(s, userProfile.getUser_id(), false);
+        FetchSingleFeedJob fetchSingleFeedJob = new FetchSingleFeedJob(s, userProfile, false);
         DataManager.lightExecutor.execute(fetchSingleFeedJob);
 
         // Return the jobId so that the requester can track the job's progress.

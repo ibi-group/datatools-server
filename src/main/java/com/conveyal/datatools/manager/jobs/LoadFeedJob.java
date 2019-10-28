@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
@@ -19,7 +20,7 @@ public class LoadFeedJob extends MonitorableJob {
     private FeedVersion feedVersion;
     private final boolean isNewVersion;
 
-    public LoadFeedJob(FeedVersion version, String owner, boolean isNewVersion) {
+    public LoadFeedJob(FeedVersion version, Auth0UserProfile owner, boolean isNewVersion) {
         super(owner, "Loading GTFS", JobType.LOAD_FEED);
         feedVersion = version;
         this.isNewVersion = isNewVersion;

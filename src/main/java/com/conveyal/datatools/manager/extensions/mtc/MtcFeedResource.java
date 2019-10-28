@@ -42,7 +42,7 @@ public class MtcFeedResource implements ExternalFeedResource {
 
     public static final Logger LOG = LoggerFactory.getLogger(MtcFeedResource.class);
 
-    private String rtdApi, s3Bucket, s3Prefix, s3CredentialsFilename;
+    private String rtdApi, s3Bucket, s3Prefix;
 
     public static final String AGENCY_ID_FIELDNAME = "AgencyId";
     public static final String RESOURCE_TYPE = "MTC";
@@ -50,7 +50,6 @@ public class MtcFeedResource implements ExternalFeedResource {
         rtdApi = DataManager.getExtensionPropertyAsText(RESOURCE_TYPE, "rtd_api");
         s3Bucket = DataManager.getExtensionPropertyAsText(RESOURCE_TYPE, "s3_bucket");
         s3Prefix = DataManager.getExtensionPropertyAsText(RESOURCE_TYPE, "s3_prefix");
-        //s3CredentialsFilename = DataManager.config.retrieveById("extensions").retrieveById("mtc").retrieveById("s3_credentials_file").asText();
     }
 
     @Override

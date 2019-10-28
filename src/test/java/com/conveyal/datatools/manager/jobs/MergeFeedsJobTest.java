@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.jobs;
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.TestUtils;
 import com.conveyal.datatools.UnitTest;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
@@ -70,7 +71,8 @@ public class MergeFeedsJobTest extends UnitTest {
         versions.add(bartVersion1);
         versions.add(calTrainVersion);
         versions.add(napaVersion);
-        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob("test", versions, project.id, MergeFeedsType.REGIONAL);
+        Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, project.id, MergeFeedsType.REGIONAL);
         // Run the job in this thread (we're not concerned about concurrency here).
         mergeFeedsJob.run();
         // Create a new feed source/version for the merged feed, so we can easily analyze its contents.
@@ -134,7 +136,8 @@ public class MergeFeedsJobTest extends UnitTest {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(bartVersion1);
         versions.add(bartVersion2);
-        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob("test", versions, "merged_output", MergeFeedsType.MTC);
+        Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.MTC);
         // Run the job in this thread (we're not concerned about concurrency here).
         mergeFeedsJob.run();
         // Result should fail.
@@ -155,7 +158,8 @@ public class MergeFeedsJobTest extends UnitTest {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(bartVersion1);
         versions.add(bartVersion2);
-        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob("test", versions, "merged_output", MergeFeedsType.MTC);
+        Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.MTC);
         // This time, turn off the failOnDuplicateTripId flag.
         mergeFeedsJob.failOnDuplicateTripId = false;
         // Result should succeed this time.
