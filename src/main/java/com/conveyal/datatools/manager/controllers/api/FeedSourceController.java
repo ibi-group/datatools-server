@@ -24,7 +24,6 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Iterator;
-import java.util.List;
 import java.util.Map;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
@@ -57,41 +56,27 @@ public class FeedSourceController {
      * - for a single project (if projectId query param provided)
      * - for the entire application
      */
-    private static Collection<FeedSource> getAllFeedSources(Request req, Response res) {
+    private static Collection<FeedSource> getProjectFeedSources(Request req, Response res) {
         Collection<FeedSource> feedSourcesToReturn = new ArrayList<>();
-        Auth0UserProfile requestingUser = req.attribute("user");
+        Auth0UserProfile user = req.attribute("user");
         String projectId = req.queryParams("projectId");
-        // Determine whether request is coming from a public HTTP endpoint.
-        boolean publicFilter = req.pathInfo().contains("public");
-        List<FeedSource> allFeedSources = Persistence.feedSources.getAll();
-        if (projectId != null && requestingUser != null) {
-            for (FeedSource source: allFeedSources) {
-                String orgId = source.organizationId();
-                if (
-                    source.projectId != null && source.projectId.equals(projectId) &&
-                    requestingUser.canManageOrViewFeed(orgId, source.projectId, source.id)
-                ) {
-                    // If requesting public sources and source is not public; skip source
-                    // TODO: determine if this is still needed.
-                    if (publicFilter && !source.isPublic) continue;
-                    feedSourcesToReturn.add(source);
-                }
-            }
-        } else {
-            // Request feed sources that are public.
-            for (FeedSource source: allFeedSources) {
-                String orgId = source.organizationId();
-                // If user is logged in and cannot view feed; skip source
-                if ((requestingUser != null && !requestingUser.canManageOrViewFeed(orgId, source.projectId, source.id))) {
-                    continue;
-                }
-                // if requesting public sources and source is not public; skip source
-                // TODO: determine if this is still needed.
-                if (publicFilter && !source.isPublic) continue;
+        Project project = Persistence.projects.getById(projectId);
+        if (project == null) {
+            logMessageAndHalt(req, 400, "Must provide valid projectId query param to retrieve feed sources.");
+        }
+        Collection<FeedSource> projectFeedSources = project.retrieveProjectFeedSources();
+        for (FeedSource source: projectFeedSources) {
+            String orgId = source.organizationId();
+            // If user can view or manage feed, add to list of feeds to return. NOTE: By default most users with access
+            // to a project should be able to view all feed sources. Custom privileges would need to be provided to
+            // override this behavior.
+            if (
+                source.projectId != null && source.projectId.equals(projectId) &&
+                    user.canManageOrViewFeed(orgId, source.projectId, source.id)
+            ) {
                 feedSourcesToReturn.add(source);
             }
         }
-        // Finally, return all feed sources meeting criteria above.
         return feedSourcesToReturn;
     }
 
@@ -119,7 +104,8 @@ public class FeedSourceController {
             NotifyUsersForSubscriptionJob.createNotification(
                 "project-updated",
                 newFeedSource.projectId,
-                String.format("New feed %s created in project %s.", newFeedSource.name, parentProject.name));
+                String.format("New feed %s created in project %s.", newFeedSource.name, parentProject.name)
+            );
             return newFeedSource;
         } catch (Exception e) {
             logMessageAndHalt(req, 500, "Unknown error encountered creating feed source", e);
@@ -185,6 +171,7 @@ public class FeedSourceController {
 
             if (prop == null) {
                 logMessageAndHalt(req, 400, String.format("Property '%s' does not exist!", propertyId));
+                return null;
             }
             // Hold previous value for use when updating third-party resource
             String previousValue = prop.value;
@@ -229,7 +216,8 @@ public class FeedSourceController {
         }
         LOG.info("Fetching feed at {} for source {}", s.url, s.name);
         Auth0UserProfile userProfile = req.attribute("user");
-        // Run in heavyExecutor because ProcessSingleFeedJob is chained to this job (if update finds new version).
+        // Run in light executor, but if a new feed is found, do not continue thread (a new one will be started in
+        // heavyExecutor in the body of the fetch job.
         FetchSingleFeedJob fetchSingleFeedJob = new FetchSingleFeedJob(s, userProfile, false);
         DataManager.lightExecutor.execute(fetchSingleFeedJob);
 
@@ -253,9 +241,6 @@ public class FeedSourceController {
 
     public static FeedSource checkFeedSourcePermissions(Request req, FeedSource feedSource, Actions action) {
         Auth0UserProfile userProfile = req.attribute("user");
-        boolean publicFilter = Boolean.valueOf(req.queryParams("public")) ||
-                req.url().split("/api/*/")[1].startsWith("public");
-
         // check for null feedSource
         if (feedSource == null) {
             logMessageAndHalt(req, 400, "Feed source ID does not exist");
@@ -274,31 +259,16 @@ public class FeedSourceController {
                 authorized = userProfile.canEditGTFS(orgId, feedSource.projectId, feedSource.id);
                 break;
             case VIEW:
-                if (!publicFilter) {
-                    authorized = userProfile.canViewFeed(orgId, feedSource.projectId, feedSource.id);
-                } else {
-                    authorized = false;
-                }
+                authorized = userProfile.canViewFeed(orgId, feedSource.projectId, feedSource.id);
                 break;
             default:
                 authorized = false;
                 break;
         }
-
-        // If requesting public sources, handle a few cases.
-        if (publicFilter) {
-            if (!feedSource.isPublic && !authorized) {
-                // if feed not public and user not authorized, halt
-                logMessageAndHalt(req, 403, "User not authorized to perform action on feed source");
-            } else if (feedSource.isPublic && action.equals(Actions.MANAGE)) {
-                // if feed is public, but action is managerial, halt (we shouldn't ever retrieveById here, but just in case)
-                logMessageAndHalt(req, 403, "User not authorized to perform action on feed source");
-            }
-        } else if (!authorized) {
-            // Not requesting public sources, so we should just consider whether user is authorized.
+        if (!authorized) {
+            // Throw halt if user not authorized.
             logMessageAndHalt(req, 403, "User not authorized to perform action on feed source");
         }
-
         // If we make it here, user has permission and the requested feed source is valid.
         return feedSource;
     }
@@ -306,15 +276,11 @@ public class FeedSourceController {
     // FIXME: use generic API controller and return JSON documents via BSON/Mongo
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/feedsource/:id", FeedSourceController::getFeedSource, json::write);
-        get(apiPrefix + "secure/feedsource", FeedSourceController::getAllFeedSources, json::write);
+        get(apiPrefix + "secure/feedsource", FeedSourceController::getProjectFeedSources, json::write);
         post(apiPrefix + "secure/feedsource", FeedSourceController::createFeedSource, json::write);
         put(apiPrefix + "secure/feedsource/:id", FeedSourceController::updateFeedSource, json::write);
         put(apiPrefix + "secure/feedsource/:id/updateExternal", FeedSourceController::updateExternalFeedResource, json::write);
         delete(apiPrefix + "secure/feedsource/:id", FeedSourceController::deleteFeedSource, json::write);
         post(apiPrefix + "secure/feedsource/:id/fetch", FeedSourceController::fetch, json::write);
-
-        // Public routes
-        get(apiPrefix + "public/feedsource/:id", FeedSourceController::getFeedSource, json::write);
-        get(apiPrefix + "public/feedsource", FeedSourceController::getAllFeedSources, json::write);
     }
 }
