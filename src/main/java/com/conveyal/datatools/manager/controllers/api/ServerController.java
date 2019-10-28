@@ -57,6 +57,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import static com.conveyal.datatools.common.utils.SparkUtils.getPOJOFromRequestBody;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.jobs.DeployJob.DEFAULT_INSTANCE_TYPE;
 import static spark.Spark.delete;
@@ -177,9 +178,9 @@ public class ServerController {
      * Create a new server for the project. All feed sources with a valid latest version are added to the new
      * deployment.
      */
-    private static OtpServer createServer(Request req, Response res) {
+    private static OtpServer createServer(Request req, Response res) throws IOException {
         Auth0UserProfile userProfile = req.attribute("user");
-        OtpServer newServer = getServerFromRequestBody(req);
+        OtpServer newServer = getPOJOFromRequestBody(req, OtpServer.class);
         // If server has no project ID specified, user must be an application admin to create it. Otherwise, they must
         // be a project admin.
         boolean allowedToCreate = newServer.projectId == null
@@ -191,16 +192,6 @@ public class ServerController {
             return newServer;
         } else {
             logMessageAndHalt(req, 403, "Not authorized to create a server for project " + newServer.projectId);
-            return null;
-        }
-    }
-
-    /** Utility method to parse OtpServer object from Spark request body. */
-    private static OtpServer getServerFromRequestBody(Request req) {
-        try {
-            return mapper.readValue(req.body(), OtpServer.class);
-        } catch (IOException e) {
-            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Error parsing OTP server JSON.", e);
             return null;
         }
     }
@@ -224,9 +215,9 @@ public class ServerController {
     /**
      * Update a single OTP server.
      */
-    private static OtpServer updateServer(Request req, Response res) {
+    private static OtpServer updateServer(Request req, Response res) throws IOException {
         OtpServer serverToUpdate = getServerWithPermissions(req, res);
-        OtpServer updatedServer = getServerFromRequestBody(req);
+        OtpServer updatedServer = getPOJOFromRequestBody(req, OtpServer.class);
         Auth0UserProfile user = req.attribute("user");
         if ((serverToUpdate.admin || serverToUpdate.projectId == null) && !user.canAdministerApplication()) {
             logMessageAndHalt(req, HttpStatus.UNAUTHORIZED_401, "User cannot modify admin-only or application-wide server.");

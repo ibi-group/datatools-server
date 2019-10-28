@@ -50,8 +50,8 @@ import static spark.Spark.put;
 
 public class FeedVersionController  {
 
-    public static final Logger LOG = LoggerFactory.getLogger(FeedVersionController.class);
-    public static JsonManager<FeedVersion> json = new JsonManager<>(FeedVersion.class, JsonViews.UserInterface.class);
+    private static final Logger LOG = LoggerFactory.getLogger(FeedVersionController.class);
+    private static JsonManager<FeedVersion> json = new JsonManager<>(FeedVersion.class, JsonViews.UserInterface.class);
 
     /**
      * Grab the feed version for the ID supplied in the request.
@@ -93,7 +93,7 @@ public class FeedVersionController  {
      *
      * @return the job ID that allows monitoring progress of the load process
      */
-    public static String createFeedVersionViaUpload(Request req, Response res) {
+    private static String createFeedVersionViaUpload(Request req, Response res) {
 
         Auth0UserProfile userProfile = req.attribute("user");
         FeedSource feedSource = requestFeedSourceById(req, Actions.MANAGE);
@@ -188,6 +188,7 @@ public class FeedVersionController  {
         FeedVersion version = Persistence.feedVersions.getById(feedVersionId);
         if (version == null) {
             logMessageAndHalt(req, 404, "Feed version ID does not exist");
+            return null;
         }
         // Performs permissions checks on the feed source this feed version belongs to, and halts if permission is denied.
         checkFeedSourcePermissions(req, version.parentFeedSource(), action);
