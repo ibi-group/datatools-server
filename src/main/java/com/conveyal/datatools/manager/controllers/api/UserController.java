@@ -309,8 +309,7 @@ public class UserController {
         // verify if the request is legit. Should only come from the user for which the account belongs to.
         Auth0UserProfile userProfile = req.attribute("user");
         if (!userProfile.getUser_id().equals(req.params("id"))) {
-            // user is not authorized because they're either not an application admin and are not the user that email
-            // verfiication is being requested for
+            // user is not authorized because they're not the user that email verification is being requested for
             logMessageAndHalt(
                 req,
                 401,
