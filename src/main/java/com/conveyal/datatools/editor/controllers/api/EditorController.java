@@ -204,7 +204,11 @@ public abstract class EditorController<T extends Entity> {
             }
             for (int i = 0; i < filterFields.size(); i++) {
                 Field field = filterFields.get(i);
-                field.setParameter(preparedStatement, oneBasedIndex, filterValues.get(i));
+                try {
+                    field.setParameter(preparedStatement, oneBasedIndex, filterValues.get(i));
+                } catch (Exception e) {
+                    logMessageAndHalt(req, 400, "Invalid value used for field " + field.name, e);
+                }
                 oneBasedIndex++;
             }
             // Execute the update and commit!
@@ -217,7 +221,7 @@ public abstract class EditorController<T extends Entity> {
         } catch (HaltException e) {
             throw e;
         } catch (Exception e) {
-            logMessageAndHalt(req, 500, "Could not patch update table", e);
+            logMessageAndHalt(req, 400, "Could not patch update table", e);
             return null;
         } finally {
             DbUtils.closeQuietly(connection);
