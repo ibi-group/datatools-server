@@ -29,6 +29,7 @@ import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.util.Date;
+import java.util.UUID;
 
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.mongodb.client.model.Filters.and;
@@ -68,7 +69,8 @@ public class FeedVersion extends Model implements Serializable {
 
         // since we store directly on the file system, this lets users look at the DB directly
         // TODO: no need to BaseGTFSCache.cleanId once we rely on GTFSCache to store the feed.
-        return BaseGTFSCache.cleanId(getCleanName(source.name) + "-" + df.format(this.updated) + "-" + source.id) + ".zip";
+        String uuid = UUID.randomUUID().toString();
+        return BaseGTFSCache.cleanId(String.join("-", getCleanName(source.name), df.format(this.updated), source.id, uuid)) + ".zip";
     }
 
     /**
