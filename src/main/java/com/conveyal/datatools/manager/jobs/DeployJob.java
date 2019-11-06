@@ -776,10 +776,10 @@ public class DeployJob extends MonitorableJob {
         if (graphAlreadyBuilt) {
             lines.add("echo 'downloading graph from s3'");
             // Download Graph from S3.
-            lines.add(String.format("aws s3 cp %s %s ", getS3GraphURI(), graphPath));
+            lines.add(String.format("aws s3 --cli-read-timeout 0 cp %s %s ", getS3GraphURI(), graphPath));
         } else {
             // Download data bundle from S3.
-            lines.add(String.format("aws s3 cp %s /tmp/bundle.zip", getS3BundleURI()));
+            lines.add(String.format("aws s3 --cli-read-timeout 0 cp %s /tmp/bundle.zip", getS3BundleURI()));
             // Determine if bundle download was successful.
             lines.add("[ -f /tmp/bundle.zip ] && BUNDLE_STATUS='SUCCESS' || BUNDLE_STATUS='FAILURE'");
             // Upload user data log after bundle download.
