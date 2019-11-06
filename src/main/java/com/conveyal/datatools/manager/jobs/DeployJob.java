@@ -734,11 +734,12 @@ public class DeployJob extends MonitorableJob {
         String jarDir = String.format("/opt/%s", getTripPlannerString());
         List<String> lines = new ArrayList<>();
         String routerName = "default";
-        final String uploadUserDataLogCommand = String.format("aws s3 --region us-east-1 cp $USERDATALOG %s/${instance_id}.log", getS3FolderURI().toString());
+        final String uploadUserDataLogCommand = String.format("aws s3 cp $USERDATALOG %s/${instance_id}.log", getS3FolderURI().toString());
         String routerDir = String.format("/var/%s/graphs/%s", getTripPlannerString(), routerName);
         String graphPath = String.join("/", routerDir, OTP_GRAPH_FILENAME);
         //////////////// BEGIN USER DATA
         lines.add("#!/bin/bash");
+        ///// 1. set some variables.
         // Send trip planner logs to LOGFILE
         lines.add(String.format("BUILDLOGFILE=/var/log/%s", getBuildLogFilename()));
         lines.add(String.format("LOGFILE=/var/log/%s.log", getTripPlannerString()));
@@ -752,6 +753,14 @@ public class DeployJob extends MonitorableJob {
         lines.add("TOTAL_MEM=`grep MemTotal /proc/meminfo | sed 's/[^0-9]//g'`");
         // 2097152 kb is 2GB, leave that much for the OS
         lines.add("MEM=`echo $(($TOTAL_MEM - 2097152))`");
+        ////// 2. Configure some stuff for AWS CLI.
+        // 50 concurrent requests was chosen based on some spot tests using a r5d.xlarge running the AMI
+        // ami-083a9f8cfa1607868.
+        lines.add("aws configure set default.s3.max_concurrent_requests 50");
+        // Get region from config or default to us-east-1
+        String region = DataManager.getConfigPropertyAsText("application.data.s3_region");
+        if (region == null) region = "us-east-1";
+        lines.add(String.format("aws configure set default.region %s", region));
         // Create the directory for the graph inputs.
         lines.add(String.format("mkdir -p %s", routerDir));
         lines.add(String.format("chown ubuntu %s", routerDir));
@@ -767,10 +776,10 @@ public class DeployJob extends MonitorableJob {
         if (graphAlreadyBuilt) {
             lines.add("echo 'downloading graph from s3'");
             // Download Graph from S3.
-            lines.add(String.format("aws s3 --region us-east-1 --cli-read-timeout 0 cp %s %s ", getS3GraphURI(), graphPath));
+            lines.add(String.format("aws s3 cp %s %s ", getS3GraphURI(), graphPath));
         } else {
             // Download data bundle from S3.
-            lines.add(String.format("aws s3 --region us-east-1 --cli-read-timeout 0 cp %s /tmp/bundle.zip", getS3BundleURI()));
+            lines.add(String.format("aws s3 cp %s /tmp/bundle.zip", getS3BundleURI()));
             // Determine if bundle download was successful.
             lines.add("[ -f /tmp/bundle.zip ] && BUNDLE_STATUS='SUCCESS' || BUNDLE_STATUS='FAILURE'");
             // Upload user data log after bundle download.
@@ -793,8 +802,8 @@ public class DeployJob extends MonitorableJob {
             // Upload the build log file and graph to S3.
             if (!deployment.r5) {
                 String s3BuildLogPath = joinToS3FolderURI(getBuildLogFilename());
-                lines.add(String.format("aws s3 --region us-east-1 cp $BUILDLOGFILE %s ", s3BuildLogPath));
-                lines.add(String.format("aws s3 --region us-east-1 cp %s %s ", graphPath, getS3GraphURI()));
+                lines.add(String.format("aws s3 cp $BUILDLOGFILE %s ", s3BuildLogPath));
+                lines.add(String.format("aws s3 cp %s %s ", graphPath, getS3GraphURI()));
             }
         }
         // Determine if graph build/download was successful (and that Graph.obj is not zero bytes).
