@@ -8,6 +8,7 @@ import com.conveyal.datatools.manager.models.EC2Info;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
@@ -20,6 +21,7 @@ import java.util.List;
 
 import static com.conveyal.datatools.manager.controllers.api.ServerController.getIds;
 import static com.conveyal.datatools.manager.controllers.api.ServerController.terminateInstances;
+import static org.junit.Assert.assertFalse;
 
 /**
  * This contains a few helpful tests for quickly spinning up a deployment using any bundle of GTFS + OSM or pre-built
@@ -51,7 +53,7 @@ public class DeployJobTest {
         server.s3Bucket = "datatools-dev";
         server.ec2Info = new EC2Info();
         server.ec2Info.instanceCount = 2;
-        server.ec2Info.instanceType = "r5d.xlarge";
+        server.ec2Info.instanceType = "r5dn.xlarge";
         // FIXME: How should we include these private-ish values??
         server.ec2Info.securityGroupId = "YOUR_VALUE";
         server.ec2Info.subnetId = "YOUR_VALUE";
@@ -62,6 +64,7 @@ public class DeployJobTest {
         deployment = new Deployment();
         deployment.projectId = project.id;
         deployment.name = "Test deployment";
+        deployment.otpVersion = "otp-latest-trimet-dev";
         Persistence.deployments.create(deployment);
     }
 
@@ -69,27 +72,28 @@ public class DeployJobTest {
      * Tests that Data Tools can run an ELB deployment.
      *
      * Note: this requires changing server.yml#modules.deployment.ec2.enabled to true
-     * @throws InterruptedException
      */
     @Test
-    public void canDeployFromPreloadedBundle () throws InterruptedException {
+    public void canDeployFromPreloadedBundle () {
         DeployJob deployJob = new DeployJob(deployment, Auth0UserProfile.createTestAdminUser(), server, "test-deploy", DeployJob.DeployType.USE_PRELOADED_BUNDLE);
         deployJob.run();
-        Thread.sleep(60 * 1000);
-        List<Instance> instances = server.retrieveEC2Instances();
-        List<String> ids = getIds(instances);
-        terminateInstances(ids);
+        // FIXME: Deployment will succeed even if one of the clone servers does not start up properly.
+        assertFalse("Deployment did not fail.", deployJob.status.error);
     }
 
     /**
      * Tests that Data Tools can run an ELB deployment from a pre-built graph.
-     * @throws InterruptedException
      */
     @Test
-    public void canDeployFromPrebuiltGraph () throws InterruptedException {
-        DeployJob deployJob = new DeployJob(deployment, Auth0UserProfile.createTestAdminUser(), server, "test-deploy", DeployJob.DeployType.USE_PREBUILT_GRAPH);
+    public void canDeployFromPrebuiltGraph () {
+        DeployJob deployJob = new DeployJob(deployment, Auth0UserProfile.createTestAdminUser(), server, "deploy-test", DeployJob.DeployType.USE_PREBUILT_GRAPH);
         deployJob.run();
-        Thread.sleep(60 * 1000);
+        // FIXME: Deployment will succeed even if one of the clone servers does not start up properly.
+        assertFalse("Deployment did not fail.", deployJob.status.error);
+    }
+
+    @AfterClass
+    public static void cleanUp() {
         List<Instance> instances = server.retrieveEC2Instances();
         List<String> ids = getIds(instances);
         terminateInstances(ids);

@@ -783,9 +783,11 @@ public class DeployJob extends MonitorableJob {
         // 2097152 kb is 2GB, leave that much for the OS
         lines.add("MEM=`echo $(($TOTAL_MEM - 2097152))`");
         ////// 2. Configure some stuff for AWS CLI.
-        // 50 concurrent requests was chosen based on some spot tests using a r5d.xlarge running the AMI
-        // ami-083a9f8cfa1607868.
-        lines.add("aws configure set default.s3.max_concurrent_requests 50");
+        // Note: too many threads/concurrent requests cause a lot of individual thread timeouts for some reason, which
+        // ultimately causes the entire cp command to stall out.
+        lines.add("aws configure set default.s3.max_concurrent_requests 3");
+        lines.add("aws configure set default.s3.multipart_chunksize 32MB");
+
         // Get region from config or default to us-east-1
         String region = DataManager.getConfigPropertyAsText("application.data.s3_region");
         if (region == null) region = "us-east-1";
@@ -805,11 +807,17 @@ public class DeployJob extends MonitorableJob {
         if (graphAlreadyBuilt) {
             lines.add("echo 'downloading graph from s3'");
             // Download Graph from S3.
-            lines.add(String.format("aws s3 --cli-read-timeout 0 cp %s %s ", getS3GraphURI(), graphPath));
+            String downloadGraph = String.format("time aws s3 --cli-read-timeout 60 cp %s %s ", getS3GraphURI(), graphPath);
+            lines.add(downloadGraph);
+            // If graph download times out, try again.
+            lines.add(String.format("[ -f %s ] && echo 'Graph downloaded!' || %s", graphPath, downloadGraph));
+            lines.add(String.format("ls -alh %s", graphPath));
         } else {
             // Download data bundle from S3.
-            lines.add(String.format("aws s3 --cli-read-timeout 0 cp %s /tmp/bundle.zip", getS3BundleURI()));
-            // Determine if bundle download was successful.
+            String downloadBundle = String.format("time aws s3 --cli-read-timeout 60 cp %s /tmp/bundle.zip", getS3BundleURI());
+            lines.add(downloadBundle);
+            // Determine if bundle download was successful and try again if not.
+            lines.add(String.format("[ -f /tmp/bundle.zip ] && echo 'Bundle downloaded!' || %s", downloadBundle));
             lines.add("[ -f /tmp/bundle.zip ] && BUNDLE_STATUS='SUCCESS' || BUNDLE_STATUS='FAILURE'");
             // Upload user data log after bundle download.
             lines.add(uploadUserDataLogCommand);
@@ -817,11 +825,6 @@ public class DeployJob extends MonitorableJob {
             lines.add(String.format("sudo echo $BUNDLE_STATUS > $WEB_DIR/%s", BUNDLE_DOWNLOAD_COMPLETE_FILE));
             // Put unzipped bundle data into router directory.
             lines.add(String.format("unzip /tmp/bundle.zip -d %s", routerDir));
-            // FIXME: Add ability to fetch custom bikeshare.xml file (CarFreeAtoZ)
-            if (false) {
-                lines.add(String.format("wget -O %s/bikeshare.xml ${config.bikeshareFeed}", routerDir));
-                lines.add(String.format("printf \"{\\n  bikeRentalFile: \"bikeshare.xml\"\\n}\" >> %s/build-config.json\"", routerDir));
-            }
             lines.add("echo 'starting graph build'");
             // Build the graph.
             if (deployment.r5) lines.add(String.format("sudo -H -u ubuntu java -Xmx${MEM}k -jar %s/%s.jar point --build %s", jarDir, jarName, routerDir));

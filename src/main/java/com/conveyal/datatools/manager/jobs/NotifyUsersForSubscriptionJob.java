@@ -10,6 +10,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.conveyal.datatools.manager.auth.Auth0Users.getVerifiedEmailsBySubscription;
+import static com.conveyal.datatools.manager.controllers.api.UserController.inTestingEnvironment;
 import static com.conveyal.datatools.manager.utils.NotificationsUtils.sendNotification;
 
 /**
@@ -101,11 +102,15 @@ public class NotifyUsersForSubscriptionJob implements Runnable {
         html += String.format(
             "<p><small>Manage subscriptions <a href='%s/settings/notifications'>here</a>.</small></p>",
             APPLICATION_URL);
-
-        LOG.info("Checking for subscribed users to notify type={} target={}", subscriptionType, target);
-        for (String email : getVerifiedEmailsBySubscription(subscriptionType, target)) {
-            LOG.info("Sending notification to {}", email);
-            sendNotification(email, subject, "Body", html);
+        // Only notify subscribed users if not in testing environment.
+        if (inTestingEnvironment()) {
+            LOG.info("Skipping check for subscribed users");
+        } else {
+            LOG.info("Checking for subscribed users to notify type={} target={}", subscriptionType, target);
+            for (String email : getVerifiedEmailsBySubscription(subscriptionType, target)) {
+                LOG.info("Sending notification to {}", email);
+                sendNotification(email, subject, "Body", html);
+            }
         }
     }
 }
