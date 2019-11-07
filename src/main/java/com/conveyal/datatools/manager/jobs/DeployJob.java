@@ -110,6 +110,7 @@ public class DeployJob extends MonitorableJob {
      * */
     private final String s3Bucket;
     private final int targetCount;
+    private final DeployType deployType;
     private int tasksCompleted = 0;
     private int totalTasks;
 
@@ -131,6 +132,7 @@ public class DeployJob extends MonitorableJob {
     private String statusMessage;
     private int serverCounter = 0;
     private String dateString = DATE_FORMAT.format(new Date());
+    private String jobRelativePath;
 
     @JsonProperty
     public String getDeploymentId () {
@@ -161,6 +163,10 @@ public class DeployJob extends MonitorableJob {
     }
 
     public DeployJob(Deployment deployment, Auth0UserProfile owner, OtpServer otpServer) {
+        this(deployment, owner, otpServer, null, DeployType.REPLACE);
+    }
+
+    public DeployJob(Deployment deployment, Auth0UserProfile owner, OtpServer otpServer, String bundlePath, DeployType deployType) {
         // TODO add new job type or get rid of enum in favor of just using class names
         super(owner, "Deploying " + deployment.name, JobType.DEPLOY_TO_OTP);
         this.deployment = deployment;
@@ -174,59 +180,73 @@ public class DeployJob extends MonitorableJob {
         status.built = false;
         status.numServersCompleted = 0;
         status.totalServers = otpServer.internalUrl == null ? 0 : otpServer.internalUrl.size();
+        this.deployType = deployType;
+        if (bundlePath == null) {
+            // Use standard path for bundle.
+            setJobRelativePath(String.join("/", bundlePrefix, deployment.projectId, deployment.id, this.jobId));
+        } else {
+            // Override job relative path so that bundle can be downloaded directly. Note: this is currently only used
+            // for testing (DeployJobTest), but the uses may be expanded in order to perhaps add a server to an existing
+            // deployment using either a specified bundle or Graph.obj.
+            setJobRelativePath(bundlePath);
+        }
         // CONNECT TO EC2
         // FIXME Should this ec2 client be longlived?
         ec2 = AmazonEC2Client.builder().build();
     }
 
     public void jobLogic () {
-        if (otpServer.s3Bucket != null) totalTasks++;
-        if (otpServer.ec2Info != null) totalTasks++;
-        try {
-            deploymentTempFile = File.createTempFile("deployment", ".zip");
-        } catch (IOException e) {
-            statusMessage = "Could not create temp file for deployment";
-            LOG.error(statusMessage);
-            e.printStackTrace();
-            status.fail(statusMessage);
-            return;
-        }
-
-        LOG.info("Created deployment bundle file: " + deploymentTempFile.getAbsolutePath());
-
-        // Dump the deployment bundle to the temp file.
-        try {
-            status.message = "Creating transit bundle (GTFS and OSM)";
-            this.deployment.dump(deploymentTempFile, true, true, true);
-            tasksCompleted++;
-        } catch (Exception e) {
-            statusMessage = "Error dumping deployment";
-            LOG.error(statusMessage);
-            e.printStackTrace();
-            status.fail(statusMessage);
-            return;
-        }
-
-        status.percentComplete = 100.0 * (double) tasksCompleted / totalTasks;
-        LOG.info("Deployment pctComplete = {}", status.percentComplete);
-        status.built = true;
-
-        // Upload to S3, if specifically required by the OTPServer or needed for servers in the target group to fetch.
-        if (otpServer.s3Bucket != null || otpServer.ec2Info != null) {
-            if (!DataManager.useS3) {
-                String message = "Cannot upload deployment to S3. Application not configured for s3 storage.";
-                LOG.error(message);
-                status.fail(message);
+        // If not using a preloaded bundle (or pre-built graph), we need to dump the GTFS feeds and OSM to a zip file and optionally upload
+        // to S3.
+        if (deployType.equals(DeployType.REPLACE)) {
+            if (otpServer.s3Bucket != null) totalTasks++;
+            if (otpServer.ec2Info != null) totalTasks++;
+            try {
+                deploymentTempFile = File.createTempFile("deployment", ".zip");
+            } catch (IOException e) {
+                statusMessage = "Could not create temp file for deployment";
+                LOG.error(statusMessage);
+                e.printStackTrace();
+                status.fail(statusMessage);
                 return;
             }
+
+            LOG.info("Created deployment bundle file: " + deploymentTempFile.getAbsolutePath());
+
+            // Dump the deployment bundle to the temp file.
             try {
-                uploadBundleToS3();
-            } catch (AmazonClientException | InterruptedException e) {
-                statusMessage = String.format("Error uploading (or copying) deployment bundle to s3://%s", s3Bucket);
-                LOG.error(statusMessage, e);
+                status.message = "Creating transit bundle (GTFS and OSM)";
+                this.deployment.dump(deploymentTempFile, true, true, true);
+                tasksCompleted++;
+            } catch (Exception e) {
+                statusMessage = "Error dumping deployment";
+                LOG.error(statusMessage);
+                e.printStackTrace();
                 status.fail(statusMessage);
+                return;
             }
 
+            status.percentComplete = 100.0 * (double) tasksCompleted / totalTasks;
+            LOG.info("Deployment pctComplete = {}", status.percentComplete);
+            status.built = true;
+
+            // Upload to S3, if specifically required by the OTPServer or needed for servers in the target group to fetch.
+            if (otpServer.s3Bucket != null || otpServer.ec2Info != null) {
+                if (!DataManager.useS3) {
+                    String message = "Cannot upload deployment to S3. Application not configured for s3 storage.";
+                    LOG.error(message);
+                    status.fail(message);
+                    return;
+                }
+                try {
+                    uploadBundleToS3();
+                } catch (AmazonClientException | InterruptedException e) {
+                    statusMessage = String.format("Error uploading (or copying) deployment bundle to s3://%s", s3Bucket);
+                    LOG.error(statusMessage, e);
+                    status.fail(statusMessage);
+                }
+
+            }
         }
 
         // Handle spinning up new EC2 servers for the load balancer's target group.
@@ -441,9 +461,11 @@ public class DeployJob extends MonitorableJob {
     public void jobFinished () {
         // Delete temp file containing OTP deployment (OSM extract and GTFS files) so that the server's disk storage
         // does not fill up.
-        boolean deleted = deploymentTempFile.delete();
-        if (!deleted) {
-            LOG.error("Deployment {} not deleted! Disk space in danger of filling up.", deployment.id);
+        if (deployType.equals(DeployType.REPLACE)) {
+            boolean deleted = deploymentTempFile.delete();
+            if (!deleted) {
+                LOG.error("Deployment {} not deleted! Disk space in danger of filling up.", deployment.id);
+            }
         }
         String message;
         // FIXME: For some reason status duration is not getting set properly in MonitorableJob.
@@ -476,35 +498,40 @@ public class DeployJob extends MonitorableJob {
             // Track any previous instances running for the server we're deploying to in order to de-register and
             // terminate them later.
             List<EC2InstanceSummary> previousInstances = otpServer.retrieveEC2InstanceSummaries();
+            // Track new instances added.
+            List<Instance> instances = new ArrayList<>();
             // First start graph-building instance and wait for graph to successfully build.
-            status.message = "Starting up graph building EC2 instance";
-            List<Instance> instances = startEC2Instances(1, false);
-            // Exit if an error was encountered.
-            if (status.error || instances.size() == 0) {
-                ServerController.terminateInstances(instances);
-                return;
-            }
-            status.message = "Waiting for graph build to complete...";
-            MonitorServerStatusJob monitorInitialServerJob = new MonitorServerStatusJob(owner, this, instances.get(0), false);
-            monitorInitialServerJob.run();
+            if (!deployType.equals(DeployType.USE_PREBUILT_GRAPH)) {
+                status.message = "Starting up graph building EC2 instance";
+                 instances.addAll(startEC2Instances(1, false));
+                // Exit if an error was encountered.
+                if (status.error || instances.size() == 0) {
+                    ServerController.terminateInstances(instances);
+                    return;
+                }
+                status.message = "Waiting for graph build to complete...";
+                MonitorServerStatusJob monitorInitialServerJob = new MonitorServerStatusJob(owner, this, instances.get(0), false);
+                monitorInitialServerJob.run();
 
-            status.update("Graph build is complete!", 50);
-            // If only building graph, job is finished. Note: the graph building EC2 instance should automatically shut
-            // itself down if this flag is turned on (happens in user data). We do not want to proceed with the rest of
-            // the job which would shut down existing servers running for the deployment.
-            if (deployment.buildGraphOnly) {
-                status.update("Graph build is complete!", 100);
-                return;
-            }
-            Persistence.deployments.replace(deployment.id, deployment);
-            if (monitorInitialServerJob.status.error) {
-                // If an error occurred while monitoring the initial server, fail this job and instruct user to inspect
-                // build logs.
-                statusMessage = "Error encountered while building graph. Inspect build logs.";
-                LOG.error(statusMessage);
-                status.fail(statusMessage);
-                ServerController.terminateInstances(instances);
-                return;
+                status.update("Graph build is complete!", 50);
+                // If only building graph, job is finished. Note: the graph building EC2 instance should automatically shut
+                // itself down if this flag is turned on (happens in user data). We do not want to proceed with the rest of
+                // the job which would shut down existing servers running for the deployment.
+                if (deployment.buildGraphOnly) {
+                    status.update("Graph build is complete!", 100);
+                    return;
+                }
+
+                Persistence.deployments.replace(deployment.id, deployment);
+                if (monitorInitialServerJob.status.error) {
+                    // If an error occurred while monitoring the initial server, fail this job and instruct user to inspect
+                    // build logs.
+                    statusMessage = "Error encountered while building graph. Inspect build logs.";
+                    LOG.error(statusMessage);
+                    status.fail(statusMessage);
+                    ServerController.terminateInstances(instances);
+                    return;
+                }
             }
             // Spin up remaining servers which will download the graph from S3.
             status.numServersRemaining = otpServer.ec2Info.instanceCount <= 0 ? 0 : otpServer.ec2Info.instanceCount - 1;
@@ -544,15 +571,17 @@ public class DeployJob extends MonitorableJob {
             instances.addAll(remainingInstances);
             String finalMessage = "Server setup is complete!";
             // Get EC2 servers running that are associated with this server.
-            List<String> previousInstanceIds = previousInstances.stream()
-                .filter(instance -> "running".equals(instance.state.getName()))
-                .map(instance -> instance.instanceId)
-                .collect(Collectors.toList());
-            if (previousInstanceIds.size() > 0) {
-                boolean success = ServerController.deRegisterAndTerminateInstances(otpServer.ec2Info.targetGroupArn, previousInstanceIds);
-                // If there was a problem during de-registration/termination, notify via status message.
-                if (!success) {
-                    finalMessage = String.format("Server setup is complete! (WARNING: Could not terminate previous EC2 instances: %s", previousInstanceIds);
+            if (deployType.equals(DeployType.REPLACE)) {
+                List<String> previousInstanceIds = previousInstances.stream()
+                    .filter(instance -> "running".equals(instance.state.getName()))
+                    .map(instance -> instance.instanceId)
+                    .collect(Collectors.toList());
+                if (previousInstanceIds.size() > 0) {
+                    boolean success = ServerController.deRegisterAndTerminateInstances(otpServer.ec2Info.targetGroupArn, previousInstanceIds);
+                    // If there was a problem during de-registration/termination, notify via status message.
+                    if (!success) {
+                        finalMessage = String.format("Server setup is complete! (WARNING: Could not terminate previous EC2 instances: %s", previousInstanceIds);
+                    }
                 }
             }
             // Job is complete.
@@ -838,7 +867,11 @@ public class DeployJob extends MonitorableJob {
 
     @JsonIgnore
     public String getJobRelativePath() {
-        return String.join("/", bundlePrefix, deployment.projectId, deployment.id, this.jobId);
+        return jobRelativePath;
+    }
+
+    public void setJobRelativePath(String jobRelativePath) {
+        this.jobRelativePath = jobRelativePath;
     }
 
     @JsonIgnore
@@ -914,5 +947,9 @@ public class DeployJob extends MonitorableJob {
             this.status = job.status;
             this.buildArtifactsFolder = job.getS3FolderURI().toString();
         }
+    }
+
+    public enum DeployType {
+        REPLACE, USE_PRELOADED_BUNDLE, USE_PREBUILT_GRAPH
     }
 }
