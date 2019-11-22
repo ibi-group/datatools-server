@@ -23,7 +23,8 @@ modules:
     enabled: true
     ec2:
       enabled: false
-      default_ami: ami-your-ami-id
+      default_ami: ami-041ee0ca5cd75f7d7
+      ebs_optimized: true
   user_admin:
     enabled: true
   # Enable GTFS+ module for testing purposes
