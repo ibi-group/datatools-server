@@ -332,6 +332,8 @@ public class MergeFeedsJob extends MonitorableJob {
         // Set up objects for tracking the rows encountered
         Map<String, String[]> rowValuesForStopOrRouteId = new HashMap<>();
         Set<String> rowStrings = new HashSet<>();
+        // Track shape_ids found in future feed in order to check for conflicts with active feed (MTC only).
+        Set<String> shapeIdsInFutureFeed = new HashSet<>();
         int mergedLineNumber = 0;
         // Get the spec fields to export
         List<Field> specFields = table.specFields();
@@ -581,6 +583,37 @@ public class MergeFeedsJob extends MonitorableJob {
                                             }
                                         }
                                     }
+                                    break;
+                                case "shapes":
+                                    // If a shape_id is found in both future and active datasets, all shape points from
+                                    // the active dataset must be feed-scoped. Otherwise, the merged dataset may contain
+                                    // shape_id:shape_pt_sequence values from both datasets (e.g., if future dataset contains
+                                    // sequences 1,2,3,10 and active contains 1,2,7,9,10; the merged set will contain
+                                    // 1,2,3,7,9,10).
+                                    if (field.name.equals("shape_id")) {
+                                        if (feedIndex == 0) {
+                                            // Track shape_id if working on future feed.
+                                            shapeIdsInFutureFeed.add(val);
+                                        } else if (shapeIdsInFutureFeed.contains(val)) {
+                                            // For the active feed, if the shape_id was already processed from the
+                                            // future feed, we need to add the feed-scope to avoid weird, hybrid shapes
+                                            // with points from both feeds.
+                                            valueToWrite = String.join(":", idScope, val);
+                                            // Update key value for subsequent ID conflict checks for this row.
+                                            keyValue = valueToWrite;
+                                            mergeFeedsResult.remappedIds.put(
+                                                getTableScopedValue(table, idScope, val),
+                                                valueToWrite
+                                            );
+                                            // Re-check refs and uniqueness after changing shape_id value. (Note: this
+                                            // probably won't have any impact, but there's not much harm in including it.)
+                                            idErrors = referenceTracker
+                                                .checkReferencesAndUniqueness(keyValue, lineNumber, field, valueToWrite,
+                                                    table, keyField, orderField);
+                                        }
+                                    }
+                                    // Skip record if normal duplicate errors are found.
+                                    if (hasDuplicateError(idErrors)) skipRecord = true;
                                     break;
                                 case "trips":
                                     // trip_ids between active and future datasets must not match. If any trip_id is found
