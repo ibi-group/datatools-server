@@ -519,9 +519,24 @@ public class MergeFeedsJob extends MonitorableJob {
                         // track references for a large number of feeds (e.g., every feed in New
                         // York State).
                         if (mergeType.equals(MTC)) {
-                            Set<NewGTFSError> idErrors = referenceTracker
-                                .checkReferencesAndUniqueness(keyValue, lineNumber, field, val,
-                                    table, keyField, orderField);
+                            Set<NewGTFSError> idErrors;
+                            // If analyzing the second feed (non-future feed), the service_id always gets feed scoped.
+                            // See https://github.com/ibi-group/datatools-server/issues/244
+                            if (feedIndex == 1 && field.name.equals("service_id")) {
+                                valueToWrite = String.join(":", idScope, val);
+                                mergeFeedsResult.remappedIds.put(
+                                    getTableScopedValue(table, idScope, val),
+                                    valueToWrite
+                                );
+                                idErrors = referenceTracker
+                                    .checkReferencesAndUniqueness(keyValue, lineNumber, field, valueToWrite,
+                                        table, keyField, orderField);
+                            } else {
+                                idErrors = referenceTracker
+                                    .checkReferencesAndUniqueness(keyValue, lineNumber, field, val,
+                                        table, keyField, orderField);
+                            }
+
                             // Store values for key fields that have been encountered.
                             // TODO Consider using Strategy Pattern https://en.wikipedia.org/wiki/Strategy_pattern
                             //  instead of a switch statement.

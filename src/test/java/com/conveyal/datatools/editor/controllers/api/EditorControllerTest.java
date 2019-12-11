@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.util.Date;
 
 import static com.conveyal.datatools.TestUtils.createFeedVersion;
+import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static com.conveyal.datatools.manager.auth.Auth0Users.USERS_API_PATH;
 import static com.conveyal.datatools.manager.controllers.api.UserController.TEST_AUTH0_DOMAIN;
 import static io.restassured.RestAssured.given;
@@ -54,7 +55,7 @@ public class EditorControllerTest extends UnitTest {
         FeedSource feedSource = new FeedSource("BART");
         feedSource.projectId = project.id;
         Persistence.feedSources.create(feedSource);
-        feedVersion = createFeedVersion(feedSource, "bart_old.zip");
+        feedVersion = createFeedVersionFromGtfsZip(feedSource, "bart_old.zip");
         // Create and run snapshot job
         Snapshot snapshot = new Snapshot("Snapshot of " + feedVersion.name, feedSource.id, feedVersion.namespace);
         CreateSnapshotJob createSnapshotJob =

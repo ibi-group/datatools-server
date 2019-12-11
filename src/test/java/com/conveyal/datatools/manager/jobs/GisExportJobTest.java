@@ -44,7 +44,9 @@ import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
-import static com.conveyal.datatools.TestUtils.createFeedVersion;
+import static com.conveyal.datatools.TestUtils.assertThatSqlCountQueryYieldsExpectedCount;
+import static com.conveyal.datatools.TestUtils.assertThatSqlQueryYieldsRowCount;
+import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
@@ -74,10 +76,10 @@ public class GisExportJobTest extends UnitTest {
         Persistence.projects.create(project);
         FeedSource caltrain = new FeedSource("Caltrain");
         Persistence.feedSources.create(caltrain);
-        calTrainVersion = createFeedVersion(caltrain, "caltrain_gtfs.zip");
+        calTrainVersion = createFeedVersionFromGtfsZip(caltrain, "caltrain_gtfs.zip");
         FeedSource hawaii = new FeedSource("Hawaii");
         Persistence.feedSources.create(hawaii);
-        hawaiiVersion = createFeedVersion(hawaii, "hawaii_fake_no_shapes.zip");
+        hawaiiVersion = createFeedVersionFromGtfsZip(hawaii, "hawaii_fake_no_shapes.zip");
     }
 
     /**
@@ -186,16 +188,11 @@ public class GisExportJobTest extends UnitTest {
                 }
             }
         }
-        PreparedStatement preparedStatement = DataManager.GTFS_DATA_SOURCE.getConnection()
-            .prepareStatement(
-                String.format("select count(*) from %s" + ".patterns", calTrainVersion.namespace));
-        ResultSet resultSet = preparedStatement.executeQuery();
-        int patternCount = 0;
-        while (resultSet.next()) {
-            patternCount = resultSet.getInt(1);
-        }
         // Check that feature count = pattern count from SQL query.
-        assertThat(featureCount, equalTo(patternCount));
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("select count(*) from %s" + ".patterns", calTrainVersion.namespace),
+            featureCount
+        );
     }
 
     /**
@@ -241,16 +238,11 @@ public class GisExportJobTest extends UnitTest {
                 }
             }
         }
-        PreparedStatement preparedStatement = DataManager.GTFS_DATA_SOURCE.getConnection()
-            .prepareStatement(
-                String.format("select count(*) from %s" + ".patterns", hawaiiVersion.namespace));
-        ResultSet resultSet = preparedStatement.executeQuery();
-        int patternCount = 0;
-        while (resultSet.next()) {
-            patternCount = resultSet.getInt(1);
-        }
         // Check that feature count = pattern count from SQL query.
-        assertThat(featureCount, equalTo(patternCount));
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("select count(*) from %s" + ".patterns", hawaiiVersion.namespace),
+            featureCount
+        );
     }
 
     /** Unzip the shapefile into a temp directory and return a list of its files. */

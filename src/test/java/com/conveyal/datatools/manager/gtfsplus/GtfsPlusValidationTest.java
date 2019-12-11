@@ -14,9 +14,8 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Date;
-import java.util.List;
 
-import static com.conveyal.datatools.TestUtils.createFeedVersion;
+import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 
@@ -40,7 +39,7 @@ public class GtfsPlusValidationTest extends UnitTest {
         FeedSource bart = new FeedSource("BART");
         bart.projectId = project.id;
         Persistence.feedSources.create(bart);
-        bartVersion1 = createFeedVersion(bart, "bart_new.zip");
+        bartVersion1 = createFeedVersionFromGtfsZip(bart, "bart_new.zip");
     }
 
     @Test
