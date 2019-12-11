@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.common.utils.Scheduler;
+import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.FetchProjectFeedsJob;
@@ -45,10 +46,8 @@ import static spark.Spark.put;
 public class ProjectController {
 
     // TODO We can probably replace this with something from Mongo so we use one JSON serializer / deserializer throughout
-    public static JsonManager<Project> json =
-            new JsonManager<>(Project.class, JsonViews.UserInterface.class);
-
-    public static final Logger LOG = LoggerFactory.getLogger(ProjectController.class);
+    private static JsonManager<Project> json = new JsonManager<>(Project.class, JsonViews.UserInterface.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ProjectController.class);
 
     /**
      * @return a list of all projects that are public or visible given the current user and organization.
@@ -127,14 +126,14 @@ public class ProjectController {
     /**
      * Manually fetch a feed all feeds in the project as a one-off operation, when the user clicks a button to request it.
      */
-    public static Boolean fetch(Request req, Response res) {
+    private static String fetch(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         Project p = requestProjectById(req, "manage");
-        FetchProjectFeedsJob fetchProjectFeedsJob = new FetchProjectFeedsJob(p, userProfile.getUser_id());
+        FetchProjectFeedsJob fetchProjectFeedsJob = new FetchProjectFeedsJob(p, userProfile);
         // This job is runnable because sometimes we schedule the task for a later time, but here we call it immediately
         // because it is short lived and just cues up more work.
         fetchProjectFeedsJob.run();
-        return true;
+        return SparkUtils.formatJobMessage(fetchProjectFeedsJob.jobId, "Fetching all project feeds...");
     }
 
     /**
@@ -235,7 +234,7 @@ public class ProjectController {
             LOG.info("Adding {} feed to merged zip", fs.name);
             feedVersions.add(version);
         }
-        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(userProfile.getUser_id(), feedVersions, project.id, REGIONAL);
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(userProfile, feedVersions, project.id, REGIONAL);
         DataManager.heavyExecutor.execute(mergeFeedsJob);
         // Return job ID to requester for monitoring job status.
         return formatJobMessage(mergeFeedsJob.jobId, "Merge operation is processing.");
@@ -245,7 +244,7 @@ public class ProjectController {
      * Returns credentials that a client may use to then download a feed version. Functionality
      * changes depending on whether application.data.use_s3_storage config property is true.
      */
-    public static Object getFeedDownloadCredentials(Request req, Response res) {
+    private static Object getFeedDownloadCredentials(Request req, Response res) {
         Project project = requestProjectById(req, "view");
 
         // if storing feeds on s3, return temporary s3 credentials for that zip file
@@ -277,7 +276,7 @@ public class ProjectController {
             logMessageAndHalt(req, 400, "no such project!");
         }
         // Run this as a synchronous job; if it proves to be too slow we will change to asynchronous.
-        new MakePublicJob(p, userProfile.getUser_id()).run();
+        new MakePublicJob(p, userProfile).run();
         return true;
     }
 

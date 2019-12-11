@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.gtfsplus.tables.GtfsPlusTable;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -137,8 +138,8 @@ public class MergeFeedsJob extends MonitorableJob {
      * @param file         resulting merge filename (without .zip)
      * @param mergeType    the type of merge to perform (@link MergeFeedsType)
      */
-    public MergeFeedsJob(String owner, Set<FeedVersion> feedVersions, String file,
-        MergeFeedsType mergeType) {
+    public MergeFeedsJob(Auth0UserProfile owner, Set<FeedVersion> feedVersions, String file,
+                         MergeFeedsType mergeType) {
         super(owner, mergeType.equals(REGIONAL) ? "Merging project feeds" : "Merging feed versions",
             JobType.MERGE_FEED_VERSIONS);
         this.feedVersions = feedVersions;

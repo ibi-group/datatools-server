@@ -117,6 +117,7 @@ public class Deployment extends Model implements Serializable {
     /** All of the feed versions used in this deployment, summarized so that the Internet won't break */
     @JsonProperty("ec2Instances")
     public List<EC2InstanceSummary> retrieveEC2Instances() {
+        if (!"true".equals(DataManager.getConfigPropertyAsText("modules.deployment.ec2.enabled"))) return Collections.EMPTY_LIST;
         Filter deploymentFilter = new Filter("tag:deploymentId", Collections.singletonList(id));
         return DeploymentController.fetchEC2InstanceSummaries(deploymentFilter);
     }

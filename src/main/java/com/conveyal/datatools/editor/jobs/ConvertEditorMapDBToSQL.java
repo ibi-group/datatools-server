@@ -10,6 +10,7 @@ import com.conveyal.datatools.editor.models.transit.Trip;
 import com.conveyal.datatools.editor.models.transit.TripPattern;
 import com.conveyal.datatools.editor.models.transit.TripPatternStop;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Snapshot;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -43,7 +44,7 @@ public class ConvertEditorMapDBToSQL extends MonitorableJob {
 
     public ConvertEditorMapDBToSQL(String feedId, Integer versionNumber) {
         // FIXME owner and job name
-        super("owner", "Create snapshot from legacy editor", JobType.CONVERT_EDITOR_MAPDB_TO_SQL);
+        super(Auth0UserProfile.createSystemUser(), "Create snapshot from legacy editor", JobType.CONVERT_EDITOR_MAPDB_TO_SQL);
         this.feedId = feedId;
         this.versionNumber = versionNumber;
     }

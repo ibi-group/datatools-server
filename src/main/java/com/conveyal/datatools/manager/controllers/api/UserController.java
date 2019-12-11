@@ -10,8 +10,10 @@ import com.conveyal.datatools.manager.models.Note;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
+import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
@@ -37,12 +39,15 @@ import java.net.URLEncoder;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
+import static com.conveyal.datatools.manager.auth.Auth0Users.API_PATH;
+import static com.conveyal.datatools.manager.auth.Auth0Connection.authDisabled;
 import static com.conveyal.datatools.manager.auth.Auth0Users.USERS_API_PATH;
 import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
 import static spark.Spark.delete;
@@ -223,21 +228,18 @@ public class UserController {
         return true;
     }
 
-    private static Object getRecentActivity(Request req, Response res) {
+    /** HTTP endpoint to get recent activity summary based on requesting user's subscriptions/notifications. */
+    private static List<Activity> getRecentActivity(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
-
-        /* TODO: Allow custom from/to range
-        String fromStr = req.queryParams("from");
-        String toStr = req.queryParams("to"); */
-
-        // Default range: past 7 days
+        // Default range: past 7 days, TODO: Allow custom from/to range based on query params?
         ZonedDateTime from = ZonedDateTime.now(ZoneOffset.UTC).minusDays(7);
         ZonedDateTime to = ZonedDateTime.now(ZoneOffset.UTC);
 
         List<Activity> activityList = new ArrayList<>();
         Auth0UserProfile.DatatoolsInfo datatools = userProfile.getApp_metadata().getDatatoolsInfo();
+        // NOTE: this condition will also occur if DISABLE_AUTH is set to true
         if (datatools == null) {
-            // NOTE: this condition will also occur if DISABLE_AUTH is set to true
+            if (authDisabled()) return Collections.emptyList();
             logMessageAndHalt(req, 403, "User does not have permission to access to this application");
         }
 
@@ -298,6 +300,44 @@ public class UserController {
         }
 
         return activityList;
+    }
+
+    /**
+     * Resends the user confirmation email for a given user
+     */
+    private static ObjectNode resendEmailConfirmation(Request req, Response res) {
+        // verify if the request is legit. Should only come from the user for which the account belongs to.
+        Auth0UserProfile userProfile = req.attribute("user");
+        if (!userProfile.getUser_id().equals(req.params("id"))) {
+            // user is not authorized because they're not the user that email verification is being requested for
+            logMessageAndHalt(
+                req,
+                401,
+                "Not authorized to resend confirmation email"
+            );
+            // doesn't actually return null since above line sends a 401 response
+            return null;
+        }
+        // authorized. Create request to resend email verification
+        HttpPost resendEmailVerificationRequest = new HttpPost(
+            "https://" + AUTH0_DOMAIN + API_PATH + "/jobs/verification-email"
+        );
+        setHeaders(req, resendEmailVerificationRequest);
+        setRequestEntityUsingJson(
+            resendEmailVerificationRequest,
+            JsonUtil.objectMapper.createObjectNode()
+                .put("user_id", userProfile.getUser_id())
+                .put("client_id", AUTH0_CLIENT_ID)
+                .toString(),
+            req
+        );
+
+        // Execute request. If a HTTP response other than 200 occurs, an error will be returned.
+        executeRequestAndGetResult(resendEmailVerificationRequest, req);
+
+        // Email verification successfully sent! Return successful response.
+        return JsonUtil.objectMapper.createObjectNode()
+            .put("emailSent", true);
     }
 
     /**
@@ -548,6 +588,7 @@ public class UserController {
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/user/:id", UserController::getUser, json::write);
         get(apiPrefix + "secure/user/:id/recentactivity", UserController::getRecentActivity, json::write);
+        get(apiPrefix + "secure/user/:id/resendEmailConfirmation", UserController::resendEmailConfirmation, json::write);
         get(apiPrefix + "secure/user", UserController::getAllUsers, json::write);
         get(apiPrefix + "secure/usercount", UserController::getUserCount, json::write);
         post(apiPrefix + "secure/user", UserController::createUser, json::write);

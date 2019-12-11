@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.jobs;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -20,7 +21,7 @@ public class FetchProjectFeedsJob extends MonitorableJob {
     public static final Logger LOG = LoggerFactory.getLogger(FetchProjectFeedsJob.class);
     public String projectId;
 
-    public FetchProjectFeedsJob (Project project, String owner) {
+    public FetchProjectFeedsJob (Project project, Auth0UserProfile owner) {
         super(owner, "Fetching feeds for " + project.name + " project.", JobType.FETCH_PROJECT_FEEDS);
         this.projectId = project.id;
     }

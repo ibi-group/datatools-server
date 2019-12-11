@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
@@ -34,6 +35,7 @@ import static org.junit.Assert.assertThat;
  */
 public class MergeFeedsJobTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(MergeFeedsJobTest.class);
+    private static Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
     private static FeedVersion bartVersion1;
     private static FeedVersion bartVersion2;
     private static FeedVersion calTrainVersion;
@@ -107,6 +109,7 @@ public class MergeFeedsJobTest extends UnitTest {
         versions.add(calTrainVersion);
         versions.add(napaVersion);
         FeedVersion mergedVersion = regionallyMergeVersions(versions);
+
         // Ensure the feed has the row counts we expect.
         assertEquals(
             "trips count for merged feed should equal sum of trips for versions merged.",
@@ -251,7 +254,7 @@ public class MergeFeedsJobTest extends UnitTest {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(bartVersion1);
         versions.add(bartVersion2);
-        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob("test", versions, "merged_output", MergeFeedsType.MTC);
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.MTC);
         // Run the job in this thread (we're not concerned about concurrency here).
         mergeFeedsJob.run();
         // Result should fail.
@@ -272,7 +275,7 @@ public class MergeFeedsJobTest extends UnitTest {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(bartVersion1);
         versions.add(bartVersion2);
-        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob("test", versions, "merged_output", MergeFeedsType.MTC);
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.MTC);
         // This time, turn off the failOnDuplicateTripId flag.
         mergeFeedsJob.failOnDuplicateTripId = false;
         // Result should succeed this time.
@@ -317,7 +320,7 @@ public class MergeFeedsJobTest extends UnitTest {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(bothCalendarFilesVersion);
         versions.add(onlyCalendarVersion);
-        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob("test", versions, "merged_output", MergeFeedsType.MTC);
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.MTC);
         // Run the job in this thread (we're not concerned about concurrency here).
         mergeFeedsJob.run();
         // assert service_ids have been feed scoped properly
@@ -419,7 +422,7 @@ public class MergeFeedsJobTest extends UnitTest {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(onlyCalendarDatesVersion);
         versions.add(onlyCalendarVersion);
-        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob("test", versions, "merged_output", MergeFeedsType.MTC);
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.MTC);
         // Run the job in this thread (we're not concerned about concurrency here).
         mergeFeedsJob.run();
         // assert service_ids have been feed scoped properly
@@ -502,7 +505,7 @@ public class MergeFeedsJobTest extends UnitTest {
      */
     private FeedVersion regionallyMergeVersions(Set<FeedVersion> versions) {
         String mergeName = UUID.randomUUID().toString();
-        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob("test", versions, mergeName, MergeFeedsType.REGIONAL);
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, mergeName, MergeFeedsType.REGIONAL);
         // Run the job in this thread (we're not concerned about concurrency here).
         mergeFeedsJob.run();
         // Create a new feed source/version for the merged feed, so we can easily analyze its contents.

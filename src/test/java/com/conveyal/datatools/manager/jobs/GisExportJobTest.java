@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.jobs;
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
@@ -91,7 +92,8 @@ public class GisExportJobTest extends UnitTest {
         File zipFile = File.createTempFile("stops", ".zip");
         Set<String> ids = new HashSet<>();
         ids.add(calTrainVersion.id);
-        GisExportJob gisExportJob = new GisExportJob(GisExportJob.ExportType.STOPS, zipFile, ids, "test");
+        Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
+        GisExportJob gisExportJob = new GisExportJob(GisExportJob.ExportType.STOPS, zipFile, ids, user);
         gisExportJob.run();
         assertThat(gisExportJob.status.error, equalTo(false));
         File[] files = getFilesFromZippedShapefile(zipFile);
@@ -145,7 +147,8 @@ public class GisExportJobTest extends UnitTest {
         File zipFile = File.createTempFile("routes", ".zip");
         Set<String> ids = new HashSet<>();
         ids.add(calTrainVersion.id);
-        GisExportJob gisExportJob = new GisExportJob(GisExportJob.ExportType.ROUTES, zipFile, ids, "test");
+        Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
+        GisExportJob gisExportJob = new GisExportJob(GisExportJob.ExportType.ROUTES, zipFile, ids, user);
         gisExportJob.run();
         assertThat(gisExportJob.status.error, equalTo(false));
         File[] files = getFilesFromZippedShapefile(zipFile);
@@ -201,7 +204,8 @@ public class GisExportJobTest extends UnitTest {
         File zipFile = File.createTempFile("routes", ".zip");
         Set<String> ids = new HashSet<>();
         ids.add(hawaiiVersion.id);
-        GisExportJob gisExportJob = new GisExportJob(GisExportJob.ExportType.ROUTES, zipFile, ids, "test");
+        Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
+        GisExportJob gisExportJob = new GisExportJob(GisExportJob.ExportType.ROUTES, zipFile, ids, user);
         gisExportJob.run();
         assertThat(gisExportJob.status.error, equalTo(false));
         File[] files = getFilesFromZippedShapefile(zipFile);
