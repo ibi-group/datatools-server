@@ -302,6 +302,12 @@ public class MergeFeedsJobTest extends UnitTest {
             9, // Magic number represents the number of routes in the merged BART feed.
             mergeFeedsJob.mergedVersion.feedLoadResult.routes.rowCount
         );
+        assertEquals(
+            "Merged feed shapes count should equal expected value.",
+            // During merge, if identical shape_id is found in both feeds, active feed shape_id should be feed-scoped.
+            bartVersion1.feedLoadResult.shapes.rowCount + bartVersion2.feedLoadResult.shapes.rowCount,
+            mergeFeedsJob.mergedVersion.feedLoadResult.shapes.rowCount
+        );
         // Ensure there are no referential integrity errors or duplicate ID errors.
         assertThatFeedHasNoErrorsOfType(
             mergeFeedsJob.mergedVersion.namespace,
