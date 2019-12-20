@@ -368,6 +368,7 @@ public class MergeFeedsJob extends MonitorableJob {
                 Field[] fieldsFoundInZip =
                     table.getFieldsFromFieldHeaders(csvReader.getHeaders(), null);
                 List<Field> fieldsFoundList = Arrays.asList(fieldsFoundInZip);
+                LocalDate futureFeedFirstDate = feedsToMerge.get(0).version.validationResult.firstCalendarDate;
                 // Determine the index of the key field for this version's table.
                 int keyFieldIndex = getFieldIndex(fieldsFoundInZip, keyField);
                 if (keyFieldIndex == -1) {
@@ -543,6 +544,22 @@ public class MergeFeedsJob extends MonitorableJob {
                             // TODO Consider using Strategy Pattern https://en.wikipedia.org/wiki/Strategy_pattern
                             //  instead of a switch statement.
                             switch (table.name) {
+                                case "calendar_dates":
+                                    // Drop any calendar_dates.txt records from the existing feed for dates that are
+                                    // in the past at the time of the merge.
+                                    int dateIndex = getFieldIndex(fieldsFoundInZip, "date");
+                                    LocalDate date = LocalDate.parse(csvReader.get(dateIndex), GTFS_DATE_FORMATTER);
+                                    if (feedIndex > 0) {
+                                        if (date.isAfter(futureFeedFirstDate) || date.isEqual(futureFeedFirstDate)) {
+                                            LOG.warn(
+                                                "Skipping calendar_dates entry {} because it operates in the time span of future feed.",
+                                                keyValue);
+                                            String key = getTableScopedValue(table, idScope, keyValue);
+                                            mergeFeedsResult.skippedIds.add(key);
+                                            skipRecord = true;
+                                            continue;
+                                        }
+                                    }
                                 case "calendar":
                                     // If any service_id in the active feed matches with the future
                                     // feed, it should be modified and all associated trip records
@@ -591,8 +608,7 @@ public class MergeFeedsJob extends MonitorableJob {
                                                 .parse(csvReader.get(endDateIndex),
                                                     GTFS_DATE_FORMATTER);
                                             if (endDate.isAfter(LocalDate.now())) {
-                                                val = feedsToMerge.get(
-                                                    0).version.validationResult.firstCalendarDate
+                                                val = futureFeedFirstDate
                                                     .minus(1, ChronoUnit.DAYS)
                                                     .format(GTFS_DATE_FORMATTER);
                                             }
