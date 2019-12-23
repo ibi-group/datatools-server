@@ -560,6 +560,7 @@ public class MergeFeedsJob extends MonitorableJob {
                                             continue;
                                         }
                                     }
+                                    break;
                                 case "calendar":
                                     // If any service_id in the active feed matches with the future
                                     // feed, it should be modified and all associated trip records
