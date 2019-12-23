@@ -6,15 +6,13 @@ import com.amazonaws.services.ec2.model.AmazonEC2Exception;
 import com.amazonaws.services.ec2.model.DescribeImagesRequest;
 import com.amazonaws.services.ec2.model.DescribeImagesResult;
 import com.amazonaws.services.ec2.model.DescribeKeyPairsResult;
-import com.amazonaws.services.ec2.model.DescribeSecurityGroupsRequest;
-import com.amazonaws.services.ec2.model.DescribeSecurityGroupsResult;
 import com.amazonaws.services.ec2.model.DescribeSubnetsRequest;
 import com.amazonaws.services.ec2.model.DescribeSubnetsResult;
+import com.amazonaws.services.ec2.model.Filter;
 import com.amazonaws.services.ec2.model.Image;
 import com.amazonaws.services.ec2.model.Instance;
 import com.amazonaws.services.ec2.model.InstanceType;
 import com.amazonaws.services.ec2.model.KeyPairInfo;
-import com.amazonaws.services.ec2.model.SecurityGroup;
 import com.amazonaws.services.ec2.model.Subnet;
 import com.amazonaws.services.ec2.model.TerminateInstancesRequest;
 import com.amazonaws.services.ec2.model.TerminateInstancesResult;
@@ -22,7 +20,10 @@ import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancing;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClient;
 import com.amazonaws.services.elasticloadbalancingv2.model.AmazonElasticLoadBalancingException;
 import com.amazonaws.services.elasticloadbalancingv2.model.DeregisterTargetsRequest;
+import com.amazonaws.services.elasticloadbalancingv2.model.DescribeLoadBalancersRequest;
+import com.amazonaws.services.elasticloadbalancingv2.model.DescribeLoadBalancersResult;
 import com.amazonaws.services.elasticloadbalancingv2.model.DescribeTargetGroupsRequest;
+import com.amazonaws.services.elasticloadbalancingv2.model.LoadBalancer;
 import com.amazonaws.services.elasticloadbalancingv2.model.TargetDescription;
 import com.amazonaws.services.elasticloadbalancingv2.model.TargetGroup;
 import com.amazonaws.services.identitymanagement.AmazonIdentityManagement;
@@ -32,8 +33,8 @@ import com.amazonaws.services.identitymanagement.model.ListInstanceProfilesResul
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
-import com.conveyal.datatools.manager.jobs.MonitorServerStatusJob;
 import com.conveyal.datatools.manager.models.Deployment;
+import com.conveyal.datatools.manager.models.EC2Info;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
@@ -73,7 +74,6 @@ import static spark.Spark.put;
 public class ServerController {
     private static JsonManager<OtpServer> json = new JsonManager<>(OtpServer.class, JsonViews.UserInterface.class);
     private static final Logger LOG = LoggerFactory.getLogger(ServerController.class);
-    private static final ObjectMapper mapper = new ObjectMapper();
     private static final AmazonEC2 ec2 = AmazonEC2Client.builder().build();
     private static final AmazonIdentityManagement iam = AmazonIdentityManagementClientBuilder.defaultClient();
     private static final AmazonElasticLoadBalancing elb = AmazonElasticLoadBalancingClient.builder().build();
@@ -242,10 +242,12 @@ public class ServerController {
             // If a server's ec2 info object is not null, it must pass a few validation checks on various fields related to
             // AWS. (e.g., target group ARN and instance type).
             if (server.ec2Info != null) {
-                validateTargetGroup(server.ec2Info.targetGroupArn, req);
                 validateInstanceType(server.ec2Info.instanceType, req);
-                validateSubnetId(server.ec2Info.subnetId, req);
-                validateSecurityGroupId(server.ec2Info.securityGroupId, req);
+                // Validate target group and get load balancer to validate subnetId and security group ID.
+                LoadBalancer loadBalancer = validateTargetGroupAndGetLoadBalancer(server.ec2Info.targetGroupArn, req);
+                validateSubnetId(loadBalancer, server.ec2Info, req);
+                validateSecurityGroupId(loadBalancer, server.ec2Info, req);
+                // Validate remaining AWS values.
                 validateIamInstanceProfileArn(server.ec2Info.iamInstanceProfileArn, req);
                 validateKeyName(server.ec2Info.keyName, req);
                 validateAmiId(server.ec2Info.amiId, req);
@@ -326,7 +328,12 @@ public class ServerController {
 //        }
     }
 
-    /** Validate that AMI exists and value is not empty. */
+    /**
+     * Validate that AMI exists and value is not empty.
+     *
+     * TODO: Should we warn user if the AMI provided is older than the default AMI registered with this application as
+     *   DEFAULT_AMI_ID?
+     */
     private static void validateAmiId(String amiId, Request req) {
         String message = "Server must have valid AMI ID (or field must be empty)";
         if (isEmpty(amiId)) return;
@@ -371,29 +378,57 @@ public class ServerController {
     }
 
     /** Validate that EC2 security group exists and is not empty. */
-    private static void validateSecurityGroupId(String securityGroupId, Request req) {
+    private static void validateSecurityGroupId(LoadBalancer loadBalancer, EC2Info ec2Info, Request req) {
         String message = "Server must have valid security group ID";
-        if (isEmpty(securityGroupId)) logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message);
-        DescribeSecurityGroupsRequest request = new DescribeSecurityGroupsRequest().withGroupIds(securityGroupId);
-        DescribeSecurityGroupsResult result = ec2.describeSecurityGroups(request);
+        List<String> securityGroups = loadBalancer.getSecurityGroups();
+        if (isEmpty(ec2Info.securityGroupId)) {
+            // Attempt to assign security group by deriving the value from target group/ELB.
+            String securityGroupId = securityGroups.iterator().next();
+            if (securityGroupId != null) {
+                // Set security group to the first value found attached to ELB.
+                ec2Info.securityGroupId = securityGroupId;
+                return;
+            }
+            // If no security group found with load balancer (for whatever reason), halt request.
+            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Load balancer for target group does not have valid security group");
+        }
         // Iterate over groups. If a matching ID is found, silently return.
-        for (SecurityGroup group : result.getSecurityGroups()) if (group.getGroupId().equals(securityGroupId)) return;
+        for (String groupId : securityGroups) if (groupId.equals(ec2Info.securityGroupId)) return;
         logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message);
     }
 
-    /** Validate that subnet exists and is not empty. */
-    private static void validateSubnetId(String subnetId, Request req) {
+    /**
+     * Validate that subnet exists and is not empty. If empty, attempt to set to an ID drawn from the load balancer's
+     * VPC.
+     */
+    private static void validateSubnetId(LoadBalancer loadBalancer, EC2Info ec2Info, Request req) {
         String message = "Server must have valid subnet ID";
-        if (isEmpty(subnetId)) logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message);
-        try {
-            DescribeSubnetsRequest request = new DescribeSubnetsRequest().withSubnetIds(subnetId);
-            DescribeSubnetsResult result = ec2.describeSubnets(request);
-            // Iterate over subnets. If a matching ID is found, silently return.
-            for (Subnet subnet : result.getSubnets()) if (subnet.getSubnetId().equals(subnetId)) return;
-        } catch (AmazonEC2Exception e) {
-            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message, e);
+        // Make request for all subnets associated with load balancer's vpc
+        Filter filter = new Filter("vpc-id").withValues(loadBalancer.getVpcId());
+        DescribeSubnetsRequest request = new DescribeSubnetsRequest().withFilters(filter);
+        DescribeSubnetsResult result = ec2.describeSubnets(request);
+        List<Subnet> subnets = result.getSubnets();
+        // Attempt to assign subnet by deriving the value from target group/ELB.
+        if (isEmpty(ec2Info.subnetId)) {
+            // Set subnetID to the first value found.
+            // TODO: could this end up with an incorrect subnet value? (i.e., a subnet that is not publicly available on
+            //  the Internet?
+            Subnet subnet = subnets.iterator().next();
+            if (subnet != null) {
+                ec2Info.subnetId = subnet.getSubnetId();
+                return;
+            }
+            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message);
+        } else {
+            // Otherwise, verify the value set in the EC2Info.
+            try {
+                // Iterate over subnets. If a matching ID is found, silently return.
+                for (Subnet subnet : subnets) if (subnet.getSubnetId().equals(ec2Info.subnetId)) return;
+            } catch (AmazonEC2Exception e) {
+                logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message, e);
+            }
+            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message);
         }
-        logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message);
     }
 
     /**
@@ -410,18 +445,42 @@ public class ServerController {
         }
     }
 
-    /** Validate that ELB target group exists and is not empty. */
-    private static void validateTargetGroup(String targetGroupArn, Request req) {
-        if (isEmpty(targetGroupArn)) logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Invalid value for Target Group ARN.");
+    /**
+     * Gets the load balancer that the target group ARN is assigned to. Note: according to AWS docs/Stack Overflow, a
+     * target group can only be assigned to a single load balancer (one-to-one relationship), so there should be no
+     * risk of this giving inconsistent results.
+     *  - https://serverfault.com/a/865422
+     *  - https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-limits.html
+     */
+    private static LoadBalancer getLoadBalancerForTargetGroup (String targetGroupArn) {
         try {
             DescribeTargetGroupsRequest request = new DescribeTargetGroupsRequest().withTargetGroupArns(targetGroupArn);
             List<TargetGroup> targetGroups = elb.describeTargetGroups(request).getTargetGroups();
-            if (targetGroups.size() == 0) {
-                logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Invalid value for Target Group ARN. Could not locate Target Group.");
+            for (TargetGroup tg : targetGroups) {
+                DescribeLoadBalancersResult balancersResult = elb.describeLoadBalancers(new DescribeLoadBalancersRequest().withLoadBalancerArns(tg.getLoadBalancerArns()));
+                // Return the first load balancer
+                return balancersResult.getLoadBalancers().iterator().next();
             }
         } catch (AmazonElasticLoadBalancingException e) {
-            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Invalid value for Target Group ARN.", e);
+            LOG.warn("Invalid value for Target Group ARN: {}", targetGroupArn);
         }
+        // If no target group/load balancer found, return null.
+        return null;
+    }
+
+    /**
+     * Validate that ELB target group exists and is not empty and return associated load balancer for validating related
+     * fields.
+     */
+    private static LoadBalancer validateTargetGroupAndGetLoadBalancer(String targetGroupArn, Request req) {
+        if (isEmpty(targetGroupArn)) logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Invalid value for Target Group ARN.");
+        // Get load balancer for target group. This essentially checks that the target group exists and is assigned
+        // to a load balancer.
+        LoadBalancer loadBalancer = getLoadBalancerForTargetGroup(targetGroupArn);
+        if (loadBalancer == null) {
+            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Invalid value for Target Group ARN. Could not locate Target Group or Load Balancer.");
+        }
+        return loadBalancer;
     }
 
     /**
