@@ -308,6 +308,15 @@ public class MergeFeedsJobTest extends UnitTest {
             bartVersion1.feedLoadResult.shapes.rowCount + bartVersion2.feedLoadResult.shapes.rowCount,
             mergeFeedsJob.mergedVersion.feedLoadResult.shapes.rowCount
         );
+        // Expect that two calendar dates are excluded from the past feed (because they occur after the first date of
+        // the future feed) .
+        int expectedCalendarDatesCount = bartVersion1.feedLoadResult.calendarDates.rowCount + bartVersion2.feedLoadResult.calendarDates.rowCount - 2;
+        assertEquals(
+            "Merged feed calendar_dates count should equal expected value.",
+            // During merge, if identical shape_id is found in both feeds, active feed shape_id should be feed-scoped.
+            expectedCalendarDatesCount,
+            mergeFeedsJob.mergedVersion.feedLoadResult.calendarDates.rowCount
+        );
         // Ensure there are no referential integrity errors or duplicate ID errors.
         assertThatFeedHasNoErrorsOfType(
             mergeFeedsJob.mergedVersion.namespace,

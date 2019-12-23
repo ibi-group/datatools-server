@@ -484,6 +484,9 @@ public class MergeFeedsJob extends MonitorableJob {
                     // Piece together the row to write, which should look practically identical to the original
                     // row except for the identifiers receiving a prefix to avoid ID conflicts.
                     for (int specFieldIndex = 0; specFieldIndex < sharedSpecFields.size(); specFieldIndex++) {
+                        // There is nothing to do in this loop if it has already been determined that the record should
+                        // be skipped.
+                        if (skipRecord) continue;
                         Field field = sharedSpecFields.get(specFieldIndex);
                         // Get index of field from GTFS spec as it appears in feed
                         int index = fieldsFoundList.indexOf(field);
@@ -552,8 +555,9 @@ public class MergeFeedsJob extends MonitorableJob {
                                     if (feedIndex > 0) {
                                         if (date.isAfter(futureFeedFirstDate) || date.isEqual(futureFeedFirstDate)) {
                                             LOG.warn(
-                                                "Skipping calendar_dates entry {} because it operates in the time span of future feed.",
-                                                keyValue);
+                                                "Skipping calendar_dates entry {} because it operates in the time span of future feed (i.e., after or on {}).",
+                                                keyValue,
+                                                futureFeedFirstDate);
                                             String key = getTableScopedValue(table, idScope, keyValue);
                                             mergeFeedsResult.skippedIds.add(key);
                                             skipRecord = true;
