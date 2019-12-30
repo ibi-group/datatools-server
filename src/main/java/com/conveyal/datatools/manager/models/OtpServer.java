@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.models;
 
 import com.amazonaws.services.ec2.model.Filter;
 import com.amazonaws.services.ec2.model.Instance;
+import com.conveyal.datatools.common.utils.AWSUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.controllers.api.DeploymentController;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -35,6 +36,11 @@ public class OtpServer extends Model {
     /** Contains all of the information needed to commission EC2 instances for an AWS Elastic Load Balancer (ELB) target group. */
     public EC2Info ec2Info;
     /**
+     * AWS role that must be assumed in order to access S3 or EC2 services. Should be null if default credentials should
+     * be used.
+     */
+    public String role;
+    /**
      * URL location of the publicly-available user interface asssociated with either the {@link #internalUrl} or the
      * load balancer/target group.
      */
@@ -53,13 +59,13 @@ public class OtpServer extends Model {
         // Prevent calling EC2 method on servers that do not have EC2 info defined because this is a JSON property.
         if (ec2Info == null) return Collections.EMPTY_LIST;
         Filter serverFilter = new Filter("tag:serverId", Collections.singletonList(id));
-        return DeploymentController.fetchEC2InstanceSummaries(serverFilter);
+        return DeploymentController.fetchEC2InstanceSummaries(AWSUtils.getEC2ClientForRole(this.role), serverFilter);
     }
 
     public List<Instance> retrieveEC2Instances() {
         if (!"true".equals(DataManager.getConfigPropertyAsText("modules.deployment.ec2.enabled"))) return Collections.EMPTY_LIST;
         Filter serverFilter = new Filter("tag:serverId", Collections.singletonList(id));
-        return DeploymentController.fetchEC2Instances(serverFilter);
+        return DeploymentController.fetchEC2Instances(AWSUtils.getEC2ClientForRole(this.role), serverFilter);
     }
 
     @JsonProperty("organizationId")

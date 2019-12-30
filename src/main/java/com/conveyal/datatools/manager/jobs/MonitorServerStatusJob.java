@@ -1,7 +1,7 @@
 package com.conveyal.datatools.manager.jobs;
 
+import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.services.ec2.AmazonEC2;
-import com.amazonaws.services.ec2.AmazonEC2Client;
 import com.amazonaws.services.ec2.model.Instance;
 import com.amazonaws.services.ec2.model.InstanceStateChange;
 import com.amazonaws.services.ec2.model.TerminateInstancesRequest;
@@ -13,6 +13,7 @@ import com.amazonaws.services.elasticloadbalancingv2.model.TargetDescription;
 import com.amazonaws.services.s3.AmazonS3URI;
 import com.amazonaws.services.s3.model.AmazonS3Exception;
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.utils.AWSUtils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.OtpServer;
@@ -43,7 +44,8 @@ public class MonitorServerStatusJob extends MonitorableJob {
     private final Instance instance;
     private final boolean graphAlreadyBuilt;
     private final OtpServer otpServer;
-    private final AmazonEC2 ec2 = AmazonEC2Client.builder().build();
+    private final AWSStaticCredentialsProvider credentials;
+    private final AmazonEC2 ec2;
     private final CloseableHttpClient httpClient = HttpClients.createDefault();
     // If the job takes longer than XX seconds, fail the job.
     private static final int TIMEOUT_MILLIS = 60 * 60 * 1000; // One hour
@@ -66,6 +68,8 @@ public class MonitorServerStatusJob extends MonitorableJob {
         this.graphAlreadyBuilt = graphAlreadyBuilt;
         status.message = "Checking server status...";
         startTime = System.currentTimeMillis();
+        credentials = AWSUtils.getCredentialsForRole(otpServer.role, "Monitor " + instance.getInstanceId());
+        ec2 = AWSUtils.getEC2ClientForCredentials(credentials);
     }
 
     @JsonProperty
@@ -168,7 +172,10 @@ public class MonitorServerStatusJob extends MonitorableJob {
         if (otpServer.ec2Info != null && otpServer.ec2Info.targetGroupArn != null) {
             // After the router is available, the EC2 instance can be registered with the load balancer.
             // REGISTER INSTANCE WITH LOAD BALANCER
-            AmazonElasticLoadBalancing elbClient = AmazonElasticLoadBalancingClient.builder().build();
+            // Use alternative credentials if they exist.
+            AmazonElasticLoadBalancing elbClient = AmazonElasticLoadBalancingClient.builder()
+                .withCredentials(credentials)
+                .build();
             RegisterTargetsRequest registerTargetsRequest = new RegisterTargetsRequest()
                     .withTargetGroupArn(otpServer.ec2Info.targetGroupArn)
                     .withTargets(new TargetDescription().withId(instance.getInstanceId()));

@@ -1,6 +1,6 @@
 package com.conveyal.datatools.editor.controllers.api;
 
-import com.conveyal.datatools.common.utils.S3Utils;
+import com.conveyal.datatools.common.utils.AWSUtils;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.editor.controllers.EditorLockController;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
@@ -335,7 +335,7 @@ public abstract class EditorController<T extends Entity> {
         int id = getIdFromRequest(req);
         String url;
         try {
-            url = S3Utils.uploadBranding(req, String.format("%s_%d", classToLowercase, id));
+            url = AWSUtils.uploadBranding(req, String.format("%s_%d", classToLowercase, id));
         } catch (HaltException e) {
             // Do not re-catch halts thrown for exceptions that have already been caught.
             throw e;

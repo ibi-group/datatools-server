@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.models;
 
 import com.amazonaws.services.ec2.model.Filter;
+import com.conveyal.datatools.common.utils.AWSUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.controllers.api.DeploymentController;
 import com.conveyal.datatools.manager.jobs.DeployJob;
@@ -119,7 +120,13 @@ public class Deployment extends Model implements Serializable {
     public List<EC2InstanceSummary> retrieveEC2Instances() {
         if (!"true".equals(DataManager.getConfigPropertyAsText("modules.deployment.ec2.enabled"))) return Collections.EMPTY_LIST;
         Filter deploymentFilter = new Filter("tag:deploymentId", Collections.singletonList(id));
-        return DeploymentController.fetchEC2InstanceSummaries(deploymentFilter);
+        // Check if the latest deployment used alternative credentials/AWS role.
+        String role = null;
+        if (this.latest() != null) {
+            OtpServer server = Persistence.servers.getById(this.latest().serverId);
+            if (server != null) role = server.role;
+        }
+        return DeploymentController.fetchEC2InstanceSummaries(AWSUtils.getEC2ClientForRole(role), deploymentFilter);
     }
 
     public void storeFeedVersions(Collection<FeedVersion> versions) {
