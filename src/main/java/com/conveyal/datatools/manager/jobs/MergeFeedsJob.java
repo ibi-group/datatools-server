@@ -368,7 +368,14 @@ public class MergeFeedsJob extends MonitorableJob {
                 Field[] fieldsFoundInZip =
                     table.getFieldsFromFieldHeaders(csvReader.getHeaders(), null);
                 List<Field> fieldsFoundList = Arrays.asList(fieldsFoundInZip);
+                // Initialize future feed's first date to the first calendar date from the validation result.
+                // This is equivalent to either the earliest date of service defined for a calendar_date record or the
+                // earliest start_date value for a calendars.txt record. For MTC, however, they require that GTFS
+                // providers use calendars.txt entries and prefer that this value (which is used to determine cutoff
+                // dates for the active feed when merging with the future) be strictly assigned the earliest
+                // calendar#start_date (unless that table for some reason does not exist).
                 LocalDate futureFeedFirstDate = feedsToMerge.get(0).version.validationResult.firstCalendarDate;
+                LocalDate futureFirstCalendarStartDate = LocalDate.MAX;
                 // Determine the index of the key field for this version's table.
                 int keyFieldIndex = getFieldIndex(fieldsFoundInZip, keyField);
                 if (keyFieldIndex == -1) {
@@ -419,6 +426,16 @@ public class MergeFeedsJob extends MonitorableJob {
                             LOG.warn("Skipping {} file for feed {}/{} (future file preferred)",
                                 table.name, feedIndex, feedsToMerge.size());
                             continue;
+                        } else if (table.name.equals("calendar_dates")) {
+                            if (
+                                futureFirstCalendarStartDate.isBefore(LocalDate.MAX) &&
+                                futureFeedFirstDate.isBefore(futureFirstCalendarStartDate)
+                            ) {
+                                // If the future feed's first date is before the feed's first calendar start date,
+                                // override the future feed first date with the calendar start date for use when checking
+                                // MTC calendar_dates and calendar records for modification/exclusion.
+                                futureFeedFirstDate = futureFirstCalendarStartDate;
+                            }
                         }
                     }
                     // Check certain initial conditions on the first line of the file.
@@ -547,24 +564,6 @@ public class MergeFeedsJob extends MonitorableJob {
                             // TODO Consider using Strategy Pattern https://en.wikipedia.org/wiki/Strategy_pattern
                             //  instead of a switch statement.
                             switch (table.name) {
-                                case "calendar_dates":
-                                    // Drop any calendar_dates.txt records from the existing feed for dates that are
-                                    // in the past at the time of the merge.
-                                    int dateIndex = getFieldIndex(fieldsFoundInZip, "date");
-                                    LocalDate date = LocalDate.parse(csvReader.get(dateIndex), GTFS_DATE_FORMATTER);
-                                    if (feedIndex > 0) {
-                                        if (date.isAfter(futureFeedFirstDate) || date.isEqual(futureFeedFirstDate)) {
-                                            LOG.warn(
-                                                "Skipping calendar_dates entry {} because it operates in the time span of future feed (i.e., after or on {}).",
-                                                keyValue,
-                                                futureFeedFirstDate);
-                                            String key = getTableScopedValue(table, idScope, keyValue);
-                                            mergeFeedsResult.skippedIds.add(key);
-                                            skipRecord = true;
-                                            continue;
-                                        }
-                                    }
-                                    break;
                                 case "calendar":
                                     // If any service_id in the active feed matches with the future
                                     // feed, it should be modified and all associated trip records
@@ -580,21 +579,27 @@ public class MergeFeedsJob extends MonitorableJob {
                                         valueToWrite = String.join(":", idScope, val);
                                         mergeFeedsResult.remappedIds.put(key, valueToWrite);
                                     }
-                                    // If a service_id from the active calendar has both the
-                                    // start_date and end_date in the future, the service will be
-                                    // excluded from the merged file. Records in trips,
-                                    // calendar_dates, and calendar_attributes referencing this
-                                    // service_id shall also be removed/ignored. Stop_time records
-                                    // for the ignored trips shall also be removed.
-                                    if (feedIndex > 0) {
-                                        int startDateIndex =
-                                            getFieldIndex(fieldsFoundInZip, "start_date");
-                                        LocalDate startDate = LocalDate
-                                            .parse(csvReader.get(startDateIndex),
-                                                GTFS_DATE_FORMATTER);
-                                        if (startDate.isAfter(LocalDate.now())) {
+                                    int startDateIndex =
+                                        getFieldIndex(fieldsFoundInZip, "start_date");
+                                    LocalDate startDate = LocalDate
+                                        .parse(csvReader.get(startDateIndex),
+                                            GTFS_DATE_FORMATTER);
+                                    if (feedIndex == 0) {
+                                        // For the future feed, check if the calendar's start date is earlier than the
+                                        // previous earliest value and update if so.
+                                        if (futureFirstCalendarStartDate.isAfter(startDate)) {
+                                            futureFirstCalendarStartDate = startDate;
+                                        }
+                                    } else {
+                                        // If a service_id from the active calendar has both the
+                                        // start_date and end_date in the future, the service will be
+                                        // excluded from the merged file. Records in trips,
+                                        // calendar_dates, and calendar_attributes referencing this
+                                        // service_id shall also be removed/ignored. Stop_time records
+                                        // for the ignored trips shall also be removed.
+                                        if (!startDate.isBefore(futureFeedFirstDate)) {
                                             LOG.warn(
-                                                "Skipping calendar entry {} because it operates in the future.",
+                                                "Skipping calendar entry {} because it operates in the time span of future feed.",
                                                 keyValue);
                                             String key =
                                                 getTableScopedValue(table, idScope, keyValue);
@@ -612,11 +617,29 @@ public class MergeFeedsJob extends MonitorableJob {
                                             LocalDate endDate = LocalDate
                                                 .parse(csvReader.get(endDateIndex),
                                                     GTFS_DATE_FORMATTER);
-                                            if (endDate.isAfter(LocalDate.now())) {
+                                            if (!endDate.isBefore(futureFeedFirstDate)) {
                                                 val = futureFeedFirstDate
                                                     .minus(1, ChronoUnit.DAYS)
                                                     .format(GTFS_DATE_FORMATTER);
                                             }
+                                        }
+                                    }
+                                    break;
+                                case "calendar_dates":
+                                    // Drop any calendar_dates.txt records from the existing feed for dates that are
+                                    // in the past at the time of the merge.
+                                    int dateIndex = getFieldIndex(fieldsFoundInZip, "date");
+                                    LocalDate date = LocalDate.parse(csvReader.get(dateIndex), GTFS_DATE_FORMATTER);
+                                    if (feedIndex > 0) {
+                                        if (!date.isBefore(futureFeedFirstDate)) {
+                                            LOG.warn(
+                                                "Skipping calendar_dates entry {} because it operates in the time span of future feed (i.e., after or on {}).",
+                                                keyValue,
+                                                futureFeedFirstDate);
+                                            String key = getTableScopedValue(table, idScope, keyValue);
+                                            mergeFeedsResult.skippedIds.add(key);
+                                            skipRecord = true;
+                                            continue;
                                         }
                                     }
                                     break;
