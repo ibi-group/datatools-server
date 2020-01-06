@@ -474,7 +474,7 @@ public class DeployJob extends MonitorableJob {
             LOG.info("Updating deployment target and deploy time.");
             deployment.deployedTo = otpServer.id;
             long durationMinutes = TimeUnit.MILLISECONDS.toMinutes(status.duration);
-            message = String.format("Deployment %s successfully deployed to %s in %s minutes.", deployment.name, otpServer.publicUrl, durationMinutes);
+            message = String.format("%s successfully deployed %s to %s in %s minutes.", owner.getEmail(), deployment.name, otpServer.publicUrl, durationMinutes);
         } else {
             message = String.format("WARNING: Deployment %s failed to deploy to %s. Error: %s", deployment.name, otpServer.publicUrl, status.message);
         }
@@ -937,6 +937,7 @@ public class DeployJob extends MonitorableJob {
         public String buildArtifactsFolder;
         public String otpVersion;
         public EC2Info ec2Info;
+        public String role;
         public long finishTime = System.currentTimeMillis();
 
         /** Empty constructor for serialization */
@@ -947,6 +948,7 @@ public class DeployJob extends MonitorableJob {
             this.ec2Info = job.otpServer.ec2Info;
             this.otpVersion = job.deployment.otpVersion;
             this.jobId = job.jobId;
+            this.role = job.otpServer.role;
             this.s3Bucket = job.s3Bucket;
             this.status = job.status;
             this.buildArtifactsFolder = job.getS3FolderURI().toString();

@@ -169,10 +169,15 @@ public class AWSUtils {
 
     /**
      * Shorthand method to obtain an S3 client for the provided role ARN. If role is null, the default EC2 credentials
-     * will be used.
+     * will be used. Similarly, if the region is null, it will be omitted while building the S3 client.
      */
     public static AmazonS3 getS3ClientForRole(String role, String region) {
         AWSStaticCredentialsProvider credentials = getCredentialsForRole(role, "s3 client");
         return getS3ClientForCredentials(credentials, region);
+    }
+
+    /** Shorthand method to obtain an S3 client for the provided role ARN. */
+    public static AmazonS3 getS3ClientForRole(String role) {
+        return getS3ClientForRole(role, null);
     }
 }

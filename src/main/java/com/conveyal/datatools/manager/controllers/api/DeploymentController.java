@@ -8,6 +8,7 @@ import com.amazonaws.services.ec2.model.DescribeInstancesResult;
 import com.amazonaws.services.ec2.model.Filter;
 import com.amazonaws.services.ec2.model.Instance;
 import com.amazonaws.services.ec2.model.Reservation;
+import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3URI;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.AWSUtils;
@@ -97,6 +98,9 @@ public class DeploymentController {
     private static String downloadBuildArtifact (Request req, Response res) {
         Deployment deployment = getDeploymentWithPermissions(req, res);
         DeployJob.DeploySummary summaryToDownload = null;
+        // Default client to use if no role was used during the deployment.
+        AmazonS3 s3Client = FeedStore.s3Client;
+        String role = null;
         String uriString;
         String filename = req.queryParams("filename");
         if (filename == null) {
@@ -133,9 +137,12 @@ public class DeploymentController {
         } else {
             // If summary is readily available, just use the ready-to-use build artifacts field.
             uriString = summaryToDownload.buildArtifactsFolder;
+            role = summaryToDownload.role;
         }
         AmazonS3URI uri = new AmazonS3URI(uriString);
-        return downloadFromS3(FeedStore.s3Client, uri.getBucket(), String.join("/", uri.getKey(), filename), false, res);
+        // Assume the alternative role if needed to download the deploy artifact.
+        if (role != null) s3Client = AWSUtils.getS3ClientForRole(role);
+        return downloadFromS3(s3Client, uri.getBucket(), String.join("/", uri.getKey(), filename), false, res);
     }
 
     /**
@@ -347,8 +354,8 @@ public class DeploymentController {
         try {
             latest = deployment.latest();
             targetGroupArn = latest.ec2Info.targetGroupArn;
-            OtpServer server = Persistence.servers.getById(latest.serverId);
-            credentials = AWSUtils.getCredentialsForRole(server.role, "deregister and terminate instances");
+            // Also, get credentials for role (if exists), which are needed to terminate instances in external AWS account.
+            credentials = AWSUtils.getCredentialsForRole(latest.role, "deregister and terminate instances");
         } catch (Exception e) {
             logMessageAndHalt(req, 400, "Latest deploy job does not exist or is missing target group ARN.");
             return false;
