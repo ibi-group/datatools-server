@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -10,6 +11,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Filters.or;
 
 /**
  * Represents a collection of feed sources that can be made into a deployment.
@@ -34,23 +36,19 @@ public class Project extends Model {
 
     public OtpRouterConfig routerConfig;
 
-    public Collection<OtpServer> otpServers;
-
     public String organizationId;
 
     /**
-     * Locate and return an OTP server contained within the project that matches the name argument.
+     * A list of servers that are available to deploy project feeds/OSM to. This includes servers assigned to this
+     * project as well as those that belong to no project.
+     * @return
      */
-    public OtpServer retrieveServer(String name) {
-        if (name == null) return null;
-        for (OtpServer otpServer : otpServers) {
-            if (otpServer.name == null) continue;
-            if (name.equals(otpServer.name) || name.equals(otpServer.target())) {
-                return otpServer;
-            }
-        }
-        LOG.warn("Could not find OTP server with name {}", name);
-        return null;
+    @JsonProperty("otpServers")
+    public List<OtpServer> availableOtpServers() {
+        return Persistence.servers.getFiltered(or(
+            eq("projectId", this.id),
+            eq("projectId", null)
+        ));
     }
 
     public String defaultTimeZone;
@@ -92,9 +90,7 @@ public class Project extends Model {
      * Get all the deployments for this project.
      */
     public Collection<Deployment> retrieveDeployments() {
-        List<Deployment> deployments = Persistence.deployments
-                .getFiltered(eq("projectId", this.id));
-        return deployments;
+        return Persistence.deployments.getFiltered(eq("projectId", this.id));
     }
 
     // TODO: Does this need to be returned with JSON API response
@@ -106,16 +102,13 @@ public class Project extends Model {
         }
     }
 
-    public boolean delete() {
+    public void delete() {
         // FIXME: Handle this in a Mongo transaction. See https://docs.mongodb.com/master/core/transactions/#transactions-and-mongodb-drivers
-//        ClientSession clientSession = Persistence.startSession();
-//        clientSession.startTransaction();
-
         // Delete each feed source in the project (which in turn deletes each feed version).
         retrieveProjectFeedSources().forEach(FeedSource::delete);
         // Delete each deployment in the project.
         retrieveDeployments().forEach(Deployment::delete);
         // Finally, delete the project.
-        return Persistence.projects.removeById(this.id);
+        Persistence.projects.removeById(this.id);
     }
 }

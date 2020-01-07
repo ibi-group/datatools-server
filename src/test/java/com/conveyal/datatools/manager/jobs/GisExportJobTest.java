@@ -1,7 +1,9 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.DatatoolsTest;
+import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
@@ -42,14 +44,16 @@ import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
-import static com.conveyal.datatools.TestUtils.createFeedVersion;
+import static com.conveyal.datatools.TestUtils.assertThatSqlCountQueryYieldsExpectedCount;
+import static com.conveyal.datatools.TestUtils.assertThatSqlQueryYieldsRowCount;
+import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.greaterThan;
 import static org.hamcrest.Matchers.lessThan;
 import static org.hamcrest.Matchers.notNullValue;
 
-public class GisExportJobTest {
+public class GisExportJobTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(GisExportJobTest.class);
     private static Project project;
     private static FeedVersion calTrainVersion;
@@ -62,7 +66,7 @@ public class GisExportJobTest {
     private static final double CALTRAIN_SOUTH = 37.002;
 
     @BeforeClass
-    public static void setUp() {
+    public static void setUp() throws IOException {
         DatatoolsTest.setUp();
         LOG.info("{} setup", GisExportJobTest.class.getSimpleName());
 
@@ -72,10 +76,10 @@ public class GisExportJobTest {
         Persistence.projects.create(project);
         FeedSource caltrain = new FeedSource("Caltrain");
         Persistence.feedSources.create(caltrain);
-        calTrainVersion = createFeedVersion(caltrain, "caltrain_gtfs.zip");
+        calTrainVersion = createFeedVersionFromGtfsZip(caltrain, "caltrain_gtfs.zip");
         FeedSource hawaii = new FeedSource("Hawaii");
         Persistence.feedSources.create(hawaii);
-        hawaiiVersion = createFeedVersion(hawaii, "hawaii_fake_no_shapes.zip");
+        hawaiiVersion = createFeedVersionFromGtfsZip(hawaii, "hawaii_fake_no_shapes.zip");
     }
 
     /**
@@ -88,7 +92,8 @@ public class GisExportJobTest {
         File zipFile = File.createTempFile("stops", ".zip");
         Set<String> ids = new HashSet<>();
         ids.add(calTrainVersion.id);
-        GisExportJob gisExportJob = new GisExportJob(GisExportJob.ExportType.STOPS, zipFile, ids, "test");
+        Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
+        GisExportJob gisExportJob = new GisExportJob(GisExportJob.ExportType.STOPS, zipFile, ids, user);
         gisExportJob.run();
         assertThat(gisExportJob.status.error, equalTo(false));
         File[] files = getFilesFromZippedShapefile(zipFile);
@@ -142,7 +147,8 @@ public class GisExportJobTest {
         File zipFile = File.createTempFile("routes", ".zip");
         Set<String> ids = new HashSet<>();
         ids.add(calTrainVersion.id);
-        GisExportJob gisExportJob = new GisExportJob(GisExportJob.ExportType.ROUTES, zipFile, ids, "test");
+        Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
+        GisExportJob gisExportJob = new GisExportJob(GisExportJob.ExportType.ROUTES, zipFile, ids, user);
         gisExportJob.run();
         assertThat(gisExportJob.status.error, equalTo(false));
         File[] files = getFilesFromZippedShapefile(zipFile);
@@ -160,9 +166,10 @@ public class GisExportJobTest {
                 for (Property property : properties) {
                     String name = property.getName().toString();
                     Object value = property.getValue();
-                    LOG.info("{}: {}", name, value);
                     if ("the_geom".equals(name)) {
                         MultiLineString shape = (MultiLineString) value;
+                        // don't log entire linestring value as it severly clutters up the logs
+                        LOG.info("{}: ({} points)", name, shape.getNumPoints());
                         // Check that the geometry was exported properly.
                         assertThat(shape, notNullValue());
                         Coordinate[] coordinates = shape.getCoordinates();
@@ -175,20 +182,17 @@ public class GisExportJobTest {
                             assertThat(coordinate.y, greaterThan(CALTRAIN_SOUTH));
                             assertThat(coordinate.y, lessThan(CALTRAIN_NORTH));
                         }
+                    } else {
+                        LOG.info("{}: {}", name, value);
                     }
                 }
             }
         }
-        PreparedStatement preparedStatement = DataManager.GTFS_DATA_SOURCE.getConnection()
-            .prepareStatement(
-                String.format("select count(*) from %s" + ".patterns", calTrainVersion.namespace));
-        ResultSet resultSet = preparedStatement.executeQuery();
-        int patternCount = 0;
-        while (resultSet.next()) {
-            patternCount = resultSet.getInt(1);
-        }
         // Check that feature count = pattern count from SQL query.
-        assertThat(featureCount, equalTo(patternCount));
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("select count(*) from %s" + ".patterns", calTrainVersion.namespace),
+            featureCount
+        );
     }
 
     /**
@@ -200,7 +204,8 @@ public class GisExportJobTest {
         File zipFile = File.createTempFile("routes", ".zip");
         Set<String> ids = new HashSet<>();
         ids.add(hawaiiVersion.id);
-        GisExportJob gisExportJob = new GisExportJob(GisExportJob.ExportType.ROUTES, zipFile, ids, "test");
+        Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
+        GisExportJob gisExportJob = new GisExportJob(GisExportJob.ExportType.ROUTES, zipFile, ids, user);
         gisExportJob.run();
         assertThat(gisExportJob.status.error, equalTo(false));
         File[] files = getFilesFromZippedShapefile(zipFile);
@@ -233,16 +238,11 @@ public class GisExportJobTest {
                 }
             }
         }
-        PreparedStatement preparedStatement = DataManager.GTFS_DATA_SOURCE.getConnection()
-            .prepareStatement(
-                String.format("select count(*) from %s" + ".patterns", hawaiiVersion.namespace));
-        ResultSet resultSet = preparedStatement.executeQuery();
-        int patternCount = 0;
-        while (resultSet.next()) {
-            patternCount = resultSet.getInt(1);
-        }
         // Check that feature count = pattern count from SQL query.
-        assertThat(featureCount, equalTo(patternCount));
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("select count(*) from %s" + ".patterns", hawaiiVersion.namespace),
+            featureCount
+        );
     }
 
     /** Unzip the shapefile into a temp directory and return a list of its files. */

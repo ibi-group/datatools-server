@@ -32,8 +32,6 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentMap;
 import java.util.stream.Collectors;
 
-import static com.conveyal.datatools.editor.jobs.ProcessGtfsSnapshotExport.toGtfsDate;
-
 /** a transaction in an agency database */
 public class FeedTx extends DatabaseTx {
     private static final Logger LOG = LoggerFactory.getLogger(FeedTx.class);
@@ -122,6 +120,10 @@ public class FeedTx extends DatabaseTx {
             buildSecondaryIndices();
 
 //        editedSinceSnapshot = tx.getAtomicBoolean("editedSinceSnapshot") == null ? tx.createAtomicBoolean("editedSinceSnapshot", false) : editedSinceSnapshot;
+    }
+
+    private static int toGtfsDate (LocalDate date) {
+        return date.getYear() * 10000 + date.getMonthValue() * 100 + date.getDayOfMonth();
     }
 
     public void commit () {

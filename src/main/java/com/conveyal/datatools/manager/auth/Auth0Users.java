@@ -38,7 +38,7 @@ public class Auth0Users {
     private static final String clientId = DataManager.getConfigPropertyAsText("AUTH0_CLIENT_ID");
     private static final String MANAGEMENT_API_VERSION = "v2";
     private static final String SEARCH_API_VERSION = "v3";
-    private static final String API_PATH = "/api/" + MANAGEMENT_API_VERSION;
+    public static final String API_PATH = "/api/" + MANAGEMENT_API_VERSION;
     public static final String USERS_API_PATH = API_PATH + "/users";
     // Cached API token so that we do not have to request a new one each time a Management API request is made.
     private static Auth0AccessToken cachedToken = null;

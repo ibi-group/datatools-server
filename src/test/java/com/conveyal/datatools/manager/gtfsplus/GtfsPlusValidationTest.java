@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.gtfsplus;
 
 import com.conveyal.datatools.DatatoolsTest;
+import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.jobs.MergeFeedsJobTest;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -13,14 +14,13 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Date;
-import java.util.List;
 
-import static com.conveyal.datatools.TestUtils.createFeedVersion;
+import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 
 /** Runs test to verify that GTFS+ validation runs as expected. */
-public class GtfsPlusValidationTest {
+public class GtfsPlusValidationTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(MergeFeedsJobTest.class);
     private static FeedVersion bartVersion1;
     private static Project project;
@@ -29,7 +29,7 @@ public class GtfsPlusValidationTest {
      * Create feed version for GTFS+ validation test.
      */
     @BeforeClass
-    public static void setUp() {
+    public static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
         // Create a project, feed sources, and feed versions to merge.
@@ -39,7 +39,7 @@ public class GtfsPlusValidationTest {
         FeedSource bart = new FeedSource("BART");
         bart.projectId = project.id;
         Persistence.feedSources.create(bart);
-        bartVersion1 = createFeedVersion(bart, "bart_new.zip");
+        bartVersion1 = createFeedVersionFromGtfsZip(bart, "bart_new.zip");
     }
 
     @Test

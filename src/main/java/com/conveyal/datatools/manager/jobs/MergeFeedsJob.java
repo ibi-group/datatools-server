@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.gtfsplus.tables.GtfsPlusTable;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -27,6 +28,7 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -136,8 +138,8 @@ public class MergeFeedsJob extends MonitorableJob {
      * @param file         resulting merge filename (without .zip)
      * @param mergeType    the type of merge to perform (@link MergeFeedsType)
      */
-    public MergeFeedsJob(String owner, Set<FeedVersion> feedVersions, String file,
-        MergeFeedsType mergeType) {
+    public MergeFeedsJob(Auth0UserProfile owner, Set<FeedVersion> feedVersions, String file,
+                         MergeFeedsType mergeType) {
         super(owner, mergeType.equals(REGIONAL) ? "Merging project feeds" : "Merging feed versions",
             JobType.MERGE_FEED_VERSIONS);
         this.feedVersions = feedVersions;
@@ -330,26 +332,16 @@ public class MergeFeedsJob extends MonitorableJob {
         // Set up objects for tracking the rows encountered
         Map<String, String[]> rowValuesForStopOrRouteId = new HashMap<>();
         Set<String> rowStrings = new HashSet<>();
+        // Track shape_ids found in future feed in order to check for conflicts with active feed (MTC only).
+        Set<String> shapeIdsInFutureFeed = new HashSet<>();
         int mergedLineNumber = 0;
         // Get the spec fields to export
         List<Field> specFields = table.specFields();
-        if (DataManager.isExtensionEnabled("mtc")) {
-            // Remove route and agency branding URL from field list.
-            // Nothing to do for other tables.
-            if ("agency".equals(table.name) || "routes".equals(table.name)) {
-                int indexToRemove = -1;
-                for (int i = 0; i < specFields.size(); i++) {
-                    if (specFields.get(i).name.endsWith("_branding_url")) {
-                        indexToRemove = i;
-                        break;
-                    }
-                }
-                // Remove item outside of loop to prevent concurrent modification exception.
-                if (indexToRemove != -1) specFields.remove(indexToRemove);
-            }
-        }
         boolean stopCodeMissingFromFirstTable = false;
         try {
+            // Get shared fields between all feeds being merged. This is used to filter the spec fields so that only
+            // fields found in the collection of feeds are included in the merged table.
+            Set<Field> sharedFields = getSharedFields(feedsToMerge, table);
             // Iterate over each zip file.
             for (int feedIndex = 0; feedIndex < feedsToMerge.size(); feedIndex++) {
                 boolean keyFieldMissing = false;
@@ -440,6 +432,7 @@ public class MergeFeedsJob extends MonitorableJob {
                                 List<Field> fieldsList = new ArrayList<>(Arrays.asList(fieldsFoundInZip));
                                 fieldsList.add(Table.AGENCY.fields[0]);
                                 fieldsFoundInZip = fieldsList.toArray(fieldsFoundInZip);
+                                sharedFields.add(Table.AGENCY.fields[0]);
                             }
                             fieldsFoundList = Arrays.asList(fieldsFoundInZip);
                         }
@@ -475,8 +468,13 @@ public class MergeFeedsJob extends MonitorableJob {
                             }
                         }
                     }
+                    // Filter the spec fields on the set of shared fields found in all feeds to be merged.
+                    List<Field> sharedSpecFields = specFields.stream()
+                        .filter(field -> containsField(sharedFields, field.name))
+                        .collect(Collectors.toList());
+                    Field[] sharedSpecFieldsArray = sharedSpecFields.toArray(new Field[0]);
                     boolean skipRecord = false;
-                    String[] rowValues = new String[specFields.size()];
+                    String[] rowValues = new String[sharedSpecFields.size()];
                     String[] values = csvReader.getValues();
                     if (values.length == 1) {
                         LOG.warn("Found blank line. Skipping...");
@@ -484,9 +482,8 @@ public class MergeFeedsJob extends MonitorableJob {
                     }
                     // Piece together the row to write, which should look practically identical to the original
                     // row except for the identifiers receiving a prefix to avoid ID conflicts.
-                    for (int specFieldIndex = 0;
-                         specFieldIndex < specFields.size(); specFieldIndex++) {
-                        Field field = specFields.get(specFieldIndex);
+                    for (int specFieldIndex = 0; specFieldIndex < sharedSpecFields.size(); specFieldIndex++) {
+                        Field field = sharedSpecFields.get(specFieldIndex);
                         // Get index of field from GTFS spec as it appears in feed
                         int index = fieldsFoundList.indexOf(field);
                         String val = csvReader.get(index);
@@ -524,9 +521,24 @@ public class MergeFeedsJob extends MonitorableJob {
                         // track references for a large number of feeds (e.g., every feed in New
                         // York State).
                         if (mergeType.equals(MTC)) {
-                            Set<NewGTFSError> idErrors = referenceTracker
-                                .checkReferencesAndUniqueness(keyValue, lineNumber, field, val,
-                                    table, keyField, orderField);
+                            Set<NewGTFSError> idErrors;
+                            // If analyzing the second feed (non-future feed), the service_id always gets feed scoped.
+                            // See https://github.com/ibi-group/datatools-server/issues/244
+                            if (feedIndex == 1 && field.name.equals("service_id")) {
+                                valueToWrite = String.join(":", idScope, val);
+                                mergeFeedsResult.remappedIds.put(
+                                    getTableScopedValue(table, idScope, val),
+                                    valueToWrite
+                                );
+                                idErrors = referenceTracker
+                                    .checkReferencesAndUniqueness(keyValue, lineNumber, field, valueToWrite,
+                                        table, keyField, orderField);
+                            } else {
+                                idErrors = referenceTracker
+                                    .checkReferencesAndUniqueness(keyValue, lineNumber, field, val,
+                                        table, keyField, orderField);
+                            }
+
                             // Store values for key fields that have been encountered.
                             // TODO Consider using Strategy Pattern https://en.wikipedia.org/wiki/Strategy_pattern
                             //  instead of a switch statement.
@@ -586,6 +598,37 @@ public class MergeFeedsJob extends MonitorableJob {
                                             }
                                         }
                                     }
+                                    break;
+                                case "shapes":
+                                    // If a shape_id is found in both future and active datasets, all shape points from
+                                    // the active dataset must be feed-scoped. Otherwise, the merged dataset may contain
+                                    // shape_id:shape_pt_sequence values from both datasets (e.g., if future dataset contains
+                                    // sequences 1,2,3,10 and active contains 1,2,7,9,10; the merged set will contain
+                                    // 1,2,3,7,9,10).
+                                    if (field.name.equals("shape_id")) {
+                                        if (feedIndex == 0) {
+                                            // Track shape_id if working on future feed.
+                                            shapeIdsInFutureFeed.add(val);
+                                        } else if (shapeIdsInFutureFeed.contains(val)) {
+                                            // For the active feed, if the shape_id was already processed from the
+                                            // future feed, we need to add the feed-scope to avoid weird, hybrid shapes
+                                            // with points from both feeds.
+                                            valueToWrite = String.join(":", idScope, val);
+                                            // Update key value for subsequent ID conflict checks for this row.
+                                            keyValue = valueToWrite;
+                                            mergeFeedsResult.remappedIds.put(
+                                                getTableScopedValue(table, idScope, val),
+                                                valueToWrite
+                                            );
+                                            // Re-check refs and uniqueness after changing shape_id value. (Note: this
+                                            // probably won't have any impact, but there's not much harm in including it.)
+                                            idErrors = referenceTracker
+                                                .checkReferencesAndUniqueness(keyValue, lineNumber, field, valueToWrite,
+                                                    table, keyField, orderField);
+                                        }
+                                    }
+                                    // Skip record if normal duplicate errors are found.
+                                    if (hasDuplicateError(idErrors)) skipRecord = true;
                                     break;
                                 case "trips":
                                     // trip_ids between active and future datasets must not match. If any trip_id is found
@@ -658,9 +701,9 @@ public class MergeFeedsJob extends MonitorableJob {
                                             // Extract the route/stop ID value used for the
                                             // route/stop with already encountered matching
                                             // short name/stop code.
-                                            String[] strings =
-                                                rowValuesForStopOrRouteId.get(String.join(
-                                                    ":", keyField, val));
+                                            String[] strings = rowValuesForStopOrRouteId.get(
+                                                String.join(":", keyField, val)
+                                            );
                                             String keyForMatchingAltId = strings[0];
                                             if (!keyForMatchingAltId.equals(currentPrimaryKey)) {
                                                 // Remap this row's route_id/stop_id to ensure
@@ -751,8 +794,8 @@ public class MergeFeedsJob extends MonitorableJob {
                             // defined above, we will be using the found fields index, which will
                             // cause major issues when trying to put and get values into the
                             // below map.
-                            String key = String.join(
-                                ":", keyField, rowValues[table.getFieldIndex(keyField)]);
+                            int index = getFieldIndex(sharedSpecFieldsArray, keyField);
+                            String key = String.join(":", keyField, rowValues[index]);
                             rowValuesForStopOrRouteId.put(key, rowValues);
                             break;
                         case "transfers":
@@ -781,7 +824,7 @@ public class MergeFeedsJob extends MonitorableJob {
                         ZipEntry tableEntry = new ZipEntry(table.name + ".txt");
                         out.putNextEntry(tableEntry);
                         // Write headers to table.
-                        String[] headers = specFields.stream()
+                        String[] headers = sharedSpecFields.stream()
                             .map(field -> field.name)
                             .toArray(String[]::new);
                         writer.write(headers);
@@ -804,6 +847,31 @@ public class MergeFeedsJob extends MonitorableJob {
         // Track the number of lines in the merged table and return final number.
         mergeFeedsResult.linesPerTable.put(table.name, mergedLineNumber);
         return mergedLineNumber;
+    }
+
+    /** Get the set of shared fields for all feeds being merged for a specific table. */
+    private Set<Field> getSharedFields(List<FeedToMerge> feedsToMerge, Table table) throws IOException {
+        Set<Field> sharedFields = new HashSet<>();
+        // First, iterate over each feed to collect the shared fields that need to be output in the merged table.
+        for (FeedToMerge feed : feedsToMerge) {
+            CsvReader csvReader = table.getCsvReader(feed.zipFile, null);
+            // If csv reader is null, the table was not found in the zip file.
+            if (csvReader == null) {
+                continue;
+            }
+            // Get fields found from headers and add them to the shared fields set.
+            Field[] fieldsFoundInZip = table.getFieldsFromFieldHeaders(csvReader.getHeaders(), null);
+            sharedFields.addAll(Arrays.asList(fieldsFoundInZip));
+        }
+        return sharedFields;
+    }
+
+    /**
+     * Checks whether a collection of fields contains a field with the provided name.
+     */
+    private boolean containsField(Collection<Field> fields, String fieldName) {
+        for (Field field : fields) if (field.name.equals(fieldName)) return true;
+        return false;
     }
 
     /** Checks that any of a set of errors is of the type {@link NewGTFSErrorType#DUPLICATE_ID}. */

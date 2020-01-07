@@ -39,10 +39,11 @@
         <url>https://github.com/ibi-group/datatools-server.git</url>
     </scm>
     <properties>
-        <jackson.version>2.9.9</jackson.version>
+        <jackson.version>2.10.1</jackson.version>
         <!-- Using the latest version of geotools (e.g, 20) seems to cause issues with the shapefile
         plugin where the_geom for each feature is null. -->
         <geotools.version>17.5</geotools.version>
+        <awsjavasdk.version>1.11.625</awsjavasdk.version>
     </properties>
     <build>
         <resources>
@@ -121,6 +122,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
+                <version>3.1.2</version>
                 <configuration>
                     <archive>
                         <manifest>
@@ -217,7 +219,7 @@
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
-            <version>1.1.3</version>
+            <version>1.2.3</version>
         </dependency>
 
         <!-- Used to connect to and import legacy editor MapDBs -->
@@ -249,7 +251,16 @@
         <dependency>
             <groupId>com.conveyal</groupId>
             <artifactId>gtfs-lib</artifactId>
-            <version>5.0.0</version>
+            <version>5.0.7</version>
+            <!-- Exclusions added in order to silence SLF4J warnings about multiple bindings:
+                http://www.slf4j.org/codes.html#multiple_bindings
+            -->
+            <exclusions>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-simple</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- Used for data-tools application database -->
@@ -280,11 +291,10 @@
             <artifactId>jackson-dataformat-yaml</artifactId>
             <version>${jackson.version}</version>
         </dependency>
-        <!-- This version does not use ${jackson.version} because v2.9.9.1 does not exist for jackson-annotations. -->
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
-            <version>2.9.9.1</version>
+            <version>${jackson.version}</version>
         </dependency>
 
         <dependency>
@@ -368,16 +378,45 @@
             <version>2.14.0</version>
             <scope>test</scope>
         </dependency>
+        <!-- Used to write YAML files -->
+        <dependency>
+            <groupId>org.yaml</groupId>
+            <artifactId>snakeyaml</artifactId>
+            <version>1.23</version>
+        </dependency>
         <!-- Used for writing csv for merged feeds. Note: this appears to be one of the only
-        CSV libraries that will only quote values when necessary (e.g., there is a comma character
-        contained within the value) and that will work with an output stream writer when writing
-        directly to a zip output stream.
-         -->
+          CSV libraries that will only quote values when necessary (e.g., there is a comma character
+          contained within the value) and that will work with an output stream writer when writing
+          directly to a zip output stream.
+          -->
         <dependency>
             <groupId>net.sf.supercsv</groupId>
             <artifactId>super-csv</artifactId>
             <version>2.4.0</version>
         </dependency>
+        <!-- AWS individual module imports (S3 imported by gtfs-lib) -->
+        <dependency>
+            <groupId>com.amazonaws</groupId>
+            <artifactId>aws-java-sdk-ec2</artifactId>
+            <version>${awsjavasdk.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.amazonaws</groupId>
+            <artifactId>aws-java-sdk-iam</artifactId>
+            <version>${awsjavasdk.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.amazonaws</groupId>
+            <artifactId>aws-java-sdk-elasticloadbalancingv2</artifactId>
+            <version>${awsjavasdk.version}</version>
+        </dependency>
+        <!-- AWS STS allows Data Tools to assume other roles in order to deploy OTP to other AWS accounts. -->
+        <dependency>
+            <groupId>com.amazonaws</groupId>
+            <artifactId>aws-java-sdk-sts</artifactId>
+            <version>${awsjavasdk.version}</version>
+        </dependency>
+
     </dependencies>
 
 </project>

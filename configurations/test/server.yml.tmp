@@ -1,0 +1,51 @@
+application:
+  title: Data Tools
+  logo: https://d2tyb7byn1fef9.cloudfront.net/ibi_group-128x128.png
+  logo_large: https://d2tyb7byn1fef9.cloudfront.net/ibi_group_black-512x512.png
+  client_assets_url: https://example.com
+  shortcut_icon_url: https://d2tyb7byn1fef9.cloudfront.net/ibi-logo-original%402x.png
+  public_url: http://localhost:9966
+  notifications_enabled: false
+  docs_url: http://conveyal-data-tools.readthedocs.org
+  support_email: support@ibigroup.com
+  port: 4000
+  data:
+    gtfs: /tmp
+    use_s3_storage: false
+    s3_region: us-east-1
+    gtfs_s3_bucket: bucket-name
+modules:
+  enterprise:
+    enabled: false
+  editor:
+    enabled: true
+  deployment:
+    enabled: true
+    ec2:
+      enabled: false
+      default_ami: ami-041ee0ca5cd75f7d7
+      ebs_optimized: true
+  user_admin:
+    enabled: true
+  # Enable GTFS+ module for testing purposes
+  gtfsplus:
+    enabled: true
+  gtfsapi:
+    enabled: true
+    load_on_fetch: false
+    # use_extension: mtc
+    # update_frequency: 30 # in seconds
+extensions:
+  # Enable MTC extension so MTC-specific feed merge tests
+  mtc:
+    enabled: true
+    rtd_api: http://localhost:9876/
+    s3_bucket: bucket-name
+    s3_prefix: waiting/
+    s3_download_prefix: waiting/
+  transitland:
+    enabled: true
+    api: https://transit.land/api/v1/feeds
+  transitfeeds:
+    enabled: true
+    api: http://api.transitfeeds.com/v1/getFeeds

@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.jobs;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.editor.utils.DirectoryZip;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.loader.Feed;
@@ -50,7 +51,7 @@ public class GisExportJob extends MonitorableJob {
     public ExportType exportType;
     public Collection<String> feedIds;
 
-    public GisExportJob(ExportType exportType, File file, Collection<String> feedIds, String owner) {
+    public GisExportJob(ExportType exportType, File file, Collection<String> feedIds, Auth0UserProfile owner) {
         super(
             owner,
             String.format("Export %s GIS for feed", exportType.toString().toLowerCase()),

@@ -8,6 +8,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.io.ByteStreams;
+import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.HaltException;
@@ -99,6 +100,16 @@ public class SparkUtils {
         logMessageAndHalt(request, statusCode, message, null);
     }
 
+    /** Utility method to parse generic object from Spark request body. */
+    public static <T> T getPOJOFromRequestBody(Request req, Class<T> clazz) throws IOException {
+        try {
+            return mapper.readValue(req.body(), clazz);
+        } catch (IOException e) {
+            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Error parsing JSON for " + clazz.getSimpleName(), e);
+            throw e;
+        }
+    }
+
     /**
      * Wrapper around Spark halt method that formats message as JSON using {@link SparkUtils#formatJSON}.
      * Extra logic occurs for when the status code is >= 500.  A Bugsnag report is created if
@@ -112,7 +123,7 @@ public class SparkUtils {
     ) throws HaltException {
         // Note that halting occurred, also print error stacktrace if applicable
         if (e != null) e.printStackTrace();
-        LOG.info("Halting with status code {}.  Error message: {}.", statusCode, message);
+        LOG.info("Halting with status code {}.  Error message: {}", statusCode, message);
 
         if (statusCode >= 500) {
             LOG.error(message);
@@ -122,7 +133,7 @@ public class SparkUtils {
             if (bugsnag != null && e != null) {
                 // create report to send to bugsnag
                 Report report = bugsnag.buildReport(e);
-                Auth0UserProfile userProfile = request.attribute("user");
+                Auth0UserProfile userProfile = request != null ? request.attribute("user") : null;
                 String userEmail = userProfile != null ? userProfile.getEmail() : "no-auth";
                 report.setUserEmail(userEmail);
                 bugsnag.notify(report);
@@ -218,11 +229,16 @@ public class SparkUtils {
         String bodyString,
         int statusCode
     ) {
+        // If request is null, log warning and exit. We do not want to hit an NPE in this method.
+        if (request == null) {
+            LOG.warn("Request object is null. Cannot log.");
+            return;
+        }
         Auth0UserProfile userProfile = request.attribute("user");
         String userEmail = userProfile != null ? userProfile.getEmail() : "no-auth";
         String queryString = request.queryParams().size() > 0 ? "?" + request.queryString() : "";
         LOG.info(
-            "{} {} {}: {}{}{}{}",
+            "{} {} {}: {}{}{} {}",
             logRequest ? "req" : String.format("res (%s)", statusCode),
             userEmail,
             request.requestMethod(),

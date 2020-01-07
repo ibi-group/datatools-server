@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.auth;
 
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -30,6 +31,46 @@ public class Auth0UserProfile {
         setEmail(email);
         setUser_id(user_id);
         setApp_metadata(new AppMetadata());
+    }
+
+    /**
+     * Utility method for creating a test admin (with application-admin permissions) user.
+     */
+    public static Auth0UserProfile createTestAdminUser() {
+        Auth0UserProfile.DatatoolsInfo adminDatatoolsInfo = new Auth0UserProfile.DatatoolsInfo();
+        adminDatatoolsInfo.setPermissions(
+            new Auth0UserProfile.Permission[]{
+                new Auth0UserProfile.Permission("administer-application", new String[]{})
+            }
+        );
+        adminDatatoolsInfo.setClientId(DataManager.getConfigPropertyAsText("AUTH0_CLIENT_ID"));
+
+        Auth0UserProfile.AppMetadata adminAppMetaData = new Auth0UserProfile.AppMetadata();
+        adminAppMetaData.setDatatoolsInfo(adminDatatoolsInfo);
+
+        Auth0UserProfile adminUser = new Auth0UserProfile("mock@example.com", "user_id:string");
+        adminUser.setApp_metadata(adminAppMetaData);
+        return adminUser;
+    }
+
+    /**
+     * Utility method for creating a system user (for autonomous server jobs).
+     */
+    public static Auth0UserProfile createSystemUser() {
+        Auth0UserProfile.DatatoolsInfo adminDatatoolsInfo = new Auth0UserProfile.DatatoolsInfo();
+        adminDatatoolsInfo.setPermissions(
+            new Auth0UserProfile.Permission[]{
+                new Auth0UserProfile.Permission("administer-application", new String[]{})
+            }
+        );
+        adminDatatoolsInfo.setClientId(DataManager.getConfigPropertyAsText("AUTH0_CLIENT_ID"));
+
+        Auth0UserProfile.AppMetadata adminAppMetaData = new Auth0UserProfile.AppMetadata();
+        adminAppMetaData.setDatatoolsInfo(adminDatatoolsInfo);
+
+        Auth0UserProfile adminUser = new Auth0UserProfile("system", "user_id:system");
+        adminUser.setApp_metadata(adminAppMetaData);
+        return adminUser;
     }
 
     public String getUser_id() {
@@ -326,6 +367,23 @@ public class Auth0UserProfile {
         return false;
     }
 
+    /** Check that user can administer project. Organization ID is drawn from persisted project. */
+    public boolean canAdministerProject(String projectId) {
+        if (canAdministerApplication()) return true;
+        com.conveyal.datatools.manager.models.Project p = Persistence.projects.getById(projectId);
+        if (p != null && canAdministerOrganization(p.organizationId)) return true;
+        for (Project project : app_metadata.getDatatoolsInfo().projects) {
+            if (project.project_id.equals(projectId)) {
+                for (Permission permission : project.permissions) {
+                    if (permission.type.equals("administer-project")) {
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
     public boolean canViewFeed(String organizationId, String projectID, String feedID) {
         if (canAdministerApplication() || canAdministerProject(projectID, organizationId)) {
             return true;
@@ -336,6 +394,11 @@ public class Auth0UserProfile {
             }
         }
         return false;
+    }
+
+    /** Check that user has manage feed or view feed permissions. */
+    public boolean canManageOrViewFeed(String organizationId, String projectID, String feedID) {
+        return canManageFeed(organizationId, projectID, feedID) || canViewFeed(organizationId, projectID, feedID);
     }
 
     public boolean canManageFeed(String organizationId, String projectID, String feedID) {

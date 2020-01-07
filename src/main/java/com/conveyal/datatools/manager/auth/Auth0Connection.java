@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.auth;
 
+import com.auth0.jwt.JWTExpiredException;
 import com.auth0.jwt.JWTVerifier;
 import com.auth0.jwt.pem.PemReader;
 import com.conveyal.datatools.manager.DataManager;
@@ -47,21 +48,7 @@ public class Auth0Connection {
         if (authDisabled() || inTestingEnvironment()) {
             // If in a development or testing environment, assign a mock profile of an admin user to the request
             // attribute and skip authentication.
-            Auth0UserProfile.DatatoolsInfo adminDatatoolsInfo = new Auth0UserProfile.DatatoolsInfo();
-            adminDatatoolsInfo.setPermissions(
-                new Auth0UserProfile.Permission[]{
-                    new Auth0UserProfile.Permission("administer-application", new String[]{})
-                }
-            );
-            adminDatatoolsInfo.setClientId(DataManager.getConfigPropertyAsText("AUTH0_CLIENT_ID"));
-
-            Auth0UserProfile.AppMetadata adminAppMetaData = new Auth0UserProfile.AppMetadata();
-            adminAppMetaData.setDatatoolsInfo(adminDatatoolsInfo);
-
-            Auth0UserProfile adminUser = new Auth0UserProfile("mock@example.com", "user_id:string");
-            adminUser.setApp_metadata(adminAppMetaData);
-
-            req.attribute("user", adminUser);
+            req.attribute("user", Auth0UserProfile.createTestAdminUser());
             return;
         }
         // Check that auth header is present and formatted correctly (Authorization: Bearer [token]).
@@ -90,6 +77,9 @@ public class Auth0Connection {
             // The user attribute is used on the server side to check user permissions and does not have all of the
             // fields that the raw Auth0 profile string does.
             req.attribute("user", profile);
+        } catch (JWTExpiredException e) {
+            LOG.warn("JWT token has expired for user.");
+            logMessageAndHalt(req, 401, "User's authentication token has expired. Please re-login.");
         } catch (Exception e) {
             LOG.warn("Login failed to verify with our authorization provider.", e);
             logMessageAndHalt(req, 401, "Could not verify user's token");

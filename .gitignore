@@ -16,6 +16,7 @@ deploy/
 # Configurations
 configurations/*
 !configurations/default
+!configurations/test
 
 # Secret config files
 .env

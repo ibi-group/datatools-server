@@ -2,7 +2,6 @@ dist: trusty # jdk 8 not available on xenial
 language: java
 java:
   - oraclejdk8
-install: true
 sudo: false
 # Install mongoDB to perform persistence tests
 services:
@@ -14,24 +13,49 @@ cache:
   directories:
     - $HOME/.m2
     - $HOME/.cache/yarn
+before_install:
+  #- sed -i.bak -e 's|https://nexus.codehaus.org/snapshots/|https://oss.sonatype.org/content/repositories/codehaus-snapshots/|g' ~/.m2/settings.xml
+  # run a script to see if the e2e tests should be ran. This script will set the environment variable SHOULD_RUN_E2E
+  # which is used in later travis commands.
+  # FIXME: E2E is disabled because it has broken for months. PR to fix e2e should uncomment this line.
+  # - source ./scripts/check-if-e2e-tests-should-run-on-travis.sh
+  # set region in AWS config for S3 setup
+  # - mkdir ~/.aws && printf '%s\n' '[default]' 'aws_access_key_id=foo' 'aws_secret_access_key=bar' 'region=us-east-1' > ~/.aws/config
+  # add aws credentials for datatools-server
+  - if [ "$SHOULD_RUN_E2E" = "true" ]; then mkdir ~/.aws && printf '%s\n' '[default]' 'aws_access_key_id=${AWS_ACCESS_KEY_ID}' 'aws_secret_access_key=${AWS_SECRET_ACCESS_KEY}' 'region=us-east-1' > ~/.aws/config; else mkdir ~/.aws && printf '%s\n' '[default]' 'aws_access_key_id=foo' 'aws_secret_access_key=bar' 'region=us-east-1' > ~/.aws/config; fi
+  - cp configurations/default/server.yml.tmp configurations/default/server.yml
+  # create database for e2e (and unit) tests
+  - psql -U postgres -c 'CREATE DATABASE catalogue;'
+  # install node v12 here in order to run the e2e tests (and for maven-semantic-release).
+  - nvm install '12'
+# Skip the install step (mvn install).
+install: true
 # Install semantic-release
 before_script:
   - yarn global add @conveyal/maven-semantic-release semantic-release@15
   # Create dir for GTFS+ files (used during testing)
   - mkdir /tmp/gtfsplus
-before_install:
-#- sed -i.bak -e 's|https://nexus.codehaus.org/snapshots/|https://oss.sonatype.org/content/repositories/codehaus-snapshots/|g' ~/.m2/settings.xml
-# set region in AWS config for S3 setup
-- mkdir ~/.aws && printf '%s\n' '[default]' 'aws_access_key_id=foo' 'aws_secret_access_key=bar' 'region=us-east-1' > ~/.aws/config
-- cp configurations/default/server.yml.tmp configurations/default/server.yml
-# create database for tests
-- psql -U postgres -c 'CREATE DATABASE catalogue;'
 script:
-# package jar
-- mvn package
+  # run mvn package to make sure unit tests and packaging can work
+  - mvn package
+  # Restart/clear MongoDB so that E2E tests run on clean DB.
+  - ./scripts/restart-mongo-with-fresh-db.sh
+  # recursively copy coverage results into another folder so the e2e tests don't overwrite them
+  - cp -R target target-unit-test-results
+  # run just the e2e tests
+  - if [ "$SHOULD_RUN_E2E" = "true" ]; then RUN_E2E=true mvn test; fi
+  # recursively copy coverage results into another folder so the deployment results don't overwrite them
+  - if [ "$SHOULD_RUN_E2E" = "true" ]; then cp -R target target-e2e-test-results; fi
 after_success:
-  # this first codecov run will upload a report associated with the commit set through Travis CI environment variables
-  - bash <(curl -s https://codecov.io/bash)
+  # these first codecov runs will upload a report associated with the commit set through Travis CI environment variables
+  # use codecov script flags to upload the coverage report for the unit tests
+  - bash <(curl -s https://codecov.io/bash) -s target-unit-test-results -F unit_tests
+  # use codecov script flags to upload the coverage report for the e2e tests
+  - |
+    if [ "$SHOULD_RUN_E2E" = "true" ]; then
+      bash <(curl -s https://codecov.io/bash) -s target-e2e-test-results -F end_to_end_tests;
+    fi
+
   # run maven-semantic-release to potentially create a new release of datatools-server. The flag --skip-maven-deploy is
   # used to avoid deploying to maven central. So essentially, this just creates a release with a changelog on github.
   #
@@ -40,37 +64,38 @@ after_success:
   # initiated the Travis build, the report will not be associated with the commits that maven-semantic-release performed
   # (if it ended up creating a release and the two commits that were a part of that workflow). Therefore, if on master
   # codecov needs to be ran two more times to create codecov reports for the commits made by maven-semantic-release.
-  # See https://github.com/conveyal/gtfs-lib/issues/193.
+  # See https://github.com/conveyal/gtfs-lib/issues/193. In order to create reports for both the unit and e2e tsts,
+  # the codecov scripts must be ran twice.
   #
   # The git commands get the commit hash of the HEAD commit and the commit just before HEAD.
   - |
     semantic-release --prepare @conveyal/maven-semantic-release --publish @semantic-release/github,@conveyal/maven-semantic-release --verify-conditions @semantic-release/github,@conveyal/maven-semantic-release --verify-release @conveyal/maven-semantic-release --use-conveyal-workflow --dev-branch=dev --skip-maven-deploy
     if [[ "$TRAVIS_BRANCH" = "master" ]]; then
-      bash <(curl -s https://codecov.io/bash) -C "$(git rev-parse HEAD)"
-      bash <(curl -s https://codecov.io/bash) -C "$(git rev-parse HEAD^)"
+      bash <(curl -s https://codecov.io/bash) -C "$(git rev-parse HEAD)" -s target-unit-test-results -F unit_tests
+      bash <(curl -s https://codecov.io/bash) -C "$(git rev-parse HEAD^)" -s target-unit-test-results -F unit_tests
+      if [ "$SHOULD_RUN_E2E" = "true" ]; then
+        bash <(curl -s https://codecov.io/bash) -C "$(git rev-parse HEAD)" -s target-e2e-test-results -F end_to_end_tests;
+        bash <(curl -s https://codecov.io/bash) -C "$(git rev-parse HEAD^)" -s target-e2e-test-results -F end_to_end_tests;
+      fi
     fi
-notifications:
-  # notify slack channel of build status
-  slack: conveyal:WQxmWiu8PdmujwLw4ziW72Gc
 before_deploy:
 # get branch name of current branch for use in jar name: https://graysonkoonce.com/getting-the-current-branch-name-during-a-pull-request-in-travis-ci/
 - export BRANCH=$(if [ "$TRAVIS_PULL_REQUEST" == "false" ]; then echo $TRAVIS_BRANCH; else echo $TRAVIS_PULL_REQUEST_BRANCH; fi)
-# Create directory that will contain artifacts to deploy to s3.
+  # Replace forward slashes with underscores in branch name.
+- export BRANCH_CLEAN=${BRANCH//\//_}
+  # Create directory that will contain artifacts to deploy to s3.
 - mkdir deploy
-# Display contents of target directory (for logging purposes only).
+  # Display contents of target directory (for logging purposes only).
 - ls target/*.jar
-# Copy packaged jars over to deploy dir.
+  # Copy packaged jar over to deploy dir.
 - cp target/dt-*.jar deploy/
-# FIXME: Do not create a branch-specific jar for now. Having a jar that changes contents but keeps the same name
-#   may cause confusion down the road and may be undesirable.
-# - cp "target/dt-$(git describe --always).jar" "deploy/dt-latest-${BRANCH}.jar"
+- cp target/dt-*.jar "deploy/dt-latest-BRANCH_CLEAN.jar"
 deploy:
   provider: s3
   skip_cleanup: true
-  access_key_id: AKIAIWMAQP5YXWT7OZEA
+  access_key_id: AKIA2YG5XQ2YEJZCBR7J
   secret_access_key:
-    secure: cDfIv+/+YimqsH8NvWQZy9YTqaplOwlIeEK+KEBCfsJ3DJK5sa6U4BMZCA4OMP1oTEaIxkd4Rcvj0OAYSFQVNQHtwc+1WeHobzu+MWajMNwmJYdjIvCqMFg2lgJdzCWv6vWcitNvrsYpuXxJlQOirY/4GjEh2gueHlilEdJEItBGYebQL0/5lg9704oeO9v+tIEVivtNc76K5DoxbAa1nW5wCYD7yMQ/cc9EQiMgR5PXNEVJS4hO7dfdDwk2ulGfpwTDrcSaR9JsHyoXj72kJHC9wocS9PLeeYzNAw6ctIymNIjotUf/QUeMlheBbLfTq6DKQ0ISLcD9YYOwviUMEGmnte+HCvTPTtxNbjBWPGa2HMkKsGjTptWu1RtqRJTLy19EN1WG5znO9M+lNGBjLivxHZA/3w7jyfvEU3wvQlzo59ytNMwOEJ3zvSm6r3/QmOr5BU+UHsqy5vv2lOQ9Nv10Uag11zDP1YWCoD96jvjZJsUZtW80ZweHYpDMq0vKdZwZSlbrhgHzS7vlDW7llZPUntz0SfKCjtddbRdy6T4HgsmA8EsBATfisWpmFA6roQSnYwfEZ5ooJ8IMjfOm1qGphrP1Qv8kYkqdtOyTijYErqJ3YzldjeItqaWtyD5tmHm6Wmq6XIbw4bnSfGRx9di+cG5lDEPe1tfBPCf9O5M=
-  # upload jars in deploy dir to bucket
+    secure: eLu2cZaG2stcSJe4ZLKq+q7FaQa1fKcPsbxeMl2fda3lcLBUN+6OoFH5dJzz/M5I2GFn/NOAt5wPmljOZf4ni01dqDimdI6qyVLyWbeOFcl6kbawVRcVpHByUiqkrj3vZ3VzGVkfud3OPdLE264xEMax/YBTK/lUA1n4X1EKW7JijaCy5RtBrej4jGXH4XnP5aJrNtsDieLkpnTcq6wfQ0CfcNvcTwz2/XvUD5Li7AJo7/r7ueyA4GUQBqinkAHIoqCv94Tx+NPhcUTywdIGaUmDYR5/uiHubFFyV5dffpkmxYStXS+VU9aJYQuF6w8YmU+RvD86dVSDw0w3eSUsM72hgfANe5Dq0XsCcLEeq+e9U8Xsb3cWcC6dYLwT2lTbufRSDhj1C/NNFZFoXW7hEMujbyKpFYulccoZ7zxHHnD76BZarvRSRofzMQSITuyghlRvbDyAehK8x8qf5MKvXJ52DSlxOkgfN3K45jMtCndpRXPeGh2rwwt5vGpC3Mdsapmxwd3D7YHrIgZtRr+DmmmMIm76UdJTmzozYm6JA8ocldYsnnHkEYu8Ailb+R06BF1+p7DdW8NiG8+hsaXGnKYI8wo6cCibY6KPMRKffFTLQGmitqIGhGUk79xhtTiGax1bDZgb/iHwE6lSr85lSHqjALLDLjWkxOYb+GIj1Qo=
   bucket: datatools-builds
   local-dir: deploy
   acl: public_read

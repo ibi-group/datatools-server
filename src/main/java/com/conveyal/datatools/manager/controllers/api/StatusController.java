@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.utils.RequestSummary;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.JsonViews;
@@ -14,28 +15,46 @@ import spark.Response;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
+import static spark.Spark.delete;
 import static spark.Spark.get;
 
 /**
  * Created by landon on 6/13/16.
  */
 public class StatusController {
-    public static final Logger LOG = LoggerFactory.getLogger(ProjectController.class);
+    private static final Logger LOG = LoggerFactory.getLogger(ProjectController.class);
 
-    public static JsonManager<MonitorableJob.Status> json =
-            new JsonManager<>(MonitorableJob.Status.class, JsonViews.UserInterface.class);
+    private static JsonManager<MonitorableJob.Status> json =
+        new JsonManager<>(MonitorableJob.Status.class, JsonViews.UserInterface.class);
 
-    // TODO: Admin API route to return active jobs for all application users.
+    /**
+     * Admin API route to return active jobs for all application users.
+     */
     private static Set<MonitorableJob> getAllJobsRoute(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         if (!userProfile.canAdministerApplication()) {
             logMessageAndHalt(req, 401, "User not authorized to view all jobs");
         }
         return getAllJobs();
+    }
+
+    /**
+     * Admin API route to return latest requests made to applications.
+     */
+    private static List<RequestSummary> getAllRequestsRoute(Request req, Response res) {
+        Auth0UserProfile userProfile = req.attribute("user");
+        if (!userProfile.canAdministerApplication()) {
+            logMessageAndHalt(req, 401, "User not authorized to view all requests");
+        }
+        return DataManager.lastRequestForUser.values().stream()
+            .sorted(Comparator.comparingLong(RequestSummary::getTime).reversed())
+            .collect(Collectors.toList());
     }
 
     public static Set<MonitorableJob> getAllJobs() {
@@ -53,6 +72,26 @@ public class StatusController {
         // FIXME: refactor underscore in user_id methods
         String userId = userProfile.getUser_id();
         return getJobById(userId, jobId, true);
+    }
+
+    /**
+     * API route that cancels a single job by ID.
+     */
+    // TODO Add ability to cancel job. This requires some changes to how these jobs are executed. It appears that
+    //  only scheduled jobs can be canceled.
+//    private static MonitorableJob cancelJob(Request req, Response res) {
+//        String jobId = req.params("jobId");
+//        Auth0UserProfile userProfile = req.attribute("user");
+//        // FIXME: refactor underscore in user_id methods
+//        String userId = userProfile.getUser_id();
+//        MonitorableJob job = getJobById(userId, jobId, true);
+//        return job;
+//    }
+
+    /** Shorthand method for getting a single job by job ID. */
+    public static MonitorableJob getJobByJobId(String jobId) {
+        for (MonitorableJob job : getAllJobs()) if (job.jobId.equals(jobId)) return job;
+        return null;
     }
 
     /**
@@ -89,21 +128,28 @@ public class StatusController {
         return getJobsByUserId(userId, true);
     }
 
-    public static Set<MonitorableJob> filterJobsByType (MonitorableJob.JobType ...jobType) {
-        return getAllJobs().stream()
-                .filter(job -> Arrays.asList(jobType).contains(job.type))
-                .collect(Collectors.toSet());
+    /**
+     * Convenience wrapper method to retrieve all jobs for {@link Auth0UserProfile}.
+     */
+    public static Set<MonitorableJob> getJobsForUser(Auth0UserProfile user) {
+        if (user == null) {
+            LOG.warn("Null user passed to getJobsForUser!");
+            return Sets.newConcurrentHashSet();
+        }
+        return getJobsByUserId(user.getUser_id(), false);
     }
 
     /**
-     * Get set of active jobs by user ID.
+     * Get set of active jobs by user ID. If there are no active jobs, return a new set.
+     *
+     * NOTE: this should be a concurrent hash set so that it is threadsafe.
      *
      * @param clearCompleted if true, remove all completed and errored jobs for this user.
      */
     private static Set<MonitorableJob> getJobsByUserId(String userId, boolean clearCompleted) {
         Set<MonitorableJob> allJobsForUser = DataManager.userJobsMap.get(userId);
         if (allJobsForUser == null) {
-            return Collections.EMPTY_SET;
+            return Sets.newConcurrentHashSet();
         }
         if (clearCompleted) {
             // Any active jobs will still have their status updated, so they need to be retrieved again with any status
@@ -127,10 +173,13 @@ public class StatusController {
 
     public static void register (String apiPrefix) {
 
+        get(apiPrefix + "secure/status/requests", StatusController::getAllRequestsRoute, json::write);
         // These endpoints return all jobs for the current user, all application jobs, or a specific job
         get(apiPrefix + "secure/status/jobs", StatusController::getUserJobsRoute, json::write);
         // FIXME Change endpoint for all jobs (to avoid overlap with jobId param)?
         get(apiPrefix + "secure/status/jobs/all", StatusController::getAllJobsRoute, json::write);
         get(apiPrefix + "secure/status/jobs/:jobId", StatusController::getOneJobRoute, json::write);
+        // TODO Add ability to cancel job
+//        delete(apiPrefix + "secure/status/jobs/:jobId", StatusController::cancelJob, json::write);
     }
 }

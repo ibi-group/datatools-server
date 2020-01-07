@@ -2,6 +2,7 @@ package com.conveyal.datatools.editor.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Snapshot;
 import com.conveyal.datatools.manager.persistence.FeedStore;
@@ -21,13 +22,13 @@ public class ExportSnapshotToGTFSJob extends MonitorableJob {
     private final Snapshot snapshot;
     private final String feedVersionId;
 
-    public ExportSnapshotToGTFSJob(String owner, Snapshot snapshot, String feedVersionId) {
+    public ExportSnapshotToGTFSJob(Auth0UserProfile owner, Snapshot snapshot, String feedVersionId) {
         super(owner, "Exporting snapshot " + snapshot.name, JobType.EXPORT_SNAPSHOT_TO_GTFS);
         this.snapshot = snapshot;
         this.feedVersionId = feedVersionId;
     }
 
-    public ExportSnapshotToGTFSJob(String owner, Snapshot snapshot) {
+    public ExportSnapshotToGTFSJob(Auth0UserProfile owner, Snapshot snapshot) {
         this(owner, snapshot, null);
     }
 

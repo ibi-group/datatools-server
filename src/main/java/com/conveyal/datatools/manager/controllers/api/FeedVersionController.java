@@ -35,7 +35,7 @@ import java.util.List;
 import java.util.HashSet;
 import java.util.Set;
 
-import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
+import static com.conveyal.datatools.common.utils.AWSUtils.downloadFromS3;
 import static com.conveyal.datatools.common.utils.SparkUtils.copyRequestStreamIntoFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
@@ -50,8 +50,8 @@ import static spark.Spark.put;
 
 public class FeedVersionController  {
 
-    public static final Logger LOG = LoggerFactory.getLogger(FeedVersionController.class);
-    public static JsonManager<FeedVersion> json = new JsonManager<>(FeedVersion.class, JsonViews.UserInterface.class);
+    private static final Logger LOG = LoggerFactory.getLogger(FeedVersionController.class);
+    private static JsonManager<FeedVersion> json = new JsonManager<>(FeedVersion.class, JsonViews.UserInterface.class);
 
     /**
      * Grab the feed version for the ID supplied in the request.
@@ -93,7 +93,7 @@ public class FeedVersionController  {
      *
      * @return the job ID that allows monitoring progress of the load process
      */
-    public static String createFeedVersionViaUpload(Request req, Response res) {
+    private static String createFeedVersionViaUpload(Request req, Response res) {
 
         Auth0UserProfile userProfile = req.attribute("user");
         FeedSource feedSource = requestFeedSourceById(req, Actions.MANAGE);
@@ -138,7 +138,7 @@ public class FeedVersionController  {
         // TODO newFeedVersion.fileTimestamp still exists
 
         // Must be handled by executor because it takes a long time.
-        ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(newFeedVersion, userProfile.getUser_id(), true);
+        ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(newFeedVersion, userProfile, true);
         DataManager.heavyExecutor.execute(processSingleFeedJob);
 
         return formatJobMessage(processSingleFeedJob.jobId, "Feed version is processing.");
@@ -165,7 +165,7 @@ public class FeedVersionController  {
         }
         FeedVersion feedVersion = new FeedVersion(feedSource);
         CreateFeedVersionFromSnapshotJob createFromSnapshotJob =
-                new CreateFeedVersionFromSnapshotJob(feedVersion, snapshot, userProfile.getUser_id());
+            new CreateFeedVersionFromSnapshotJob(feedVersion, snapshot, userProfile);
         DataManager.heavyExecutor.execute(createFromSnapshotJob);
 
         return true;
@@ -188,6 +188,7 @@ public class FeedVersionController  {
         FeedVersion version = Persistence.feedVersions.getById(feedVersionId);
         if (version == null) {
             logMessageAndHalt(req, 404, "Feed version ID does not exist");
+            return null;
         }
         // Performs permissions checks on the feed source this feed version belongs to, and halts if permission is denied.
         checkFeedSourcePermissions(req, version.parentFeedSource(), action);
@@ -281,12 +282,8 @@ public class FeedVersionController  {
         List<String> feedIds = Arrays.asList(req.queryParams("feedId").split(","));
         File temp = File.createTempFile("gis_" + type, ".zip");
         // Create and run shapefile export.
-        GisExportJob gisExportJob = new GisExportJob(
-            GisExportJob.ExportType.valueOf(type),
-            temp,
-            feedIds,
-            userProfile.getUser_id()
-        );
+        GisExportJob.ExportType exportType = GisExportJob.ExportType.valueOf(type);
+        GisExportJob gisExportJob = new GisExportJob(exportType, temp, feedIds, userProfile);
         DataManager.heavyExecutor.execute(gisExportJob);
         // Do not use S3 to store the file, which should only be stored ephemerally (until requesting
         // user has downloaded file).
@@ -360,7 +357,7 @@ public class FeedVersionController  {
         }
         // Kick off merge feeds job.
         Auth0UserProfile userProfile = req.attribute("user");
-        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(userProfile.getUser_id(), versions, "merged", mergeType);
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(userProfile, versions, "merged", mergeType);
         DataManager.heavyExecutor.execute(mergeFeedsJob);
         return SparkUtils.formatJobMessage(mergeFeedsJob.jobId, "Merging feed versions...");
     }
