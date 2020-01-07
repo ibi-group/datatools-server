@@ -342,6 +342,14 @@ public class MergeFeedsJob extends MonitorableJob {
             // Get shared fields between all feeds being merged. This is used to filter the spec fields so that only
             // fields found in the collection of feeds are included in the merged table.
             Set<Field> sharedFields = getSharedFields(feedsToMerge, table);
+            // Initialize future feed's first date to the first calendar date from the validation result.
+            // This is equivalent to either the earliest date of service defined for a calendar_date record or the
+            // earliest start_date value for a calendars.txt record. For MTC, however, they require that GTFS
+            // providers use calendars.txt entries and prefer that this value (which is used to determine cutoff
+            // dates for the active feed when merging with the future) be strictly assigned the earliest
+            // calendar#start_date (unless that table for some reason does not exist).
+            LocalDate futureFeedFirstDate = feedsToMerge.get(0).version.validationResult.firstCalendarDate;
+            LocalDate futureFirstCalendarStartDate = LocalDate.MAX;
             // Iterate over each zip file.
             for (int feedIndex = 0; feedIndex < feedsToMerge.size(); feedIndex++) {
                 boolean keyFieldMissing = false;
@@ -368,14 +376,6 @@ public class MergeFeedsJob extends MonitorableJob {
                 Field[] fieldsFoundInZip =
                     table.getFieldsFromFieldHeaders(csvReader.getHeaders(), null);
                 List<Field> fieldsFoundList = Arrays.asList(fieldsFoundInZip);
-                // Initialize future feed's first date to the first calendar date from the validation result.
-                // This is equivalent to either the earliest date of service defined for a calendar_date record or the
-                // earliest start_date value for a calendars.txt record. For MTC, however, they require that GTFS
-                // providers use calendars.txt entries and prefer that this value (which is used to determine cutoff
-                // dates for the active feed when merging with the future) be strictly assigned the earliest
-                // calendar#start_date (unless that table for some reason does not exist).
-                LocalDate futureFeedFirstDate = feedsToMerge.get(0).version.validationResult.firstCalendarDate;
-                LocalDate futureFirstCalendarStartDate = LocalDate.MAX;
                 // Determine the index of the key field for this version's table.
                 int keyFieldIndex = getFieldIndex(fieldsFoundInZip, keyField);
                 if (keyFieldIndex == -1) {
