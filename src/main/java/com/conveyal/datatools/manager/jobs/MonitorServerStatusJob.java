@@ -68,7 +68,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
         this.graphAlreadyBuilt = graphAlreadyBuilt;
         status.message = "Checking server status...";
         startTime = System.currentTimeMillis();
-        credentials = AWSUtils.getCredentialsForRole(otpServer.role, "Monitor " + instance.getInstanceId());
+        credentials = AWSUtils.getCredentialsForRole(otpServer.role, "monitor-" + instance.getInstanceId());
         ec2 = AWSUtils.getEC2ClientForCredentials(credentials);
     }
 

@@ -247,7 +247,7 @@ public class ServerController {
         AmazonS3 s3Client = FeedStore.s3Client;
         try {
             // Construct credentials if role is provided.
-            AWSStaticCredentialsProvider credentials = AWSUtils.getCredentialsForRole(server.role, "test");
+            AWSStaticCredentialsProvider credentials = AWSUtils.getCredentialsForRole(server.role, "validate");
             // If alternative credentials exist, override the default AWS clients.
             if (credentials != null) {
                 ec2Client = AmazonEC2Client.builder().withCredentials(credentials).build();
@@ -452,8 +452,8 @@ public class ServerController {
         // If alternative credentials exist, use them to assume the role. Otherwise, use default ELB client.
         AmazonElasticLoadBalancing elbClient = credentials != null
             ? AmazonElasticLoadBalancingClient.builder()
-            .withCredentials(credentials)
-            .build()
+                .withCredentials(credentials)
+                .build()
             : elb;
         try {
             DescribeTargetGroupsRequest targetGroupsRequest = new DescribeTargetGroupsRequest()

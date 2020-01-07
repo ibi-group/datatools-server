@@ -125,15 +125,19 @@ public class AWSUtils {
     }
 
     /**
-     * Create credentials for a new session for the provided IAM role. The primary AWS account for the Data Tools
-     * application must be able to assume this role (e.g., through delegating access via an account IAM role
+     * Create credentials for a new session for the provided IAM role and session name. The primary AWS account for the
+     * Data Tools application must be able to assume this role (e.g., through delegating access via an account IAM role
      * https://docs.aws.amazon.com/IAM/latest/UserGuide/tutorial_cross-account-with-roles.html). The credentials can be
      * then used for creating a temporary S3 or EC2 client.
      */
     public static AWSStaticCredentialsProvider getCredentialsForRole(String role, String sessionName) {
+        String roleSessionName = "data-tools-session";
         if (role == null) return null;
-        STSAssumeRoleSessionCredentialsProvider.Builder builder = new STSAssumeRoleSessionCredentialsProvider.Builder(role, "test");
-        STSAssumeRoleSessionCredentialsProvider sessionProvider = builder.build();
+        if (sessionName != null) roleSessionName = String.join("-", roleSessionName, sessionName);
+        STSAssumeRoleSessionCredentialsProvider sessionProvider = new STSAssumeRoleSessionCredentialsProvider.Builder(
+            role,
+            roleSessionName
+        ).build();
         AWSSessionCredentials credentials = sessionProvider.getCredentials();
         return new AWSStaticCredentialsProvider(new BasicSessionCredentials(
             credentials.getAWSAccessKeyId(), credentials.getAWSSecretKey(),
@@ -145,8 +149,8 @@ public class AWSUtils {
      * will be used.
      */
     public static AmazonEC2 getEC2ClientForRole (String role) {
-        AWSStaticCredentialsProvider credentials = getCredentialsForRole(role, "ec2 client");
-        return AmazonEC2Client.builder().withCredentials(credentials).build();
+        AWSStaticCredentialsProvider credentials = getCredentialsForRole(role, "ec2-client");
+        return getEC2ClientForCredentials(credentials);
     }
 
     /**
@@ -172,7 +176,7 @@ public class AWSUtils {
      * will be used. Similarly, if the region is null, it will be omitted while building the S3 client.
      */
     public static AmazonS3 getS3ClientForRole(String role, String region) {
-        AWSStaticCredentialsProvider credentials = getCredentialsForRole(role, "s3 client");
+        AWSStaticCredentialsProvider credentials = getCredentialsForRole(role, "s3-client");
         return getS3ClientForCredentials(credentials, region);
     }
 

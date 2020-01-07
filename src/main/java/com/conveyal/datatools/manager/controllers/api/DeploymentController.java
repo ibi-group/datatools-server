@@ -355,7 +355,7 @@ public class DeploymentController {
             latest = deployment.latest();
             targetGroupArn = latest.ec2Info.targetGroupArn;
             // Also, get credentials for role (if exists), which are needed to terminate instances in external AWS account.
-            credentials = AWSUtils.getCredentialsForRole(latest.role, "deregister and terminate instances");
+            credentials = AWSUtils.getCredentialsForRole(latest.role, "deregister-instances");
         } catch (Exception e) {
             logMessageAndHalt(req, 400, "Latest deploy job does not exist or is missing target group ARN.");
             return false;
