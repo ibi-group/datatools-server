@@ -1,24 +1,18 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.amazonaws.AmazonClientException;
+import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.event.ProgressListener;
 import com.amazonaws.services.ec2.AmazonEC2;
-import com.amazonaws.services.ec2.AmazonEC2Client;
-import com.amazonaws.services.ec2.model.AmazonEC2Exception;
 import com.amazonaws.services.ec2.model.CreateTagsRequest;
 import com.amazonaws.services.ec2.model.DescribeInstanceStatusRequest;
-import com.amazonaws.services.ec2.model.DescribeInstancesRequest;
 import com.amazonaws.services.ec2.model.Filter;
 import com.amazonaws.services.ec2.model.IamInstanceProfileSpecification;
 import com.amazonaws.services.ec2.model.Instance;
 import com.amazonaws.services.ec2.model.InstanceNetworkInterfaceSpecification;
-import com.amazonaws.services.ec2.model.Reservation;
 import com.amazonaws.services.ec2.model.RunInstancesRequest;
 import com.amazonaws.services.ec2.model.Tag;
-import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancing;
-import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClient;
-import com.amazonaws.services.elasticloadbalancingv2.model.DeregisterTargetsRequest;
-import com.amazonaws.services.elasticloadbalancingv2.model.TargetDescription;
+import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3URI;
 import com.amazonaws.services.s3.model.CopyObjectRequest;
 import com.amazonaws.services.s3.transfer.TransferManager;
@@ -42,10 +36,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Map;
 import java.util.Scanner;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
@@ -56,6 +48,7 @@ import java.util.stream.Collectors;
 import com.amazonaws.waiters.Waiter;
 import com.amazonaws.waiters.WaiterParameters;
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.utils.AWSUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.controllers.api.DeploymentController;
@@ -64,7 +57,6 @@ import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.EC2Info;
 import com.conveyal.datatools.manager.models.EC2InstanceSummary;
 import com.conveyal.datatools.manager.models.OtpServer;
-import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.StringUtils;
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -111,10 +103,12 @@ public class DeployJob extends MonitorableJob {
     private final String s3Bucket;
     private final int targetCount;
     private final DeployType deployType;
+    private final AWSStaticCredentialsProvider credentials;
     private int tasksCompleted = 0;
     private int totalTasks;
 
     private AmazonEC2 ec2;
+    private AmazonS3 s3Client;
     private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss z");
 
     /** The deployment to deploy */
@@ -190,9 +184,12 @@ public class DeployJob extends MonitorableJob {
             // deployment using either a specified bundle or Graph.obj.
             setJobRelativePath(bundlePath);
         }
-        // CONNECT TO EC2
+        // CONNECT TO EC2/S3
         // FIXME Should this ec2 client be longlived?
-        ec2 = AmazonEC2Client.builder().build();
+        credentials = AWSUtils.getCredentialsForRole(otpServer.role, this.jobId);
+        ec2 = AWSUtils.getEC2ClientForCredentials(credentials);
+        s3Client = AWSUtils.getS3ClientForCredentials(credentials, null);
+
     }
 
     public void jobLogic () {
@@ -283,7 +280,7 @@ public class DeployJob extends MonitorableJob {
         status.message = "Uploading bundle to " + getS3BundleURI();
         status.uploadingS3 = true;
         LOG.info("Uploading deployment {} to {}", deployment.name, uri.toString());
-        TransferManager tx = TransferManagerBuilder.standard().withS3Client(FeedStore.s3Client).build();
+        TransferManager tx = TransferManagerBuilder.standard().withS3Client(s3Client).build();
         final Upload upload = tx.upload(bucket, uri.getKey(), deploymentTempFile);
 
         upload.addProgressListener(
@@ -300,7 +297,7 @@ public class DeployJob extends MonitorableJob {
         // copy to [name]-latest.zip
         String copyKey = getLatestS3BundleKey();
         CopyObjectRequest copyObjRequest = new CopyObjectRequest(bucket, uri.getKey(), uri.getBucket(), copyKey);
-        FeedStore.s3Client.copyObject(copyObjRequest);
+        s3Client.copyObject(copyObjRequest);
         LOG.info("Copied to s3://{}/{}", bucket, copyKey);
         LOG.info("Uploaded to {}", getS3BundleURI());
         status.update("Upload to S3 complete.", status.percentComplete + 10);
@@ -477,7 +474,7 @@ public class DeployJob extends MonitorableJob {
             LOG.info("Updating deployment target and deploy time.");
             deployment.deployedTo = otpServer.id;
             long durationMinutes = TimeUnit.MILLISECONDS.toMinutes(status.duration);
-            message = String.format("Deployment %s successfully deployed to %s in %s minutes.", deployment.name, otpServer.publicUrl, durationMinutes);
+            message = String.format("%s successfully deployed %s to %s in %s minutes.", owner.getEmail(), deployment.name, otpServer.publicUrl, durationMinutes);
         } else {
             message = String.format("WARNING: Deployment %s failed to deploy to %s. Error: %s", deployment.name, otpServer.publicUrl, status.message);
         }
@@ -506,7 +503,7 @@ public class DeployJob extends MonitorableJob {
                  instances.addAll(startEC2Instances(1, false));
                 // Exit if an error was encountered.
                 if (status.error || instances.size() == 0) {
-                    ServerController.terminateInstances(instances);
+                    ServerController.terminateInstances(ec2, instances);
                     return;
                 }
                 status.message = "Waiting for graph build to complete...";
@@ -529,7 +526,7 @@ public class DeployJob extends MonitorableJob {
                     statusMessage = "Error encountered while building graph. Inspect build logs.";
                     LOG.error(statusMessage);
                     status.fail(statusMessage);
-                    ServerController.terminateInstances(instances);
+                    ServerController.terminateInstances(ec2, instances);
                     return;
                 }
             }
@@ -542,7 +539,7 @@ public class DeployJob extends MonitorableJob {
                 status.message = String.format("Spinning up remaining %d instance(s).", status.numServersRemaining);
                 remainingInstances.addAll(startEC2Instances(status.numServersRemaining, true));
                 if (remainingInstances.size() == 0 || status.error) {
-                    ServerController.terminateInstances(remainingInstances);
+                    ServerController.terminateInstances(ec2, remainingInstances);
                     return;
                 }
                 // Create new thread pool to monitor server setup so that the servers are monitored in parallel.
@@ -564,7 +561,7 @@ public class DeployJob extends MonitorableJob {
                     String id = job.getInstanceId();
                     LOG.warn("Error encountered while monitoring server {}. Terminating.", id);
                     remainingInstances.removeIf(instance -> instance.getInstanceId().equals(id));
-                    ServerController.terminateInstances(id);
+                    ServerController.terminateInstances(ec2, id);
                 }
             }
             // Add all servers that did not encounter issues to list for registration with ELB.
@@ -577,7 +574,11 @@ public class DeployJob extends MonitorableJob {
                     .map(instance -> instance.instanceId)
                     .collect(Collectors.toList());
                 if (previousInstanceIds.size() > 0) {
-                    boolean success = ServerController.deRegisterAndTerminateInstances(otpServer.ec2Info.targetGroupArn, previousInstanceIds);
+                    boolean success = ServerController.deRegisterAndTerminateInstances(
+                        credentials,
+                        otpServer.ec2Info.targetGroupArn,
+                        previousInstanceIds
+                    );
                     // If there was a problem during de-registration/termination, notify via status message.
                     if (!success) {
                         finalMessage = String.format("Server setup is complete! (WARNING: Could not terminate previous EC2 instances: %s", previousInstanceIds);
@@ -625,7 +626,7 @@ public class DeployJob extends MonitorableJob {
         if (amiId == null) {
             amiId = DEFAULT_AMI_ID;
             // Verify that AMI is correctly defined.
-            if (amiId == null || !ServerController.amiExists(amiId)) {
+            if (amiId == null || !ServerController.amiExists(amiId, ec2)) {
                 statusMessage = String.format(
                     "Default AMI ID (%s) is missing or bad. Should be provided in config at %s",
                     amiId,
@@ -692,7 +693,7 @@ public class DeployJob extends MonitorableJob {
         while (instanceIpAddresses.size() < instances.size()) {
             LOG.info("Checking that public IP addresses have initialized for EC2 instances.");
             // Check that all of the instances have public IPs.
-            List<Instance> instancesWithIps = DeploymentController.fetchEC2Instances(instanceIdFilter);
+            List<Instance> instancesWithIps = DeploymentController.fetchEC2Instances(ec2, instanceIdFilter);
             for (Instance instance : instancesWithIps) {
                 String publicIp = instance.getPublicIpAddress();
                 // If IP has been found, store the updated instance and IP.
@@ -936,6 +937,7 @@ public class DeployJob extends MonitorableJob {
         public String buildArtifactsFolder;
         public String otpVersion;
         public EC2Info ec2Info;
+        public String role;
         public long finishTime = System.currentTimeMillis();
 
         /** Empty constructor for serialization */
@@ -946,6 +948,7 @@ public class DeployJob extends MonitorableJob {
             this.ec2Info = job.otpServer.ec2Info;
             this.otpVersion = job.deployment.otpVersion;
             this.jobId = job.jobId;
+            this.role = job.otpServer.role;
             this.s3Bucket = job.s3Bucket;
             this.status = job.status;
             this.buildArtifactsFolder = job.getS3FolderURI().toString();

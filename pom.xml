@@ -410,6 +410,13 @@
             <artifactId>aws-java-sdk-elasticloadbalancingv2</artifactId>
             <version>${awsjavasdk.version}</version>
         </dependency>
+        <!-- AWS STS allows Data Tools to assume other roles in order to deploy OTP to other AWS accounts. -->
+        <dependency>
+            <groupId>com.amazonaws</groupId>
+            <artifactId>aws-java-sdk-sts</artifactId>
+            <version>${awsjavasdk.version}</version>
+        </dependency>
+
     </dependencies>
 
 </project>

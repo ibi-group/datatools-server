@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.amazonaws.services.ec2.model.Instance;
 import com.conveyal.datatools.DatatoolsTest;
+import com.conveyal.datatools.common.utils.AWSUtils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.EC2Info;
@@ -96,7 +97,7 @@ public class DeployJobTest {
     public static void cleanUp() {
         List<Instance> instances = server.retrieveEC2Instances();
         List<String> ids = getIds(instances);
-        terminateInstances(ids);
+        terminateInstances(AWSUtils.getEC2ClientForRole(server.role), ids);
     }
 
 }

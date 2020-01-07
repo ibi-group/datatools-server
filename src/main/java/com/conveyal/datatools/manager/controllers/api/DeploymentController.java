@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.controllers.api;
 
+import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.AmazonEC2Client;
 import com.amazonaws.services.ec2.model.DescribeInstancesRequest;
@@ -7,8 +8,10 @@ import com.amazonaws.services.ec2.model.DescribeInstancesResult;
 import com.amazonaws.services.ec2.model.Filter;
 import com.amazonaws.services.ec2.model.Instance;
 import com.amazonaws.services.ec2.model.Reservation;
+import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3URI;
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.utils.AWSUtils;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
@@ -42,7 +45,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
+import static com.conveyal.datatools.common.utils.AWSUtils.downloadFromS3;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static spark.Spark.delete;
 import static spark.Spark.get;
@@ -95,6 +98,9 @@ public class DeploymentController {
     private static String downloadBuildArtifact (Request req, Response res) {
         Deployment deployment = getDeploymentWithPermissions(req, res);
         DeployJob.DeploySummary summaryToDownload = null;
+        // Default client to use if no role was used during the deployment.
+        AmazonS3 s3Client = FeedStore.s3Client;
+        String role = null;
         String uriString;
         String filename = req.queryParams("filename");
         if (filename == null) {
@@ -131,9 +137,12 @@ public class DeploymentController {
         } else {
             // If summary is readily available, just use the ready-to-use build artifacts field.
             uriString = summaryToDownload.buildArtifactsFolder;
+            role = summaryToDownload.role;
         }
         AmazonS3URI uri = new AmazonS3URI(uriString);
-        return downloadFromS3(FeedStore.s3Client, uri.getBucket(), String.join("/", uri.getKey(), filename), false, res);
+        // Assume the alternative role if needed to download the deploy artifact.
+        if (role != null) s3Client = AWSUtils.getS3ClientForRole(role);
+        return downloadFromS3(s3Client, uri.getBucket(), String.join("/", uri.getKey(), filename), false, res);
     }
 
     /**
@@ -340,8 +349,13 @@ public class DeploymentController {
         // Get the target group ARN from the latest deployment. Surround in a try/catch in case of NPEs.
         // TODO: Perhaps provide some other way to provide the target group ARN.
         String targetGroupArn;
+        DeployJob.DeploySummary latest;
+        AWSStaticCredentialsProvider credentials;
         try {
-            targetGroupArn = deployment.latest().ec2Info.targetGroupArn;
+            latest = deployment.latest();
+            targetGroupArn = latest.ec2Info.targetGroupArn;
+            // Also, get credentials for role (if exists), which are needed to terminate instances in external AWS account.
+            credentials = AWSUtils.getCredentialsForRole(latest.role, "deregister-instances");
         } catch (Exception e) {
             logMessageAndHalt(req, 400, "Latest deploy job does not exist or is missing target group ARN.");
             return false;
@@ -359,7 +373,7 @@ public class DeploymentController {
             }
         }
         // If checks are ok, terminate instances.
-        boolean success = ServerController.deRegisterAndTerminateInstances(targetGroupArn, idsToTerminate);
+        boolean success = ServerController.deRegisterAndTerminateInstances(credentials, targetGroupArn, idsToTerminate);
         if (!success) {
             logMessageAndHalt(req, 400, "Could not complete termination request");
             return false;
@@ -378,17 +392,18 @@ public class DeploymentController {
     /**
      * Fetches list of {@link EC2InstanceSummary} for all instances matching the provided filters.
      */
-    public static List<EC2InstanceSummary> fetchEC2InstanceSummaries(Filter... filters) {
-        return fetchEC2Instances(filters).stream().map(EC2InstanceSummary::new).collect(Collectors.toList());
+    public static List<EC2InstanceSummary> fetchEC2InstanceSummaries(AmazonEC2 ec2Client, Filter... filters) {
+        return fetchEC2Instances(ec2Client, filters).stream().map(EC2InstanceSummary::new).collect(Collectors.toList());
     }
 
     /**
      * Fetch EC2 instances from AWS that match the provided set of filters (e.g., tags, instance ID, or other properties).
      */
-    public static List<Instance> fetchEC2Instances(Filter... filters) {
+    public static List<Instance> fetchEC2Instances(AmazonEC2 ec2Client, Filter... filters) {
+        if (ec2Client == null) ec2Client = ec2;
         List<Instance> instances = new ArrayList<>();
         DescribeInstancesRequest request = new DescribeInstancesRequest().withFilters(filters);
-        DescribeInstancesResult result = ec2.describeInstances(request);
+        DescribeInstancesResult result = ec2Client.describeInstances(request);
         for (Reservation reservation : result.getReservations()) {
             instances.addAll(reservation.getInstances());
         }
