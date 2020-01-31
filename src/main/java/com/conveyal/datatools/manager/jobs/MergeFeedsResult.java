@@ -22,6 +22,11 @@ public class MergeFeedsResult implements Serializable {
     public Set<String> idConflicts = new HashSet<>();
     /** Contains the set of IDs for records that were excluded in the merged feed */
     public Set<String> skippedIds = new HashSet<>();
+    /**
+     * Track the set of service IDs to end up in the merged feed in order to determine which calendar_dates and trips
+     * records should be retained in the merged result.
+     */
+    public Set<String> serviceIds  = new HashSet<>();
     /** Contains the set of IDs that had their values remapped during the merge */
     public Map<String, String> remappedIds = new HashMap<>();
     /** Mapping of table name to line count in merged file */

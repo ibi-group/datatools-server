@@ -624,10 +624,14 @@ public class MergeFeedsJob extends MonitorableJob {
                                             }
                                         }
                                     }
+                                    // Track service ID because we want to avoid removing trips that may reference this
+                                    // service_id when the service_id is used by calendar_dates that operate in the valid
+                                    // date range, i.e., before the future feed's first date.
+                                    if (field.name.equals("service_id")) mergeFeedsResult.serviceIds.add(valueToWrite);
                                     break;
                                 case "calendar_dates":
                                     // Drop any calendar_dates.txt records from the existing feed for dates that are
-                                    // in the past at the time of the merge.
+                                    // not before the first date of the future feed.
                                     int dateIndex = getFieldIndex(fieldsFoundInZip, "date");
                                     LocalDate date = LocalDate.parse(csvReader.get(dateIndex), GTFS_DATE_FORMATTER);
                                     if (feedIndex > 0) {
@@ -642,6 +646,10 @@ public class MergeFeedsJob extends MonitorableJob {
                                             continue;
                                         }
                                     }
+                                    // Track service ID because we want to avoid removing trips that may reference this
+                                    // service_id when the service_id is used by calendar.txt records that operate in
+                                    // the valid date range, i.e., before the future feed's first date.
+                                    if (field.name.equals("service_id")) mergeFeedsResult.serviceIds.add(keyValue);
                                     break;
                                 case "shapes":
                                     // If a shape_id is found in both future and active datasets, all shape points from
@@ -799,14 +807,21 @@ public class MergeFeedsJob extends MonitorableJob {
                             // record and add its primary key to the list of skipped IDs (so that other references can
                             // be properly omitted).
                             if (mergeFeedsResult.skippedIds.contains(key)) {
-                                String skippedKey = getTableScopedValue(table, idScope, keyValue);
-                                if (orderField != null) {
-                                    skippedKey = String.join(":", skippedKey,
-                                        csvReader.get(getFieldIndex(fieldsFoundInZip, orderField)));
+                                // If a calendar#service_id has been skipped, but there were valid service_ids found in
+                                // calendar_dates, do not skip that record for both the calendar_date and any related
+                                // trips.
+                                if (field.name.equals("service_id") && mergeFeedsResult.serviceIds.contains(val)) {
+                                    LOG.warn("Not skipping valid service_id {} for {} {}", val, table.name, keyValue);
+                                } else {
+                                    String skippedKey = getTableScopedValue(table, idScope, keyValue);
+                                    if (orderField != null) {
+                                        skippedKey = String.join(":", skippedKey,
+                                            csvReader.get(getFieldIndex(fieldsFoundInZip, orderField)));
+                                    }
+                                    mergeFeedsResult.skippedIds.add(skippedKey);
+                                    skipRecord = true;
+                                    continue;
                                 }
-                                mergeFeedsResult.skippedIds.add(skippedKey);
-                                skipRecord = true;
-                                continue;
                             }
                             // If the field is a foreign reference, check to see whether the reference has been
                             // remapped due to a conflicting ID from another feed (e.g., calendar#service_id).

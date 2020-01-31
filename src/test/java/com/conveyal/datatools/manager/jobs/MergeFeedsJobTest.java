@@ -26,9 +26,9 @@ import static com.conveyal.datatools.TestUtils.assertThatSqlCountQueryYieldsExpe
 import static com.conveyal.datatools.TestUtils.createFeedVersion;
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static com.conveyal.datatools.TestUtils.zipFolderFiles;
-import static org.hamcrest.Matchers.equalTo;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 /**
  * Tests for the various {@link MergeFeedsJob} merge types.
@@ -42,6 +42,7 @@ public class MergeFeedsJobTest extends UnitTest {
     private static Project project;
     private static FeedVersion napaVersion;
     private static FeedVersion bothCalendarFilesVersion;
+    private static FeedVersion bothCalendarFilesVersion2;
     private static FeedVersion onlyCalendarVersion;
     private static FeedVersion onlyCalendarDatesVersion;
 
@@ -49,7 +50,7 @@ public class MergeFeedsJobTest extends UnitTest {
      * Prepare and start a testing-specific web server
      */
     @BeforeClass
-    public static void setUp() throws IOException, InterruptedException {
+    public static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
 
@@ -85,17 +86,18 @@ public class MergeFeedsJobTest extends UnitTest {
             fakeAgency,
             zipFolderFiles("fake-agency-with-calendar-and-calendar-dates")
         );
-        Thread.sleep(1000); // sleep 1s so a duplicate FeedVersionID is not generated
         onlyCalendarVersion = createFeedVersion(
             fakeAgency,
             zipFolderFiles("fake-agency-with-only-calendar")
         );
-        Thread.sleep(1000); // sleep 1s so a duplicate FeedVersionID is not generated
         onlyCalendarDatesVersion = createFeedVersion(
             fakeAgency,
             zipFolderFiles("fake-agency-with-only-calendar-dates")
         );
-        Thread.sleep(1000); // sleep 1s so a duplicate FeedVersionID is not generated
+        bothCalendarFilesVersion2 = createFeedVersion(
+            fakeAgency,
+            zipFolderFiles("fake-agency-with-calendar-and-calendar-dates-2")
+        );
     }
 
     /**
@@ -258,9 +260,8 @@ public class MergeFeedsJobTest extends UnitTest {
         // Run the job in this thread (we're not concerned about concurrency here).
         mergeFeedsJob.run();
         // Result should fail.
-        assertEquals(
+        assertTrue(
             "Merge feeds job should fail due to duplicate trip IDs.",
-            true,
             mergeFeedsJob.mergeFeedsResult.failed
         );
     }
@@ -280,6 +281,7 @@ public class MergeFeedsJobTest extends UnitTest {
         mergeFeedsJob.failOnDuplicateTripId = false;
         // Result should succeed this time.
         mergeFeedsJob.run();
+        assertFeedMergeSucceeded(mergeFeedsJob);
         // Check GTFS+ line numbers.
         assertEquals(
             "Merged directions count should equal expected value.",
@@ -338,6 +340,7 @@ public class MergeFeedsJobTest extends UnitTest {
         MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.MTC);
         // Run the job in this thread (we're not concerned about concurrency here).
         mergeFeedsJob.run();
+        assertFeedMergeSucceeded(mergeFeedsJob);
         // assert service_ids have been feed scoped properly
         String mergedNamespace = mergeFeedsJob.mergedVersion.namespace;
 
@@ -440,6 +443,7 @@ public class MergeFeedsJobTest extends UnitTest {
         MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.MTC);
         // Run the job in this thread (we're not concerned about concurrency here).
         mergeFeedsJob.run();
+        assertFeedMergeSucceeded(mergeFeedsJob);
         // assert service_ids have been feed scoped properly
         String mergedNamespace = mergeFeedsJob.mergedVersion.namespace;
 
@@ -513,6 +517,72 @@ public class MergeFeedsJobTest extends UnitTest {
         );
         // This fails, but if remappedReferences isn't actually needed maybe the current implementation is good-to-go
         // assertThat(mergeFeedsJob.mergeFeedsResult.remappedReferences, equalTo(1));
+    }
+
+    /**
+     * Tests whether a MTC feed merge of two feed versions correctly removes calendar records that have overlapping
+     * service but keeps calendar_dates records that share service_id with the removed calendar and trips that reference
+     * that service_id.
+     *
+     */
+    @Test
+    public void canMergeFeedsWithMTCForServiceIds3 () throws SQLException {
+        Set<FeedVersion> versions = new HashSet<>();
+        versions.add(bothCalendarFilesVersion);
+        versions.add(bothCalendarFilesVersion2);
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.MTC);
+        // Run the job in this thread (we're not concerned about concurrency here).
+        mergeFeedsJob.run();
+        assertFeedMergeSucceeded(mergeFeedsJob);
+        // assert service_ids have been feed scoped properly
+        String mergedNamespace = mergeFeedsJob.mergedVersion.namespace;
+        // - calendar table
+        // expect a total of 3 records in calendar table
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.calendar", mergedNamespace),
+            3
+        );
+        // - calendar_dates table
+        // expect 3 records in calendar_dates table
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.calendar_dates", mergedNamespace),
+            3
+        );
+
+        // - trips table
+        // expect 3 records in trips table
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.trips", mergedNamespace),
+            3
+        );
+        // common_id service_id should be scoped for earlier feed version.
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format(
+                "SELECT count(*) FROM %s.trips WHERE service_id='Fake_Agency4:common_id'",
+                mergedNamespace
+            ),
+            1
+        );
+        // Modified cal_to_remove should still exist in calendar_dates. It is modified even though it does not exist in
+        // the future feed due to the MTC requirement to update all service_ids in the past feed.
+        // See https://github.com/ibi-group/datatools-server/issues/244
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format(
+                "SELECT count(*) FROM %s.calendar_dates WHERE service_id='Fake_Agency4:cal_to_remove'",
+                mergedNamespace
+            ),
+            1
+        );
+    }
+
+    /**
+     * Verifies that a completed merge feeds job did not fail.
+     * @param mergeFeedsJob
+     */
+    private void assertFeedMergeSucceeded(MergeFeedsJob mergeFeedsJob) {
+        if (mergeFeedsJob.mergedVersion.namespace == null || mergeFeedsJob.mergeFeedsResult.failed) {
+            fail("Merge feeds job failed: " + String.join(", ", mergeFeedsJob.mergeFeedsResult.failureReasons));
+        }
     }
 
     /**
