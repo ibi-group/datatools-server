@@ -342,6 +342,14 @@ public class MergeFeedsJob extends MonitorableJob {
             // Get shared fields between all feeds being merged. This is used to filter the spec fields so that only
             // fields found in the collection of feeds are included in the merged table.
             Set<Field> sharedFields = getSharedFields(feedsToMerge, table);
+            // Initialize future feed's first date to the first calendar date from the validation result.
+            // This is equivalent to either the earliest date of service defined for a calendar_date record or the
+            // earliest start_date value for a calendars.txt record. For MTC, however, they require that GTFS
+            // providers use calendars.txt entries and prefer that this value (which is used to determine cutoff
+            // dates for the active feed when merging with the future) be strictly assigned the earliest
+            // calendar#start_date (unless that table for some reason does not exist).
+            LocalDate futureFeedFirstDate = feedsToMerge.get(0).version.validationResult.firstCalendarDate;
+            LocalDate futureFirstCalendarStartDate = LocalDate.MAX;
             // Iterate over each zip file.
             for (int feedIndex = 0; feedIndex < feedsToMerge.size(); feedIndex++) {
                 boolean keyFieldMissing = false;
@@ -418,6 +426,16 @@ public class MergeFeedsJob extends MonitorableJob {
                             LOG.warn("Skipping {} file for feed {}/{} (future file preferred)",
                                 table.name, feedIndex, feedsToMerge.size());
                             continue;
+                        } else if (table.name.equals("calendar_dates")) {
+                            if (
+                                futureFirstCalendarStartDate.isBefore(LocalDate.MAX) &&
+                                futureFeedFirstDate.isBefore(futureFirstCalendarStartDate)
+                            ) {
+                                // If the future feed's first date is before the feed's first calendar start date,
+                                // override the future feed first date with the calendar start date for use when checking
+                                // MTC calendar_dates and calendar records for modification/exclusion.
+                                futureFeedFirstDate = futureFirstCalendarStartDate;
+                            }
                         }
                     }
                     // Check certain initial conditions on the first line of the file.
@@ -483,6 +501,9 @@ public class MergeFeedsJob extends MonitorableJob {
                     // Piece together the row to write, which should look practically identical to the original
                     // row except for the identifiers receiving a prefix to avoid ID conflicts.
                     for (int specFieldIndex = 0; specFieldIndex < sharedSpecFields.size(); specFieldIndex++) {
+                        // There is nothing to do in this loop if it has already been determined that the record should
+                        // be skipped.
+                        if (skipRecord) continue;
                         Field field = sharedSpecFields.get(specFieldIndex);
                         // Get index of field from GTFS spec as it appears in feed
                         int index = fieldsFoundList.indexOf(field);
@@ -558,21 +579,27 @@ public class MergeFeedsJob extends MonitorableJob {
                                         valueToWrite = String.join(":", idScope, val);
                                         mergeFeedsResult.remappedIds.put(key, valueToWrite);
                                     }
-                                    // If a service_id from the active calendar has both the
-                                    // start_date and end_date in the future, the service will be
-                                    // excluded from the merged file. Records in trips,
-                                    // calendar_dates, and calendar_attributes referencing this
-                                    // service_id shall also be removed/ignored. Stop_time records
-                                    // for the ignored trips shall also be removed.
-                                    if (feedIndex > 0) {
-                                        int startDateIndex =
-                                            getFieldIndex(fieldsFoundInZip, "start_date");
-                                        LocalDate startDate = LocalDate
-                                            .parse(csvReader.get(startDateIndex),
-                                                GTFS_DATE_FORMATTER);
-                                        if (startDate.isAfter(LocalDate.now())) {
+                                    int startDateIndex =
+                                        getFieldIndex(fieldsFoundInZip, "start_date");
+                                    LocalDate startDate = LocalDate
+                                        .parse(csvReader.get(startDateIndex),
+                                            GTFS_DATE_FORMATTER);
+                                    if (feedIndex == 0) {
+                                        // For the future feed, check if the calendar's start date is earlier than the
+                                        // previous earliest value and update if so.
+                                        if (futureFirstCalendarStartDate.isAfter(startDate)) {
+                                            futureFirstCalendarStartDate = startDate;
+                                        }
+                                    } else {
+                                        // If a service_id from the active calendar has both the
+                                        // start_date and end_date in the future, the service will be
+                                        // excluded from the merged file. Records in trips,
+                                        // calendar_dates, and calendar_attributes referencing this
+                                        // service_id shall also be removed/ignored. Stop_time records
+                                        // for the ignored trips shall also be removed.
+                                        if (!startDate.isBefore(futureFeedFirstDate)) {
                                             LOG.warn(
-                                                "Skipping calendar entry {} because it operates in the future.",
+                                                "Skipping calendar entry {} because it operates in the time span of future feed.",
                                                 keyValue);
                                             String key =
                                                 getTableScopedValue(table, idScope, keyValue);
@@ -590,14 +617,39 @@ public class MergeFeedsJob extends MonitorableJob {
                                             LocalDate endDate = LocalDate
                                                 .parse(csvReader.get(endDateIndex),
                                                     GTFS_DATE_FORMATTER);
-                                            if (endDate.isAfter(LocalDate.now())) {
-                                                val = feedsToMerge.get(
-                                                    0).version.validationResult.firstCalendarDate
+                                            if (!endDate.isBefore(futureFeedFirstDate)) {
+                                                val = futureFeedFirstDate
                                                     .minus(1, ChronoUnit.DAYS)
                                                     .format(GTFS_DATE_FORMATTER);
                                             }
                                         }
                                     }
+                                    // Track service ID because we want to avoid removing trips that may reference this
+                                    // service_id when the service_id is used by calendar_dates that operate in the valid
+                                    // date range, i.e., before the future feed's first date.
+                                    if (field.name.equals("service_id")) mergeFeedsResult.serviceIds.add(valueToWrite);
+                                    break;
+                                case "calendar_dates":
+                                    // Drop any calendar_dates.txt records from the existing feed for dates that are
+                                    // not before the first date of the future feed.
+                                    int dateIndex = getFieldIndex(fieldsFoundInZip, "date");
+                                    LocalDate date = LocalDate.parse(csvReader.get(dateIndex), GTFS_DATE_FORMATTER);
+                                    if (feedIndex > 0) {
+                                        if (!date.isBefore(futureFeedFirstDate)) {
+                                            LOG.warn(
+                                                "Skipping calendar_dates entry {} because it operates in the time span of future feed (i.e., after or on {}).",
+                                                keyValue,
+                                                futureFeedFirstDate);
+                                            String key = getTableScopedValue(table, idScope, keyValue);
+                                            mergeFeedsResult.skippedIds.add(key);
+                                            skipRecord = true;
+                                            continue;
+                                        }
+                                    }
+                                    // Track service ID because we want to avoid removing trips that may reference this
+                                    // service_id when the service_id is used by calendar.txt records that operate in
+                                    // the valid date range, i.e., before the future feed's first date.
+                                    if (field.name.equals("service_id")) mergeFeedsResult.serviceIds.add(keyValue);
                                     break;
                                 case "shapes":
                                     // If a shape_id is found in both future and active datasets, all shape points from
@@ -755,14 +807,21 @@ public class MergeFeedsJob extends MonitorableJob {
                             // record and add its primary key to the list of skipped IDs (so that other references can
                             // be properly omitted).
                             if (mergeFeedsResult.skippedIds.contains(key)) {
-                                String skippedKey = getTableScopedValue(table, idScope, keyValue);
-                                if (orderField != null) {
-                                    skippedKey = String.join(":", skippedKey,
-                                        csvReader.get(getFieldIndex(fieldsFoundInZip, orderField)));
+                                // If a calendar#service_id has been skipped, but there were valid service_ids found in
+                                // calendar_dates, do not skip that record for both the calendar_date and any related
+                                // trips.
+                                if (field.name.equals("service_id") && mergeFeedsResult.serviceIds.contains(val)) {
+                                    LOG.warn("Not skipping valid service_id {} for {} {}", val, table.name, keyValue);
+                                } else {
+                                    String skippedKey = getTableScopedValue(table, idScope, keyValue);
+                                    if (orderField != null) {
+                                        skippedKey = String.join(":", skippedKey,
+                                            csvReader.get(getFieldIndex(fieldsFoundInZip, orderField)));
+                                    }
+                                    mergeFeedsResult.skippedIds.add(skippedKey);
+                                    skipRecord = true;
+                                    continue;
                                 }
-                                mergeFeedsResult.skippedIds.add(skippedKey);
-                                skipRecord = true;
-                                continue;
                             }
                             // If the field is a foreign reference, check to see whether the reference has been
                             // remapped due to a conflicting ID from another feed (e.g., calendar#service_id).
