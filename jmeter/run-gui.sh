@@ -1,3 +1,5 @@
 #!/bin/sh
 
-apache-jmeter-5.2.1/bin/jmeter.sh -t test-script.jmx
+source jmeter-version.sh
+
+apache-jmeter-$JMETER_VER/bin/jmeter.sh -t test-script.jmx
