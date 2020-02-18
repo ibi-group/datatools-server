@@ -1,5 +1,7 @@
 #!/bin/sh
 
+source jmeter-version.sh
+
 if [ -z $1 ]
 then
   >&2 echo 'Must supply "batch", "fetch", "query" or "upload" as first argument'
@@ -42,7 +44,7 @@ mkdir output/report
 
 echo "starting jmeter script"
 
-jmeter_cmd="apache-jmeter-3.3/bin/jmeter.sh -n -t test-script.jmx -l output/result/result.csv -e -o output/report -Jmode=$1 -Jthreads=$2 -Jloops=$3"
+jmeter_cmd="apache-jmeter-$JMETER_VER/bin/jmeter.sh -n -t test-script.jmx -l output/result/result.csv -e -o output/report -Jmode=$1 -Jthreads=$2 -Jloops=$3"
 
 if [ -n "$4" ]
 then
