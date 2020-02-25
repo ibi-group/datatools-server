@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.controllers.api;
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.AmazonEC2Client;
+import com.amazonaws.services.ec2.AmazonEC2ClientBuilder;
 import com.amazonaws.services.ec2.model.AmazonEC2Exception;
 import com.amazonaws.services.ec2.model.DescribeImagesRequest;
 import com.amazonaws.services.ec2.model.DescribeImagesResult;
@@ -19,6 +20,7 @@ import com.amazonaws.services.ec2.model.TerminateInstancesRequest;
 import com.amazonaws.services.ec2.model.TerminateInstancesResult;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancing;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClient;
+import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClientBuilder;
 import com.amazonaws.services.elasticloadbalancingv2.model.AmazonElasticLoadBalancingException;
 import com.amazonaws.services.elasticloadbalancingv2.model.DeregisterTargetsRequest;
 import com.amazonaws.services.elasticloadbalancingv2.model.DescribeLoadBalancersRequest;
@@ -62,6 +64,7 @@ import java.util.stream.Collectors;
 import static com.conveyal.datatools.common.utils.SparkUtils.getPOJOFromRequestBody;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.jobs.DeployJob.DEFAULT_INSTANCE_TYPE;
+import static com.conveyal.datatools.manager.persistence.FeedStore.getAWSCreds;
 import static spark.Spark.delete;
 import static spark.Spark.get;
 import static spark.Spark.options;
@@ -250,9 +253,23 @@ public class ServerController {
             AWSStaticCredentialsProvider credentials = AWSUtils.getCredentialsForRole(server.role, "validate");
             // If alternative credentials exist, override the default AWS clients.
             if (credentials != null) {
+                // build ec2 client
                 ec2Client = AmazonEC2Client.builder().withCredentials(credentials).build();
                 iamClient = AmazonIdentityManagementClientBuilder.standard().withCredentials(credentials).build();
                 s3Client = AWSUtils.getS3ClientForRole(server.role, null);
+            }
+            if (server.ec2Info.region != null) {
+                AmazonEC2ClientBuilder builder = AmazonEC2Client.builder();
+                if (credentials != null) {
+                    builder.withCredentials(credentials);
+                }
+                builder.withRegion(server.ec2Info.region);
+                ec2Client = builder.build();
+                if (credentials !=  null) {
+                    s3Client = AWSUtils.getS3ClientForRole(server.role, server.ec2Info.region);
+                } else {
+                    s3Client = AWSUtils.getS3ClientForCredentials(getAWSCreds(), server.ec2Info.region);
+                }
             }
             // Check that projectId is valid.
             if (server.projectId != null) {
@@ -265,7 +282,7 @@ public class ServerController {
             if (server.ec2Info != null) {
                 validateInstanceType(server.ec2Info.instanceType, req);
                 // Validate target group and get load balancer to validate subnetId and security group ID.
-                LoadBalancer loadBalancer = validateTargetGroupAndGetLoadBalancer(server.ec2Info.targetGroupArn, req, credentials);
+                LoadBalancer loadBalancer = validateTargetGroupAndGetLoadBalancer(server.ec2Info, req, credentials);
                 validateSubnetId(loadBalancer, server.ec2Info, req, ec2Client);
                 validateSecurityGroupId(loadBalancer, server.ec2Info, req);
                 // Validate remaining AWS values.
@@ -304,7 +321,7 @@ public class ServerController {
             s3Client.putObject(s3Bucket, key, File.createTempFile("test", ".zip"));
             s3Client.deleteObject(s3Bucket, key);
         } catch (IOException | AmazonS3Exception e) {
-            LOG.warn("S3 client cannot write to bucket" + s3Bucket, e);
+            LOG.warn("S3 client cannot write to bucket: " + s3Bucket, e);
             return false;
         }
         return true;
@@ -448,16 +465,21 @@ public class ServerController {
      *  - https://serverfault.com/a/865422
      *  - https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-limits.html
      */
-    private static LoadBalancer getLoadBalancerForTargetGroup (String targetGroupArn, AWSStaticCredentialsProvider credentials) {
+    private static LoadBalancer getLoadBalancerForTargetGroup (EC2Info ec2Info, AWSStaticCredentialsProvider credentials) {
         // If alternative credentials exist, use them to assume the role. Otherwise, use default ELB client.
-        AmazonElasticLoadBalancing elbClient = credentials != null
-            ? AmazonElasticLoadBalancingClient.builder()
-                .withCredentials(credentials)
-                .build()
-            : elb;
+        AmazonElasticLoadBalancingClientBuilder builder = AmazonElasticLoadBalancingClient.builder();
+        if (credentials != null) {
+            builder.withCredentials(credentials);
+        }
+
+        if (ec2Info.region != null) {
+            builder.withRegion(ec2Info.region);
+        }
+
+        AmazonElasticLoadBalancing elbClient = builder.build();
         try {
             DescribeTargetGroupsRequest targetGroupsRequest = new DescribeTargetGroupsRequest()
-                .withTargetGroupArns(targetGroupArn);
+                .withTargetGroupArns(ec2Info.targetGroupArn);
             List<TargetGroup> targetGroups = elbClient.describeTargetGroups(targetGroupsRequest).getTargetGroups();
             for (TargetGroup tg : targetGroups) {
                 DescribeLoadBalancersRequest request = new DescribeLoadBalancersRequest()
@@ -467,7 +489,7 @@ public class ServerController {
                 return result.getLoadBalancers().iterator().next();
             }
         } catch (AmazonElasticLoadBalancingException e) {
-            LOG.warn("Invalid value for Target Group ARN: {}", targetGroupArn);
+            LOG.warn("Invalid value for Target Group ARN: {}", ec2Info.targetGroupArn);
         }
         // If no target group/load balancer found, return null.
         return null;
@@ -477,11 +499,13 @@ public class ServerController {
      * Validate that ELB target group exists and is not empty and return associated load balancer for validating related
      * fields.
      */
-    private static LoadBalancer validateTargetGroupAndGetLoadBalancer(String targetGroupArn, Request req, AWSStaticCredentialsProvider credentials) {
-        if (isEmpty(targetGroupArn)) logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Invalid value for Target Group ARN.");
+    private static LoadBalancer validateTargetGroupAndGetLoadBalancer(EC2Info ec2Info, Request req, AWSStaticCredentialsProvider credentials) {
+        if (isEmpty(ec2Info.targetGroupArn)) {
+            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Invalid value for Target Group ARN.");
+        }
         // Get load balancer for target group. This essentially checks that the target group exists and is assigned
         // to a load balancer.
-        LoadBalancer loadBalancer = getLoadBalancerForTargetGroup(targetGroupArn, credentials);
+        LoadBalancer loadBalancer = getLoadBalancerForTargetGroup(ec2Info, credentials);
         if (loadBalancer == null) {
             logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Invalid value for Target Group ARN. Could not locate Target Group or Load Balancer.");
         }

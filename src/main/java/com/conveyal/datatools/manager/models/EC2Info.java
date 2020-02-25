@@ -27,10 +27,19 @@ public class EC2Info implements Serializable {
     public String securityGroupId;
     /** The Amazon machine image (AMI) to be used for the OTP EC2 machines. */
     public String amiId;
+    /**
+     * The AWS-style instance type (e.g., t2.medium) to use for new EC2 machines used specifically for graph building.
+     * Defaults to {@link com.conveyal.datatools.manager.jobs.DeployJob#DEFAULT_INSTANCE_TYPE} if null during deployment.
+     */
+    public String buildInstanceType;
+    /** The Amazon machine image (AMI) to be used for the OTP EC2 machine used specifically for graph building. */
+    public String buildAmiId;
     /** The IAM instance profile ARN that the OTP EC2 server should assume. For example, arn:aws:iam::123456789012:instance-profile/otp-ec2-role */
     public String iamInstanceProfileArn;
     /** The AWS key file (.pem) that should be used to set up OTP EC2 servers (gives a way for admins to SSH into machine). */
     public String keyName;
     /** The target group to deploy new EC2 instances to. */
     public String targetGroupArn;
+    /** An optional custom AWS region */
+    public String region;
 }
