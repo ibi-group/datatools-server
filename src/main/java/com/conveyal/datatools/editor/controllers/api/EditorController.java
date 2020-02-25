@@ -13,6 +13,7 @@ import com.conveyal.gtfs.loader.JdbcTableWriter;
 import com.conveyal.gtfs.loader.Requirement;
 import com.conveyal.gtfs.loader.Table;
 import com.conveyal.gtfs.model.Entity;
+import com.conveyal.gtfs.storage.StorageException;
 import com.conveyal.gtfs.util.InvalidNamespaceException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -220,12 +221,17 @@ public abstract class EditorController<T extends Entity> {
             return response.toString();
         } catch (HaltException e) {
             throw e;
-        } catch (Exception e) {
+        } catch (StorageException e) {
+            // If an invalid value was applied to a field filter, a Storage Exception will be thrown, which we should
+            // catch and share details with the user.
             logMessageAndHalt(req, 400, "Could not patch update table", e);
-            return null;
+        } catch (Exception e) {
+            // This catch-all accounts for any issues encountered with SQL exceptions or other unknown issues.
+            logMessageAndHalt(req, 500, "Could not patch update table", e);
         } finally {
             DbUtils.closeQuietly(connection);
         }
+        return null;
     }
 
     /**
