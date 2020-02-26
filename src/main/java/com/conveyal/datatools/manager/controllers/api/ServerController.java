@@ -258,19 +258,6 @@ public class ServerController {
                 iamClient = AmazonIdentityManagementClientBuilder.standard().withCredentials(credentials).build();
                 s3Client = AWSUtils.getS3ClientForRole(server.role, null);
             }
-            if (server.ec2Info.region != null) {
-                AmazonEC2ClientBuilder builder = AmazonEC2Client.builder();
-                if (credentials != null) {
-                    builder.withCredentials(credentials);
-                }
-                builder.withRegion(server.ec2Info.region);
-                ec2Client = builder.build();
-                if (credentials !=  null) {
-                    s3Client = AWSUtils.getS3ClientForRole(server.role, server.ec2Info.region);
-                } else {
-                    s3Client = AWSUtils.getS3ClientForCredentials(getAWSCreds(), server.ec2Info.region);
-                }
-            }
             // Check that projectId is valid.
             if (server.projectId != null) {
                 Project project = Persistence.projects.getById(server.projectId);
@@ -280,6 +267,20 @@ public class ServerController {
             // If a server's ec2 info object is not null, it must pass a few validation checks on various fields related to
             // AWS. (e.g., target group ARN and instance type).
             if (server.ec2Info != null) {
+                // do some custom items if a custom region should be used
+                if (server.ec2Info.region != null) {
+                    AmazonEC2ClientBuilder builder = AmazonEC2Client.builder();
+                    if (credentials != null) {
+                        builder.withCredentials(credentials);
+                    }
+                    builder.withRegion(server.ec2Info.region);
+                    ec2Client = builder.build();
+                    if (credentials !=  null) {
+                        s3Client = AWSUtils.getS3ClientForRole(server.role, server.ec2Info.region);
+                    } else {
+                        s3Client = AWSUtils.getS3ClientForCredentials(getAWSCreds(), server.ec2Info.region);
+                    }
+                }
                 validateInstanceType(server.ec2Info.instanceType, req);
                 // Validate target group and get load balancer to validate subnetId and security group ID.
                 LoadBalancer loadBalancer = validateTargetGroupAndGetLoadBalancer(server.ec2Info, req, credentials);
