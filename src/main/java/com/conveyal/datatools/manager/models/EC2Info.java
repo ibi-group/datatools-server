@@ -42,4 +42,15 @@ public class EC2Info implements Serializable {
     public String targetGroupArn;
     /** An optional custom AWS region */
     public String region;
+
+    /**
+     * Returns true if the instance type or ami ids are set and are different for a graph build.
+     */
+    public boolean hasSeparateGraphBuildConfig() {
+        return (
+            buildInstanceType != null && !buildInstanceType.equals(instanceType)
+        ) || (
+            buildAmiId != null && !buildAmiId.equals(amiId)
+        );
+    }
 }

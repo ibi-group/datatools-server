@@ -120,7 +120,10 @@ public class ServerController {
         OtpServer server = getServerWithPermissions(req, res);
         List<Instance> instances = server.retrieveEC2Instances();
         List<String> ids = getIds(instances);
-        AmazonEC2 ec2Client = AWSUtils.getEC2ClientForRole(server.role);
+        AmazonEC2 ec2Client = AWSUtils.getEC2ClientForRole(
+            server.role,
+            server.ec2Info == null ? null : server.ec2Info.region
+        );
         terminateInstances(ec2Client, ids);
         for (Deployment deployment : Deployment.retrieveDeploymentForServerAndRouterId(server.id, null)) {
             Persistence.deployments.updateField(deployment.id, "deployedTo", null);
@@ -160,7 +163,12 @@ public class ServerController {
      * De-register instances from the specified target group/load balancer and terminate the instances.
      *
      */
-    public static boolean deRegisterAndTerminateInstances(AWSStaticCredentialsProvider credentials, String targetGroupArn, List<String> instanceIds) {
+    public static boolean deRegisterAndTerminateInstances(
+        AWSStaticCredentialsProvider credentials,
+        String targetGroupArn,
+        String region,
+        List<String> instanceIds
+    ) {
         LOG.info("De-registering instances from load balancer {}", instanceIds);
         TargetDescription[] targetDescriptions = instanceIds.stream()
             .map(id -> new TargetDescription().withId(id))
@@ -172,12 +180,21 @@ public class ServerController {
             AmazonElasticLoadBalancing elbClient = elb;
             AmazonEC2 ec2Client = ec2;
             // If OTP Server has role defined/alt credentials, override default AWS clients.
-            if (credentials != null) {
-                elbClient = AmazonElasticLoadBalancingClient.builder().withCredentials(credentials).build();
-                ec2Client = AmazonEC2Client.builder().withCredentials(credentials).build();
+            if (credentials != null || region != null) {
+                AmazonElasticLoadBalancingClientBuilder elbBuilder = AmazonElasticLoadBalancingClient.builder();
+                AmazonEC2ClientBuilder ec2Builder = AmazonEC2Client.builder();
+                if (credentials != null) {
+                    elbBuilder.withCredentials(credentials);
+                    ec2Builder.withCredentials(credentials);
+                }
+                if (region != null) {
+                    elbBuilder.withRegion(region);
+                    ec2Builder.withRegion(region);
+                }
+                elbClient = elbBuilder.build();
+                ec2Client = ec2Builder.build();
             }
             elbClient.deregisterTargets(request);
-            // FIXME default to regular ec2 client
             ServerController.terminateInstances(ec2Client, instanceIds);
         } catch (AmazonEC2Exception | AmazonElasticLoadBalancingException e) {
             LOG.warn("Could not terminate EC2 instances: " + String.join(",", instanceIds), e);
