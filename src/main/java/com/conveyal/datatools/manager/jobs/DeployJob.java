@@ -876,33 +876,10 @@ public class DeployJob extends MonitorableJob {
             lines.add(String.format("sudo echo $BUNDLE_STATUS > $WEB_DIR/%s", BUNDLE_DOWNLOAD_COMPLETE_FILE));
             // Put unzipped bundle data into router directory.
             lines.add(String.format("unzip /tmp/bundle.zip -d %s", routerDir));
-            // copy cached_elevations if it exists into routerDir
-            String cachedElevationFile = String.format(
-                "/var/%s/cache/cached_elevations.obj",
-                getTripPlannerString()
-            );
-            String builtCachedElevationFile = String.format(
-                "%s/cached_elevations.obj",
-                routerDir
-            );
-            lines.add(String.format(
-                "[ -f %s ] && cp %s %s",
-                cachedElevationFile,
-                cachedElevationFile,
-                builtCachedElevationFile
-            ));
             lines.add("echo 'starting graph build'");
             // Build the graph.
             if (deployment.r5) lines.add(String.format("sudo -H -u ubuntu java -Xmx${MEM}k -jar %s/%s.jar point --build %s", jarDir, jarName, routerDir));
             else lines.add(String.format("sudo -H -u ubuntu java -jar -Xmx${MEM}k %s/%s.jar --build %s > $BUILDLOGFILE 2>&1", jarDir, jarName, routerDir));
-            // copy resulting cached elevations to cache folder. This is useful if creating an AMI image is desired
-            // after graph build.
-            lines.add(String.format(
-                "[ -f %s ] && cp %s %s",
-                builtCachedElevationFile,
-                builtCachedElevationFile,
-                cachedElevationFile
-            ));
             // Re-upload user data log after build command.
             lines.add(uploadUserDataLogCommand);
             // Upload the build log file, build report and graph to S3.
