@@ -29,7 +29,7 @@ public class EC2Info implements Serializable {
     public String amiId;
     /**
      * The AWS-style instance type (e.g., t2.medium) to use for new EC2 machines used specifically for graph building.
-     * Defaults to {@link com.conveyal.datatools.manager.jobs.DeployJob#DEFAULT_INSTANCE_TYPE} if null during deployment.
+     * Defaults to {@link com.conveyal.datatools.manager.models.EC2Info#instanceType} if null during deployment.
      */
     public String buildInstanceType;
     /** The Amazon machine image (AMI) to be used for the OTP EC2 machine used specifically for graph building. */
