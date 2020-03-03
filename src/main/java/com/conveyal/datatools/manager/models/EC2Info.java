@@ -1,9 +1,13 @@
 package com.conveyal.datatools.manager.models;
 
+import com.conveyal.datatools.manager.DataManager;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.io.Serializable;
 import java.util.List;
+
+import static com.conveyal.datatools.manager.jobs.DeployJob.AMI_CONFIG_PATH;
+import static com.conveyal.datatools.manager.jobs.DeployJob.DEFAULT_INSTANCE_TYPE;
 
 /**
  * Contains the fields specific to starting up new EC2 servers for an ELB target group. If null, at least one internal
@@ -52,5 +56,37 @@ public class EC2Info implements Serializable {
         ) || (
             buildAmiId != null && !buildAmiId.equals(amiId)
         );
+    }
+
+    /**
+     * Returns the appropriate ami ID to use when creating a new ec2 instance during a deploy job.
+     *
+     * @param graphAlreadyBuilt whether or not a graph has already been built. If false, this means a build ami should
+     *                          be used if available.
+     */
+    public String getAmiId(boolean graphAlreadyBuilt) {
+        if (!graphAlreadyBuilt && buildAmiId != null) {
+            return buildAmiId;
+        } else if (amiId != null) {
+            return amiId;
+        } else {
+            return DataManager.getConfigPropertyAsText(AMI_CONFIG_PATH);
+        }
+    }
+
+    /**
+     * Returns the appropriate instance type to use when creating a new ec2 instance during a deploy job.
+     *
+     * @param graphAlreadyBuilt whether or not a graph has already been built. If false, this means a build instance
+     *                          type should be used if available.
+     */
+    public String getInstanceType(boolean graphAlreadyBuilt) {
+        if (!graphAlreadyBuilt && buildInstanceType != null) {
+            return buildInstanceType;
+        } else if (instanceType != null) {
+            return instanceType;
+        } else {
+            return DEFAULT_INSTANCE_TYPE;
+        }
     }
 }

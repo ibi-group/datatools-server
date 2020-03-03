@@ -133,18 +133,14 @@ public class MonitorServerStatusJob extends MonitorableJob {
             wait("graph build/download check: " + graphStatusUrl);
             graphIsAvailable = checkForSuccessfulRequest(graphStatusUrl);
             if (jobHasTimedOut()) {
-                message = "Job timed out while waiting for graph build/download. If this was a graph building machine, it may have run out of memory.";
-                LOG.error(message);
-                failJob(message);
+                failJob("Job timed out while waiting for graph build/download. If this was a graph building machine, it may have run out of memory.");
                 return;
             }
         }
         // Check status of bundle download and fail job if there was a failure.
         String graphStatus = getUrlAsString(graphStatusUrl);
         if (graphStatus == null || !graphStatus.contains("SUCCESS")) {
-            message = "Failure encountered while building/downloading graph.";
-            LOG.error(message);
-            failJob(message);
+            failJob("Failure encountered while building/downloading graph.");
             return;
         }
         graphBuildSeconds = (System.currentTimeMillis() - graphBuildStartTime) / 1000;
@@ -166,9 +162,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
             wait("router to become available: " + routerUrl);
             routerIsAvailable = checkForSuccessfulRequest(routerUrl);
             if (jobHasTimedOut()) {
-                message = "Job timed out while waiting for trip planner to start up.";
-                failJob(message);
-                LOG.error(message);
+                failJob("Job timed out while waiting for trip planner to start up.");
                 return;
             }
         }
@@ -192,9 +186,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
             LOG.info("View logs at {}", getUserDataLogS3Path());
             deployJob.incrementCompletedServers();
         } else {
-            message = "There is no load balancer under which to register ec2 instance.";
-            LOG.error(message);
-            failJob(message);
+            failJob("There is no load balancer under which to register ec2 instance.");
         }
     }
 
@@ -209,6 +201,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
      * Helper that fails with a helpful message about where to find uploaded logs.
      */
     private void failJob(String message) {
+        LOG.error(message);
         status.fail(String.format("%s Check logs at: %s", message, getUserDataLogS3Path()));
     }
 

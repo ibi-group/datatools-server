@@ -80,8 +80,7 @@ public class DeployJob extends MonitorableJob {
     private static final Logger LOG = LoggerFactory.getLogger(DeployJob.class);
     private static final String bundlePrefix = "bundles";
     public static final String DEFAULT_INSTANCE_TYPE = "t2.medium";
-    private static final String AMI_CONFIG_PATH = "modules.deployment.ec2.default_ami";
-    private static final String DEFAULT_AMI_ID = DataManager.getConfigPropertyAsText(AMI_CONFIG_PATH);
+    public static final String AMI_CONFIG_PATH = "modules.deployment.ec2.default_ami";
     // Indicates whether EC2 instances should be EBS optimized.
     private static final boolean EBS_OPTIMIZED = "true".equals(DataManager.getConfigPropertyAsText("modules.deployment.ec2.ebs_optimized"));
     private static final String OTP_GRAPH_FILENAME = "Graph.obj";
@@ -654,14 +653,7 @@ public class DeployJob extends MonitorableJob {
                 .withGroups(otpServer.ec2Info.securityGroupId)
                 .withDeviceIndex(0);
         // Pick proper ami depending on whether graph is being built and what is defined.
-        String amiId;
-        if (!graphAlreadyBuilt && otpServer.ec2Info.buildAmiId != null) {
-            amiId = otpServer.ec2Info.buildAmiId;
-        } else if (otpServer.ec2Info.amiId != null) {
-            amiId = otpServer.ec2Info.amiId;
-        } else {
-            amiId = DEFAULT_AMI_ID;
-        }
+        String amiId = otpServer.ec2Info.getAmiId(graphAlreadyBuilt);
         // Verify that AMI is correctly defined.
         if (amiId == null || !ServerController.amiExists(amiId, ec2)) {
             statusMessage = String.format(
@@ -672,14 +664,7 @@ public class DeployJob extends MonitorableJob {
             status.fail(statusMessage);
         }
         // Pick proper instance type depending on whether graph is being built and what is defined.
-        String instanceType;
-        if (!graphAlreadyBuilt && otpServer.ec2Info.buildInstanceType != null) {
-            instanceType = otpServer.ec2Info.buildInstanceType;
-        } else if (otpServer.ec2Info.instanceType != null) {
-            instanceType = otpServer.ec2Info.instanceType;
-        } else {
-            instanceType = DEFAULT_INSTANCE_TYPE;
-        }
+        String instanceType = otpServer.ec2Info.getInstanceType(graphAlreadyBuilt);
         RunInstancesRequest runInstancesRequest = new RunInstancesRequest()
                 .withNetworkInterfaces(interfaceSpecification)
                 .withInstanceType(instanceType)
