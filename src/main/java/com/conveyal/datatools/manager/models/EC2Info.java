@@ -4,10 +4,6 @@ import com.conveyal.datatools.manager.DataManager;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
 import java.io.Serializable;
-import java.util.List;
-
-import static com.conveyal.datatools.manager.jobs.DeployJob.AMI_CONFIG_PATH;
-import static com.conveyal.datatools.manager.jobs.DeployJob.DEFAULT_INSTANCE_TYPE;
 
 /**
  * Contains the fields specific to starting up new EC2 servers for an ELB target group. If null, at least one internal
@@ -16,11 +12,15 @@ import static com.conveyal.datatools.manager.jobs.DeployJob.DEFAULT_INSTANCE_TYP
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class EC2Info implements Serializable {
     private static final long serialVersionUID = 1L;
+
+    public static final String AMI_CONFIG_PATH = "modules.deployment.ec2.default_ami";
+    public static final String DEFAULT_INSTANCE_TYPE = "t2.medium";
+
     /** Empty constructor for serialization. */
     public EC2Info () {}
     /**
      * The AWS-style instance type (e.g., t2.medium) to use for new EC2 machines. Defaults to
-     * {@link com.conveyal.datatools.manager.jobs.DeployJob#DEFAULT_INSTANCE_TYPE} if null during deployment.
+     * {@link com.conveyal.datatools.manager.models.EC2Info#DEFAULT_INSTANCE_TYPE} if null during deployment.
      */
     public String instanceType;
     /** Number of instances to spin up and add to target group. If zero, defaults to 1. */
@@ -29,22 +29,31 @@ public class EC2Info implements Serializable {
     public String subnetId;
     /** The security group ID associated with the target group. */
     public String securityGroupId;
-    /** The Amazon machine image (AMI) to be used for the OTP EC2 machines. */
+    /**
+     * The Amazon machine image (AMI) to be used for the OTP EC2 machines. Defaults to the app config value at
+     * {@link com.conveyal.datatools.manager.models.EC2Info#AMI_CONFIG_PATH} if null during deployment.
+     */
     public String amiId;
     /**
      * The AWS-style instance type (e.g., t2.medium) to use for new EC2 machines used specifically for graph building.
      * Defaults to {@link com.conveyal.datatools.manager.models.EC2Info#instanceType} if null during deployment.
      */
     public String buildInstanceType;
-    /** The Amazon machine image (AMI) to be used for the OTP EC2 machine used specifically for graph building. */
+    /**
+     * The Amazon machine image (AMI) (e.g. ami-12345678) to be used for the OTP EC2 machine used specifically for
+     * graph building. Defaults to {@link com.conveyal.datatools.manager.models.EC2Info#amiId} if null during deployment.
+     */
     public String buildAmiId;
-    /** The IAM instance profile ARN that the OTP EC2 server should assume. For example, arn:aws:iam::123456789012:instance-profile/otp-ec2-role */
+    /**
+     * The IAM instance profile ARN that the OTP EC2 server should assume. For example,
+     * arn:aws:iam::123456789012:instance-profile/otp-ec2-role
+     */
     public String iamInstanceProfileArn;
     /** The AWS key file (.pem) that should be used to set up OTP EC2 servers (gives a way for admins to SSH into machine). */
     public String keyName;
     /** The target group to deploy new EC2 instances to. */
     public String targetGroupArn;
-    /** An optional custom AWS region */
+    /** An optional custom AWS region (e.g., us-east-1) */
     public String region;
 
     /**

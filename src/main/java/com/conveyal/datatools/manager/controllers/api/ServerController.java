@@ -63,7 +63,7 @@ import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.getPOJOFromRequestBody;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
-import static com.conveyal.datatools.manager.jobs.DeployJob.DEFAULT_INSTANCE_TYPE;
+import static com.conveyal.datatools.manager.models.EC2Info.DEFAULT_INSTANCE_TYPE;
 import static com.conveyal.datatools.manager.persistence.FeedStore.getAWSCreds;
 import static spark.Spark.delete;
 import static spark.Spark.get;
@@ -284,7 +284,7 @@ public class ServerController {
             // If a server's ec2 info object is not null, it must pass a few validation checks on various fields related to
             // AWS. (e.g., target group ARN and instance type).
             if (server.ec2Info != null) {
-                // do some custom items if a custom region should be used
+                // create custom clients if credentials and or a custom region exist
                 if (server.ec2Info.region != null) {
                     AmazonEC2ClientBuilder builder = AmazonEC2Client.builder();
                     if (credentials != null) {
@@ -464,14 +464,17 @@ public class ServerController {
 
     /**
      * Validate that EC2 instance type (e.g., t2-medium) exists. This value can be empty and will default to
-     * {@link com.conveyal.datatools.manager.jobs.DeployJob#DEFAULT_INSTANCE_TYPE} at deploy time.
+     * {@link com.conveyal.datatools.manager.models.EC2Info#DEFAULT_INSTANCE_TYPE} at deploy time.
      */
     private static void validateInstanceType(String instanceType, Request req) {
         if (instanceType == null) return;
         try {
             InstanceType.fromValue(instanceType);
         } catch (IllegalArgumentException e) {
-            String message = String.format("Must provide valid instance type (if none provided, defaults to %s).", DEFAULT_INSTANCE_TYPE);
+            String message = String.format(
+                "Must provide valid instance type (if none provided, defaults to %s).",
+                DEFAULT_INSTANCE_TYPE
+            );
             logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message, e);
         }
     }

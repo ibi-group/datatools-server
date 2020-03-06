@@ -6,10 +6,12 @@ import com.amazonaws.event.ProgressListener;
 import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.model.CreateTagsRequest;
 import com.amazonaws.services.ec2.model.DescribeInstanceStatusRequest;
+import com.amazonaws.services.ec2.model.DescribeInstancesRequest;
 import com.amazonaws.services.ec2.model.Filter;
 import com.amazonaws.services.ec2.model.IamInstanceProfileSpecification;
 import com.amazonaws.services.ec2.model.Instance;
 import com.amazonaws.services.ec2.model.InstanceNetworkInterfaceSpecification;
+import com.amazonaws.services.ec2.model.InstanceType;
 import com.amazonaws.services.ec2.model.RunInstancesRequest;
 import com.amazonaws.services.ec2.model.Tag;
 import com.amazonaws.services.s3.AmazonS3;
@@ -69,6 +71,8 @@ import org.slf4j.LoggerFactory;
 import static com.conveyal.datatools.manager.controllers.api.ServerController.getIds;
 import static com.conveyal.datatools.manager.models.Deployment.DEFAULT_OTP_VERSION;
 import static com.conveyal.datatools.manager.models.Deployment.DEFAULT_R5_VERSION;
+import static com.conveyal.datatools.manager.models.EC2Info.AMI_CONFIG_PATH;
+import static com.conveyal.datatools.manager.models.EC2Info.DEFAULT_INSTANCE_TYPE;
 
 /**
  * Deploy the given deployment to the OTP servers specified by targets.
@@ -79,8 +83,6 @@ public class DeployJob extends MonitorableJob {
 
     private static final Logger LOG = LoggerFactory.getLogger(DeployJob.class);
     private static final String bundlePrefix = "bundles";
-    public static final String DEFAULT_INSTANCE_TYPE = "t2.medium";
-    public static final String AMI_CONFIG_PATH = "modules.deployment.ec2.default_ami";
     // Indicates whether EC2 instances should be EBS optimized.
     private static final boolean EBS_OPTIMIZED = "true".equals(DataManager.getConfigPropertyAsText("modules.deployment.ec2.ebs_optimized"));
     private static final String OTP_GRAPH_FILENAME = "Graph.obj";
@@ -553,7 +555,7 @@ public class DeployJob extends MonitorableJob {
                 if (otpServer.ec2Info.hasSeparateGraphBuildConfig()) {
                     // different instance type and/or ami exists for graph building. Terminate graph building instance
                     ServerController.terminateInstances(ec2, graphBuildingInstances);
-                    status.numServersRemaining = Math.max(otpServer.ec2Info.instanceCount, 0);
+                    status.numServersRemaining = Math.max(otpServer.ec2Info.instanceCount, 1);
                 } else {
                     // same configuration exists, so keep instance on and add to list of running instances
                     instances.addAll(graphBuildingInstances);
@@ -657,14 +659,29 @@ public class DeployJob extends MonitorableJob {
         // Verify that AMI is correctly defined.
         if (amiId == null || !ServerController.amiExists(amiId, ec2)) {
             statusMessage = String.format(
-                "Default AMI ID (%s) is missing or bad. Should be provided in config at %s",
+                "AMI ID (%s) is missing or bad. Check the deployment settings or the default value in the app config at %s",
                 amiId,
-                AMI_CONFIG_PATH);
+                AMI_CONFIG_PATH
+            );
             LOG.error(statusMessage);
             status.fail(statusMessage);
+            return Collections.EMPTY_LIST;
         }
         // Pick proper instance type depending on whether graph is being built and what is defined.
         String instanceType = otpServer.ec2Info.getInstanceType(graphAlreadyBuilt);
+        // Verify that instance type is correctly defined.
+        try {
+            InstanceType.fromValue(instanceType);
+        } catch (IllegalArgumentException e) {
+            statusMessage = String.format(
+                "Instance type (%s) is bad. Check the deployment settings. The default value is %s",
+                instanceType,
+                DEFAULT_INSTANCE_TYPE
+            );
+            LOG.error(statusMessage);
+            status.fail(statusMessage);
+            return Collections.EMPTY_LIST;
+        }
         RunInstancesRequest runInstancesRequest = new RunInstancesRequest()
                 .withNetworkInterfaces(interfaceSpecification)
                 .withInstanceType(instanceType)
