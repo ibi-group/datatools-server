@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <configuration>
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
-        <layout class="ch.qos.logback.classic.PatternLayout">
-            <Pattern>%d{MMM dd HH:mm:ss.SSS} [%thread] %-5level %logger{36}:%L - %msg%n</Pattern>
-        </layout>
+        <encoder class="ch.qos.logback.classic.encoder.PatternLayoutEncoder">
+            <pattern>%highlight(%-5level) %d{yyyy-MM-dd'T'HH:mm:ss.SSS} %yellow([%thread]) %blue(%logger{36}\(%file:%line\)) %msg%n</pattern>
+        </encoder>
     </appender>
     <root level="info">
         <appender-ref ref="STDOUT" />
