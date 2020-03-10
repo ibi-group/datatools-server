@@ -76,6 +76,7 @@ public abstract class MonitorableJob implements Runnable, Serializable {
         }
         this.owner = owner;
         this.name = name;
+        status.name = name;
         this.type = type;
         registerJob();
     }
@@ -279,6 +280,7 @@ public abstract class MonitorableJob implements Runnable, Serializable {
         }
 
         public void fail (String message, Exception e) {
+            LOG.warn("Job `{}` has been failed with message: `{}` and Exception: `{}`", name, message, e);
             this.error = true;
             this.percentComplete = 100;
             this.completed = true;
@@ -288,6 +290,7 @@ public abstract class MonitorableJob implements Runnable, Serializable {
         }
 
         public void fail (String message) {
+            LOG.warn("Job `{}` has been failed with message: `{}`", name, message);
             this.error = true;
             this.percentComplete = 100;
             this.completed = true;

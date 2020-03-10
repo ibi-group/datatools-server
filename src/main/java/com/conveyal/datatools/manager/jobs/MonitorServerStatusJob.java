@@ -8,6 +8,7 @@ import com.amazonaws.services.ec2.model.TerminateInstancesRequest;
 import com.amazonaws.services.ec2.model.TerminateInstancesResult;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancing;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClient;
+import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClientBuilder;
 import com.amazonaws.services.elasticloadbalancingv2.model.RegisterTargetsRequest;
 import com.amazonaws.services.elasticloadbalancingv2.model.TargetDescription;
 import com.amazonaws.services.s3.AmazonS3URI;
@@ -69,7 +70,9 @@ public class MonitorServerStatusJob extends MonitorableJob {
         status.message = "Checking server status...";
         startTime = System.currentTimeMillis();
         credentials = AWSUtils.getCredentialsForRole(otpServer.role, "monitor-" + instance.getInstanceId());
-        ec2 = AWSUtils.getEC2ClientForCredentials(credentials);
+        ec2 = deployJob.getCustomRegion() == null
+            ? AWSUtils.getEC2ClientForCredentials(credentials)
+            : AWSUtils.getEC2ClientForCredentials(credentials, deployJob.getCustomRegion());
     }
 
     @JsonProperty
@@ -106,14 +109,14 @@ public class MonitorServerStatusJob extends MonitorableJob {
                 wait("bundle download check:" + bundleUrl);
                 bundleIsDownloaded = checkForSuccessfulRequest(bundleUrl);
                 if (jobHasTimedOut()) {
-                    status.fail(String.format("Job timed out while checking for server bundle download status (%s)", instance.getInstanceId()));
+                    failJob("Job timed out while checking for server bundle download status.");
                     return;
                 }
             }
             // Check status of bundle download and fail job if there was a failure.
             String bundleStatus = getUrlAsString(bundleUrl);
             if (bundleStatus == null || !bundleStatus.contains("SUCCESS")) {
-                status.fail("Failure encountered while downloading transit bundle.");
+                failJob("Failure encountered while downloading transit bundle.");
                 return;
             }
             long bundleDownloadSeconds = (System.currentTimeMillis() - bundleDownloadStartTime) / 1000;
@@ -130,26 +133,23 @@ public class MonitorServerStatusJob extends MonitorableJob {
             wait("graph build/download check: " + graphStatusUrl);
             graphIsAvailable = checkForSuccessfulRequest(graphStatusUrl);
             if (jobHasTimedOut()) {
-                message = String.format("Job timed out while waiting for graph build/download (%s). If this was a graph building machine, it may have run out of memory.", instance.getInstanceId());
-                LOG.error(message);
-                status.fail(message);
+                failJob("Job timed out while waiting for graph build/download. If this was a graph building machine, it may have run out of memory.");
                 return;
             }
         }
         // Check status of bundle download and fail job if there was a failure.
         String graphStatus = getUrlAsString(graphStatusUrl);
         if (graphStatus == null || !graphStatus.contains("SUCCESS")) {
-            message = String.format("Failure encountered while building/downloading graph (%s).", instance.getInstanceId());
-            LOG.error(message);
-            status.fail(message);
+            failJob("Failure encountered while building/downloading graph.");
             return;
         }
         graphBuildSeconds = (System.currentTimeMillis() - graphBuildStartTime) / 1000;
         message = String.format("Graph build/download completed in %d seconds!", graphBuildSeconds);
         LOG.info(message);
         // If only task is to build graph, this machine's job is complete and we can consider this job done.
-        if (deployment.buildGraphOnly) {
+        if (deployment.buildGraphOnly || (!graphAlreadyBuilt && otpServer.ec2Info.hasSeparateGraphBuildConfig())) {
             status.update(false, message, 100);
+            LOG.info("View logs at {}", getUserDataLogS3Path());
             return;
         }
         status.update("Loading graph...", 70);
@@ -162,9 +162,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
             wait("router to become available: " + routerUrl);
             routerIsAvailable = checkForSuccessfulRequest(routerUrl);
             if (jobHasTimedOut()) {
-                message = String.format("Job timed out while waiting for trip planner to start up (%s)", instance.getInstanceId());
-                status.fail(message);
-                LOG.error(message);
+                failJob("Job timed out while waiting for trip planner to start up.");
                 return;
             }
         }
@@ -173,9 +171,10 @@ public class MonitorServerStatusJob extends MonitorableJob {
             // After the router is available, the EC2 instance can be registered with the load balancer.
             // REGISTER INSTANCE WITH LOAD BALANCER
             // Use alternative credentials if they exist.
-            AmazonElasticLoadBalancing elbClient = AmazonElasticLoadBalancingClient.builder()
-                .withCredentials(credentials)
-                .build();
+            AmazonElasticLoadBalancingClientBuilder builder = AmazonElasticLoadBalancingClient.builder()
+                .withCredentials(credentials);
+            if (deployJob.getCustomRegion() != null) builder.withRegion(deployJob.getCustomRegion());
+            AmazonElasticLoadBalancing elbClient = builder.build();
             RegisterTargetsRequest registerTargetsRequest = new RegisterTargetsRequest()
                     .withTargetGroupArn(otpServer.ec2Info.targetGroupArn)
                     .withTargets(new TargetDescription().withId(instance.getInstanceId()));
@@ -184,12 +183,26 @@ public class MonitorServerStatusJob extends MonitorableJob {
             message = String.format("Server successfully registered with load balancer %s. OTP running at %s", otpServer.ec2Info.targetGroupArn, routerUrl);
             LOG.info(message);
             status.update(false, message, 100, true);
+            LOG.info("View logs at {}", getUserDataLogS3Path());
             deployJob.incrementCompletedServers();
         } else {
-            message = String.format("There is no load balancer under which to register ec2 instance %s.", instance.getInstanceId());
-            LOG.error(message);
-            status.fail(message);
+            failJob("There is no load balancer under which to register ec2 instance.");
         }
+    }
+
+    /**
+     * Gets the expected path to the user data logs that get uploaded to s3
+     */
+    private String getUserDataLogS3Path() {
+        return String.format("%s/%s.log", deployJob.getS3FolderURI(), instance.getInstanceId());
+    }
+
+    /**
+     * Helper that fails with a helpful message about where to find uploaded logs.
+     */
+    private void failJob(String message) {
+        LOG.error(message);
+        status.fail(String.format("%s Check logs at: %s", message, getUserDataLogS3Path()));
     }
 
     /** Determine if job has passed time limit for its run time. */

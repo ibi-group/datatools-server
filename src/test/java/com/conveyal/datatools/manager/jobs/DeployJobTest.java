@@ -97,7 +97,10 @@ public class DeployJobTest {
     public static void cleanUp() {
         List<Instance> instances = server.retrieveEC2Instances();
         List<String> ids = getIds(instances);
-        terminateInstances(AWSUtils.getEC2ClientForRole(server.role), ids);
+        terminateInstances(
+            AWSUtils.getEC2ClientForRole(server.role, server.ec2Info == null ? null : server.ec2Info.region),
+            ids
+        );
     }
 
 }

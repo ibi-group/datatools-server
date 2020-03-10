@@ -9,6 +9,7 @@ import com.amazonaws.services.ec2.model.Filter;
 import com.amazonaws.services.ec2.model.Instance;
 import com.amazonaws.services.ec2.model.Reservation;
 import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.AmazonS3URI;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.AWSUtils;
@@ -47,6 +48,7 @@ import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.AWSUtils.downloadFromS3;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
+import static com.conveyal.datatools.manager.persistence.FeedStore.getAWSCreds;
 import static spark.Spark.delete;
 import static spark.Spark.get;
 import static spark.Spark.options;
@@ -101,6 +103,7 @@ public class DeploymentController {
         // Default client to use if no role was used during the deployment.
         AmazonS3 s3Client = FeedStore.s3Client;
         String role = null;
+        String region = null;
         String uriString;
         String filename = req.queryParams("filename");
         if (filename == null) {
@@ -131,6 +134,7 @@ public class DeploymentController {
                     logMessageAndHalt(req, 400, "The deployment does not have job history or associated server information to construct URI for build artifact. " + uriString);
                     return null;
                 }
+                region = server.ec2Info == null ? null : server.ec2Info.region;
                 uriString = String.format("s3://%s/bundles/%s/%s/%s", server.s3Bucket, deployment.projectId, deployment.id, jobId);
                 LOG.warn("Could not find deploy summary for job. Attempting to use {}", uriString);
             }
@@ -138,10 +142,15 @@ public class DeploymentController {
             // If summary is readily available, just use the ready-to-use build artifacts field.
             uriString = summaryToDownload.buildArtifactsFolder;
             role = summaryToDownload.role;
+            region = summaryToDownload.ec2Info == null ? null : summaryToDownload.ec2Info.region;
         }
         AmazonS3URI uri = new AmazonS3URI(uriString);
         // Assume the alternative role if needed to download the deploy artifact.
-        if (role != null) s3Client = AWSUtils.getS3ClientForRole(role);
+        if (role != null) {
+            s3Client = AWSUtils.getS3ClientForRole(role, region);
+        } else if (region != null) {
+            s3Client = AWSUtils.getS3ClientForCredentials(getAWSCreds(), region);
+        }
         return downloadFromS3(s3Client, uri.getBucket(), String.join("/", uri.getKey(), filename), false, res);
     }
 
@@ -373,7 +382,12 @@ public class DeploymentController {
             }
         }
         // If checks are ok, terminate instances.
-        boolean success = ServerController.deRegisterAndTerminateInstances(credentials, targetGroupArn, idsToTerminate);
+        boolean success = ServerController.deRegisterAndTerminateInstances(
+            credentials,
+            targetGroupArn,
+            latest.ec2Info.region,
+            idsToTerminate
+        );
         if (!success) {
             logMessageAndHalt(req, 400, "Could not complete termination request");
             return false;

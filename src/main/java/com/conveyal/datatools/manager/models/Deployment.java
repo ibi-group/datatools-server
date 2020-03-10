@@ -122,11 +122,20 @@ public class Deployment extends Model implements Serializable {
         Filter deploymentFilter = new Filter("tag:deploymentId", Collections.singletonList(id));
         // Check if the latest deployment used alternative credentials/AWS role.
         String role = null;
+        String region = null;
         if (this.latest() != null) {
             OtpServer server = Persistence.servers.getById(this.latest().serverId);
-            if (server != null) role = server.role;
+            if (server != null) {
+                role = server.role;
+                if (server.ec2Info != null) {
+                    region = server.ec2Info.region;
+                }
+            }
         }
-        return DeploymentController.fetchEC2InstanceSummaries(AWSUtils.getEC2ClientForRole(role), deploymentFilter);
+        return DeploymentController.fetchEC2InstanceSummaries(
+            AWSUtils.getEC2ClientForRole(role, region),
+            deploymentFilter
+        );
     }
 
     public void storeFeedVersions(Collection<FeedVersion> versions) {
