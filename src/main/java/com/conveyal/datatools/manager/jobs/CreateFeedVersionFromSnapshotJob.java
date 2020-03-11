@@ -16,12 +16,14 @@ import org.slf4j.LoggerFactory;
 public class CreateFeedVersionFromSnapshotJob extends MonitorableJob {
     public static final Logger LOG = LoggerFactory.getLogger(CreateFeedVersionFromSnapshotJob.class);
 
+    // TODO make feed version private?
     public FeedVersion feedVersion;
     private final Snapshot snapshot;
 
-    public CreateFeedVersionFromSnapshotJob(FeedVersion feedVersion, Snapshot snapshot, Auth0UserProfile owner) {
-        super(owner, "Creating Feed Version from Snapshot for " + feedVersion.parentFeedSource().name, JobType.CREATE_FEEDVERSION_FROM_SNAPSHOT);
-        this.feedVersion = feedVersion;
+    public CreateFeedVersionFromSnapshotJob(FeedSource feedSource, Snapshot snapshot, Auth0UserProfile owner) {
+        super(owner, "Creating Feed Version from Snapshot for " + feedSource.name, JobType.CREATE_FEEDVERSION_FROM_SNAPSHOT);
+        this.feedVersion = new FeedVersion(feedSource);
+        this.feedVersion.retrievalMethod = FeedSource.FeedRetrievalMethod.PRODUCED_IN_HOUSE;
         this.snapshot = snapshot;
         status.message = "Initializing...";
     }
