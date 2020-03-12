@@ -286,13 +286,9 @@ public class GisExportJob extends MonitorableJob {
                 f.delete();
             }
             outDir.delete();
-            status.update(false, "Export complete!", 100);
-            status.completed = true;
+            status.finish("Export complete!");
         } catch (Exception e) {
-            String message = "An exception occurred during the GIS export";
-            LOG.error(message);
-            status.fail(message);
-            e.printStackTrace();
+            status.fail("An exception occurred during the GIS export", e);
         } finally {
             if (connection != null) DbUtils.closeQuietly(connection);
         }

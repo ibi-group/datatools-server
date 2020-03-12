@@ -186,10 +186,7 @@ public class FeedSource extends Model implements Cloneable {
                     "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.95 Safari/537.11"
             );
         } catch (IOException e) {
-            String message = String.format("Unable to open connection to %s; not fetching feed %s", url, this.name);
-            LOG.error(message);
-            // TODO use this update function throughout this class
-            status.update(true, message, 0);
+            status.fail(String.format("Unable to open connection to %s; not fetching feed %s", url, this.name), e);
             return null;
         }
 
@@ -211,13 +208,13 @@ public class FeedSource extends Model implements Cloneable {
                 case HttpURLConnection.HTTP_NOT_MODIFIED:
                     message = String.format("Feed %s has not been modified", this.name);
                     LOG.warn(message);
-                    status.update(false, message, 100.0);
+                    status.finish(message);
                     return null;
                 case HttpURLConnection.HTTP_OK:
                     // Response is OK. Continue on to save the GTFS file.
                     message = String.format("Saving %s feed.", this.name);
                     LOG.info(message);
-                    status.update(false, message, 75.0);
+                    status.update(message, 75.0);
                     newGtfsFile = version.newGtfsFile(conn.getInputStream());
                     break;
                 case HttpURLConnection.HTTP_MOVED_TEMP:
@@ -270,7 +267,7 @@ public class FeedSource extends Model implements Cloneable {
             } else {
                 LOG.warn("Failed to delete unneeded GTFS file at: {}", filePath);
             }
-            status.update(false, message, 100.0, true);
+            status.finish(message);
             return null;
         }
         else {
@@ -287,7 +284,7 @@ public class FeedSource extends Model implements Cloneable {
                     String.format("New feed version created for %s.", this.name));
             String message = String.format("Fetch complete for %s", this.name);
             LOG.info(message);
-            status.update(false, message, 100.0);
+            status.finish(message);
             return version;
         }
     }

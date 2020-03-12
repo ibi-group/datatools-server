@@ -24,7 +24,7 @@ public class LoadFeedJob extends MonitorableJob {
         super(owner, "Loading GTFS", JobType.LOAD_FEED);
         feedVersion = version;
         this.isNewVersion = isNewVersion;
-        status.update(false, "Waiting to load feed...", 0);
+        status.update("Waiting to load feed...", 0);
     }
 
     /**
@@ -46,7 +46,7 @@ public class LoadFeedJob extends MonitorableJob {
     @Override
     public void jobFinished () {
         if (!status.error) {
-            status.update(false, "Load stage complete!", 100, true);
+            status.finish("Load stage complete!");
         }
     }
 

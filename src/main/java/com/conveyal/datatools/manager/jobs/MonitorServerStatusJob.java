@@ -148,7 +148,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
         LOG.info(message);
         // If only task is to build graph, this machine's job is complete and we can consider this job done.
         if (deployment.buildGraphOnly || (!graphAlreadyBuilt && otpServer.ec2Info.hasSeparateGraphBuildConfig())) {
-            status.update(false, message, 100);
+            status.finish(message);
             LOG.info("View logs at {}", getUserDataLogS3Path());
             return;
         }
@@ -181,8 +181,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
             elbClient.registerTargets(registerTargetsRequest);
             // FIXME how do we know it was successful?
             message = String.format("Server successfully registered with load balancer %s. OTP running at %s", otpServer.ec2Info.targetGroupArn, routerUrl);
-            LOG.info(message);
-            status.update(false, message, 100, true);
+            status.finish(message);
             LOG.info("View logs at {}", getUserDataLogS3Path());
             deployJob.incrementCompletedServers();
         } else {

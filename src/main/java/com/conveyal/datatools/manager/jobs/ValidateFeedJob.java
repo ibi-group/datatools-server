@@ -24,7 +24,7 @@ public class ValidateFeedJob extends MonitorableJob {
         super(owner, "Validating Feed", JobType.VALIDATE_FEED);
         feedVersion = version;
         this.isNewVersion = isNewVersion;
-        status.update(false, "Waiting to begin validation...", 0);
+        status.update("Waiting to begin validation...", 0);
     }
 
     @Override
@@ -49,14 +49,12 @@ public class ValidateFeedJob extends MonitorableJob {
                 } else {
                     Persistence.feedVersions.replace(feedVersion.id, feedVersion);
                 }
-
-                // schedule expiration notification jobs
+                // Schedule expiration notification jobs.
                 Scheduler.scheduleExpirationNotifications(feedVersion.parentFeedSource());
             }
             // TODO: If ValidateFeedJob is called without a parent job (e.g., to "re-validate" a feed), we should handle
-            // storing the updated ValidationResult in Mongo.
-
-            status.update(false, "Validation finished!", 100, true);
+            //  storing the updated ValidationResult in Mongo.
+            status.finish("Validation finished!");
         }
     }
 

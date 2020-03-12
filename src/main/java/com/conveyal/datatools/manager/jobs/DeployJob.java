@@ -136,6 +136,11 @@ public class DeployJob extends MonitorableJob {
         return deployment.id;
     }
 
+    @JsonProperty
+    public String getProjectId () {
+        return deployment.projectId;
+    }
+
     /** Increment the completed servers count (for use during ELB deployment) and update the job status. */
     public void incrementCompletedServers() {
         status.numServersCompleted++;
@@ -212,10 +217,7 @@ public class DeployJob extends MonitorableJob {
             try {
                 deploymentTempFile = File.createTempFile("deployment", ".zip");
             } catch (IOException e) {
-                statusMessage = "Could not create temp file for deployment";
-                LOG.error(statusMessage);
-                e.printStackTrace();
-                status.fail(statusMessage);
+                status.fail("Could not create temp file for deployment", e);
                 return;
             }
 
@@ -227,10 +229,7 @@ public class DeployJob extends MonitorableJob {
                 this.deployment.dump(deploymentTempFile, true, true, true);
                 tasksCompleted++;
             } catch (Exception e) {
-                statusMessage = "Error dumping deployment";
-                LOG.error(statusMessage);
-                e.printStackTrace();
-                status.fail(statusMessage);
+                status.fail("Error dumping deployment", e);
                 return;
             }
 
@@ -241,17 +240,13 @@ public class DeployJob extends MonitorableJob {
             // Upload to S3, if specifically required by the OTPServer or needed for servers in the target group to fetch.
             if (otpServer.s3Bucket != null || otpServer.ec2Info != null) {
                 if (!DataManager.useS3) {
-                    String message = "Cannot upload deployment to S3. Application not configured for s3 storage.";
-                    LOG.error(message);
-                    status.fail(message);
+                    status.fail("Cannot upload deployment to S3. Application not configured for s3 storage.");
                     return;
                 }
                 try {
                     uploadBundleToS3();
                 } catch (AmazonClientException | InterruptedException e) {
-                    statusMessage = String.format("Error uploading (or copying) deployment bundle to s3://%s", s3Bucket);
-                    LOG.error(statusMessage, e);
-                    status.fail(statusMessage);
+                    status.fail(String.format("Error uploading/copying deployment bundle to s3://%s", s3Bucket), e);
                 }
 
             }
@@ -264,9 +259,7 @@ public class DeployJob extends MonitorableJob {
                 // If creating a new server, there is no need to deploy to an existing one.
                 return;
             } else {
-                String message = "Cannot complete deployment. EC2 deployment disabled in server configuration.";
-                LOG.error(message);
-                status.fail(message);
+                status.fail("Cannot complete deployment. EC2 deployment disabled in server configuration.");
                 return;
             }
         }
@@ -437,7 +430,6 @@ public class DeployJob extends MonitorableJob {
                         response = scanner.next();
                     }
                     statusMessage = String.format("Got response code %d from server due to %s", code, response);
-                    LOG.error(statusMessage);
                     status.fail(statusMessage);
                     // Skip deploying to any other servers.
                     // There is no reason to take out the rest of the servers, it's going to have the same result.
@@ -445,8 +437,7 @@ public class DeployJob extends MonitorableJob {
                 }
             } catch (IOException e) {
                 statusMessage = String.format("Could not finish request to server %s", url);
-                LOG.error(statusMessage);
-                status.fail(statusMessage);
+                status.fail(statusMessage, e);
             }
 
             status.numServersCompleted++;
@@ -484,7 +475,7 @@ public class DeployJob extends MonitorableJob {
         status.duration = System.currentTimeMillis() - status.startTime;
         if (!status.error) {
             // Update status with successful completion state only if no error was encountered.
-            status.update(false, "Deployment complete!", 100, true);
+            status.finish("Deployment complete!");
             // Store the target server in the deployedTo field and set last deployed time.
             LOG.info("Updating deployment target and deploy time.");
             deployment.deployedTo = otpServer.id;
@@ -620,7 +611,7 @@ public class DeployJob extends MonitorableJob {
                 }
             }
             // Job is complete.
-            status.update(false, finalMessage, 100, true);
+            status.finish(finalMessage);
         } catch (Exception e) {
             LOG.error("Could not deploy to EC2 server", e);
             status.fail("Could not deploy to EC2 server", e);
