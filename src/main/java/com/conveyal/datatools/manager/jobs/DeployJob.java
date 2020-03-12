@@ -858,8 +858,9 @@ public class DeployJob extends MonitorableJob {
         // Get the total memory by grepping for MemTotal in meminfo file and removing non-numbers from the line
         // (leaving just the total mem in kb). This is used for starting up the OTP build/run processes.
         lines.add("TOTAL_MEM=`grep MemTotal /proc/meminfo | sed 's/[^0-9]//g'`");
-        // 2097152 kb is 2GB, leave that much for the OS
-        lines.add("MEM=`echo $(($TOTAL_MEM - 2097152))`");
+        // If on a low-memory instance (assuming around 2GB of RAM), allocate 1.5GB for java.
+        // Otherwise use as much as possible while leaving 2097152 kb (2GB) for the OS
+        lines.add("if [ \"2500000\" -gt \"$TOTAL_MEM\" ]; then MEM=1500000; else MEM=`echo $(($TOTAL_MEM - 2097152))`; fi");
         ////// 2. Configure some stuff for AWS CLI.
         // Note: too many threads/concurrent requests cause a lot of individual thread timeouts for some reason, which
         // ultimately causes the entire cp command to stall out.
