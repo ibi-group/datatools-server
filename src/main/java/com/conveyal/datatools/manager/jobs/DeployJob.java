@@ -981,6 +981,11 @@ public class DeployJob extends MonitorableJob {
         return String.join("/", pathList);
     }
 
+    @JsonIgnore
+    public AmazonS3 getS3Client() {
+        return s3Client;
+    }
+
     /**
      * Represents the current status of this job.
      */
