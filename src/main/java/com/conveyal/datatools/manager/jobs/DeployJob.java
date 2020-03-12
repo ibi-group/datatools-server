@@ -4,7 +4,10 @@ import com.amazonaws.AmazonClientException;
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.event.ProgressListener;
 import com.amazonaws.services.ec2.AmazonEC2;
+import com.amazonaws.services.ec2.model.CreateImageRequest;
+import com.amazonaws.services.ec2.model.CreateImageResult;
 import com.amazonaws.services.ec2.model.CreateTagsRequest;
+import com.amazonaws.services.ec2.model.DeregisterImageRequest;
 import com.amazonaws.services.ec2.model.DescribeInstanceStatusRequest;
 import com.amazonaws.services.ec2.model.DescribeInstancesRequest;
 import com.amazonaws.services.ec2.model.Filter;
@@ -530,7 +533,7 @@ public class DeployJob extends MonitorableJob {
                 );
                 monitorInitialServerJob.run();
 
-                status.update("Graph build is complete!", 50);
+                status.update("Graph build is complete!", 40);
                 // If only building graph, job is finished. Note: the graph building EC2 instance should automatically shut
                 // itself down if this flag is turned on (happens in user data). We do not want to proceed with the rest of
                 // the job which would shut down existing servers running for the deployment.
@@ -549,11 +552,33 @@ public class DeployJob extends MonitorableJob {
                     ServerController.terminateInstances(ec2, graphBuildingInstances);
                     return;
                 }
+                // Check if a new image of the instance with the completed graph build should be created.
+                if (otpServer.ec2Info.recreateBuildImage) {
+                    status.update("Creating build image", 42.5);
+                    // Create a new image of this instance.
+                    CreateImageRequest createImageRequest = new CreateImageRequest()
+                        .withInstanceId(graphBuildingInstances.get(0).getInstanceId())
+                        .withName(otpServer.ec2Info.buildImageName)
+                        .withDescription(otpServer.ec2Info.buildImageDescription);
+                    CreateImageResult createImageResult = ec2.createImage(createImageRequest);
+                    // Deregister old image if it exists
+                    if (otpServer.ec2Info.buildAmiId != null) {
+                        status.message = "Deregistering old build image";
+                        DeregisterImageRequest deregisterImageRequest = new DeregisterImageRequest()
+                            .withImageId(otpServer.ec2Info.buildAmiId);
+                        ec2.deregisterImage(deregisterImageRequest);
+                    }
+                    status.update("Updating Server build AMI info", 45);
+                    // Update OTP Server info
+                    otpServer.ec2Info.buildAmiId = createImageResult.getImageId();
+                    Persistence.servers.replace(otpServer.id, otpServer);
+                }
                 // Check whether the graph build instance type or AMI ID is different from the non-graph building type.
                 // If so, terminate the graph building instance. If not, add the graph building instance to the list
                 // of started instances.
                 if (otpServer.ec2Info.hasSeparateGraphBuildConfig()) {
                     // different instance type and/or ami exists for graph building. Terminate graph building instance
+                    status.update("Terminating build instance", 47.5);
                     ServerController.terminateInstances(ec2, graphBuildingInstances);
                     status.numServersRemaining = Math.max(otpServer.ec2Info.instanceCount, 1);
                 } else {
@@ -564,6 +589,7 @@ public class DeployJob extends MonitorableJob {
                         : otpServer.ec2Info.instanceCount - 1;
                 }
             }
+            status.update("Starting server instances", 50);
             // Spin up remaining servers which will download the graph from S3.
             List<MonitorServerStatusJob> remainingServerMonitorJobs = new ArrayList<>();
             List<Instance> remainingInstances = new ArrayList<>();
