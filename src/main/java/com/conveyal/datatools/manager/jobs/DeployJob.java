@@ -842,6 +842,10 @@ public class DeployJob extends MonitorableJob {
         String graphPath = String.join("/", routerDir, OTP_GRAPH_FILENAME);
         //////////////// BEGIN USER DATA
         lines.add("#!/bin/bash");
+        ///// 0. Remove previous status files
+        lines.add("WEB_DIR=/usr/share/nginx/client");
+        lines.add(String.format("rm $WEB_DIR/%s || echo '' > /dev/null", BUNDLE_DOWNLOAD_COMPLETE_FILE));
+        lines.add(String.format("rm $WEB_DIR/%s || echo '' > /dev/null", GRAPH_STATUS_FILE));
         ///// 1. set some variables.
         // Send trip planner logs to LOGFILE
         lines.add(String.format("BUILDLOGFILE=/var/log/%s", getBuildLogFilename()));
@@ -880,7 +884,6 @@ public class DeployJob extends MonitorableJob {
         lines.add(String.format("mkdir -p %s", jarDir));
         // Add client static file directory for uploading deploy stage status files.
         // TODO: switch to AMI that uses /usr/share/nginx/html as static file dir so we don't have to create this new dir.
-        lines.add("WEB_DIR=/usr/share/nginx/client");
         lines.add("sudo mkdir $WEB_DIR");
         lines.add(String.format("wget %s -O %s/%s.jar", s3JarUrl, jarDir, jarName));
         if (graphAlreadyBuilt) {
