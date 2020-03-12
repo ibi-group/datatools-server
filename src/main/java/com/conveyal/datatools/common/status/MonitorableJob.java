@@ -3,7 +3,6 @@ package com.conveyal.datatools.common.status;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.google.common.collect.Sets;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -16,8 +15,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static com.conveyal.datatools.manager.controllers.api.StatusController.getJobsForUser;
 
