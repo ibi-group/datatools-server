@@ -571,6 +571,7 @@ public class DeployJob extends MonitorableJob {
                     status.update("Updating Server build AMI info", 45);
                     // Update OTP Server info
                     otpServer.ec2Info.buildAmiId = createImageResult.getImageId();
+                    otpServer.ec2Info.recreateBuildImage = false;
                     Persistence.servers.replace(otpServer.id, otpServer);
                 }
                 // Check whether the graph build instance type or AMI ID is different from the non-graph building type.
@@ -837,22 +838,24 @@ public class DeployJob extends MonitorableJob {
         String jarDir = String.format("/opt/%s", getTripPlannerString());
         List<String> lines = new ArrayList<>();
         String routerName = "default";
-        final String uploadUserDataLogCommand = String.format("aws s3 cp $USERDATALOG %s/${instance_id}.log", getS3FolderURI().toString());
+        final String uploadUserDataLogCommand = String.format("aws s3 cp $USERDATALOG %s/${INSTANCE_ID}.log", getS3FolderURI().toString());
         String routerDir = String.format("/var/%s/graphs/%s", getTripPlannerString(), routerName);
         String graphPath = String.join("/", routerDir, OTP_GRAPH_FILENAME);
         //////////////// BEGIN USER DATA
         lines.add("#!/bin/bash");
-        ///// 0. Remove previous status files
-        lines.add("WEB_DIR=/usr/share/nginx/client");
-        lines.add(String.format("rm $WEB_DIR/%s || echo '' > /dev/null", BUNDLE_DOWNLOAD_COMPLETE_FILE));
-        lines.add(String.format("rm $WEB_DIR/%s || echo '' > /dev/null", GRAPH_STATUS_FILE));
-        ///// 1. set some variables.
-        // Send trip planner logs to LOGFILE
+        // set some variables.
         lines.add(String.format("BUILDLOGFILE=/var/log/%s", getBuildLogFilename()));
         lines.add(String.format("LOGFILE=/var/log/%s.log", getTripPlannerString()));
         lines.add("USERDATALOG=/var/log/user-data.log");
+        lines.add("WEB_DIR=/usr/share/nginx/client");
+        // Remove previous files that might have been created during an Image creation
+        lines.add(String.format("rm $WEB_DIR/%s || echo '' > /dev/null", BUNDLE_DOWNLOAD_COMPLETE_FILE));
+        lines.add(String.format("rm $WEB_DIR/%s || echo '' > /dev/null", GRAPH_STATUS_FILE));
+        lines.add("rm $BUILDLOGFILE || echo '' > /dev/null");
+        lines.add("rm LOGFILE || echo '' > /dev/null");
+        lines.add("rm USERDATALOG || echo '' > /dev/null");
         // Get the instance's instance ID from the AWS metadata endpoint.
-        lines.add("instance_id=`curl http://169.254.169.254/latest/meta-data/instance-id`");
+        lines.add("INSTANCE_ID=`curl http://169.254.169.254/latest/meta-data/instance-id`");
         // Log user data setup to /var/log/user-data.log
         lines.add("exec > >(tee $USERDATALOG|logger -t user-data -s 2>/dev/console) 2>&1");
         // Get the total memory by grepping for MemTotal in meminfo file and removing non-numbers from the line
@@ -861,7 +864,7 @@ public class DeployJob extends MonitorableJob {
         // If on a low-memory instance (assuming around 2GB of RAM), allocate 1.5GB for java.
         // Otherwise use as much as possible while leaving 2097152 kb (2GB) for the OS
         lines.add("if [ \"2500000\" -gt \"$TOTAL_MEM\" ]; then MEM=1500000; else MEM=`echo $(($TOTAL_MEM - 2097152))`; fi");
-        ////// 2. Configure some stuff for AWS CLI.
+        // Configure some stuff for AWS CLI.
         // Note: too many threads/concurrent requests cause a lot of individual thread timeouts for some reason, which
         // ultimately causes the entire cp command to stall out.
         lines.add("aws configure set default.s3.max_concurrent_requests 3");
