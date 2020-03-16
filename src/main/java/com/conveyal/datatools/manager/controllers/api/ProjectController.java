@@ -252,9 +252,7 @@ public class ProjectController {
                     logMessageAndHalt(
                         req,
                         HttpStatus.BAD_REQUEST_400,
-                        "Merge feeds job aborted. Regional merge already exists for latest feed versions found in project.",
-                        null,
-                        "path/to/feedSource"
+                        "Merge feeds job aborted. Regional merge already exists for latest feed versions found in project."
                         );
                 }
             }
