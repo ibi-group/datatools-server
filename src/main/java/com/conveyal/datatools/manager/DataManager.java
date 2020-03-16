@@ -56,6 +56,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.common.utils.SparkUtils.logRequest;
@@ -122,12 +123,14 @@ public class DataManager {
     public static final Map<String, RequestSummary> lastRequestForUser = new HashMap<>();
 
     public static void main(String[] args) throws IOException {
-
+        long serverStartTime = System.currentTimeMillis();
         initializeApplication(args);
 
         registerRoutes();
 
         registerExternalResources();
+        double startupSeconds = (System.currentTimeMillis() - serverStartTime) / 1000D;
+        LOG.info("Data Tools server start up completed in {} seconds.", startupSeconds);
     }
 
     static void initializeApplication(String[] args) throws IOException {

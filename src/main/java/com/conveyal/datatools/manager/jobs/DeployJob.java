@@ -9,7 +9,6 @@ import com.amazonaws.services.ec2.model.CreateImageResult;
 import com.amazonaws.services.ec2.model.CreateTagsRequest;
 import com.amazonaws.services.ec2.model.DeregisterImageRequest;
 import com.amazonaws.services.ec2.model.DescribeInstanceStatusRequest;
-import com.amazonaws.services.ec2.model.DescribeInstancesRequest;
 import com.amazonaws.services.ec2.model.Filter;
 import com.amazonaws.services.ec2.model.IamInstanceProfileSpecification;
 import com.amazonaws.services.ec2.model.Instance;
@@ -129,7 +128,6 @@ public class DeployJob extends MonitorableJob {
     /** This hides the status field on the parent class, providing additional fields. */
     public DeployStatus status;
 
-    private String statusMessage;
     private int serverCounter = 0;
     private String dateString = DATE_FORMAT.format(new Date());
     private String jobRelativePath;
@@ -137,6 +135,11 @@ public class DeployJob extends MonitorableJob {
     @JsonProperty
     public String getDeploymentId () {
         return deployment.id;
+    }
+
+    @JsonProperty
+    public String getProjectId () {
+        return deployment.projectId;
     }
 
     /** Increment the completed servers count (for use during ELB deployment) and update the job status. */
@@ -215,10 +218,7 @@ public class DeployJob extends MonitorableJob {
             try {
                 deploymentTempFile = File.createTempFile("deployment", ".zip");
             } catch (IOException e) {
-                statusMessage = "Could not create temp file for deployment";
-                LOG.error(statusMessage);
-                e.printStackTrace();
-                status.fail(statusMessage);
+                status.fail("Could not create temp file for deployment", e);
                 return;
             }
 
@@ -230,10 +230,7 @@ public class DeployJob extends MonitorableJob {
                 this.deployment.dump(deploymentTempFile, true, true, true);
                 tasksCompleted++;
             } catch (Exception e) {
-                statusMessage = "Error dumping deployment";
-                LOG.error(statusMessage);
-                e.printStackTrace();
-                status.fail(statusMessage);
+                status.fail("Error dumping deployment", e);
                 return;
             }
 
@@ -244,17 +241,13 @@ public class DeployJob extends MonitorableJob {
             // Upload to S3, if specifically required by the OTPServer or needed for servers in the target group to fetch.
             if (otpServer.s3Bucket != null || otpServer.ec2Info != null) {
                 if (!DataManager.useS3) {
-                    String message = "Cannot upload deployment to S3. Application not configured for s3 storage.";
-                    LOG.error(message);
-                    status.fail(message);
+                    status.fail("Cannot upload deployment to S3. Application not configured for s3 storage.");
                     return;
                 }
                 try {
                     uploadBundleToS3();
                 } catch (AmazonClientException | InterruptedException e) {
-                    statusMessage = String.format("Error uploading (or copying) deployment bundle to s3://%s", s3Bucket);
-                    LOG.error(statusMessage, e);
-                    status.fail(statusMessage);
+                    status.fail(String.format("Error uploading/copying deployment bundle to s3://%s", s3Bucket), e);
                 }
 
             }
@@ -267,9 +260,7 @@ public class DeployJob extends MonitorableJob {
                 // If creating a new server, there is no need to deploy to an existing one.
                 return;
             } else {
-                String message = "Cannot complete deployment. EC2 deployment disabled in server configuration.";
-                LOG.error(message);
-                status.fail(message);
+                status.fail("Cannot complete deployment. EC2 deployment disabled in server configuration.");
                 return;
             }
         }
@@ -333,14 +324,8 @@ public class DeployJob extends MonitorableJob {
             try {
                 url = new URL(rawUrl + "/routers/" + getRouterId());
             } catch (MalformedURLException e) {
-                statusMessage = String.format("Malformed deployment URL %s", rawUrl);
-                LOG.error(statusMessage);
-
-                // do not set percentComplete to 100 because we continue to the next server
-                // TODO: should this return instead so that the job is cancelled?
-                status.error = true;
-                status.message = statusMessage;
-                continue;
+                status.fail(String.format("Malformed deployment URL %s", rawUrl), e);
+                return false;
             }
 
             // grab them synchronously, so that we only take down one OTP server at a time
@@ -348,14 +333,8 @@ public class DeployJob extends MonitorableJob {
             try {
                 conn = (HttpURLConnection) url.openConnection();
             } catch (IOException e) {
-                statusMessage = String.format("Unable to open URL of OTP server %s", url);
-                LOG.error(statusMessage);
-
-                // do not set percentComplete to 100 because we continue to the next server
-                // TODO: should this return instead so that the job is cancelled?
-                status.error = true;
-                status.message = statusMessage;
-                continue;
+                status.fail(String.format("Unable to open URL of OTP server %s", url), e);
+                return false;
             }
 
             conn.addRequestProperty("Content-Type", "application/zip");
@@ -369,10 +348,7 @@ public class DeployJob extends MonitorableJob {
             try {
                 post = Channels.newChannel(conn.getOutputStream());
             } catch (IOException e) {
-                statusMessage = String.format("Could not open channel to OTP server %s", url);
-                LOG.error(statusMessage);
-                e.printStackTrace();
-                status.fail(statusMessage);
+                status.fail(String.format("Could not open channel to OTP server %s", url), e);
                 return false;
             }
 
@@ -381,17 +357,14 @@ public class DeployJob extends MonitorableJob {
             try {
                 input = new FileInputStream(deploymentTempFile).getChannel();
             } catch (FileNotFoundException e) {
-                LOG.error("Internal error: could not read dumped deployment!");
-                status.fail("Internal error: could not read dumped deployment!");
+                status.fail("Internal error: could not read dumped deployment!", e);
                 return false;
             }
 
             try {
                 conn.connect();
             } catch (IOException e) {
-                statusMessage = String.format("Unable to open connection to OTP server %s", url);
-                LOG.error(statusMessage);
-                status.fail(statusMessage);
+                status.fail(String.format("Unable to open connection to OTP server %s", url), e);
                 return false;
             }
 
@@ -399,20 +372,14 @@ public class DeployJob extends MonitorableJob {
             try {
                 input.transferTo(0, Long.MAX_VALUE, post);
             } catch (IOException e) {
-                statusMessage = String.format("Unable to transfer deployment to server %s", url);
-                LOG.error(statusMessage);
-                e.printStackTrace();
-                status.fail(statusMessage);
+                status.fail(String.format("Unable to transfer deployment to server %s", url), e);
                 return false;
             }
 
             try {
                 post.close();
             } catch (IOException e) {
-                String message = String.format("Error finishing connection to server %s", url);
-                LOG.error(message);
-                e.printStackTrace();
-                status.fail(message);
+                status.fail(String.format("Error finishing connection to server %s", url), e);
                 return false;
             }
 
@@ -439,17 +406,13 @@ public class DeployJob extends MonitorableJob {
                         scanner.useDelimiter("\\Z");
                         response = scanner.next();
                     }
-                    statusMessage = String.format("Got response code %d from server due to %s", code, response);
-                    LOG.error(statusMessage);
-                    status.fail(statusMessage);
+                    status.fail(String.format("Got response code %d from server due to %s", code, response));
                     // Skip deploying to any other servers.
                     // There is no reason to take out the rest of the servers, it's going to have the same result.
                     return false;
                 }
             } catch (IOException e) {
-                statusMessage = String.format("Could not finish request to server %s", url);
-                LOG.error(statusMessage);
-                status.fail(statusMessage);
+                status.fail(String.format("Could not finish request to server %s", url), e);
             }
 
             status.numServersCompleted++;
@@ -487,7 +450,7 @@ public class DeployJob extends MonitorableJob {
         status.duration = System.currentTimeMillis() - status.startTime;
         if (!status.error) {
             // Update status with successful completion state only if no error was encountered.
-            status.update(false, "Deployment complete!", 100, true);
+            status.completeSuccessfully("Deployment complete!");
             // Store the target server in the deployedTo field and set last deployed time.
             LOG.info("Updating deployment target and deploy time.");
             deployment.deployedTo = otpServer.id;
@@ -546,9 +509,7 @@ public class DeployJob extends MonitorableJob {
                 if (monitorInitialServerJob.status.error) {
                     // If an error occurred while monitoring the initial server, fail this job and instruct user to inspect
                     // build logs.
-                    statusMessage = "Error encountered while building graph. Inspect build logs.";
-                    LOG.error(statusMessage);
-                    status.fail(statusMessage);
+                    status.fail("Error encountered while building graph. Inspect build logs.");
                     ServerController.terminateInstances(ec2, graphBuildingInstances);
                     return;
                 }
@@ -647,7 +608,7 @@ public class DeployJob extends MonitorableJob {
                 }
             }
             // Job is complete.
-            status.update(false, finalMessage, 100, true);
+            status.completeSuccessfully(finalMessage);
         } catch (Exception e) {
             LOG.error("Could not deploy to EC2 server", e);
             status.fail("Could not deploy to EC2 server", e);
@@ -685,13 +646,11 @@ public class DeployJob extends MonitorableJob {
         String amiId = otpServer.ec2Info.getAmiId(graphAlreadyBuilt);
         // Verify that AMI is correctly defined.
         if (amiId == null || !ServerController.amiExists(amiId, ec2)) {
-            statusMessage = String.format(
+            status.fail(String.format(
                 "AMI ID (%s) is missing or bad. Check the deployment settings or the default value in the app config at %s",
                 amiId,
                 AMI_CONFIG_PATH
-            );
-            LOG.error(statusMessage);
-            status.fail(statusMessage);
+            ));
             return Collections.EMPTY_LIST;
         }
         // Pick proper instance type depending on whether graph is being built and what is defined.
@@ -700,13 +659,11 @@ public class DeployJob extends MonitorableJob {
         try {
             InstanceType.fromValue(instanceType);
         } catch (IllegalArgumentException e) {
-            statusMessage = String.format(
+            status.fail(String.format(
                 "Instance type (%s) is bad. Check the deployment settings. The default value is %s",
                 instanceType,
                 DEFAULT_INSTANCE_TYPE
-            );
-            LOG.error(statusMessage);
-            status.fail(statusMessage);
+            ), e);
             return Collections.EMPTY_LIST;
         }
         RunInstancesRequest runInstancesRequest = new RunInstancesRequest()
@@ -736,9 +693,7 @@ public class DeployJob extends MonitorableJob {
             waiter.run(new WaiterParameters<>(new DescribeInstanceStatusRequest().withInstanceIds(instanceIds)));
             LOG.info("Instance status is OK after {} ms", (System.currentTimeMillis() - beginWaiting));
         } catch (Exception e) {
-            statusMessage = "Waiter for instance status check failed. You may need to terminate the failed instances.";
-            LOG.error(statusMessage, e);
-            status.fail(statusMessage);
+            status.fail("Waiter for instance status check failed. You may need to terminate the failed instances.", e);
             return Collections.EMPTY_LIST;
         }
         for (Instance instance : instances) {
@@ -824,15 +779,11 @@ public class DeployJob extends MonitorableJob {
             huc.setRequestMethod("HEAD");
             int responseCode = huc.getResponseCode();
             if (responseCode != HttpStatus.OK_200) {
-                statusMessage = String.format("Requested trip planner jar does not exist at %s", s3JarUrl);
-                LOG.error(statusMessage);
-                status.fail(statusMessage);
+                status.fail(String.format("Requested trip planner jar does not exist at %s", s3JarUrl));
                 return null;
             }
         } catch (IOException e) {
-            statusMessage = String.format("Error checking for trip planner jar: %s", s3JarUrl);
-            LOG.error(statusMessage, e);
-            status.fail(statusMessage);
+            status.fail(String.format("Error checking for trip planner jar: %s", s3JarUrl));
             return null;
         }
         String jarDir = String.format("/opt/%s", getTripPlannerString());

@@ -231,7 +231,7 @@ public class MergeFeedsJob extends MonitorableJob {
             status.fail("Merging feed versions failed.");
         } else {
             storeMergedFeed();
-            status.update(false, "Merged feed created successfully.", 100, true);
+            status.completeSuccessfully("Merged feed created successfully.");
         }
         LOG.info("Feed merge is complete.");
         if (!mergeType.equals(REGIONAL) && !status.error && !mergeFeedsResult.failed) {
@@ -272,7 +272,7 @@ public class MergeFeedsJob extends MonitorableJob {
      */
     private void storeMergedFeed() throws IOException {
         if (mergeType.equals(REGIONAL)) {
-            status.update(false, "Saving merged feed.", 95);
+            status.update("Saving merged feed.", 95);
             // Store the project merged zip locally or on s3
             if (DataManager.useS3) {
                 String s3Key = String.join("/", "project", filename);

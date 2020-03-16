@@ -221,7 +221,7 @@ public class FeedVersion extends Model implements Serializable {
         File gtfsFile;
         // STEP 1. LOAD GTFS feed into relational database
         try {
-            status.update(false,"Unpacking feed...", 15.0);
+            status.update("Unpacking feed...", 15.0);
             // Get SQL schema namespace for the feed version. This is needed for reconnecting with feeds
             // in the database.
             gtfsFile = retrieveGtfsFile();
@@ -236,9 +236,7 @@ public class FeedVersion extends Model implements Serializable {
             this.namespace = feedLoadResult.uniqueIdentifier;
             LOG.info("Loaded GTFS into SQL {}", feedLoadResult.uniqueIdentifier);
         } catch (Exception e) {
-            String errorString = String.format("Error loading GTFS feed for version: %s", this.id);
-            LOG.warn(errorString, e);
-            status.update(true, errorString, 0);
+            status.fail(String.format("Error loading GTFS feed for version: %s", this.id), e);
             // FIXME: Delete local copy of feed version after failed load?
             return;
         }
@@ -246,9 +244,7 @@ public class FeedVersion extends Model implements Serializable {
         // FIXME: is this the right approach?
         // if load was unsuccessful, update status and return
         if(this.feedLoadResult == null) {
-            String errorString = String.format("Could not load GTFS for FeedVersion %s", id);
-            LOG.error(errorString);
-            status.update(true, errorString, 0);
+            status.fail(String.format("Could not load GTFS for FeedVersion %s", id));
             // FIXME: Delete local copy of feed version after failed load?
             return;
         }
@@ -310,9 +306,7 @@ public class FeedVersion extends Model implements Serializable {
             status.update("Validating feed...", 33);
             validationResult = GTFS.validate(feedLoadResult.uniqueIdentifier, DataManager.GTFS_DATA_SOURCE);
         } catch (Exception e) {
-            String message = String.format("Unable to validate feed %s", this.id);
-            LOG.error(message, e);
-            status.update(true, message, 100, true);
+            status.fail(String.format("Unable to validate feed %s", this.id), e);
             // FIXME create validation result with new constructor?
             validationResult = new ValidationResult();
             validationResult.fatalException = "failure!";

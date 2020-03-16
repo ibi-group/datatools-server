@@ -5,7 +5,7 @@ import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.FetchProjectFeedsJob;
-import com.conveyal.datatools.manager.jobs.MakePublicJob;
+import com.conveyal.datatools.manager.jobs.PublishProjectFeedsJob;
 import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -265,7 +265,7 @@ public class ProjectController {
      * Updates the index.html document that serves as a listing of those objects on S3.
      * This is often referred to as "deploying" the project.
      */
-    private static boolean publishPublicFeeds(Request req, Response res) {
+    private static String publishPublicFeeds(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         String id = req.params("id");
         if (id == null) {
@@ -275,9 +275,10 @@ public class ProjectController {
         if (p == null) {
             logMessageAndHalt(req, 400, "no such project!");
         }
-        // Run this as a synchronous job; if it proves to be too slow we will change to asynchronous.
-        new MakePublicJob(p, userProfile).run();
-        return true;
+        // Run as lightweight job.
+        PublishProjectFeedsJob publishProjectFeedsJob = new PublishProjectFeedsJob(p, userProfile);
+        DataManager.lightExecutor.execute(publishProjectFeedsJob);
+        return formatJobMessage(publishProjectFeedsJob.jobId, "Publishing public feeds");
     }
 
     /**

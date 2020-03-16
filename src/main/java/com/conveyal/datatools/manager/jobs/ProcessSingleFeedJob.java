@@ -26,7 +26,7 @@ public class ProcessSingleFeedJob extends MonitorableJob {
         super(owner, "Processing GTFS for " + (feedVersion.parentFeedSource() != null ? feedVersion.parentFeedSource().name : "unknown feed source"), JobType.PROCESS_FEED);
         this.feedVersion = feedVersion;
         this.isNewVersion = isNewVersion;
-        status.update(false,  "Processing...", 0);
+        status.update("Waiting...", 0);
         status.uploading = true;
     }
 
@@ -62,7 +62,7 @@ public class ProcessSingleFeedJob extends MonitorableJob {
     public void jobFinished () {
         if (!status.error) {
             // Note: storing a new feed version in database is handled at completion of the ValidateFeedJob subtask.
-            status.update(false, "New version saved.", 100, true);
+            status.completeSuccessfully("New version saved.");
         } else {
             // Processing did not complete. Depending on which sub-task this occurred in,
             // there may or may not have been a successful load/validation of the feed.
