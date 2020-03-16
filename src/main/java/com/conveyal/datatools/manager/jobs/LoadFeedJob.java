@@ -7,8 +7,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.Map;
-
 /**
  * Performs the load GTFS into SQL task for a given feed version. If feed version is not new (and using S3 for storage),
  * the load step will skip uploading the feed to S3 to avoid overwriting the existing files there (this shouldn't be
@@ -46,7 +44,7 @@ public class LoadFeedJob extends MonitorableJob {
     @Override
     public void jobFinished () {
         if (!status.error) {
-            status.finish("Load stage complete!");
+            status.completeSuccessfully("Load stage complete!");
         }
     }
 

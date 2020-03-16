@@ -447,7 +447,7 @@ public class DeployJob extends MonitorableJob {
         status.duration = System.currentTimeMillis() - status.startTime;
         if (!status.error) {
             // Update status with successful completion state only if no error was encountered.
-            status.finish("Deployment complete!");
+            status.completeSuccessfully("Deployment complete!");
             // Store the target server in the deployedTo field and set last deployed time.
             LOG.info("Updating deployment target and deploy time.");
             deployment.deployedTo = otpServer.id;
@@ -581,7 +581,7 @@ public class DeployJob extends MonitorableJob {
                 }
             }
             // Job is complete.
-            status.finish(finalMessage);
+            status.completeSuccessfully(finalMessage);
         } catch (Exception e) {
             LOG.error("Could not deploy to EC2 server", e);
             status.fail("Could not deploy to EC2 server", e);

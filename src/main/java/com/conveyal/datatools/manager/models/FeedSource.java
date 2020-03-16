@@ -10,7 +10,6 @@ import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
 import com.conveyal.gtfs.GTFS;
-import com.conveyal.gtfs.validator.ValidationResult;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -208,7 +207,7 @@ public class FeedSource extends Model implements Cloneable {
                 case HttpURLConnection.HTTP_NOT_MODIFIED:
                     message = String.format("Feed %s has not been modified", this.name);
                     LOG.warn(message);
-                    status.finish(message);
+                    status.completeSuccessfully(message);
                     return null;
                 case HttpURLConnection.HTTP_OK:
                     // Response is OK. Continue on to save the GTFS file.
@@ -267,7 +266,7 @@ public class FeedSource extends Model implements Cloneable {
             } else {
                 LOG.warn("Failed to delete unneeded GTFS file at: {}", filePath);
             }
-            status.finish(message);
+            status.completeSuccessfully(message);
             return null;
         }
         else {
@@ -284,7 +283,7 @@ public class FeedSource extends Model implements Cloneable {
                     String.format("New feed version created for %s.", this.name));
             String message = String.format("Fetch complete for %s", this.name);
             LOG.info(message);
-            status.finish(message);
+            status.completeSuccessfully(message);
             return version;
         }
     }

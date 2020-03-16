@@ -99,6 +99,6 @@ public class PublishProjectFeedsJob extends MonitorableJob {
 
     @Override
     public void jobFinished() {
-        status.finish("Public page updated successfully!");
+        status.completeSuccessfully("Public page updated successfully!");
     }
 }

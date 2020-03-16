@@ -77,6 +77,6 @@ public class ExportSnapshotToGTFSJob extends MonitorableJob {
 
     @Override
     public void jobFinished () {
-        if (!status.error) status.finish("Export complete!");
+        if (!status.error) status.completeSuccessfully("Export complete!");
     }
 }

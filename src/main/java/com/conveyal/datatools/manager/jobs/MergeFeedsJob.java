@@ -231,7 +231,7 @@ public class MergeFeedsJob extends MonitorableJob {
             status.fail("Merging feed versions failed.");
         } else {
             storeMergedFeed();
-            status.finish("Merged feed created successfully.");
+            status.completeSuccessfully("Merged feed created successfully.");
         }
         LOG.info("Feed merge is complete.");
         if (!mergeType.equals(REGIONAL) && !status.error && !mergeFeedsResult.failed) {

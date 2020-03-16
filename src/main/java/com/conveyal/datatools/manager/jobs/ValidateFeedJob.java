@@ -54,7 +54,7 @@ public class ValidateFeedJob extends MonitorableJob {
             }
             // TODO: If ValidateFeedJob is called without a parent job (e.g., to "re-validate" a feed), we should handle
             //  storing the updated ValidationResult in Mongo.
-            status.finish("Validation finished!");
+            status.completeSuccessfully("Validation finished!");
         }
     }
 

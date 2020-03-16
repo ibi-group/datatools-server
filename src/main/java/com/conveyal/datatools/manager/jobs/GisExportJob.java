@@ -27,7 +27,6 @@ import org.geotools.data.simple.SimpleFeatureSource;
 import org.geotools.data.simple.SimpleFeatureStore;
 import org.geotools.feature.DefaultFeatureCollection;
 import org.geotools.feature.simple.SimpleFeatureBuilder;
-import org.geotools.feature.simple.SimpleFeatureTypeBuilder;
 import org.geotools.referencing.crs.DefaultGeographicCRS;
 import org.opengis.feature.simple.SimpleFeature;
 import org.opengis.feature.simple.SimpleFeatureType;
@@ -286,7 +285,7 @@ public class GisExportJob extends MonitorableJob {
                 f.delete();
             }
             outDir.delete();
-            status.finish("Export complete!");
+            status.completeSuccessfully("Export complete!");
         } catch (Exception e) {
             status.fail("An exception occurred during the GIS export", e);
         } finally {

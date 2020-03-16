@@ -62,7 +62,7 @@ public class ProcessSingleFeedJob extends MonitorableJob {
     public void jobFinished () {
         if (!status.error) {
             // Note: storing a new feed version in database is handled at completion of the ValidateFeedJob subtask.
-            status.finish("New version saved.");
+            status.completeSuccessfully("New version saved.");
         } else {
             // Processing did not complete. Depending on which sub-task this occurred in,
             // there may or may not have been a successful load/validation of the feed.

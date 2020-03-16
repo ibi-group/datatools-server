@@ -132,7 +132,7 @@ public class CreateSnapshotJob extends MonitorableJob {
                         snapshot.namespace
                 );
             }
-            status.finish("Created snapshot!");
+            status.completeSuccessfully("Created snapshot!");
         }
     }
 }
