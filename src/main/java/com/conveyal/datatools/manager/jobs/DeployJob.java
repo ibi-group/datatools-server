@@ -4,7 +4,10 @@ import com.amazonaws.AmazonClientException;
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.event.ProgressListener;
 import com.amazonaws.services.ec2.AmazonEC2;
+import com.amazonaws.services.ec2.model.CreateImageRequest;
+import com.amazonaws.services.ec2.model.CreateImageResult;
 import com.amazonaws.services.ec2.model.CreateTagsRequest;
+import com.amazonaws.services.ec2.model.DeregisterImageRequest;
 import com.amazonaws.services.ec2.model.DescribeInstanceStatusRequest;
 import com.amazonaws.services.ec2.model.DescribeInstancesRequest;
 import com.amazonaws.services.ec2.model.Filter;
@@ -530,7 +533,7 @@ public class DeployJob extends MonitorableJob {
                 );
                 monitorInitialServerJob.run();
 
-                status.update("Graph build is complete!", 50);
+                status.update("Graph build is complete!", 40);
                 // If only building graph, job is finished. Note: the graph building EC2 instance should automatically shut
                 // itself down if this flag is turned on (happens in user data). We do not want to proceed with the rest of
                 // the job which would shut down existing servers running for the deployment.
@@ -549,11 +552,34 @@ public class DeployJob extends MonitorableJob {
                     ServerController.terminateInstances(ec2, graphBuildingInstances);
                     return;
                 }
+                // Check if a new image of the instance with the completed graph build should be created.
+                if (otpServer.ec2Info.recreateBuildImage) {
+                    status.update("Creating build image", 42.5);
+                    // Create a new image of this instance.
+                    CreateImageRequest createImageRequest = new CreateImageRequest()
+                        .withInstanceId(graphBuildingInstances.get(0).getInstanceId())
+                        .withName(otpServer.ec2Info.buildImageName)
+                        .withDescription(otpServer.ec2Info.buildImageDescription);
+                    CreateImageResult createImageResult = ec2.createImage(createImageRequest);
+                    // Deregister old image if it exists
+                    if (otpServer.ec2Info.buildAmiId != null) {
+                        status.message = "Deregistering old build image";
+                        DeregisterImageRequest deregisterImageRequest = new DeregisterImageRequest()
+                            .withImageId(otpServer.ec2Info.buildAmiId);
+                        ec2.deregisterImage(deregisterImageRequest);
+                    }
+                    status.update("Updating Server build AMI info", 45);
+                    // Update OTP Server info
+                    otpServer.ec2Info.buildAmiId = createImageResult.getImageId();
+                    otpServer.ec2Info.recreateBuildImage = false;
+                    Persistence.servers.replace(otpServer.id, otpServer);
+                }
                 // Check whether the graph build instance type or AMI ID is different from the non-graph building type.
                 // If so, terminate the graph building instance. If not, add the graph building instance to the list
                 // of started instances.
                 if (otpServer.ec2Info.hasSeparateGraphBuildConfig()) {
                     // different instance type and/or ami exists for graph building. Terminate graph building instance
+                    status.update("Terminating build instance", 47.5);
                     ServerController.terminateInstances(ec2, graphBuildingInstances);
                     status.numServersRemaining = Math.max(otpServer.ec2Info.instanceCount, 1);
                 } else {
@@ -564,6 +590,7 @@ public class DeployJob extends MonitorableJob {
                         : otpServer.ec2Info.instanceCount - 1;
                 }
             }
+            status.update("Starting server instances", 50);
             // Spin up remaining servers which will download the graph from S3.
             List<MonitorServerStatusJob> remainingServerMonitorJobs = new ArrayList<>();
             List<Instance> remainingInstances = new ArrayList<>();
@@ -811,26 +838,33 @@ public class DeployJob extends MonitorableJob {
         String jarDir = String.format("/opt/%s", getTripPlannerString());
         List<String> lines = new ArrayList<>();
         String routerName = "default";
-        final String uploadUserDataLogCommand = String.format("aws s3 cp $USERDATALOG %s/${instance_id}.log", getS3FolderURI().toString());
+        final String uploadUserDataLogCommand = String.format("aws s3 cp $USERDATALOG %s/${INSTANCE_ID}.log", getS3FolderURI().toString());
         String routerDir = String.format("/var/%s/graphs/%s", getTripPlannerString(), routerName);
         String graphPath = String.join("/", routerDir, OTP_GRAPH_FILENAME);
         //////////////// BEGIN USER DATA
         lines.add("#!/bin/bash");
-        ///// 1. set some variables.
-        // Send trip planner logs to LOGFILE
+        // set some variables.
         lines.add(String.format("BUILDLOGFILE=/var/log/%s", getBuildLogFilename()));
         lines.add(String.format("LOGFILE=/var/log/%s.log", getTripPlannerString()));
         lines.add("USERDATALOG=/var/log/user-data.log");
+        lines.add("WEB_DIR=/usr/share/nginx/client");
+        // Remove previous files that might have been created during an Image creation
+        lines.add(String.format("rm $WEB_DIR/%s || echo '' > /dev/null", BUNDLE_DOWNLOAD_COMPLETE_FILE));
+        lines.add(String.format("rm $WEB_DIR/%s || echo '' > /dev/null", GRAPH_STATUS_FILE));
+        lines.add("rm $BUILDLOGFILE || echo '' > /dev/null");
+        lines.add("rm LOGFILE || echo '' > /dev/null");
+        lines.add("rm USERDATALOG || echo '' > /dev/null");
         // Get the instance's instance ID from the AWS metadata endpoint.
-        lines.add("instance_id=`curl http://169.254.169.254/latest/meta-data/instance-id`");
+        lines.add("INSTANCE_ID=`curl http://169.254.169.254/latest/meta-data/instance-id`");
         // Log user data setup to /var/log/user-data.log
         lines.add("exec > >(tee $USERDATALOG|logger -t user-data -s 2>/dev/console) 2>&1");
         // Get the total memory by grepping for MemTotal in meminfo file and removing non-numbers from the line
         // (leaving just the total mem in kb). This is used for starting up the OTP build/run processes.
         lines.add("TOTAL_MEM=`grep MemTotal /proc/meminfo | sed 's/[^0-9]//g'`");
-        // 2097152 kb is 2GB, leave that much for the OS
-        lines.add("MEM=`echo $(($TOTAL_MEM - 2097152))`");
-        ////// 2. Configure some stuff for AWS CLI.
+        // If on a low-memory instance (assuming around 2GB of RAM), allocate 1.5GB for java.
+        // Otherwise use as much as possible while leaving 2097152 kb (2GB) for the OS
+        lines.add("if [ \"2500000\" -gt \"$TOTAL_MEM\" ]; then MEM=1500000; else MEM=`echo $(($TOTAL_MEM - 2097152))`; fi");
+        // Configure some stuff for AWS CLI.
         // Note: too many threads/concurrent requests cause a lot of individual thread timeouts for some reason, which
         // ultimately causes the entire cp command to stall out.
         lines.add("aws configure set default.s3.max_concurrent_requests 3");
@@ -854,7 +888,6 @@ public class DeployJob extends MonitorableJob {
         lines.add(String.format("mkdir -p %s", jarDir));
         // Add client static file directory for uploading deploy stage status files.
         // TODO: switch to AMI that uses /usr/share/nginx/html as static file dir so we don't have to create this new dir.
-        lines.add("WEB_DIR=/usr/share/nginx/client");
         lines.add("sudo mkdir $WEB_DIR");
         lines.add(String.format("wget %s -O %s/%s.jar", s3JarUrl, jarDir, jarName));
         if (graphAlreadyBuilt) {
@@ -953,6 +986,11 @@ public class DeployJob extends MonitorableJob {
         pathList.add(getS3FolderURI().toString());
         pathList.addAll(Arrays.asList(paths));
         return String.join("/", pathList);
+    }
+
+    @JsonIgnore
+    public AmazonS3 getS3Client() {
+        return s3Client;
     }
 
     /**
