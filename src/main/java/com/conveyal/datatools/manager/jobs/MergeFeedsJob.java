@@ -5,7 +5,6 @@ import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.gtfsplus.tables.GtfsPlusTable;
 import com.conveyal.datatools.manager.models.FeedSource;
-import com.conveyal.datatools.manager.models.FeedSource.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.FeedStore;
@@ -136,14 +135,19 @@ public class MergeFeedsJob extends MonitorableJob {
     final FeedVersion mergedVersion;
     public boolean failOnDuplicateTripId = true;
 
+    public MergeFeedsJob(Auth0UserProfile owner, Set<FeedVersion> feedVersions, String file, MergeFeedsType mergeType) {
+        this(owner, feedVersions, file, mergeType, true);
+    }
+
     /**
-     * @param owner        user ID that initiated job
-     * @param feedVersions set of feed versions to merge
-     * @param file         resulting merge filename (without .zip)
-     * @param mergeType    the type of merge to perform (@link MergeFeedsType)
+     * @param owner             user ID that initiated job
+     * @param feedVersions      set of feed versions to merge
+     * @param file              resulting merge filename (without .zip)
+     * @param mergeType         the type of merge to perform {@link MergeFeedsType}
+     * @param storeNewVersion   whether to store merged feed as new version
      */
     public MergeFeedsJob(Auth0UserProfile owner, Set<FeedVersion> feedVersions, String file,
-                         MergeFeedsType mergeType) {
+                         MergeFeedsType mergeType, boolean storeNewVersion) {
         super(owner, mergeType.equals(REGIONAL) ? "Merging project feeds" : "Merging feed versions",
             JobType.MERGE_FEED_VERSIONS);
         this.feedVersions = feedVersions;
@@ -158,7 +162,7 @@ public class MergeFeedsJob extends MonitorableJob {
         // Grab parent feed source depending on merge type.
         FeedSource regionalFeedSource = null;
         // If storing a regional merge as a new version, find the feed source designated by the project.
-        if (mergeType.equals(REGIONAL)) {
+        if (mergeType.equals(REGIONAL) && storeNewVersion) {
             regionalFeedSource = Persistence.feedSources.getById(project.regionalFeedSourceId);
             // Create new feed source if this is the first regional merge.
             if (regionalFeedSource == null) {
@@ -175,11 +179,13 @@ public class MergeFeedsJob extends MonitorableJob {
         this.feedSource = mergeType.equals(REGIONAL)
             ? regionalFeedSource
             : feedVersions.iterator().next().parentFeedSource();
-        // Set feed source for merged version.
-        this.mergedVersion = new FeedVersion(this.feedSource);
-        this.mergedVersion.retrievalMethod = mergeType.equals(REGIONAL)
-            ? FeedRetrievalMethod.REGIONAL_MERGE
-            : FeedRetrievalMethod.SERVICE_PERIOD_MERGE;
+        // Merged version will be null if the new version should not be stored.
+        this.mergedVersion = storeNewVersion ? new FeedVersion(this.feedSource) : null;
+        if (this.mergedVersion != null) {
+            this.mergedVersion.retrievalMethod = mergeType.equals(REGIONAL)
+                ? REGIONAL_MERGE
+                : FeedSource.FeedRetrievalMethod.SERVICE_PERIOD_MERGE;
+        }
         this.mergeFeedsResult = new MergeFeedsResult(mergeType);
     }
 
