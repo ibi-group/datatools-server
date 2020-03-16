@@ -135,6 +135,13 @@ public class FeedSource extends Model implements Cloneable {
         this.retrievalMethod = FeedRetrievalMethod.MANUALLY_UPLOADED;
     }
 
+    public FeedSource (String name, String projectId, FeedRetrievalMethod retrievalMethod) {
+        super();
+        this.name = name;
+        this.projectId = projectId;
+        this.retrievalMethod = retrievalMethod;
+    }
+
     /**
      * No-arg constructor to yield an uninitialized feed source, for dump/restore.
      * Should not be used in general code.
@@ -526,12 +533,18 @@ public class FeedSource extends Model implements Cloneable {
     }
 
     /**
-     * Represents ways feeds can be retrieved
+     * Represents ways feeds can be retrieved. Note: this enum was originally developed for feed sources, which were
+     * limited to a single retrieval method per source; however, use of this software has evolved in such a way that
+     * supports GTFS data for a single feed source to be retrieved in a multitude of ways, including: fetching via URL,
+     * uploading manually, creating with the editor, or transforming in some way (e.g., merging multiple versions or
+     * post-processing a single version).
      */
     public enum FeedRetrievalMethod {
         FETCHED_AUTOMATICALLY, // automatically retrieved over HTTP on some regular basis
         MANUALLY_UPLOADED, // manually uploaded by someone, perhaps the agency, or perhaps an internal user
-        PRODUCED_IN_HOUSE // produced in-house in a GTFS Editor instance
+        PRODUCED_IN_HOUSE, // produced in-house in a GTFS Editor instance
+        REGIONAL_MERGE,
+        SERVICE_PERIOD_MERGE
     }
 
     /**

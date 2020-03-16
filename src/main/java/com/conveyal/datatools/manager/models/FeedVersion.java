@@ -29,6 +29,7 @@ import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.util.Date;
+import java.util.Set;
 import java.util.UUID;
 
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
@@ -50,6 +51,10 @@ public class FeedVersion extends Model implements Serializable {
     private static final Logger LOG = LoggerFactory.getLogger(FeedVersion.class);
     // FIXME: move this out of FeedVersion (also, it should probably not be public)?
     public static FeedStore feedStore = new FeedStore();
+    /**
+     * Input feed versions used to create a merged version.
+     */
+    public Set<String> inputVersions;
 
     /**
      * We generate IDs manually, but we need a bit of information to do so
