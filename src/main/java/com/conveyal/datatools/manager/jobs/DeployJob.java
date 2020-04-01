@@ -66,7 +66,6 @@ import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.StringUtils;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.commons.codec.binary.Base64;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
@@ -298,13 +297,18 @@ public class DeployJob extends MonitorableJob {
         // need the router-config separately from the bundle for EC2 instances that download the graph only.
         byte[] routerConfigAsBytes = deployment.generateRouterConfig();
         if (routerConfigAsBytes != null) {
+            LOG.info("Uploading router-config.json to s3 bucket");
+            // Write router config to temp file.
             File routerConfigFile = File.createTempFile("router-config", ".json");
             FileOutputStream out = new FileOutputStream(routerConfigFile);
             out.write(routerConfigAsBytes);
             out.close();
+            // Upload router config.
             transferManager
-                .upload(bucket, joinToS3FolderURI("router-config.json"), routerConfigFile)
+                .upload(bucket, getS3FolderURI().getKey() + "/router-config.json", routerConfigFile)
                 .waitForCompletion();
+            // Delete temp file.
+            routerConfigFile.delete();
         }
         // Shutdown the Transfer Manager, but don't shut down the underlying S3 client.
         // The default behavior for shutdownNow shut's down the underlying s3 client
@@ -861,9 +865,11 @@ public class DeployJob extends MonitorableJob {
             // If graph download times out, try again.
             lines.add(String.format("[ -f %s ] && echo 'Graph downloaded!' || %s", graphPath, downloadGraph));
             lines.add(String.format("ls -alh %s", graphPath));
-            // Download router config if it exists (normally this would be just included as part of bundle.zip, but the
+            // Download router config if not null (normally this would be just included as part of bundle.zip, but the
             // bundle is not downloaded when the graph already exists).
-            lines.add(String.format("aws s3 --cli-read-timeout 60 cp %s %s ", joinToS3FolderURI("router-config.json"), routerDir + "/"));
+            if (deployment.generateRouterConfig() != null) {
+                lines.add(String.format("aws s3 --cli-read-timeout 60 cp %s %s ", joinToS3FolderURI("router-config.json"), routerDir + "/"));
+            }
         } else {
             // Download data bundle from S3.
             String downloadBundle = String.format("time aws s3 --cli-read-timeout 60 cp %s /tmp/bundle.zip", getS3BundleURI());
@@ -908,6 +914,7 @@ public class DeployJob extends MonitorableJob {
         lines.add(uploadUserDataLogCommand);
         // Create file with bundle status in web dir to notify Data Tools that download is complete.
         lines.add(String.format("sudo echo $GRAPH_STATUS > $WEB_DIR/%s", GRAPH_STATUS_FILE));
+        lines.add("echo 'Graph build/download status: $GRAPH_STATUS'");
         if (deployment.buildGraphOnly) {
             // If building graph only, tell the instance to shut itself down after the graph build (and log upload) is
             // complete.

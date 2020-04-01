@@ -350,15 +350,13 @@ public class Deployment extends Model implements Serializable {
         }
 
         if (includeOtpConfig) {
-            // Write build-config.json and router-config.json
-            ObjectMapper mapper = new ObjectMapper();
+            // Write build-config.json and router-config.json into zip file.
             // Use custom build config if it is not null, otherwise default to project build config.
             byte[] buildConfigAsBytes = generateBuildConfig();
             if (buildConfigAsBytes != null) {
                 // Include build config if not null.
                 ZipEntry buildConfigEntry = new ZipEntry("build-config.json");
                 out.putNextEntry(buildConfigEntry);
-                mapper.setSerializationInclusion(Include.NON_NULL);
                 out.write(buildConfigAsBytes);
                 out.closeEntry();
             }
@@ -368,7 +366,6 @@ public class Deployment extends Model implements Serializable {
                 // Include router config if not null.
                 ZipEntry routerConfigEntry = new ZipEntry("router-config.json");
                 out.putNextEntry(routerConfigEntry);
-                mapper.setSerializationInclusion(Include.NON_NULL);
                 out.write(routerConfigAsBytes);
                 out.closeEntry();
             }
@@ -380,21 +377,30 @@ public class Deployment extends Model implements Serializable {
     /** Generate build config for deployment as byte array (for writing to file output stream). */
     public byte[] generateBuildConfig() throws JsonProcessingException {
         Project project = this.parentProject();
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.setSerializationInclusion(Include.NON_NULL);
         return customBuildConfig != null
             ? customBuildConfig.getBytes(StandardCharsets.UTF_8)
             : project.buildConfig != null
-            ? new ObjectMapper().writer().writeValueAsBytes(project.buildConfig)
+            ? mapper.writer().writeValueAsBytes(project.buildConfig)
             : null;
     }
 
     /** Generate router config for deployment as byte array (for writing to file output stream). */
-    public byte[] generateRouterConfig() throws JsonProcessingException {
+    public byte[] generateRouterConfig() {
         Project project = this.parentProject();
-        return customRouterConfig != null
-            ? customRouterConfig.getBytes(StandardCharsets.UTF_8)
-            : project.routerConfig != null
-            ? new ObjectMapper().writer().writeValueAsBytes(project.routerConfig)
-            : null;
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.setSerializationInclusion(Include.NON_NULL);
+        try {
+            return customRouterConfig != null
+                ? customRouterConfig.getBytes(StandardCharsets.UTF_8)
+                : project.routerConfig != null
+                ? mapper.writer().writeValueAsBytes(project.routerConfig)
+                : null;
+        } catch (JsonProcessingException e) {
+            LOG.error("Router config contains malformed JSON", e);
+            return null;
+        }
     }
 
     /**
