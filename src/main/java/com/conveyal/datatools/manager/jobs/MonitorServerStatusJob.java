@@ -49,8 +49,6 @@ public class MonitorServerStatusJob extends MonitorableJob {
     private final AWSStaticCredentialsProvider credentials;
     private final AmazonEC2 ec2;
     private final CloseableHttpClient httpClient = HttpClients.createDefault();
-    // If the job takes longer than XX seconds, fail the job.
-    private static final int TIMEOUT_MILLIS = 60 * 60 * 1000; // One hour
     // Delay checks by twenty seconds to give user-data script time to upload the instance's user data log if part of the
     // script fails (e.g., uploading or downloading a file).
     private static final int DELAY_SECONDS = 20;
@@ -109,7 +107,9 @@ public class MonitorServerStatusJob extends MonitorableJob {
                 // If the request is successful, the OTP instance has started.
                 wait("bundle download check:" + bundleUrl);
                 bundleIsDownloaded = checkForSuccessfulRequest(bundleUrl);
-                if (jobHasTimedOut()) {
+                // wait 20 minutes max for the bundle to download
+                long maxBundleDownloadTimeMillis = 20 * 60 * 1000;
+                if (taskHasTimedOut(bundleDownloadStartTime, maxBundleDownloadTimeMillis)) {
                     failJob("Job timed out while checking for server bundle download status.");
                     return;
                 }
@@ -133,7 +133,9 @@ public class MonitorServerStatusJob extends MonitorableJob {
             // If the request is successful, the OTP instance has started.
             wait("graph build/download check: " + graphStatusUrl);
             graphIsAvailable = checkForSuccessfulRequest(graphStatusUrl);
-            if (jobHasTimedOut()) {
+            // wait a maximum of 4 hours if building the graph, or 20 minutes if downloading a graph
+            long maxGraphBuildOrDownloadWaitTimeMillis = graphAlreadyBuilt ? 20 * 60 * 1000 : 4 * 60 * 60 * 1000;
+            if (taskHasTimedOut(graphBuildStartTime, maxGraphBuildOrDownloadWaitTimeMillis)) {
                 failJob("Job timed out while waiting for graph build/download. If this was a graph building machine, it may have run out of memory.");
                 return;
             }
@@ -157,12 +159,15 @@ public class MonitorServerStatusJob extends MonitorableJob {
         // Once this is confirmed, check for the existence of the router, which will indicate that the graph build is
         // complete.
         String routerUrl = String.join("/", ipUrl, "otp/routers/default");
+        long graphLoadStartTime = System.currentTimeMillis();
         while (!routerIsAvailable) {
             // If the request was successful, the graph build is complete!
             // TODO: Substitute in specific router ID? Or just default to... default.
             wait("router to become available: " + routerUrl);
             routerIsAvailable = checkForSuccessfulRequest(routerUrl);
-            if (jobHasTimedOut()) {
+            // wait a maximum of 20 minutes to load the graph and for the server to start
+            long maxGraphLoadWaitTimeMillis = 20 * 60 * 1000;
+            if (taskHasTimedOut(graphLoadStartTime, maxGraphLoadWaitTimeMillis)) {
                 failJob("Job timed out while waiting for trip planner to start up.");
                 return;
             }
@@ -205,10 +210,10 @@ public class MonitorServerStatusJob extends MonitorableJob {
         status.fail(String.format("%s Check logs at: %s", message, getUserDataLogS3Path()));
     }
 
-    /** Determine if job has passed time limit for its run time. */
-    private boolean jobHasTimedOut() {
-        long runTime = System.currentTimeMillis() - startTime;
-        return runTime > TIMEOUT_MILLIS;
+    /** Determine if a specific task has passed time limit for its run time. */
+    private boolean taskHasTimedOut(long startTime, long maxRunTimeMillis) {
+        long runTimeMillis = System.currentTimeMillis() - startTime;
+        return runTimeMillis > maxRunTimeMillis;
     }
 
     /**
