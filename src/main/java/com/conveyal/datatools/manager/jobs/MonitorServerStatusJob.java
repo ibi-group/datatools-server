@@ -108,8 +108,8 @@ public class MonitorServerStatusJob extends MonitorableJob {
                 wait("bundle download check:" + bundleUrl);
                 bundleIsDownloaded = checkForSuccessfulRequest(bundleUrl);
                 // wait 20 minutes max for the bundle to download
-                long maxBundleDownloadTime = 20 * 60 * 1000;
-                if (taskHasTimedOut(bundleDownloadStartTime, maxBundleDownloadTime)) {
+                long maxBundleDownloadTimeMillis = 20 * 60 * 1000;
+                if (taskHasTimedOut(bundleDownloadStartTime, maxBundleDownloadTimeMillis)) {
                     failJob("Job timed out while checking for server bundle download status.");
                     return;
                 }
@@ -134,8 +134,8 @@ public class MonitorServerStatusJob extends MonitorableJob {
             wait("graph build/download check: " + graphStatusUrl);
             graphIsAvailable = checkForSuccessfulRequest(graphStatusUrl);
             // wait a maximum of 4 hours if building the graph, or 20 minutes if downloading a graph
-            long maxGraphBuildOrDownloadWaitTime = graphAlreadyBuilt ? 20 * 60 * 1000 : 4 * 60 * 60 * 1000;
-            if (taskHasTimedOut(graphBuildStartTime, maxGraphBuildOrDownloadWaitTime)) {
+            long maxGraphBuildOrDownloadWaitTimeMillis = graphAlreadyBuilt ? 20 * 60 * 1000 : 4 * 60 * 60 * 1000;
+            if (taskHasTimedOut(graphBuildStartTime, maxGraphBuildOrDownloadWaitTimeMillis)) {
                 failJob("Job timed out while waiting for graph build/download. If this was a graph building machine, it may have run out of memory.");
                 return;
             }
@@ -166,8 +166,8 @@ public class MonitorServerStatusJob extends MonitorableJob {
             wait("router to become available: " + routerUrl);
             routerIsAvailable = checkForSuccessfulRequest(routerUrl);
             // wait a maximum of 20 minutes to load the graph and for the server to start
-            long maxGraphLoadWaitTime = 20 * 60 * 1000;
-            if (taskHasTimedOut(graphLoadStartTime, maxGraphLoadWaitTime)) {
+            long maxGraphLoadWaitTimeMillis = 20 * 60 * 1000;
+            if (taskHasTimedOut(graphLoadStartTime, maxGraphLoadWaitTimeMillis)) {
                 failJob("Job timed out while waiting for trip planner to start up.");
                 return;
             }
@@ -211,9 +211,9 @@ public class MonitorServerStatusJob extends MonitorableJob {
     }
 
     /** Determine if a specific task has passed time limit for its run time. */
-    private boolean taskHasTimedOut(long startTime, long maxRunTime) {
-        long runTime = System.currentTimeMillis() - startTime;
-        return runTime > maxRunTime;
+    private boolean taskHasTimedOut(long startTime, long maxRunTimeMillis) {
+        long runTimeMillis = System.currentTimeMillis() - startTime;
+        return runTimeMillis > maxRunTimeMillis;
     }
 
     /**
