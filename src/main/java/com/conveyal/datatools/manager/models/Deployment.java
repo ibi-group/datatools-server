@@ -14,6 +14,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.io.ByteStreams;
 
@@ -350,14 +351,9 @@ public class Deployment extends Model implements Serializable {
 
         if (includeOtpConfig) {
             // Write build-config.json and router-config.json
-            Project project = this.parentProject();
             ObjectMapper mapper = new ObjectMapper();
             // Use custom build config if it is not null, otherwise default to project build config.
-            byte[] buildConfigAsBytes = customBuildConfig != null
-                ? customBuildConfig.getBytes(StandardCharsets.UTF_8)
-                : project.buildConfig != null
-                    ? mapper.writer().writeValueAsBytes(project.buildConfig)
-                    : null;
+            byte[] buildConfigAsBytes = generateBuildConfig();
             if (buildConfigAsBytes != null) {
                 // Include build config if not null.
                 ZipEntry buildConfigEntry = new ZipEntry("build-config.json");
@@ -367,11 +363,7 @@ public class Deployment extends Model implements Serializable {
                 out.closeEntry();
             }
             // Use custom router config if it is not null, otherwise default to project router config.
-            byte[] routerConfigAsBytes = customRouterConfig != null
-                ? customRouterConfig.getBytes(StandardCharsets.UTF_8)
-                : project.routerConfig != null
-                    ? mapper.writer().writeValueAsBytes(project.routerConfig)
-                    : null;
+            byte[] routerConfigAsBytes = generateRouterConfig();
             if (routerConfigAsBytes != null) {
                 // Include router config if not null.
                 ZipEntry routerConfigEntry = new ZipEntry("router-config.json");
@@ -383,6 +375,26 @@ public class Deployment extends Model implements Serializable {
         }
         // Finally close the zip output stream. The dump file is now complete.
         out.close();
+    }
+
+    /** Generate build config for deployment as byte array (for writing to file output stream). */
+    public byte[] generateBuildConfig() throws JsonProcessingException {
+        Project project = this.parentProject();
+        return customBuildConfig != null
+            ? customBuildConfig.getBytes(StandardCharsets.UTF_8)
+            : project.buildConfig != null
+            ? new ObjectMapper().writer().writeValueAsBytes(project.buildConfig)
+            : null;
+    }
+
+    /** Generate router config for deployment as byte array (for writing to file output stream). */
+    public byte[] generateRouterConfig() throws JsonProcessingException {
+        Project project = this.parentProject();
+        return customRouterConfig != null
+            ? customRouterConfig.getBytes(StandardCharsets.UTF_8)
+            : project.routerConfig != null
+            ? new ObjectMapper().writer().writeValueAsBytes(project.routerConfig)
+            : null;
     }
 
     /**
