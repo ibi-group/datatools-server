@@ -375,32 +375,37 @@ public class Deployment extends Model implements Serializable {
     }
 
     /** Generate build config for deployment as byte array (for writing to file output stream). */
-    public byte[] generateBuildConfig() throws JsonProcessingException {
+    public byte[] generateBuildConfig() {
         Project project = this.parentProject();
         ObjectMapper mapper = new ObjectMapper();
         mapper.setSerializationInclusion(Include.NON_NULL);
         return customBuildConfig != null
             ? customBuildConfig.getBytes(StandardCharsets.UTF_8)
             : project.buildConfig != null
-            ? mapper.writer().writeValueAsBytes(project.buildConfig)
-            : null;
+                ? writeToBytes(project.buildConfig)
+                : null;
+    }
+
+    /** Convenience method to write serializable object (primarily for router/build config objects) to byte array. */
+    private <O extends Serializable> byte[] writeToBytes(O object) {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.setSerializationInclusion(Include.NON_NULL);
+        try {
+            return mapper.writer().writeValueAsBytes(object);
+        } catch (JsonProcessingException e) {
+            LOG.error("Value contains malformed JSON", e);
+            return null;
+        }
     }
 
     /** Generate router config for deployment as byte array (for writing to file output stream). */
     public byte[] generateRouterConfig() {
         Project project = this.parentProject();
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.setSerializationInclusion(Include.NON_NULL);
-        try {
-            return customRouterConfig != null
-                ? customRouterConfig.getBytes(StandardCharsets.UTF_8)
-                : project.routerConfig != null
-                ? mapper.writer().writeValueAsBytes(project.routerConfig)
+        return customRouterConfig != null
+            ? customRouterConfig.getBytes(StandardCharsets.UTF_8)
+            : project.routerConfig != null
+                ? writeToBytes(project.routerConfig)
                 : null;
-        } catch (JsonProcessingException e) {
-            LOG.error("Router config contains malformed JSON", e);
-            return null;
-        }
     }
 
     /**
