@@ -377,8 +377,6 @@ public class Deployment extends Model implements Serializable {
     /** Generate build config for deployment as byte array (for writing to file output stream). */
     public byte[] generateBuildConfig() {
         Project project = this.parentProject();
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.setSerializationInclusion(Include.NON_NULL);
         return customBuildConfig != null
             ? customBuildConfig.getBytes(StandardCharsets.UTF_8)
             : project.buildConfig != null
