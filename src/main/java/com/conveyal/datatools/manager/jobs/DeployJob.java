@@ -512,6 +512,14 @@ public class DeployJob extends MonitorableJob {
                 );
                 monitorInitialServerJob.run();
 
+                if (monitorInitialServerJob.status.error) {
+                    // If an error occurred while monitoring the initial server, fail this job and instruct user to inspect
+                    // build logs.
+                    status.fail("Error encountered while building graph. Inspect build logs.");
+                    ServerController.terminateInstances(ec2, graphBuildingInstances);
+                    return;
+                }
+
                 status.update("Graph build is complete!", 40);
                 // If only building graph, job is finished. Note: the graph building EC2 instance should automatically shut
                 // itself down if this flag is turned on (happens in user data). We do not want to proceed with the rest of
@@ -522,13 +530,7 @@ public class DeployJob extends MonitorableJob {
                 }
 
                 Persistence.deployments.replace(deployment.id, deployment);
-                if (monitorInitialServerJob.status.error) {
-                    // If an error occurred while monitoring the initial server, fail this job and instruct user to inspect
-                    // build logs.
-                    status.fail("Error encountered while building graph. Inspect build logs.");
-                    ServerController.terminateInstances(ec2, graphBuildingInstances);
-                    return;
-                }
+
                 // Check if a new image of the instance with the completed graph build should be created.
                 if (otpServer.ec2Info.recreateBuildImage) {
                     status.update("Creating build image", 42.5);

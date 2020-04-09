@@ -181,7 +181,9 @@ public abstract class MonitorableJob implements Runnable, Serializable {
             // TODO: should we add separate hooks depending on state of job/sub-tasks (e.g., success, catch, finally)
             // Set status to finished in case duration needed by finishing stage. (e.g., storing the job duration in a
             // database).
-            status.completeSuccessfully("Job complete!");
+            if (cancelMessage.equals("")) {
+                status.completeSuccessfully("Job complete!");
+            }
             jobFinished();
 
             // We retain finished or errored jobs on the server until they are fetched via the API, which implies they
