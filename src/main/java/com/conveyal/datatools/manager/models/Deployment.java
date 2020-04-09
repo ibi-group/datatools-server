@@ -14,6 +14,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.io.ByteStreams;
 
@@ -349,40 +350,60 @@ public class Deployment extends Model implements Serializable {
         }
 
         if (includeOtpConfig) {
-            // Write build-config.json and router-config.json
-            Project project = this.parentProject();
-            ObjectMapper mapper = new ObjectMapper();
+            // Write build-config.json and router-config.json into zip file.
             // Use custom build config if it is not null, otherwise default to project build config.
-            byte[] buildConfigAsBytes = customBuildConfig != null
-                ? customBuildConfig.getBytes(StandardCharsets.UTF_8)
-                : project.buildConfig != null
-                    ? mapper.writer().writeValueAsBytes(project.buildConfig)
-                    : null;
+            byte[] buildConfigAsBytes = generateBuildConfig();
             if (buildConfigAsBytes != null) {
                 // Include build config if not null.
                 ZipEntry buildConfigEntry = new ZipEntry("build-config.json");
                 out.putNextEntry(buildConfigEntry);
-                mapper.setSerializationInclusion(Include.NON_NULL);
                 out.write(buildConfigAsBytes);
                 out.closeEntry();
             }
             // Use custom router config if it is not null, otherwise default to project router config.
-            byte[] routerConfigAsBytes = customRouterConfig != null
-                ? customRouterConfig.getBytes(StandardCharsets.UTF_8)
-                : project.routerConfig != null
-                    ? mapper.writer().writeValueAsBytes(project.routerConfig)
-                    : null;
+            byte[] routerConfigAsBytes = generateRouterConfig();
             if (routerConfigAsBytes != null) {
                 // Include router config if not null.
                 ZipEntry routerConfigEntry = new ZipEntry("router-config.json");
                 out.putNextEntry(routerConfigEntry);
-                mapper.setSerializationInclusion(Include.NON_NULL);
                 out.write(routerConfigAsBytes);
                 out.closeEntry();
             }
         }
         // Finally close the zip output stream. The dump file is now complete.
         out.close();
+    }
+
+    /** Generate build config for deployment as byte array (for writing to file output stream). */
+    public byte[] generateBuildConfig() {
+        Project project = this.parentProject();
+        return customBuildConfig != null
+            ? customBuildConfig.getBytes(StandardCharsets.UTF_8)
+            : project.buildConfig != null
+                ? writeToBytes(project.buildConfig)
+                : null;
+    }
+
+    /** Convenience method to write serializable object (primarily for router/build config objects) to byte array. */
+    private <O extends Serializable> byte[] writeToBytes(O object) {
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.setSerializationInclusion(Include.NON_NULL);
+        try {
+            return mapper.writer().writeValueAsBytes(object);
+        } catch (JsonProcessingException e) {
+            LOG.error("Value contains malformed JSON", e);
+            return null;
+        }
+    }
+
+    /** Generate router config for deployment as byte array (for writing to file output stream). */
+    public byte[] generateRouterConfig() {
+        Project project = this.parentProject();
+        return customRouterConfig != null
+            ? customRouterConfig.getBytes(StandardCharsets.UTF_8)
+            : project.routerConfig != null
+                ? writeToBytes(project.routerConfig)
+                : null;
     }
 
     /**

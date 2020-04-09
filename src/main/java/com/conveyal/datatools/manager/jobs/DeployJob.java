@@ -26,6 +26,7 @@ import com.amazonaws.services.s3.transfer.Upload;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
@@ -246,7 +247,7 @@ public class DeployJob extends MonitorableJob {
                 }
                 try {
                     uploadBundleToS3();
-                } catch (AmazonClientException | InterruptedException e) {
+                } catch (AmazonClientException | InterruptedException | IOException e) {
                     status.fail(String.format("Error uploading/copying deployment bundle to s3://%s", s3Bucket), e);
                 }
 
@@ -279,25 +280,40 @@ public class DeployJob extends MonitorableJob {
     /**
      * Upload to S3 the transit data bundle zip that contains GTFS zip files, OSM data, and config files.
      */
-    private void uploadBundleToS3() throws InterruptedException, AmazonClientException {
+    private void uploadBundleToS3() throws InterruptedException, AmazonClientException, IOException {
         AmazonS3URI uri = new AmazonS3URI(getS3BundleURI());
         String bucket = uri.getBucket();
         status.message = "Uploading bundle to " + getS3BundleURI();
         status.uploadingS3 = true;
         LOG.info("Uploading deployment {} to {}", deployment.name, uri.toString());
-        TransferManager tx = TransferManagerBuilder.standard().withS3Client(s3Client).build();
-        final Upload upload = tx.upload(bucket, uri.getKey(), deploymentTempFile);
-
-        upload.addProgressListener(
-            (ProgressListener) progressEvent -> status.percentUploaded = upload.getProgress().getPercentTransferred()
+        // Use Transfer Manager so we can monitor S3 bundle upload progress.
+        TransferManager transferManager = TransferManagerBuilder.standard().withS3Client(s3Client).build();
+        final Upload uploadBundle = transferManager.upload(bucket, uri.getKey(), deploymentTempFile);
+        uploadBundle.addProgressListener(
+            (ProgressListener) progressEvent -> status.percentUploaded = uploadBundle.getProgress().getPercentTransferred()
         );
-
-        upload.waitForCompletion();
-
+        uploadBundle.waitForCompletion();
+        // Check if router config exists and upload as separate file using transfer manager. Note: this is because we
+        // need the router-config separately from the bundle for EC2 instances that download the graph only.
+        byte[] routerConfigAsBytes = deployment.generateRouterConfig();
+        if (routerConfigAsBytes != null) {
+            LOG.info("Uploading router-config.json to s3 bucket");
+            // Write router config to temp file.
+            File routerConfigFile = File.createTempFile("router-config", ".json");
+            FileOutputStream out = new FileOutputStream(routerConfigFile);
+            out.write(routerConfigAsBytes);
+            out.close();
+            // Upload router config.
+            transferManager
+                .upload(bucket, getS3FolderURI().getKey() + "/router-config.json", routerConfigFile)
+                .waitForCompletion();
+            // Delete temp file.
+            routerConfigFile.delete();
+        }
         // Shutdown the Transfer Manager, but don't shut down the underlying S3 client.
         // The default behavior for shutdownNow shut's down the underlying s3 client
         // which will cause any following s3 operations to fail.
-        tx.shutdownNow(false);
+        transferManager.shutdownNow(false);
 
         // copy to [name]-latest.zip
         String copyKey = getLatestS3BundleKey();
@@ -849,6 +865,11 @@ public class DeployJob extends MonitorableJob {
             // If graph download times out, try again.
             lines.add(String.format("[ -f %s ] && echo 'Graph downloaded!' || %s", graphPath, downloadGraph));
             lines.add(String.format("ls -alh %s", graphPath));
+            // Download router config if not null (normally this would be just included as part of bundle.zip, but the
+            // bundle is not downloaded when the graph already exists).
+            if (deployment.generateRouterConfig() != null) {
+                lines.add(String.format("aws s3 --cli-read-timeout 60 cp %s %s ", joinToS3FolderURI("router-config.json"), routerDir + "/"));
+            }
         } else {
             // Download data bundle from S3.
             String downloadBundle = String.format("time aws s3 --cli-read-timeout 60 cp %s /tmp/bundle.zip", getS3BundleURI());
@@ -893,6 +914,7 @@ public class DeployJob extends MonitorableJob {
         lines.add(uploadUserDataLogCommand);
         // Create file with bundle status in web dir to notify Data Tools that download is complete.
         lines.add(String.format("sudo echo $GRAPH_STATUS > $WEB_DIR/%s", GRAPH_STATUS_FILE));
+        lines.add("echo 'Graph build/download status: $GRAPH_STATUS'");
         if (deployment.buildGraphOnly) {
             // If building graph only, tell the instance to shut itself down after the graph build (and log upload) is
             // complete.

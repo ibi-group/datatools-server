@@ -9,17 +9,16 @@ import com.amazonaws.services.ec2.model.TerminateInstancesResult;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancing;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClient;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClientBuilder;
+import com.amazonaws.services.elasticloadbalancingv2.model.DescribeTargetHealthRequest;
+import com.amazonaws.services.elasticloadbalancingv2.model.DescribeTargetHealthResult;
 import com.amazonaws.services.elasticloadbalancingv2.model.RegisterTargetsRequest;
 import com.amazonaws.services.elasticloadbalancingv2.model.TargetDescription;
-import com.amazonaws.services.s3.AmazonS3URI;
-import com.amazonaws.services.s3.model.AmazonS3Exception;
-import com.amazonaws.services.s3.model.S3Object;
+import com.amazonaws.services.elasticloadbalancingv2.model.TargetHealthDescription;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.AWSUtils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.OtpServer;
-import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -52,7 +51,6 @@ public class MonitorServerStatusJob extends MonitorableJob {
     // Delay checks by twenty seconds to give user-data script time to upload the instance's user data log if part of the
     // script fails (e.g., uploading or downloading a file).
     private static final int DELAY_SECONDS = 20;
-    private final long startTime;
     public long graphBuildSeconds;
 
     public MonitorServerStatusJob(Auth0UserProfile owner, DeployJob deployJob, Instance instance, boolean graphAlreadyBuilt) {
@@ -67,7 +65,6 @@ public class MonitorServerStatusJob extends MonitorableJob {
         this.instance = instance;
         this.graphAlreadyBuilt = graphAlreadyBuilt;
         status.message = "Checking server status...";
-        startTime = System.currentTimeMillis();
         credentials = AWSUtils.getCredentialsForRole(otpServer.role, "monitor-" + instance.getInstanceId());
         ec2 = deployJob.getCustomRegion() == null
             ? AWSUtils.getEC2ClientForCredentials(credentials)
@@ -86,7 +83,6 @@ public class MonitorServerStatusJob extends MonitorableJob {
 
     @Override
     public void jobLogic() {
-        String message;
         String ipUrl = "http://" + instance.getPublicIpAddress();
         // Get OTP URL for instance to check for availability.
         boolean routerIsAvailable = false, graphIsAvailable = false;
@@ -105,7 +101,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
             long bundleDownloadStartTime = System.currentTimeMillis();
             while (!bundleIsDownloaded) {
                 // If the request is successful, the OTP instance has started.
-                wait("bundle download check:" + bundleUrl);
+                wait("bundle download check: " + bundleUrl);
                 bundleIsDownloaded = checkForSuccessfulRequest(bundleUrl);
                 // wait 20 minutes max for the bundle to download
                 long maxBundleDownloadTimeMillis = 20 * 60 * 1000;
@@ -121,8 +117,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
                 return;
             }
             long bundleDownloadSeconds = (System.currentTimeMillis() - bundleDownloadStartTime) / 1000;
-            message = String.format("Bundle downloaded in %d seconds!", bundleDownloadSeconds);
-            LOG.info(message);
+            LOG.info("Bundle downloaded in {} seconds!", bundleDownloadSeconds);
             status.update("Building graph...", 30);
         } else {
             status.update("Loading graph...", 40);
@@ -147,7 +142,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
             return;
         }
         graphBuildSeconds = (System.currentTimeMillis() - graphBuildStartTime) / 1000;
-        message = String.format("Graph build/download completed in %d seconds!", graphBuildSeconds);
+        String message = String.format("Graph build/download completed in %d seconds!", graphBuildSeconds);
         LOG.info(message);
         // If only task is to build graph, this machine's job is complete and we can consider this job done.
         if (deployment.buildGraphOnly || (!graphAlreadyBuilt && otpServer.ec2Info.hasSeparateGraphBuildConfig())) {
@@ -184,10 +179,35 @@ public class MonitorServerStatusJob extends MonitorableJob {
             RegisterTargetsRequest registerTargetsRequest = new RegisterTargetsRequest()
                     .withTargetGroupArn(otpServer.ec2Info.targetGroupArn)
                     .withTargets(new TargetDescription().withId(instance.getInstanceId()));
-            elbClient.registerTargets(registerTargetsRequest);
-            // FIXME how do we know it was successful?
-            message = String.format("Server successfully registered with load balancer %s. OTP running at %s", otpServer.ec2Info.targetGroupArn, routerUrl);
-            status.completeSuccessfully(message);
+            boolean targetAddedSuccessfully = false;
+            long registerTargetStartTime = System.currentTimeMillis();
+            while (!targetAddedSuccessfully) {
+                // Register target with target group.
+                elbClient.registerTargets(registerTargetsRequest);
+                wait("instance to register with ELB target group");
+                // Check that the instance ID shows up in the health check.
+                DescribeTargetHealthRequest healthRequest = new DescribeTargetHealthRequest()
+                    .withTargetGroupArn(otpServer.ec2Info.targetGroupArn);
+                DescribeTargetHealthResult healthResult = elbClient.describeTargetHealth(healthRequest);
+                for (TargetHealthDescription health : healthResult.getTargetHealthDescriptions()) {
+                    if (instance.getInstanceId().equals(health.getTarget().getId())) {
+                        LOG.info("Instance {} successfully added to target group!", instance.getInstanceId());
+                        targetAddedSuccessfully = true;
+                    }
+                }
+                // Wait for two minutes.
+                if (taskHasTimedOut(registerTargetStartTime, 2 * 60 * 1000)) {
+                    failJob("Job timed out while checking for server bundle download status.");
+                    return;
+                }
+            }
+            status.completeSuccessfully(
+                String.format(
+                    "Server successfully registered with load balancer %s. OTP running at %s",
+                    otpServer.ec2Info.targetGroupArn,
+                    routerUrl
+                )
+            );
             LOG.info("View logs at {}", getUserDataLogS3Path());
             deployJob.incrementCompletedServers();
         } else {
@@ -216,27 +236,6 @@ public class MonitorServerStatusJob extends MonitorableJob {
         return runTimeMillis > maxRunTimeMillis;
     }
 
-    /**
-     * Checks for Graph object on S3.
-     */
-    private boolean isGraphBuilt() {
-        AmazonS3URI uri = new AmazonS3URI(deployJob.getS3GraphURI());
-        LOG.info("Checking for graph at {}", uri.toString());
-        // Surround with try/catch (exception thrown if object does not exist).
-        try {
-            deployJob.getS3Client().getObject(uri.getBucket(), uri.getKey());
-            return true;
-        } catch (AmazonS3Exception e) {
-            String errorCode = e.getErrorCode();
-            if (!errorCode.equals("NoSuchKey")) {
-                LOG.warn("Error encountered while checking for graph upload: {}", e);
-                return false;
-            }
-            LOG.warn("Object not found for key " + uri.getKey(), e);
-            return false;
-        }
-    }
-
     /** Have the current thread sleep for a few seconds in order to pause during a while loop. */
     private void wait(String waitingFor) {
         try {
@@ -247,14 +246,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
         }
     }
 
-    /**
-     * Get the S3 key for the bundle status file, which is uploaded by the graph-building EC2 instance after the graph
-     * build completes. The file contains either "SUCCESS" or "FAILURE".
-     */
-    private String getBundleStatusKey () {
-        return String.join("/", deployJob.getJobRelativePath(), BUNDLE_DOWNLOAD_COMPLETE_FILE);
-    }
-
+    /** Make HTTP request to URL and return the string response. */
     private String getUrlAsString(String url) {
         HttpGet httpGet = new HttpGet(url);
         try (CloseableHttpResponse response = httpClient.execute(httpGet)) {
