@@ -310,7 +310,7 @@
   - name: price
     required: true
     inputType: TEXT
-    maxLength: 8
+    maxLength: 6 # MTC: (5,2) number format from 0.00 to 999.99.
     columnWidth: 3
 
 - id: calendar_attributes
@@ -338,5 +338,5 @@
   - name: zone_name
     required: true
     inputType: TEXT
-    maxLength: 35
+    maxLength: 250
     helpContent: Public name of the fare zone, as it should appear on 511.org such as EastBay, WestBay, etc
