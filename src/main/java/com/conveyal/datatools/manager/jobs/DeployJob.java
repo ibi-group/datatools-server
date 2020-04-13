@@ -228,7 +228,11 @@ public class DeployJob extends MonitorableJob {
             // Dump the deployment bundle to the temp file.
             try {
                 status.message = "Creating transit bundle (GTFS and OSM)";
-                this.deployment.dump(deploymentTempFile, true, true, true);
+                // Only download OSM extract if an OSM extract does not exist at a public URL and not skipping extract.
+                boolean includeOsm = deployment.osmExtractUrl == null && !deployment.skipOsmExtract;
+                // TODO: At this stage, perform a HEAD request on OSM extract URL to verify that it exists before
+                //  continuing with deployment. The same probably goes for the specified OTP jar file.
+                this.deployment.dump(deploymentTempFile, true, includeOsm, true);
                 tasksCompleted++;
             } catch (Exception e) {
                 status.fail("Error dumping deployment", e);
@@ -874,6 +878,10 @@ public class DeployJob extends MonitorableJob {
             // Download data bundle from S3.
             String downloadBundle = String.format("time aws s3 --cli-read-timeout 60 cp %s /tmp/bundle.zip", getS3BundleURI());
             lines.add(downloadBundle);
+            // Download OSM extract if exists at URL. Otherwise, it is assumed to be in the bundle.
+            if (deployment.osmExtractUrl != null && !deployment.skipOsmExtract) {
+                lines.add(String.format("wget %s -O %s/osm.pbf", deployment.osmExtractUrl, routerDir));
+            }
             // Determine if bundle download was successful and try again if not.
             lines.add(String.format("[ -f /tmp/bundle.zip ] && echo 'Bundle downloaded!' || %s", downloadBundle));
             lines.add("[ -f /tmp/bundle.zip ] && BUNDLE_STATUS='SUCCESS' || BUNDLE_STATUS='FAILURE'");
