@@ -1,4 +1,128 @@
 ---
+- id: calendar_attributes
+  name: calendar_attributes.txt
+  helpContent: This file contains calendar attributes. This file is needed because standard GTFS does not include these fields.
+  fields:
+    - name: service_id
+      required: true
+      inputType: GTFS_SERVICE
+      helpContent: From GTFS calendar.txt file
+    - name: service_description
+      required: true
+      inputType: TEXT
+      maxLength: 250
+      helpContent: Description of the service, as it should appear on 511.org such as Weekdays, Sunday/Holiday
+
+- id: directions
+  name: directions.txt
+  helpContent: <p>Users of version 1.7 or later must use this file and ignore realtime_directions.txt file.</p><p>In the standard GTFS, trip direction can be specified as ‘0’ or ‘1’ only. It does not allow for indication of specific directions such as North, South, etc. This file captures the direction text for each of the directions in a route.</p><p>Route direction information can be provided through either this directions.txt OR realtime_directions.txt file, but not both. Users of GTFS+ version 1.7 and above are required to provide directions.txt file and ignore realtime_directions.txt file. Users of version 1.6 or earlier may continue to use realtime_directions.txt, unless they voluntarily choose to upgrade to directions.txt. Only one of directions.txt or realtime_directions.txt should be included. Also, tripheadsign field in GTFS trips.txt file should be populated in order to distinguish patterns within a direction and to provide destination information to passengers.</p> <p>When directions.txt file is used, optional direction_id field in GTFS trips.txt must be filled in.</p>
+  fields:
+    - name: route_id
+      required: true
+      inputType: GTFS_ROUTE
+      columnWidth: 6
+      helpContent: From GTFS routes.txt file.
+    - name: direction_id
+      required: true
+      inputType: DROPDOWN
+      options:
+        - value: '0'
+        - value: '1'
+      columnWidth: 3
+      helpContent: Binary direction_id from GTFS trips.txt file. Each (route_id, direction_id) pair can only appear once in directions.txt.
+    - name: direction
+      required: true
+      inputType: DROPDOWN
+      options:
+        - value: North
+        - value: South
+        - value: East
+        - value: West
+        - value: Northeast
+        - value: Northwest
+        - value: Southeast
+        - value: Southwest
+        - value: Clockwise
+        - value: Counterclockwise
+        - value: Inbound
+        - value: Outbound
+        - value: Loop
+        - value: A Loop
+        - value: B Loop
+      columnWidth: 3
+      helpContent: Corresponding direction name.
+
+- id: fare_rider_categories
+  name: fare_rider_categories.txt
+  helpContent: This file specifies attributes for the fares for rider categories. GTFS file fare_attributes.txt contains the fares for the Regular rider category. Fares for other rider categories such as Child, Senior, etc will be provided in this plus file fare_rider_categories.txt. The combination of fare_id and rider_category_id should be unique in this file. This file is needed because standard GTFS does not include these fields.
+  fields:
+    - name: fare_id
+      required: true
+      inputType: GTFS_FARE
+      columnWidth: 6
+      helpContent: From GTFS fare_attributes.txt file
+    - name: rider_category_id
+      required: true
+      inputType: DROPDOWN
+      options:
+        - value: '2'
+          text: Senior
+        - value: '3'
+          text: Child
+        - value: '4'
+          text: Student
+        - value: '5'
+          text: Youth
+        - value: '6'
+          text: Disabled
+        - value: '7'
+          text: Promotional category
+        - value: '11'
+          text: Military
+        - value: '15'
+          text: Custom (15)
+        - value: '16'
+          text: Custom (16)
+        - value: '17'
+          text: Custom (17)
+        - value: '18'
+          text: Custom (18)
+        - value: '19'
+          text: Custom (19)
+        - value: '20'
+          text: Custom (20)
+        - value: '21'
+          text: Custom (21)
+        - value: '22'
+          text: Custom (22)
+        - value: '23'
+          text: Custom (23)
+        - value: '24'
+          text: Custom (24)
+        - value: '25'
+          text: Custom (25)
+      columnWidth: 3
+      helpContent: From Plus file rider_categories.txt
+    - name: price
+      required: true
+      inputType: TEXT
+      maxLength: 6 # MTC: (5,2) number format from 0.00 to 999.99.
+      columnWidth: 3
+
+- id: farezone_attributes
+  name: farezone_attributes.txt
+  helpContent: This file contains fare zone attributes. This file is needed because standard GTFS does not include these fields.
+  fields:
+    - name: zone_id
+      required: true
+      inputType: GTFS_ZONE
+      helpContent: From GTFS stops.txt file
+    - name: zone_name
+      required: true
+      inputType: TEXT
+      maxLength: 250
+      helpContent: Public name of the fare zone, as it should appear on 511.org such as EastBay, WestBay, etc
+
 - id: realtime_routes
   name: realtime_routes.txt
   helpContent: This file contains additional real-time information for a route.
@@ -49,45 +173,6 @@
     columnWidth: 2
     helpContent: Corresponding stop_code used in real-time feed for MTC.
 
-- id: directions
-  name: directions.txt
-  helpContent: <p>Users of version 1.7 or later must use this file and ignore realtime_directions.txt file.</p><p>In the standard GTFS, trip direction can be specified as ‘0’ or ‘1’ only. It does not allow for indication of specific directions such as North, South, etc. This file captures the direction text for each of the directions in a route.</p><p>Route direction information can be provided through either this directions.txt OR realtime_directions.txt file, but not both. Users of GTFS+ version 1.7 and above are required to provide directions.txt file and ignore realtime_directions.txt file. Users of version 1.6 or earlier may continue to use realtime_directions.txt, unless they voluntarily choose to upgrade to directions.txt. Only one of directions.txt or realtime_directions.txt should be included. Also, tripheadsign field in GTFS trips.txt file should be populated in order to distinguish patterns within a direction and to provide destination information to passengers.</p> <p>When directions.txt file is used, optional direction_id field in GTFS trips.txt must be filled in.</p>
-  fields:
-  - name: route_id
-    required: true
-    inputType: GTFS_ROUTE
-    columnWidth: 6
-    helpContent: From GTFS routes.txt file.
-  - name: direction_id
-    required: true
-    inputType: DROPDOWN
-    options:
-    - value: '0'
-    - value: '1'
-    columnWidth: 3
-    helpContent: Binary direction_id from GTFS trips.txt file. Each (route_id, direction_id) pair can only appear once in directions.txt.
-  - name: direction
-    required: true
-    inputType: DROPDOWN
-    options:
-    - value: North
-    - value: South
-    - value: East
-    - value: West
-    - value: Northeast
-    - value: Northwest
-    - value: Southeast
-    - value: Southwest
-    - value: Clockwise
-    - value: Counterclockwise
-    - value: Inbound
-    - value: Outbound
-    - value: Loop
-    - value: A Loop
-    - value: B Loop
-    columnWidth: 3
-    helpContent: Corresponding direction name.
-
 - id: realtime_trips
   name: realtime_trips.txt
   helpContent: This file contains real-time identifiers for trips. This file can be omitted if the GTFS trips.txt file contains the same Trip IDs included in real-time feed for MTC within the trip_id field.
@@ -103,6 +188,61 @@
 #    maxLength: 15
     columnWidth: 6
     helpContent: Corresponding trip_id provided in real-time feed for MTC.
+
+- id: rider_categories
+  name: rider_categories.txt
+  helpContent: This file lists the rider categories for fares other than the Regular category. This file is needed because standard GTFS does not include these fields.
+  fields:
+    - name: rider_category_id
+      required: true
+      inputType: DROPDOWN
+      options:
+        - value: '1'
+          text: Adult
+        - value: '2'
+          text: Senior
+        - value: '3'
+          text: Child
+        - value: '4'
+          text: Student
+        - value: '5'
+          text: Youth
+        - value: '6'
+          text: Disabled
+        - value: '7'
+          text: Promotional category
+        - value: '11'
+          text: Military
+        - value: '15'
+          text: Custom (15)
+        - value: '16'
+          text: Custom (16)
+        - value: '17'
+          text: Custom (17)
+        - value: '18'
+          text: Custom (18)
+        - value: '19'
+          text: Custom (19)
+        - value: '20'
+          text: Custom (20)
+        - value: '21'
+          text: Custom (21)
+        - value: '22'
+          text: Custom (22)
+        - value: '23'
+          text: Custom (23)
+        - value: '24'
+          text: Custom (24)
+        - value: '25'
+          text: Custom (25)
+      columnWidth: 6
+      helpContent: Unique rider category ID (agency can assign categories that do not fall under standard categories)
+    - name: rider_category_description
+      required: true
+      inputType: TEXT
+      maxLength: 256
+      columnWidth: 6
+      helpContent: Rider category as it should appear on 511.org, such as Child (ages 5-11), Seniors (Ages 62 & Up)
 
 - id: stop_attributes
   name: stop_attributes.txt
@@ -200,143 +340,3 @@
     inputType: GTFS_STOP
     columnWidth: 6
     helpContent: From GTFS stop_times.txt file (Include Time point stops only)
-
-- id: rider_categories
-  name: rider_categories.txt
-  helpContent: This file lists the rider categories for fares other than the Regular category. This file is needed because standard GTFS does not include these fields.
-  fields:
-  - name: rider_category_id
-    required: true
-    inputType: DROPDOWN
-    options:
-    - value: '1'
-      text: Adult
-    - value: '2'
-      text: Senior
-    - value: '3'
-      text: Child
-    - value: '4'
-      text: Student
-    - value: '5'
-      text: Youth
-    - value: '6'
-      text: Disabled
-    - value: '7'
-      text: Promotional category
-    - value: '11'
-      text: Military
-    - value: '15'
-      text: Custom (15)
-    - value: '16'
-      text: Custom (16)
-    - value: '17'
-      text: Custom (17)
-    - value: '18'
-      text: Custom (18)
-    - value: '19'
-      text: Custom (19)
-    - value: '20'
-      text: Custom (20)
-    - value: '21'
-      text: Custom (21)
-    - value: '22'
-      text: Custom (22)
-    - value: '23'
-      text: Custom (23)
-    - value: '24'
-      text: Custom (24)
-    - value: '25'
-      text: Custom (25)
-    columnWidth: 6
-    helpContent: Unique rider category ID (agency can assign categories that do not fall under standard categories)
-  - name: rider_category_description
-    required: true
-    inputType: TEXT
-    maxLength: 256
-    columnWidth: 6
-    helpContent: Rider category as it should appear on 511.org, such as Child (ages 5-11), Seniors (Ages 62 & Up)
-
-- id: fare_rider_categories
-  name: fare_rider_categories.txt
-  helpContent: This file specifies attributes for the fares for rider categories. GTFS file fare_attributes.txt contains the fares for the Regular rider category. Fares for other rider categories such as Child, Senior, etc will be provided in this plus file fare_rider_categories.txt. The combination of fare_id and rider_category_id should be unique in this file. This file is needed because standard GTFS does not include these fields.
-  fields:
-  - name: fare_id
-    required: true
-    inputType: GTFS_FARE
-    columnWidth: 6
-    helpContent: From GTFS fare_attributes.txt file
-  - name: rider_category_id
-    required: true
-    inputType: DROPDOWN
-    options:
-    - value: '2'
-      text: Senior
-    - value: '3'
-      text: Child
-    - value: '4'
-      text: Student
-    - value: '5'
-      text: Youth
-    - value: '6'
-      text: Disabled
-    - value: '7'
-      text: Promotional category
-    - value: '11'
-      text: Military
-    - value: '15'
-      text: Custom (15)
-    - value: '16'
-      text: Custom (16)
-    - value: '17'
-      text: Custom (17)
-    - value: '18'
-      text: Custom (18)
-    - value: '19'
-      text: Custom (19)
-    - value: '20'
-      text: Custom (20)
-    - value: '21'
-      text: Custom (21)
-    - value: '22'
-      text: Custom (22)
-    - value: '23'
-      text: Custom (23)
-    - value: '24'
-      text: Custom (24)
-    - value: '25'
-      text: Custom (25)
-    columnWidth: 3
-    helpContent: From Plus file rider_categories.txt
-  - name: price
-    required: true
-    inputType: TEXT
-    maxLength: 8
-    columnWidth: 3
-
-- id: calendar_attributes
-  name: calendar_attributes.txt
-  helpContent: This file contains calendar attributes. This file is needed because standard GTFS does not include these fields.
-  fields:
-  - name: service_id
-    required: true
-    inputType: GTFS_SERVICE
-    helpContent: From GTFS calendar.txt file
-  - name: service_description
-    required: true
-    inputType: TEXT
-    maxLength: 250
-    helpContent: Description of the service, as it should appear on 511.org such as Weekdays, Sunday/Holiday
-
-- id: farezone_attributes
-  name: farezone_attributes.txt
-  helpContent: This file contains fare zone attributes. This file is needed because standard GTFS does not include these fields.
-  fields:
-  - name: zone_id
-    required: true
-    inputType: GTFS_ZONE
-    helpContent: From GTFS stops.txt file
-  - name: zone_name
-    required: true
-    inputType: TEXT
-    maxLength: 35
-    helpContent: Public name of the fare zone, as it should appear on 511.org such as EastBay, WestBay, etc
