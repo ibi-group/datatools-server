@@ -51,11 +51,12 @@ public class MonitorServerStatusJob extends MonitorableJob {
     private final OtpServer otpServer;
     private final AWSStaticCredentialsProvider credentials;
     private final AmazonEC2 ec2;
+    private final AmazonElasticLoadBalancing elbClient;
     private final CloseableHttpClient httpClient = HttpClients.createDefault();
     // Delay checks by twenty seconds to give user-data script time to upload the instance's user data log if part of the
     // script fails (e.g., uploading or downloading a file).
     private static final int DELAY_SECONDS = 20;
-    public long graphBuildSeconds;
+    public long graphTaskSeconds;
 
     public MonitorServerStatusJob(Auth0UserProfile owner, DeployJob deployJob, Instance instance, boolean graphAlreadyBuilt) {
         super(
@@ -73,6 +74,11 @@ public class MonitorServerStatusJob extends MonitorableJob {
         ec2 = deployJob.getCustomRegion() == null
             ? AWSUtils.getEC2ClientForCredentials(credentials)
             : AWSUtils.getEC2ClientForCredentials(credentials, deployJob.getCustomRegion());
+        AmazonElasticLoadBalancingClientBuilder elbBuilder = AmazonElasticLoadBalancingClient.builder()
+            .withCredentials(credentials);
+        elbClient = deployJob.getCustomRegion() == null
+            ? elbBuilder.build()
+            : elbBuilder.withRegion(deployJob.getCustomRegion()).build();
     }
 
     @JsonProperty
@@ -90,14 +96,20 @@ public class MonitorServerStatusJob extends MonitorableJob {
         String ipUrl = "http://" + instance.getPublicIpAddress();
         // Get OTP URL for instance to check for availability.
         boolean routerIsAvailable = false, graphIsAvailable = false;
-        // If graph was not already built by a previous server, wait for it to build.
+        if (otpServer.ec2Info == null || otpServer.ec2Info.targetGroupArn == null) {
+            // Fail the job from the outset if there is no target group defined.
+            failJob("There is no load balancer under which to register ec2 instance.");
+        }
         try {
-            if (!graphAlreadyBuilt) {
+            if (graphAlreadyBuilt) {
+                // If graph already build, instance's user data will download Graph.obj automatically instead of bundle.
+                status.update("Loading graph...", 40);
+            } else {
+                // Otherwise, we need to verify that the bundle downloaded successfully.
                 boolean bundleIsDownloaded = false;
                 // Progressively check status of OTP server
                 if (deployment.buildGraphOnly) {
                     // No need to check that OTP is running. Just check to see that the graph is built.
-                    bundleIsDownloaded = true;
                     routerIsAvailable = true;
                 }
                 // First, check that OTP has started up.
@@ -124,10 +136,9 @@ public class MonitorServerStatusJob extends MonitorableJob {
                 long bundleDownloadSeconds = (System.currentTimeMillis() - bundleDownloadStartTime) / 1000;
                 LOG.info("Bundle downloaded in {} seconds!", bundleDownloadSeconds);
                 status.update("Building graph...", 30);
-            } else {
-                status.update("Loading graph...", 40);
             }
-            long graphBuildStartTime = System.currentTimeMillis();
+            // Once bundle is downloaded, we await the build (or download if graph already built) of the graph.
+            long graphCheckStartTime = System.currentTimeMillis();
             String graphStatusUrl = String.join("/", ipUrl, GRAPH_STATUS_FILE);
             while (!graphIsAvailable) {
                 // If the request is successful, the OTP instance has started.
@@ -135,90 +146,88 @@ public class MonitorServerStatusJob extends MonitorableJob {
                 graphIsAvailable = checkForSuccessfulRequest(graphStatusUrl);
                 // wait a maximum of 4 hours if building the graph, or 20 minutes if downloading a graph
                 long maxGraphBuildOrDownloadWaitTimeMillis = graphAlreadyBuilt ? 20 * 60 * 1000 : 4 * 60 * 60 * 1000;
-                if (taskHasTimedOut(graphBuildStartTime, maxGraphBuildOrDownloadWaitTimeMillis)) {
+                if (taskHasTimedOut(graphCheckStartTime, maxGraphBuildOrDownloadWaitTimeMillis)) {
                     failJob("Job timed out while waiting for graph build/download. If this was a graph building machine, it may have run out of memory.");
                     return;
                 }
             }
-            // Check status of bundle download and fail job if there was a failure.
+            // Check graph status and fail job if there was a failure.
             String graphStatus = getUrlAsString(graphStatusUrl);
             if (graphStatus == null || !graphStatus.contains("SUCCESS")) {
                 failJob("Failure encountered while building/downloading graph.");
                 return;
             }
-            graphBuildSeconds = (System.currentTimeMillis() - graphBuildStartTime) / 1000;
-            String message = String.format("Graph build/download completed in %d seconds!", graphBuildSeconds);
+            graphTaskSeconds = (System.currentTimeMillis() - graphCheckStartTime) / 1000;
+            String message = String.format("Graph build/download completed in %d seconds!", graphTaskSeconds);
             LOG.info(message);
-            // If only task is to build graph, this machine's job is complete and we can consider this job done.
+            // If only task for this instance is to build the graph (either because that is the deployment purpose or
+            // because this instance type/image is for graph building only), this machine's job is complete and we can
+            // consider this job done.
             if (deployment.buildGraphOnly || (!graphAlreadyBuilt && otpServer.ec2Info.hasSeparateGraphBuildConfig())) {
                 status.completeSuccessfully(message);
                 LOG.info("View logs at {}", getUserDataLogS3Path());
                 return;
             }
             status.update("Loading graph...", 70);
-            // Once this is confirmed, check for the existence of the router, which will indicate that the graph build is
-            // complete.
+            // Once this is confirmed, check for the availability of the router, which will indicate that the graph
+            // load has completed successfully.
             String routerUrl = String.join("/", ipUrl, "otp/routers/default");
-            long graphLoadStartTime = System.currentTimeMillis();
+            long routerCheckStartTime = System.currentTimeMillis();
             while (!routerIsAvailable) {
                 // If the request was successful, the graph build is complete!
-                // TODO: Substitute in specific router ID? Or just default to... default.
+                // TODO: Substitute in specific router ID? Or just default to... "default".
                 waitAndCheckInstanceHealth("router to become available: " + routerUrl);
                 routerIsAvailable = checkForSuccessfulRequest(routerUrl);
-                // wait a maximum of 20 minutes to load the graph and for the server to start
-                long maxGraphLoadWaitTimeMillis = 20 * 60 * 1000;
-                if (taskHasTimedOut(graphLoadStartTime, maxGraphLoadWaitTimeMillis)) {
+                // wait a maximum of 20 minutes to load the graph and for the router to become available.
+                long maxRouterAvailableWaitTimeMillis = 20 * 60 * 1000;
+                if (taskHasTimedOut(routerCheckStartTime, maxRouterAvailableWaitTimeMillis)) {
                     failJob("Job timed out while waiting for trip planner to start up.");
                     return;
                 }
             }
             status.update("Graph loaded!", 90);
-            if (otpServer.ec2Info != null && otpServer.ec2Info.targetGroupArn != null) {
-                // After the router is available, the EC2 instance can be registered with the load balancer.
-                // REGISTER INSTANCE WITH LOAD BALANCER
-                // Use alternative credentials if they exist.
-                AmazonElasticLoadBalancingClientBuilder builder = AmazonElasticLoadBalancingClient.builder()
-                    .withCredentials(credentials);
-                if (deployJob.getCustomRegion() != null) builder.withRegion(deployJob.getCustomRegion());
-                AmazonElasticLoadBalancing elbClient = builder.build();
-                RegisterTargetsRequest registerTargetsRequest = new RegisterTargetsRequest()
-                    .withTargetGroupArn(otpServer.ec2Info.targetGroupArn)
-                    .withTargets(new TargetDescription().withId(instance.getInstanceId()));
-                boolean targetAddedSuccessfully = false;
-                long registerTargetStartTime = System.currentTimeMillis();
-                while (!targetAddedSuccessfully) {
-                    // Register target with target group.
-                    elbClient.registerTargets(registerTargetsRequest);
-                    waitAndCheckInstanceHealth("instance to register with ELB target group");
-                    // Check that the instance ID shows up in the health check.
-                    DescribeTargetHealthRequest healthRequest = new DescribeTargetHealthRequest()
-                        .withTargetGroupArn(otpServer.ec2Info.targetGroupArn);
-                    DescribeTargetHealthResult healthResult = elbClient.describeTargetHealth(healthRequest);
-                    for (TargetHealthDescription health : healthResult.getTargetHealthDescriptions()) {
-                        if (instance.getInstanceId().equals(health.getTarget().getId())) {
-                            LOG.info("Instance {} successfully added to target group!", instance.getInstanceId());
-                            targetAddedSuccessfully = true;
-                        }
-                    }
-                    // Wait for two minutes.
-                    if (taskHasTimedOut(registerTargetStartTime, 2 * 60 * 1000)) {
-                        failJob("Job timed out while checking for server bundle download status.");
-                        return;
+            // After the router is available, the EC2 instance can be registered with the load balancer.
+            // REGISTER INSTANCE WITH LOAD BALANCER
+            RegisterTargetsRequest registerTargetsRequest = new RegisterTargetsRequest()
+                .withTargetGroupArn(otpServer.ec2Info.targetGroupArn)
+                .withTargets(new TargetDescription().withId(instance.getInstanceId()));
+            boolean targetAddedSuccessfully = false;
+            long registerTargetStartTime = System.currentTimeMillis();
+            while (!targetAddedSuccessfully) {
+                // Register target with target group.
+                elbClient.registerTargets(registerTargetsRequest);
+                waitAndCheckInstanceHealth("instance to register with ELB target group");
+                // Check that the instance ID shows up in the health check.
+                DescribeTargetHealthRequest healthRequest = new DescribeTargetHealthRequest()
+                    .withTargetGroupArn(otpServer.ec2Info.targetGroupArn);
+                DescribeTargetHealthResult healthResult = elbClient.describeTargetHealth(healthRequest);
+                for (TargetHealthDescription health : healthResult.getTargetHealthDescriptions()) {
+                    if (instance.getInstanceId().equals(health.getTarget().getId())) {
+                        LOG.info("Instance {} successfully added to target group!", instance.getInstanceId());
+                        targetAddedSuccessfully = true;
                     }
                 }
-                status.completeSuccessfully(
-                    String.format(
-                        "Server successfully registered with load balancer %s. OTP running at %s",
-                        otpServer.ec2Info.targetGroupArn,
-                        routerUrl
-                    )
-                );
-                LOG.info("View logs at {}", getUserDataLogS3Path());
-                deployJob.incrementCompletedServers();
-            } else {
-                failJob("There is no load balancer under which to register ec2 instance.");
+                // Wait for two minutes.
+                if (taskHasTimedOut(registerTargetStartTime, 2 * 60 * 1000)) {
+                    failJob("Job timed out while waiting to register EC2 instance with load balancer target group.");
+                    return;
+                }
             }
+            status.completeSuccessfully(
+                String.format(
+                    "Server successfully registered with load balancer %s. OTP running at %s",
+                    otpServer.ec2Info.targetGroupArn,
+                    routerUrl
+                )
+            );
+            LOG.info("View logs at {}", getUserDataLogS3Path());
+            deployJob.incrementCompletedServers();
         } catch (InstanceHealthException e) {
+            // If at any point during the job, an instance health check indicates that the EC2 instance being monitored
+            // was terminated or stopped, an InstanceHealthException will be thrown. Whether the instance termination
+            // was accidental or intentional, we want the result to be that the job fails and the deployment be aborted.
+            // This gives us a failsafe in case we kick off a deployment accidentally or otherwise need to cancel the
+            // deployment job (e.g., due to an incorrect configuration).
             failJob("Ec2 Instance was stopped or terminated before job could complete!");
         }
     }
