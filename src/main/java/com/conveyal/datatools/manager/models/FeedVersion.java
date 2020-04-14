@@ -33,6 +33,7 @@ import java.util.Date;
 import java.util.Set;
 import java.util.UUID;
 
+import static com.conveyal.datatools.manager.DataManager.isExtensionEnabled;
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
@@ -307,10 +308,16 @@ public class FeedVersion extends Model implements Serializable {
         // VALIDATE GTFS feed
         try {
             LOG.info("Beginning validation...");
-            // run validation on feed version
             // FIXME: pass status to validate? Or somehow listen to events?
             status.update("Validating feed...", 33);
-            validationResult = GTFS.validate(feedLoadResult.uniqueIdentifier, DataManager.GTFS_DATA_SOURCE, MTCValidator::new);
+
+            // Validate the feed version.
+            // Certain extensions, if enabled, have extra validators
+            if (isExtensionEnabled("mtc")) {
+                validationResult = GTFS.validate(feedLoadResult.uniqueIdentifier, DataManager.GTFS_DATA_SOURCE, MTCValidator::new);
+            } else {
+                validationResult = GTFS.validate(feedLoadResult.uniqueIdentifier, DataManager.GTFS_DATA_SOURCE);
+            }
         } catch (Exception e) {
             status.fail(String.format("Unable to validate feed %s", this.id), e);
             // FIXME create validation result with new constructor?
