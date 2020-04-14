@@ -235,7 +235,7 @@ public class ProjectController {
             feedVersions.add(version);
         }
         MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(userProfile, feedVersions, project.id, REGIONAL);
-        DataManager.heavyExecutor.execute(mergeFeedsJob);
+        Scheduler.runJob(project.id, mergeFeedsJob);
         // Return job ID to requester for monitoring job status.
         return formatJobMessage(mergeFeedsJob.jobId, "Merge operation is processing.");
     }

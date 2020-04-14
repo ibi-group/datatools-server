@@ -1,6 +1,7 @@
 package com.conveyal.datatools.editor.controllers.api;
 
 
+import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.editor.jobs.CreateSnapshotJob;
 import com.conveyal.datatools.editor.jobs.ExportSnapshotToGTFSJob;
@@ -102,7 +103,7 @@ public class SnapshotController {
             createSnapshotJob.addNextJob(new CreateFeedVersionFromSnapshotJob(feedSource, snapshot, userProfile));
         }
         // Begin asynchronous execution.
-        DataManager.heavyExecutor.execute(createSnapshotJob);
+        Scheduler.runJob(feedSource.id, createSnapshotJob);
         return SparkUtils.formatJobMessage(createSnapshotJob.jobId, "Creating snapshot.");
     }
 
@@ -123,7 +124,7 @@ public class SnapshotController {
         boolean preserveBuffer = "true".equals(req.queryParams("preserveBuffer")) && feedSource.editorNamespace != null;
         CreateSnapshotJob createSnapshotJob =
                 new CreateSnapshotJob(userProfile, snapshot, true, false, preserveBuffer);
-        DataManager.heavyExecutor.execute(createSnapshotJob);
+        Scheduler.runJob(feedSource.id, createSnapshotJob);
         return formatJobMessage(createSnapshotJob.jobId, "Importing version as snapshot.");
     }
 
@@ -162,7 +163,7 @@ public class SnapshotController {
         String name = "Restore snapshot " + snapshotToRestore.name;
         Snapshot snapshot = new Snapshot(name, feedSource.id, snapshotToRestore.namespace);
         CreateSnapshotJob createSnapshotJob = new CreateSnapshotJob(userProfile, snapshot, true, false, preserveBuffer);
-        DataManager.heavyExecutor.execute(createSnapshotJob);
+        Scheduler.runJob(feedSource.id, createSnapshotJob);
         return formatJobMessage(createSnapshotJob.jobId, "Restoring snapshot...");
     }
 
@@ -176,7 +177,7 @@ public class SnapshotController {
         // Create and kick off export job.
         // FIXME: what if a snapshot is already written to S3?
         ExportSnapshotToGTFSJob exportSnapshotToGTFSJob = new ExportSnapshotToGTFSJob(userProfile,  snapshot);
-        DataManager.heavyExecutor.execute(exportSnapshotToGTFSJob);
+        Scheduler.runJob(snapshot.id, exportSnapshotToGTFSJob);
         return formatJobMessage(exportSnapshotToGTFSJob.jobId, "Exporting snapshot to GTFS.");
     }
 

@@ -277,6 +277,12 @@ public class DeployJob extends MonitorableJob {
         status.completed = true;
     }
 
+    @Override
+    public void abortLogic() {
+        deploymentTempFile.delete();
+        // TODO Terminate instances?
+    }
+
     /**
      * Upload to S3 the transit data bundle zip that contains GTFS zip files, OSM data, and config files.
      */

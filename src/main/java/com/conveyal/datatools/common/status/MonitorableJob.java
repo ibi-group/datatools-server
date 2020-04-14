@@ -15,6 +15,8 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
 
 import static com.conveyal.datatools.manager.controllers.api.StatusController.getJobsForUser;
 
@@ -31,6 +33,7 @@ public abstract class MonitorableJob implements Runnable, Serializable {
     public File file;
     public String parentJobId;
     public JobType parentJobType;
+    public Future<?> future;
     // Status is not final to allow some jobs to have extra status fields.
     public Status status = new Status();
     // Name is not final in case it needs to be amended during job processing.
@@ -120,6 +123,10 @@ public abstract class MonitorableJob implements Runnable, Serializable {
      */
     public abstract void jobLogic() throws Exception;
 
+    public void abortLogic() {
+        // do nothing by default.
+    };
+
     /**
      * This method may be overridden in the event that you want to perform a special final step after this job and
      * all sub-jobs have completed.
@@ -197,11 +204,12 @@ public abstract class MonitorableJob implements Runnable, Serializable {
      * clean up steps needed to complete job in an errored state (generally due to failure in a previous task in
      * the chain).
      */
-    private void cancel(String message) {
+    public void cancel(String message) {
+        this.future.cancel(true);
+        abortLogic();
         // Updating the job status with error is all we need to do in order to move the job into completion. Once the
         // user fetches the errored job, it will be automatically removed from the system.
         status.fail(message);
-        // FIXME: Do we need to run any clean up here?
     }
 
     /**

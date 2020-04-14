@@ -31,7 +31,7 @@ public class FetchProjectFeedsJob extends MonitorableJob {
         Project project = Persistence.projects.getById(projectId);
         if (project == null) {
             LOG.error("Fetch feeds job failed because project {} does not exist in database. Clearing the project's scheduled fetch jobs.");
-            Scheduler.removeProjectJobsOfType(projectId, FetchProjectFeedsJob.class, true);
+            Scheduler.removeJobsOfType(projectId, FetchProjectFeedsJob.class, true);
             return;
         }
         LOG.info("Fetch job running for {} project at {}", project.name, ZonedDateTime.now(ZoneId.of("America/New_York")));
@@ -56,7 +56,7 @@ public class FetchProjectFeedsJob extends MonitorableJob {
             // Run this in a heavy executor with continueThread = true, so that fetch/process jobs for each
             // feed source execute in order (i.e., fetch feed source A, then process; next, fetch feed source b, then
             // process).
-            DataManager.heavyExecutor.execute(fetchSingleFeedJob);
+            Scheduler.runJob(feedSource.id, fetchSingleFeedJob);
         }
     }
 

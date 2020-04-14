@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.jobs;
 import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
+import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -25,11 +26,11 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource.AGENCY_ID_FIELDNAME;
-import static com.conveyal.datatools.common.utils.Scheduler.schedulerService;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 
@@ -52,18 +53,24 @@ public class FeedUpdater {
     private Map<String, String> eTagForFeed;
     private final String feedBucket;
     private final String bucketFolder;
+    private final ScheduledFuture<?> scheduledFuture;
     private static final Logger LOG = LoggerFactory.getLogger(FeedUpdater.class);
 
     private FeedUpdater(int updateFrequencySeconds, String feedBucket, String bucketFolder) {
         LOG.info("Setting feed update to check every {} seconds", updateFrequencySeconds);
-        schedulerService.scheduleAtFixedRate(new UpdateFeedsTask(), 0, updateFrequencySeconds, TimeUnit.SECONDS);
+        scheduledFuture = Scheduler.scheduleRecurring(
+            new UpdateFeedsTask(),
+            0,
+            updateFrequencySeconds,
+            TimeUnit.SECONDS
+        );
         this.feedBucket = feedBucket;
         this.bucketFolder = bucketFolder;
     }
 
     /**
      * Create a {@link FeedUpdater} to poll the provided S3 bucket/prefix at the specified interval (in seconds) for
-     * updated files. The updater's task is run using the {@link com.conveyal.datatools.common.utils.Scheduler#schedulerService}.
+     * updated files. The updater's task is run using the {@link com.conveyal.datatools.common.utils.Scheduler}.
      */
     public static FeedUpdater schedule(int updateFrequencySeconds, String s3Bucket, String s3Prefix) {
         return new FeedUpdater(updateFrequencySeconds, s3Bucket, s3Prefix);

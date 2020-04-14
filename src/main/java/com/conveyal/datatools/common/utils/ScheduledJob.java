@@ -1,15 +1,15 @@
 package com.conveyal.datatools.common.utils;
 
-import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.Future;
 
 /**
- * Utility class that associates a {@link Runnable} with its {@link ScheduledFuture} for easy storage and recall.
+ * Utility class that associates a {@link Runnable} with its {@link Future} for easy storage and recall.
  */
 public class ScheduledJob {
-    public final ScheduledFuture scheduledFuture;
+    public final Future scheduledFuture;
     public final Runnable job;
 
-    public ScheduledJob (Runnable job, ScheduledFuture scheduledFuture) {
+    public ScheduledJob (Runnable job, Future scheduledFuture) {
         this.job = job;
         this.scheduledFuture = scheduledFuture;
     }

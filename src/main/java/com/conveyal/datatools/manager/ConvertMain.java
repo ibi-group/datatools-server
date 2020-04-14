@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.editor.datastore.GlobalTx;
 import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.jobs.ConvertEditorMapDBToSQL;
@@ -103,9 +104,9 @@ public class ConvertMain {
             Set<MonitorableJob> activeJobs = StatusController.filterActiveJobs(StatusController.getAllJobs());
             LOG.info(String.format("%d/%d jobs still active. Checking for completion again in 5 seconds...", activeJobs.size(), totalJobs));
 //            LOG.info(String.join(", ", activeJobs.stream().map(job -> job.name).collect(Collectors.toList())));
-            int jobsInExecutor = ((ThreadPoolExecutor) DataManager.heavyExecutor).getActiveCount();
+            int jobsInExecutor = Scheduler.getActiveCount();
             LOG.info(String.format("Jobs in thread pool executor: %d", jobsInExecutor));
-            LOG.info(String.format("Jobs completed by executor: %d", ((ThreadPoolExecutor) DataManager.heavyExecutor).getCompletedTaskCount()));
+            LOG.info(String.format("Jobs completed by executor: %d", Scheduler.getCompletedTaskCount()));
             Thread.sleep(5000);
         }
         long durationInMillis = System.currentTimeMillis() - startTime;
@@ -141,11 +142,11 @@ public class ConvertMain {
                     if (!feedSourcesEncountered.contains(feedSource.id)) {
                         // If this is the first feed encountered, load the editor buffer.
                         ConvertEditorMapDBToSQL convertEditorBufferToSQL = new ConvertEditorMapDBToSQL(snapshot.id.a, null);
-                        DataManager.heavyExecutor.execute(convertEditorBufferToSQL);
+                        Scheduler.runJob(snapshot.id.a, convertEditorBufferToSQL);
                         count++;
                     }
                     ConvertEditorMapDBToSQL convertEditorMapDBToSQL = new ConvertEditorMapDBToSQL(snapshot.id.a, snapshot.id.b);
-                    DataManager.heavyExecutor.execute(convertEditorMapDBToSQL);
+                    Scheduler.runJob(snapshot.id.a, convertEditorMapDBToSQL);
                     LOG.info(count + "/" + snapshotCount + " snapshot conversion queued");
                     feedSourcesEncountered.add(feedSource.id);
                     count++;

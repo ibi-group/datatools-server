@@ -56,6 +56,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
@@ -99,9 +100,10 @@ public class DataManager {
     private static final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
 
 
-    // Heavy executor should contain long-lived CPU-intensive tasks (e.g., feed loading/validation)
-    public static Executor heavyExecutor = Executors.newFixedThreadPool(4);
-    // light executor is for tasks for things that should finish quickly (e.g., email notifications)
+    /**
+     * The light executor is for tasks for things that should finish quickly (e.g., email notifications) and do not need
+     * to be cancelled. Cancellable jobs (e.g., deployment to OTP) should be scheduled with {@link Scheduler}.
+     */
     public static Executor lightExecutor = Executors.newSingleThreadExecutor();
 
     public static String feedBucket;
@@ -266,7 +268,9 @@ public class DataManager {
                 String extensionFeedBucket = getExtensionPropertyAsText(extensionType, "s3_bucket");
                 String extensionBucketFolder = getExtensionPropertyAsText(extensionType, "s3_download_prefix");
                 int updateFrequency = getConfigProperty("modules.gtfsapi.update_frequency").asInt();
-                if (feedBucket != null && extensionBucketFolder != null) FeedUpdater.schedule(updateFrequency, extensionFeedBucket, extensionBucketFolder);
+                if (feedBucket != null && extensionBucketFolder != null) {
+                    FeedUpdater.schedule(updateFrequency, extensionFeedBucket, extensionBucketFolder);
+                }
                 else LOG.warn("FeedUpdater not initialized. S3 bucket and folder not provided.");
             }
         }

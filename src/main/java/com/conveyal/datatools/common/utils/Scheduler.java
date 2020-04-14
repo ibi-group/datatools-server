@@ -1,10 +1,12 @@
 package com.conveyal.datatools.common.utils;
 
+import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.FeedExpirationNotificationJob;
 import com.conveyal.datatools.manager.jobs.FetchProjectFeedsJob;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.models.Model;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.google.common.collect.ArrayListMultimap;
@@ -22,8 +24,10 @@ import java.time.format.DateTimeFormatter;
 import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
 import static com.conveyal.datatools.common.utils.Utils.getTimezone;
@@ -33,21 +37,26 @@ import static com.google.common.collect.Multimaps.synchronizedListMultimap;
  * This class centralizes the logic associated with scheduling and cancelling tasks (organized as a {@link ScheduledJob})
  * for the Data Tools application. These tasks can be auto-scheduled according to application data (e.g., feed expiration
  * notifications based on the latest feed version's last date of service) or enabled by users (e.g., scheduling a project
- * auto feed fetch nightly at 2AM). The jobs are tracked in {@link #scheduledJobsForFeedSources} and
- * {@link #scheduledJobsForProjects} so that they can be cancelled at a later point in time should the associated
+ * auto feed fetch nightly at 2AM). The jobs are tracked in {@link #scheduledJobs} and
+ * {@link #scheduledJobs} so that they can be cancelled at a later point in time should the associated
  * feeds/projects be deleted or if the user changes the fetch behavior.
  */
 public class Scheduler {
     private static final Logger LOG = LoggerFactory.getLogger(Scheduler.class);
 
-    // Scheduled executor that handles running scheduled jobs.
-    public final static ScheduledExecutorService schedulerService = Executors.newScheduledThreadPool(1);
-    /** Stores {@link ScheduledJob} objects containing scheduled tasks keyed on the tasks's associated {@link FeedSource} ID. */
-    public final static ListMultimap<String, ScheduledJob> scheduledJobsForFeedSources =
+    /** Scheduled executor that handles running scheduled jobs. */
+    private final static ScheduledExecutorService schedulerService = Executors.newScheduledThreadPool(4);
+    /** Stores {@link ScheduledJob} objects containing scheduled tasks keyed on the tasks's associated {@link Model} ID. */
+    public final static ListMultimap<String, ScheduledJob> scheduledJobs =
         synchronizedListMultimap(ArrayListMultimap.create());
-    /** Stores {@link ScheduledJob} objects containing scheduled tasks keyed on the tasks's associated {@link Project} ID. */
-    public final static ListMultimap<String, ScheduledJob> scheduledJobsForProjects =
-        synchronizedListMultimap(ArrayListMultimap.create());
+
+    public static int getActiveCount() {
+        return ((ThreadPoolExecutor) schedulerService).getActiveCount();
+    }
+
+    public static long getCompletedTaskCount() {
+        return ((ThreadPoolExecutor) schedulerService).getCompletedTaskCount();
+    }
 
     /**
      * A method to initialize all scheduled tasks upon server startup.
@@ -67,23 +76,34 @@ public class Scheduler {
         }
     }
 
+    public static ScheduledFuture<?> scheduleRecurring (Runnable job, long initialDelay, long period, TimeUnit unit) {
+        return schedulerService.scheduleAtFixedRate(job, initialDelay, period, unit);
+    }
+
     /**
-     * Convenience method for scheduling one-off jobs for a feed source.
+     * Convenience method for submitting a scheduled job for immediate execution.
      */
-    public static ScheduledJob scheduleFeedSourceJob (FeedSource feedSource, Runnable job, long delay, TimeUnit timeUnit) {
-        ScheduledFuture scheduledFuture = schedulerService.schedule(job, delay, timeUnit);
-        ScheduledJob scheduledJob = new ScheduledJob(job, scheduledFuture);
-        scheduledJobsForFeedSources.put(feedSource.id, scheduledJob);
+    public static ScheduledJob runJob(String id, MonitorableJob job) {
+        job.future = schedulerService.submit(job);
+        ScheduledJob scheduledJob = new ScheduledJob(job, job.future);
+        scheduledJobs.put(id, scheduledJob);
         return scheduledJob;
     }
 
     /**
-     * Cancels and removes all scheduled jobs for a given entity id and job class. NOTE: This is intended as an internal
-     * method that should operate on one of the scheduledJobsForXYZ fields of this class. A wrapper method (such as
-     * {@link #removeProjectJobsOfType(String, Class, boolean)}) should be provided for any new entity types with
-     * scheduled jobs (e.g., if feed version-specific scheduled jobs are needed).
+     * Convenience method for scheduling one-off jobs for a generic {@link Model}.
      */
-    private static int removeJobsOfType(ListMultimap<String, ScheduledJob> scheduledJobs, String id, Class<?> clazz, boolean mayInterruptIfRunning) {
+    public static ScheduledJob scheduleJob(String id, Runnable job, long delay, TimeUnit timeUnit) {
+        ScheduledFuture scheduledFuture = schedulerService.schedule(job, delay, timeUnit);
+        ScheduledJob scheduledJob = new ScheduledJob(job, scheduledFuture);
+        scheduledJobs.put(id, scheduledJob);
+        return scheduledJob;
+    }
+
+    /**
+     * Cancels and removes all scheduled jobs for a given entity id and job class.
+     */
+    public static int removeJobsOfType(String id, Class<?> clazz, boolean mayInterruptIfRunning) {
         int jobsCancelled = 0;
         // First get the list of jobs belonging to the id (e.g., all jobs related to a feed source).
         List<ScheduledJob> jobs = scheduledJobs.get(id);
@@ -103,22 +123,6 @@ public class Scheduler {
     }
 
     /**
-     * Cancels and removes all scheduled jobs for a given feed source id and job class.
-     */
-    public static void removeFeedSourceJobsOfType(String id, Class<?> clazz, boolean mayInterruptIfRunning) {
-        int cancelled = removeJobsOfType(scheduledJobsForFeedSources, id, clazz, mayInterruptIfRunning);
-        if (cancelled > 0) LOG.info("Cancelled/removed {} {} jobs for feed source {}", cancelled, clazz.getSimpleName(), id);
-    }
-
-    /**
-     * Cancels and removes all scheduled jobs for a given project id and job class.
-     */
-    public static void removeProjectJobsOfType(String id, Class<?> clazz, boolean mayInterruptIfRunning) {
-        int cancelled = removeJobsOfType(scheduledJobsForProjects, id, clazz, mayInterruptIfRunning);
-        if (cancelled > 0) LOG.info("Cancelled/removed {} {} jobs for project {}", cancelled, clazz.getSimpleName(), id);
-    }
-
-    /**
      * Schedule or cancel auto feed fetch for a project as needed.  This should be called whenever a
      * project is created or updated.  If a project is deleted, the auto feed fetch jobs will
      * automatically cancel itself.
@@ -127,7 +131,7 @@ public class Scheduler {
         // If auto fetch flag is turned on, schedule auto fetch.
         if (project.autoFetchFeeds) Scheduler.scheduleAutoFeedFetch(project, 1);
         // Otherwise, cancel any existing task for this id.
-        else Scheduler.removeProjectJobsOfType(project.id, FetchProjectFeedsJob.class, true);
+        else Scheduler.removeJobsOfType(project.id, FetchProjectFeedsJob.class, true);
     }
 
     /**
@@ -139,7 +143,7 @@ public class Scheduler {
     public static void scheduleAutoFeedFetch (Project project, int intervalInDays) {
         try {
             // First cancel any already scheduled auto fetch task for this project id.
-            removeProjectJobsOfType(project.id, FetchProjectFeedsJob.class, true);
+            removeJobsOfType(project.id, FetchProjectFeedsJob.class, true);
 
             ZoneId timezone = getTimezone(project.defaultTimeZone);
             LOG.info("Scheduling auto-fetch for projectID: {}", project.id);
@@ -173,7 +177,7 @@ public class Scheduler {
                 TimeUnit.MINUTES
             );
             ScheduledJob scheduledJob = new ScheduledJob(fetchProjectFeedsJob, scheduledFuture);
-            scheduledJobsForProjects.put(project.id, scheduledJob);
+            scheduledJobs.put(project.id, scheduledJob);
         } catch (Exception e) {
             LOG.error("Error scheduling project {} feed fetch.", project.id);
             e.printStackTrace();
@@ -187,7 +191,7 @@ public class Scheduler {
      */
     public static void scheduleExpirationNotifications (FeedSource feedSource) {
         // Cancel existing expiration notifications
-        removeFeedSourceJobsOfType(feedSource.id, FeedExpirationNotificationJob.class, true);
+        removeJobsOfType(feedSource.id, FeedExpirationNotificationJob.class, true);
 
         FeedVersion latest = feedSource.retrieveLatest();
 
@@ -226,8 +230,8 @@ public class Scheduler {
 
             // one week warning
             if (timeUntilOneWeekBeforeExpiration > 0) {
-                scheduleFeedSourceJob(
-                    feedSource,
+                scheduleJob(
+                    feedSource.id,
                     new FeedExpirationNotificationJob(feedSource.id, true),
                     timeUntilOneWeekBeforeExpiration,
                     TimeUnit.SECONDS
@@ -235,8 +239,8 @@ public class Scheduler {
             }
 
             // actual expiration
-            scheduleFeedSourceJob(
-                feedSource,
+            scheduleJob(
+                feedSource.id,
                 new FeedExpirationNotificationJob(feedSource.id, false),
                 timeUntilExpiration,
                 TimeUnit.SECONDS

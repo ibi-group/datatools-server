@@ -13,6 +13,7 @@ import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.AmazonS3URI;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.AWSUtils;
+import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
@@ -487,7 +488,7 @@ public class DeploymentController {
 
         // Execute the deployment job and keep track of it in the jobs for server map.
         DeployJob job = new DeployJob(deployment, userProfile, otpServer);
-        DataManager.heavyExecutor.execute(job);
+        Scheduler.runJob(deployment.id, job);
         deploymentJobsByServer.put(target, job);
 
         return SparkUtils.formatJobMessage(job.jobId, "Deployment initiating.");

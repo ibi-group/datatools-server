@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.controllers.api;
 
+import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
@@ -34,6 +35,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.stream.Stream;
 
 import static com.conveyal.datatools.common.utils.AWSUtils.downloadFromS3;
 import static com.conveyal.datatools.common.utils.SparkUtils.copyRequestStreamIntoFile;
@@ -139,7 +141,7 @@ public class FeedVersionController  {
 
         // Must be handled by executor because it takes a long time.
         ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(newFeedVersion, userProfile, true);
-        DataManager.heavyExecutor.execute(processSingleFeedJob);
+        Scheduler.runJob(newFeedVersion.id, processSingleFeedJob);
 
         return formatJobMessage(processSingleFeedJob.jobId, "Feed version is processing.");
     }
@@ -165,7 +167,7 @@ public class FeedVersionController  {
         }
         CreateFeedVersionFromSnapshotJob createFromSnapshotJob =
             new CreateFeedVersionFromSnapshotJob(feedSource, snapshot, userProfile);
-        DataManager.heavyExecutor.execute(createFromSnapshotJob);
+        Scheduler.runJob(feedSource.id, createFromSnapshotJob); // FIXME pass snapshot?
 
         return true;
     }
@@ -283,7 +285,7 @@ public class FeedVersionController  {
         // Create and run shapefile export.
         GisExportJob.ExportType exportType = GisExportJob.ExportType.valueOf(type);
         GisExportJob gisExportJob = new GisExportJob(exportType, temp, feedIds, userProfile);
-        DataManager.heavyExecutor.execute(gisExportJob);
+        Scheduler.runJob(String.join(",", feedIds), gisExportJob);
         // Do not use S3 to store the file, which should only be stored ephemerally (until requesting
         // user has downloaded file).
         FeedDownloadToken token = new FeedDownloadToken(gisExportJob);
@@ -357,7 +359,7 @@ public class FeedVersionController  {
         // Kick off merge feeds job.
         Auth0UserProfile userProfile = req.attribute("user");
         MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(userProfile, versions, "merged", mergeType);
-        DataManager.heavyExecutor.execute(mergeFeedsJob);
+        Scheduler.runJob(String.join(",", versionIds), mergeFeedsJob);
         return SparkUtils.formatJobMessage(mergeFeedsJob.jobId, "Merging feed versions...");
     }
 

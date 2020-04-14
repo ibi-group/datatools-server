@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.controllers;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
@@ -364,7 +365,7 @@ public class DumpController {
             } else {
                 job = new ValidateFeedJob(version, systemUser, false);
             }
-            DataManager.heavyExecutor.execute(job);
+            Scheduler.runJob(version.id, job);
         }
         // ValidateAllFeedsJob validateAllFeedsJob = new ValidateAllFeedsJob("system", force, load);
         return true;
