@@ -2,8 +2,11 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.services.ec2.AmazonEC2;
+import com.amazonaws.services.ec2.model.DescribeInstancesRequest;
+import com.amazonaws.services.ec2.model.DescribeInstancesResult;
 import com.amazonaws.services.ec2.model.Instance;
 import com.amazonaws.services.ec2.model.InstanceStateChange;
+import com.amazonaws.services.ec2.model.Reservation;
 import com.amazonaws.services.ec2.model.TerminateInstancesRequest;
 import com.amazonaws.services.ec2.model.TerminateInstancesResult;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancing;
@@ -30,6 +33,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.Collections;
 
 import static com.conveyal.datatools.manager.jobs.DeployJob.BUNDLE_DOWNLOAD_COMPLETE_FILE;
 import static com.conveyal.datatools.manager.jobs.DeployJob.GRAPH_STATUS_FILE;
@@ -47,11 +51,12 @@ public class MonitorServerStatusJob extends MonitorableJob {
     private final OtpServer otpServer;
     private final AWSStaticCredentialsProvider credentials;
     private final AmazonEC2 ec2;
+    private final AmazonElasticLoadBalancing elbClient;
     private final CloseableHttpClient httpClient = HttpClients.createDefault();
     // Delay checks by twenty seconds to give user-data script time to upload the instance's user data log if part of the
     // script fails (e.g., uploading or downloading a file).
     private static final int DELAY_SECONDS = 20;
-    public long graphBuildSeconds;
+    public long graphTaskSeconds;
 
     public MonitorServerStatusJob(Auth0UserProfile owner, DeployJob deployJob, Instance instance, boolean graphAlreadyBuilt) {
         super(
@@ -69,6 +74,11 @@ public class MonitorServerStatusJob extends MonitorableJob {
         ec2 = deployJob.getCustomRegion() == null
             ? AWSUtils.getEC2ClientForCredentials(credentials)
             : AWSUtils.getEC2ClientForCredentials(credentials, deployJob.getCustomRegion());
+        AmazonElasticLoadBalancingClientBuilder elbBuilder = AmazonElasticLoadBalancingClient.builder()
+            .withCredentials(credentials);
+        elbClient = deployJob.getCustomRegion() == null
+            ? elbBuilder.build()
+            : elbBuilder.withRegion(deployJob.getCustomRegion()).build();
     }
 
     @JsonProperty
@@ -86,105 +96,107 @@ public class MonitorServerStatusJob extends MonitorableJob {
         String ipUrl = "http://" + instance.getPublicIpAddress();
         // Get OTP URL for instance to check for availability.
         boolean routerIsAvailable = false, graphIsAvailable = false;
-        // If graph was not already built by a previous server, wait for it to build.
-        if (!graphAlreadyBuilt) {
-            boolean bundleIsDownloaded = false;
-            // Progressively check status of OTP server
-            if (deployment.buildGraphOnly) {
-                // No need to check that OTP is running. Just check to see that the graph is built.
-                bundleIsDownloaded = true;
-                routerIsAvailable = true;
+        if (otpServer.ec2Info == null || otpServer.ec2Info.targetGroupArn == null) {
+            // Fail the job from the outset if there is no target group defined.
+            failJob("There is no load balancer under which to register ec2 instance.");
+        }
+        try {
+            if (graphAlreadyBuilt) {
+                // If graph already build, instance's user data will download Graph.obj automatically instead of bundle.
+                status.update("Loading graph...", 40);
+            } else {
+                // Otherwise, we need to verify that the bundle downloaded successfully.
+                boolean bundleIsDownloaded = false;
+                // Progressively check status of OTP server
+                if (deployment.buildGraphOnly) {
+                    // No need to check that OTP is running. Just check to see that the graph is built.
+                    routerIsAvailable = true;
+                }
+                // First, check that OTP has started up.
+                status.update("Prepping for graph build...", 20);
+                String bundleUrl = String.join("/", ipUrl, BUNDLE_DOWNLOAD_COMPLETE_FILE);
+                long bundleDownloadStartTime = System.currentTimeMillis();
+                while (!bundleIsDownloaded) {
+                    // If the request is successful, the OTP instance has started.
+                    waitAndCheckInstanceHealth("bundle download check: " + bundleUrl);
+                    bundleIsDownloaded = checkForSuccessfulRequest(bundleUrl);
+                    // wait 20 minutes max for the bundle to download
+                    long maxBundleDownloadTimeMillis = 20 * 60 * 1000;
+                    if (taskHasTimedOut(bundleDownloadStartTime, maxBundleDownloadTimeMillis)) {
+                        failJob("Job timed out while checking for server bundle download status.");
+                        return;
+                    }
+                }
+                // Check status of bundle download and fail job if there was a failure.
+                String bundleStatus = getUrlAsString(bundleUrl);
+                if (bundleStatus == null || !bundleStatus.contains("SUCCESS")) {
+                    failJob("Failure encountered while downloading transit bundle.");
+                    return;
+                }
+                long bundleDownloadSeconds = (System.currentTimeMillis() - bundleDownloadStartTime) / 1000;
+                LOG.info("Bundle downloaded in {} seconds!", bundleDownloadSeconds);
+                status.update("Building graph...", 30);
             }
-            // First, check that OTP has started up.
-            status.update("Prepping for graph build...", 20);
-            String bundleUrl = String.join("/", ipUrl, BUNDLE_DOWNLOAD_COMPLETE_FILE);
-            long bundleDownloadStartTime = System.currentTimeMillis();
-            while (!bundleIsDownloaded) {
+            // Once bundle is downloaded, we await the build (or download if graph already built) of the graph.
+            long graphCheckStartTime = System.currentTimeMillis();
+            String graphStatusUrl = String.join("/", ipUrl, GRAPH_STATUS_FILE);
+            while (!graphIsAvailable) {
                 // If the request is successful, the OTP instance has started.
-                wait("bundle download check: " + bundleUrl);
-                bundleIsDownloaded = checkForSuccessfulRequest(bundleUrl);
-                // wait 20 minutes max for the bundle to download
-                long maxBundleDownloadTimeMillis = 20 * 60 * 1000;
-                if (taskHasTimedOut(bundleDownloadStartTime, maxBundleDownloadTimeMillis)) {
-                    failJob("Job timed out while checking for server bundle download status.");
+                waitAndCheckInstanceHealth("graph build/download check: " + graphStatusUrl);
+                graphIsAvailable = checkForSuccessfulRequest(graphStatusUrl);
+                // wait a maximum of 4 hours if building the graph, or 20 minutes if downloading a graph
+                long maxGraphBuildOrDownloadWaitTimeMillis = graphAlreadyBuilt ? 20 * 60 * 1000 : 4 * 60 * 60 * 1000;
+                if (taskHasTimedOut(graphCheckStartTime, maxGraphBuildOrDownloadWaitTimeMillis)) {
+                    failJob("Job timed out while waiting for graph build/download. If this was a graph building machine, it may have run out of memory.");
                     return;
                 }
             }
-            // Check status of bundle download and fail job if there was a failure.
-            String bundleStatus = getUrlAsString(bundleUrl);
-            if (bundleStatus == null || !bundleStatus.contains("SUCCESS")) {
-                failJob("Failure encountered while downloading transit bundle.");
+            // Check graph status and fail job if there was a failure.
+            String graphStatus = getUrlAsString(graphStatusUrl);
+            if (graphStatus == null || !graphStatus.contains("SUCCESS")) {
+                failJob("Failure encountered while building/downloading graph.");
                 return;
             }
-            long bundleDownloadSeconds = (System.currentTimeMillis() - bundleDownloadStartTime) / 1000;
-            LOG.info("Bundle downloaded in {} seconds!", bundleDownloadSeconds);
-            status.update("Building graph...", 30);
-        } else {
-            status.update("Loading graph...", 40);
-        }
-        long graphBuildStartTime = System.currentTimeMillis();
-        String graphStatusUrl = String.join("/", ipUrl, GRAPH_STATUS_FILE);
-        while (!graphIsAvailable) {
-            // If the request is successful, the OTP instance has started.
-            wait("graph build/download check: " + graphStatusUrl);
-            graphIsAvailable = checkForSuccessfulRequest(graphStatusUrl);
-            // wait a maximum of 4 hours if building the graph, or 20 minutes if downloading a graph
-            long maxGraphBuildOrDownloadWaitTimeMillis = graphAlreadyBuilt ? 20 * 60 * 1000 : 4 * 60 * 60 * 1000;
-            if (taskHasTimedOut(graphBuildStartTime, maxGraphBuildOrDownloadWaitTimeMillis)) {
-                failJob("Job timed out while waiting for graph build/download. If this was a graph building machine, it may have run out of memory.");
+            graphTaskSeconds = (System.currentTimeMillis() - graphCheckStartTime) / 1000;
+            String message = String.format("Graph build/download completed in %d seconds!", graphTaskSeconds);
+            LOG.info(message);
+            // If only task for this instance is to build the graph (either because that is the deployment purpose or
+            // because this instance type/image is for graph building only), this machine's job is complete and we can
+            // consider this job done.
+            if (deployment.buildGraphOnly || (!graphAlreadyBuilt && otpServer.ec2Info.hasSeparateGraphBuildConfig())) {
+                status.completeSuccessfully(message);
+                LOG.info("View logs at {}", getUserDataLogS3Path());
                 return;
             }
-        }
-        // Check status of bundle download and fail job if there was a failure.
-        String graphStatus = getUrlAsString(graphStatusUrl);
-        if (graphStatus == null || !graphStatus.contains("SUCCESS")) {
-            failJob("Failure encountered while building/downloading graph.");
-            return;
-        }
-        graphBuildSeconds = (System.currentTimeMillis() - graphBuildStartTime) / 1000;
-        String message = String.format("Graph build/download completed in %d seconds!", graphBuildSeconds);
-        LOG.info(message);
-        // If only task is to build graph, this machine's job is complete and we can consider this job done.
-        if (deployment.buildGraphOnly || (!graphAlreadyBuilt && otpServer.ec2Info.hasSeparateGraphBuildConfig())) {
-            status.completeSuccessfully(message);
-            LOG.info("View logs at {}", getUserDataLogS3Path());
-            return;
-        }
-        status.update("Loading graph...", 70);
-        // Once this is confirmed, check for the existence of the router, which will indicate that the graph build is
-        // complete.
-        String routerUrl = String.join("/", ipUrl, "otp/routers/default");
-        long graphLoadStartTime = System.currentTimeMillis();
-        while (!routerIsAvailable) {
-            // If the request was successful, the graph build is complete!
-            // TODO: Substitute in specific router ID? Or just default to... default.
-            wait("router to become available: " + routerUrl);
-            routerIsAvailable = checkForSuccessfulRequest(routerUrl);
-            // wait a maximum of 20 minutes to load the graph and for the server to start
-            long maxGraphLoadWaitTimeMillis = 20 * 60 * 1000;
-            if (taskHasTimedOut(graphLoadStartTime, maxGraphLoadWaitTimeMillis)) {
-                failJob("Job timed out while waiting for trip planner to start up.");
-                return;
+            status.update("Loading graph...", 70);
+            // Once this is confirmed, check for the availability of the router, which will indicate that the graph
+            // load has completed successfully.
+            String routerUrl = String.join("/", ipUrl, "otp/routers/default");
+            long routerCheckStartTime = System.currentTimeMillis();
+            while (!routerIsAvailable) {
+                // If the request was successful, the graph build is complete!
+                // TODO: Substitute in specific router ID? Or just default to... "default".
+                waitAndCheckInstanceHealth("router to become available: " + routerUrl);
+                routerIsAvailable = checkForSuccessfulRequest(routerUrl);
+                // wait a maximum of 20 minutes to load the graph and for the router to become available.
+                long maxRouterAvailableWaitTimeMillis = 20 * 60 * 1000;
+                if (taskHasTimedOut(routerCheckStartTime, maxRouterAvailableWaitTimeMillis)) {
+                    failJob("Job timed out while waiting for trip planner to start up.");
+                    return;
+                }
             }
-        }
-        status.update("Graph loaded!", 90);
-        if (otpServer.ec2Info != null && otpServer.ec2Info.targetGroupArn != null) {
+            status.update("Graph loaded!", 90);
             // After the router is available, the EC2 instance can be registered with the load balancer.
             // REGISTER INSTANCE WITH LOAD BALANCER
-            // Use alternative credentials if they exist.
-            AmazonElasticLoadBalancingClientBuilder builder = AmazonElasticLoadBalancingClient.builder()
-                .withCredentials(credentials);
-            if (deployJob.getCustomRegion() != null) builder.withRegion(deployJob.getCustomRegion());
-            AmazonElasticLoadBalancing elbClient = builder.build();
             RegisterTargetsRequest registerTargetsRequest = new RegisterTargetsRequest()
-                    .withTargetGroupArn(otpServer.ec2Info.targetGroupArn)
-                    .withTargets(new TargetDescription().withId(instance.getInstanceId()));
+                .withTargetGroupArn(otpServer.ec2Info.targetGroupArn)
+                .withTargets(new TargetDescription().withId(instance.getInstanceId()));
             boolean targetAddedSuccessfully = false;
             long registerTargetStartTime = System.currentTimeMillis();
             while (!targetAddedSuccessfully) {
                 // Register target with target group.
                 elbClient.registerTargets(registerTargetsRequest);
-                wait("instance to register with ELB target group");
+                waitAndCheckInstanceHealth("instance to register with ELB target group");
                 // Check that the instance ID shows up in the health check.
                 DescribeTargetHealthRequest healthRequest = new DescribeTargetHealthRequest()
                     .withTargetGroupArn(otpServer.ec2Info.targetGroupArn);
@@ -197,7 +209,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
                 }
                 // Wait for two minutes.
                 if (taskHasTimedOut(registerTargetStartTime, 2 * 60 * 1000)) {
-                    failJob("Job timed out while checking for server bundle download status.");
+                    failJob("Job timed out while waiting to register EC2 instance with load balancer target group.");
                     return;
                 }
             }
@@ -210,8 +222,13 @@ public class MonitorServerStatusJob extends MonitorableJob {
             );
             LOG.info("View logs at {}", getUserDataLogS3Path());
             deployJob.incrementCompletedServers();
-        } else {
-            failJob("There is no load balancer under which to register ec2 instance.");
+        } catch (InstanceHealthException e) {
+            // If at any point during the job, an instance health check indicates that the EC2 instance being monitored
+            // was terminated or stopped, an InstanceHealthException will be thrown. Whether the instance termination
+            // was accidental or intentional, we want the result to be that the job fails and the deployment be aborted.
+            // This gives us a failsafe in case we kick off a deployment accidentally or otherwise need to cancel the
+            // deployment job (e.g., due to an incorrect configuration).
+            failJob("Ec2 Instance was stopped or terminated before job could complete!");
         }
     }
 
@@ -236,13 +253,49 @@ public class MonitorServerStatusJob extends MonitorableJob {
         return runTimeMillis > maxRunTimeMillis;
     }
 
-    /** Have the current thread sleep for a few seconds in order to pause during a while loop. */
-    private void wait(String waitingFor) {
+    /**
+     * Have the current thread sleep for a few seconds in order to pause during a while loop. Also, before and after
+     * waiting, check the instance health to make sure it is still running. If a user has terminated the instance, the
+     * job should be failed.
+     */
+    private void waitAndCheckInstanceHealth(String waitingFor) throws InstanceHealthException {
+        checkInstanceHealth();
         try {
             LOG.info("Waiting {} seconds for {}", DELAY_SECONDS, waitingFor);
             Thread.sleep(1000 * DELAY_SECONDS);
         } catch (InterruptedException e) {
             e.printStackTrace();
+        }
+        checkInstanceHealth();
+    }
+
+    /**
+     * Checks whether the instance is running. If it has entered a state where it is stopped, terminated or about to be
+     * stopped or terminated, then this method throws an exception.
+     */
+    private void checkInstanceHealth() throws InstanceHealthException {
+        DescribeInstancesRequest request = new DescribeInstancesRequest()
+            .withInstanceIds(Collections.singletonList(instance.getInstanceId()));
+        DescribeInstancesResult result = ec2.describeInstances(request);
+        for (Reservation reservation : result.getReservations()) {
+            for (Instance reservationInstance : reservation.getInstances()) {
+                if (reservationInstance.getInstanceId().equals(instance.getInstanceId())) {
+                    // Code 16 is running. Anything above that is either stopped, terminated or about to be stopped or
+                    // terminated
+                    if (reservationInstance.getState().getCode() > 16) {
+                        throw new InstanceHealthException(reservationInstance.getState().getName());
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * An exception for when the ec2 Instance has entered a state where it is no longer running.
+     */
+    private class InstanceHealthException extends Exception {
+        public InstanceHealthException(String instanceStateName) {
+            super(String.format("Instance state no longer healthy! It changed to: %s", instanceStateName));
         }
     }
 
