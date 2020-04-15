@@ -147,8 +147,14 @@ public class Deployment extends Model implements Serializable {
         }
     }
 
-    // future use
-    public String osmFileId;
+    /**
+     * Public URL at which the OSM extract should be downloaded. This should be null if the extract should be downloaded
+     * from an extract server. Extract type should be a .pbf.
+     */
+    public String osmExtractUrl;
+
+    /** If true, OSM extract will be skipped entirely (extract will be fetched from neither extract server nor URL. */
+    public boolean skipOsmExtract;
 
     /**
      * The version (according to git describe) of OTP being used on this deployment This should default to
