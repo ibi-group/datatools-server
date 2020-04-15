@@ -179,11 +179,9 @@ public abstract class MonitorableJob implements Runnable, Serializable {
             // Run final steps of job pending completion or error. Note: any tasks that depend on job success should
             // check job status to determine if final step should be executed (e.g., storing feed version in MongoDB).
             // TODO: should we add separate hooks depending on state of job/sub-tasks (e.g., success, catch, finally)
-            // Set status to finished in case duration needed by finishing stage. (e.g., storing the job duration in a
-            // database).
-            if (cancelMessage.equals("")) {
-                status.completeSuccessfully("Job complete!");
-            }
+            // Complete the job (as success if no errors encountered, as failure otherwise).
+            if (!parentJobErrored && !subTaskErrored) status.completeSuccessfully("Job complete!");
+            else status.complete(true);
             jobFinished();
 
             // We retain finished or errored jobs on the server until they are fetched via the API, which implies they
@@ -290,10 +288,18 @@ public abstract class MonitorableJob implements Runnable, Serializable {
          */
         private void complete(boolean isError, String message) {
             this.error = isError;
-            this.message = message;
+            // Skip message update if null.
+            if (message != null) this.message = message;
             this.percentComplete = 100;
             this.completed = true;
             this.duration = System.currentTimeMillis() - this.startTime;
+        }
+
+        /**
+         * Shorthand method to complete job without overriding current message.
+         */
+        private void complete(boolean isError) {
+            complete(isError, null);
         }
 
         /**
