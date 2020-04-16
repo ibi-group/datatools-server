@@ -609,6 +609,12 @@ public class DeployJob extends MonitorableJob {
             }
             // Add all servers that did not encounter issues to list for registration with ELB.
             instances.addAll(remainingInstances);
+            // Fail deploy job if no instances are running at this point (i.e., graph builder instance has shut down
+            // and the graph loading instance(s) failed to load graph successfully).
+            if (instances.size() == 0) {
+                status.fail("Job failed because no running instances remain.");
+                return;
+            }
             String finalMessage = "Server setup is complete!";
             // Get EC2 servers running that are associated with this server.
             if (deployType.equals(DeployType.REPLACE)) {
