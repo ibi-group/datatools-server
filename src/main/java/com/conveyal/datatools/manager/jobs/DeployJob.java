@@ -496,8 +496,8 @@ public class DeployJob extends MonitorableJob {
             // Track any previous instances running for the server we're deploying to in order to de-register and
             // terminate them later.
             List<EC2InstanceSummary> previousInstances = otpServer.retrieveEC2InstanceSummaries();
-            // Track new instances added.
-            List<Instance> instances = new ArrayList<>();
+            // Track new instances that should be added to target group once the deploy job is completed.
+            List<Instance> newInstancesForTargetGroup = new ArrayList<>();
             // First start graph-building instance and wait for graph to successfully build.
             if (!deployType.equals(DeployType.USE_PREBUILT_GRAPH)) {
                 status.message = "Starting up graph building EC2 instance";
@@ -567,7 +567,7 @@ public class DeployJob extends MonitorableJob {
                     status.numServersRemaining = Math.max(otpServer.ec2Info.instanceCount, 1);
                 } else {
                     // same configuration exists, so keep instance on and add to list of running instances
-                    instances.addAll(graphBuildingInstances);
+                    newInstancesForTargetGroup.addAll(graphBuildingInstances);
                     status.numServersRemaining = otpServer.ec2Info.instanceCount <= 0
                         ? 0
                         : otpServer.ec2Info.instanceCount - 1;
@@ -608,10 +608,10 @@ public class DeployJob extends MonitorableJob {
                 }
             }
             // Add all servers that did not encounter issues to list for registration with ELB.
-            instances.addAll(remainingInstances);
+            newInstancesForTargetGroup.addAll(remainingInstances);
             // Fail deploy job if no instances are running at this point (i.e., graph builder instance has shut down
             // and the graph loading instance(s) failed to load graph successfully).
-            if (instances.size() == 0) {
+            if (newInstancesForTargetGroup.size() == 0) {
                 status.fail("Job failed because no running instances remain.");
                 return;
             }
