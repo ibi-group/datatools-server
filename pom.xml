@@ -244,7 +244,7 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- Used for loading/fetching/writing GTFS entities. gtfs-lib also provides access to:
+        <!-- Used for loading/fetching/validating/writing GTFS entities. gtfs-lib also provides access to:
          - commons-io - generic utilities
          - AWS S3 SDK - putting/getting objects into/out of S3.
          -->
