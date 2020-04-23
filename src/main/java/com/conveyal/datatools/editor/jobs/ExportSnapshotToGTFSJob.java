@@ -52,6 +52,7 @@ public class ExportSnapshotToGTFSJob extends MonitorableJob {
         FeedLoadResult result = exporter.exportTables();
         if (result.fatalException != null) {
             status.fail(String.format("Error (%s) encountered while exporting database tables.", result.fatalException));
+            return;
         }
 
         // Override snapshot ID if exporting feed for use as new feed version.
