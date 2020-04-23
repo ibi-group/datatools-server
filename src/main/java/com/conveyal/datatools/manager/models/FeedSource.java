@@ -56,7 +56,7 @@ public class FeedSource extends Model implements Cloneable {
      * stop_times or individual patterns. WARNING: enabling this flag for a feed and then attempting to edit patterns in
      * complicated ways (e.g., modifying the order of pattern stops) could have unexpected consequences.
      */
-    public boolean preserveStopTimes;
+    public boolean preserveStopTimesSequence;
 
     /**
      * Get the Project of which this feed is a part

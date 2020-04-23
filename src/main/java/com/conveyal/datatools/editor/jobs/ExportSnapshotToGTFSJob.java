@@ -21,6 +21,7 @@ public class ExportSnapshotToGTFSJob extends MonitorableJob {
     private static final Logger LOG = LoggerFactory.getLogger(ExportSnapshotToGTFSJob.class);
     private final Snapshot snapshot;
     private final String feedVersionId;
+    private File tempFile;
 
     public ExportSnapshotToGTFSJob(Auth0UserProfile owner, Snapshot snapshot, String feedVersionId) {
         super(owner, "Exporting snapshot " + snapshot.name, JobType.EXPORT_SNAPSHOT_TO_GTFS);
@@ -40,7 +41,6 @@ public class ExportSnapshotToGTFSJob extends MonitorableJob {
 
     @Override
     public void jobLogic() {
-        File tempFile;
         try {
             tempFile = File.createTempFile("snapshot", "zip");
         } catch (IOException e) {
@@ -72,12 +72,15 @@ public class ExportSnapshotToGTFSJob extends MonitorableJob {
                 status.fail(String.format("Could not store feed for snapshot %s", snapshot.id), e);
             }
         }
-        // Delete snapshot temp file.
-        tempFile.delete();
     }
 
     @Override
     public void jobFinished () {
         if (!status.error) status.completeSuccessfully("Export complete!");
+        // Delete snapshot temp file.
+        if (tempFile != null) {
+            LOG.info("Deleting temporary GTFS file for exported snapshot at {}", tempFile.getAbsolutePath());
+            tempFile.delete();
+        }
     }
 }
