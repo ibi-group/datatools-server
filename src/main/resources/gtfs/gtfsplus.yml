@@ -198,7 +198,7 @@
       inputType: DROPDOWN
       options:
         - value: '1'
-          text: Adult
+          text: Regular
         - value: '2'
           text: Senior
         - value: '3'

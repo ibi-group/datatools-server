@@ -4,9 +4,11 @@ import com.amazonaws.AmazonClientException;
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.event.ProgressListener;
 import com.amazonaws.services.ec2.AmazonEC2;
+import com.amazonaws.services.ec2.model.CreateImageRequest;
+import com.amazonaws.services.ec2.model.CreateImageResult;
 import com.amazonaws.services.ec2.model.CreateTagsRequest;
+import com.amazonaws.services.ec2.model.DeregisterImageRequest;
 import com.amazonaws.services.ec2.model.DescribeInstanceStatusRequest;
-import com.amazonaws.services.ec2.model.DescribeInstancesRequest;
 import com.amazonaws.services.ec2.model.Filter;
 import com.amazonaws.services.ec2.model.IamInstanceProfileSpecification;
 import com.amazonaws.services.ec2.model.Instance;
@@ -126,7 +128,6 @@ public class DeployJob extends MonitorableJob {
     /** This hides the status field on the parent class, providing additional fields. */
     public DeployStatus status;
 
-    private String statusMessage;
     private int serverCounter = 0;
     private String dateString = DATE_FORMAT.format(new Date());
     private String jobRelativePath;
@@ -134,6 +135,11 @@ public class DeployJob extends MonitorableJob {
     @JsonProperty
     public String getDeploymentId () {
         return deployment.id;
+    }
+
+    @JsonProperty
+    public String getProjectId () {
+        return deployment.projectId;
     }
 
     /** Increment the completed servers count (for use during ELB deployment) and update the job status. */
@@ -212,10 +218,7 @@ public class DeployJob extends MonitorableJob {
             try {
                 deploymentTempFile = File.createTempFile("deployment", ".zip");
             } catch (IOException e) {
-                statusMessage = "Could not create temp file for deployment";
-                LOG.error(statusMessage);
-                e.printStackTrace();
-                status.fail(statusMessage);
+                status.fail("Could not create temp file for deployment", e);
                 return;
             }
 
@@ -227,10 +230,7 @@ public class DeployJob extends MonitorableJob {
                 this.deployment.dump(deploymentTempFile, true, true, true);
                 tasksCompleted++;
             } catch (Exception e) {
-                statusMessage = "Error dumping deployment";
-                LOG.error(statusMessage);
-                e.printStackTrace();
-                status.fail(statusMessage);
+                status.fail("Error dumping deployment", e);
                 return;
             }
 
@@ -241,17 +241,13 @@ public class DeployJob extends MonitorableJob {
             // Upload to S3, if specifically required by the OTPServer or needed for servers in the target group to fetch.
             if (otpServer.s3Bucket != null || otpServer.ec2Info != null) {
                 if (!DataManager.useS3) {
-                    String message = "Cannot upload deployment to S3. Application not configured for s3 storage.";
-                    LOG.error(message);
-                    status.fail(message);
+                    status.fail("Cannot upload deployment to S3. Application not configured for s3 storage.");
                     return;
                 }
                 try {
                     uploadBundleToS3();
                 } catch (AmazonClientException | InterruptedException e) {
-                    statusMessage = String.format("Error uploading (or copying) deployment bundle to s3://%s", s3Bucket);
-                    LOG.error(statusMessage, e);
-                    status.fail(statusMessage);
+                    status.fail(String.format("Error uploading/copying deployment bundle to s3://%s", s3Bucket), e);
                 }
 
             }
@@ -264,9 +260,7 @@ public class DeployJob extends MonitorableJob {
                 // If creating a new server, there is no need to deploy to an existing one.
                 return;
             } else {
-                String message = "Cannot complete deployment. EC2 deployment disabled in server configuration.";
-                LOG.error(message);
-                status.fail(message);
+                status.fail("Cannot complete deployment. EC2 deployment disabled in server configuration.");
                 return;
             }
         }
@@ -330,14 +324,8 @@ public class DeployJob extends MonitorableJob {
             try {
                 url = new URL(rawUrl + "/routers/" + getRouterId());
             } catch (MalformedURLException e) {
-                statusMessage = String.format("Malformed deployment URL %s", rawUrl);
-                LOG.error(statusMessage);
-
-                // do not set percentComplete to 100 because we continue to the next server
-                // TODO: should this return instead so that the job is cancelled?
-                status.error = true;
-                status.message = statusMessage;
-                continue;
+                status.fail(String.format("Malformed deployment URL %s", rawUrl), e);
+                return false;
             }
 
             // grab them synchronously, so that we only take down one OTP server at a time
@@ -345,14 +333,8 @@ public class DeployJob extends MonitorableJob {
             try {
                 conn = (HttpURLConnection) url.openConnection();
             } catch (IOException e) {
-                statusMessage = String.format("Unable to open URL of OTP server %s", url);
-                LOG.error(statusMessage);
-
-                // do not set percentComplete to 100 because we continue to the next server
-                // TODO: should this return instead so that the job is cancelled?
-                status.error = true;
-                status.message = statusMessage;
-                continue;
+                status.fail(String.format("Unable to open URL of OTP server %s", url), e);
+                return false;
             }
 
             conn.addRequestProperty("Content-Type", "application/zip");
@@ -366,10 +348,7 @@ public class DeployJob extends MonitorableJob {
             try {
                 post = Channels.newChannel(conn.getOutputStream());
             } catch (IOException e) {
-                statusMessage = String.format("Could not open channel to OTP server %s", url);
-                LOG.error(statusMessage);
-                e.printStackTrace();
-                status.fail(statusMessage);
+                status.fail(String.format("Could not open channel to OTP server %s", url), e);
                 return false;
             }
 
@@ -378,17 +357,14 @@ public class DeployJob extends MonitorableJob {
             try {
                 input = new FileInputStream(deploymentTempFile).getChannel();
             } catch (FileNotFoundException e) {
-                LOG.error("Internal error: could not read dumped deployment!");
-                status.fail("Internal error: could not read dumped deployment!");
+                status.fail("Internal error: could not read dumped deployment!", e);
                 return false;
             }
 
             try {
                 conn.connect();
             } catch (IOException e) {
-                statusMessage = String.format("Unable to open connection to OTP server %s", url);
-                LOG.error(statusMessage);
-                status.fail(statusMessage);
+                status.fail(String.format("Unable to open connection to OTP server %s", url), e);
                 return false;
             }
 
@@ -396,20 +372,14 @@ public class DeployJob extends MonitorableJob {
             try {
                 input.transferTo(0, Long.MAX_VALUE, post);
             } catch (IOException e) {
-                statusMessage = String.format("Unable to transfer deployment to server %s", url);
-                LOG.error(statusMessage);
-                e.printStackTrace();
-                status.fail(statusMessage);
+                status.fail(String.format("Unable to transfer deployment to server %s", url), e);
                 return false;
             }
 
             try {
                 post.close();
             } catch (IOException e) {
-                String message = String.format("Error finishing connection to server %s", url);
-                LOG.error(message);
-                e.printStackTrace();
-                status.fail(message);
+                status.fail(String.format("Error finishing connection to server %s", url), e);
                 return false;
             }
 
@@ -436,17 +406,13 @@ public class DeployJob extends MonitorableJob {
                         scanner.useDelimiter("\\Z");
                         response = scanner.next();
                     }
-                    statusMessage = String.format("Got response code %d from server due to %s", code, response);
-                    LOG.error(statusMessage);
-                    status.fail(statusMessage);
+                    status.fail(String.format("Got response code %d from server due to %s", code, response));
                     // Skip deploying to any other servers.
                     // There is no reason to take out the rest of the servers, it's going to have the same result.
                     return false;
                 }
             } catch (IOException e) {
-                statusMessage = String.format("Could not finish request to server %s", url);
-                LOG.error(statusMessage);
-                status.fail(statusMessage);
+                status.fail(String.format("Could not finish request to server %s", url), e);
             }
 
             status.numServersCompleted++;
@@ -484,7 +450,7 @@ public class DeployJob extends MonitorableJob {
         status.duration = System.currentTimeMillis() - status.startTime;
         if (!status.error) {
             // Update status with successful completion state only if no error was encountered.
-            status.update(false, "Deployment complete!", 100, true);
+            status.completeSuccessfully("Deployment complete!");
             // Store the target server in the deployedTo field and set last deployed time.
             LOG.info("Updating deployment target and deploy time.");
             deployment.deployedTo = otpServer.id;
@@ -530,7 +496,7 @@ public class DeployJob extends MonitorableJob {
                 );
                 monitorInitialServerJob.run();
 
-                status.update("Graph build is complete!", 50);
+                status.update("Graph build is complete!", 40);
                 // If only building graph, job is finished. Note: the graph building EC2 instance should automatically shut
                 // itself down if this flag is turned on (happens in user data). We do not want to proceed with the rest of
                 // the job which would shut down existing servers running for the deployment.
@@ -543,17 +509,38 @@ public class DeployJob extends MonitorableJob {
                 if (monitorInitialServerJob.status.error) {
                     // If an error occurred while monitoring the initial server, fail this job and instruct user to inspect
                     // build logs.
-                    statusMessage = "Error encountered while building graph. Inspect build logs.";
-                    LOG.error(statusMessage);
-                    status.fail(statusMessage);
+                    status.fail("Error encountered while building graph. Inspect build logs.");
                     ServerController.terminateInstances(ec2, graphBuildingInstances);
                     return;
+                }
+                // Check if a new image of the instance with the completed graph build should be created.
+                if (otpServer.ec2Info.recreateBuildImage) {
+                    status.update("Creating build image", 42.5);
+                    // Create a new image of this instance.
+                    CreateImageRequest createImageRequest = new CreateImageRequest()
+                        .withInstanceId(graphBuildingInstances.get(0).getInstanceId())
+                        .withName(otpServer.ec2Info.buildImageName)
+                        .withDescription(otpServer.ec2Info.buildImageDescription);
+                    CreateImageResult createImageResult = ec2.createImage(createImageRequest);
+                    // Deregister old image if it exists
+                    if (otpServer.ec2Info.buildAmiId != null) {
+                        status.message = "Deregistering old build image";
+                        DeregisterImageRequest deregisterImageRequest = new DeregisterImageRequest()
+                            .withImageId(otpServer.ec2Info.buildAmiId);
+                        ec2.deregisterImage(deregisterImageRequest);
+                    }
+                    status.update("Updating Server build AMI info", 45);
+                    // Update OTP Server info
+                    otpServer.ec2Info.buildAmiId = createImageResult.getImageId();
+                    otpServer.ec2Info.recreateBuildImage = false;
+                    Persistence.servers.replace(otpServer.id, otpServer);
                 }
                 // Check whether the graph build instance type or AMI ID is different from the non-graph building type.
                 // If so, terminate the graph building instance. If not, add the graph building instance to the list
                 // of started instances.
                 if (otpServer.ec2Info.hasSeparateGraphBuildConfig()) {
                     // different instance type and/or ami exists for graph building. Terminate graph building instance
+                    status.update("Terminating build instance", 47.5);
                     ServerController.terminateInstances(ec2, graphBuildingInstances);
                     status.numServersRemaining = Math.max(otpServer.ec2Info.instanceCount, 1);
                 } else {
@@ -564,6 +551,7 @@ public class DeployJob extends MonitorableJob {
                         : otpServer.ec2Info.instanceCount - 1;
                 }
             }
+            status.update("Starting server instances", 50);
             // Spin up remaining servers which will download the graph from S3.
             List<MonitorServerStatusJob> remainingServerMonitorJobs = new ArrayList<>();
             List<Instance> remainingInstances = new ArrayList<>();
@@ -620,7 +608,7 @@ public class DeployJob extends MonitorableJob {
                 }
             }
             // Job is complete.
-            status.update(false, finalMessage, 100, true);
+            status.completeSuccessfully(finalMessage);
         } catch (Exception e) {
             LOG.error("Could not deploy to EC2 server", e);
             status.fail("Could not deploy to EC2 server", e);
@@ -658,13 +646,11 @@ public class DeployJob extends MonitorableJob {
         String amiId = otpServer.ec2Info.getAmiId(graphAlreadyBuilt);
         // Verify that AMI is correctly defined.
         if (amiId == null || !ServerController.amiExists(amiId, ec2)) {
-            statusMessage = String.format(
+            status.fail(String.format(
                 "AMI ID (%s) is missing or bad. Check the deployment settings or the default value in the app config at %s",
                 amiId,
                 AMI_CONFIG_PATH
-            );
-            LOG.error(statusMessage);
-            status.fail(statusMessage);
+            ));
             return Collections.EMPTY_LIST;
         }
         // Pick proper instance type depending on whether graph is being built and what is defined.
@@ -673,13 +659,11 @@ public class DeployJob extends MonitorableJob {
         try {
             InstanceType.fromValue(instanceType);
         } catch (IllegalArgumentException e) {
-            statusMessage = String.format(
+            status.fail(String.format(
                 "Instance type (%s) is bad. Check the deployment settings. The default value is %s",
                 instanceType,
                 DEFAULT_INSTANCE_TYPE
-            );
-            LOG.error(statusMessage);
-            status.fail(statusMessage);
+            ), e);
             return Collections.EMPTY_LIST;
         }
         RunInstancesRequest runInstancesRequest = new RunInstancesRequest()
@@ -709,9 +693,7 @@ public class DeployJob extends MonitorableJob {
             waiter.run(new WaiterParameters<>(new DescribeInstanceStatusRequest().withInstanceIds(instanceIds)));
             LOG.info("Instance status is OK after {} ms", (System.currentTimeMillis() - beginWaiting));
         } catch (Exception e) {
-            statusMessage = "Waiter for instance status check failed. You may need to terminate the failed instances.";
-            LOG.error(statusMessage, e);
-            status.fail(statusMessage);
+            status.fail("Waiter for instance status check failed. You may need to terminate the failed instances.", e);
             return Collections.EMPTY_LIST;
         }
         for (Instance instance : instances) {
@@ -797,40 +779,43 @@ public class DeployJob extends MonitorableJob {
             huc.setRequestMethod("HEAD");
             int responseCode = huc.getResponseCode();
             if (responseCode != HttpStatus.OK_200) {
-                statusMessage = String.format("Requested trip planner jar does not exist at %s", s3JarUrl);
-                LOG.error(statusMessage);
-                status.fail(statusMessage);
+                status.fail(String.format("Requested trip planner jar does not exist at %s", s3JarUrl));
                 return null;
             }
         } catch (IOException e) {
-            statusMessage = String.format("Error checking for trip planner jar: %s", s3JarUrl);
-            LOG.error(statusMessage, e);
-            status.fail(statusMessage);
+            status.fail(String.format("Error checking for trip planner jar: %s", s3JarUrl));
             return null;
         }
         String jarDir = String.format("/opt/%s", getTripPlannerString());
         List<String> lines = new ArrayList<>();
         String routerName = "default";
-        final String uploadUserDataLogCommand = String.format("aws s3 cp $USERDATALOG %s/${instance_id}.log", getS3FolderURI().toString());
+        final String uploadUserDataLogCommand = String.format("aws s3 cp $USERDATALOG %s/${INSTANCE_ID}.log", getS3FolderURI().toString());
         String routerDir = String.format("/var/%s/graphs/%s", getTripPlannerString(), routerName);
         String graphPath = String.join("/", routerDir, OTP_GRAPH_FILENAME);
         //////////////// BEGIN USER DATA
         lines.add("#!/bin/bash");
-        ///// 1. set some variables.
-        // Send trip planner logs to LOGFILE
+        // set some variables.
         lines.add(String.format("BUILDLOGFILE=/var/log/%s", getBuildLogFilename()));
         lines.add(String.format("LOGFILE=/var/log/%s.log", getTripPlannerString()));
         lines.add("USERDATALOG=/var/log/user-data.log");
+        lines.add("WEB_DIR=/usr/share/nginx/client");
+        // Remove previous files that might have been created during an Image creation
+        lines.add(String.format("rm $WEB_DIR/%s || echo '' > /dev/null", BUNDLE_DOWNLOAD_COMPLETE_FILE));
+        lines.add(String.format("rm $WEB_DIR/%s || echo '' > /dev/null", GRAPH_STATUS_FILE));
+        lines.add("rm $BUILDLOGFILE || echo '' > /dev/null");
+        lines.add("rm LOGFILE || echo '' > /dev/null");
+        lines.add("rm USERDATALOG || echo '' > /dev/null");
         // Get the instance's instance ID from the AWS metadata endpoint.
-        lines.add("instance_id=`curl http://169.254.169.254/latest/meta-data/instance-id`");
+        lines.add("INSTANCE_ID=`curl http://169.254.169.254/latest/meta-data/instance-id`");
         // Log user data setup to /var/log/user-data.log
         lines.add("exec > >(tee $USERDATALOG|logger -t user-data -s 2>/dev/console) 2>&1");
         // Get the total memory by grepping for MemTotal in meminfo file and removing non-numbers from the line
         // (leaving just the total mem in kb). This is used for starting up the OTP build/run processes.
         lines.add("TOTAL_MEM=`grep MemTotal /proc/meminfo | sed 's/[^0-9]//g'`");
-        // 2097152 kb is 2GB, leave that much for the OS
-        lines.add("MEM=`echo $(($TOTAL_MEM - 2097152))`");
-        ////// 2. Configure some stuff for AWS CLI.
+        // If on a low-memory instance (assuming around 2GB of RAM), allocate 1.5GB for java.
+        // Otherwise use as much as possible while leaving 2097152 kb (2GB) for the OS
+        lines.add("if [ \"2500000\" -gt \"$TOTAL_MEM\" ]; then MEM=1500000; else MEM=`echo $(($TOTAL_MEM - 2097152))`; fi");
+        // Configure some stuff for AWS CLI.
         // Note: too many threads/concurrent requests cause a lot of individual thread timeouts for some reason, which
         // ultimately causes the entire cp command to stall out.
         lines.add("aws configure set default.s3.max_concurrent_requests 3");
@@ -854,7 +839,6 @@ public class DeployJob extends MonitorableJob {
         lines.add(String.format("mkdir -p %s", jarDir));
         // Add client static file directory for uploading deploy stage status files.
         // TODO: switch to AMI that uses /usr/share/nginx/html as static file dir so we don't have to create this new dir.
-        lines.add("WEB_DIR=/usr/share/nginx/client");
         lines.add("sudo mkdir $WEB_DIR");
         lines.add(String.format("wget %s -O %s/%s.jar", s3JarUrl, jarDir, jarName));
         if (graphAlreadyBuilt) {
@@ -953,6 +937,11 @@ public class DeployJob extends MonitorableJob {
         pathList.add(getS3FolderURI().toString());
         pathList.addAll(Arrays.asList(paths));
         return String.join("/", pathList);
+    }
+
+    @JsonIgnore
+    public AmazonS3 getS3Client() {
+        return s3Client;
     }
 
     /**

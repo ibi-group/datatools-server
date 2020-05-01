@@ -55,6 +55,16 @@ public class EC2Info implements Serializable {
     public String targetGroupArn;
     /** An optional custom AWS region (e.g., us-east-1) */
     public String region;
+    /**
+     * Informs the DeployJob that a new Image of the graph building machine should be created after graph building has
+     * finished. The previous Image associated with the buildAmiId will be deregistered. Then the buildAmiId will be
+     * updated with AMI ID associated with the newly created Image.
+     */
+    public boolean recreateBuildImage;
+    /** The name to give the newly created AMI if makeBuildImage is set to true */
+    public String buildImageName;
+    /** The description to give the newly created AMI if makeBuildImage is set to true */
+    public String buildImageDescription;
 
     /**
      * Returns true if the instance type or ami ids are set and are different for a graph build.

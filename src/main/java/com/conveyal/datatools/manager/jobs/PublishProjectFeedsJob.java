@@ -7,32 +7,33 @@ import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.FeedStore;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import org.apache.commons.io.FileUtils;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
-import java.util.Map;
 
 /**
- * TODO: JAVADOC and RENAME: this seems to be a single purpose run() method but it's just called "public job".
- *
+ * Publish the latest GTFS files for all public feeds in a project.
  */
-public class MakePublicJob extends MonitorableJob {
-    public Project project;
-    private static final Logger LOG = LoggerFactory.getLogger(MakePublicJob.class);
+public class PublishProjectFeedsJob extends MonitorableJob {
+    private Project project;
 
-    public MakePublicJob(Project project, Auth0UserProfile owner) {
+    public PublishProjectFeedsJob(Project project, Auth0UserProfile owner) {
         super(owner, "Generating public html for " + project.name, JobType.MAKE_PROJECT_PUBLIC);
         this.project = project;
-        status.update(false, "Waiting to begin validation...", 0);
+        status.update("Waiting to publish feeds...", 0);
+    }
+
+    @JsonProperty
+    public String getProjectId () {
+        return project.id;
     }
 
     @Override
     public void jobLogic () {
-        LOG.info("Generating new html for public feeds");
+        status.update("Preparing HTML for public feeds page", 10);
         String output;
         String title = "Public Feeds";
         StringBuilder r = new StringBuilder();
@@ -50,6 +51,7 @@ public class MakePublicJob extends MonitorableJob {
         r.append("<h1>" + title + "</h1>\n");
         r.append("The following feeds, in GTFS format, are available for download and use.\n");
         r.append("<ul>\n");
+        status.update("Ensuring public GTFS files are up-to-date.", 50);
         project.retrieveProjectFeedSources().stream()
                 .filter(fs -> fs.isPublic && fs.retrieveLatest() != null)
                 .forEach(fs -> {
@@ -83,6 +85,7 @@ public class MakePublicJob extends MonitorableJob {
         output = r.toString();
         String fileName = "index.html";
         String folder = "public/";
+        status.update("Updating GTFS directory...", 90);
         File file = new File(String.join("/", FileUtils.getTempDirectory().getAbsolutePath(), fileName));
         file.deleteOnExit();
         try {
@@ -90,10 +93,12 @@ public class MakePublicJob extends MonitorableJob {
         } catch (IOException e) {
             e.printStackTrace();
         }
-
         FeedStore.s3Client.putObject(DataManager.feedBucket, folder + fileName, file);
         FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, folder + fileName, CannedAccessControlList.PublicRead);
+    }
 
-        LOG.info("Public page updated on s3");
+    @Override
+    public void jobFinished() {
+        status.completeSuccessfully("Public page updated successfully!");
     }
 }

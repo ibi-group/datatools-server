@@ -13,6 +13,7 @@ import com.amazonaws.services.elasticloadbalancingv2.model.RegisterTargetsReques
 import com.amazonaws.services.elasticloadbalancingv2.model.TargetDescription;
 import com.amazonaws.services.s3.AmazonS3URI;
 import com.amazonaws.services.s3.model.AmazonS3Exception;
+import com.amazonaws.services.s3.model.S3Object;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.AWSUtils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
@@ -148,7 +149,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
         LOG.info(message);
         // If only task is to build graph, this machine's job is complete and we can consider this job done.
         if (deployment.buildGraphOnly || (!graphAlreadyBuilt && otpServer.ec2Info.hasSeparateGraphBuildConfig())) {
-            status.update(false, message, 100);
+            status.completeSuccessfully(message);
             LOG.info("View logs at {}", getUserDataLogS3Path());
             return;
         }
@@ -181,8 +182,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
             elbClient.registerTargets(registerTargetsRequest);
             // FIXME how do we know it was successful?
             message = String.format("Server successfully registered with load balancer %s. OTP running at %s", otpServer.ec2Info.targetGroupArn, routerUrl);
-            LOG.info(message);
-            status.update(false, message, 100, true);
+            status.completeSuccessfully(message);
             LOG.info("View logs at {}", getUserDataLogS3Path());
             deployJob.incrementCompletedServers();
         } else {
@@ -219,8 +219,14 @@ public class MonitorServerStatusJob extends MonitorableJob {
         LOG.info("Checking for graph at {}", uri.toString());
         // Surround with try/catch (exception thrown if object does not exist).
         try {
-            return FeedStore.s3Client.doesObjectExist(uri.getBucket(), uri.getKey());
+            deployJob.getS3Client().getObject(uri.getBucket(), uri.getKey());
+            return true;
         } catch (AmazonS3Exception e) {
+            String errorCode = e.getErrorCode();
+            if (!errorCode.equals("NoSuchKey")) {
+                LOG.warn("Error encountered while checking for graph upload: {}", e);
+                return false;
+            }
             LOG.warn("Object not found for key " + uri.getKey(), e);
             return false;
         }

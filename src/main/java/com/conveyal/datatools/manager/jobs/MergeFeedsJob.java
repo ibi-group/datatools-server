@@ -263,7 +263,7 @@ public class MergeFeedsJob extends MonitorableJob {
         } else {
             // Store feed locally and (if applicable) upload regional feed to S3.
             storeMergedFeed();
-            status.update(false, "Merged feed created successfully.", 100, true);
+            status.completeSuccessfully("Merged feed created successfully.");
         }
         LOG.info("Feed merge is complete.");
         if (mergedVersion != null && !status.error && !mergeFeedsResult.failed) {
@@ -313,7 +313,7 @@ public class MergeFeedsJob extends MonitorableJob {
         }
         // Write the new latest regional merge file to s3://$BUCKET/project/$PROJECT_ID.zip
         if (mergeType.equals(REGIONAL)) {
-            status.update(false, "Saving merged feed.", 95);
+            status.update("Saving merged feed.", 95);
             // Store the project merged zip locally or on s3
             if (DataManager.useS3) {
                 String s3Key = String.join("/", "project", filename);
