@@ -56,9 +56,17 @@ import static com.conveyal.gtfs.GTFS.makeSnapshot;
  */
 public class CreateSnapshotJob extends MonitorableJob {
     private static final Logger LOG = LoggerFactory.getLogger(CreateSnapshotJob.class);
+    /** The namespace to snapshot. (Note: namespace resulting from snapshot can be found at {@link Snapshot#namespace} */
     private final String namespace;
+    /** Whether to update working buffer for the feed source to the newly created snapshot namespace. */
     private final boolean updateBuffer;
+    /** Whether to persist the snapshot in the Snapshots collection. */
     private final boolean storeSnapshot;
+    /**
+     * Whether to preserve the existing editor buffer as its own snapshot. This is essentially a shorthand for creating
+     * a snapshot and then separately loading something new into the buffer (if used with updateBuffer). It can also be
+     * thought of as an autosave.
+     */
     private final boolean preserveBuffer;
     private Snapshot snapshot;
     private FeedSource feedSource;
@@ -108,8 +116,9 @@ public class CreateSnapshotJob extends MonitorableJob {
             if (preserveBuffer) {
                 // Preserve the existing buffer as a snapshot if requested. This is essentially a shorthand for creating
                 // a snapshot and then separately loading something new into the buffer. It can be thought of as an
-                // autosave. FIXME: the buffer would still exist even if not "preserved" here. Should it be deleted if
-                // requester opts to not preserve it?
+                // autosave.
+                // FIXME: the buffer would still exist even if not "preserved" here. Should it be deleted if
+                //   requester opts to not preserve it?
                 if (feedSource.editorNamespace == null) {
                     LOG.error("Cannot preserve snapshot with null namespace for feed source {}", feedSource.id);
                 } else {

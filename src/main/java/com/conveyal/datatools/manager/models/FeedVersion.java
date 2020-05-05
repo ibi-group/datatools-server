@@ -390,8 +390,7 @@ public class FeedVersion extends Model implements Serializable {
      * 1. If we are deleting the latest version, change the memoized "last fetched" value in the FeedSource.
      * 2. Delete the GTFS Zip file locally or on S3
      * 3. Remove this feed version from all Deployments [shouldn't we be updating the version rather than deleting it?]
-     * 4. Remove the transport network file from the local disk
-     * 5. Finally delete the version object from the database.
+     * 4. Finally delete the version object from the database.
      */
     public void delete() {
         try {
@@ -403,7 +402,8 @@ public class FeedVersion extends Model implements Serializable {
             if (latest != null && latest.id.equals(this.id)) {
                 // Even if there are previous feed versions, we set to null to allow re-fetching the version that was just deleted
                 // TODO instead, set it to the fetch time of the previous feed version
-                Persistence.feedSources.update(fs.id, "{lastFetched:null}");
+                fs.lastFetched = null;
+                Persistence.feedSources.replace(fs.id, fs);
             }
             feedStore.deleteFeed(id);
             // Delete feed version tables in GTFS database

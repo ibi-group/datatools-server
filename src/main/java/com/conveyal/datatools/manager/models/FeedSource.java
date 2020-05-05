@@ -25,9 +25,11 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
@@ -63,10 +65,8 @@ public class FeedSource extends Model implements Cloneable {
         return project == null ? null : project.organizationId;
     }
 
-    // TODO: Add back in regions once they have been refactored
-//    public List<Region> retrieveRegionList () {
-//        return Region.retrieveAll().stream().filter(r -> Arrays.asList(regions).contains(r.id)).collect(Collectors.toList());
-//    }
+    public boolean transformInPlace;
+    public List<FeedTransformation> transformations = new ArrayList<>();
 
     /** The name of this feed source, e.g. MTA New York City Subway */
     public String name;

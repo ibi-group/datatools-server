@@ -5,6 +5,7 @@ import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.validator.ValidationResult;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
@@ -42,7 +43,7 @@ public class ValidateFeedJob extends MonitorableJob {
                 // the FeedVersion into mongo.
                 // This happens here because otherwise we would have to wait for other jobs,
                 // such as BuildTransportNetwork, to finish. If those subsequent jobs fail,
-                // the version won't get loaded into the database (even though it exists in postgres).
+                // the version won't get loaded into MongoDB (even though it exists in postgres).
                 feedVersion.storeUser(owner);
                 if (isNewVersion) {
                     Persistence.feedVersions.create(feedVersion);
@@ -55,6 +56,11 @@ public class ValidateFeedJob extends MonitorableJob {
             // TODO: If ValidateFeedJob is called without a parent job (e.g., to "re-validate" a feed), we should handle
             //  storing the updated ValidationResult in Mongo.
             status.completeSuccessfully("Validation finished!");
+        } else {
+            // If the version was not stored successfully, call FeedVersion#delete to reset things to before the version
+            // was uploaded/fetched. Note: delete calls made to MongoDB on the version ID will not succeed, but that is
+            // expected.
+            feedVersion.delete();
         }
     }
 

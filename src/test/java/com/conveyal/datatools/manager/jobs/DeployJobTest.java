@@ -30,6 +30,8 @@ import static org.junit.Assert.assertFalse;
  *
  * Note: these tests require credentials on the IBI AWS account, which is why the class is tagged with Ignore (so that it is
  * not run with the rest of the test suite)
+ *
+ * FIXME: Does this need to extend UnitTest?
  */
 @Ignore
 public class DeployJobTest {

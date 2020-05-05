@@ -85,7 +85,7 @@ public class SnapshotController {
             req.queryParamOrDefault("publishNewVersion", Boolean.FALSE.toString())
         );
         FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, Actions.EDIT, "feedId");
-        // Take fields from request body for creating snapshot.
+        // Take fields from request body for creating snapshot (i.e., feedId/feedSourceId, name, comment).
         Snapshot snapshot = json.read(req.body());
         // Ensure feed source ID and snapshotOf namespace is correct
         snapshot.feedSourceId = feedSource.id;
