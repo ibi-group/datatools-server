@@ -26,6 +26,7 @@ import com.amazonaws.services.s3.transfer.Upload;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
@@ -227,7 +228,11 @@ public class DeployJob extends MonitorableJob {
             // Dump the deployment bundle to the temp file.
             try {
                 status.message = "Creating transit bundle (GTFS and OSM)";
-                this.deployment.dump(deploymentTempFile, true, true, true);
+                // Only download OSM extract if an OSM extract does not exist at a public URL and not skipping extract.
+                boolean includeOsm = deployment.osmExtractUrl == null && !deployment.skipOsmExtract;
+                // TODO: At this stage, perform a HEAD request on OSM extract URL to verify that it exists before
+                //  continuing with deployment. The same probably goes for the specified OTP jar file.
+                this.deployment.dump(deploymentTempFile, true, includeOsm, true);
                 tasksCompleted++;
             } catch (Exception e) {
                 status.fail("Error dumping deployment", e);
@@ -246,7 +251,7 @@ public class DeployJob extends MonitorableJob {
                 }
                 try {
                     uploadBundleToS3();
-                } catch (AmazonClientException | InterruptedException e) {
+                } catch (AmazonClientException | InterruptedException | IOException e) {
                     status.fail(String.format("Error uploading/copying deployment bundle to s3://%s", s3Bucket), e);
                 }
 
@@ -279,25 +284,40 @@ public class DeployJob extends MonitorableJob {
     /**
      * Upload to S3 the transit data bundle zip that contains GTFS zip files, OSM data, and config files.
      */
-    private void uploadBundleToS3() throws InterruptedException, AmazonClientException {
+    private void uploadBundleToS3() throws InterruptedException, AmazonClientException, IOException {
         AmazonS3URI uri = new AmazonS3URI(getS3BundleURI());
         String bucket = uri.getBucket();
         status.message = "Uploading bundle to " + getS3BundleURI();
         status.uploadingS3 = true;
         LOG.info("Uploading deployment {} to {}", deployment.name, uri.toString());
-        TransferManager tx = TransferManagerBuilder.standard().withS3Client(s3Client).build();
-        final Upload upload = tx.upload(bucket, uri.getKey(), deploymentTempFile);
-
-        upload.addProgressListener(
-            (ProgressListener) progressEvent -> status.percentUploaded = upload.getProgress().getPercentTransferred()
+        // Use Transfer Manager so we can monitor S3 bundle upload progress.
+        TransferManager transferManager = TransferManagerBuilder.standard().withS3Client(s3Client).build();
+        final Upload uploadBundle = transferManager.upload(bucket, uri.getKey(), deploymentTempFile);
+        uploadBundle.addProgressListener(
+            (ProgressListener) progressEvent -> status.percentUploaded = uploadBundle.getProgress().getPercentTransferred()
         );
-
-        upload.waitForCompletion();
-
+        uploadBundle.waitForCompletion();
+        // Check if router config exists and upload as separate file using transfer manager. Note: this is because we
+        // need the router-config separately from the bundle for EC2 instances that download the graph only.
+        byte[] routerConfigAsBytes = deployment.generateRouterConfig();
+        if (routerConfigAsBytes != null) {
+            LOG.info("Uploading router-config.json to s3 bucket");
+            // Write router config to temp file.
+            File routerConfigFile = File.createTempFile("router-config", ".json");
+            FileOutputStream out = new FileOutputStream(routerConfigFile);
+            out.write(routerConfigAsBytes);
+            out.close();
+            // Upload router config.
+            transferManager
+                .upload(bucket, getS3FolderURI().getKey() + "/router-config.json", routerConfigFile)
+                .waitForCompletion();
+            // Delete temp file.
+            routerConfigFile.delete();
+        }
         // Shutdown the Transfer Manager, but don't shut down the underlying S3 client.
         // The default behavior for shutdownNow shut's down the underlying s3 client
         // which will cause any following s3 operations to fail.
-        tx.shutdownNow(false);
+        transferManager.shutdownNow(false);
 
         // copy to [name]-latest.zip
         String copyKey = getLatestS3BundleKey();
@@ -476,8 +496,8 @@ public class DeployJob extends MonitorableJob {
             // Track any previous instances running for the server we're deploying to in order to de-register and
             // terminate them later.
             List<EC2InstanceSummary> previousInstances = otpServer.retrieveEC2InstanceSummaries();
-            // Track new instances added.
-            List<Instance> instances = new ArrayList<>();
+            // Track new instances that should be added to target group once the deploy job is completed.
+            List<Instance> newInstancesForTargetGroup = new ArrayList<>();
             // First start graph-building instance and wait for graph to successfully build.
             if (!deployType.equals(DeployType.USE_PREBUILT_GRAPH)) {
                 status.message = "Starting up graph building EC2 instance";
@@ -496,6 +516,14 @@ public class DeployJob extends MonitorableJob {
                 );
                 monitorInitialServerJob.run();
 
+                if (monitorInitialServerJob.status.error) {
+                    // If an error occurred while monitoring the initial server, fail this job and instruct user to inspect
+                    // build logs.
+                    status.fail("Error encountered while building graph. Inspect build logs.");
+                    ServerController.terminateInstances(ec2, graphBuildingInstances);
+                    return;
+                }
+
                 status.update("Graph build is complete!", 40);
                 // If only building graph, job is finished. Note: the graph building EC2 instance should automatically shut
                 // itself down if this flag is turned on (happens in user data). We do not want to proceed with the rest of
@@ -506,13 +534,7 @@ public class DeployJob extends MonitorableJob {
                 }
 
                 Persistence.deployments.replace(deployment.id, deployment);
-                if (monitorInitialServerJob.status.error) {
-                    // If an error occurred while monitoring the initial server, fail this job and instruct user to inspect
-                    // build logs.
-                    status.fail("Error encountered while building graph. Inspect build logs.");
-                    ServerController.terminateInstances(ec2, graphBuildingInstances);
-                    return;
-                }
+
                 // Check if a new image of the instance with the completed graph build should be created.
                 if (otpServer.ec2Info.recreateBuildImage) {
                     status.update("Creating build image", 42.5);
@@ -545,7 +567,7 @@ public class DeployJob extends MonitorableJob {
                     status.numServersRemaining = Math.max(otpServer.ec2Info.instanceCount, 1);
                 } else {
                     // same configuration exists, so keep instance on and add to list of running instances
-                    instances.addAll(graphBuildingInstances);
+                    newInstancesForTargetGroup.addAll(graphBuildingInstances);
                     status.numServersRemaining = otpServer.ec2Info.instanceCount <= 0
                         ? 0
                         : otpServer.ec2Info.instanceCount - 1;
@@ -586,7 +608,13 @@ public class DeployJob extends MonitorableJob {
                 }
             }
             // Add all servers that did not encounter issues to list for registration with ELB.
-            instances.addAll(remainingInstances);
+            newInstancesForTargetGroup.addAll(remainingInstances);
+            // Fail deploy job if no instances are running at this point (i.e., graph builder instance has shut down
+            // and the graph loading instance(s) failed to load graph successfully).
+            if (newInstancesForTargetGroup.size() == 0) {
+                status.fail("Job failed because no running instances remain.");
+                return;
+            }
             String finalMessage = "Server setup is complete!";
             // Get EC2 servers running that are associated with this server.
             if (deployType.equals(DeployType.REPLACE)) {
@@ -849,10 +877,19 @@ public class DeployJob extends MonitorableJob {
             // If graph download times out, try again.
             lines.add(String.format("[ -f %s ] && echo 'Graph downloaded!' || %s", graphPath, downloadGraph));
             lines.add(String.format("ls -alh %s", graphPath));
+            // Download router config if not null (normally this would be just included as part of bundle.zip, but the
+            // bundle is not downloaded when the graph already exists).
+            if (deployment.generateRouterConfig() != null) {
+                lines.add(String.format("aws s3 --cli-read-timeout 60 cp %s %s ", joinToS3FolderURI("router-config.json"), routerDir + "/"));
+            }
         } else {
             // Download data bundle from S3.
             String downloadBundle = String.format("time aws s3 --cli-read-timeout 60 cp %s /tmp/bundle.zip", getS3BundleURI());
             lines.add(downloadBundle);
+            // Download OSM extract if exists at URL. Otherwise, it is assumed to be in the bundle.
+            if (deployment.osmExtractUrl != null && !deployment.skipOsmExtract) {
+                lines.add(String.format("wget %s -O %s/osm.pbf", deployment.osmExtractUrl, routerDir));
+            }
             // Determine if bundle download was successful and try again if not.
             lines.add(String.format("[ -f /tmp/bundle.zip ] && echo 'Bundle downloaded!' || %s", downloadBundle));
             lines.add("[ -f /tmp/bundle.zip ] && BUNDLE_STATUS='SUCCESS' || BUNDLE_STATUS='FAILURE'");
@@ -893,6 +930,7 @@ public class DeployJob extends MonitorableJob {
         lines.add(uploadUserDataLogCommand);
         // Create file with bundle status in web dir to notify Data Tools that download is complete.
         lines.add(String.format("sudo echo $GRAPH_STATUS > $WEB_DIR/%s", GRAPH_STATUS_FILE));
+        lines.add("echo 'Graph build/download status: $GRAPH_STATUS'");
         if (deployment.buildGraphOnly) {
             // If building graph only, tell the instance to shut itself down after the graph build (and log upload) is
             // complete.
