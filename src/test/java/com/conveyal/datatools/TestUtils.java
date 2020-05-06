@@ -15,6 +15,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
@@ -158,46 +159,25 @@ public class TestUtils {
     }
 
     /**
-     * Get a connection to the database and execute the given sql query
-     */
-    public static ResultSet executeSql (String sql) throws SQLException {
-        LOG.info(sql);
-        return GTFS_DATA_SOURCE.getConnection().prepareStatement(sql).executeQuery();
-    }
-
-    /**
      * Asserts that the result of a SQL count statement is equal to an expected value
      *
      * @param sql A SQL statement in the form of `SELECT count(*) FROM ...`
      * @param expectedCount The expected count that is returned from the result of the SQL statement.
      */
     public static void assertThatSqlCountQueryYieldsExpectedCount(String sql, int expectedCount) throws SQLException {
-        int count = 0;
-        ResultSet resultSet = executeSql(sql);
-        while (resultSet.next()) {
-            count = resultSet.getInt(1);
+        int count = -1;
+        LOG.info(sql);
+        // Encapsulate connection in try-with-resources to ensure it is closed and does not interfere with other tests.
+        try (Connection connection = GTFS_DATA_SOURCE.getConnection()) {
+            ResultSet resultSet = connection.prepareStatement(sql).executeQuery();
+            while (resultSet.next()) {
+                count = resultSet.getInt(1);
+            }
         }
         assertThat(
             "Records matching query should equal expected count.",
             count,
             equalTo(expectedCount)
-        );
-    }
-
-    /**
-     * Asserts that the number of rows found in a SQL query matches an expected value
-     *
-     * @param sql A SQL statement to be executed
-     * @param expectedRowCount The number of rows that are expected to be found in the result
-     */
-    public static void assertThatSqlQueryYieldsRowCount(String sql, int expectedRowCount) throws SQLException {
-        int recordCount = 0;
-        ResultSet rs = executeSql(sql);
-        while (rs.next()) recordCount++;
-        assertThat(
-            "Records matching query should equal expected count.",
-            recordCount,
-            equalTo(expectedRowCount)
         );
     }
 
@@ -208,9 +188,9 @@ public class TestUtils {
      * @param errorTypes Arguments of Strings of possible `error_type` values to check for
      */
     public static void assertThatFeedHasNoErrorsOfType (String namespace, String... errorTypes) throws SQLException {
-        assertThatSqlQueryYieldsRowCount(
+        assertThatSqlCountQueryYieldsExpectedCount(
             String.format(
-                "select * from %s.errors where error_type in (%s)",
+                "select count(*) from %s.errors where error_type in (%s)",
                 namespace,
                 Arrays.stream(errorTypes)
                     .map(error -> String.format("'%s'", error))

@@ -1,31 +1,28 @@
 package com.conveyal.datatools.manager.models;
 
-public class FeedTransformation extends Model {
-    private static final long serialVersionUID = 1L;
+import com.conveyal.datatools.common.status.MonitorableJob;
+import org.bson.codecs.pojo.annotations.BsonDiscriminator;
 
-    public String sourceVersionId;
-    public TransformType transformType;
+/**
+ * This abstract class is the base for arbitrary feed transformations.
+ *
+ * Note: Subclasses do not need the {@link BsonDiscriminator} annotation. This is used by MongoDB to handle
+ * polymorphism, but it only need be applied to the abstract parent class.
+ */
+@BsonDiscriminator
+public abstract class FeedTransformation extends Model {
     public String csvData;
+    public String sourceVersionId;
     public String table;
-    // FIXME
-    public Class jobClazz;
 
-    public static FeedTransformation defaultReplaceFileTransform(String sourceVersionId, String table) {
-        FeedTransformation transformation = new FeedTransformation();
-        transformation.transformType = TransformType.REPLACE_FILE_FROM_VERSION;
-        transformation.sourceVersionId = sourceVersionId;
-        transformation.table = table;
-        return transformation;
-    }
+    public FeedTransformation() {}
 
-    public boolean isAppliedBeforeLoad() {
-        switch (this.transformType) {
-            case REPLACE_FILE_FROM_VERSION:
-            case REPLACE_FILE_FROM_STRING:
-                return true;
-            default:
-                return false;
-        }
-    }
+    // TODO Should we add an isValid function that determines if the transformation is defined correctly? Maybe
+    //  it could return something object that contains a bool + message.
+    // boolean isValid();
+
+    public abstract void transform(FeedVersion target, MonitorableJob.Status status);
+
+    public abstract boolean isAppliedBeforeLoad();
 }
 
