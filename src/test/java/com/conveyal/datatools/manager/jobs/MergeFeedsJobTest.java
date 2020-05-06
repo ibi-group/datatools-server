@@ -23,6 +23,7 @@ import java.util.UUID;
 
 import static com.conveyal.datatools.TestUtils.assertThatFeedHasNoErrorsOfType;
 import static com.conveyal.datatools.TestUtils.assertThatSqlCountQueryYieldsExpectedCount;
+import static com.conveyal.datatools.TestUtils.assertThatSqlQueryYieldsRowCount;
 import static com.conveyal.datatools.TestUtils.createFeedVersion;
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static com.conveyal.datatools.TestUtils.zipFolderFiles;
@@ -523,7 +524,6 @@ public class MergeFeedsJobTest extends UnitTest {
      * Tests whether a MTC feed merge of two feed versions correctly removes calendar records that have overlapping
      * service but keeps calendar_dates records that share service_id with the removed calendar and trips that reference
      * that service_id.
-     *
      */
     @Test
     public void canMergeFeedsWithMTCForServiceIds3 () throws SQLException {
@@ -559,6 +559,15 @@ public class MergeFeedsJobTest extends UnitTest {
         assertThatSqlCountQueryYieldsExpectedCount(
             String.format(
                 "SELECT count(*) FROM %s.trips WHERE service_id='Fake_Agency4:common_id'",
+                mergedNamespace
+            ),
+            1
+        );
+        // Amended calendar record from earlier feed version should also have a modified end date (one day before the
+        // earliest start_date from the future feed).
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format(
+                "SELECT count(*) FROM %s.calendar WHERE service_id='Fake_Agency4:common_id' AND end_date='20170914'",
                 mergedNamespace
             ),
             1
