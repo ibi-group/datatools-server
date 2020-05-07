@@ -69,10 +69,12 @@ public class Deployment extends Model implements Serializable {
 
     public List<DeployJob.DeploySummary> deployJobSummaries = new ArrayList<>();
 
-    @JsonView(JsonViews.DataDump.class)
     public String projectId;
 
-    @JsonProperty("project")
+    /**
+     * Get parent project for deployment. Note: at one point this was a JSON property of this class, but severe
+     * performance issues prevent this field from scaling to be fetched/assigned to a large collection of deployments.
+     */
     public Project parentProject() {
         return Persistence.projects.getById(projectId);
     }
@@ -137,14 +139,6 @@ public class Deployment extends Model implements Serializable {
             AWSUtils.getEC2ClientForRole(role, region),
             deploymentFilter
         );
-    }
-
-    public void storeFeedVersions(Collection<FeedVersion> versions) {
-        feedVersionIds = new ArrayList<>(versions.size());
-
-        for (FeedVersion version : versions) {
-            feedVersionIds.add(version.id);
-        }
     }
 
     /**
