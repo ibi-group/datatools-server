@@ -118,8 +118,7 @@ public class Deployment extends Model implements Serializable {
         return ret;
     }
 
-    /** All of the feed versions used in this deployment, summarized so that the Internet won't break */
-    @JsonProperty("ec2Instances")
+    /** Fetch ec2 instances tagged with this deployment's ID. */
     public List<EC2InstanceSummary> retrieveEC2Instances() {
         if (!"true".equals(DataManager.getConfigPropertyAsText("modules.deployment.ec2.enabled"))) return Collections.EMPTY_LIST;
         Filter deploymentFilter = new Filter("tag:deploymentId", Collections.singletonList(id));
@@ -552,10 +551,23 @@ public class Deployment extends Model implements Serializable {
      */
     public abstract static class DeploymentFullFeedVersionMixin {
         @JsonIgnore
-        public abstract Collection<SummarizedFeedVersion> retrievefeedVersions();
+        public abstract Collection<SummarizedFeedVersion> retrieveFeedVersions();
 
-//        @JsonProperty("feedVersions")
+        @JsonProperty("feedVersions")
         @JsonIgnore(false)
         public abstract Collection<FeedVersion> retrieveFullFeedVersions ();
+    }
+
+    /**
+     * A MixIn to be applied to this deployment, for returning a single deployment, so that the list of ec2Instances is
+     * included in the JSON response.
+     *
+     * Usually a mixin would be used on an external class, but since we are changing one thing about a single class, it seemed
+     * unnecessary to define a new view.
+     */
+    public abstract static class DeploymentWithEc2InstancesMixin {
+
+        @JsonProperty("ec2Instances")
+        public abstract Collection<FeedVersion> retrieveEC2Instances ();
     }
 }
