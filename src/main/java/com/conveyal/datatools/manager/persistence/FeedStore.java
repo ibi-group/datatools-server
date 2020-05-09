@@ -206,6 +206,10 @@ public class FeedStore {
         return null;
     }
 
+    public String getS3FeedPath (String id) {
+        return String.format("s3://%s/%s", s3Bucket, getS3Key(id));
+    }
+
     /**
      * Store GTFS file locally. This method is used when a new feed version or generated GTFS file
      * (e.g., the product of merging multiple GTFS files from a project) needs to be stored locally for

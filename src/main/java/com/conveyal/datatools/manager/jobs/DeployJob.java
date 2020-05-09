@@ -64,8 +64,10 @@ import com.conveyal.datatools.manager.models.EC2InstanceSummary;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.StringUtils;
+import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import org.apache.commons.codec.binary.Base64;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
@@ -92,6 +94,7 @@ public class DeployJob extends MonitorableJob {
     // Use txt at the end of these filenames so that these can easily be viewed in a web browser.
     public static final String BUNDLE_DOWNLOAD_COMPLETE_FILE = "BUNDLE_DOWNLOAD_COMPLETE.txt";
     public static final String GRAPH_STATUS_FILE = "GRAPH_STATUS.txt";
+    public static final String OTP_RUNNER_STATUS_FILE = "status.json";
     private static final long TEN_MINUTES_IN_MILLISECONDS = 10 * 60 * 1000;
     // Note: using a cloudfront URL for these download repo URLs will greatly increase download/deploy speed.
     private static final String R5_REPO_URL = DataManager.hasConfigProperty("modules.deployment.r5_download_url")
@@ -211,11 +214,12 @@ public class DeployJob extends MonitorableJob {
     }
 
     public void jobLogic () {
-        // If not using a preloaded bundle (or pre-built graph), we need to dump the GTFS feeds and OSM to a zip file and optionally upload
-        // to S3.
-        if (deployType.equals(DeployType.REPLACE)) {
+        if (otpServer.ec2Info != null) totalTasks++;
+        // If needed, dump the GTFS feeds and OSM to a zip file and optionally upload to S3. Since ec2 deployments use
+        // otp-runner to automatically download all files needed for the bundle, skip this step if ec2 deployment is
+        // enabled and there are internal urls to deploy the graph over wire.
+        if (deployType.equals(DeployType.REPLACE) && (otpServer.ec2Info == null || otpServer.internalUrl != null)) {
             if (otpServer.s3Bucket != null) totalTasks++;
-            if (otpServer.ec2Info != null) totalTasks++;
             try {
                 deploymentTempFile = File.createTempFile("deployment", ".zip");
             } catch (IOException e) {
@@ -262,6 +266,7 @@ public class DeployJob extends MonitorableJob {
         if (otpServer.ec2Info != null) {
             if ("true".equals(DataManager.getConfigPropertyAsText("modules.deployment.ec2.enabled"))) {
                 replaceEC2Servers();
+                tasksCompleted++;
                 // If creating a new server, there is no need to deploy to an existing one.
                 return;
             } else {
@@ -651,10 +656,7 @@ public class DeployJob extends MonitorableJob {
      * TODO: Booting up R5 servers has not been fully tested.
      */
     private List<Instance> startEC2Instances(int count, boolean graphAlreadyBuilt) {
-        // User data should contain info about:
-        // 1. Downloading GTFS/OSM info (s3)
-        // 2. Time to live until shutdown/termination (for test servers)
-        // 3. Hosting / nginx
+        // Create user data to instruct the ec2 instance to do stuff at startup.
         String userData = constructUserData(graphAlreadyBuilt);
         // Failure was encountered while constructing user data.
         if (userData == null) {
@@ -788,30 +790,90 @@ public class DeployJob extends MonitorableJob {
      * startup.
      */
     private String constructUserData(boolean graphAlreadyBuilt) {
-        // Prefix/name of JAR file (WITHOUT .jar)
-        String jarName = deployment.r5 ? deployment.r5Version : deployment.otpVersion;
-        if (jarName == null) {
-            if (deployment.r5) deployment.r5Version = DEFAULT_R5_VERSION;
-            else deployment.otpVersion = DEFAULT_OTP_VERSION;
-            // If there is no version specified, use the default (and persist value).
-            jarName = deployment.r5 ? deployment.r5Version : deployment.otpVersion;
-            Persistence.deployments.replace(deployment.id, deployment);
+        if (deployment.r5) {
+            status.fail("Deployments with r5 are not supported at this time");
+            return null;
         }
-        // Construct URL for trip planner jar and check that it exists with a lightweight HEAD request.
-        String s3JarKey = jarName + ".jar";
-        String repoUrl = deployment.r5 ? R5_REPO_URL : OTP_REPO_URL;
-        String s3JarUrl = String.join("/", repoUrl, s3JarKey);
-        try {
-            final URL url = new URL(s3JarUrl);
-            HttpURLConnection huc = (HttpURLConnection) url.openConnection();
-            huc.setRequestMethod("HEAD");
-            int responseCode = huc.getResponseCode();
-            if (responseCode != HttpStatus.OK_200) {
-                status.fail(String.format("Requested trip planner jar does not exist at %s", s3JarUrl));
+        String jarName = getJarName();
+        String s3JarUrl = getS3JarUrl(jarName);
+        if (!s3JarUrlIsValid(s3JarUrl)) {
+            return null;
+        }
+        List<String> lines = new ArrayList<>();
+        String routerName = "default";
+        //////////////// BEGIN USER DATA
+        lines.add("#!/bin/bash");
+        // Remove previous files that might have been created during an Image creation
+        String webDir = "/usr/share/nginx/client";
+        lines.add(String.format("rm %s/%s || echo '' > /dev/null", webDir, OTP_RUNNER_STATUS_FILE));
+        // create otp-runner config file
+        OtpRunnerManifest manifest = new OtpRunnerManifest();
+        // add common settings
+        manifest.graphsFolder = String.format("/var/%s/graphs", getTripPlannerString());
+        manifest.graphObjUrl = getS3GraphURI();
+        manifest.jarFile = String.format("/opt/%s/%s", getTripPlannerString(), jarName);
+        manifest.jarUrl = s3JarUrl;
+        manifest.s3UploadBucket = getS3FolderURI().toString();
+        manifest.statusFileLocation = String.format("%s/%s", webDir, OTP_RUNNER_STATUS_FILE);
+        manifest.uploadOtpRunnerLogs = true;
+        if (!graphAlreadyBuilt) {
+            manifest.buildConfigJSON = deployment.generateBuildConfig().toString();
+            manifest.buildGraph = true;
+            try {
+                manifest.gtfsAndOsmUrls = deployment.generateGtfsAndOsmUrls();
+            } catch (MalformedURLException e) {
+                status.fail("Failed to create OSM download url!", e);
                 return null;
             }
-        } catch (IOException e) {
-            status.fail(String.format("Error checking for trip planner jar: %s", s3JarUrl));
+            manifest.uploadGraph = true;
+            manifest.uploadGraphBuildLogs = true;
+            manifest.uploadGraphBuildReport = true;
+            if (deployment.buildGraphOnly || otpServer.ec2Info.hasSeparateGraphBuildConfig()) {
+                // This instance should be ran to only build the graph
+                manifest.runServer = false;
+            } else {
+                // This instance will both run a graph and start the OTP server
+                manifest.routerConfigJSON = deployment.generateRouterConfig().toString();
+                manifest.runServer = true;
+                manifest.uploadServerStartupLogs = true;
+            }
+        } else {
+            // This instance will only start the OTP server with a prebuilt graph
+            manifest.buildGraph = false;
+            manifest.routerConfigJSON = deployment.generateRouterConfig().toString();
+            manifest.runServer = true;
+            manifest.uploadServerStartupLogs = true;
+        }
+        String otpRunnerManifestFile = String.format("/var/%s/otp-runner-manifest.json", getTripPlannerString());
+        // FIXME what if the JSON has a single quote?
+        try {
+            lines.add(
+                String.format(
+                    "echo '%s' > %s",
+                    JsonUtil.objectMapper.writeValueAsString(manifest),
+                    otpRunnerManifestFile
+                )
+            );
+        } catch (JsonProcessingException e) {
+            status.fail("Failed to create manifest for otp-runner!", e);
+            return null;
+        }
+        // install otp-runner
+        lines.add("yarn global add https://github.com/ibi-group/otp-runner.git");
+        // execute otp-runner
+        lines.add(String.format("otp-runner %s", otpRunnerManifestFile));
+        // Return the entire user data script as a single string.
+        return String.join("\n", lines);
+    }
+
+    /**
+     * Construct the user data script (as string) that should be provided to the AMI and executed upon EC2 instance
+     * startup.
+     */
+    private String constructUserDataOld(boolean graphAlreadyBuilt) {
+        String jarName = getJarName();
+        String s3JarUrl = getS3JarUrl(jarName);
+        if (!s3JarUrlIsValid(s3JarUrl)) {
             return null;
         }
         String jarDir = String.format("/opt/%s", getTripPlannerString());
@@ -944,6 +1006,42 @@ public class DeployJob extends MonitorableJob {
         }
         // Return the entire user data script as a single string.
         return String.join("\n", lines);
+    }
+
+    private String getJarName() {
+        String jarName = deployment.r5 ? deployment.r5Version : deployment.otpVersion;
+        if (jarName == null) {
+            if (deployment.r5) deployment.r5Version = DEFAULT_R5_VERSION;
+            else deployment.otpVersion = DEFAULT_OTP_VERSION;
+            // If there is no version specified, use the default (and persist value).
+            jarName = deployment.r5 ? deployment.r5Version : deployment.otpVersion;
+            Persistence.deployments.replace(deployment.id, deployment);
+        }
+        return jarName;
+    }
+
+    private String getS3JarUrl(String jarName) {
+        // Construct URL for trip planner jar and check that it exists with a lightweight HEAD request.
+        String s3JarKey = jarName + ".jar";
+        String repoUrl = deployment.r5 ? R5_REPO_URL : OTP_REPO_URL;
+        return String.join("/", repoUrl, s3JarKey);
+    }
+
+    private boolean s3JarUrlIsValid(String s3JarUrl) {
+        try {
+            final URL url = new URL(s3JarUrl);
+            HttpURLConnection huc = (HttpURLConnection) url.openConnection();
+            huc.setRequestMethod("HEAD");
+            int responseCode = huc.getResponseCode();
+            if (responseCode != HttpStatus.OK_200) {
+                status.fail(String.format("Requested trip planner jar does not exist at %s", s3JarUrl));
+                return false;
+            }
+        } catch (IOException e) {
+            status.fail(String.format("Error checking for trip planner jar: %s", s3JarUrl));
+            return false;
+        }
+        return true;
     }
 
     private String getBuildLogFilename() {

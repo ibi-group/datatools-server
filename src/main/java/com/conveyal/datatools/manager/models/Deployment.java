@@ -28,6 +28,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
 import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
@@ -45,6 +46,7 @@ import com.mongodb.client.FindIterable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.conveyal.datatools.manager.models.FeedVersion.feedStore;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 
@@ -416,17 +418,21 @@ public class Deployment extends Model implements Serializable {
      * Get OSM extract from OSM vex server as input stream.
      */
     public static InputStream downloadOsmExtract(Rectangle2D rectangle2D) throws IOException {
-        Bounds bounds = new Bounds(rectangle2D);
-        if (!bounds.areValid()) {
-            throw new IllegalArgumentException(String.format("Provided bounds %s are not valid", bounds.toVexString()));
-        }
-        URL vexUrl = new URL(String.format(Locale.ROOT, "%s/%s.pbf",
-                DataManager.getConfigPropertyAsText("OSM_VEX"),
-                bounds.toVexString()));
+        URL vexUrl = getVexUrl(rectangle2D);
         LOG.info("Getting OSM extract at {}", vexUrl.toString());
         HttpURLConnection conn = (HttpURLConnection) vexUrl.openConnection();
         conn.connect();
         return conn.getInputStream();
+    }
+
+    public static URL getVexUrl (Rectangle2D rectangle2D) throws MalformedURLException {
+        Bounds bounds = new Bounds(rectangle2D);
+        if (!bounds.areValid()) {
+            throw new IllegalArgumentException(String.format("Provided bounds %s are not valid", bounds.toVexString()));
+        }
+        return new URL(String.format(Locale.ROOT, "%s/%s.pbf",
+            DataManager.getConfigPropertyAsText("OSM_VEX"),
+            bounds.toVexString()));
     }
 
     /**
@@ -517,6 +523,17 @@ public class Deployment extends Model implements Serializable {
 
     public boolean delete() {
         return Persistence.deployments.removeById(this.id);
+    }
+
+    public List<String> generateGtfsAndOsmUrls() throws MalformedURLException {
+        List<String> urls = new ArrayList();
+        // add OSM data
+        urls.add(getVexUrl(retrieveProjectBounds()).toString());
+        // add GTFS files
+        for (String feedVersionId : feedVersionIds) {
+            urls.add(feedStore.getS3FeedPath(feedVersionId));
+        }
+        return urls;
     }
 
     /**

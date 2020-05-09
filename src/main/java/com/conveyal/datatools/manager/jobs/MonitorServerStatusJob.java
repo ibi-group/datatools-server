@@ -37,6 +37,7 @@ import java.util.Collections;
 
 import static com.conveyal.datatools.manager.jobs.DeployJob.BUNDLE_DOWNLOAD_COMPLETE_FILE;
 import static com.conveyal.datatools.manager.jobs.DeployJob.GRAPH_STATUS_FILE;
+import static com.conveyal.datatools.manager.jobs.DeployJob.OTP_RUNNER_STATUS_FILE;
 
 /**
  * Job that is dispatched during a {@link DeployJob} that spins up EC2 instances. This handles waiting for the server to
@@ -55,7 +56,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
     private final CloseableHttpClient httpClient = HttpClients.createDefault();
     // Delay checks by twenty seconds to give user-data script time to upload the instance's user data log if part of the
     // script fails (e.g., uploading or downloading a file).
-    private static final int DELAY_SECONDS = 20;
+    private static final int DELAY_SECONDS = 4;
     public long graphTaskSeconds;
 
     public MonitorServerStatusJob(Auth0UserProfile owner, DeployJob deployJob, Instance instance, boolean graphAlreadyBuilt) {
@@ -93,71 +94,47 @@ public class MonitorServerStatusJob extends MonitorableJob {
 
     @Override
     public void jobLogic() {
-        String ipUrl = "http://" + instance.getPublicIpAddress();
         // Get OTP URL for instance to check for availability.
-        boolean routerIsAvailable = false, graphIsAvailable = false;
+        String ipUrl = "http://" + instance.getPublicIpAddress();
         if (otpServer.ec2Info == null || otpServer.ec2Info.targetGroupArn == null) {
             // Fail the job from the outset if there is no target group defined.
             failJob("There is no load balancer under which to register ec2 instance.");
         }
         try {
-            if (graphAlreadyBuilt) {
-                // If graph already build, instance's user data will download Graph.obj automatically instead of bundle.
-                status.update("Loading graph...", 40);
-            } else {
-                // Otherwise, we need to verify that the bundle downloaded successfully.
-                boolean bundleIsDownloaded = false;
-                // Progressively check status of OTP server
-                if (deployment.buildGraphOnly) {
-                    // No need to check that OTP is running. Just check to see that the graph is built.
-                    routerIsAvailable = true;
-                }
-                // First, check that OTP has started up.
-                status.update("Prepping for graph build...", 20);
-                String bundleUrl = String.join("/", ipUrl, BUNDLE_DOWNLOAD_COMPLETE_FILE);
-                long bundleDownloadStartTime = System.currentTimeMillis();
-                while (!bundleIsDownloaded) {
-                    // If the request is successful, the OTP instance has started.
-                    waitAndCheckInstanceHealth("bundle download check: " + bundleUrl);
-                    bundleIsDownloaded = checkForSuccessfulRequest(bundleUrl);
-                    // wait 20 minutes max for the bundle to download
-                    long maxBundleDownloadTimeMillis = 20 * 60 * 1000;
-                    if (taskHasTimedOut(bundleDownloadStartTime, maxBundleDownloadTimeMillis)) {
-                        failJob("Job timed out while checking for server bundle download status.");
-                        return;
-                    }
-                }
-                // Check status of bundle download and fail job if there was a failure.
-                String bundleStatus = getUrlAsString(bundleUrl);
-                if (bundleStatus == null || !bundleStatus.contains("SUCCESS")) {
-                    failJob("Failure encountered while downloading transit bundle.");
-                    return;
-                }
-                long bundleDownloadSeconds = (System.currentTimeMillis() - bundleDownloadStartTime) / 1000;
-                LOG.info("Bundle downloaded in {} seconds!", bundleDownloadSeconds);
-                status.update("Building graph...", 30);
-            }
-            // Once bundle is downloaded, we await the build (or download if graph already built) of the graph.
-            long graphCheckStartTime = System.currentTimeMillis();
-            String graphStatusUrl = String.join("/", ipUrl, GRAPH_STATUS_FILE);
-            while (!graphIsAvailable) {
+            // Wait for otp-runner to produce first status file
+            long statusCheckStartTime = System.currentTimeMillis();
+            String statusUrl = String.join("/", ipUrl, OTP_RUNNER_STATUS_FILE);
+            boolean otpRunnerStatusAvailable = false;
+            while (!otpRunnerStatusAvailable) {
                 // If the request is successful, the OTP instance has started.
-                waitAndCheckInstanceHealth("graph build/download check: " + graphStatusUrl);
-                graphIsAvailable = checkForSuccessfulRequest(graphStatusUrl);
-                // wait a maximum of 4 hours if building the graph, or 20 minutes if downloading a graph
-                long maxGraphBuildOrDownloadWaitTimeMillis = graphAlreadyBuilt ? 20 * 60 * 1000 : 4 * 60 * 60 * 1000;
-                if (taskHasTimedOut(graphCheckStartTime, maxGraphBuildOrDownloadWaitTimeMillis)) {
-                    failJob("Job timed out while waiting for graph build/download. If this was a graph building machine, it may have run out of memory.");
+                waitAndCheckInstanceHealth("otp-runner status file availability check: " + statusUrl);
+                otpRunnerStatusAvailable = checkForSuccessfulRequest(statusUrl);
+                long maxOtpRunnerStartupTimeMillis = 5 * 60 * 1000;
+                if (taskHasTimedOut(statusCheckStartTime, maxOtpRunnerStartupTimeMillis)) {
+                    failJob("Job timed out while waiting for otp-runner to produce a status file!");
                     return;
                 }
             }
-            // Check graph status and fail job if there was a failure.
-            String graphStatus = getUrlAsString(graphStatusUrl);
-            if (graphStatus == null || !graphStatus.contains("SUCCESS")) {
-                failJob("Failure encountered while building/downloading graph.");
+            // Wait for otp-runner to write a status that fulfills expectations of this job
+            statusCheckStartTime = System.currentTimeMillis();
+            boolean otpRunnerCompleted = false;
+            while (!otpRunnerCompleted) {
+                // If the request is successful, the OTP instance has started.
+                waitAndCheckInstanceHealth("otp-runner status file availability check: " + statusUrl);
+                otpRunnerCompleted = checkForOtpRunnerCompletion(statusUrl);
+                // wait a maximum of 5 hours if building a graph, or 1 hour if just starting a server
+                long maxOtpRunnerWaitTimeMillis = (graphAlreadyBuilt ? 5 : 1) * 60 * 60 * 1000;
+                if (taskHasTimedOut(statusCheckStartTime, maxOtpRunnerWaitTimeMillis)) {
+                    failJob("Job timed out while waiting for otp-runner to finish!");
+                    return;
+                }
+            }
+
+            // Check if an otp-runner status file check has already failed this job.
+            if (status.error) {
                 return;
             }
-            graphTaskSeconds = (System.currentTimeMillis() - graphCheckStartTime) / 1000;
+            graphTaskSeconds = (System.currentTimeMillis() - statusCheckStartTime) / 1000;
             String message = String.format("Graph build/download completed in %d seconds!", graphTaskSeconds);
             LOG.info(message);
             // If only task for this instance is to build the graph (either because that is the deployment purpose or
@@ -168,11 +145,11 @@ public class MonitorServerStatusJob extends MonitorableJob {
                 LOG.info("View logs at {}", getUserDataLogS3Path());
                 return;
             }
-            status.update("Loading graph...", 70);
             // Once this is confirmed, check for the availability of the router, which will indicate that the graph
             // load has completed successfully.
             String routerUrl = String.join("/", ipUrl, "otp/routers/default");
             long routerCheckStartTime = System.currentTimeMillis();
+            boolean routerIsAvailable = false;
             while (!routerIsAvailable) {
                 // If the request was successful, the graph build is complete!
                 // TODO: Substitute in specific router ID? Or just default to... "default".
