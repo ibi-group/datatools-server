@@ -21,7 +21,6 @@ import org.bson.codecs.pojo.annotations.BsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.awt.geom.Rectangle2D;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -59,15 +58,38 @@ public class FeedVersion extends Model implements Serializable {
     public Set<String> inputVersions;
 
     /**
-     * We generate IDs manually, but we need a bit of information to do so
+     * This is not the recommended way to create a new feed version. This constructor should primarily be used in
+     * testing, when shorthand is OK. Generally, the retrieval method should be provided for more precision about where
+     * the version came from.
      */
     public FeedVersion(FeedSource source) {
+        this(source, source.retrievalMethod);
+    }
+
+    /**
+     * This is the recommended constructor for creating a new feed version. This is generally called before the GTFS
+     * file has been supplied because we store the GTFS file at a location based the feed version ID (which is generated
+     * in this constructor). Call {@link FeedStore#getPathToFeed} to determine where its GTFS should be stored and
+     * {@link #assignGtfsFile} to associate characteristics of the GTFS file with the version.
+     * @param source            the parent feed source
+     * @param retrievalMethod   how the version's GTFS was supplied to Data Tools
+     */
+    public FeedVersion(FeedSource source, FeedSource.FeedRetrievalMethod retrievalMethod) {
         this.updated = new Date();
         this.feedSourceId = source.id;
         this.name = formattedTimestamp() + " Version";
+        // We generate IDs manually, but we need a bit of information to do so
         this.id = generateFeedVersionId(source);
         int count = source.feedVersionCount();
         this.version = count + 1;
+        this.retrievalMethod = retrievalMethod;
+    }
+
+    public FeedVersion(FeedSource source, Snapshot snapshot) {
+        this(source, snapshot.retrievalMethod);
+        // Set feed version properties.
+        originNamespace = snapshot.namespace;
+        name = snapshot.name + " Snapshot Export";
     }
 
     private String generateFeedVersionId(FeedSource source) {
@@ -149,11 +171,12 @@ public class FeedVersion extends Model implements Serializable {
         return feedStore.getFeed(id);
     }
 
+    /**
+     * Store a new GTFS file from an input stream representing the GTFS zip file.
+     */
     public File newGtfsFile(InputStream inputStream) throws IOException {
         File file = feedStore.newFeed(id, inputStream, parentFeedSource());
-        // fileSize field will not be stored until new FeedVersion is stored in MongoDB (usually in
-        // the final steps of ValidateFeedJob).
-        this.fileSize = file.length();
+        assignGtfsFile(file);
         LOG.info("New GTFS file saved: {} ({} bytes)", id, this.fileSize);
         return file;
     }
@@ -235,8 +258,8 @@ public class FeedVersion extends Model implements Serializable {
             if (gtfsFile.length() == 0) {
                 throw new IOException("Empty GTFS file supplied");
             }
-            // If feed version has not been hashed, hash it here.
-            if (hash == null) hash = HashUtils.hashFile(gtfsFile);
+            // If somehow feed version has not been taken characteristics from GTFS file, handle this here.
+            assignGtfsFile(gtfsFile);
             String gtfsFilePath = gtfsFile.getPath();
             this.feedLoadResult = GTFS.load(gtfsFilePath, DataManager.GTFS_DATA_SOURCE);
             // FIXME? duplication of namespace (also stored as feedLoadResult.uniqueIdentifier)
@@ -330,28 +353,6 @@ public class FeedVersion extends Model implements Serializable {
         validate(null);
     }
 
-    public void hash () {
-        this.hash = HashUtils.hashFile(retrieveGtfsFile());
-    }
-
-    /**
-     * Get the OSM file for the given bounds if it exists on disk.
-     *
-     * FIXME: Use osm-lib to handle caching OSM data.
-     */
-    private static File retrieveCachedOSMFile(Rectangle2D bounds) {
-        if (bounds != null) {
-            String baseDir = FeedStore.basePath.getAbsolutePath() + File.separator + "osm";
-            File osmPath = new File(String.format("%s/%.6f_%.6f_%.6f_%.6f", baseDir, bounds.getMaxX(), bounds.getMaxY(), bounds.getMinX(), bounds.getMinY()));
-            if (!osmPath.exists()) {
-                osmPath.mkdirs();
-            }
-            return new File(osmPath.getAbsolutePath() + "/data.osm.pbf");
-        } else {
-            return null;
-        }
-    }
-
     /**
      * Does this feed version have any critical errors that would prevent it being loaded to OTP?
      * @return whether feed version has critical errors
@@ -424,5 +425,32 @@ public class FeedVersion extends Model implements Serializable {
         } catch (Exception e) {
             LOG.warn("Error deleting version", e);
         }
+    }
+
+    /**
+     * Assign characteristics from a new GTFS file to the feed version. This should generally be called directly after
+     * constructing the feed version (assuming the GTFS file is available). Characteristics set from file include:
+     * - last modified (file timestamp)
+     * - length (file size)
+     * - hash
+     * @param newGtfsFile   the new GTFS file
+     * @param lastModifiedOverride  optional override of the file's last modified value
+     */
+    public void assignGtfsFile(File newGtfsFile, Long lastModifiedOverride) {
+        if (lastModifiedOverride != null) {
+            newGtfsFile.setLastModified(lastModifiedOverride);
+            fileTimestamp = lastModifiedOverride;
+        } else {
+            fileTimestamp = newGtfsFile.lastModified();
+        }
+        fileSize = newGtfsFile.length();
+        if (hash == null) hash = HashUtils.hashFile(newGtfsFile);
+    }
+
+    /**
+     * Convenience wrapper for {@link #assignGtfsFile} that does not override file's last modified.
+     */
+    public void assignGtfsFile(File newGtfsFile) {
+        assignGtfsFile(newGtfsFile, null);
     }
 }

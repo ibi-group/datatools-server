@@ -47,6 +47,7 @@ import java.util.zip.ZipOutputStream;
 import static com.conveyal.datatools.manager.jobs.MergeFeedsType.SERVICE_PERIOD;
 import static com.conveyal.datatools.manager.jobs.MergeFeedsType.REGIONAL;
 import static com.conveyal.datatools.manager.models.FeedSource.FeedRetrievalMethod.REGIONAL_MERGE;
+import static com.conveyal.datatools.manager.models.FeedSource.FeedRetrievalMethod.SERVICE_PERIOD_MERGE;
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.conveyal.gtfs.loader.DateField.GTFS_DATE_FORMATTER;
 import static com.conveyal.gtfs.loader.Field.getFieldIndex;
@@ -179,13 +180,11 @@ public class MergeFeedsJob extends MonitorableJob {
         this.feedSource = mergeType.equals(REGIONAL)
             ? regionalFeedSource
             : feedVersions.iterator().next().parentFeedSource();
+        FeedSource.FeedRetrievalMethod retrievalMethod = mergeType.equals(REGIONAL)
+            ? REGIONAL_MERGE
+            : SERVICE_PERIOD_MERGE;
         // Merged version will be null if the new version should not be stored.
-        this.mergedVersion = storeNewVersion ? new FeedVersion(this.feedSource) : null;
-        if (this.mergedVersion != null) {
-            this.mergedVersion.retrievalMethod = mergeType.equals(REGIONAL)
-                ? REGIONAL_MERGE
-                : FeedSource.FeedRetrievalMethod.SERVICE_PERIOD_MERGE;
-        }
+        this.mergedVersion = storeNewVersion ? new FeedVersion(this.feedSource, retrievalMethod) : null;
         this.mergeFeedsResult = new MergeFeedsResult(mergeType);
     }
 
@@ -267,7 +266,6 @@ public class MergeFeedsJob extends MonitorableJob {
         }
         LOG.info("Feed merge is complete.");
         if (mergedVersion != null && !status.error && !mergeFeedsResult.failed) {
-            mergedVersion.hash();
             mergedVersion.inputVersions = feedVersions.stream().map(FeedVersion::retrieveId).collect(Collectors.toSet());
             // Handle the processing of the new version when storing new version (note: s3 upload is handled within this job).
             // We must add this job in jobLogic (rather than jobFinished) because jobFinished is called after this job's
@@ -305,9 +303,9 @@ public class MergeFeedsJob extends MonitorableJob {
         if (mergedVersion != null) {
             // Store the zip file for the merged feed version.
             try {
-                FeedVersion.feedStore.newFeed(mergedVersion.id, new FileInputStream(mergedTempFile), feedSource);
+                mergedVersion.newGtfsFile(new FileInputStream(mergedTempFile));
             } catch (IOException e) {
-                LOG.error("Could not store merged feed for new version");
+                LOG.error("Could not store merged feed for new version", e);
                 throw e;
             }
         }
@@ -325,8 +323,7 @@ public class MergeFeedsJob extends MonitorableJob {
                     FeedVersion.feedStore
                         .newFeed(filename, new FileInputStream(mergedTempFile), null);
                 } catch (IOException e) {
-                    e.printStackTrace();
-                    LOG.error("Could not store feed for project {}", filename);
+                    LOG.error("Could not store feed for project " + filename, e);
                     throw e;
                 }
             }

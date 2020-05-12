@@ -5,6 +5,7 @@ import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.gtfsplus.GtfsPlusValidation;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
+import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -33,6 +34,7 @@ import java.util.zip.ZipOutputStream;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.copyRequestStreamIntoFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
+import static com.conveyal.datatools.manager.models.FeedSource.FeedRetrievalMethod.PRODUCED_IN_HOUSE_GTFS_PLUS;
 import static spark.Spark.delete;
 import static spark.Spark.get;
 import static spark.Spark.post;
@@ -61,7 +63,7 @@ public class GtfsPlusController {
      */
     private static Boolean uploadGtfsPlusFile (Request req, Response res) {
         String feedVersionId = req.params("versionid");
-        File newGtfsFile = new File(gtfsPlusStore.getPathToFeed(feedVersionId));
+        File newGtfsFile = gtfsPlusStore.getPathToFeed(feedVersionId);
         copyRequestStreamIntoFile(req, newGtfsFile);
         return true;
     }
@@ -222,8 +224,8 @@ public class GtfsPlusController {
         } catch (IOException e) {
             logMessageAndHalt(req, 500, "Error creating combined GTFS/GTFS+ file", e);
         }
-
-        FeedVersion newFeedVersion = new FeedVersion(feedVersion.parentFeedSource());
+        // Create a new feed version to represent the published GTFS+.
+        FeedVersion newFeedVersion = new FeedVersion(feedVersion.parentFeedSource(), PRODUCED_IN_HOUSE_GTFS_PLUS);
         File newGtfsFile = null;
         try {
             newGtfsFile = newFeedVersion.newGtfsFile(new FileInputStream(newFeed));
@@ -236,9 +238,6 @@ public class GtfsPlusController {
             return null;
         }
         newFeedVersion.originNamespace = feedVersion.namespace;
-        newFeedVersion.fileTimestamp = newGtfsFile.lastModified();
-        newFeedVersion.fileSize = newGtfsFile.length();
-        newFeedVersion.hash = HashUtils.hashFile(newGtfsFile);
 
         // Must be handled by executor because it takes a long time.
         ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(newFeedVersion, profile, true);

@@ -4,6 +4,7 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedSource;
+import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Snapshot;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.loader.FeedLoadResult;
@@ -57,7 +58,7 @@ import static com.conveyal.gtfs.GTFS.makeSnapshot;
 public class CreateSnapshotJob extends MonitorableJob {
     private static final Logger LOG = LoggerFactory.getLogger(CreateSnapshotJob.class);
     /** The namespace to snapshot. (Note: namespace resulting from snapshot can be found at {@link Snapshot#namespace} */
-    private final String namespace;
+    private String namespace;
     /** Whether to update working buffer for the feed source to the newly created snapshot namespace. */
     private final boolean updateBuffer;
     /** Whether to persist the snapshot in the Snapshots collection. */
@@ -81,6 +82,15 @@ public class CreateSnapshotJob extends MonitorableJob {
         status.update( "Initializing...", 0);
     }
 
+    public CreateSnapshotJob(Auth0UserProfile owner, Snapshot snapshot) {
+        super(owner, "Creating snapshot for " + snapshot.feedSourceId, JobType.CREATE_SNAPSHOT);
+        this.snapshot = snapshot;
+        this.updateBuffer = false;
+        this.storeSnapshot = true;
+        this.preserveBuffer = false;
+        status.update( "Initializing...", 0);
+    }
+
     @JsonProperty
     public String getFeedSourceId () {
         return snapshot.feedSourceId;
@@ -88,6 +98,11 @@ public class CreateSnapshotJob extends MonitorableJob {
 
     @Override
     public void jobLogic() {
+        // Special case where snapshot was created when the
+        if (namespace == null && snapshot.feedVersionId != null) {
+            FeedVersion feedVersion = Persistence.feedVersions.getById(snapshot.feedVersionId);
+            this.namespace = feedVersion.namespace;
+        }
         // Get count of snapshots to set new version number.
         feedSource = Persistence.feedSources.getById(snapshot.feedSourceId);
         // Update job name to use feed source name (rather than ID).

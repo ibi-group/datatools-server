@@ -40,8 +40,11 @@ public class Snapshot extends Model {
     @JsonAlias({"feedId", "feedSourceId"})
     public String feedSourceId;
 
-    /** The feed version this snapshot was generated from or published to, if any */
+    /** The feed version this snapshot was generated from or published to, if any. */
     public String feedVersionId;
+
+    /** Retrieval method for the snapshot is PRODUCED_IN_HOUSE (i.e., created by editor) by default. */
+    public FeedSource.FeedRetrievalMethod retrievalMethod = FeedSource.FeedRetrievalMethod.PRODUCED_IN_HOUSE;
 
     /** The namespace this snapshot is a copy of */
     public String snapshotOf;
@@ -71,6 +74,17 @@ public class Snapshot extends Model {
         this.feedSourceId = feedSourceId;
         this.snapshotOf = snapshotOf;
         snapshotTime = System.currentTimeMillis();
+    }
+
+    /**
+     * This constructor can be used to assign the snapshot to a feed version if the namespace for the version does not
+     * exist yet.
+     */
+    public Snapshot(String name, FeedVersion feedVersion) {
+        this(null, feedVersion.feedSourceId, null);
+        this.retrievalMethod = FeedSource.FeedRetrievalMethod.VERSION_CLONE;
+        // The feedVersionId
+        this.feedVersionId = feedVersion.id;
     }
 
     public Snapshot(String feedSourceId, String snapshotOf) {

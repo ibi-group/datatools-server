@@ -25,11 +25,7 @@ public class CreateFeedVersionFromSnapshotJob extends MonitorableJob {
 
     public CreateFeedVersionFromSnapshotJob(FeedSource feedSource, Snapshot snapshot, Auth0UserProfile owner) {
         super(owner, "Creating Feed Version from Snapshot for " + feedSource.name, JobType.CREATE_FEEDVERSION_FROM_SNAPSHOT);
-        this.feedVersion = new FeedVersion(feedSource);
-        // Set feed version properties.
-        feedVersion.originNamespace = snapshot.namespace;
-        feedVersion.retrievalMethod = FeedSource.FeedRetrievalMethod.PRODUCED_IN_HOUSE;
-        feedVersion.name = snapshot.name + " Snapshot Export";
+        this.feedVersion = new FeedVersion(feedSource, snapshot);
         this.snapshot = snapshot;
     }
 
@@ -39,7 +35,7 @@ public class CreateFeedVersionFromSnapshotJob extends MonitorableJob {
         // Add the jobs to handle this operation in order.
         addNextJob(
             // First export the snapshot to GTFS.
-            new ExportSnapshotToGTFSJob(owner, snapshot, feedVersion.id),
+            new ExportSnapshotToGTFSJob(owner, snapshot, feedVersion),
             // Then, process feed version once GTFS file written.
             new ProcessSingleFeedJob(feedVersion, owner, true)
         );

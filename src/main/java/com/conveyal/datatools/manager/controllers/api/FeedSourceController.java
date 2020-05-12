@@ -23,8 +23,12 @@ import spark.Response;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.getPOJOFromRequestBody;
@@ -86,6 +90,7 @@ public class FeedSourceController {
     private static FeedSource createFeedSource(Request req, Response res) throws IOException {
         Auth0UserProfile userProfile = req.attribute("user");
         FeedSource newFeedSource = getPOJOFromRequestBody(req, FeedSource.class);
+        validate(req, newFeedSource);
         boolean allowedToCreateFeedSource = userProfile.canAdministerProject(newFeedSource.projectId);
         if (!allowedToCreateFeedSource) {
             logMessageAndHalt(req, 403, "User not allowed to create feed source");
@@ -113,6 +118,23 @@ public class FeedSourceController {
         }
     }
 
+    private static boolean validate(Request req, FeedSource feedSource) {
+        if (feedSource.name == null || feedSource.name.isEmpty()) {
+            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Feed source name must be provided");
+            return false;
+        }
+        List<FeedSource.FeedRetrievalMethod> retrievalMethods = feedSource.transformRules.stream()
+            .map(rule -> rule.retrievalMethods)
+            .flatMap(Collection::stream)
+            .collect(Collectors.toList());
+        Set<FeedSource.FeedRetrievalMethod> retrievalMethodSet = new HashSet<>(retrievalMethods);
+        if (retrievalMethods.size() > retrievalMethodSet.size()) {
+            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Retrieval methods cannot be defined more than once in transformation rules.");
+            return false;
+        }
+        return true;
+    }
+
     /**
      * Spark HTTP endpoint to update a feed source. Note: at one point this endpoint accepted a JSON object
      * representing a single field to update for the feed source, but it now requires that the JSON body represent all
@@ -123,6 +145,7 @@ public class FeedSourceController {
         String feedSourceId = req.params("id");
         FeedSource formerFeedSource = requestFeedSourceById(req, Actions.MANAGE);
         FeedSource updatedFeedSource = getPOJOFromRequestBody(req, FeedSource.class);
+        validate(req, updatedFeedSource);
         // Feed source previously had a URL, but it has been changed. In this case, we reset the last fetched timestamp.
         if (formerFeedSource.url != null && !formerFeedSource.url.equals(updatedFeedSource.url)) {
             LOG.info("Feed source fetch URL has been modified. Resetting lastFetched value from {} to {}", formerFeedSource.lastFetched, null);

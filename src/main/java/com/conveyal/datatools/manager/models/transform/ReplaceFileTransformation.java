@@ -1,6 +1,7 @@
-package com.conveyal.datatools.manager.models;
+package com.conveyal.datatools.manager.models.transform;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.Persistence;
 
 import java.nio.file.FileSystem;
@@ -11,7 +12,10 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 
-public class ReplaceFileTransformation extends FeedTransformation {
+/**
+ * This feed transformation will replace a file in the target zip (table) with a file from the source version.
+ */
+public class ReplaceFileTransformation extends ZipTransformation {
 
     /** no-arg constructor for de/serialization */
     public ReplaceFileTransformation() {}
@@ -23,8 +27,13 @@ public class ReplaceFileTransformation extends FeedTransformation {
         return transformation;
     }
 
-    public void transform(FeedVersion target, MonitorableJob.Status status) {
+    @Override
+    public void transform(FeedTransformTarget target, MonitorableJob.Status status) {
         // TODO: Refactor into validation code?
+        if (target.gtfsFile == null || !target.gtfsFile.exists()) {
+            status.fail("Target file must exist.");
+            return;
+        }
         FeedVersion sourceVersion = Persistence.feedVersions.getById(sourceVersionId);
         if (sourceVersion == null) {
             status.fail("Source version ID must reference valid version.");
@@ -42,7 +51,7 @@ public class ReplaceFileTransformation extends FeedTransformation {
         try (FileSystem sourceZipFs = FileSystems.newFileSystem(sourceZipPath, null)) {
             // If the source txt file does not exist, NoSuchFileException will be thrown and caught below.
             Path sourceTxtFilePath = sourceZipFs.getPath(tableNamePath);
-            Path targetZipPath = Paths.get(target.retrieveGtfsFile().getAbsolutePath());
+            Path targetZipPath = Paths.get(target.gtfsFile.getAbsolutePath());
             try( FileSystem targetZipFs = FileSystems.newFileSystem(targetZipPath, null) ){
                 Path targetTxtFilePath = targetZipFs.getPath(tableNamePath);
                 // Copy a file into the zip file, replacing it if it already exists.
@@ -53,9 +62,5 @@ public class ReplaceFileTransformation extends FeedTransformation {
         } catch (Exception e) {
             status.fail("Unknown error encountered while transforming zip file", e);
         }
-    }
-
-    public boolean isAppliedBeforeLoad() {
-        return true;
     }
 }

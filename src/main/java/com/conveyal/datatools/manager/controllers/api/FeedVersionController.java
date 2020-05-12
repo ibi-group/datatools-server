@@ -98,29 +98,18 @@ public class FeedVersionController  {
         Auth0UserProfile userProfile = req.attribute("user");
         FeedSource feedSource = requestFeedSourceById(req, Actions.MANAGE);
         FeedVersion latestVersion = feedSource.retrieveLatest();
-        FeedVersion newFeedVersion = new FeedVersion(feedSource);
-        newFeedVersion.retrievalMethod = FeedSource.FeedRetrievalMethod.MANUALLY_UPLOADED;
-
-
-        // FIXME: Make the creation of new GTFS files generic to handle other feed creation methods, including fetching
-        // by URL and loading from the editor.
-        File newGtfsFile = new File(DataManager.getConfigPropertyAsText("application.data.gtfs"), newFeedVersion.id);
+        FeedVersion newFeedVersion = new FeedVersion(feedSource, FeedSource.FeedRetrievalMethod.MANUALLY_UPLOADED);
+        // Get path to GTFS file for storage.
+        File newGtfsFile = FeedVersion.feedStore.getPathToFeed(newFeedVersion.id);
         copyRequestStreamIntoFile(req, newGtfsFile);
         // Set last modified based on value of query param. This is determined/supplied by the client
         // request because this data gets lost in the uploadStream otherwise.
         Long lastModified = req.queryParams("lastModified") != null
             ? Long.valueOf(req.queryParams("lastModified"))
             : null;
-        if (lastModified != null) {
-            newGtfsFile.setLastModified(lastModified);
-            newFeedVersion.fileTimestamp = lastModified;
-        }
-        LOG.info("Last modified: {}", new Date(newGtfsFile.lastModified()));
+        newFeedVersion.assignGtfsFile(newGtfsFile, lastModified);
 
-        // TODO: fix FeedVersion.hash() call when called in this context. Nothing gets hashed because the file has not been saved yet.
-        // newFeedVersion.hash();
-        newFeedVersion.fileSize = newGtfsFile.length();
-        newFeedVersion.hash = HashUtils.hashFile(newGtfsFile);
+        LOG.info("Last modified: {}", new Date(newGtfsFile.lastModified()));
 
         // Check that the hashes of the feeds don't match, i.e. that the feed has changed since the last version.
         // (as long as there is a latest version, i.e. the feed source is not completely new)

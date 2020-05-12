@@ -6,6 +6,8 @@ import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
+import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
+import com.conveyal.datatools.manager.models.transform.FeedTransformation;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
@@ -31,6 +33,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.mongodb.client.model.Filters.and;
@@ -65,8 +68,7 @@ public class FeedSource extends Model implements Cloneable {
         return project == null ? null : project.organizationId;
     }
 
-    public boolean transformInPlace;
-    public List<FeedTransformation> transformations = new ArrayList<>();
+    public List<FeedTransformRules> transformRules = new ArrayList<>();
 
     /** The name of this feed source, e.g. MTA New York City Subway */
     public String name;
@@ -167,8 +169,7 @@ public class FeedSource extends Model implements Cloneable {
         // We create a new FeedVersion now, so that the fetched date is (milliseconds) before
         // fetch occurs. That way, in the highly unlikely event that a feed is updated while we're
         // fetching it, we will not miss a new feed.
-        FeedVersion version = new FeedVersion(this);
-        version.retrievalMethod = FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
+        FeedVersion version = new FeedVersion(this, FeedRetrievalMethod.FETCHED_AUTOMATICALLY);
 
         // build the URL from which to fetch
         URL url = null;
@@ -221,6 +222,8 @@ public class FeedSource extends Model implements Cloneable {
                     message = String.format("Saving %s feed.", this.name);
                     LOG.info(message);
                     status.update(message, 75.0);
+                    // Create new file from input stream (this also handles hashing the file and other version fields
+                    // calculated from the GTFS file.
                     newGtfsFile = version.newGtfsFile(conn.getInputStream());
                     break;
                 case HttpURLConnection.HTTP_MOVED_TEMP:
@@ -257,11 +260,6 @@ public class FeedSource extends Model implements Cloneable {
             e.printStackTrace();
             return null;
         }
-
-        // note that anything other than a new feed fetched successfully will have already returned from the function
-        version.hash = HashUtils.hashFile(newGtfsFile);
-
-
         if (latest != null && version.hash.equals(latest.hash)) {
             // If new version hash equals the hash for the latest version, do not error. Simply indicate that server
             // operators should add If-Modified-Since support to avoid wasting bandwidth.
@@ -536,11 +534,20 @@ public class FeedSource extends Model implements Cloneable {
      * post-processing a single version).
      */
     public enum FeedRetrievalMethod {
-        FETCHED_AUTOMATICALLY, // automatically retrieved over HTTP on some regular basis
-        MANUALLY_UPLOADED, // manually uploaded by someone, perhaps the agency, or perhaps an internal user
-        PRODUCED_IN_HOUSE, // produced in-house in a GTFS Editor instance
+        /** Feed automatically retrieved over HTTP on some regular basis. */
+        FETCHED_AUTOMATICALLY,
+        /** Feed manually uploaded by someone, perhaps the agency, or perhaps an internal user. */
+        MANUALLY_UPLOADED,
+        /** Feed produced in-house in a GTFS Editor instance (i.e., from a database snapshot). */
+        PRODUCED_IN_HOUSE,
+        /** Feed produced in-house in the GTFS+ Editor. */
+        PRODUCED_IN_HOUSE_GTFS_PLUS,
+        /** Feed produced from a regional merge (e.g., merging all feeds from a project). */
         REGIONAL_MERGE,
-        SERVICE_PERIOD_MERGE
+        /** Feed produced by merging two versions that span different service periods. */
+        SERVICE_PERIOD_MERGE,
+        /** Feed produced by cloning an existing version. */
+        VERSION_CLONE
     }
 
     /**
@@ -579,5 +586,36 @@ public class FeedSource extends Model implements Cloneable {
 
     public FeedSource clone () throws CloneNotSupportedException {
         return (FeedSource) super.clone();
+    }
+
+    public <T extends FeedTransformation> boolean hasTransformationsOfType(FeedVersion target, Class<T> clazz) {
+        return getActiveTransformations(target, clazz).size() > 0;
+    }
+
+    public boolean hasRulesForRetrievalMethod(FeedRetrievalMethod retrievalMethod) {
+        return getRulesForRetrievalMethod(retrievalMethod) != null;
+    }
+
+    public FeedTransformRules getRulesForRetrievalMethod(FeedRetrievalMethod retrievalMethod) {
+        FeedTransformRules ruleSet = null;
+        for (FeedTransformRules rule : transformRules) {
+            if (rule.hasRetrievalMethod(retrievalMethod)) {
+                if (ruleSet != null) {
+                    LOG.warn("Found multiple transform rule sets for retrieval method {} (feed source {}). Defaulting to first found.", retrievalMethod, this.name);
+                    continue;
+                }
+                // Set rule set to item matching retrieval method.
+                ruleSet = rule;
+            }
+        }
+        return ruleSet;
+    }
+
+    public <T extends FeedTransformation> List<T> getActiveTransformations(FeedVersion target, Class<T> clazz) {
+        return transformRules.stream()
+            .filter(FeedTransformRules::isActive)
+            .map(rule -> rule.getActiveTransformations(target, clazz))
+            .flatMap(Collection::stream)
+            .collect(Collectors.toList());
     }
 }

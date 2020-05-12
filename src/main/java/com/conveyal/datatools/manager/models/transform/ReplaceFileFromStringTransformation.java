@@ -1,4 +1,4 @@
-package com.conveyal.datatools.manager.models;
+package com.conveyal.datatools.manager.models.transform;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
 
@@ -12,7 +12,10 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 
-public class ReplaceFileFromStringTransformation extends FeedTransformation {
+/**
+ * This feed transformation will replace a file in the target zip (table) with the provided csv data.
+ */
+public class ReplaceFileFromStringTransformation extends ZipTransformation {
 
     public static ReplaceFileFromStringTransformation create(String csvData, String table) {
         ReplaceFileFromStringTransformation transformation = new ReplaceFileFromStringTransformation();
@@ -22,8 +25,12 @@ public class ReplaceFileFromStringTransformation extends FeedTransformation {
     }
 
     @Override
-    public void transform(FeedVersion target, MonitorableJob.Status status) {
+    public void transform(FeedTransformTarget target, MonitorableJob.Status status) {
         // TODO: Refactor into validation code?
+        if (target.gtfsFile == null || !target.gtfsFile.exists()) {
+            status.fail("Target version must not be null.");
+            return;
+        }
         if (csvData == null) {
             // TODO: Should we permit a null value (perhaps to result in removing the file)?
             status.fail("CSV data must not be null.");
@@ -36,7 +43,7 @@ public class ReplaceFileFromStringTransformation extends FeedTransformation {
         String tableName = table + ".txt";
         String tableNamePath = "/" + tableName;
         // Run the replace transformation
-        Path targetZipPath = Paths.get(target.retrieveGtfsFile().getAbsolutePath());
+        Path targetZipPath = Paths.get(target.gtfsFile.getAbsolutePath());
         try( FileSystem targetZipFs = FileSystems.newFileSystem(targetZipPath, null) ){
             // Convert csv data to input stream.
             InputStream inputStream = new ByteArrayInputStream(csvData.getBytes(StandardCharsets.UTF_8));
@@ -46,10 +53,5 @@ public class ReplaceFileFromStringTransformation extends FeedTransformation {
         } catch (Exception e) {
             status.fail("Unknown error encountered while transforming zip file", e);
         }
-    }
-
-    @Override
-    public boolean isAppliedBeforeLoad() {
-        return true;
     }
 }
