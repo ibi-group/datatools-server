@@ -74,6 +74,8 @@ public class Deployment extends Model implements Serializable {
     @JsonView(JsonViews.DataDump.class)
     public String projectId;
 
+    private ObjectMapper otpConfigMapper = new ObjectMapper().setSerializationInclusion(Include.NON_NULL);
+
     @JsonProperty("project")
     public Project parentProject() {
         return Persistence.projects.getById(projectId);
@@ -392,19 +394,32 @@ public class Deployment extends Model implements Serializable {
                 : null;
     }
 
+    public String generateBuildConfigAsString() {
+        if (customBuildConfig != null) return customBuildConfig;
+        return writeToString(this.parentProject().buildConfig);
+    }
+
     /** Convenience method to write serializable object (primarily for router/build config objects) to byte array. */
     private <O extends Serializable> byte[] writeToBytes(O object) {
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.setSerializationInclusion(Include.NON_NULL);
         try {
-            return mapper.writer().writeValueAsBytes(object);
+            return otpConfigMapper.writer().writeValueAsBytes(object);
         } catch (JsonProcessingException e) {
             LOG.error("Value contains malformed JSON", e);
             return null;
         }
     }
 
-    /** Generate router config for deployment as byte array (for writing to file output stream). */
+    /** Convenience method to write serializable object (primarily for router/build config objects) to string. */
+    private <O extends Serializable> String writeToString(O object) {
+        try {
+            return otpConfigMapper.writer().writeValueAsString(object);
+        } catch (JsonProcessingException e) {
+            LOG.error("Value contains malformed JSON", e);
+            return null;
+        }
+    }
+
+    /** Generate router config for deployment as string. */
     public byte[] generateRouterConfig() {
         Project project = this.parentProject();
         return customRouterConfig != null
@@ -412,6 +427,12 @@ public class Deployment extends Model implements Serializable {
             : project.routerConfig != null
                 ? writeToBytes(project.routerConfig)
                 : null;
+    }
+
+    /** Generate router config for deployment as byte array (for writing to file output stream). */
+    public String generateRouterConfigAsString() {
+        if (customRouterConfig != null) return customRouterConfig;
+        return writeToString(this.parentProject().routerConfig);
     }
 
     /**

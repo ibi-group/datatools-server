@@ -22,6 +22,7 @@ import com.conveyal.datatools.common.utils.AWSUtils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.OtpServer;
+import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.apache.http.HttpEntity;
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -118,9 +119,9 @@ public class MonitorServerStatusJob extends MonitorableJob {
             // Wait for otp-runner to write a status that fulfills expectations of this job
             statusCheckStartTime = System.currentTimeMillis();
             boolean otpRunnerCompleted = false;
-            while (!otpRunnerCompleted) {
+            while (!otpRunnerCompleted && !status.error) {
                 // If the request is successful, the OTP instance has started.
-                waitAndCheckInstanceHealth("otp-runner status file availability check: " + statusUrl);
+                waitAndCheckInstanceHealth("otp-runner completion check: " + statusUrl);
                 otpRunnerCompleted = checkForOtpRunnerCompletion(statusUrl);
                 // wait a maximum of 5 hours if building a graph, or 1 hour if just starting a server
                 long maxOtpRunnerWaitTimeMillis = (graphAlreadyBuilt ? 5 : 1) * 60 * 60 * 1000;
@@ -140,7 +141,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
             // If only task for this instance is to build the graph (either because that is the deployment purpose or
             // because this instance type/image is for graph building only), this machine's job is complete and we can
             // consider this job done.
-            if (deployment.buildGraphOnly || (!graphAlreadyBuilt && otpServer.ec2Info.hasSeparateGraphBuildConfig())) {
+            if (isBuildOnlyServer()) {
                 status.completeSuccessfully(message);
                 LOG.info("View logs at {}", getUserDataLogS3Path());
                 return;
@@ -207,6 +208,10 @@ public class MonitorServerStatusJob extends MonitorableJob {
             // deployment job (e.g., due to an incorrect configuration).
             failJob("Ec2 Instance was stopped or terminated before job could complete!");
         }
+    }
+
+    private boolean isBuildOnlyServer() {
+        return deployment.buildGraphOnly || (!graphAlreadyBuilt && otpServer.ec2Info.hasSeparateGraphBuildConfig());
     }
 
     /**
@@ -276,15 +281,27 @@ public class MonitorServerStatusJob extends MonitorableJob {
         }
     }
 
-    /** Make HTTP request to URL and return the string response. */
-    private String getUrlAsString(String url) {
+    private boolean checkForOtpRunnerCompletion(String url) {
         HttpGet httpGet = new HttpGet(url);
+        OtpRunnerStatus otpRunnerStatus;
         try (CloseableHttpResponse response = httpClient.execute(httpGet)) {
-            return EntityUtils.toString(response.getEntity());
+            otpRunnerStatus = JsonUtil.objectMapper.readValue(response.getEntity().getContent(), OtpRunnerStatus.class);
         } catch (IOException e) {
-            LOG.error("Could not complete request to {}", url);
+            LOG.error("Could not get otp-runner status from {}", url);
             e.printStackTrace();
-            return null;
+            return false;
+        }
+        if (otpRunnerStatus.error) {
+            failJob(otpRunnerStatus.message);
+            return false;
+        }
+        status.update(otpRunnerStatus.message, otpRunnerStatus.pctProgress);
+        if (graphAlreadyBuilt || !isBuildOnlyServer()) {
+            // server that finishes after OTP server is successfully started
+            return otpRunnerStatus.serverStarted;
+        } else {
+            // server that finishes after graph is uploaded
+            return otpRunnerStatus.graphUploaded;
         }
     }
 

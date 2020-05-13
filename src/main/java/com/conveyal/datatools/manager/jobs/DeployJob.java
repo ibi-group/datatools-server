@@ -66,8 +66,10 @@ import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.StringUtils;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.codec.binary.Base64;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
@@ -218,7 +220,12 @@ public class DeployJob extends MonitorableJob {
         // If needed, dump the GTFS feeds and OSM to a zip file and optionally upload to S3. Since ec2 deployments use
         // otp-runner to automatically download all files needed for the bundle, skip this step if ec2 deployment is
         // enabled and there are internal urls to deploy the graph over wire.
-        if (deployType.equals(DeployType.REPLACE) && (otpServer.ec2Info == null || otpServer.internalUrl != null)) {
+        if (
+            deployType.equals(DeployType.REPLACE) &&
+                (otpServer.ec2Info == null ||
+                    (otpServer.internalUrl != null && otpServer.internalUrl.size() > 0)
+                )
+        ) {
             if (otpServer.s3Bucket != null) totalTasks++;
             try {
                 deploymentTempFile = File.createTempFile("deployment", ".zip");
@@ -464,7 +471,7 @@ public class DeployJob extends MonitorableJob {
     public void jobFinished () {
         // Delete temp file containing OTP deployment (OSM extract and GTFS files) so that the server's disk storage
         // does not fill up.
-        if (deployType.equals(DeployType.REPLACE)) {
+        if (deployType.equals(DeployType.REPLACE) && deploymentTempFile != null) {
             boolean deleted = deploymentTempFile.delete();
             if (!deleted) {
                 LOG.error("Deployment {} not deleted! Disk space in danger of filling up.", deployment.id);
@@ -799,13 +806,7 @@ public class DeployJob extends MonitorableJob {
         if (!s3JarUrlIsValid(s3JarUrl)) {
             return null;
         }
-        List<String> lines = new ArrayList<>();
-        String routerName = "default";
-        //////////////// BEGIN USER DATA
-        lines.add("#!/bin/bash");
-        // Remove previous files that might have been created during an Image creation
         String webDir = "/usr/share/nginx/client";
-        lines.add(String.format("rm %s/%s || echo '' > /dev/null", webDir, OTP_RUNNER_STATUS_FILE));
         // create otp-runner config file
         OtpRunnerManifest manifest = new OtpRunnerManifest();
         // add common settings
@@ -817,7 +818,7 @@ public class DeployJob extends MonitorableJob {
         manifest.statusFileLocation = String.format("%s/%s", webDir, OTP_RUNNER_STATUS_FILE);
         manifest.uploadOtpRunnerLogs = true;
         if (!graphAlreadyBuilt) {
-            manifest.buildConfigJSON = deployment.generateBuildConfig().toString();
+            manifest.buildConfigJSON = deployment.generateBuildConfigAsString();
             manifest.buildGraph = true;
             try {
                 manifest.gtfsAndOsmUrls = deployment.generateGtfsAndOsmUrls();
@@ -833,7 +834,7 @@ public class DeployJob extends MonitorableJob {
                 manifest.runServer = false;
             } else {
                 // This instance will both run a graph and start the OTP server
-                manifest.routerConfigJSON = deployment.generateRouterConfig().toString();
+                manifest.routerConfigJSON = deployment.generateRouterConfigAsString();
                 manifest.runServer = true;
                 manifest.uploadServerStartupLogs = true;
             }
@@ -845,12 +846,25 @@ public class DeployJob extends MonitorableJob {
             manifest.uploadServerStartupLogs = true;
         }
         String otpRunnerManifestFile = String.format("/var/%s/otp-runner-manifest.json", getTripPlannerString());
+
+        //////////////// BEGIN USER DATA
+        List<String> lines = new ArrayList<>();
+        lines.add("#!/bin/bash");
+        // NOTE: user data output is logged to `/var/log/cloud-init-output.log` automatically with ec2 instances
+        // Add some items to the $PATH as the $PATH with user-data scripts differs from the ssh $PATH.
+        lines.add("export PATH=\"$PATH:/home/ubuntu/.yarn/bin\"");
+        lines.add("export PATH=\"$PATH:/home/ubuntu/.nvm/versions/node/v12.16.3/bin\"");
+        // Remove previous files that might have been created during an Image creation
+        lines.add(String.format("rm %s/%s || echo '' > /dev/null", webDir, OTP_RUNNER_STATUS_FILE));
+
         // FIXME what if the JSON has a single quote?
         try {
+            ObjectMapper mapper = new ObjectMapper();
+            mapper.setSerializationInclusion(JsonInclude.Include.NON_EMPTY);
             lines.add(
                 String.format(
                     "echo '%s' > %s",
-                    JsonUtil.objectMapper.writeValueAsString(manifest),
+                    mapper.writeValueAsString(manifest),
                     otpRunnerManifestFile
                 )
             );
