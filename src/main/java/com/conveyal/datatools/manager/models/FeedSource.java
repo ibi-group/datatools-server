@@ -47,8 +47,17 @@ public class FeedSource extends Model implements Cloneable {
     /**
      * The collection of which this feed is a part
      */
-    //@JsonView(JsonViews.DataDump.class)
     public String projectId;
+
+    /**
+     * When snapshotting a GTFS feed for editing, gtfs-lib currently defaults to normalize stop sequence values to be
+     * zero-based and incrementing. This can muck with GTFS files that are linked to GTFS-rt feeds by stop_sequence, so
+     * this override flag currently provides a workaround for feeds that need to be edited but do not need to edit
+     * stop_times or individual patterns. WARNING: enabling this flag for a feed and then attempting to edit patterns in
+     * complicated ways (e.g., modifying the order of pattern stops) could have unexpected consequences. There is no UI
+     * setting for this and it is not recommended to do this unless absolutely necessary.
+     */
+    public boolean preserveStopTimesSequence;
 
     /**
      * Get the Project of which this feed is a part
