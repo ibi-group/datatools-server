@@ -508,7 +508,9 @@ public class MergeFeedsJob extends MonitorableJob {
                         // Get index of field from GTFS spec as it appears in feed
                         int index = fieldsFoundList.indexOf(field);
                         String val = csvReader.get(index);
-                        // Default value to write is unchanged from value found in csv.
+                        // Default value to write is unchanged from value found in csv (i.e. val). Note: if looking to
+                        // modify the value that is written in the merged file, you must update valueToWrite (e.g.,
+                        // updating the current feed's end_date or accounting for cases where IDs conflict).
                         String valueToWrite = val;
                         // Handle filling in agency_id if missing when merging regional feeds.
                         if (newAgencyId != null && field.name.equals("agency_id") && mergeType
@@ -615,10 +617,9 @@ public class MergeFeedsJob extends MonitorableJob {
                                             getFieldIndex(fieldsFoundInZip, "end_date");
                                         if (index == endDateIndex) {
                                             LocalDate endDate = LocalDate
-                                                .parse(csvReader.get(endDateIndex),
-                                                    GTFS_DATE_FORMATTER);
+                                                .parse(csvReader.get(endDateIndex), GTFS_DATE_FORMATTER);
                                             if (!endDate.isBefore(futureFeedFirstDate)) {
-                                                val = futureFeedFirstDate
+                                                val = valueToWrite = futureFeedFirstDate
                                                     .minus(1, ChronoUnit.DAYS)
                                                     .format(GTFS_DATE_FORMATTER);
                                             }

@@ -9,7 +9,6 @@ import com.amazonaws.services.ec2.model.Filter;
 import com.amazonaws.services.ec2.model.Instance;
 import com.amazonaws.services.ec2.model.Reservation;
 import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.AmazonS3URI;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.AWSUtils;
@@ -60,7 +59,6 @@ import static spark.Spark.put;
  * These methods are mapped to API endpoints by Spark.
  */
 public class DeploymentController {
-    private static JsonManager<Deployment> json = new JsonManager<>(Deployment.class, JsonViews.UserInterface.class);
     private static final Logger LOG = LoggerFactory.getLogger(DeploymentController.class);
     private static Map<String, DeployJob> deploymentJobsByServer = new HashMap<>();
     private static final AmazonEC2 ec2 = AmazonEC2Client.builder().build();
@@ -494,22 +492,29 @@ public class DeploymentController {
     }
 
     public static void register (String apiPrefix) {
-        post(apiPrefix + "secure/deployments/:id/deploy/:target", DeploymentController::deploy, json::write);
+        // Construct JSON managers which help serialize the response. Slim JSON is the generic JSON view. Full JSON
+        // contains additional fields (at the moment just #ec2Instances) and should only be used when the controller
+        // returns a single deployment (slimJson is better suited for a collection). If fullJson is attempted for use
+        // with a collection, massive performance issues will ensure (mainly due to multiple calls to AWS EC2).
+        JsonManager<Deployment> slimJson = new JsonManager<>(Deployment.class, JsonViews.UserInterface.class);
+        JsonManager<Deployment> fullJson = new JsonManager<>(Deployment.class, JsonViews.UserInterface.class);
+        fullJson.addMixin(Deployment.class, Deployment.DeploymentWithEc2InstancesMixin.class);
+
+        post(apiPrefix + "secure/deployments/:id/deploy/:target", DeploymentController::deploy, slimJson::write);
         post(apiPrefix + "secure/deployments/:id/deploy/", ((request, response) -> {
             logMessageAndHalt(request, 400, "Must provide valid deployment target name");
             return null;
-        }), json::write);
+        }), slimJson::write);
         options(apiPrefix + "secure/deployments", (q, s) -> "");
         get(apiPrefix + "secure/deployments/:id/download", DeploymentController::downloadDeployment);
         get(apiPrefix + "secure/deployments/:id/artifact", DeploymentController::downloadBuildArtifact);
-        get(apiPrefix + "secure/deployments/:id/ec2", DeploymentController::fetchEC2InstanceSummaries, json::write);
-        delete(apiPrefix + "secure/deployments/:id/ec2", DeploymentController::terminateEC2InstanceForDeployment, json::write);
-        get(apiPrefix + "secure/deployments/:id", DeploymentController::getDeployment, json::write);
-        delete(apiPrefix + "secure/deployments/:id", DeploymentController::deleteDeployment, json::write);
-        get(apiPrefix + "secure/deployments", DeploymentController::getAllDeployments, json::write);
-        post(apiPrefix + "secure/deployments", DeploymentController::createDeployment, json::write);
-//        post(apiPrefix + "secure/deployments/:id/ec2", DeploymentController::addEC2InstanceToDeployment, json::write);
-        put(apiPrefix + "secure/deployments/:id", DeploymentController::updateDeployment, json::write);
-        post(apiPrefix + "secure/deployments/fromfeedsource/:id", DeploymentController::createDeploymentFromFeedSource, json::write);
+        get(apiPrefix + "secure/deployments/:id/ec2", DeploymentController::fetchEC2InstanceSummaries, slimJson::write);
+        delete(apiPrefix + "secure/deployments/:id/ec2", DeploymentController::terminateEC2InstanceForDeployment, slimJson::write);
+        get(apiPrefix + "secure/deployments/:id", DeploymentController::getDeployment, fullJson::write);
+        delete(apiPrefix + "secure/deployments/:id", DeploymentController::deleteDeployment, fullJson::write);
+        get(apiPrefix + "secure/deployments", DeploymentController::getAllDeployments, slimJson::write);
+        post(apiPrefix + "secure/deployments", DeploymentController::createDeployment, fullJson::write);
+        put(apiPrefix + "secure/deployments/:id", DeploymentController::updateDeployment, fullJson::write);
+        post(apiPrefix + "secure/deployments/fromfeedsource/:id", DeploymentController::createDeploymentFromFeedSource, fullJson::write);
     }
 }
