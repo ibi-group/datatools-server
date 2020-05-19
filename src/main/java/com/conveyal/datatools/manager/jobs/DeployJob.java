@@ -811,7 +811,7 @@ public class DeployJob extends MonitorableJob {
                 return null;
             }
         } catch (IOException e) {
-            status.fail(String.format("Error checking for trip planner jar: %s", s3JarUrl));
+            status.fail(String.format("Error checking for trip planner jar: %s", s3JarUrl), e);
             return null;
         }
         String jarDir = String.format("/opt/%s", getTripPlannerString());
