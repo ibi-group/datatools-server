@@ -6,6 +6,7 @@ import com.conveyal.datatools.editor.jobs.CreateSnapshotJob;
 import com.conveyal.datatools.editor.jobs.ExportSnapshotToGTFSJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.auth.Actions;
 import com.conveyal.datatools.manager.controllers.api.FeedVersionController;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -23,7 +24,7 @@ import spark.Response;
 import java.io.IOException;
 import java.util.Collection;
 
-import static com.conveyal.datatools.common.utils.S3Utils.downloadFromS3;
+import static com.conveyal.datatools.common.utils.AWSUtils.downloadFromS3;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
@@ -38,7 +39,7 @@ import static spark.Spark.put;
  */
 public class SnapshotController {
 
-    public static final Logger LOG = LoggerFactory.getLogger(SnapshotController.class);
+    private static final Logger LOG = LoggerFactory.getLogger(SnapshotController.class);
     public static JsonManager<Snapshot> json =
             new JsonManager<>(Snapshot.class, JsonViews.UserInterface.class);
 
@@ -57,7 +58,7 @@ public class SnapshotController {
         String id = req.params("id");
         if (id == null) logMessageAndHalt(req, 400, "Must provide valid snapshot ID");
         // Check user permissions on feed source.
-        FeedVersionController.requestFeedSourceById(req, "view", "feedId");
+        FeedVersionController.requestFeedSourceById(req, Actions.VIEW, "feedId");
         return Persistence.snapshots.getById(id);
     }
 
@@ -66,7 +67,7 @@ public class SnapshotController {
      */
     private static Collection<Snapshot> getSnapshots(Request req, Response res) {
         // Get feed source and check user permissions.
-        FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, "view", "feedId");
+        FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, Actions.VIEW, "feedId");
         // FIXME Do we need a way to return all snapshots?
         // Is this used in GTFS Data Manager to retrieveById snapshots in bulk?
 
@@ -79,7 +80,7 @@ public class SnapshotController {
      */
     private static String createSnapshot (Request req, Response res) throws IOException {
         Auth0UserProfile userProfile = req.attribute("user");
-        FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, "edit", "feedId");
+        FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, Actions.EDIT, "feedId");
         // Take fields from request body for creating snapshot.
         Snapshot snapshot = json.read(req.body());
         // Ensure feed source ID and snapshotOf namespace is correct
@@ -91,7 +92,7 @@ public class SnapshotController {
         boolean bufferIsEmpty = feedSource.editorNamespace == null;
         // Create new non-buffer snapshot.
         CreateSnapshotJob createSnapshotJob =
-                new CreateSnapshotJob(snapshot, bufferIsEmpty, !bufferIsEmpty, false);
+                new CreateSnapshotJob(userProfile, snapshot, bufferIsEmpty, !bufferIsEmpty, false);
         // Begin asynchronous execution.
         DataManager.heavyExecutor.execute(createSnapshotJob);
         return SparkUtils.formatJobMessage(createSnapshotJob.jobId, "Creating snapshot.");
@@ -104,7 +105,7 @@ public class SnapshotController {
         Auth0UserProfile userProfile = req.attribute("user");
         // Get feed version from request (and check permissions).
         String feedVersionId = req.queryParams("feedVersionId");
-        FeedVersion feedVersion = FeedVersionController.requestFeedVersion(req, "edit", feedVersionId);
+        FeedVersion feedVersion = FeedVersionController.requestFeedVersion(req, Actions.EDIT, feedVersionId);
         FeedSource feedSource = feedVersion.parentFeedSource();
         // Create and run snapshot job
         Snapshot snapshot = new Snapshot("Snapshot of " + feedVersion.name, feedSource.id, feedVersion.namespace);
@@ -113,7 +114,7 @@ public class SnapshotController {
         // explicitly asked for it. Otherwise, let go of the buffer.
         boolean preserveBuffer = "true".equals(req.queryParams("preserveBuffer")) && feedSource.editorNamespace != null;
         CreateSnapshotJob createSnapshotJob =
-                new CreateSnapshotJob(snapshot, true, false, preserveBuffer);
+                new CreateSnapshotJob(userProfile, snapshot, true, false, preserveBuffer);
         DataManager.heavyExecutor.execute(createSnapshotJob);
         return formatJobMessage(createSnapshotJob.jobId, "Importing version as snapshot.");
     }
@@ -135,7 +136,7 @@ public class SnapshotController {
         String id = req.params("id");
         // FIXME Ensure namespace id exists in database?
         // Retrieve feed source.
-        FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, "edit", "feedId");
+        FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, Actions.EDIT, "feedId");
         Snapshot snapshotToRestore = Persistence.snapshots.getById(id);
         if (snapshotToRestore == null) {
             logMessageAndHalt(req, 400, "Must specify valid snapshot ID");
@@ -152,8 +153,7 @@ public class SnapshotController {
         // copy of a feed for no reason.
         String name = "Restore snapshot " + snapshotToRestore.name;
         Snapshot snapshot = new Snapshot(name, feedSource.id, snapshotToRestore.namespace);
-        snapshot.storeUser(userProfile);
-        CreateSnapshotJob createSnapshotJob = new CreateSnapshotJob(snapshot, true, false, preserveBuffer);
+        CreateSnapshotJob createSnapshotJob = new CreateSnapshotJob(userProfile, snapshot, true, false, preserveBuffer);
         DataManager.heavyExecutor.execute(createSnapshotJob);
         return formatJobMessage(createSnapshotJob.jobId, "Restoring snapshot...");
     }
@@ -164,11 +164,10 @@ public class SnapshotController {
      */
     private static String downloadSnapshotAsGTFS(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
-        String userId = userProfile.getUser_id();
         Snapshot snapshot = getSnapshotFromRequest(req);
         // Create and kick off export job.
         // FIXME: what if a snapshot is already written to S3?
-        ExportSnapshotToGTFSJob exportSnapshotToGTFSJob = new ExportSnapshotToGTFSJob(userId,  snapshot);
+        ExportSnapshotToGTFSJob exportSnapshotToGTFSJob = new ExportSnapshotToGTFSJob(userProfile,  snapshot);
         DataManager.heavyExecutor.execute(exportSnapshotToGTFSJob);
         return formatJobMessage(exportSnapshotToGTFSJob.jobId, "Exporting snapshot to GTFS.");
     }
@@ -212,13 +211,13 @@ public class SnapshotController {
         String id = req.params("id");
         // FIXME Ensure namespace id exists in database.
         // Check feed source permissions.
-        FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, "edit", "feedId");
+        FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, Actions.EDIT, "feedId");
         // Retrieve snapshot
         Snapshot snapshot = Persistence.snapshots.getById(id);
         if (snapshot == null) logMessageAndHalt(req, 400, "Must provide valid snapshot ID.");
         try {
             // Remove the snapshot and then renumber the snapshots
-            Persistence.snapshots.removeById(snapshot.id);
+            snapshot.delete();
             feedSource.renumberSnapshots();
             // FIXME Are there references that need to be removed? E.g., what if the active buffer snapshot is deleted?
             // FIXME delete tables from database?

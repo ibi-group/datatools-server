@@ -6,7 +6,6 @@ import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
 import com.amazonaws.auth.profile.ProfileCredentialsProvider;
 import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.CopyObjectRequest;
 import com.amazonaws.services.s3.model.GetObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectRequest;
@@ -14,6 +13,7 @@ import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.transfer.TransferManager;
 import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
 import com.amazonaws.services.s3.transfer.Upload;
+import com.conveyal.datatools.common.utils.AWSUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import gnu.trove.list.TLongList;
@@ -76,19 +76,11 @@ public class FeedStore {
         // s3 storage
         if (DataManager.useS3 || hasConfigProperty("modules.gtfsapi.use_extension")){
             s3Bucket = DataManager.getConfigPropertyAsText("application.data.gtfs_s3_bucket");
-            AmazonS3ClientBuilder builder = AmazonS3ClientBuilder.standard()
-                    .withCredentials(getAWSCreds());
-
-            // if region configuration string is provided, use that
-            // otherwise default to ~/.aws/config
-            // NOTE: if this is missing
-            String s3Region = DataManager.getConfigPropertyAsText("application.data.s3_region");
-            if (s3Region != null) {
-                LOG.info("Using S3 region {}", s3Region);
-                builder.withRegion(s3Region);
-            }
             try {
-                s3Client = builder.build();
+                // If region configuration string is provided, use that.
+                // Otherwise defaults to value provided in ~/.aws/config
+                String region = DataManager.getConfigPropertyAsText("application.data.s3_region");
+                s3Client = AWSUtils.getS3ClientForCredentials(getAWSCreds(), region);
             } catch (Exception e) {
                 LOG.error("S3 client not initialized correctly.  Must provide config property application.data.s3_region or specify region in ~/.aws/config", e);
             }
@@ -158,7 +150,7 @@ public class FeedStore {
         }
     }
 
-    private static AWSCredentialsProvider getAWSCreds () {
+    public static AWSCredentialsProvider getAWSCreds () {
         if (S3_CREDENTIALS_FILENAME != null) {
             return new ProfileCredentialsProvider(S3_CREDENTIALS_FILENAME, "default");
         } else {

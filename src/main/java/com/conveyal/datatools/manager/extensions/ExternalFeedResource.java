@@ -16,7 +16,7 @@ public interface ExternalFeedResource {
 
     public void importFeedsForProject(Project project, String authHeader) throws Exception;
 
-    public void feedSourceCreated(FeedSource source, String authHeader);
+    public void feedSourceCreated(FeedSource source, String authHeader) throws Exception;
 
     public void propertyUpdated(ExternalFeedSourceProperty property, String previousValue, String authHeader) throws IOException;
 

@@ -1,6 +1,10 @@
 package com.conveyal.datatools.manager.models;
 
+import com.amazonaws.services.ec2.model.Filter;
+import com.conveyal.datatools.common.utils.AWSUtils;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.controllers.api.DeploymentController;
+import com.conveyal.datatools.manager.jobs.DeployJob;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.StringUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
@@ -29,6 +33,7 @@ import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
@@ -55,8 +60,13 @@ public class Deployment extends Model implements Serializable {
 
     public String name;
 
+    public static final String DEFAULT_OTP_VERSION = "otp-v1.4.0";
+    public static final String DEFAULT_R5_VERSION = "v2.4.1-9-g3be6daa";
+
     /** What server is this currently deployed to? */
     public String deployedTo;
+
+    public List<DeployJob.DeploySummary> deployJobSummaries = new ArrayList<>();
 
     @JsonView(JsonViews.DataDump.class)
     public String projectId;
@@ -105,6 +115,20 @@ public class Deployment extends Model implements Serializable {
         return ret;
     }
 
+    /** All of the feed versions used in this deployment, summarized so that the Internet won't break */
+    @JsonProperty("ec2Instances")
+    public List<EC2InstanceSummary> retrieveEC2Instances() {
+        if (!"true".equals(DataManager.getConfigPropertyAsText("modules.deployment.ec2.enabled"))) return Collections.EMPTY_LIST;
+        Filter deploymentFilter = new Filter("tag:deploymentId", Collections.singletonList(id));
+        // Check if the latest deployment used alternative credentials/AWS role.
+        String role = null;
+        if (this.latest() != null) {
+            OtpServer server = Persistence.servers.getById(this.latest().serverId);
+            if (server != null) role = server.role;
+        }
+        return DeploymentController.fetchEC2InstanceSummaries(AWSUtils.getEC2ClientForRole(role), deploymentFilter);
+    }
+
     public void storeFeedVersions(Collection<FeedVersion> versions) {
         feedVersionIds = new ArrayList<>(versions.size());
 
@@ -116,11 +140,34 @@ public class Deployment extends Model implements Serializable {
     // future use
     public String osmFileId;
 
-    /** The commit of OTP being used on this deployment */
-    public String otpCommit;
+    /**
+     * The version (according to git describe) of OTP being used on this deployment This should default to
+     * {@link Deployment#DEFAULT_OTP_VERSION}.
+     */
+    public String otpVersion;
+
+    public boolean buildGraphOnly;
+
+    /**
+     * The version (according to git describe) of R5 being used on this deployment. This should default to
+     * {@link Deployment#DEFAULT_R5_VERSION}.
+     */
+    public String r5Version;
+
+    /** Whether this deployment should build an r5 server (false=OTP) */
+    public boolean r5;
 
     /** Date when the deployment was last deployed to a server */
-    public Date lastDeployed;
+    @JsonProperty("lastDeployed")
+    public Date retrieveLastDeployed () {
+        return latest() != null ? new Date(latest().finishTime) : null;
+    }
+
+    /** Get latest deployment summary. */
+    @JsonProperty("latest")
+    public DeployJob.DeploySummary latest () {
+        return deployJobSummaries.size() > 0 ? deployJobSummaries.get(0) : null;
+    }
 
     /**
      * The routerId of this deployment
@@ -226,7 +273,8 @@ public class Deployment extends Model implements Serializable {
         // do nothing.
     }
 
-    /** Dump this deployment to the given file
+    /**
+     * Dump this deployment to the given output file.
      * @param output the output file
      * @param includeOsm should an osm.pbf file be included in the dump?
      * @param includeOtpConfig should OTP build-config.json and router-config.json be included?
@@ -418,9 +466,9 @@ public class Deployment extends Model implements Serializable {
     /**
      * Get the deployments currently deployed to a particular server and router combination.
      */
-    public static FindIterable<Deployment> retrieveDeploymentForServerAndRouterId(String server, String routerId) {
+    public static FindIterable<Deployment> retrieveDeploymentForServerAndRouterId(String serverId, String routerId) {
         return Persistence.deployments.getMongoCollection().find(and(
-                eq("deployedTo", server),
+                eq("deployedTo", serverId),
                 eq("routerId", routerId)
         ));
     }
@@ -448,7 +496,7 @@ public class Deployment extends Model implements Serializable {
         public int version;
 
         public SummarizedFeedVersion (FeedVersion version) {
-            this.validationResult = new FeedValidationResultSummary(version.validationResult, version.feedLoadResult);
+            this.validationResult = new FeedValidationResultSummary(version);
             this.feedSource = version.parentFeedSource();
             this.updated = version.updated;
             this.id = version.id;

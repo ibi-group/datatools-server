@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager;
 import com.bugsnag.Bugsnag;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.CorsFilter;
+import com.conveyal.datatools.common.utils.RequestSummary;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.editor.controllers.EditorLockController;
 import com.conveyal.datatools.editor.controllers.api.EditorControllerImpl;
@@ -17,6 +18,7 @@ import com.conveyal.datatools.manager.controllers.api.GtfsPlusController;
 import com.conveyal.datatools.manager.controllers.api.NoteController;
 import com.conveyal.datatools.manager.controllers.api.OrganizationController;
 import com.conveyal.datatools.manager.controllers.api.ProjectController;
+import com.conveyal.datatools.manager.controllers.api.ServerController;
 import com.conveyal.datatools.manager.controllers.api.StatusController;
 import com.conveyal.datatools.manager.controllers.api.UserController;
 import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
@@ -32,11 +34,13 @@ import com.conveyal.gtfs.loader.Table;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
+import com.google.common.collect.EvictingQueue;
 import com.google.common.collect.Sets;
 import com.google.common.io.Resources;
 import org.apache.commons.io.Charsets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import spark.Request;
 import spark.utils.IOUtils;
 
 import javax.sql.DataSource;
@@ -56,6 +60,7 @@ import java.util.concurrent.Executors;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.common.utils.SparkUtils.logRequest;
 import static com.conveyal.datatools.common.utils.SparkUtils.logResponse;
+import static spark.Service.SPARK_DEFAULT_PORT;
 import static spark.Spark.after;
 import static spark.Spark.before;
 import static spark.Spark.exception;
@@ -67,6 +72,7 @@ import static spark.Spark.port;
  * referenced throughout the application.
  */
 public class DataManager {
+    public static final String GTFS_PLUS_SUBDIR = "gtfsplus";
     private static final Logger LOG = LoggerFactory.getLogger(DataManager.class);
 
     // These fields hold YAML files that represent the server configuration.
@@ -104,13 +110,16 @@ public class DataManager {
     public static String commit = "";
 
     public static boolean useS3;
-    private static final String API_PREFIX = "/api/manager/";
+    public static final String API_PREFIX = "/api/manager/";
+    // Application port defaults to Spark's default.
+    public static int PORT = SPARK_DEFAULT_PORT;
     private static final String GTFS_API_PREFIX = API_PREFIX + "secure/gtfs/";
     private static final String EDITOR_API_PREFIX = "/api/editor/";
     public static final String publicPath = "(" + API_PREFIX + "|" + EDITOR_API_PREFIX + ")public/.*";
     private static final String DEFAULT_ENV = "configurations/default/env.yml";
     private static final String DEFAULT_CONFIG = "configurations/default/server.yml";
     public static DataSource GTFS_DATA_SOURCE;
+    public static final Map<String, RequestSummary> lastRequestForUser = new HashMap<>();
 
     public static void main(String[] args) throws IOException {
 
@@ -132,8 +141,9 @@ public class DataManager {
         LOG.info(FeedStore.class.getSimpleName());
 
         // Optionally set port for server. Otherwise, Spark defaults to 4567.
-        if (getConfigProperty("application.port") != null) {
-            port(Integer.parseInt(getConfigPropertyAsText("application.port")));
+        if (hasConfigProperty("application.port")) {
+            PORT = Integer.parseInt(getConfigPropertyAsText("application.port"));
+            port(PORT);
         }
         useS3 = "true".equals(getConfigPropertyAsText("application.data.use_s3_storage"));
 
@@ -215,6 +225,7 @@ public class DataManager {
         NoteController.register(API_PREFIX);
         StatusController.register(API_PREFIX);
         OrganizationController.register(API_PREFIX);
+        ServerController.register(API_PREFIX);
 
         // Register editor API routes
         if (isModuleEnabled("editor")) {
@@ -226,6 +237,7 @@ public class DataManager {
             gtfsConfig = yamlMapper.readTree(gtfs);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.AGENCY, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.CALENDAR, DataManager.GTFS_DATA_SOURCE);
+            // NOTE: fare_attributes controller handles updates to nested table fare_rules.
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.FARE_ATTRIBUTES, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.FEED_INFO, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.ROUTES, DataManager.GTFS_DATA_SOURCE);
@@ -235,7 +247,6 @@ public class DataManager {
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.STOPS, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.TRIPS, DataManager.GTFS_DATA_SOURCE);
             // TODO: Add transfers.txt controller?
-//            GisController.register(EDITOR_API_PREFIX);
         }
 
         // log all exceptions to system.out
@@ -297,7 +308,8 @@ public class DataManager {
         });
         // load index.html
         final String index = resourceToString("/public/index.html")
-                .replace("${S3BUCKET}", getConfigPropertyAsText("application.assets_bucket"));
+            .replace("${CLIENT_ASSETS_URL}", getConfigPropertyAsText("application.client_assets_url"))
+            .replace("${SHORTCUT_ICON_URL}", getConfigPropertyAsText("application.shortcut_icon_url"));
         final String auth0html = resourceToString("/public/auth0-silent-callback.html");
 
         // auth0 silent callback
@@ -323,6 +335,8 @@ public class DataManager {
 
         // add logger
         before((request, response) -> {
+            RequestSummary summary = RequestSummary.fromRequest(request);
+            lastRequestForUser.put(summary.user, summary);
             logRequest(request, response);
         });
 
@@ -358,6 +372,14 @@ public class DataManager {
             node = node.get(parts[i]);
         }
         return node != null;
+    }
+
+    /**
+     * Public getter method for the config file that does not contain any sensitive information. On the contrary, the
+     * {@link #envConfig} file should NOT be shared outside of this class and certainly not shared with the client.
+     */
+    public static JsonNode getPublicConfig() {
+        return serverConfig;
     }
 
     /**

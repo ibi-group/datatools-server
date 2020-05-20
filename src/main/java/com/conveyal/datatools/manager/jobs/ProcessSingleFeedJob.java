@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
@@ -15,17 +16,15 @@ import org.slf4j.LoggerFactory;
  */
 public class ProcessSingleFeedJob extends MonitorableJob {
     private FeedVersion feedVersion;
-    private String owner;
     private final boolean isNewVersion;
     private static final Logger LOG = LoggerFactory.getLogger(ProcessSingleFeedJob.class);
 
     /**
      * Create a job for the given feed version.
      */
-    public ProcessSingleFeedJob (FeedVersion feedVersion, String owner, boolean isNewVersion) {
+    public ProcessSingleFeedJob (FeedVersion feedVersion, Auth0UserProfile owner, boolean isNewVersion) {
         super(owner, "Processing GTFS for " + (feedVersion.parentFeedSource() != null ? feedVersion.parentFeedSource().name : "unknown feed source"), JobType.PROCESS_FEED);
         this.feedVersion = feedVersion;
-        this.owner = owner;
         this.isNewVersion = isNewVersion;
         status.update(false,  "Processing...", 0);
         status.uploading = true;
@@ -50,7 +49,7 @@ public class ProcessSingleFeedJob extends MonitorableJob {
     public void jobLogic () {
         LOG.info("Processing feed for {}", feedVersion.id);
 
-        // First, load the feed into database.
+        // First, load the feed into database. During this stage, the GTFS file will be uploaded to S3 (and deleted locally).
         addNextJob(new LoadFeedJob(feedVersion, owner, isNewVersion));
 
         // Next, validate the feed.

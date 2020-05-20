@@ -10,8 +10,10 @@ import com.conveyal.datatools.manager.models.Note;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
+import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.HttpClient;
@@ -24,6 +26,7 @@ import org.apache.http.client.methods.HttpRequestBase;
 import org.apache.http.entity.ByteArrayEntity;
 import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.util.EntityUtils;
+import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
@@ -36,12 +39,16 @@ import java.net.URLEncoder;
 import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.Date;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
+import static com.conveyal.datatools.manager.auth.Auth0Users.API_PATH;
+import static com.conveyal.datatools.manager.auth.Auth0Connection.authDisabled;
+import static com.conveyal.datatools.manager.auth.Auth0Users.USERS_API_PATH;
 import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
 import static spark.Spark.delete;
 import static spark.Spark.get;
@@ -53,24 +60,34 @@ import static spark.Spark.put;
  */
 public class UserController {
 
-    private static String AUTH0_DOMAIN = DataManager.getConfigPropertyAsText("AUTH0_DOMAIN");
-    private static String AUTH0_CLIENT_ID = DataManager.getConfigPropertyAsText("AUTH0_CLIENT_ID");
-    private static String AUTH0_API_TOKEN = DataManager.getConfigPropertyAsText("AUTH0_TOKEN");
+    private static final String AUTH0_DOMAIN = DataManager.getConfigPropertyAsText("AUTH0_DOMAIN");
+    private static final String AUTH0_CLIENT_ID = DataManager.getConfigPropertyAsText("AUTH0_CLIENT_ID");
+    public static final int TEST_AUTH0_PORT = 8089;
+    public static final String TEST_AUTH0_DOMAIN = String.format("localhost:%d", TEST_AUTH0_PORT);
     private static Logger LOG = LoggerFactory.getLogger(UserController.class);
     private static ObjectMapper mapper = new ObjectMapper();
-    private static final String charset = "UTF-8";
-    private static String baseUsersUrl = "https://" + AUTH0_DOMAIN + "/api/v2/users";
-    public static JsonManager<Project> json =
-            new JsonManager<>(Project.class, JsonViews.UserInterface.class);
+    private static final String UTF_8 = "UTF-8";
+    public static final String DEFAULT_BASE_USERS_URL = "https://" + AUTH0_DOMAIN  + USERS_API_PATH;
+    /** Users URL uses Auth0 domain by default, but can be overridden with {@link #setBaseUsersUrl(String)} for testing. */
+    private static String baseUsersUrl = DEFAULT_BASE_USERS_URL;
+    private static final JsonManager<Project> json = new JsonManager<>(Project.class, JsonViews.UserInterface.class);
 
     /**
      * HTTP endpoint to get a single Auth0 user for the application (by specified ID param). Note, this uses a different
      * Auth0 API (get user) than the other get methods (user search query).
      */
     private static String getUser(Request req, Response res) {
-        HttpGet request = new HttpGet(getUserIdUrl(req));
-        setHeaders(request);
-        return executeRequestAndGetResult(request, req);
+        HttpGet getUserRequest = new HttpGet(getUserIdUrl(req));
+        setHeaders(req, getUserRequest);
+        return executeRequestAndGetResult(getUserRequest, req);
+    }
+
+    /**
+     * Determines whether the user controller is being run in a testing environment by checking if the users URL contains
+     * the {@link #TEST_AUTH0_DOMAIN}.
+     */
+    public static boolean inTestingEnvironment() {
+        return baseUsersUrl.contains(TEST_AUTH0_DOMAIN);
     }
 
     /**
@@ -134,8 +151,8 @@ public class UserController {
      * injecting permissions somehow into the create user request.
      */
     private static String createPublicUser(Request req, Response res) {
-        HttpPost request = new HttpPost(baseUsersUrl);
-        setHeaders(request);
+        HttpPost createUserRequest = new HttpPost(baseUsersUrl);
+        setHeaders(req, createUserRequest);
 
         JsonNode jsonNode = parseJsonFromBody(req);
         String json = String.format("{" +
@@ -144,19 +161,17 @@ public class UserController {
                 "\"password\": %s," +
                 "\"app_metadata\": {\"datatools\": [{\"permissions\": [], \"projects\": [], \"subscriptions\": [], \"client_id\": \"%s\" }] } }",
                 jsonNode.get("email"), jsonNode.get("password"), AUTH0_CLIENT_ID);
-        setRequestEntityUsingJson(request, json, req);
+        setRequestEntityUsingJson(createUserRequest, json, req);
 
-        return executeRequestAndGetResult(request, req);
+        return executeRequestAndGetResult(createUserRequest, req);
     }
 
     /**
      * HTTP endpoint to create new Auth0 user for the application.
-     *
-     * FIXME: This endpoint fails if the user's email already exists in the Auth0 tenant.
      */
     private static String createUser(Request req, Response res) {
-        HttpPost request = new HttpPost(baseUsersUrl);
-        setHeaders(request);
+        HttpPost createUserRequest = new HttpPost(baseUsersUrl);
+        setHeaders(req, createUserRequest);
 
         JsonNode jsonNode = parseJsonFromBody(req);
         String json = String.format("{" +
@@ -165,19 +180,27 @@ public class UserController {
                 "\"password\": %s," +
                 "\"app_metadata\": {\"datatools\": [%s] } }"
                 , jsonNode.get("email"), jsonNode.get("password"), jsonNode.get("permissions"));
-        setRequestEntityUsingJson(request, json, req);
+        setRequestEntityUsingJson(createUserRequest, json, req);
 
-        return executeRequestAndGetResult(request, req);
+        return executeRequestAndGetResult(createUserRequest, req);
     }
 
     private static String updateUser(Request req, Response res) {
         String userId = req.params("id");
         Auth0UserProfile user = getUserById(userId);
 
+        if (user == null) {
+            logMessageAndHalt(
+                req,
+                404,
+                String.format("Could not update user: User with id %s not found (or there are issues with the Auth0 configuration)", userId)
+            );
+        }
+
         LOG.info("Updating user {}", user.getEmail());
 
-        HttpPatch request = new HttpPatch(getUserIdUrl(req));
-        setHeaders(request);
+        HttpPatch updateUserRequest = new HttpPatch(getUserIdUrl(req));
+        setHeaders(req, updateUserRequest);
 
         JsonNode jsonNode = parseJsonFromBody(req);
 
@@ -193,33 +216,30 @@ public class UserController {
 //        }
         String json = "{ \"app_metadata\": { \"datatools\" : " + data + " }}";
 
-        setRequestEntityUsingJson(request, json, req);
+        setRequestEntityUsingJson(updateUserRequest, json, req);
 
-        return executeRequestAndGetResult(request, req);
+        return executeRequestAndGetResult(updateUserRequest, req);
     }
 
     private static Object deleteUser(Request req, Response res) {
-        HttpDelete request = new HttpDelete(getUserIdUrl(req));
-        setHeaders(request);
-        executeRequestAndGetResult(request, req);
+        HttpDelete deleteUserRequest = new HttpDelete(getUserIdUrl(req));
+        setHeaders(req, deleteUserRequest);
+        executeRequestAndGetResult(deleteUserRequest, req);
         return true;
     }
 
-    private static Object getRecentActivity(Request req, Response res) {
+    /** HTTP endpoint to get recent activity summary based on requesting user's subscriptions/notifications. */
+    private static List<Activity> getRecentActivity(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
-
-        /* TODO: Allow custom from/to range
-        String fromStr = req.queryParams("from");
-        String toStr = req.queryParams("to"); */
-
-        // Default range: past 7 days
+        // Default range: past 7 days, TODO: Allow custom from/to range based on query params?
         ZonedDateTime from = ZonedDateTime.now(ZoneOffset.UTC).minusDays(7);
         ZonedDateTime to = ZonedDateTime.now(ZoneOffset.UTC);
 
         List<Activity> activityList = new ArrayList<>();
         Auth0UserProfile.DatatoolsInfo datatools = userProfile.getApp_metadata().getDatatoolsInfo();
+        // NOTE: this condition will also occur if DISABLE_AUTH is set to true
         if (datatools == null) {
-            // NOTE: this condition will also occur if DISABLE_AUTH is set to true
+            if (authDisabled()) return Collections.emptyList();
             logMessageAndHalt(req, 403, "User does not have permission to access to this application");
         }
 
@@ -283,12 +303,59 @@ public class UserController {
     }
 
     /**
-     * Set some common headers on the request
+     * Resends the user confirmation email for a given user
      */
-    private static void setHeaders(HttpRequestBase request) {
-        request.addHeader("Authorization", "Bearer " + AUTH0_API_TOKEN);
-        request.setHeader("Accept-Charset", charset);
-        request.setHeader("Content-Type", "application/json");
+    private static ObjectNode resendEmailConfirmation(Request req, Response res) {
+        // verify if the request is legit. Should only come from the user for which the account belongs to.
+        Auth0UserProfile userProfile = req.attribute("user");
+        if (!userProfile.getUser_id().equals(req.params("id"))) {
+            // user is not authorized because they're not the user that email verification is being requested for
+            logMessageAndHalt(
+                req,
+                401,
+                "Not authorized to resend confirmation email"
+            );
+            // doesn't actually return null since above line sends a 401 response
+            return null;
+        }
+        // authorized. Create request to resend email verification
+        HttpPost resendEmailVerificationRequest = new HttpPost(
+            "https://" + AUTH0_DOMAIN + API_PATH + "/jobs/verification-email"
+        );
+        setHeaders(req, resendEmailVerificationRequest);
+        setRequestEntityUsingJson(
+            resendEmailVerificationRequest,
+            JsonUtil.objectMapper.createObjectNode()
+                .put("user_id", userProfile.getUser_id())
+                .put("client_id", AUTH0_CLIENT_ID)
+                .toString(),
+            req
+        );
+
+        // Execute request. If a HTTP response other than 200 occurs, an error will be returned.
+        executeRequestAndGetResult(resendEmailVerificationRequest, req);
+
+        // Email verification successfully sent! Return successful response.
+        return JsonUtil.objectMapper.createObjectNode()
+            .put("emailSent", true);
+    }
+
+    /**
+     * Set some common headers on the request, including the API access token, which must be obtained via token request
+     * to Auth0.
+     */
+    private static void setHeaders(Request sparkRequest, HttpRequestBase auth0Request) {
+        String apiToken = Auth0Users.getApiToken();
+        if (apiToken == null) {
+            logMessageAndHalt(
+                sparkRequest,
+                400,
+                "Failed to obtain Auth0 API token for request"
+            );
+        }
+        auth0Request.addHeader("Authorization", "Bearer " + apiToken);
+        auth0Request.setHeader("Accept-Charset", UTF_8);
+        auth0Request.setHeader("Content-Type", "application/json");
     }
 
     /**
@@ -338,7 +405,7 @@ public class UserController {
     private static void setRequestEntityUsingJson(HttpEntityEnclosingRequestBase request, String json, Request req) {
         HttpEntity entity = null;
         try {
-            entity = new ByteArrayEntity(json.getBytes(charset));
+            entity = new ByteArrayEntity(json.getBytes(UTF_8));
         } catch (UnsupportedEncodingException e) {
             logMessageAndHalt(
                 req,
@@ -374,16 +441,9 @@ public class UserController {
             );
         }
 
-        int statusCode = response.getStatusLine().getStatusCode();
-        if(statusCode >= 300) {
-            LOG.error("HTTP request returned error code >= 300: ({})", httpRequest.toString());
-            logMessageAndHalt(req, statusCode, response.toString());
-        }
-
         // parse response body if there is one
         HttpEntity entity = response.getEntity();
         String result = null;
-
         if (entity != null) {
             try {
                 result = EntityUtils.toString(entity);
@@ -391,12 +451,37 @@ public class UserController {
                 logMessageAndHalt(
                     req,
                     500,
-                    String.format("Failed to parse result of http request (%s).",
-                                  httpRequest.toString()
+                    String.format(
+                        "Failed to parse result of http request (%s).",
+                        httpRequest.toString()
                     ),
                     e
                 );
             }
+        }
+
+        int statusCode = response.getStatusLine().getStatusCode();
+        if(statusCode >= 300) {
+            LOG.error(
+                "HTTP request returned error code >= 300: ({}). Body: {}",
+                httpRequest.toString(),
+                result != null ? result : ""
+            );
+            // attempt to parse auth0 response to respond with an error message
+            String auth0Message = "An Auth0 error occurred";
+            JsonNode jsonResponse = null;
+            try {
+                jsonResponse = mapper.readTree(result);
+            } catch (IOException e) {
+                LOG.warn("Could not parse json from auth0 error message. Body: {}", result != null ? result : "");
+                e.printStackTrace();
+            }
+
+            if (jsonResponse != null && jsonResponse.has("message")) {
+                auth0Message = String.format("%s: %s", auth0Message, jsonResponse.get("message").asText());
+            }
+
+            logMessageAndHalt(req, statusCode, auth0Message);
         }
 
         LOG.info("Successfully made request: ({})", httpRequest.toString());
@@ -492,9 +577,18 @@ public class UserController {
         }
     }
 
+    /**
+     * Used to override the base url for making requests to Auth0. This is primarily used for testing purposes to set
+     * the url to something that is stubbed with WireMock.
+     */
+    public static void setBaseUsersUrl (String url) {
+        baseUsersUrl = url;
+    }
+
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/user/:id", UserController::getUser, json::write);
         get(apiPrefix + "secure/user/:id/recentactivity", UserController::getRecentActivity, json::write);
+        get(apiPrefix + "secure/user/:id/resendEmailConfirmation", UserController::resendEmailConfirmation, json::write);
         get(apiPrefix + "secure/user", UserController::getAllUsers, json::write);
         get(apiPrefix + "secure/usercount", UserController::getUserCount, json::write);
         post(apiPrefix + "secure/user", UserController::createUser, json::write);

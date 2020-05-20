@@ -6,7 +6,7 @@
 
     <groupId>com.conveyal</groupId>
     <artifactId>datatools-server</artifactId>
-    <version>3.3.2-SNAPSHOT</version>
+    <version>3.6.1-SNAPSHOT</version>
 
     <licenses>
         <license>
@@ -16,42 +16,34 @@
     </licenses>
 
     <!-- Developer entries are provided for primary developers.
-   For other contributors, see https://github.com/conveyal/datatools-server/graphs/contributors -->
+   For other contributors, see https://github.com/ibi-group/datatools-server/graphs/contributors -->
     <developers>
         <developer>
             <name>Landon Reed</name>
-            <email>lreed@conveyal.com</email>
-            <organization>Conveyal</organization>
-            <organizationUrl>http://conveyal.com/</organizationUrl>
-        </developer>
-        <developer>
-            <name>Andrew Byrd</name>
-            <email>abyrd@conveyal.com</email>
-            <organization>Conveyal</organization>
-            <organizationUrl>http://conveyal.com/</organizationUrl>
-        </developer>
-        <developer>
-            <name>David Emory</name>
-            <email>demory@conveyal.com</email>
-            <organization>Conveyal</organization>
-            <organizationUrl>http://conveyal.com/</organizationUrl>
+            <email>landon.reed@ibigroup.com</email>
+            <organization>IBI Group</organization>
+            <organizationUrl>https://ibigroup.com/</organizationUrl>
         </developer>
         <developer>
             <name>Evan Siroky</name>
-            <email>esiroky@conveyal.com</email>
-            <organization>Conveyal</organization>
-            <organizationUrl>http://conveyal.com/</organizationUrl>
+            <email>evan.siroky@ibigroup.com</email>
+            <organization>IBI Group</organization>
+            <organizationUrl>https://ibigroup.com/</organizationUrl>
         </developer>
     </developers>
 
     <!-- Define where the source code for project lives -->
     <scm>
-        <connection>scm:git:https://github.com/conveyal/datatools-server.git</connection>
-        <developerConnection>scm:git:ssh://git@github.com/conveyal/datatools-server.git</developerConnection>
-        <url>https://github.com/conveyal/datatools-server.git</url>
+        <connection>scm:git:https://github.com/ibi-group/datatools-server.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/ibi-group/datatools-server.git</developerConnection>
+        <url>https://github.com/ibi-group/datatools-server.git</url>
     </scm>
     <properties>
-        <jackson.version>2.9.8</jackson.version>
+        <jackson.version>2.10.1</jackson.version>
+        <!-- Using the latest version of geotools (e.g, 20) seems to cause issues with the shapefile
+        plugin where the_geom for each feature is null. -->
+        <geotools.version>17.5</geotools.version>
+        <awsjavasdk.version>1.11.625</awsjavasdk.version>
     </properties>
     <build>
         <resources>
@@ -130,6 +122,7 @@
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-jar-plugin</artifactId>
+                <version>3.1.2</version>
                 <configuration>
                     <archive>
                         <manifest>
@@ -157,23 +150,6 @@
                         </goals>
                     </execution>
                 </executions>
-            </plugin>
-            <!-- This plugin makes sure junit 5 tests run -->
-            <plugin>
-                <artifactId>maven-surefire-plugin</artifactId>
-                <version>2.22.0</version>
-                <dependencies>
-                    <dependency>
-                        <groupId>org.junit.platform</groupId>
-                        <artifactId>junit-platform-surefire-provider</artifactId>
-                        <version>1.3.1</version>
-                    </dependency>
-                    <dependency>
-                        <groupId>org.junit.jupiter</groupId>
-                        <artifactId>junit-jupiter-engine</artifactId>
-                        <version>5.3.1</version>
-                    </dependency>
-                </dependencies>
             </plugin>
         </plugins>
     </build>
@@ -218,6 +194,11 @@
                 <updatePolicy>always</updatePolicy>
             </snapshots>
         </repository>
+        <!--  used for importing java projects from github -->
+        <repository>
+            <id>jitpack.io</id>
+            <url>https://jitpack.io</url>
+        </repository>
     </repositories>
 
     <dependencies>
@@ -238,7 +219,7 @@
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
-            <version>1.1.3</version>
+            <version>1.2.3</version>
         </dependency>
 
         <!-- Used to connect to and import legacy editor MapDBs -->
@@ -255,11 +236,31 @@
             <version>2.1.0</version>
         </dependency>
 
-        <!-- Used for loading/fetching/writing GTFS entities (also provides access to commons-io and AWS S3 SDK). -->
+        <!-- Used for testing (note: this should match the version in gtfs-lib). -->
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <version>4.12</version>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- Used for loading/fetching/writing GTFS entities. gtfs-lib also provides access to:
+         - commons-io - generic utilities
+         - AWS S3 SDK - putting/getting objects into/out of S3.
+         -->
         <dependency>
             <groupId>com.conveyal</groupId>
             <artifactId>gtfs-lib</artifactId>
-            <version>4.2.5</version>
+            <version>5.0.7</version>
+            <!-- Exclusions added in order to silence SLF4J warnings about multiple bindings:
+                http://www.slf4j.org/codes.html#multiple_bindings
+            -->
+            <exclusions>
+                <exclusion>
+                    <groupId>org.slf4j</groupId>
+                    <artifactId>slf4j-simple</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <!-- Used for data-tools application database -->
@@ -290,7 +291,6 @@
             <artifactId>jackson-dataformat-yaml</artifactId>
             <version>${jackson.version}</version>
         </dependency>
-
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
@@ -322,15 +322,18 @@
         <dependency>
             <groupId>org.geotools</groupId>
             <artifactId>gt-shapefile</artifactId>
-            <version>19.2</version>
+            <version>${geotools.version}</version>
         </dependency>
-
-        <!-- Unit testing -->
+        <!-- gt-metadata and gt-api contains some dependencies required by gt-shapefile -->
         <dependency>
-            <groupId>org.junit.jupiter</groupId>
-            <artifactId>junit-jupiter-api</artifactId>
-            <version>5.3.1</version>
-            <scope>test</scope>
+            <groupId>org.geotools</groupId>
+            <artifactId>gt-metadata</artifactId>
+            <version>${geotools.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>org.geotools</groupId>
+            <artifactId>gt-api</artifactId>
+            <version>${geotools.version}</version>
         </dependency>
 
         <!-- Error reporting -->
@@ -359,6 +362,59 @@
             <groupId>org.hamcrest</groupId>
             <artifactId>java-hamcrest</artifactId>
             <version>2.0.0.0</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- Snapshotting library for testing -->
+        <dependency>
+            <groupId>com.github.conveyal</groupId>
+            <artifactId>java-snapshot-matcher</artifactId>
+            <version>3495b32f7b4d3f82590e0a2284029214070b6984</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- wiremock is used to mock http requests -->
+        <dependency>
+            <groupId>com.github.tomakehurst</groupId>
+            <artifactId>wiremock-standalone</artifactId>
+            <version>2.14.0</version>
+            <scope>test</scope>
+        </dependency>
+        <!-- Used to write YAML files -->
+        <dependency>
+            <groupId>org.yaml</groupId>
+            <artifactId>snakeyaml</artifactId>
+            <version>1.23</version>
+        </dependency>
+        <!-- Used for writing csv for merged feeds. Note: this appears to be one of the only
+          CSV libraries that will only quote values when necessary (e.g., there is a comma character
+          contained within the value) and that will work with an output stream writer when writing
+          directly to a zip output stream.
+          -->
+        <dependency>
+            <groupId>net.sf.supercsv</groupId>
+            <artifactId>super-csv</artifactId>
+            <version>2.4.0</version>
+        </dependency>
+        <!-- AWS individual module imports (S3 imported by gtfs-lib) -->
+        <dependency>
+            <groupId>com.amazonaws</groupId>
+            <artifactId>aws-java-sdk-ec2</artifactId>
+            <version>${awsjavasdk.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.amazonaws</groupId>
+            <artifactId>aws-java-sdk-iam</artifactId>
+            <version>${awsjavasdk.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.amazonaws</groupId>
+            <artifactId>aws-java-sdk-elasticloadbalancingv2</artifactId>
+            <version>${awsjavasdk.version}</version>
+        </dependency>
+        <!-- AWS STS allows Data Tools to assume other roles in order to deploy OTP to other AWS accounts. -->
+        <dependency>
+            <groupId>com.amazonaws</groupId>
+            <artifactId>aws-java-sdk-sts</artifactId>
+            <version>${awsjavasdk.version}</version>
         </dependency>
 
     </dependencies>

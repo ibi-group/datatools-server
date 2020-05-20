@@ -2,6 +2,7 @@ package com.conveyal.datatools.editor.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Snapshot;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -62,8 +63,8 @@ public class CreateSnapshotJob extends MonitorableJob {
     private Snapshot snapshot;
     private FeedSource feedSource;
 
-    public CreateSnapshotJob(Snapshot snapshot, boolean updateBufferNamespace, boolean storeSnapshot, boolean preserveBufferAsSnapshot) {
-        super(snapshot.userId, "Creating snapshot for " + snapshot.feedSourceId, JobType.CREATE_SNAPSHOT);
+    public CreateSnapshotJob(Auth0UserProfile owner, Snapshot snapshot, boolean updateBufferNamespace, boolean storeSnapshot, boolean preserveBufferAsSnapshot) {
+        super(owner, "Creating snapshot for " + snapshot.feedSourceId, JobType.CREATE_SNAPSHOT);
         this.namespace = snapshot.snapshotOf;
         this.snapshot = snapshot;
         this.updateBuffer = updateBufferNamespace;

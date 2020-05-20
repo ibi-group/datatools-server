@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.editor.jobs.ExportSnapshotToGTFSJob;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Snapshot;
@@ -18,7 +19,7 @@ public class CreateFeedVersionFromSnapshotJob extends MonitorableJob {
     public FeedVersion feedVersion;
     private final Snapshot snapshot;
 
-    public CreateFeedVersionFromSnapshotJob(FeedVersion feedVersion, Snapshot snapshot, String owner) {
+    public CreateFeedVersionFromSnapshotJob(FeedVersion feedVersion, Snapshot snapshot, Auth0UserProfile owner) {
         super(owner, "Creating Feed Version from Snapshot for " + feedVersion.parentFeedSource().name, JobType.CREATE_FEEDVERSION_FROM_SNAPSHOT);
         this.feedVersion = feedVersion;
         this.snapshot = snapshot;
@@ -28,6 +29,7 @@ public class CreateFeedVersionFromSnapshotJob extends MonitorableJob {
     @Override
     public void jobLogic() {
         // Set feed version properties.
+        feedVersion.originNamespace = snapshot.namespace;
         feedVersion.retrievalMethod = FeedSource.FeedRetrievalMethod.PRODUCED_IN_HOUSE;
         feedVersion.name = snapshot.name + " Snapshot Export";
         // FIXME: This should probably just create a new snapshot, and then validate those tables.

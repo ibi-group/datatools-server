@@ -2,7 +2,15 @@ package com.conveyal.datatools.common.utils;
 
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.HttpMethod;
+import com.amazonaws.auth.AWSCredentialsProvider;
+import com.amazonaws.auth.AWSSessionCredentials;
+import com.amazonaws.auth.AWSStaticCredentialsProvider;
+import com.amazonaws.auth.BasicSessionCredentials;
+import com.amazonaws.auth.STSAssumeRoleSessionCredentialsProvider;
+import com.amazonaws.services.ec2.AmazonEC2;
+import com.amazonaws.services.ec2.AmazonEC2Client;
 import com.amazonaws.services.s3.AmazonS3;
+import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.GeneratePresignedUrlRequest;
 import com.amazonaws.services.s3.model.PutObjectRequest;
@@ -29,9 +37,9 @@ import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 /**
  * Created by landon on 8/2/16.
  */
-public class S3Utils {
+public class AWSUtils {
 
-    private static final Logger LOG = LoggerFactory.getLogger(S3Utils.class);
+    private static final Logger LOG = LoggerFactory.getLogger(AWSUtils.class);
     private static final int REQUEST_TIMEOUT_MSEC = 30 * 1000;
 
     public static String uploadBranding(Request req, String key) {
@@ -114,5 +122,66 @@ public class S3Utils {
         } else {
             return SparkUtils.formatJSON("url", url.toString());
         }
+    }
+
+    /**
+     * Create credentials for a new session for the provided IAM role and session name. The primary AWS account for the
+     * Data Tools application must be able to assume this role (e.g., through delegating access via an account IAM role
+     * https://docs.aws.amazon.com/IAM/latest/UserGuide/tutorial_cross-account-with-roles.html). The credentials can be
+     * then used for creating a temporary S3 or EC2 client.
+     */
+    public static AWSStaticCredentialsProvider getCredentialsForRole(String role, String sessionName) {
+        String roleSessionName = "data-tools-session";
+        if (role == null) return null;
+        if (sessionName != null) roleSessionName = String.join("-", roleSessionName, sessionName);
+        STSAssumeRoleSessionCredentialsProvider sessionProvider = new STSAssumeRoleSessionCredentialsProvider.Builder(
+            role,
+            roleSessionName
+        ).build();
+        AWSSessionCredentials credentials = sessionProvider.getCredentials();
+        return new AWSStaticCredentialsProvider(new BasicSessionCredentials(
+            credentials.getAWSAccessKeyId(), credentials.getAWSSecretKey(),
+            credentials.getSessionToken()));
+    }
+
+    /**
+     * Shorthand method to obtain an EC2 client for the provided role ARN. If role is null, the default EC2 credentials
+     * will be used.
+     */
+    public static AmazonEC2 getEC2ClientForRole (String role) {
+        AWSStaticCredentialsProvider credentials = getCredentialsForRole(role, "ec2-client");
+        return getEC2ClientForCredentials(credentials);
+    }
+
+    /**
+     * Shorthand method to obtain an EC2 client for the provided credentials. If credentials are null, the default EC2
+     * credentials will be used.
+     */
+    public static AmazonEC2 getEC2ClientForCredentials (AWSCredentialsProvider credentials) {
+        return AmazonEC2Client.builder().withCredentials(credentials).build();
+    }
+
+    /**
+     * Shorthand method to obtain an S3 client for the provided credentials. If credentials are null, the default EC2
+     * credentials will be used.
+     */
+    public static AmazonS3 getS3ClientForCredentials (AWSCredentialsProvider credentials, String region) {
+        AmazonS3ClientBuilder builder = AmazonS3ClientBuilder.standard();
+        if (region != null) builder.withRegion(region);
+        return builder.withCredentials(credentials).build();
+    }
+
+    /**
+     * Shorthand method to obtain an S3 client for the provided role ARN. If role is null, the default EC2 credentials
+     * will be used. Similarly, if the region is null, it will be omitted while building the S3 client.
+     */
+    public static AmazonS3 getS3ClientForRole(String role, String region) {
+        AWSStaticCredentialsProvider credentials = getCredentialsForRole(role, "s3-client");
+        return getS3ClientForCredentials(credentials, region);
+    }
+
+    /** Shorthand method to obtain an S3 client for the provided role ARN. */
+    public static AmazonS3 getS3ClientForRole(String role) {
+        return getS3ClientForRole(role, null);
     }
 }

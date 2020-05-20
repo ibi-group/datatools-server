@@ -1,28 +1,35 @@
 package com.conveyal.datatools.common.status;
 
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.google.common.collect.Sets;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
+import java.io.Serializable;
 import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
+
+import static com.conveyal.datatools.manager.controllers.api.StatusController.getJobsForUser;
 
 /**
  * Created by landon on 6/13/16.
  */
-public abstract class MonitorableJob implements Runnable {
+public abstract class MonitorableJob implements Runnable, Serializable {
+    private static final long serialVersionUID = 1L;
     private static final Logger LOG = LoggerFactory.getLogger(MonitorableJob.class);
-    protected final String owner;
+    protected final Auth0UserProfile owner;
 
     // Public fields will be serialized over HTTP API and visible to the web client
     public final JobType type;
+    public File file;
     public String parentJobId;
     public JobType parentJobType;
     // Status is not final to allow some jobs to have extra status fields.
@@ -48,6 +55,7 @@ public abstract class MonitorableJob implements Runnable {
         LOAD_FEED,
         VALIDATE_FEED,
         DEPLOY_TO_OTP,
+        EXPORT_GIS,
         FETCH_PROJECT_FEEDS,
         FETCH_SINGLE_FEED,
         MAKE_PROJECT_PUBLIC,
@@ -57,23 +65,28 @@ public abstract class MonitorableJob implements Runnable {
         EXPORT_SNAPSHOT_TO_GTFS,
         CONVERT_EDITOR_MAPDB_TO_SQL,
         VALIDATE_ALL_FEEDS,
-        MERGE_PROJECT_FEEDS
+        MONITOR_SERVER_STATUS,
+        MERGE_FEED_VERSIONS
     }
 
-    public MonitorableJob(String owner, String name, JobType type) {
+    public MonitorableJob(Auth0UserProfile owner, String name, JobType type) {
+        // Prevent the creation of a job if the user is null.
+        if (owner == null) {
+            throw new IllegalArgumentException("MonitorableJob must be registered with a non-null user/owner.");
+        }
         this.owner = owner;
         this.name = name;
         this.type = type;
         registerJob();
     }
 
-    public MonitorableJob(String owner) {
+    public MonitorableJob(Auth0UserProfile owner) {
         this(owner, "Unnamed Job", JobType.UNKNOWN_TYPE);
     }
 
     /** Constructor for a usually unmonitored system job (but still something we want to conform to our model). */
     public MonitorableJob () {
-        this("system", "System job", JobType.SYSTEM_JOB);
+        this(Auth0UserProfile.createSystemUser(), "System job", JobType.SYSTEM_JOB);
     }
 
     /**
@@ -81,23 +94,25 @@ public abstract class MonitorableJob implements Runnable {
      * It is a standard start-up stage for all monitorable jobs.
      */
     private void registerJob() {
-        Set<MonitorableJob> userJobs = DataManager.userJobsMap.get(this.owner);
-        // If there are no current jobs for the user, create a new empty set. NOTE: this should be a concurrent hash
-        // set so that it is threadsafe.
-        if (userJobs == null) userJobs = Sets.newConcurrentHashSet();
+        // Get all active jobs and add the latest active job. Note: Removal of job from user's set of jobs is handled
+        // in the StatusController when a user requests their active jobs and the job has finished/errored.
+        Set<MonitorableJob> userJobs = getJobsForUser(this.owner);
         userJobs.add(this);
-
-        DataManager.userJobsMap.put(this.owner, userJobs);
+        DataManager.userJobsMap.put(retrieveUserId(), userJobs);
     }
 
-    /**
-     * This method should never be called directly or overridden. It is a standard clean up stage for all
-     * monitorable jobs.
-     */
-    private void unRegisterJob () {
-        // remove this job from the user-job map
-        Set<MonitorableJob> userJobs = DataManager.userJobsMap.get(this.owner);
-        if (userJobs != null) userJobs.remove(this);
+    @JsonProperty("owner")
+    public String retrieveUserId() {
+        return this.owner.getUser_id();
+    }
+
+    @JsonProperty("email")
+    public String retrieveEmail() {
+        return this.owner.getEmail();
+    }
+
+    public File retrieveFile () {
+        return file;
     }
 
     /**
@@ -110,7 +125,8 @@ public abstract class MonitorableJob implements Runnable {
      * all sub-jobs have completed.
      */
     public void jobFinished () {
-        // do nothing by default.
+        // Do nothing by default. Note: job is only removed from active jobs set only when a user requests the latest jobs
+        // via the StatusController HTTP endpoint.
     }
 
     /**
@@ -121,7 +137,6 @@ public abstract class MonitorableJob implements Runnable {
         boolean parentJobErrored = false;
         boolean subTaskErrored = false;
         String cancelMessage = "";
-        long startTimeNanos = System.nanoTime();
         try {
             // First execute the core logic of the specific MonitorableJob subclass
             jobLogic();
@@ -163,7 +178,8 @@ public abstract class MonitorableJob implements Runnable {
                 // because the error presumably already occurred and has a better error message.
                 cancel(cancelMessage);
             }
-
+            // Set duration of job in case it is needed by finishing step (e.g., storing the job duration in a database).
+            status.duration = System.currentTimeMillis() - status.startTime;
             // Run final steps of job pending completion or error. Note: any tasks that depend on job success should
             // check job status to determine if final step should be executed (e.g., storing feed version in MongoDB).
             // TODO: should we add separate hooks depending on state of job/sub-tasks (e.g., success, catch, finally)
@@ -175,13 +191,10 @@ public abstract class MonitorableJob implements Runnable {
             // could be displayed by the client.
         } catch (Exception ex) {
             // Set job status to failed
-            // Note that when an exception occurs during job execution we do not call unRegisterJob,
-            // so the job continues to exist in the failed state and the user can see it.
             LOG.error("Job failed", ex);
             status.update(true, ex.getMessage(), 100, true);
+            status.duration = System.currentTimeMillis() - status.startTime;
         }
-        status.startTime = TimeUnit.NANOSECONDS.toMillis(startTimeNanos);
-        status.duration = TimeUnit.NANOSECONDS.toMillis(System.nanoTime() - startTimeNanos);
         LOG.info("{} {} {} in {} ms", type, jobId, status.error ? "errored" : "completed", status.duration);
     }
 
@@ -235,7 +248,7 @@ public abstract class MonitorableJob implements Runnable {
         /** How much of task is complete? */
         public double percentComplete;
 
-        public long startTime;
+        public long startTime = System.currentTimeMillis();
         public long duration;
 
         // When was the job initialized?

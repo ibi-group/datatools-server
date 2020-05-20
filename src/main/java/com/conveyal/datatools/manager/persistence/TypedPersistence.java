@@ -141,7 +141,7 @@ public class TypedPersistence<T extends Model> {
      * We should really have a bit more abstraction here.
      */
     public List<T> getFiltered (Bson filter) {
-        return mongoCollection.find(filter).into(new ArrayList<T>());
+        return mongoCollection.find(filter).into(new ArrayList<>());
     }
 
     /**
@@ -164,6 +164,11 @@ public class TypedPersistence<T extends Model> {
             return mongoCollection.find(filter).sort(sortBy).first();
         else
             return mongoCollection.find(filter).first();
+    }
+
+    /** Convenience wrapper for #getOneFiltered that supplies null for sortBy arg. */
+    public T getOneFiltered (Bson filter) {
+        return getOneFiltered(filter, null);
     }
 
     public boolean removeById (String id) {

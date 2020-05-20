@@ -29,6 +29,7 @@ import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.util.Date;
+import java.util.UUID;
 
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.mongodb.client.model.Filters.and;
@@ -68,7 +69,8 @@ public class FeedVersion extends Model implements Serializable {
 
         // since we store directly on the file system, this lets users look at the DB directly
         // TODO: no need to BaseGTFSCache.cleanId once we rely on GTFSCache to store the feed.
-        return BaseGTFSCache.cleanId(getCleanName(source.name) + "-" + df.format(this.updated) + "-" + source.id) + ".zip";
+        String uuid = UUID.randomUUID().toString();
+        return BaseGTFSCache.cleanId(String.join("-", getCleanName(source.name), df.format(this.updated), source.id, uuid)) + ".zip";
     }
 
     /**
@@ -168,7 +170,7 @@ public class FeedVersion extends Model implements Serializable {
     @JsonView(JsonViews.UserInterface.class)
     @BsonProperty("validationSummary")
     public FeedValidationResultSummary validationSummary() {
-        return new FeedValidationResultSummary(validationResult, feedLoadResult);
+        return new FeedValidationResultSummary(this);
     }
 
 
@@ -189,6 +191,12 @@ public class FeedVersion extends Model implements Serializable {
 
     /** SQL namespace for GTFS data */
     public String namespace;
+
+    /**
+     * Indicates the namespace from which this version originated. For example, if it was published from a snapshot
+     * namespace or a GTFS+ feed, this field will reference that source namespace.
+     */
+    public String originNamespace;
 
     /**
      * Indicates when a feed version was published to an external source. If null, the version has not been sent. This
@@ -391,6 +399,8 @@ public class FeedVersion extends Model implements Serializable {
                 Persistence.feedSources.update(fs.id, "{lastFetched:null}");
             }
             feedStore.deleteFeed(id);
+            // Delete feed version tables in GTFS database
+            GTFS.delete(this.namespace, DataManager.GTFS_DATA_SOURCE);
             // Remove this FeedVersion from all Deployments associated with this FeedVersion's FeedSource's Project
             // TODO TEST THOROUGHLY THAT THIS UPDATE EXPRESSION IS CORRECT
             // Although outright deleting the feedVersion from deployments could be surprising and shouldn't be done anyway.

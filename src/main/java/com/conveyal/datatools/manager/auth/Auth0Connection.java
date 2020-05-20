@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.auth;
 
+import com.auth0.jwt.JWTExpiredException;
 import com.auth0.jwt.JWTVerifier;
 import com.auth0.jwt.pem.PemReader;
 import com.conveyal.datatools.manager.DataManager;
@@ -20,6 +21,7 @@ import java.util.Map;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
 import static com.conveyal.datatools.manager.DataManager.hasConfigProperty;
+import static com.conveyal.datatools.manager.controllers.api.UserController.inTestingEnvironment;
 
 /**
  * This handles verifying the Auth0 token passed in the Auth header of Spark HTTP requests.
@@ -43,9 +45,10 @@ public class Auth0Connection {
      * @param req Spark request object
      */
     public static void checkUser(Request req) {
-        if (authDisabled()) {
-            // If in a development environment, assign a mock profile to request attribute and skip authentication.
-            req.attribute("user", new Auth0UserProfile("mock@example.com", "user_id:string"));
+        if (authDisabled() || inTestingEnvironment()) {
+            // If in a development or testing environment, assign a mock profile of an admin user to the request
+            // attribute and skip authentication.
+            req.attribute("user", Auth0UserProfile.createTestAdminUser());
             return;
         }
         // Check that auth header is present and formatted correctly (Authorization: Bearer [token]).
@@ -74,6 +77,9 @@ public class Auth0Connection {
             // The user attribute is used on the server side to check user permissions and does not have all of the
             // fields that the raw Auth0 profile string does.
             req.attribute("user", profile);
+        } catch (JWTExpiredException e) {
+            LOG.warn("JWT token has expired for user.");
+            logMessageAndHalt(req, 401, "User's authentication token has expired. Please re-login.");
         } catch (Exception e) {
             LOG.warn("Login failed to verify with our authorization provider.", e);
             logMessageAndHalt(req, 401, "Could not verify user's token");
@@ -132,8 +138,11 @@ public class Auth0Connection {
      * tables in the database.
      */
     public static void checkEditPrivileges(Request request) {
-        if (authDisabled()) {
-            // If in a development environment, skip privileges check.
+        if (authDisabled() || inTestingEnvironment()) {
+            // If in a development or testing environment, skip privileges check. This is done so that basically any API
+            // endpoint can function.
+            // TODO: make unit tests of the below items or do some more stuff as mentioned in PR review here:
+            // https://github.com/conveyal/datatools-server/pull/187#discussion_r262714708
             return;
         }
         Auth0UserProfile userProfile = request.attribute("user");
