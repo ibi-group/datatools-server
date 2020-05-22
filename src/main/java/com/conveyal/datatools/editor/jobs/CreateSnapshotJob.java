@@ -87,7 +87,7 @@ public class CreateSnapshotJob extends MonitorableJob {
         Collection<Snapshot> existingSnapshots = feedSource.retrieveSnapshots();
         int version = existingSnapshots.size();
         status.update("Creating snapshot...", 20);
-        FeedLoadResult loadResult = makeSnapshot(namespace, DataManager.GTFS_DATA_SOURCE);
+        FeedLoadResult loadResult = makeSnapshot(namespace, DataManager.GTFS_DATA_SOURCE, !feedSource.preserveStopTimesSequence);
         snapshot.version = version;
         snapshot.namespace = loadResult.uniqueIdentifier;
         snapshot.feedLoadResult = loadResult;
