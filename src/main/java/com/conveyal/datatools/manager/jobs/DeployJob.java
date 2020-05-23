@@ -814,10 +814,16 @@ public class DeployJob extends MonitorableJob {
         manifest.graphObjUrl = getS3GraphURI();
         manifest.jarFile = String.format("/opt/%s/%s", getTripPlannerString(), jarName);
         manifest.jarUrl = s3JarUrl;
+        // This must be added here because logging starts immediately before defaults are set while validating the
+        // manifest
+        manifest.otpRunnerLogFile = "/var/log/otp-runner.log";
+        manifest.prefixLogUploadsWithInstanceId = true;
+        manifest.serverStartupTimeoutSeconds = 3300;
         manifest.s3UploadBucket = getS3FolderURI().toString();
         manifest.statusFileLocation = String.format("%s/%s", webDir, OTP_RUNNER_STATUS_FILE);
         manifest.uploadOtpRunnerLogs = true;
         if (!graphAlreadyBuilt) {
+            // settings when graph building needs to happen
             manifest.buildConfigJSON = deployment.generateBuildConfigAsString();
             manifest.buildGraph = true;
             try {
@@ -841,7 +847,7 @@ public class DeployJob extends MonitorableJob {
         } else {
             // This instance will only start the OTP server with a prebuilt graph
             manifest.buildGraph = false;
-            manifest.routerConfigJSON = deployment.generateRouterConfig().toString();
+            manifest.routerConfigJSON = deployment.generateRouterConfigAsString();
             manifest.runServer = true;
             manifest.uploadServerStartupLogs = true;
         }
@@ -856,6 +862,11 @@ public class DeployJob extends MonitorableJob {
         lines.add("export PATH=\"$PATH:/home/ubuntu/.nvm/versions/node/v12.16.3/bin\"");
         // Remove previous files that might have been created during an Image creation
         lines.add(String.format("rm %s/%s || echo '' > /dev/null", webDir, OTP_RUNNER_STATUS_FILE));
+        lines.add(String.format("rm %s || echo '' > /dev/null", otpRunnerManifestFile));
+        lines.add(String.format("rm %s || echo '' > /dev/null", manifest.jarFile));
+        lines.add(String.format("rm %s || echo '' > /dev/null", manifest.otpRunnerLogFile));
+        lines.add("rm /var/log/otp-build.log || echo '' > /dev/null");
+        lines.add("rm /var/log/otp-server.log || echo '' > /dev/null");
 
         // FIXME what if the JSON has a single quote?
         try {

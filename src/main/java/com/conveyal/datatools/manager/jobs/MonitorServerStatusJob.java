@@ -36,8 +36,6 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.util.Collections;
 
-import static com.conveyal.datatools.manager.jobs.DeployJob.BUNDLE_DOWNLOAD_COMPLETE_FILE;
-import static com.conveyal.datatools.manager.jobs.DeployJob.GRAPH_STATUS_FILE;
 import static com.conveyal.datatools.manager.jobs.DeployJob.OTP_RUNNER_STATUS_FILE;
 
 /**
@@ -143,7 +141,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
             // consider this job done.
             if (isBuildOnlyServer()) {
                 status.completeSuccessfully(message);
-                LOG.info("View logs at {}", getUserDataLogS3Path());
+                LOG.info("View logs at {}", getOtpRunnerLogS3Path());
                 return;
             }
             // Once this is confirmed, check for the availability of the router, which will indicate that the graph
@@ -198,7 +196,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
                     routerUrl
                 )
             );
-            LOG.info("View logs at {}", getUserDataLogS3Path());
+            LOG.info("View logs at {}", getOtpRunnerLogS3Path());
             deployJob.incrementCompletedServers();
         } catch (InstanceHealthException e) {
             // If at any point during the job, an instance health check indicates that the EC2 instance being monitored
@@ -217,8 +215,8 @@ public class MonitorServerStatusJob extends MonitorableJob {
     /**
      * Gets the expected path to the user data logs that get uploaded to s3
      */
-    private String getUserDataLogS3Path() {
-        return String.format("%s/%s.log", deployJob.getS3FolderURI(), instance.getInstanceId());
+    private String getOtpRunnerLogS3Path() {
+        return String.format("%s/%s-otp-runner.log", deployJob.getS3FolderURI(), instance.getInstanceId());
     }
 
     /**
@@ -226,7 +224,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
      */
     private void failJob(String message) {
         LOG.error(message);
-        status.fail(String.format("%s Check logs at: %s", message, getUserDataLogS3Path()));
+        status.fail(String.format("%s Check logs at: %s", message, getOtpRunnerLogS3Path()));
     }
 
     /** Determine if a specific task has passed time limit for its run time. */

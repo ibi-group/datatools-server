@@ -12,6 +12,7 @@ public class OtpRunnerManifest {
     public String jarFile;
     public String jarUrl;
     public String otpRunnerLogFile;
+    public boolean prefixLogUploadsWithInstanceId;
     public String routerConfigJSON;
     public String routerName;
     public boolean runServer;
