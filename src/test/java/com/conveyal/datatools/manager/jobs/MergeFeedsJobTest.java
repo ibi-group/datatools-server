@@ -13,17 +13,14 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.UUID;
 
 import static com.conveyal.datatools.TestUtils.assertThatFeedHasNoErrorsOfType;
 import static com.conveyal.datatools.TestUtils.assertThatSqlCountQueryYieldsExpectedCount;
-import static com.conveyal.datatools.TestUtils.assertThatSqlQueryYieldsRowCount;
 import static com.conveyal.datatools.TestUtils.createFeedVersion;
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static com.conveyal.datatools.TestUtils.zipFolderFiles;
