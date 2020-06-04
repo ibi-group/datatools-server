@@ -350,7 +350,7 @@ public class MergeFeedsJob extends MonitorableJob {
             // calendar#start_date (unless that table for some reason does not exist).
             LocalDate futureFeedFirstDate = feedsToMerge.get(0).version.validationResult.firstCalendarDate;
             LocalDate futureFirstCalendarStartDate = LocalDate.MAX;
-            // Iterate over each zip file.
+            // Iterate over each zip file. For service period merge, the first feed is the future GTFS.
             for (int feedIndex = 0; feedIndex < feedsToMerge.size(); feedIndex++) {
                 boolean keyFieldMissing = false;
                 // Use for a new agency ID for use if the feed does not contain one. Initialize to
@@ -455,33 +455,56 @@ public class MergeFeedsJob extends MonitorableJob {
                             fieldsFoundList = Arrays.asList(fieldsFoundInZip);
                         }
                         if (mergeType.equals(MTC) && table.name.equals("stops")) {
-                            // For the first line of the stops table, check that the alt. key
-                            // field (stop_code) is present. If it is not, revert to the original
-                            // key field. This is only pertinent for the MTC merge type.
-                            // TODO: Use more sophisticated check for missing stop_codes than
-                            //  simply the first line containing the value.
-                            if (feedIndex == 0) {
-                                // Check that the first file contains stop_code values.
-                                if ("".equals(keyValue)) {
+                            if (lineNumber == 0) {
+                                // Before reading any lines in stops.txt, first determine whether all records contain
+                                // properly filled stop_codes. The rules governing this logic are as follows:
+                                // 1. Stops with location_type greater than 0 (i.e., anything but 0 or empty) are permitted
+                                //    to have empty stop_codes (even if there are other stops in the feed that have
+                                //    stop_code values). This is because these location_types represent special entries
+                                //    that are either stations, entrances/exits, or generic nodes (e.g., for
+                                //    pathways.txt).
+                                // 2. For regular stops (location_type = 0 or empty), all or none of the stops must
+                                //    contain stop_codes. Otherwise, the merge feeds job will be failed.
+                                int stopsMissingStopCodeCount = 0;
+                                int stopsCount = 0;
+                                int locationTypeIndex = getFieldIndex(fieldsFoundInZip, "location_type");
+                                int stopCodeIndex = getFieldIndex(fieldsFoundInZip, "stop_code");
+                                // Get special stops reader to iterate over every stop and determine if stop_code values
+                                // are present.
+                                CsvReader stopsReader = table.getCsvReader(feed.zipFile, null);
+                                while (stopsReader.readRecord()) {
+                                    stopsCount++;
+                                    String locationType = stopsReader.get(locationTypeIndex);
+                                    // "Regular" stop records (i.e., not a station, entrance, or anything with
+                                    // location_type > 0) should contain stop_code.
+                                    boolean isRegularStop = "".equals(locationType) || "0".equals(locationType);
+                                    String stopCode = stopsReader.get(stopCodeIndex);
+                                    boolean stopCodeIsMissing = "".equals(stopCode);
+                                    if (isRegularStop && stopCodeIsMissing) stopsMissingStopCodeCount++;
+                                }
+                                LOG.info("total stops: {}", stopsCount);
+                                LOG.info("stops missing stop_code: {}", stopsMissingStopCodeCount);
+                                if (stopsMissingStopCodeCount == stopsCount) {
+                                    // If all stops are missing stop_code, we simply default to merging on stop_id.
                                     LOG.warn(
                                         "stop_code is not present in file {}/{}. Reverting to stop_id",
-                                        feedIndex, feedsToMerge.size());
+                                        feedIndex + 1, feedsToMerge.size());
                                     // If the key value for stop_code is not present, revert to stop_id.
                                     keyField = table.getKeyFieldName();
                                     keyFieldIndex = table.getKeyFieldIndex(fieldsFoundInZip);
                                     keyValue = csvReader.get(keyFieldIndex);
-                                    stopCodeMissingFromFirstTable = true;
-                                }
-                            } else {
-                                // Check whether stop_code exists for the subsequent files.
-                                String firstStopCodeValue = csvReader.get(getFieldIndex(fieldsFoundInZip, "stop_code"));
-                                if (stopCodeMissingFromFirstTable && !"".equals(firstStopCodeValue)) {
-                                    // If stop_code was missing from the first file and exists for
-                                    // the second, we consider that a failing error.
+                                } else if (stopsMissingStopCodeCount > 0) {
+                                    // If some, but not all, stops are missing stop_code, the merge feeds job must fail.
                                     mergeFeedsResult.failed = true;
                                     mergeFeedsResult.errorCount++;
                                     mergeFeedsResult.failureReasons.add(
-                                        "If one stops.txt file contains stop_codes, both feed versions must stop_codes.");
+                                        String.format(
+                                            "If stop_code is provided for some stops (for those with location_type = " +
+                                            "empty or 0), all stops must have stop_code values. The merge process " +
+                                            "found %d stops that were incorrectly missing stop_code values.",
+                                            stopsMissingStopCodeCount
+                                        )
+                                    );
                                 }
                             }
                         }
