@@ -366,7 +366,7 @@ public class MergeFeedsJob extends MonitorableJob {
         int mergedLineNumber = 0;
         // Get the spec fields to export
         List<Field> specFields = table.specFields();
-        boolean stopCodeMissingFromFirstTable = false;
+        boolean stopCodeMissingFromFirstFeed = false;
         try {
             // Get shared fields between all feeds being merged. This is used to filter the spec fields so that only
             // fields found in the collection of feeds are included in the merged table.
@@ -522,6 +522,21 @@ public class MergeFeedsJob extends MonitorableJob {
                                     keyField = table.getKeyFieldName();
                                     keyFieldIndex = table.getKeyFieldIndex(fieldsFoundInZip);
                                     keyValue = csvReader.get(keyFieldIndex);
+                                    if (feedIndex == 0) {
+                                        stopCodeMissingFromFirstFeed = true;
+                                    }
+                                    if (feedIndex == 1 && !stopCodeMissingFromFirstFeed) {
+                                        mergeFeedsResult.failed = true;
+                                        mergeFeedsResult.errorCount++;
+                                        mergeFeedsResult.failureReasons.add(
+                                            String.format(
+                                                "If stop_code is provided for some stops (for those with location_type = " +
+                                                    "empty or 0), all stops must have stop_code values. The merge process " +
+                                                    "found %d stops that were incorrectly missing stop_code values.",
+                                                stopsMissingStopCodeCount
+                                            )
+                                        );
+                                    }
                                 } else if (stopsMissingStopCodeCount > 0) {
                                     // If some, but not all, stops are missing stop_code, the merge feeds job must fail.
                                     mergeFeedsResult.failed = true;
@@ -529,8 +544,8 @@ public class MergeFeedsJob extends MonitorableJob {
                                     mergeFeedsResult.failureReasons.add(
                                         String.format(
                                             "If stop_code is provided for some stops (for those with location_type = " +
-                                            "empty or 0), all stops must have stop_code values. The merge process " +
-                                            "found %d stops that were incorrectly missing stop_code values.",
+                                                "empty or 0), all stops must have stop_code values. The merge process " +
+                                                "found %d stops that were incorrectly missing stop_code values.",
                                             stopsMissingStopCodeCount
                                         )
                                     );
