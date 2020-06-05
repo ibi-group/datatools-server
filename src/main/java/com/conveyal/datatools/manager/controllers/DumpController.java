@@ -7,6 +7,7 @@ import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.jobs.ValidateFeedJob;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
+import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
@@ -286,13 +287,13 @@ public class DumpController {
             feedSource.name = name;
             switch(node.findValue("retrievalMethod").asText()) {
                 case "FETCHED_AUTOMATICALLY":
-                    feedSource.retrievalMethod = FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
+                    feedSource.retrievalMethod = FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
                     break;
                 case "MANUALLY_UPLOADED":
-                    feedSource.retrievalMethod = FeedSource.FeedRetrievalMethod.MANUALLY_UPLOADED;
+                    feedSource.retrievalMethod = FeedRetrievalMethod.MANUALLY_UPLOADED;
                     break;
                 case "PRODUCED_IN_HOUSE":
-                    feedSource.retrievalMethod = FeedSource.FeedRetrievalMethod.PRODUCED_IN_HOUSE;
+                    feedSource.retrievalMethod = FeedRetrievalMethod.PRODUCED_IN_HOUSE;
                     break;
             }
             feedSource.snapshotVersion = node.findValue("snapshotVersion").asText();

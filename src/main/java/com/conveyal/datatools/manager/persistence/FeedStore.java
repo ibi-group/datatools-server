@@ -33,7 +33,7 @@ import java.nio.file.Path;
 import static com.conveyal.datatools.manager.DataManager.hasConfigProperty;
 
 /**
- * Store a feed on the file system or s3.
+ * Store a feed on the file system or S3.
  * @author mattwigway
  *
  */
@@ -127,7 +127,7 @@ public class FeedStore {
     /**
      * Get the File for the provided feed version ID (or other entity ID, depending on the feed store's context).
      */
-    public File getPathToFeed(String id) {
+    public File getFeedFile(String id) {
         return new File(path, id);
     }
 
@@ -154,14 +154,9 @@ public class FeedStore {
             }
 
             try {
-                Path path = Files.createTempFile(id, null);
-                // FIXME: Figure out how to manage temp files created here. Currently, we just call deleteOnExit, but
-                //  this will only delete the file once the java process stops.
-                File tempFile = path.toFile();
-                tempFile.deleteOnExit();
-                ByteStreams.copy(objectData, new FileOutputStream(tempFile));
-                return tempFile;
+                return createTempFile(id, objectData);
             } catch (IOException e) {
+                // TODO: Log to bugsnag?
                 LOG.error("Error creating temp file", e);
             }
         }
@@ -208,6 +203,16 @@ public class FeedStore {
         File latest = new File(path, feedSource.id + ".zip");
         LOG.info("Copying version to latest {}", feedSource);
         FileUtils.copyFile(version, latest, true);
+    }
+
+    private File createTempFile (String name, InputStream in) throws IOException {
+        Path path = Files.createTempFile(name, null);
+        // FIXME: Figure out how to manage temp files created here. Currently, we just call deleteOnExit, but
+        //  this will only delete the file once the java process stops.
+        File tempFile = path.toFile();
+        tempFile.deleteOnExit();
+        ByteStreams.copy(in, new FileOutputStream(tempFile));
+        return tempFile;
     }
 
     /**

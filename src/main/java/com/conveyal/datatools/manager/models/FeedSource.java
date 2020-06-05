@@ -33,6 +33,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
@@ -536,30 +537,6 @@ public class FeedSource extends Model implements Cloneable {
     }
 
     /**
-     * Represents ways feeds can be retrieved. Note: this enum was originally developed for feed sources, which were
-     * limited to a single retrieval method per source; however, use of this software has evolved in such a way that
-     * supports GTFS data for a single feed source to be retrieved in a multitude of ways, including: fetching via URL,
-     * uploading manually, creating with the editor, or transforming in some way (e.g., merging multiple versions or
-     * post-processing a single version).
-     */
-    public enum FeedRetrievalMethod {
-        /** Feed automatically retrieved over HTTP on some regular basis. */
-        FETCHED_AUTOMATICALLY,
-        /** Feed manually uploaded by someone, perhaps the agency, or perhaps an internal user. */
-        MANUALLY_UPLOADED,
-        /** Feed produced in-house in a GTFS Editor instance (i.e., from a database snapshot). */
-        PRODUCED_IN_HOUSE,
-        /** Feed produced in-house in the GTFS+ Editor. */
-        PRODUCED_IN_HOUSE_GTFS_PLUS,
-        /** Feed produced from a regional merge (e.g., merging all feeds from a project). */
-        REGIONAL_MERGE,
-        /** Feed produced by merging two versions that span different service periods. */
-        SERVICE_PERIOD_MERGE,
-        /** Feed produced by cloning an existing version. */
-        VERSION_CLONE
-    }
-
-    /**
      * Delete this feed source and everything that it contains.
      *
      * FIXME: Use a Mongo transaction to handle the deletion of these related objects.
@@ -605,19 +582,15 @@ public class FeedSource extends Model implements Cloneable {
         return getRulesForRetrievalMethod(retrievalMethod) != null;
     }
 
+    /**
+     * Get transform rules for the retrieval method or null if none exist. Note: this will return the first rule set
+     * found. There should not be multiple rule sets for a given retrieval method.
+     */
     public FeedTransformRules getRulesForRetrievalMethod(FeedRetrievalMethod retrievalMethod) {
-        FeedTransformRules ruleSet = null;
-        for (FeedTransformRules rule : transformRules) {
-            if (rule.hasRetrievalMethod(retrievalMethod)) {
-                if (ruleSet != null) {
-                    LOG.warn("Found multiple transform rule sets for retrieval method {} (feed source {}). Defaulting to first found.", retrievalMethod, this.name);
-                    continue;
-                }
-                // Set rule set to item matching retrieval method.
-                ruleSet = rule;
-            }
-        }
-        return ruleSet;
+        return transformRules.stream()
+            .filter(feedTransformRules -> feedTransformRules.hasRetrievalMethod(retrievalMethod))
+            .findFirst()
+            .orElse(null);
     }
 
     public <T extends FeedTransformation> List<T> getActiveTransformations(FeedVersion target, Class<T> clazz) {

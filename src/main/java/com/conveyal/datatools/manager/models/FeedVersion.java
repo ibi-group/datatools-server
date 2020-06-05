@@ -69,12 +69,12 @@ public class FeedVersion extends Model implements Serializable {
     /**
      * This is the recommended constructor for creating a new feed version. This is generally called before the GTFS
      * file has been supplied because we store the GTFS file at a location based the feed version ID (which is generated
-     * in this constructor). Call {@link FeedStore#getPathToFeed} to determine where its GTFS should be stored and
-     * {@link #assignGtfsFile} to associate characteristics of the GTFS file with the version.
+     * in this constructor). Call {@link FeedStore#getFeedFile} to determine where its GTFS should be stored and
+     * {@link #assignGtfsFileAttributes} to associate characteristics of the GTFS file with the version.
      * @param source            the parent feed source
      * @param retrievalMethod   how the version's GTFS was supplied to Data Tools
      */
-    public FeedVersion(FeedSource source, FeedSource.FeedRetrievalMethod retrievalMethod) {
+    public FeedVersion(FeedSource source, FeedRetrievalMethod retrievalMethod) {
         this.updated = new Date();
         this.feedSourceId = source.id;
         this.name = formattedTimestamp() + " Version";
@@ -115,7 +115,7 @@ public class FeedVersion extends Model implements Serializable {
     @JsonView(JsonViews.DataDump.class)
     public String feedSourceId;
 
-    public FeedSource.FeedRetrievalMethod retrievalMethod;
+    public FeedRetrievalMethod retrievalMethod;
 
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("feedSource")
@@ -176,7 +176,7 @@ public class FeedVersion extends Model implements Serializable {
      */
     public File newGtfsFile(InputStream inputStream) throws IOException {
         File file = feedStore.newFeed(id, inputStream, parentFeedSource());
-        assignGtfsFile(file);
+        assignGtfsFileAttributes(file);
         LOG.info("New GTFS file saved: {} ({} bytes)", id, this.fileSize);
         return file;
     }
@@ -258,8 +258,9 @@ public class FeedVersion extends Model implements Serializable {
             if (gtfsFile.length() == 0) {
                 throw new IOException("Empty GTFS file supplied");
             }
-            // If somehow feed version has not been taken characteristics from GTFS file, handle this here.
-            assignGtfsFile(gtfsFile);
+            // If somehow feed version has not already had GTFS file attributes assigned during stages prior to load,
+            // handle this here.
+            assignGtfsFileAttributes(gtfsFile);
             String gtfsFilePath = gtfsFile.getPath();
             this.feedLoadResult = GTFS.load(gtfsFilePath, DataManager.GTFS_DATA_SOURCE);
             // FIXME? duplication of namespace (also stored as feedLoadResult.uniqueIdentifier)
@@ -436,7 +437,7 @@ public class FeedVersion extends Model implements Serializable {
      * @param newGtfsFile   the new GTFS file
      * @param lastModifiedOverride  optional override of the file's last modified value
      */
-    public void assignGtfsFile(File newGtfsFile, Long lastModifiedOverride) {
+    public void assignGtfsFileAttributes(File newGtfsFile, Long lastModifiedOverride) {
         if (lastModifiedOverride != null) {
             newGtfsFile.setLastModified(lastModifiedOverride);
             fileTimestamp = lastModifiedOverride;
@@ -448,9 +449,9 @@ public class FeedVersion extends Model implements Serializable {
     }
 
     /**
-     * Convenience wrapper for {@link #assignGtfsFile} that does not override file's last modified.
+     * Convenience wrapper for {@link #assignGtfsFileAttributes} that does not override file's last modified.
      */
-    public void assignGtfsFile(File newGtfsFile) {
-        assignGtfsFile(newGtfsFile, null);
+    public void assignGtfsFileAttributes(File newGtfsFile) {
+        assignGtfsFileAttributes(newGtfsFile, null);
     }
 }

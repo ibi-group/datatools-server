@@ -19,7 +19,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.util.List;
 
-import static com.conveyal.datatools.manager.models.FeedSource.FeedRetrievalMethod.VERSION_CLONE;
+import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.VERSION_CLONE;
 
 /**
  * Process/validate a single GTFS feed. This job is called once a GTFS file had been uploaded or fetched and is ready to
@@ -30,11 +30,11 @@ import static com.conveyal.datatools.manager.models.FeedSource.FeedRetrievalMeth
  *
  */
 public class ProcessSingleFeedJob extends MonitorableJob {
-    private FeedVersion feedVersion;
+    private final FeedVersion feedVersion;
     private final boolean isNewVersion;
     private static final Logger LOG = LoggerFactory.getLogger(ProcessSingleFeedJob.class);
-    private boolean shouldClone;
-    private FeedSource feedSource;
+    private final boolean shouldClone;
+    private final FeedSource feedSource;
 
     /**
      * Create a job for the given feed version.
@@ -42,7 +42,13 @@ public class ProcessSingleFeedJob extends MonitorableJob {
     public ProcessSingleFeedJob (FeedVersion feedVersion, Auth0UserProfile owner, boolean isNewVersion) {
         super(owner, "Processing GTFS for " + (feedVersion.parentFeedSource() != null ? feedVersion.parentFeedSource().name : "unknown feed source"), JobType.PROCESS_FEED);
         this.feedVersion = feedVersion;
+        this.feedSource = feedVersion.parentFeedSource();
         this.isNewVersion = isNewVersion;
+        // If there are any feed transformations that apply to the VERSION_CLONE retrieval method, we need to add a
+        // stage to jobFinished (perhaps) to clone the feed version (as long as this feed version has not already been
+        // cloned). Once that feed version is processed, the appropriate transformations will apply themselves.
+        shouldClone = !feedVersion.retrievalMethod.equals(VERSION_CLONE) &&
+            feedSource.hasRulesForRetrievalMethod(VERSION_CLONE);
         status.update("Waiting...", 0);
         status.uploading = true;
     }
@@ -59,18 +65,12 @@ public class ProcessSingleFeedJob extends MonitorableJob {
 
     @JsonProperty
     public String getFeedSourceId () {
-        return feedVersion.parentFeedSource().id;
+        return feedSource.id;
     }
 
     @Override
     public void jobLogic () {
         LOG.info("Processing feed for {}", feedVersion.id);
-        feedSource = feedVersion.parentFeedSource();
-        // If there are any feed transformations that apply to the VERSION_CLONE retrieval method, we need to add a
-        // stage to jobFinished (perhaps) to clone the feed version (as long as this feed version has not already been
-        // cloned). Once that feed version is processed, the appropriate transformations will apply themselves.
-        shouldClone = !feedVersion.retrievalMethod.equals(VERSION_CLONE) &&
-            feedSource.hasRulesForRetrievalMethod(VERSION_CLONE);
         FeedTransformRules rules = feedSource.getRulesForRetrievalMethod(feedVersion.retrievalMethod);
         boolean shouldTransform = rules != null;
         if (shouldTransform) {
@@ -148,11 +148,11 @@ public class ProcessSingleFeedJob extends MonitorableJob {
                     // Create a new version for the clone.
                     FeedVersion newFeedVersion = new FeedVersion(feedSource, VERSION_CLONE);
                     // Get new path for GTFS file.
-                    File newGtfsFile = FeedVersion.feedStore.getPathToFeed(newFeedVersion.id);
+                    File newGtfsFile = FeedVersion.feedStore.getFeedFile(newFeedVersion.id);
                     // Copy previous version to the new GTFS path.
                     Files.copy(feedVersion.retrieveGtfsFile().toPath(), newGtfsFile.toPath());
                     // Handle hashing file.
-                    newFeedVersion.assignGtfsFile(newGtfsFile);
+                    newFeedVersion.assignGtfsFileAttributes(newGtfsFile);
                     // Kick off job in new thread. Transformations that apply to clone will be picked up in the next
                     // processing stage. FIXME should this happen in the same thread?
                     ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(newFeedVersion, owner, true);

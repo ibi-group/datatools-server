@@ -60,7 +60,7 @@ public class GtfsPlusValidation implements Serializable {
         FeedVersion feedVersion = Persistence.feedVersions.getById(feedVersionId);
         // Load the main GTFS file.
         // FIXME: Swap MapDB-backed GTFSFeed for use of SQL data?
-        File gtfsFeedDbFile = gtfsPlusStore.getPathToFeed(feedVersionId + ".db");
+        File gtfsFeedDbFile = gtfsPlusStore.getFeedFile(feedVersionId + ".db");
         String gtfsFeedDbFilePath = gtfsFeedDbFile.getAbsolutePath();
         GTFSFeed gtfsFeed;
         try {

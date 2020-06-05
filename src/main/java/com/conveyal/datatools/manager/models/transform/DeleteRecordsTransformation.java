@@ -16,7 +16,7 @@ import static com.conveyal.datatools.manager.DataManager.GTFS_DATA_SOURCE;
 
 /**
  * For now this is somewhat of just a demonstration/example for how to build create a {@link DbTransformation} subclass.
- * This feed transformation will operate on the namespace for the provided {@link FeedTransformTarget#snapshotId}.
+ * This feed transformation will operate on the namespace for the provided {@link FeedTransformDbTarget#snapshotId}.
  * It will delete all records in the specified table that match the WHERE clause created by the match field and values.
  */
 public class DeleteRecordsTransformation extends DbTransformation {
@@ -32,10 +32,16 @@ public class DeleteRecordsTransformation extends DbTransformation {
 
     @Override
     public void transform(FeedTransformTarget target, MonitorableJob.Status status) {
+        if (!(target instanceof FeedTransformDbTarget)) {
+            status.fail("Target must be FeedTransformDbTarget.");
+            return;
+        }
+        // Cast transform target to DB flavor.
+        FeedTransformDbTarget dbTarget = (FeedTransformDbTarget)target;
         // Fetch the referenced snapshot to transform.
-        Snapshot snapshot = Persistence.snapshots.getById(target.snapshotId);
+        Snapshot snapshot = Persistence.snapshots.getById(dbTarget.snapshotId);
         if (snapshot == null) {
-            status.fail(String.format("Cannot find snapshot to transform (id=%s)", target.snapshotId));
+            status.fail(String.format("Cannot find snapshot to transform (id=%s)", dbTarget.snapshotId));
             return;
         }
         // Create a new SQL connection, construct the SQL statement, execute and commit results.

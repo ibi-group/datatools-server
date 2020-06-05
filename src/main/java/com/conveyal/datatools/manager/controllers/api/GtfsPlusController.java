@@ -5,11 +5,9 @@ import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.gtfsplus.GtfsPlusValidation;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
-import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
-import com.conveyal.datatools.manager.utils.HashUtils;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.eclipse.jetty.http.HttpStatus;
@@ -34,7 +32,7 @@ import java.util.zip.ZipOutputStream;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.copyRequestStreamIntoFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
-import static com.conveyal.datatools.manager.models.FeedSource.FeedRetrievalMethod.PRODUCED_IN_HOUSE_GTFS_PLUS;
+import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.PRODUCED_IN_HOUSE_GTFS_PLUS;
 import static spark.Spark.delete;
 import static spark.Spark.get;
 import static spark.Spark.post;
@@ -63,7 +61,7 @@ public class GtfsPlusController {
      */
     private static Boolean uploadGtfsPlusFile (Request req, Response res) {
         String feedVersionId = req.params("versionid");
-        File newGtfsFile = gtfsPlusStore.getPathToFeed(feedVersionId);
+        File newGtfsFile = gtfsPlusStore.getFeedFile(feedVersionId);
         copyRequestStreamIntoFile(req, newGtfsFile);
         return true;
     }

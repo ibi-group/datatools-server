@@ -75,7 +75,7 @@ public class ExportSnapshotToGTFSJob extends MonitorableJob {
         } else {
             try {
                 File gtfsFile = FeedVersion.feedStore.newFeed(filename, new FileInputStream(tempFile), null);
-                if (isNewVersion) feedVersion.assignGtfsFile(gtfsFile);
+                if (isNewVersion) feedVersion.assignGtfsFileAttributes(gtfsFile);
             } catch (IOException e) {
                 status.fail(String.format("Could not store feed for snapshot %s", snapshot.id), e);
             }

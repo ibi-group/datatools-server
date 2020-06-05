@@ -25,25 +25,27 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.ArrayList;
-import java.util.Date;
 import java.util.List;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
+import static com.conveyal.datatools.TestUtils.appendDate;
 import static com.conveyal.datatools.TestUtils.assertThatSqlCountQueryYieldsExpectedCount;
+import static com.conveyal.datatools.TestUtils.createFeedVersion;
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
-import static com.conveyal.datatools.manager.models.FeedSource.FeedRetrievalMethod.MANUALLY_UPLOADED;
+import static com.conveyal.datatools.TestUtils.zipFolderFiles;
+import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.MANUALLY_UPLOADED;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
 
 public class ArbitraryTransformJobTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(ArbitraryTransformJob.class);
-    private static Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
+    private static final Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
     private static Project project;
-    private static FeedSource bart;
-    private FeedVersion bartVersion;
-    private FeedVersion newBartVersion;
+    private static FeedSource feedSource;
+    private FeedVersion sourceVersion;
+    private FeedVersion targetVersion;
 
     /**
      * Initialize Data Tools and set up a simple feed source and project.
@@ -55,12 +57,12 @@ public class ArbitraryTransformJobTest extends UnitTest {
 
         // Create a project, feed sources, and feed versions to merge.
         project = new Project();
-        project.name = String.format("Test %s", new Date().toString());
+        project.name = appendDate("Test");
         Persistence.projects.create(project);
 
         // Bart
-        bart = new FeedSource("BART", project.id, MANUALLY_UPLOADED);
-        Persistence.feedSources.create(bart);
+        feedSource = new FeedSource(appendDate("Test Feed"), project.id, MANUALLY_UPLOADED);
+        Persistence.feedSources.create(feedSource);
     }
 
     /**
@@ -77,9 +79,9 @@ public class ArbitraryTransformJobTest extends UnitTest {
      */
     @Before
     public void setUpTest() {
-        bart = Persistence.feedSources.getById(bart.id);
-        bart.transformRules = new ArrayList<>();
-        Persistence.feedSources.replace(bart.id, bart);
+        feedSource = Persistence.feedSources.getById(feedSource.id);
+        feedSource.transformRules = new ArrayList<>();
+        Persistence.feedSources.replace(feedSource.id, feedSource);
     }
 
     /**
@@ -88,78 +90,92 @@ public class ArbitraryTransformJobTest extends UnitTest {
     @After
     public void tearDownTest() {
         // Clean up
-        if (bartVersion != null) bartVersion.delete();
-        if (newBartVersion != null) newBartVersion.delete();
+        if (sourceVersion != null) sourceVersion.delete();
+        if (targetVersion != null) targetVersion.delete();
     }
 
+    /**
+     * Test that a {@link ReplaceFileTransformation} will successfully add a GTFS+ file found in the source version
+     * into the target version's GTFS file.
+     */
     @Test
-    public void canReplaceGtfsPlusFile() throws IOException {
+    public void canReplaceGtfsPlusFileFromVersion() throws IOException {
         final String table = "stop_attributes";
-        bartVersion = createFeedVersionFromGtfsZip(bart, "bart_old.zip");
+        // Create source version (folder contains stop_attributes file).
+        sourceVersion = createFeedVersion(
+            feedSource,
+            zipFolderFiles("fake-agency-with-only-calendar")
+        );
         // Replace file transformation runs before feed is loaded into database.
-        // Note: stop_attributes.txt is a GTFS+ file found in BART's feed.
-        FeedTransformation transformation = ReplaceFileTransformation.create(bartVersion.id, table);
+        FeedTransformation transformation = ReplaceFileTransformation.create(sourceVersion.id, table);
         FeedTransformRules transformRules = new FeedTransformRules(transformation);
-        bart.transformRules.add(transformRules);
-        Persistence.feedSources.replace(bart.id, bart);
-        // Create new BART version (note: bart_new.zip GTFS file has been stripped of stop_attributes.txt)
-        newBartVersion = createFeedVersionFromGtfsZip(bart, "bart_new.zip");
+        feedSource.transformRules.add(transformRules);
+        Persistence.feedSources.replace(feedSource.id, feedSource);
+        // Create target version (note: GTFS folder has no stop_attributes.txt file).
+        targetVersion = createFeedVersion(
+            feedSource,
+            zipFolderFiles("fake-agency-with-only-calendar-dates")
+        );
         // Check that new version has stop_attributes file
-        ZipFile zip = new ZipFile(newBartVersion.retrieveGtfsFile());
+        ZipFile zip = new ZipFile(targetVersion.retrieveGtfsFile());
         ZipEntry entry = zip.getEntry(table + ".txt");
         assertThat(entry, Matchers.notNullValue());
         // TODO Verify that stop_attributes file matches source file exactly?
     }
 
     @Test
-    public void canDeleteTrips() {
+    public void canDeleteTrips() throws IOException {
         // Add delete trips transformation.
         List<String> values = new ArrayList<>();
         // Collect route_id values.
-        values.add("19");
+        values.add("1");
         FeedTransformation transformation = DeleteRecordsTransformation.create(
             "trips",
             "route_id",
             values
         );
         FeedTransformRules transformRules = new FeedTransformRules(transformation);
-        bart.transformRules.add(transformRules);
-        Persistence.feedSources.replace(bart.id, bart);
+        feedSource.transformRules.add(transformRules);
+        Persistence.feedSources.replace(feedSource.id, feedSource);
         // Load feed.
-        bartVersion = createFeedVersionFromGtfsZip(bart, "bart_old.zip");
+        sourceVersion = createFeedVersion(
+            feedSource,
+            zipFolderFiles("fake-agency-with-only-calendar")
+        );
         // Fetch snapshot where modifications were made and create new version from it.
-        Snapshot snapshotWithModifications = bart.retrieveSnapshots().iterator().next();
-        CreateFeedVersionFromSnapshotJob newVersionJob = new CreateFeedVersionFromSnapshotJob(bart, snapshotWithModifications, user);
+        Snapshot snapshotWithModifications = feedSource.retrieveSnapshots().iterator().next();
+        CreateFeedVersionFromSnapshotJob newVersionJob = new CreateFeedVersionFromSnapshotJob(feedSource, snapshotWithModifications, user);
         newVersionJob.run();
         // Grab the modified version and check that the trips count matches expectation.
-        FeedVersion newVersion = bart.retrieveLatest();
+        FeedVersion newVersion = feedSource.retrieveLatest();
         assertEquals(
             "trips count for transformed feed should be decreased by the # of records matched by the query",
-            bartVersion.feedLoadResult.trips.rowCount - 1041,
+            // The only trips.txt has one trip with route_id=1
+            sourceVersion.feedLoadResult.trips.rowCount - 1,
             newVersion.feedLoadResult.trips.rowCount
         );
     }
 
     @Test
     public void replaceGtfsPlusFileFailsIfSourceIsMissing() {
-        bartVersion = createFeedVersionFromGtfsZip(bart, "bart_new.zip");
+        sourceVersion = createFeedVersionFromGtfsZip(feedSource, "bart_new.zip");
         // Replace file transformation runs before feed is loaded into database.
         // Note: stop_attributes.txt is a GTFS+ file found in BART's feed.
-        FeedTransformation transformation = ReplaceFileTransformation.create(bartVersion.id, "stop_attributes");
+        FeedTransformation transformation = ReplaceFileTransformation.create(sourceVersion.id, "stop_attributes");
         FeedTransformRules transformRules = new FeedTransformRules(transformation);
-        bart.transformRules.add(transformRules);
-        Persistence.feedSources.replace(bart.id, bart);
+        feedSource.transformRules.add(transformRules);
+        Persistence.feedSources.replace(feedSource.id, feedSource);
         // Create new BART version (note: bart_new.zip GTFS file has been stripped of stop_attributes.txt)
-        newBartVersion = createFeedVersionFromGtfsZip(bart, "bart_old.zip");
+        targetVersion = createFeedVersionFromGtfsZip(feedSource, "bart_old.zip");
         // TODO Check that new version has stop_attributes file that matches source version's copy.
-        assertThat(newBartVersion.validationResult, Matchers.nullValue());
+        assertThat(targetVersion.validationResult, Matchers.nullValue());
     }
 
     @Test
     public void canReplaceFeedInfo() throws SQLException {
         // Generate random UUID for feedId, which gets placed into the csv data.
         final String feedId = UUID.randomUUID().toString();
-        bartVersion = createFeedVersionFromGtfsZip(bart, "bart_old.zip");
+        sourceVersion = createFeedVersionFromGtfsZip(feedSource, "bart_old.zip");
         // Add feed_info csv data (purposefully with two rows, even though this is not valid GTFS).
         final String feedInfoContent = String.format(
             "feed_id,feed_publisher_name,feed_publisher_url,feed_lang\n%s,BART,https://www.bart.gov/,en\n2,abc,https://example.com",
@@ -167,22 +183,22 @@ public class ArbitraryTransformJobTest extends UnitTest {
         );
         FeedTransformation transformation = ReplaceFileFromStringTransformation.create(feedInfoContent, "feed_info");
         FeedTransformRules transformRules = new FeedTransformRules(transformation);
-        bart.transformRules.add(transformRules);
-        Persistence.feedSources.replace(bart.id, bart);
+        feedSource.transformRules.add(transformRules);
+        Persistence.feedSources.replace(feedSource.id, feedSource);
         // Create new BART version (note: bart_new.zip GTFS file has been stripped of
         // stop_attributes.txt)
-        newBartVersion = createFeedVersionFromGtfsZip(bart, "bart_new.zip");
+        targetVersion = createFeedVersionFromGtfsZip(feedSource, "bart_new.zip");
         LOG.info("Checking assertions.");
         assertEquals(
             "feed_info.txt row count should equal input csv data # of rows",
             2, // Magic number should match row count in feed_info csv string above.
-            newBartVersion.feedLoadResult.feedInfo.rowCount
+            targetVersion.feedLoadResult.feedInfo.rowCount
         );
         // Check for presence of new feedId in database (one record).
         assertThatSqlCountQueryYieldsExpectedCount(
             String.format(
                 "SELECT count(*) FROM %s.feed_info WHERE feed_id = '%s'",
-                newBartVersion.namespace,
+                targetVersion.namespace,
                 feedId
             ),
             1

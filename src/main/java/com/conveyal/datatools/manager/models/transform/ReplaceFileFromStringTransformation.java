@@ -26,11 +26,12 @@ public class ReplaceFileFromStringTransformation extends ZipTransformation {
 
     @Override
     public void transform(FeedTransformTarget target, MonitorableJob.Status status) {
-        // TODO: Refactor into validation code?
-        if (target.gtfsFile == null || !target.gtfsFile.exists()) {
-            status.fail("Target version must not be null.");
+        if (!(target instanceof FeedTransformZipTarget)) {
+            status.fail("Target must be FeedTransformZipTarget.");
             return;
         }
+        // Cast transform target to zip flavor.
+        FeedTransformZipTarget zipTarget = (FeedTransformZipTarget)target;
         if (csvData == null) {
             // TODO: Should we permit a null value (perhaps to result in removing the file)?
             status.fail("CSV data must not be null.");
@@ -43,7 +44,7 @@ public class ReplaceFileFromStringTransformation extends ZipTransformation {
         String tableName = table + ".txt";
         String tableNamePath = "/" + tableName;
         // Run the replace transformation
-        Path targetZipPath = Paths.get(target.gtfsFile.getAbsolutePath());
+        Path targetZipPath = Paths.get(zipTarget.gtfsFile.getAbsolutePath());
         try( FileSystem targetZipFs = FileSystems.newFileSystem(targetZipPath, null) ){
             // Convert csv data to input stream.
             InputStream inputStream = new ByteArrayInputStream(csvData.getBytes(StandardCharsets.UTF_8));

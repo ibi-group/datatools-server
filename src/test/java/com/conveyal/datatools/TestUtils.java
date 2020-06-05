@@ -19,6 +19,7 @@ import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
+import java.util.Date;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -31,6 +32,13 @@ public class TestUtils {
     private static final Logger LOG = LoggerFactory.getLogger(TestUtils.class);
 
     private static final ObjectMapper mapper = new ObjectMapper();
+
+    /**
+     * @return input string with date appended
+     */
+    public static String appendDate(String inputString) {
+        return String.join(" ", inputString, new Date().toString());
+    }
 
     /**
      * Returns true only if an environment variable exists and is set to "true".

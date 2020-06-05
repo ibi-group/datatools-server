@@ -8,6 +8,7 @@ import com.conveyal.datatools.manager.jobs.FetchProjectFeedsJob;
 import com.conveyal.datatools.manager.jobs.PublishProjectFeedsJob;
 import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
+import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
@@ -227,7 +228,7 @@ public class ProjectController {
         // Get latest version for each feed source in project
         Collection<FeedSource> feedSources = project.retrieveProjectFeedSources();
         for (FeedSource feedSource : feedSources) {
-            if (feedSource.retrievalMethod.equals(FeedSource.FeedRetrievalMethod.REGIONAL_MERGE)) {
+            if (feedSource.retrievalMethod.equals(FeedRetrievalMethod.REGIONAL_MERGE)) {
                 LOG.warn("Skipping {} feed source because it contains the regionally merged feed.", feedSource.name);
                 continue;
             }

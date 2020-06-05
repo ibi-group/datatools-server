@@ -7,6 +7,7 @@ import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
 import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
+import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Project;
@@ -118,18 +119,30 @@ public class FeedSourceController {
         }
     }
 
+    /**
+     * Check that updated or new feedSource object is valid. This method should be called before a feedSource is
+     * persisted to the database.
+     * TODO: Determine if other checks ought to be applied here.
+     */
     private static boolean validate(Request req, FeedSource feedSource) {
         if (feedSource.name == null || feedSource.name.isEmpty()) {
             logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Feed source name must be provided");
             return false;
         }
-        List<FeedSource.FeedRetrievalMethod> retrievalMethods = feedSource.transformRules.stream()
+        // Collect all retrieval methods found in tranform rules into a list.
+        List<FeedRetrievalMethod> retrievalMethods = feedSource.transformRules.stream()
             .map(rule -> rule.retrievalMethods)
             .flatMap(Collection::stream)
             .collect(Collectors.toList());
-        Set<FeedSource.FeedRetrievalMethod> retrievalMethodSet = new HashSet<>(retrievalMethods);
+        Set<FeedRetrievalMethod> retrievalMethodSet = new HashSet<>(retrievalMethods);
         if (retrievalMethods.size() > retrievalMethodSet.size()) {
-            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Retrieval methods cannot be defined more than once in transformation rules.");
+            // Explicitly check that the list of retrieval methods is not larger than the set (i.e., that there are no
+            // duplicates).
+            logMessageAndHalt(
+                req,
+                HttpStatus.BAD_REQUEST_400,
+                "Retrieval methods cannot be defined more than once in transformation rules."
+            );
             return false;
         }
         return true;

@@ -24,7 +24,7 @@ import static com.conveyal.datatools.TestUtils.assertThatSqlCountQueryYieldsExpe
 import static com.conveyal.datatools.TestUtils.createFeedVersion;
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static com.conveyal.datatools.TestUtils.zipFolderFiles;
-import static com.conveyal.datatools.manager.models.FeedSource.FeedRetrievalMethod.MANUALLY_UPLOADED;
+import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.MANUALLY_UPLOADED;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;

@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.models.transform;
 
+import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 
@@ -20,7 +21,7 @@ public class FeedTransformRules implements Serializable {
     /** Whether the rule set is active */
     public boolean active = true;
     /** Version retrieval methods to which this transform rule set applies. */
-    public List<FeedSource.FeedRetrievalMethod> retrievalMethods = new ArrayList<>();
+    public List<FeedRetrievalMethod> retrievalMethods = new ArrayList<>();
     /** List of transformations to be applied to feed in sequence */
     public List<FeedTransformation> transformations = new ArrayList<>();
     /**
@@ -34,11 +35,11 @@ public class FeedTransformRules implements Serializable {
 
     /** Default constructor to create rule set with the passed in transformations */
     public FeedTransformRules(FeedTransformation ...transformations) {
-        // Default retrieval method to apply to is fetch/manual upload. In other words, transformations attached to this
+        // Default retrieval methods to apply to are fetch/manual upload. In other words, transformations attached to this
         // rule set will only be applied to new versions that are fetched by URL or uploaded manually (not feeds
         // produced by the GTFS editor).
-        retrievalMethods.add(FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY);
-        retrievalMethods.add(FeedSource.FeedRetrievalMethod.MANUALLY_UPLOADED);
+        retrievalMethods.add(FeedRetrievalMethod.FETCHED_AUTOMATICALLY);
+        retrievalMethods.add(FeedRetrievalMethod.MANUALLY_UPLOADED);
         this.transformations.addAll(Arrays.asList(transformations));
     }
 
@@ -46,7 +47,7 @@ public class FeedTransformRules implements Serializable {
         return active;
     }
 
-    public boolean hasRetrievalMethod(FeedSource.FeedRetrievalMethod retrievalMethod) {
+    public boolean hasRetrievalMethod(FeedRetrievalMethod retrievalMethod) {
         return retrievalMethods.contains(retrievalMethod);
     }
 

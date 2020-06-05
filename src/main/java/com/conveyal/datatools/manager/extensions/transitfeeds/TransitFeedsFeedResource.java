@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.extensions.transitfeeds;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
+import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
@@ -129,7 +130,7 @@ public class TransitFeedsFeedResource implements ExternalFeedResource {
                 if (source == null) source = new FeedSource(feedName);
                 else source.name = feedName;
 
-                source.retrievalMethod = FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
+                source.retrievalMethod = FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
                 source.name = feedName;
                 System.out.println(source.name);
 

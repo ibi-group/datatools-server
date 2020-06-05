@@ -4,6 +4,7 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.gtfsplus.tables.GtfsPlusTable;
+import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
@@ -46,8 +47,8 @@ import java.util.zip.ZipOutputStream;
 
 import static com.conveyal.datatools.manager.jobs.MergeFeedsType.SERVICE_PERIOD;
 import static com.conveyal.datatools.manager.jobs.MergeFeedsType.REGIONAL;
-import static com.conveyal.datatools.manager.models.FeedSource.FeedRetrievalMethod.REGIONAL_MERGE;
-import static com.conveyal.datatools.manager.models.FeedSource.FeedRetrievalMethod.SERVICE_PERIOD_MERGE;
+import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.REGIONAL_MERGE;
+import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.SERVICE_PERIOD_MERGE;
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.conveyal.gtfs.loader.DateField.GTFS_DATE_FORMATTER;
 import static com.conveyal.gtfs.loader.Field.getFieldIndex;
@@ -180,7 +181,7 @@ public class MergeFeedsJob extends MonitorableJob {
         this.feedSource = mergeType.equals(REGIONAL)
             ? regionalFeedSource
             : feedVersions.iterator().next().parentFeedSource();
-        FeedSource.FeedRetrievalMethod retrievalMethod = mergeType.equals(REGIONAL)
+        FeedRetrievalMethod retrievalMethod = mergeType.equals(REGIONAL)
             ? REGIONAL_MERGE
             : SERVICE_PERIOD_MERGE;
         // Merged version will be null if the new version should not be stored.

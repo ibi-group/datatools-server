@@ -1,7 +1,6 @@
 package com.conveyal.datatools.manager.models.transform;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.manager.controllers.api.FeedSourceController;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import org.slf4j.Logger;
@@ -33,11 +32,12 @@ public class ReplaceFileTransformation extends ZipTransformation {
 
     @Override
     public void transform(FeedTransformTarget target, MonitorableJob.Status status) {
-        // TODO: Refactor into validation code?
-        if (target.gtfsFile == null || !target.gtfsFile.exists()) {
-            status.fail("Target file must exist.");
+        if (!(target instanceof FeedTransformZipTarget)) {
+            status.fail("Target must be FeedTransformZipTarget.");
             return;
         }
+        // Cast transform target to zip flavor.
+        FeedTransformZipTarget zipTarget = (FeedTransformZipTarget)target;
         FeedVersion sourceVersion = Persistence.feedVersions.getById(sourceVersionId);
         if (sourceVersion == null) {
             status.fail("Source version ID must reference valid version.");
@@ -55,7 +55,7 @@ public class ReplaceFileTransformation extends ZipTransformation {
         try (FileSystem sourceZipFs = FileSystems.newFileSystem(sourceZipPath, null)) {
             // If the source txt file does not exist, NoSuchFileException will be thrown and caught below.
             Path sourceTxtFilePath = sourceZipFs.getPath(tableNamePath);
-            Path targetZipPath = Paths.get(target.gtfsFile.getAbsolutePath());
+            Path targetZipPath = Paths.get(zipTarget.gtfsFile.getAbsolutePath());
             LOG.info("Replacing file {} in zip file {} with source {}", tableNamePath, targetZipPath.getFileName(), sourceVersion.id);
             try( FileSystem targetZipFs = FileSystems.newFileSystem(targetZipPath, null) ){
                 Path targetTxtFilePath = targetZipFs.getPath(tableNamePath);

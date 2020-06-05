@@ -44,7 +44,7 @@ public class Snapshot extends Model {
     public String feedVersionId;
 
     /** Retrieval method for the snapshot is PRODUCED_IN_HOUSE (i.e., created by editor) by default. */
-    public FeedSource.FeedRetrievalMethod retrievalMethod = FeedSource.FeedRetrievalMethod.PRODUCED_IN_HOUSE;
+    public FeedRetrievalMethod retrievalMethod = FeedRetrievalMethod.PRODUCED_IN_HOUSE;
 
     /** The namespace this snapshot is a copy of */
     public String snapshotOf;
@@ -82,7 +82,7 @@ public class Snapshot extends Model {
      */
     public Snapshot(String name, FeedVersion feedVersion) {
         this(null, feedVersion.feedSourceId, null);
-        this.retrievalMethod = FeedSource.FeedRetrievalMethod.VERSION_CLONE;
+        this.retrievalMethod = FeedRetrievalMethod.VERSION_CLONE;
         // The feedVersionId
         this.feedVersionId = feedVersion.id;
     }

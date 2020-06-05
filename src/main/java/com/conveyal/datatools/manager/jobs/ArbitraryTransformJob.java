@@ -3,7 +3,9 @@ package com.conveyal.datatools.manager.jobs;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.transform.DbTransformation;
+import com.conveyal.datatools.manager.models.transform.FeedTransformDbTarget;
 import com.conveyal.datatools.manager.models.transform.FeedTransformTarget;
+import com.conveyal.datatools.manager.models.transform.FeedTransformZipTarget;
 import com.conveyal.datatools.manager.models.transform.FeedTransformation;
 import com.conveyal.datatools.manager.models.transform.ZipTransformation;
 
@@ -24,7 +26,7 @@ public class ArbitraryTransformJob extends MonitorableJob {
      */
     public ArbitraryTransformJob(Auth0UserProfile owner, File targetFile, ZipTransformation transformation) {
         super(owner, "Transform " + targetFile.getAbsolutePath(), JobType.ARBITRARY_FEED_TRANSFORM);
-        this.target = new FeedTransformTarget(targetFile);
+        this.target = new FeedTransformZipTarget(targetFile);
         this.transformation = transformation;
     }
 
@@ -33,12 +35,16 @@ public class ArbitraryTransformJob extends MonitorableJob {
      */
     public ArbitraryTransformJob(Auth0UserProfile owner, String targetSnapshotId, DbTransformation transformation) {
         super(owner, "Transform " + targetSnapshotId, JobType.ARBITRARY_FEED_TRANSFORM);
-        this.target = new FeedTransformTarget(targetSnapshotId);
+        this.target = new FeedTransformDbTarget(targetSnapshotId);
         this.transformation = transformation;
     }
 
     @Override
     public void jobLogic() {
+        // First validate the target and skip transformation if it is invalid.
+        target.validate(status);
+        if (status.error) return;
+        // If target is valid, perform transformation.
         transformation.transform(target, status);
     }
 }
