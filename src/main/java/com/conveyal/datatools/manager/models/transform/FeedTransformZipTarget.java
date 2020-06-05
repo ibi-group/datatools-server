@@ -5,7 +5,7 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import java.io.File;
 
 /**
- * Target for a zip transformation (e.g., {@link ReplaceFileTransformation}).
+ * Target for a zip transformation (e.g., {@link ReplaceFileFromVersionTransformation}).
  */
 public class FeedTransformZipTarget implements FeedTransformTarget {
     public File gtfsFile;

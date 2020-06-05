@@ -46,6 +46,8 @@ public class ValidateFeedJob extends MonitorableJob {
                 // the version won't get loaded into MongoDB (even though it exists in postgres).
                 feedVersion.storeUser(owner);
                 if (isNewVersion) {
+                    int count = feedVersion.parentFeedSource().feedVersionCount();
+                    feedVersion.version = count + 1;
                     Persistence.feedVersions.create(feedVersion);
                 } else {
                     Persistence.feedVersions.replace(feedVersion.id, feedVersion);

@@ -80,8 +80,6 @@ public class FeedVersion extends Model implements Serializable {
         this.name = formattedTimestamp() + " Version";
         // We generate IDs manually, but we need a bit of information to do so
         this.id = generateFeedVersionId(source);
-        int count = source.feedVersionCount();
-        this.version = count + 1;
         this.retrievalMethod = retrievalMethod;
     }
 

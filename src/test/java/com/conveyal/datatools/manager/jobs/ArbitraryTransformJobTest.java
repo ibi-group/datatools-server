@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.jobs;
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Snapshot;
 import com.conveyal.datatools.manager.models.transform.DeleteRecordsTransformation;
@@ -11,7 +12,7 @@ import com.conveyal.datatools.manager.models.transform.FeedTransformation;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.models.transform.ReplaceFileFromStringTransformation;
-import com.conveyal.datatools.manager.models.transform.ReplaceFileTransformation;
+import com.conveyal.datatools.manager.models.transform.ReplaceFileFromVersionTransformation;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import org.hamcrest.Matchers;
 import org.junit.After;
@@ -33,10 +34,11 @@ import java.util.zip.ZipFile;
 import static com.conveyal.datatools.TestUtils.appendDate;
 import static com.conveyal.datatools.TestUtils.assertThatSqlCountQueryYieldsExpectedCount;
 import static com.conveyal.datatools.TestUtils.createFeedVersion;
-import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static com.conveyal.datatools.TestUtils.zipFolderFiles;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.MANUALLY_UPLOADED;
+import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.VERSION_CLONE;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertThat;
 
 public class ArbitraryTransformJobTest extends UnitTest {
@@ -95,7 +97,7 @@ public class ArbitraryTransformJobTest extends UnitTest {
     }
 
     /**
-     * Test that a {@link ReplaceFileTransformation} will successfully add a GTFS+ file found in the source version
+     * Test that a {@link ReplaceFileFromVersionTransformation} will successfully add a GTFS+ file found in the source version
      * into the target version's GTFS file.
      */
     @Test
@@ -107,7 +109,7 @@ public class ArbitraryTransformJobTest extends UnitTest {
             zipFolderFiles("fake-agency-with-only-calendar")
         );
         // Replace file transformation runs before feed is loaded into database.
-        FeedTransformation transformation = ReplaceFileTransformation.create(sourceVersion.id, table);
+        FeedTransformation transformation = ReplaceFileFromVersionTransformation.create(sourceVersion.id, table);
         FeedTransformRules transformRules = new FeedTransformRules(transformation);
         feedSource.transformRules.add(transformRules);
         Persistence.feedSources.replace(feedSource.id, feedSource);
@@ -158,41 +160,37 @@ public class ArbitraryTransformJobTest extends UnitTest {
     }
 
     @Test
-    public void replaceGtfsPlusFileFailsIfSourceIsMissing() {
-        sourceVersion = createFeedVersionFromGtfsZip(feedSource, "bart_new.zip");
-        // Replace file transformation runs before feed is loaded into database.
-        // Note: stop_attributes.txt is a GTFS+ file found in BART's feed.
-        FeedTransformation transformation = ReplaceFileTransformation.create(sourceVersion.id, "stop_attributes");
-        FeedTransformRules transformRules = new FeedTransformRules(transformation);
-        feedSource.transformRules.add(transformRules);
-        Persistence.feedSources.replace(feedSource.id, feedSource);
-        // Create new BART version (note: bart_new.zip GTFS file has been stripped of stop_attributes.txt)
-        targetVersion = createFeedVersionFromGtfsZip(feedSource, "bart_old.zip");
-        // TODO Check that new version has stop_attributes file that matches source version's copy.
-        assertThat(targetVersion.validationResult, Matchers.nullValue());
-    }
-
-    @Test
-    public void canReplaceFeedInfo() throws SQLException {
+    public void canCloneZipFileAndTransform() throws IOException, SQLException {
         // Generate random UUID for feedId, which gets placed into the csv data.
         final String feedId = UUID.randomUUID().toString();
-        sourceVersion = createFeedVersionFromGtfsZip(feedSource, "bart_old.zip");
-        // Add feed_info csv data (purposefully with two rows, even though this is not valid GTFS).
-        final String feedInfoContent = String.format(
-            "feed_id,feed_publisher_name,feed_publisher_url,feed_lang\n%s,BART,https://www.bart.gov/,en\n2,abc,https://example.com",
-            feedId
-        );
+        final String feedInfoContent = generateFeedInfo(feedId);
         FeedTransformation transformation = ReplaceFileFromStringTransformation.create(feedInfoContent, "feed_info");
-        FeedTransformRules transformRules = new FeedTransformRules(transformation);
+        // Create transform rules for VERSION_CLONE retrieval method.
+        FeedTransformRules transformRules = new FeedTransformRules(transformation, FeedRetrievalMethod.VERSION_CLONE);
         feedSource.transformRules.add(transformRules);
         Persistence.feedSources.replace(feedSource.id, feedSource);
-        // Create new BART version (note: bart_new.zip GTFS file has been stripped of
-        // stop_attributes.txt)
-        targetVersion = createFeedVersionFromGtfsZip(feedSource, "bart_new.zip");
-        LOG.info("Checking assertions.");
+        // Create new version. This will handle processing the initial version, cloning that version, and applying the
+        // transformations to the cloned version. It will conclude once the cloned version is processed.
+        sourceVersion = createFeedVersion(
+            feedSource,
+            zipFolderFiles("fake-agency-with-only-calendar")
+        );
+        // Grab the cloned version and check assertions.
+        targetVersion = feedSource.retrieveLatest();
+        LOG.info("Checking canCloneZipFileAndTransform assertions.");
+        assertEquals(
+            "Cloned version number should increment by one over original version.",
+            sourceVersion.version + 1,
+            targetVersion.version
+        );
+        assertEquals(
+            "Cloned version retrieval method should be VERSION_CLONE",
+            targetVersion.retrievalMethod,
+            VERSION_CLONE
+        );
         assertEquals(
             "feed_info.txt row count should equal input csv data # of rows",
-            2, // Magic number should match row count in feed_info csv string above.
+            2, // Magic number should match row count in string produced by generateFeedInfo
             targetVersion.feedLoadResult.feedInfo.rowCount
         );
         // Check for presence of new feedId in database (one record).
@@ -204,6 +202,70 @@ public class ArbitraryTransformJobTest extends UnitTest {
             ),
             1
         );
+    }
 
+    @Test
+    public void replaceGtfsPlusFileFailsIfSourceIsMissing() throws IOException {
+        sourceVersion = createFeedVersion(
+            feedSource,
+            zipFolderFiles("fake-agency-with-only-calendar")
+        );
+        // Replace file transformation runs before feed is loaded into database.
+        // Note: stop_attributes.txt is a GTFS+ file found in BART's feed.
+        FeedTransformation transformation = ReplaceFileFromVersionTransformation.create(sourceVersion.id, "realtime_routes");
+        FeedTransformRules transformRules = new FeedTransformRules(transformation);
+        feedSource.transformRules.add(transformRules);
+        Persistence.feedSources.replace(feedSource.id, feedSource);
+        // Create new BART version (note: bart_new.zip GTFS file has been stripped of stop_attributes.txt)
+        targetVersion = createFeedVersion(
+            feedSource,
+            zipFolderFiles("fake-agency-with-only-calendar-dates")
+        );
+        // TODO Check that new version has stop_attributes file that matches source version's copy.
+        assertThat(targetVersion.validationResult, Matchers.nullValue());
+    }
+
+    @Test
+    public void canReplaceFeedInfo() throws SQLException, IOException {
+        // Generate random UUID for feedId, which gets placed into the csv data.
+        final String feedId = UUID.randomUUID().toString();
+        final String feedInfoContent = generateFeedInfo(feedId);
+        sourceVersion = createFeedVersion(
+            feedSource,
+            zipFolderFiles("fake-agency-with-only-calendar")
+        );
+        FeedTransformation transformation = ReplaceFileFromStringTransformation.create(feedInfoContent, "feed_info");
+        FeedTransformRules transformRules = new FeedTransformRules(transformation);
+        feedSource.transformRules.add(transformRules);
+        Persistence.feedSources.replace(feedSource.id, feedSource);
+        // Create new BART version (note: bart_new.zip GTFS file has been stripped of
+        // stop_attributes.txt)
+        targetVersion = createFeedVersion(
+            feedSource,
+            zipFolderFiles("fake-agency-with-only-calendar-dates")
+        );
+        LOG.info("Checking assertions.");
+        assertEquals(
+            "feed_info.txt row count should equal input csv data # of rows",
+            2, // Magic number should match row count in string produced by generateFeedInfo
+            targetVersion.feedLoadResult.feedInfo.rowCount
+        );
+        // Check for presence of new feedId in database (one record).
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format(
+                "SELECT count(*) FROM %s.feed_info WHERE feed_id = '%s'",
+                targetVersion.namespace,
+                feedId
+            ),
+            1
+        );
+    }
+
+    private static String generateFeedInfo(String feedId) {
+        // Add feed_info csv data (purposefully with two rows, even though this is not valid GTFS).
+        return String.format(
+            "feed_id,feed_publisher_name,feed_publisher_url,feed_lang\n%s,BART,https://www.bart.gov/,en\n2,abc,https://example.com",
+            feedId
+        );
     }
 }

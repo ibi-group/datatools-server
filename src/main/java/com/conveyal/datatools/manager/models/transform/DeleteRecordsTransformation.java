@@ -18,6 +18,9 @@ import static com.conveyal.datatools.manager.DataManager.GTFS_DATA_SOURCE;
  * For now this is somewhat of just a demonstration/example for how to build create a {@link DbTransformation} subclass.
  * This feed transformation will operate on the namespace for the provided {@link FeedTransformDbTarget#snapshotId}.
  * It will delete all records in the specified table that match the WHERE clause created by the match field and values.
+ *
+ * TODO: Determine if this transformation class should be deleted. WARNING: this currently does not handle cascade
+ *   deleting stop_times associated with deleted trips (or records from other related tables).
  */
 public class DeleteRecordsTransformation extends DbTransformation {
     private static final Logger LOG = LoggerFactory.getLogger(DeleteRecordsTransformation.class);

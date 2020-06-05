@@ -17,14 +17,14 @@ import java.nio.file.StandardCopyOption;
 /**
  * This feed transformation will replace a file in the target zip (table) with a file from the source version.
  */
-public class ReplaceFileTransformation extends ZipTransformation {
-    private static final Logger LOG = LoggerFactory.getLogger(ReplaceFileTransformation.class);
+public class ReplaceFileFromVersionTransformation extends ZipTransformation {
+    private static final Logger LOG = LoggerFactory.getLogger(ReplaceFileFromVersionTransformation.class);
 
     /** no-arg constructor for de/serialization */
-    public ReplaceFileTransformation() {}
+    public ReplaceFileFromVersionTransformation() {}
 
-    public static ReplaceFileTransformation create(String sourceVersionId, String table) {
-        ReplaceFileTransformation transformation = new ReplaceFileTransformation();
+    public static ReplaceFileFromVersionTransformation create(String sourceVersionId, String table) {
+        ReplaceFileFromVersionTransformation transformation = new ReplaceFileFromVersionTransformation();
         transformation.sourceVersionId = sourceVersionId;
         transformation.table = table;
         return transformation;

@@ -33,6 +33,7 @@ public class ProcessSingleFeedJob extends MonitorableJob {
     private final FeedVersion feedVersion;
     private final boolean isNewVersion;
     private static final Logger LOG = LoggerFactory.getLogger(ProcessSingleFeedJob.class);
+    /** Following the process feed job, whether the feed version should be cloned. */
     private final boolean shouldClone;
     private final FeedSource feedSource;
 
@@ -68,6 +69,26 @@ public class ProcessSingleFeedJob extends MonitorableJob {
         return feedSource.id;
     }
 
+    /**
+     * The primary logic in this job handles loading (into Postgres) and validating the incoming GTFS file. However,
+     * there are important secondary functions that run {@link ArbitraryTransformJob} to modify either the input GTFS
+     * zip file or the resulting database representation.
+     *
+     * There are a few different transformation possibilities:
+     * 1. We only have zip transformations. These can either apply directly to the imported zip
+     *    or they can apply to a cloned version of the import. In the second case, the retrieval method should be set to
+     *    VERSION_CLONE (otherwise, it can be set to any other combination of retrieval methods).
+     * 2. We only have db transformations. These will always apply to a cloned snapshot of a feed version to
+     *    prevent the feed version's namespace from having different contents from the zip file. Following this, the
+     *    snapshot can either end up hanging (i.e., not published) or once all of the transformations have been
+     *    applied, we can create a new feed version from the snapshot (retrieval method being produced in house??).
+     * 3. Let's say we have zip transformations and db transformations.
+     *    a. Zip transformations apply to imported version, db transformations apply to snapshot or get published (no big deal)
+     *    b. Zip transformations apply to cloned version, db transformations apply to snapshot or get published.
+     *       This case is a little trickier, because we could end up with two cloned_versions. Let's say we want
+     *       a SQL query to run on the original data, create a new GTFS file, and then replace a GTFS+ file from some
+     *       other version. FTR1 = clone
+     */
     @Override
     public void jobLogic () {
         LOG.info("Processing feed for {}", feedVersion.id);
@@ -113,6 +134,33 @@ public class ProcessSingleFeedJob extends MonitorableJob {
             }
         }
 
+        if (shouldClone) {
+            // If it was determined that the final version should be cloned (because of feed transformations that
+            // must operate on a cloned version), handle that here. The cloned version will then apply the
+            // transformations in its process feed job.
+            try {
+                // Create a new version for the clone.
+                FeedVersion newFeedVersion = new FeedVersion(feedSource, VERSION_CLONE);
+                LOG.info(
+                    "Cloning version ({} to {}) due to presence of transform rules applying to VERSION_CLONE method.",
+                    feedVersion.id,
+                    newFeedVersion.id
+                );
+                // Get new path for GTFS file.
+                File newGtfsFile = FeedVersion.feedStore.getFeedFile(newFeedVersion.id);
+                // Copy previous version to the new GTFS path.
+                Files.copy(feedVersion.retrieveGtfsFile().toPath(), newGtfsFile.toPath());
+                // Handle hashing file.
+                newFeedVersion.assignGtfsFileAttributes(newGtfsFile);
+                // Kick off version clone job in same thread. Transformations that apply to VERSION_CLONE will
+                // happen in this job.
+                ProcessSingleFeedJob versionCloneJob = new ProcessSingleFeedJob(newFeedVersion, owner, true);
+                addNextJob(versionCloneJob);
+            } catch (IOException e) {
+                status.fail("Could not clone version.", e);
+            }
+        }
+
         // FIXME: Should we overwrite the input GTFS dataset if transforming in place?
 
         // TODO: Any other activities that need to be run (e.g., module-specific activities).
@@ -129,38 +177,6 @@ public class ProcessSingleFeedJob extends MonitorableJob {
         if (!status.error) {
             // Note: storing a new feed version in database is handled at completion of the ValidateFeedJob subtask.
             status.completeSuccessfully("New version saved.");
-            // OK, let's map out the different transformation possibilities:
-            // 1. We only have zip transformations. These can either apply directly to the imported zip (dangerous)
-            // or they can apply to a cloned version of the import. In that case, the retrieval method should be set to
-            // VERSION_CLONE (otherwise, can be set to any other combination of retrieval methods).
-            // 2. We only have db transformations. These will always apply to a cloned snapshot of a feed version to
-            // avoid the primary db namespace having different contents from the zip file. Possibilities here are that
-            // the snapshot can end up hanging (i.e., not published) or once all of the transformations have been
-            // applied, we can create a new feed version from the snapshot (retrieval method being produced in house??).
-            // 3. Let's say we have zip transformations and db transformations.
-            // 3a: Zip transformations apply to imported version, db transformations apply to snapshot or get published (no big deal)
-            // 3b: Zip transformations apply to cloned version, db transformations apply to snapshot or get published.
-            //  ---- This case is a little trickier, because we could end up with two cloned_versions. Let's say we want
-            //  a SQL query to run on the original data, create a new GTFS file, and then replace a GTFS+ file from some
-            //  other version. FTR1 = clone
-            if (shouldClone) {
-                try {
-                    // Create a new version for the clone.
-                    FeedVersion newFeedVersion = new FeedVersion(feedSource, VERSION_CLONE);
-                    // Get new path for GTFS file.
-                    File newGtfsFile = FeedVersion.feedStore.getFeedFile(newFeedVersion.id);
-                    // Copy previous version to the new GTFS path.
-                    Files.copy(feedVersion.retrieveGtfsFile().toPath(), newGtfsFile.toPath());
-                    // Handle hashing file.
-                    newFeedVersion.assignGtfsFileAttributes(newGtfsFile);
-                    // Kick off job in new thread. Transformations that apply to clone will be picked up in the next
-                    // processing stage. FIXME should this happen in the same thread?
-                    ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(newFeedVersion, owner, true);
-                    DataManager.heavyExecutor.execute(processSingleFeedJob);
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
-            }
         } else {
             // Processing did not complete. Depending on which sub-task this occurred in,
             // there may or may not have been a successful load/validation of the feed.

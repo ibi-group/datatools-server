@@ -34,13 +34,19 @@ public class FeedTransformRules implements Serializable {
     public FeedTransformRules() {}
 
     /** Default constructor to create rule set with the passed in transformations */
-    public FeedTransformRules(FeedTransformation ...transformations) {
+    public FeedTransformRules(FeedTransformation transformation) {
         // Default retrieval methods to apply to are fetch/manual upload. In other words, transformations attached to this
         // rule set will only be applied to new versions that are fetched by URL or uploaded manually (not feeds
         // produced by the GTFS editor).
-        retrievalMethods.add(FeedRetrievalMethod.FETCHED_AUTOMATICALLY);
-        retrievalMethods.add(FeedRetrievalMethod.MANUALLY_UPLOADED);
-        this.transformations.addAll(Arrays.asList(transformations));
+        this(transformation, FeedRetrievalMethod.FETCHED_AUTOMATICALLY, FeedRetrievalMethod.MANUALLY_UPLOADED);
+    }
+
+    public FeedTransformRules(FeedTransformation transformation, FeedRetrievalMethod ...retrievalMethods) {
+        // Default retrieval methods to apply to are fetch/manual upload. In other words, transformations attached to this
+        // rule set will only be applied to new versions that are fetched by URL or uploaded manually (not feeds
+        // produced by the GTFS editor).
+        this.retrievalMethods.addAll(Arrays.asList(retrievalMethods));
+        this.transformations.add(transformation);
     }
 
     public boolean isActive() {
