@@ -217,13 +217,13 @@ public class MergeFeedsJobTest extends UnitTest {
         );
 
         // - trips table
-        // expect only 2 records in trips table
+        // expect 2 + 1 = 3 records in trips table
         assertThatSqlCountQueryYieldsExpectedCount(
             String.format(
                 "SELECT count(*) FROM %s.trips",
                 mergedNamespace
             ),
-            2
+            3
         );
         // onlyCalendarDatesVersion's common_id service_id should be scoped
         assertThatSqlCountQueryYieldsExpectedCount(
@@ -233,13 +233,13 @@ public class MergeFeedsJobTest extends UnitTest {
             ),
             1
         );
-        // onlyCalendarVersion's common_id service_id should be scoped
+        // 2 trips with onlyCalendarVersion's common_id service_id should be scoped
         assertThatSqlCountQueryYieldsExpectedCount(
             String.format(
                 "SELECT count(*) FROM %s.trips WHERE service_id='Fake_Agency2:common_id'",
                 mergedNamespace
             ),
-            1
+            2
         );
     }
 
@@ -402,10 +402,10 @@ public class MergeFeedsJobTest extends UnitTest {
         );
 
         // - trips table
-        // expect only 2 records in trips table
+        // expect 2 + 1 = 3 records in trips table
         assertThatSqlCountQueryYieldsExpectedCount(
             String.format("SELECT count(*) FROM %s.trips", mergedNamespace),
-            2
+            3
         );
         // bothCalendarFilesVersion's common_id service_id should be scoped
         assertThatSqlCountQueryYieldsExpectedCount(
@@ -415,13 +415,13 @@ public class MergeFeedsJobTest extends UnitTest {
             ),
             1
         );
-        // onlyCalendarVersion's common_id service_id should not be scoped
+        // 2 trips with onlyCalendarVersion's common_id service_id should not be scoped
         assertThatSqlCountQueryYieldsExpectedCount(
             String.format(
                 "SELECT count(*) FROM %s.trips WHERE service_id='common_id'",
                 mergedNamespace
             ),
-            1
+            2
         );
     }
 
@@ -489,10 +489,10 @@ public class MergeFeedsJobTest extends UnitTest {
         );
 
         // - trips table
-        // expect only 2 records in trips table
+        // expect 2 + 1 = 3 records in trips table
         assertThatSqlCountQueryYieldsExpectedCount(
             String.format("SELECT count(*) FROM %s.trips", mergedNamespace),
-            2
+            3
         );
         // bothCalendarFilesVersion's common_id service_id should be scoped
         assertThatSqlCountQueryYieldsExpectedCount(
@@ -502,13 +502,13 @@ public class MergeFeedsJobTest extends UnitTest {
             ),
             1
         );
-        // onlyCalendarVersion's common_id service_id should not be scoped
+        // 2 trips with onlyCalendarVersion's common_id service_id should not be scoped
         assertThatSqlCountQueryYieldsExpectedCount(
             String.format(
                 "SELECT count(*) FROM %s.trips WHERE service_id='common_id'",
                 mergedNamespace
             ),
-            1
+            2
         );
         // This fails, but if remappedReferences isn't actually needed maybe the current implementation is good-to-go
         // assertThat(mergeFeedsJob.mergeFeedsResult.remappedReferences, equalTo(1));

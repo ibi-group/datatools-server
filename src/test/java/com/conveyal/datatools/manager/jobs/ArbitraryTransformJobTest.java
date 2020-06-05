@@ -126,13 +126,15 @@ public class ArbitraryTransformJobTest extends UnitTest {
     @Test
     public void canDeleteTrips() throws IOException {
         // Add delete trips transformation.
-        List<String> values = new ArrayList<>();
+        List<String> routeIds = new ArrayList<>();
         // Collect route_id values.
-        values.add("1");
+        routeIds.add("1");
+        // Store the number of trips that run on the route_ids here.
+        int numberOfTripsForRoutes = 1;
         FeedTransformation transformation = DeleteRecordsTransformation.create(
             "trips",
             "route_id",
-            values
+            routeIds
         );
         FeedTransformRules transformRules = new FeedTransformRules(transformation);
         feedSource.transformRules.add(transformRules);
@@ -150,8 +152,7 @@ public class ArbitraryTransformJobTest extends UnitTest {
         FeedVersion newVersion = feedSource.retrieveLatest();
         assertEquals(
             "trips count for transformed feed should be decreased by the # of records matched by the query",
-            // The only trips.txt has one trip with route_id=1
-            sourceVersion.feedLoadResult.trips.rowCount - 1,
+            sourceVersion.feedLoadResult.trips.rowCount - numberOfTripsForRoutes,
             newVersion.feedLoadResult.trips.rowCount
         );
     }
