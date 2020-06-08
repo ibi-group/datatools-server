@@ -43,7 +43,6 @@ public class Project extends Model {
      * project as well as those that belong to no project.
      * @return
      */
-    @JsonProperty("otpServers")
     public List<OtpServer> availableOtpServers() {
         return Persistence.servers.getFiltered(or(
             eq("projectId", this.id),
@@ -110,5 +109,18 @@ public class Project extends Model {
         retrieveDeployments().forEach(Deployment::delete);
         // Finally, delete the project.
         Persistence.projects.removeById(this.id);
+    }
+
+    /**
+     * A MixIn to be applied to this deployment, for returning a single deployment, so that the list of ec2Instances is
+     * included in the JSON response.
+     *
+     * Usually a mixin would be used on an external class, but since we are changing one thing about a single class, it seemed
+     * unnecessary to define a new view.
+     */
+    public abstract static class ProjectWithOtpServers {
+
+        @JsonProperty("otpServers")
+        public abstract Collection<OtpServer> availableOtpServers ();
     }
 }
