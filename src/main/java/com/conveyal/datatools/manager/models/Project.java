@@ -112,11 +112,11 @@ public class Project extends Model {
     }
 
     /**
-     * A MixIn to be applied to this deployment, for returning a single deployment, so that the list of ec2Instances is
+     * A MixIn to be applied to this project, for returning a single project, so that the list of otpServers is
      * included in the JSON response.
      *
-     * Usually a mixin would be used on an external class, but since we are changing one thing about a single class, it seemed
-     * unnecessary to define a new view.
+     * Usually a mixin would be used on an external class, but since we are changing one thing about a single class, it
+     * seemed unnecessary to define a new view.
      */
     public abstract static class ProjectWithOtpServers {
 
