@@ -37,8 +37,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -439,6 +441,9 @@ public class Deployment extends Model implements Serializable {
         return conn.getInputStream();
     }
 
+    /**
+     * Gets the URL for downloading an OSM PBF file from the osm vex server for the desired bounding box.
+     */
     public static URL getVexUrl (Rectangle2D rectangle2D) throws MalformedURLException {
         Bounds bounds = new Bounds(rectangle2D);
         if (!bounds.areValid()) {
@@ -539,15 +544,19 @@ public class Deployment extends Model implements Serializable {
         return Persistence.deployments.removeById(this.id);
     }
 
+    /**
+     * Creates a list of all of the download URLs for all of the OSM and GTFS files that would be needed to build an OTP
+     * graph.
+     */
     public List<String> generateGtfsAndOsmUrls() throws MalformedURLException {
-        List<String> urls = new ArrayList();
+        Set<String> urls = new HashSet<>();
         // add OSM data
         urls.add(getVexUrl(retrieveProjectBounds()).toString());
         // add GTFS files
         for (String feedVersionId : feedVersionIds) {
             urls.add(feedStore.getS3FeedPath(feedVersionId));
         }
-        return urls;
+        return new ArrayList<>(urls);
     }
 
     /**

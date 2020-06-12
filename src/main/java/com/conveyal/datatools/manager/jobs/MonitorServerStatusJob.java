@@ -53,7 +53,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
     private final AmazonEC2 ec2;
     private final AmazonElasticLoadBalancing elbClient;
     private final CloseableHttpClient httpClient = HttpClients.createDefault();
-    // Delay checks by twenty seconds to give user-data script time to upload the instance's user data log if part of the
+    // Delay checks by four seconds to give user-data script time to upload the instance's user data log if part of the
     // script fails (e.g., uploading or downloading a file).
     private static final int DELAY_SECONDS = 4;
     public long graphTaskSeconds;
@@ -117,21 +117,20 @@ public class MonitorServerStatusJob extends MonitorableJob {
             // Wait for otp-runner to write a status that fulfills expectations of this job
             statusCheckStartTime = System.currentTimeMillis();
             boolean otpRunnerCompleted = false;
-            while (!otpRunnerCompleted && !status.error) {
+            while (!otpRunnerCompleted) {
                 // If the request is successful, the OTP instance has started.
                 waitAndCheckInstanceHealth("otp-runner completion check: " + statusUrl);
                 otpRunnerCompleted = checkForOtpRunnerCompletion(statusUrl);
+                // Check if an otp-runner status file check has already failed this job.
+                if (status.error) {
+                    return;
+                }
                 // wait a maximum of 5 hours if building a graph, or 1 hour if just starting a server
                 long maxOtpRunnerWaitTimeMillis = (graphAlreadyBuilt ? 5 : 1) * 60 * 60 * 1000;
                 if (taskHasTimedOut(statusCheckStartTime, maxOtpRunnerWaitTimeMillis)) {
                     failJob("Job timed out while waiting for otp-runner to finish!");
                     return;
                 }
-            }
-
-            // Check if an otp-runner status file check has already failed this job.
-            if (status.error) {
-                return;
             }
             graphTaskSeconds = (System.currentTimeMillis() - statusCheckStartTime) / 1000;
             String message = String.format("Graph build/download completed in %d seconds!", graphTaskSeconds);
@@ -213,7 +212,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
     }
 
     /**
-     * Gets the expected path to the user data logs that get uploaded to s3
+     * Gets the expected path to the otp-runner logs that get uploaded to s3
      */
     private String getOtpRunnerLogS3Path() {
         return String.format("%s/%s-otp-runner.log", deployJob.getS3FolderURI(), instance.getInstanceId());

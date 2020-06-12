@@ -2,6 +2,10 @@ package com.conveyal.datatools.manager.jobs;
 
 import java.util.List;
 
+/**
+ * A mapping of the possible values of an otp-runner manifest. For further documentation please see otp-runner docs at
+ * https://github.com/ibi-group/otp-runner#manifestjson-values
+ */
 public class OtpRunnerManifest {
     public String buildConfigJSON;
     public boolean buildGraph;
@@ -16,7 +20,7 @@ public class OtpRunnerManifest {
     public String routerConfigJSON;
     public String routerName;
     public boolean runServer;
-    public String s3UploadBucket;
+    public String s3UploadPath;
     public String serverLogFile;
     public int serverStartupTimeoutSeconds;
     public String statusFileLocation;
