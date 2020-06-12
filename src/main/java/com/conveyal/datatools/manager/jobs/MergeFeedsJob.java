@@ -467,6 +467,7 @@ public class MergeFeedsJob extends MonitorableJob {
                                 //    contain stop_codes. Otherwise, the merge feeds job will be failed.
                                 int stopsMissingStopCodeCount = 0;
                                 int stopsCount = 0;
+                                int specialStopsCount = 0;
                                 int locationTypeIndex = getFieldIndex(fieldsFoundInZip, "location_type");
                                 int stopCodeIndex = getFieldIndex(fieldsFoundInZip, "stop_code");
                                 // Get special stops reader to iterate over every stop and determine if stop_code values
@@ -475,12 +476,13 @@ public class MergeFeedsJob extends MonitorableJob {
                                 while (stopsReader.readRecord()) {
                                     stopsCount++;
                                     String locationType = stopsReader.get(locationTypeIndex);
-                                    // "Regular" stop records (i.e., not a station, entrance, or anything with
-                                    // location_type > 0) should contain stop_code.
-                                    boolean isRegularStop = "".equals(locationType) || "0".equals(locationType);
+                                    // Special stop records (i.e., a station, entrance, or anything with
+                                    // location_type > 0) do not need to specify stop_code. Other stops should.
+                                    boolean isSpecialStop = !"".equals(locationType) && !"0".equals(locationType);
                                     String stopCode = stopsReader.get(stopCodeIndex);
                                     boolean stopCodeIsMissing = "".equals(stopCode);
-                                    if (isRegularStop && stopCodeIsMissing) stopsMissingStopCodeCount++;
+                                    if (isSpecialStop) specialStopsCount++;
+                                    else if (stopCodeIsMissing) stopsMissingStopCodeCount++;
                                 }
                                 LOG.info("total stops: {}", stopsCount);
                                 LOG.info("stops missing stop_code: {}", stopsMissingStopCodeCount);
@@ -493,19 +495,17 @@ public class MergeFeedsJob extends MonitorableJob {
                                     keyField = table.getKeyFieldName();
                                     keyFieldIndex = table.getKeyFieldIndex(fieldsFoundInZip);
                                     keyValue = csvReader.get(keyFieldIndex);
-                                    if (feedIndex == 0) {
-                                        stopCodeMissingFromFirstFeed = true;
-                                    }
+                                    // When all stops missing stop_code for the first feed, there's nothing to do (i.e.,
+                                    // no failure condition has been triggered yet). Just indicate this in the flag and
+                                    // proceed with the merge.
+                                    if (feedIndex == 0) stopCodeMissingFromFirstFeed = true;
+                                    // However... if the second feed was missing stop_codes and the first feed was not,
+                                    // fail the merge job.
                                     if (feedIndex == 1 && !stopCodeMissingFromFirstFeed) {
                                         mergeFeedsResult.failed = true;
                                         mergeFeedsResult.errorCount++;
                                         mergeFeedsResult.failureReasons.add(
-                                            String.format(
-                                                "If stop_code is provided for some stops (for those with location_type = " +
-                                                    "empty or 0), all stops must have stop_code values. The merge process " +
-                                                    "found %d stops that were incorrectly missing stop_code values.",
-                                                stopsMissingStopCodeCount
-                                            )
+                                            stopCodeFailureMessage(stopsMissingStopCodeCount, stopsCount, specialStopsCount)
                                         );
                                     }
                                 } else if (stopsMissingStopCodeCount > 0) {
@@ -513,12 +513,7 @@ public class MergeFeedsJob extends MonitorableJob {
                                     mergeFeedsResult.failed = true;
                                     mergeFeedsResult.errorCount++;
                                     mergeFeedsResult.failureReasons.add(
-                                        String.format(
-                                            "If stop_code is provided for some stops (for those with location_type = " +
-                                                "empty or 0), all stops must have stop_code values. The merge process " +
-                                                "found %d stops that were incorrectly missing stop_code values.",
-                                            stopsMissingStopCodeCount
-                                        )
+                                        stopCodeFailureMessage(stopsMissingStopCodeCount, stopsCount, specialStopsCount)
                                     );
                                 }
                             }
@@ -945,6 +940,19 @@ public class MergeFeedsJob extends MonitorableJob {
         // Track the number of lines in the merged table and return final number.
         mergeFeedsResult.linesPerTable.put(table.name, mergedLineNumber);
         return mergedLineNumber;
+    }
+
+    private static String stopCodeFailureMessage(int stopsMissingStopCodeCount, int stopsCount, int specialStopsCount) {
+        return String.format(
+            "If stop_code is provided for some stops (for those with location_type = " +
+                "empty or 0), all stops must have stop_code values. The merge process " +
+                "found %d of %d total stops that were incorrectly missing stop_code values. " +
+                "Note: \"special\" stops with location_type > 0 need not specify this value " +
+                "(%d special stops found in feed).",
+            stopsMissingStopCodeCount,
+            stopsCount,
+            specialStopsCount
+        );
     }
 
     /** Get the set of shared fields for all feeds being merged for a specific table. */
