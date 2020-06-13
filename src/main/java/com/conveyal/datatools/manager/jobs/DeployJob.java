@@ -91,6 +91,8 @@ public class DeployJob extends MonitorableJob {
     private static final String bundlePrefix = "bundles";
     // Indicates whether EC2 instances should be EBS optimized.
     private static final boolean EBS_OPTIMIZED = "true".equals(DataManager.getConfigPropertyAsText("modules.deployment.ec2.ebs_optimized"));
+    // Indicates the node.js version installed by nvm to set the PATH variable to point to
+    private static final String NODE_VERSION = "v12.16.3";
     private static final String OTP_GRAPH_FILENAME = "Graph.obj";
     public static final String OTP_RUNNER_STATUS_FILE = "status.json";
     private static final long TEN_MINUTES_IN_MILLISECONDS = 10 * 60 * 1000;
@@ -855,7 +857,7 @@ public class DeployJob extends MonitorableJob {
         // NOTE: user data output is logged to `/var/log/cloud-init-output.log` automatically with ec2 instances
         // Add some items to the $PATH as the $PATH with user-data scripts differs from the ssh $PATH.
         lines.add("export PATH=\"$PATH:/home/ubuntu/.yarn/bin\"");
-        lines.add("export PATH=\"$PATH:/home/ubuntu/.nvm/versions/node/v12.16.3/bin\"");
+        lines.add(String.format("export PATH=\"$PATH:/home/ubuntu/.nvm/versions/node/%s/bin\"", NODE_VERSION));
         // Remove previous files that might have been created during an Image creation
         lines.add(String.format("rm %s/%s || echo '' > /dev/null", webDir, OTP_RUNNER_STATUS_FILE));
         lines.add(String.format("rm %s || echo '' > /dev/null", otpRunnerManifestFile));
@@ -882,7 +884,9 @@ public class DeployJob extends MonitorableJob {
             status.fail("Failed to create manifest for otp-runner!", e);
             return null;
         }
-        // install otp-runner
+        // install otp-runner as a global package thus enabling use of the otp-runner command
+        // This will install that latest version of otp-runner from the default github branch. It is not yet published
+        // as an npm package.
         lines.add("yarn global add https://github.com/ibi-group/otp-runner.git");
         // execute otp-runner
         lines.add(String.format("otp-runner %s", otpRunnerManifestFile));
