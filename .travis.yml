@@ -14,8 +14,6 @@ cache:
     - $HOME/.m2
     - $HOME/.cache/yarn
 before_install:
-  # Log git description (used for deployment artifact) at the top of travis build to avoid scrolling to bottom.
-  - git describe --always
   #- sed -i.bak -e 's|https://nexus.codehaus.org/snapshots/|https://oss.sonatype.org/content/repositories/codehaus-snapshots/|g' ~/.m2/settings.xml
   # run a script to see if the e2e tests should be ran. This script will set the environment variable SHOULD_RUN_E2E
   # which is used in later travis commands.
