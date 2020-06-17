@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
+import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -14,6 +15,15 @@ import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.models.transform.ReplaceFileFromStringTransformation;
 import com.conveyal.datatools.manager.models.transform.ReplaceFileFromVersionTransformation;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.gtfs.GTFS;
+import com.conveyal.gtfs.loader.BatchTracker;
+import com.conveyal.gtfs.loader.Feed;
+import com.conveyal.gtfs.loader.FeedLoadResult;
+import com.conveyal.gtfs.loader.SnapshotResult;
+import com.conveyal.gtfs.loader.Table;
+import com.conveyal.gtfs.model.Entity;
+import com.conveyal.gtfs.model.StopTime;
+import com.conveyal.gtfs.util.InvalidNamespaceException;
 import org.hamcrest.Matchers;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -24,7 +34,10 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -35,6 +48,7 @@ import static com.conveyal.datatools.TestUtils.appendDate;
 import static com.conveyal.datatools.TestUtils.assertThatSqlCountQueryYieldsExpectedCount;
 import static com.conveyal.datatools.TestUtils.createFeedVersion;
 import static com.conveyal.datatools.TestUtils.zipFolderFiles;
+import static com.conveyal.datatools.manager.DataManager.GTFS_DATA_SOURCE;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.MANUALLY_UPLOADED;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.VERSION_CLONE;
 import static org.junit.Assert.assertEquals;
@@ -216,13 +230,129 @@ public class ArbitraryTransformJobTest extends UnitTest {
         FeedTransformRules transformRules = new FeedTransformRules(transformation);
         feedSource.transformRules.add(transformRules);
         Persistence.feedSources.replace(feedSource.id, feedSource);
-        // Create new BART version (note: bart_new.zip GTFS file has been stripped of stop_attributes.txt)
+        // Create new target version (note: fake-agency-with-only-calendar-dates does not contain realtime_routes.txt)
         targetVersion = createFeedVersion(
             feedSource,
             zipFolderFiles("fake-agency-with-only-calendar-dates")
         );
         // TODO Check that new version has stop_attributes file that matches source version's copy.
         assertThat(targetVersion.validationResult, Matchers.nullValue());
+    }
+
+    @Test
+    public void canInterpolateStopTimes() throws InterruptedException {
+        FeedLoadResult loadResult = GTFS.load("/Users/landonreed/gtfs/phil.zip", DataManager.GTFS_DATA_SOURCE);
+        // Make snapshot so that fields are normalized (e.g., spec fields not found in zip are added).
+        SnapshotResult result = GTFS.makeSnapshot(loadResult.uniqueIdentifier, GTFS_DATA_SOURCE, false);
+        Feed feed = new Feed(DataManager.GTFS_DATA_SOURCE, result.uniqueIdentifier);
+        String tripId = null;
+        List<StopTime> allStopTimes = new ArrayList<>();
+        List<StopTime> stopTimesForTrip = new ArrayList<>();
+        for (StopTime stopTime : feed.stopTimes.getAllOrdered()) {
+            if (tripId == null) tripId = stopTime.trip_id;
+            // New trip encountered.
+            if (tripId != null && !tripId.equals(stopTime.trip_id)) {
+                // Handle interpolation and add modified stop times to list.
+                interpolateStopTimes(stopTimesForTrip);
+                allStopTimes.addAll(stopTimesForTrip);
+                // Reset stopTimes
+                stopTimesForTrip = new ArrayList<>();
+            }
+            tripId = stopTime.trip_id;
+            stopTimesForTrip.add(stopTime);
+        }
+        if (allStopTimes.size() == 0) {
+            throw new RuntimeException("Error reading stop_times table!");
+        }
+        // Update stop times.
+        try (Connection connection = GTFS_DATA_SOURCE.getConnection()) {
+            // Delete all records first.
+            Statement statement = connection.createStatement();
+            statement.execute(String.format("DELETE FROM %s.stop_times", result.uniqueIdentifier));
+            // Then, add back the interpolated stop_times.
+            String sql = Table.STOP_TIMES.generateInsertSql(result.uniqueIdentifier, true);
+            PreparedStatement insertStatement = connection.prepareStatement(sql);
+            BatchTracker tracker = new BatchTracker("stop_time", insertStatement);
+            for (StopTime stopTime : allStopTimes) {
+                stopTime.setStatementParameters(insertStatement, true);
+                tracker.addBatch();
+            }
+            tracker.executeRemaining();
+            connection.commit();
+        } catch (SQLException e) {
+            throw new RuntimeException(e);
+        }
+        GTFS.export(result.uniqueIdentifier, "/Users/landonreed/gtfs/phil_interpolated.zip", GTFS_DATA_SOURCE, false);
+    }
+
+    private static boolean isSet (int time) {
+        return time != Entity.INT_MISSING;
+    }
+
+    /**
+     *
+     * @param stopTimes
+     * @return
+     */
+    private static void interpolateStopTimes(List<StopTime> stopTimes) {
+        int lastStop = stopTimes.size() - 1;
+        int numInterpStops = -1;
+        int departureTime = -1, prevDepartureTime = -1;
+        int interpStep = 0;
+
+        int i;
+        for (i = 0; i < lastStop; i++) {
+            StopTime st0 = stopTimes.get(i);
+
+            prevDepartureTime = departureTime;
+            departureTime = st0.departure_time;
+
+            /* Interpolate, if necessary, the times of non-timepoint stops */
+            /* genuine interpolation needed */
+            if (!(isSet(st0.departure_time) && isSet(st0.arrival_time))) {
+                // figure out how many such stops there are in a row.
+                int j;
+                StopTime st = null;
+                for (j = i + 1; j < lastStop + 1; ++j) {
+                    st = stopTimes.get(j);
+                    if ((isSet(st.departure_time) && st.departure_time != departureTime)
+                        || (isSet(st.arrival_time) && st.arrival_time != departureTime)) {
+                        break;
+                    }
+                }
+                if (j == lastStop + 1) {
+                    throw new RuntimeException(
+                        "Could not interpolate arrival/departure time on stop " + i
+                            + " (missing final stop time) on trip " + st0.trip_id);
+                }
+                numInterpStops = j - i;
+                int arrivalTime;
+                if (isSet(st.arrival_time)) {
+                    arrivalTime = st.arrival_time;
+                } else {
+                    arrivalTime = st.departure_time;
+                }
+                interpStep = (arrivalTime - prevDepartureTime) / (numInterpStops + 1);
+                if (interpStep < 0) {
+                    throw new RuntimeException(
+                        "trip goes backwards for some reason");
+                }
+                for (j = i; j < i + numInterpStops; ++j) {
+                    LOG.debug("interpolating " + j + " between " + prevDepartureTime + " and " + arrivalTime);
+                    departureTime = prevDepartureTime + interpStep * (j - i + 1);
+                    st = stopTimes.get(j);
+                    if (isSet(st.arrival_time)) {
+                        departureTime = st.arrival_time;
+                    } else {
+                        st.arrival_time = departureTime;
+                    }
+                    if (!isSet(st.departure_time)) {
+                        st.departure_time = departureTime;
+                    }
+                }
+                i = j - 1;
+            }
+        }
     }
 
     @Test
@@ -238,8 +368,7 @@ public class ArbitraryTransformJobTest extends UnitTest {
         FeedTransformRules transformRules = new FeedTransformRules(transformation);
         feedSource.transformRules.add(transformRules);
         Persistence.feedSources.replace(feedSource.id, feedSource);
-        // Create new BART version (note: bart_new.zip GTFS file has been stripped of
-        // stop_attributes.txt)
+        // Create new target version.
         targetVersion = createFeedVersion(
             feedSource,
             zipFolderFiles("fake-agency-with-only-calendar-dates")
