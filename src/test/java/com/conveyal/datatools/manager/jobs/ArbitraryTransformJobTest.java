@@ -239,6 +239,10 @@ public class ArbitraryTransformJobTest extends UnitTest {
         assertThat(targetVersion.validationResult, Matchers.nullValue());
     }
 
+    /**
+     * TODO: move this into a transformation.
+     * @throws InterruptedException
+     */
     @Test
     public void canInterpolateStopTimes() throws InterruptedException {
         FeedLoadResult loadResult = GTFS.load("/Users/landonreed/gtfs/phil.zip", DataManager.GTFS_DATA_SOURCE);
@@ -289,6 +293,14 @@ public class ArbitraryTransformJobTest extends UnitTest {
         return time != Entity.INT_MISSING;
     }
 
+    protected static boolean missingBothTimes(StopTime stopTime) {
+        return (stopTime.arrival_time == Entity.INT_MISSING && stopTime.departure_time == Entity.INT_MISSING);
+    }
+
+    protected static boolean missingEitherTime (StopTime stopTime) {
+        return !isSet(stopTime.arrival_time) || !isSet(stopTime.departure_time);
+    }
+
     /**
      *
      * @param stopTimes
@@ -296,9 +308,9 @@ public class ArbitraryTransformJobTest extends UnitTest {
      */
     private static void interpolateStopTimes(List<StopTime> stopTimes) {
         int lastStop = stopTimes.size() - 1;
-        int numInterpStops = -1;
+        int numStopsToInterpolate = -1;
         int departureTime = -1, prevDepartureTime = -1;
-        int interpStep = 0;
+        int interpolationStep = 0;
 
         int i;
         for (i = 0; i < lastStop; i++) {
@@ -306,17 +318,22 @@ public class ArbitraryTransformJobTest extends UnitTest {
 
             prevDepartureTime = departureTime;
             departureTime = st0.departure_time;
+//            shapeDistTraveled =
 
-            /* Interpolate, if necessary, the times of non-timepoint stops */
-            /* genuine interpolation needed */
-            if (!(isSet(st0.departure_time) && isSet(st0.arrival_time))) {
-                // figure out how many such stops there are in a row.
+            if (missingEitherTime(st0)) {
+                // Arrival or departure time for the stop is missing. Interpolate.
                 int j;
-                StopTime st = null;
+                StopTime refStopTime = null;
+                // TODO: use shape_dist_traveled for more accurate interpolation.
+                boolean hasShapeDistTraveled = true;
+                // First, figure out how many such stops there are in a row.
                 for (j = i + 1; j < lastStop + 1; ++j) {
-                    st = stopTimes.get(j);
-                    if ((isSet(st.departure_time) && st.departure_time != departureTime)
-                        || (isSet(st.arrival_time) && st.arrival_time != departureTime)) {
+                    refStopTime = stopTimes.get(j);
+//                    if (st.shape_dist_traveled)
+                    // If next stop has a time and it is not equal to the first stop's time, we can stop counting. This
+                    // is our reference stop_time for interpolation.
+                    if ((isSet(refStopTime.departure_time) && refStopTime.departure_time != departureTime)
+                        || (isSet(refStopTime.arrival_time) && refStopTime.arrival_time != departureTime)) {
                         break;
                     }
                 }
@@ -325,31 +342,40 @@ public class ArbitraryTransformJobTest extends UnitTest {
                         "Could not interpolate arrival/departure time on stop " + i
                             + " (missing final stop time) on trip " + st0.trip_id);
                 }
-                numInterpStops = j - i;
+                numStopsToInterpolate = j - i;
                 int arrivalTime;
-                if (isSet(st.arrival_time)) {
-                    arrivalTime = st.arrival_time;
+                if (isSet(refStopTime.arrival_time)) {
+                    arrivalTime = refStopTime.arrival_time;
                 } else {
-                    arrivalTime = st.departure_time;
+                    arrivalTime = refStopTime.departure_time;
                 }
-                interpStep = (arrivalTime - prevDepartureTime) / (numInterpStops + 1);
-                if (interpStep < 0) {
-                    throw new RuntimeException(
-                        "trip goes backwards for some reason");
+                // Get the time between arrival and previous departure and subdivide that time block to find the
+                // interpolation step.
+                interpolationStep = (arrivalTime - prevDepartureTime) / (numStopsToInterpolate + 1);
+                if (interpolationStep < 0) {
+                    throw new RuntimeException("trip goes backwards for some reason");
                 }
-                for (j = i; j < i + numInterpStops; ++j) {
-                    LOG.debug("interpolating " + j + " between " + prevDepartureTime + " and " + arrivalTime);
-                    departureTime = prevDepartureTime + interpStep * (j - i + 1);
-                    st = stopTimes.get(j);
-                    if (isSet(st.arrival_time)) {
-                        departureTime = st.arrival_time;
-                    } else {
-                        st.arrival_time = departureTime;
-                    }
-                    if (!isSet(st.departure_time)) {
-                        st.departure_time = departureTime;
-                    }
+                // Finally, for each of the stops to interpolate, set the arrival and departure times.
+                for (j = i; j < i + numStopsToInterpolate; ++j) {
+                    StopTime stopTimeToUpdate = stopTimes.get(j);
+                    LOG.debug("Interpolating stop #{} between {} and {}", j, prevDepartureTime, arrivalTime);
+                    // TODO: use shape_dist_traveled for a more accurate interpolation?
+                    // Update departure time to previous + step and use for current stop's arrival/departure times if
+                    // both times are missing. Otherwise, use whatever value is currently set.
+                    departureTime = missingBothTimes(stopTimeToUpdate)
+                        ? prevDepartureTime + interpolationStep * (j - i + 1)
+                        : isSet(stopTimeToUpdate.arrival_time)
+                            ? stopTimeToUpdate.arrival_time
+                            : stopTimeToUpdate.departure_time;
+                    // FIXME: There's an edge case where the stoptime we're updating has one time (say, departure) and
+                    //  that time is greater than the interpolated time for the next stoptime. E.g., 9am is stop1
+                    //  departure and 9:30am is the stop4 arrival. We have two stops needing interpolation in between
+                    //  (making the interpolation step 10 minutes). However, stop2 has arrival of 9:22am. If we try to
+                    //  interpolate stop3 we end of with stop3 arrival/departure of 9:20am!
+                    stopTimeToUpdate.arrival_time = departureTime;
+                    stopTimeToUpdate.departure_time = departureTime;
                 }
+                // We're done with this block of interpolated stops. Continue checking if we need to interpolate times.
                 i = j - 1;
             }
         }
