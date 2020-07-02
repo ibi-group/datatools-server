@@ -4,6 +4,7 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.gtfsplus.tables.GtfsPlusTable;
 import com.conveyal.datatools.manager.models.Snapshot;
+import com.conveyal.datatools.manager.models.TableTransformResult;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.loader.JdbcGtfsLoader;
 import com.conveyal.gtfs.loader.Table;
@@ -107,9 +108,10 @@ public class DeleteRecordsTransformation extends DbTransformation {
                 preparedStatement.setString(i + 1, matchValues.get(i));
             }
             LOG.info("SQL update: {}", preparedStatement.toString());
-            int count = preparedStatement.executeUpdate();
-            LOG.info("{} deleted {} records", this.getClass().getSimpleName(), count);
+            int deleted = preparedStatement.executeUpdate();
+            LOG.info("{} deleted {} records", this.getClass().getSimpleName(), deleted);
             connection.commit();
+            target.feedTransformResult.addResultForTable(new TableTransformResult(table, deleted, 0, 0));
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }

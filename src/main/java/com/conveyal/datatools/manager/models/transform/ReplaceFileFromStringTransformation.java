@@ -1,6 +1,8 @@
 package com.conveyal.datatools.manager.models.transform;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.manager.models.TableTransformResult;
+import com.conveyal.datatools.manager.models.TransformType;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -33,8 +35,8 @@ public class ReplaceFileFromStringTransformation extends ZipTransformation {
         // Cast transform target to zip flavor.
         FeedTransformZipTarget zipTarget = (FeedTransformZipTarget)target;
         if (csvData == null) {
-            // TODO: Should we permit a null value (perhaps to result in removing the file)?
-            status.fail("CSV data must not be null.");
+            // TODO: If this is a null value, delete the table (not yet supported).
+            status.fail("CSV data must not be null (delete table not yet supported)");
             return;
         }
         if (table == null) {
@@ -49,8 +51,13 @@ public class ReplaceFileFromStringTransformation extends ZipTransformation {
             // Convert csv data to input stream.
             InputStream inputStream = new ByteArrayInputStream(csvData.getBytes(StandardCharsets.UTF_8));
             Path targetTxtFilePath = targetZipFs.getPath(tableNamePath);
+            // Set transform type according to whether target file exists.
+            TransformType type = Files.exists(targetTxtFilePath)
+                ? TransformType.TABLE_REPLACED
+                : TransformType.TABLE_ADDED;
             // Copy csv input stream into the zip file, replacing it if it already exists.
             Files.copy(inputStream, targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
+            target.feedTransformResult.addResultForTable(new TableTransformResult(tableName, type));
         } catch (Exception e) {
             status.fail("Unknown error encountered while transforming zip file", e);
         }

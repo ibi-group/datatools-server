@@ -193,7 +193,11 @@ public class FeedVersion extends Model implements Serializable {
     /** The results of validating this feed */
     public ValidationResult validationResult;
 
+    /** The results of loading this feed into the GTFS database */
     public FeedLoadResult feedLoadResult;
+
+    /** The results of transforming this feed into the GTFS database */
+    public FeedTransformResult feedTransformResult;
 
     @JsonView(JsonViews.UserInterface.class)
     @BsonProperty("validationSummary")

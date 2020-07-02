@@ -24,18 +24,18 @@ public class ArbitraryTransformJob extends MonitorableJob {
     /**
      * Constructor to initialize a feed transform job that applies to the target version's zip GTFS file.
      */
-    public ArbitraryTransformJob(Auth0UserProfile owner, File targetFile, ZipTransformation transformation) {
-        super(owner, "Transform " + targetFile.getAbsolutePath(), JobType.ARBITRARY_FEED_TRANSFORM);
-        this.target = new FeedTransformZipTarget(targetFile);
+    public ArbitraryTransformJob(Auth0UserProfile owner, FeedTransformZipTarget zipTarget, ZipTransformation transformation) {
+        super(owner, "Transform " + zipTarget.gtfsFile.getAbsolutePath(), JobType.ARBITRARY_FEED_TRANSFORM);
+        this.target = zipTarget;
         this.transformation = transformation;
     }
 
     /**
      * Constructor to initialize a feed transform job that applies to the target database namespace.
      */
-    public ArbitraryTransformJob(Auth0UserProfile owner, String targetSnapshotId, DbTransformation transformation) {
-        super(owner, "Transform " + targetSnapshotId, JobType.ARBITRARY_FEED_TRANSFORM);
-        this.target = new FeedTransformDbTarget(targetSnapshotId);
+    public ArbitraryTransformJob(Auth0UserProfile owner, FeedTransformDbTarget dbTarget, DbTransformation transformation) {
+        super(owner, "Transform " + dbTarget.snapshotId, JobType.ARBITRARY_FEED_TRANSFORM);
+        this.target = dbTarget;
         this.transformation = transformation;
     }
 

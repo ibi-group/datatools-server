@@ -8,7 +8,9 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.transform.DbTransformation;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Snapshot;
+import com.conveyal.datatools.manager.models.transform.FeedTransformDbTarget;
 import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
+import com.conveyal.datatools.manager.models.transform.FeedTransformZipTarget;
 import com.conveyal.datatools.manager.models.transform.ZipTransformation;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
@@ -83,11 +85,12 @@ public class ProcessSingleFeedJob extends MonitorableJob {
      *    snapshot can either end up hanging (i.e., not published) or once all of the transformations have been
      *    applied, we can create a new feed version from the snapshot (retrieval method being produced in house??).
      * 3. Let's say we have zip transformations and db transformations.
-     *    a. Zip transformations apply to imported version, db transformations apply to snapshot or get published (no big deal)
+     *    a. Zip transformations apply to imported version, db transformations apply to new snapshot or get published as
+     *       additional feed version (no big deal).
      *    b. Zip transformations apply to cloned version, db transformations apply to snapshot or get published.
      *       This case is a little trickier, because we could end up with two cloned_versions. Let's say we want
      *       a SQL query to run on the original data, create a new GTFS file, and then replace a GTFS+ file from some
-     *       other version. FTR1 = clone
+     *       other version.
      */
     @Override
     public void jobLogic () {
@@ -97,13 +100,16 @@ public class ProcessSingleFeedJob extends MonitorableJob {
         if (shouldTransform) {
             // Run zip transformations before load to handle any operations that must be applied directly to the zip file.
             List<ZipTransformation> zipTransformations = rules.getActiveTransformations(feedVersion, ZipTransformation.class);
+            FeedTransformZipTarget zipTarget = new FeedTransformZipTarget(feedVersion.retrieveGtfsFile());
             for (ZipTransformation transformation : zipTransformations) {
-                ArbitraryTransformJob zipTransform = new ArbitraryTransformJob(owner, feedVersion.retrieveGtfsFile(), transformation);
+                ArbitraryTransformJob zipTransform = new ArbitraryTransformJob(owner, zipTarget, transformation);
                 // Run transform job in line so we can monitor the error status before load/validate begins.
                 zipTransform.run();
                 // Short circuit the feed load/validate if a pre-load transform fails.
                 if (zipTransform.status.error) return;
             }
+            // Assign transform result from zip target.
+            feedVersion.feedTransformResult = zipTarget.feedTransformResult;
         }
 
         // First, load the feed into database. During this stage, the GTFS file will be uploaded to S3 (and deleted locally).
@@ -124,10 +130,12 @@ public class ProcessSingleFeedJob extends MonitorableJob {
             // Apply post-load transformations to snapshotted feed version. Post-load transformations will modify only the
             // snapshot (not the original feed version's namespace), so the snapshot must be published (or loaded into the
             // editor) in order to see the results.
-            // FIXME need to add snapshot namespace...
+            FeedTransformDbTarget dbTarget = new FeedTransformDbTarget(snapshot.id);
             for (DbTransformation transformation : rules.getActiveTransformations(feedVersion, DbTransformation.class)) {
-                addNextJob(new ArbitraryTransformJob(owner, snapshot.id, transformation));
+                addNextJob(new ArbitraryTransformJob(owner, dbTarget, transformation));
             }
+            // Assign transform result from db target.
+            snapshot.feedTransformResult = dbTarget.feedTransformResult;
             // If the user has selected to create a new version from the resulting snapshot, do so here.
             if (rules.createNewVersion) {
                 addNextJob(new CreateFeedVersionFromSnapshotJob(feedSource, snapshot, owner));

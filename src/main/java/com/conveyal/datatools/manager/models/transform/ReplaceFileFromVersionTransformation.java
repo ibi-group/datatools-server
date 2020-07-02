@@ -2,6 +2,8 @@ package com.conveyal.datatools.manager.models.transform;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.models.TableTransformResult;
+import com.conveyal.datatools.manager.models.TransformType;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,8 +61,13 @@ public class ReplaceFileFromVersionTransformation extends ZipTransformation {
             LOG.info("Replacing file {} in zip file {} with source {}", tableNamePath, targetZipPath.getFileName(), sourceVersion.id);
             try( FileSystem targetZipFs = FileSystems.newFileSystem(targetZipPath, null) ){
                 Path targetTxtFilePath = targetZipFs.getPath(tableNamePath);
+                // Set transform type according to whether target file exists.
+                TransformType type = Files.exists(targetTxtFilePath)
+                    ? TransformType.TABLE_REPLACED
+                    : TransformType.TABLE_ADDED;
                 // Copy a file into the zip file, replacing it if it already exists.
                 Files.copy(sourceTxtFilePath, targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
+                target.feedTransformResult.addResultForTable(new TableTransformResult(tableName, type));
             }
             LOG.info("File replacement zip transformation successful!");
         } catch (NoSuchFileException e) {

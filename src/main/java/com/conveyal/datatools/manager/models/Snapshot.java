@@ -54,6 +54,8 @@ public class Snapshot extends Model {
 
     public FeedLoadResult feedLoadResult;
 
+    public FeedTransformResult feedTransformResult;
+
     /** the date/time this snapshot was taken (millis since epoch) */
     public long snapshotTime;
 

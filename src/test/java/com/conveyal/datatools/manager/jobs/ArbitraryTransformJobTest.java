@@ -211,12 +211,12 @@ public class ArbitraryTransformJobTest extends UnitTest {
             zipFolderFiles("fake-agency-with-only-calendar")
         );
         // Replace file transformation runs before feed is loaded into database.
-        // Note: stop_attributes.txt is a GTFS+ file found in BART's feed.
+        // Note: stop_attributes.txt is a GTFS+ file found in source feed version.
         FeedTransformation transformation = ReplaceFileFromVersionTransformation.create(sourceVersion.id, "realtime_routes");
         FeedTransformRules transformRules = new FeedTransformRules(transformation);
         feedSource.transformRules.add(transformRules);
         Persistence.feedSources.replace(feedSource.id, feedSource);
-        // Create new BART version (note: bart_new.zip GTFS file has been stripped of stop_attributes.txt)
+        // Create new target version (note: bart_new.zip GTFS file has been stripped of stop_attributes.txt)
         targetVersion = createFeedVersion(
             feedSource,
             zipFolderFiles("fake-agency-with-only-calendar-dates")
@@ -238,8 +238,7 @@ public class ArbitraryTransformJobTest extends UnitTest {
         FeedTransformRules transformRules = new FeedTransformRules(transformation);
         feedSource.transformRules.add(transformRules);
         Persistence.feedSources.replace(feedSource.id, feedSource);
-        // Create new BART version (note: bart_new.zip GTFS file has been stripped of
-        // stop_attributes.txt)
+        // Create new target version (note: the folder has no stop_attributes.txt file)
         targetVersion = createFeedVersion(
             feedSource,
             zipFolderFiles("fake-agency-with-only-calendar-dates")
