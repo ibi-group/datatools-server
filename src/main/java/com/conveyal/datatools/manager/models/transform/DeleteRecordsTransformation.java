@@ -52,7 +52,7 @@ public class DeleteRecordsTransformation extends DbTransformation {
         // Fetch the referenced snapshot to transform.
         Snapshot snapshot = Persistence.snapshots.getById(dbTarget.snapshotId);
         if (snapshot == null) {
-            status.fail(String.format("Cannot find snapshot to transform (id=%s)", dbTarget.namespace));
+            status.fail(String.format("Cannot find snapshot to transform (id=%s)", dbTarget.snapshotId));
             return;
         }
 
