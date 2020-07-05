@@ -28,6 +28,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
 import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
@@ -36,8 +37,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -45,6 +48,7 @@ import com.mongodb.client.FindIterable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.conveyal.datatools.manager.models.FeedVersion.feedStore;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 
@@ -70,6 +74,8 @@ public class Deployment extends Model implements Serializable {
     public List<DeployJob.DeploySummary> deployJobSummaries = new ArrayList<>();
 
     public String projectId;
+
+    private ObjectMapper otpConfigMapper = new ObjectMapper().setSerializationInclusion(Include.NON_NULL);
 
     /**
      * Get parent project for deployment. Note: at one point this was a JSON property of this class, but severe
@@ -383,19 +389,32 @@ public class Deployment extends Model implements Serializable {
                 : null;
     }
 
+    public String generateBuildConfigAsString() {
+        if (customBuildConfig != null) return customBuildConfig;
+        return writeToString(this.parentProject().buildConfig);
+    }
+
     /** Convenience method to write serializable object (primarily for router/build config objects) to byte array. */
     private <O extends Serializable> byte[] writeToBytes(O object) {
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.setSerializationInclusion(Include.NON_NULL);
         try {
-            return mapper.writer().writeValueAsBytes(object);
+            return otpConfigMapper.writer().writeValueAsBytes(object);
         } catch (JsonProcessingException e) {
             LOG.error("Value contains malformed JSON", e);
             return null;
         }
     }
 
-    /** Generate router config for deployment as byte array (for writing to file output stream). */
+    /** Convenience method to write serializable object (primarily for router/build config objects) to string. */
+    private <O extends Serializable> String writeToString(O object) {
+        try {
+            return otpConfigMapper.writer().writeValueAsString(object);
+        } catch (JsonProcessingException e) {
+            LOG.error("Value contains malformed JSON", e);
+            return null;
+        }
+    }
+
+    /** Generate router config for deployment as string. */
     public byte[] generateRouterConfig() {
         Project project = this.parentProject();
         return customRouterConfig != null
@@ -405,21 +424,34 @@ public class Deployment extends Model implements Serializable {
                 : null;
     }
 
+    /** Generate router config for deployment as byte array (for writing to file output stream). */
+    public String generateRouterConfigAsString() {
+        if (customRouterConfig != null) return customRouterConfig;
+        return writeToString(this.parentProject().routerConfig);
+    }
+
     /**
      * Get OSM extract from OSM vex server as input stream.
      */
     public static InputStream downloadOsmExtract(Rectangle2D rectangle2D) throws IOException {
-        Bounds bounds = new Bounds(rectangle2D);
-        if (!bounds.areValid()) {
-            throw new IllegalArgumentException(String.format("Provided bounds %s are not valid", bounds.toVexString()));
-        }
-        URL vexUrl = new URL(String.format(Locale.ROOT, "%s/%s.pbf",
-                DataManager.getConfigPropertyAsText("OSM_VEX"),
-                bounds.toVexString()));
+        URL vexUrl = getVexUrl(rectangle2D);
         LOG.info("Getting OSM extract at {}", vexUrl.toString());
         HttpURLConnection conn = (HttpURLConnection) vexUrl.openConnection();
         conn.connect();
         return conn.getInputStream();
+    }
+
+    /**
+     * Gets the URL for downloading an OSM PBF file from the osm vex server for the desired bounding box.
+     */
+    public static URL getVexUrl (Rectangle2D rectangle2D) throws MalformedURLException {
+        Bounds bounds = new Bounds(rectangle2D);
+        if (!bounds.areValid()) {
+            throw new IllegalArgumentException(String.format("Provided bounds %s are not valid", bounds.toVexString()));
+        }
+        return new URL(String.format(Locale.ROOT, "%s/%s.pbf",
+            DataManager.getConfigPropertyAsText("OSM_VEX"),
+            bounds.toVexString()));
     }
 
     /**
@@ -510,6 +542,21 @@ public class Deployment extends Model implements Serializable {
 
     public boolean delete() {
         return Persistence.deployments.removeById(this.id);
+    }
+
+    /**
+     * Creates a list of all of the download URLs for all of the OSM and GTFS files that would be needed to build an OTP
+     * graph.
+     */
+    public List<String> generateGtfsAndOsmUrls() throws MalformedURLException {
+        Set<String> urls = new HashSet<>();
+        // add OSM data
+        urls.add(getVexUrl(retrieveProjectBounds()).toString());
+        // add GTFS files
+        for (String feedVersionId : feedVersionIds) {
+            urls.add(feedStore.getS3FeedPath(feedVersionId));
+        }
+        return new ArrayList<>(urls);
     }
 
     /**

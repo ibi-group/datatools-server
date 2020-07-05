@@ -65,7 +65,10 @@ import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.StringUtils;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.codec.binary.Base64;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
@@ -88,10 +91,10 @@ public class DeployJob extends MonitorableJob {
     private static final String bundlePrefix = "bundles";
     // Indicates whether EC2 instances should be EBS optimized.
     private static final boolean EBS_OPTIMIZED = "true".equals(DataManager.getConfigPropertyAsText("modules.deployment.ec2.ebs_optimized"));
+    // Indicates the node.js version installed by nvm to set the PATH variable to point to
+    private static final String NODE_VERSION = "v12.16.3";
     private static final String OTP_GRAPH_FILENAME = "Graph.obj";
-    // Use txt at the end of these filenames so that these can easily be viewed in a web browser.
-    public static final String BUNDLE_DOWNLOAD_COMPLETE_FILE = "BUNDLE_DOWNLOAD_COMPLETE.txt";
-    public static final String GRAPH_STATUS_FILE = "GRAPH_STATUS.txt";
+    public static final String OTP_RUNNER_STATUS_FILE = "status.json";
     private static final long TEN_MINUTES_IN_MILLISECONDS = 10 * 60 * 1000;
     // Note: using a cloudfront URL for these download repo URLs will greatly increase download/deploy speed.
     private static final String R5_REPO_URL = DataManager.hasConfigProperty("modules.deployment.r5_download_url")
@@ -211,11 +214,17 @@ public class DeployJob extends MonitorableJob {
     }
 
     public void jobLogic () {
-        // If not using a preloaded bundle (or pre-built graph), we need to dump the GTFS feeds and OSM to a zip file and optionally upload
-        // to S3.
-        if (deployType.equals(DeployType.REPLACE)) {
+        if (otpServer.ec2Info != null) totalTasks++;
+        // If needed, dump the GTFS feeds and OSM to a zip file and optionally upload to S3. Since ec2 deployments use
+        // otp-runner to automatically download all files needed for the bundle, skip this step if ec2 deployment is
+        // enabled and there are internal urls to deploy the graph over wire.
+        if (
+            deployType.equals(DeployType.REPLACE) &&
+                (otpServer.ec2Info == null ||
+                    (otpServer.internalUrl != null && otpServer.internalUrl.size() > 0)
+                )
+        ) {
             if (otpServer.s3Bucket != null) totalTasks++;
-            if (otpServer.ec2Info != null) totalTasks++;
             try {
                 deploymentTempFile = File.createTempFile("deployment", ".zip");
             } catch (IOException e) {
@@ -262,6 +271,7 @@ public class DeployJob extends MonitorableJob {
         if (otpServer.ec2Info != null) {
             if ("true".equals(DataManager.getConfigPropertyAsText("modules.deployment.ec2.enabled"))) {
                 replaceEC2Servers();
+                tasksCompleted++;
                 // If creating a new server, there is no need to deploy to an existing one.
                 return;
             } else {
@@ -459,7 +469,7 @@ public class DeployJob extends MonitorableJob {
     public void jobFinished () {
         // Delete temp file containing OTP deployment (OSM extract and GTFS files) so that the server's disk storage
         // does not fill up.
-        if (deployType.equals(DeployType.REPLACE)) {
+        if (deployType.equals(DeployType.REPLACE) && deploymentTempFile != null) {
             boolean deleted = deploymentTempFile.delete();
             if (!deleted) {
                 LOG.error("Deployment {} not deleted! Disk space in danger of filling up.", deployment.id);
@@ -651,10 +661,7 @@ public class DeployJob extends MonitorableJob {
      * TODO: Booting up R5 servers has not been fully tested.
      */
     private List<Instance> startEC2Instances(int count, boolean graphAlreadyBuilt) {
-        // User data should contain info about:
-        // 1. Downloading GTFS/OSM info (s3)
-        // 2. Time to live until shutdown/termination (for test servers)
-        // 3. Hosting / nginx
+        // Create user data to instruct the ec2 instance to do stuff at startup.
         String userData = constructUserData(graphAlreadyBuilt);
         // Failure was encountered while constructing user data.
         if (userData == null) {
@@ -788,7 +795,106 @@ public class DeployJob extends MonitorableJob {
      * startup.
      */
     private String constructUserData(boolean graphAlreadyBuilt) {
-        // Prefix/name of JAR file (WITHOUT .jar)
+        if (deployment.r5) {
+            status.fail("Deployments with r5 are not supported at this time");
+            return null;
+        }
+        String jarName = getJarName();
+        String s3JarUrl = getS3JarUrl(jarName);
+        if (!s3JarUrlIsValid(s3JarUrl)) {
+            return null;
+        }
+        String webDir = "/usr/share/nginx/client";
+        // create otp-runner config file
+        OtpRunnerManifest manifest = new OtpRunnerManifest();
+        // add common settings
+        manifest.graphsFolder = String.format("/var/%s/graphs", getTripPlannerString());
+        manifest.graphObjUrl = getS3GraphURI();
+        manifest.jarFile = String.format("/opt/%s/%s", getTripPlannerString(), jarName);
+        manifest.jarUrl = s3JarUrl;
+        // This must be added here because logging starts immediately before defaults are set while validating the
+        // manifest
+        manifest.otpRunnerLogFile = "/var/log/otp-runner.log";
+        manifest.prefixLogUploadsWithInstanceId = true;
+        manifest.serverStartupTimeoutSeconds = 3300;
+        manifest.s3UploadPath = getS3FolderURI().toString();
+        manifest.statusFileLocation = String.format("%s/%s", webDir, OTP_RUNNER_STATUS_FILE);
+        manifest.uploadOtpRunnerLogs = true;
+        if (!graphAlreadyBuilt) {
+            // settings when graph building needs to happen
+            manifest.buildConfigJSON = deployment.generateBuildConfigAsString();
+            manifest.buildGraph = true;
+            try {
+                manifest.gtfsAndOsmUrls = deployment.generateGtfsAndOsmUrls();
+            } catch (MalformedURLException e) {
+                status.fail("Failed to create OSM download url!", e);
+                return null;
+            }
+            manifest.uploadGraph = true;
+            manifest.uploadGraphBuildLogs = true;
+            manifest.uploadGraphBuildReport = true;
+            if (deployment.buildGraphOnly || otpServer.ec2Info.hasSeparateGraphBuildConfig()) {
+                // This instance should be ran to only build the graph
+                manifest.runServer = false;
+            } else {
+                // This instance will both run a graph and start the OTP server
+                manifest.routerConfigJSON = deployment.generateRouterConfigAsString();
+                manifest.runServer = true;
+                manifest.uploadServerStartupLogs = true;
+            }
+        } else {
+            // This instance will only start the OTP server with a prebuilt graph
+            manifest.buildGraph = false;
+            manifest.routerConfigJSON = deployment.generateRouterConfigAsString();
+            manifest.runServer = true;
+            manifest.uploadServerStartupLogs = true;
+        }
+        String otpRunnerManifestFile = String.format("/var/%s/otp-runner-manifest.json", getTripPlannerString());
+
+        //////////////// BEGIN USER DATA
+        List<String> lines = new ArrayList<>();
+        lines.add("#!/bin/bash");
+        // NOTE: user data output is logged to `/var/log/cloud-init-output.log` automatically with ec2 instances
+        // Add some items to the $PATH as the $PATH with user-data scripts differs from the ssh $PATH.
+        lines.add("export PATH=\"$PATH:/home/ubuntu/.yarn/bin\"");
+        lines.add(String.format("export PATH=\"$PATH:/home/ubuntu/.nvm/versions/node/%s/bin\"", NODE_VERSION));
+        // Remove previous files that might have been created during an Image creation
+        lines.add(String.format("rm %s/%s || echo '' > /dev/null", webDir, OTP_RUNNER_STATUS_FILE));
+        lines.add(String.format("rm %s || echo '' > /dev/null", otpRunnerManifestFile));
+        lines.add(String.format("rm %s || echo '' > /dev/null", manifest.jarFile));
+        lines.add(String.format("rm %s || echo '' > /dev/null", manifest.otpRunnerLogFile));
+        lines.add("rm /var/log/otp-build.log || echo '' > /dev/null");
+        lines.add("rm /var/log/otp-server.log || echo '' > /dev/null");
+
+        // Write the otp-runner manifest to a file by echoing it to a file on the ec2 instance.
+        try {
+            ObjectMapper mapper = new ObjectMapper();
+            mapper.setSerializationInclusion(JsonInclude.Include.NON_EMPTY);
+            lines.add(
+                String.format(
+                    // Use ANSI-C Quoting to make sure single quote characters are properly escaped.
+                    // See https://www.gnu.org/software/bash/manual/html_node/ANSI_002dC-Quoting.html
+                    "echo $'%s' > %s",
+                    // Replace single quote characters with escape character
+                    mapper.writeValueAsString(manifest).replace("'", "\\'"),
+                    otpRunnerManifestFile
+                )
+            );
+        } catch (JsonProcessingException e) {
+            status.fail("Failed to create manifest for otp-runner!", e);
+            return null;
+        }
+        // install otp-runner as a global package thus enabling use of the otp-runner command
+        // This will install that latest version of otp-runner from the default github branch. It is not yet published
+        // as an npm package.
+        lines.add("yarn global add https://github.com/ibi-group/otp-runner.git");
+        // execute otp-runner
+        lines.add(String.format("otp-runner %s", otpRunnerManifestFile));
+        // Return the entire user data script as a single string.
+        return String.join("\n", lines);
+    }
+
+    private String getJarName() {
         String jarName = deployment.r5 ? deployment.r5Version : deployment.otpVersion;
         if (jarName == null) {
             if (deployment.r5) deployment.r5Version = DEFAULT_R5_VERSION;
@@ -797,153 +903,36 @@ public class DeployJob extends MonitorableJob {
             jarName = deployment.r5 ? deployment.r5Version : deployment.otpVersion;
             Persistence.deployments.replace(deployment.id, deployment);
         }
-        // Construct URL for trip planner jar and check that it exists with a lightweight HEAD request.
+        return jarName;
+    }
+
+    /**
+     * Construct URL for trip planner jar
+     */
+    private String getS3JarUrl(String jarName) {
         String s3JarKey = jarName + ".jar";
         String repoUrl = deployment.r5 ? R5_REPO_URL : OTP_REPO_URL;
-        String s3JarUrl = String.join("/", repoUrl, s3JarKey);
+        return String.join("/", repoUrl, s3JarKey);
+    }
+
+    /**
+     * Checks if an AWS S3 url is valid by making a HTTP HEAD request and returning true if the request succeeded.
+     */
+    private boolean s3JarUrlIsValid(String s3JarUrl) {
         try {
             final URL url = new URL(s3JarUrl);
-            HttpURLConnection huc = (HttpURLConnection) url.openConnection();
-            huc.setRequestMethod("HEAD");
-            int responseCode = huc.getResponseCode();
+            HttpURLConnection httpURLConnection = (HttpURLConnection) url.openConnection();
+            httpURLConnection.setRequestMethod("HEAD");
+            int responseCode = httpURLConnection.getResponseCode();
             if (responseCode != HttpStatus.OK_200) {
                 status.fail(String.format("Requested trip planner jar does not exist at %s", s3JarUrl));
-                return null;
+                return false;
             }
         } catch (IOException e) {
-            status.fail(String.format("Error checking for trip planner jar: %s", s3JarUrl), e);
-            return null;
+            status.fail(String.format("Error checking for trip planner jar: %s", s3JarUrl));
+            return false;
         }
-        String jarDir = String.format("/opt/%s", getTripPlannerString());
-        List<String> lines = new ArrayList<>();
-        String routerName = "default";
-        final String uploadUserDataLogCommand = String.format("aws s3 cp $USERDATALOG %s/${INSTANCE_ID}.log", getS3FolderURI().toString());
-        String routerDir = String.format("/var/%s/graphs/%s", getTripPlannerString(), routerName);
-        String graphPath = String.join("/", routerDir, OTP_GRAPH_FILENAME);
-        //////////////// BEGIN USER DATA
-        lines.add("#!/bin/bash");
-        // set some variables.
-        lines.add(String.format("BUILDLOGFILE=/var/log/%s", getBuildLogFilename()));
-        lines.add(String.format("LOGFILE=/var/log/%s.log", getTripPlannerString()));
-        lines.add("USERDATALOG=/var/log/user-data.log");
-        lines.add("WEB_DIR=/usr/share/nginx/client");
-        // Remove previous files that might have been created during an Image creation
-        lines.add(String.format("rm $WEB_DIR/%s || echo '' > /dev/null", BUNDLE_DOWNLOAD_COMPLETE_FILE));
-        lines.add(String.format("rm $WEB_DIR/%s || echo '' > /dev/null", GRAPH_STATUS_FILE));
-        lines.add("rm $BUILDLOGFILE || echo '' > /dev/null");
-        lines.add("rm LOGFILE || echo '' > /dev/null");
-        lines.add("rm USERDATALOG || echo '' > /dev/null");
-        // Get the instance's instance ID from the AWS metadata endpoint.
-        lines.add("INSTANCE_ID=`curl http://169.254.169.254/latest/meta-data/instance-id`");
-        // Log user data setup to /var/log/user-data.log
-        lines.add("exec > >(tee $USERDATALOG|logger -t user-data -s 2>/dev/console) 2>&1");
-        // Get the total memory by grepping for MemTotal in meminfo file and removing non-numbers from the line
-        // (leaving just the total mem in kb). This is used for starting up the OTP build/run processes.
-        lines.add("TOTAL_MEM=`grep MemTotal /proc/meminfo | sed 's/[^0-9]//g'`");
-        // If on a low-memory instance (assuming around 2GB of RAM), allocate 1.5GB for java.
-        // Otherwise use as much as possible while leaving 2097152 kb (2GB) for the OS
-        lines.add("if [ \"2500000\" -gt \"$TOTAL_MEM\" ]; then MEM=1500000; else MEM=`echo $(($TOTAL_MEM - 2097152))`; fi");
-        // Configure some stuff for AWS CLI.
-        // Note: too many threads/concurrent requests cause a lot of individual thread timeouts for some reason, which
-        // ultimately causes the entire cp command to stall out.
-        lines.add("aws configure set default.s3.max_concurrent_requests 3");
-        lines.add("aws configure set default.s3.multipart_chunksize 32MB");
-
-        // Get region from config or default to us-east-1
-        String region;
-        if (customRegion != null) {
-            region = customRegion;
-        } else {
-            region = DataManager.getConfigPropertyAsText("application.data.s3_region");
-        }
-        if (region == null) region = "us-east-1";
-        lines.add(String.format("aws configure set default.region %s", region));
-        // Create the directory for the graph inputs.
-        lines.add(String.format("mkdir -p %s", routerDir));
-        lines.add(String.format("chown ubuntu %s", routerDir));
-        // Remove the current inputs from router directory.
-        lines.add(String.format("rm -rf %s/*", routerDir));
-        // Download trip planner JAR.
-        lines.add(String.format("mkdir -p %s", jarDir));
-        // Add client static file directory for uploading deploy stage status files.
-        // TODO: switch to AMI that uses /usr/share/nginx/html as static file dir so we don't have to create this new dir.
-        lines.add("sudo mkdir $WEB_DIR");
-        lines.add(String.format("wget %s -O %s/%s.jar", s3JarUrl, jarDir, jarName));
-        if (graphAlreadyBuilt) {
-            lines.add("echo 'downloading graph from s3'");
-            // Download Graph from S3.
-            String downloadGraph = String.format("time aws s3 --cli-read-timeout 60 cp %s %s ", getS3GraphURI(), graphPath);
-            lines.add(downloadGraph);
-            // If graph download times out, try again.
-            lines.add(String.format("[ -f %s ] && echo 'Graph downloaded!' || %s", graphPath, downloadGraph));
-            lines.add(String.format("ls -alh %s", graphPath));
-            // Download router config if not null (normally this would be just included as part of bundle.zip, but the
-            // bundle is not downloaded when the graph already exists).
-            if (deployment.generateRouterConfig() != null) {
-                lines.add(String.format("aws s3 --cli-read-timeout 60 cp %s %s ", joinToS3FolderURI("router-config.json"), routerDir + "/"));
-            }
-        } else {
-            // Download data bundle from S3.
-            String downloadBundle = String.format("time aws s3 --cli-read-timeout 60 cp %s /tmp/bundle.zip", getS3BundleURI());
-            lines.add(downloadBundle);
-            // Download OSM extract if exists at URL. Otherwise, it is assumed to be in the bundle.
-            if (deployment.osmExtractUrl != null && !deployment.skipOsmExtract) {
-                lines.add(String.format("wget %s -O %s/osm.pbf", deployment.osmExtractUrl, routerDir));
-            }
-            // Determine if bundle download was successful and try again if not.
-            lines.add(String.format("[ -f /tmp/bundle.zip ] && echo 'Bundle downloaded!' || %s", downloadBundle));
-            lines.add("[ -f /tmp/bundle.zip ] && BUNDLE_STATUS='SUCCESS' || BUNDLE_STATUS='FAILURE'");
-            // Upload user data log after bundle download.
-            lines.add(uploadUserDataLogCommand);
-            // Create file with bundle status in web dir to notify Data Tools that download is complete.
-            lines.add(String.format("sudo echo $BUNDLE_STATUS > $WEB_DIR/%s", BUNDLE_DOWNLOAD_COMPLETE_FILE));
-            // Put unzipped bundle data into router directory.
-            lines.add(String.format("unzip /tmp/bundle.zip -d %s", routerDir));
-            lines.add("echo 'starting graph build'");
-            // Build the graph.
-            if (deployment.r5) lines.add(String.format("sudo -H -u ubuntu java -Xmx${MEM}k -jar %s/%s.jar point --build %s", jarDir, jarName, routerDir));
-            else lines.add(String.format("sudo -H -u ubuntu java -jar -Xmx${MEM}k %s/%s.jar --build %s > $BUILDLOGFILE 2>&1", jarDir, jarName, routerDir));
-            // Re-upload user data log after build command.
-            lines.add(uploadUserDataLogCommand);
-            // Upload the build log file, build report and graph to S3.
-            if (!deployment.r5) {
-                String s3BuildLogPath = joinToS3FolderURI(getBuildLogFilename());
-                // upload log file
-                lines.add(String.format("aws s3 cp $BUILDLOGFILE %s ", s3BuildLogPath));
-                // upload report if it was generated
-                String reportPath = String.format("%s/report", routerDir);
-                lines.add(String.format(
-                    "[ -e %s ] && cd %s && zip -r report.zip report && cd - && aws s3 cp %s.zip %s",
-                    reportPath,
-                    routerDir,
-                    reportPath,
-                    joinToS3FolderURI("graph-build-report.zip")
-                ));
-                // upload graph
-                lines.add(String.format("aws s3 cp %s %s ", graphPath, getS3GraphURI()));
-            }
-        }
-        // Determine if graph build/download was successful (and that Graph.obj is not zero bytes).
-        lines.add(String.format("FILESIZE=$(wc -c <%s)", graphPath));
-        lines.add(String.format("[ -f %s ] && (($FILESIZE > 0)) && GRAPH_STATUS='SUCCESS' || GRAPH_STATUS='FAILURE'", graphPath));
-        // Re-upload user data log before indicating that graph build/download is complete.
-        lines.add(uploadUserDataLogCommand);
-        // Create file with bundle status in web dir to notify Data Tools that download is complete.
-        lines.add(String.format("sudo echo $GRAPH_STATUS > $WEB_DIR/%s", GRAPH_STATUS_FILE));
-        lines.add("echo 'Graph build/download status: $GRAPH_STATUS'");
-        if (deployment.buildGraphOnly) {
-            // If building graph only, tell the instance to shut itself down after the graph build (and log upload) is
-            // complete.
-            lines.add("echo 'shutting down server (build graph only specified in deployment target)'");
-            lines.add("sudo poweroff");
-        } else {
-            // Otherwise, kick off the application.
-            lines.add("echo 'kicking off trip planner (logs at $LOGFILE)'");
-            if (deployment.r5) lines.add(String.format("sudo -H -u ubuntu nohup java -Xmx${MEM}k -Djava.util.Arrays.useLegacyMergeSort=true -jar %s/%s.jar point --isochrones %s > /var/log/r5.out 2>&1&", jarDir, jarName, routerDir));
-            else lines.add(String.format("sudo -H -u ubuntu nohup java -jar -Xmx${MEM}k %s/%s.jar --server --bindAddress 127.0.0.1 --router default > $LOGFILE 2>&1 &", jarDir, jarName));
-        }
-        // Return the entire user data script as a single string.
-        return String.join("\n", lines);
+        return true;
     }
 
     private String getBuildLogFilename() {
