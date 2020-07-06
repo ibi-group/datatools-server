@@ -70,7 +70,7 @@ public class CreateSnapshotJob extends MonitorableJob {
         this.updateBuffer = updateBufferNamespace;
         this.storeSnapshot = storeSnapshot;
         this.preserveBuffer = preserveBufferAsSnapshot;
-        status.update(false,  "Initializing...", 0);
+        status.update( "Initializing...", 0);
     }
 
     @JsonProperty
@@ -86,8 +86,8 @@ public class CreateSnapshotJob extends MonitorableJob {
         this.name = String.format("Creating snapshot for %s", feedSource.name);
         Collection<Snapshot> existingSnapshots = feedSource.retrieveSnapshots();
         int version = existingSnapshots.size();
-        status.update(false,  "Creating snapshot...", 20);
-        FeedLoadResult loadResult = makeSnapshot(namespace, DataManager.GTFS_DATA_SOURCE);
+        status.update("Creating snapshot...", 20);
+        FeedLoadResult loadResult = makeSnapshot(namespace, DataManager.GTFS_DATA_SOURCE, !feedSource.preserveStopTimesSequence);
         snapshot.version = version;
         snapshot.namespace = loadResult.uniqueIdentifier;
         snapshot.feedLoadResult = loadResult;
@@ -95,6 +95,7 @@ public class CreateSnapshotJob extends MonitorableJob {
             snapshot.generateName();
         }
         snapshot.snapshotTime = loadResult.completionTime;
+        status.update("Database snapshot finished.", 80);
     }
 
     @Override
@@ -131,7 +132,7 @@ public class CreateSnapshotJob extends MonitorableJob {
                         snapshot.namespace
                 );
             }
-            status.update(false, "Created snapshot!", 100, true);
+            status.completeSuccessfully("Created snapshot!");
         }
     }
 }

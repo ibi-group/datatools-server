@@ -5,7 +5,7 @@ import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.FetchProjectFeedsJob;
-import com.conveyal.datatools.manager.jobs.MakePublicJob;
+import com.conveyal.datatools.manager.jobs.PublishProjectFeedsJob;
 import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -44,9 +44,6 @@ import static spark.Spark.put;
  */
 @SuppressWarnings({"unused", "ThrowableNotThrown"})
 public class ProjectController {
-
-    // TODO We can probably replace this with something from Mongo so we use one JSON serializer / deserializer throughout
-    private static JsonManager<Project> json = new JsonManager<>(Project.class, JsonViews.UserInterface.class);
     private static final Logger LOG = LoggerFactory.getLogger(ProjectController.class);
 
     /**
@@ -265,7 +262,7 @@ public class ProjectController {
      * Updates the index.html document that serves as a listing of those objects on S3.
      * This is often referred to as "deploying" the project.
      */
-    private static boolean publishPublicFeeds(Request req, Response res) {
+    private static String publishPublicFeeds(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         String id = req.params("id");
         if (id == null) {
@@ -275,9 +272,10 @@ public class ProjectController {
         if (p == null) {
             logMessageAndHalt(req, 400, "no such project!");
         }
-        // Run this as a synchronous job; if it proves to be too slow we will change to asynchronous.
-        new MakePublicJob(p, userProfile).run();
-        return true;
+        // Run as lightweight job.
+        PublishProjectFeedsJob publishProjectFeedsJob = new PublishProjectFeedsJob(p, userProfile);
+        DataManager.lightExecutor.execute(publishProjectFeedsJob);
+        return formatJobMessage(publishProjectFeedsJob.jobId, "Publishing public feeds");
     }
 
     /**
@@ -315,20 +313,28 @@ public class ProjectController {
      * A bit too static/global for an OO language, but that's how Spark works.
      */
     public static void register (String apiPrefix) {
-        get(apiPrefix + "secure/project/:id", ProjectController::getProject, json::write);
-        get(apiPrefix + "secure/project", ProjectController::getAllProjects, json::write);
-        post(apiPrefix + "secure/project", ProjectController::createProject, json::write);
-        put(apiPrefix + "secure/project/:id", ProjectController::updateProject, json::write);
-        delete(apiPrefix + "secure/project/:id", ProjectController::deleteProject, json::write);
-        get(apiPrefix + "secure/project/:id/thirdPartySync/:type", ProjectController::thirdPartySync, json::write);
-        post(apiPrefix + "secure/project/:id/fetch", ProjectController::fetch, json::write);
-        post(apiPrefix + "secure/project/:id/deployPublic", ProjectController::publishPublicFeeds, json::write);
+        // Construct JSON managers which help serialize the response. Slim JSON is the generic JSON view. Full JSON
+        // contains additional fields (at the moment just #otpServers) and should only be used when the controller
+        // returns a single project (slimJson is better suited for a collection). If fullJson is attempted for use
+        // with a collection, massive performance issues will ensure (mainly due to multiple calls to AWS EC2).
+        JsonManager<Project> slimJson = new JsonManager<>(Project.class, JsonViews.UserInterface.class);
+        JsonManager<Project> fullJson = new JsonManager<>(Project.class, JsonViews.UserInterface.class);
+        fullJson.addMixin(Project.class, Project.ProjectWithOtpServers.class);
+
+        get(apiPrefix + "secure/project/:id", ProjectController::getProject, fullJson::write);
+        get(apiPrefix + "secure/project", ProjectController::getAllProjects, slimJson::write);
+        post(apiPrefix + "secure/project", ProjectController::createProject, fullJson::write);
+        put(apiPrefix + "secure/project/:id", ProjectController::updateProject, fullJson::write);
+        delete(apiPrefix + "secure/project/:id", ProjectController::deleteProject, fullJson::write);
+        get(apiPrefix + "secure/project/:id/thirdPartySync/:type", ProjectController::thirdPartySync, fullJson::write);
+        post(apiPrefix + "secure/project/:id/fetch", ProjectController::fetch, fullJson::write);
+        post(apiPrefix + "secure/project/:id/deployPublic", ProjectController::publishPublicFeeds, fullJson::write);
 
         get(apiPrefix + "secure/project/:id/download", ProjectController::mergeProjectFeeds);
-        get(apiPrefix + "secure/project/:id/downloadtoken", ProjectController::getFeedDownloadCredentials, json::write);
+        get(apiPrefix + "secure/project/:id/downloadtoken", ProjectController::getFeedDownloadCredentials, fullJson::write);
 
-        get(apiPrefix + "public/project/:id", ProjectController::getProject, json::write);
-        get(apiPrefix + "public/project", ProjectController::getAllProjects, json::write);
+        get(apiPrefix + "public/project/:id", ProjectController::getProject, fullJson::write);
+        get(apiPrefix + "public/project", ProjectController::getAllProjects, slimJson::write);
         get(apiPrefix + "downloadprojectfeed/:token", ProjectController::downloadMergedFeedWithToken);
     }
 

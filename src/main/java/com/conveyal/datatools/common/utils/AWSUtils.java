@@ -148,9 +148,11 @@ public class AWSUtils {
      * Shorthand method to obtain an EC2 client for the provided role ARN. If role is null, the default EC2 credentials
      * will be used.
      */
-    public static AmazonEC2 getEC2ClientForRole (String role) {
+    public static AmazonEC2 getEC2ClientForRole (String role, String region) {
         AWSStaticCredentialsProvider credentials = getCredentialsForRole(role, "ec2-client");
-        return getEC2ClientForCredentials(credentials);
+        return region == null
+            ? getEC2ClientForCredentials(credentials)
+            : getEC2ClientForCredentials(credentials, region);
     }
 
     /**
@@ -159,6 +161,14 @@ public class AWSUtils {
      */
     public static AmazonEC2 getEC2ClientForCredentials (AWSCredentialsProvider credentials) {
         return AmazonEC2Client.builder().withCredentials(credentials).build();
+    }
+
+    /**
+     * Shorthand method to obtain an EC2 client for the provided credentials and region. If credentials are null, the
+     * default EC2 credentials will be used.
+     */
+    public static AmazonEC2 getEC2ClientForCredentials (AWSCredentialsProvider credentials, String region) {
+        return AmazonEC2Client.builder().withCredentials(credentials).withRegion(region).build();
     }
 
     /**

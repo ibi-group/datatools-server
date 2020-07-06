@@ -59,13 +59,22 @@ public class OtpServer extends Model {
         // Prevent calling EC2 method on servers that do not have EC2 info defined because this is a JSON property.
         if (ec2Info == null) return Collections.EMPTY_LIST;
         Filter serverFilter = new Filter("tag:serverId", Collections.singletonList(id));
-        return DeploymentController.fetchEC2InstanceSummaries(AWSUtils.getEC2ClientForRole(this.role), serverFilter);
+        return DeploymentController.fetchEC2InstanceSummaries(
+            AWSUtils.getEC2ClientForRole(this.role, ec2Info.region),
+            serverFilter
+        );
     }
 
     public List<Instance> retrieveEC2Instances() {
-        if (!"true".equals(DataManager.getConfigPropertyAsText("modules.deployment.ec2.enabled"))) return Collections.EMPTY_LIST;
+        if (
+            !"true".equals(DataManager.getConfigPropertyAsText("modules.deployment.ec2.enabled")) ||
+                ec2Info == null
+        ) return Collections.EMPTY_LIST;
         Filter serverFilter = new Filter("tag:serverId", Collections.singletonList(id));
-        return DeploymentController.fetchEC2Instances(AWSUtils.getEC2ClientForRole(this.role), serverFilter);
+        return DeploymentController.fetchEC2Instances(
+            AWSUtils.getEC2ClientForRole(this.role, ec2Info.region),
+            serverFilter
+        );
     }
 
     @JsonProperty("organizationId")

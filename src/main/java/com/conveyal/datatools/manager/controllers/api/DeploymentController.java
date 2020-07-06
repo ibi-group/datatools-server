@@ -47,6 +47,7 @@ import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.AWSUtils.downloadFromS3;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
+import static com.conveyal.datatools.manager.persistence.FeedStore.getAWSCreds;
 import static spark.Spark.delete;
 import static spark.Spark.get;
 import static spark.Spark.options;
@@ -58,7 +59,6 @@ import static spark.Spark.put;
  * These methods are mapped to API endpoints by Spark.
  */
 public class DeploymentController {
-    private static JsonManager<Deployment> json = new JsonManager<>(Deployment.class, JsonViews.UserInterface.class);
     private static final Logger LOG = LoggerFactory.getLogger(DeploymentController.class);
     private static Map<String, DeployJob> deploymentJobsByServer = new HashMap<>();
     private static final AmazonEC2 ec2 = AmazonEC2Client.builder().build();
@@ -101,6 +101,7 @@ public class DeploymentController {
         // Default client to use if no role was used during the deployment.
         AmazonS3 s3Client = FeedStore.s3Client;
         String role = null;
+        String region = null;
         String uriString;
         String filename = req.queryParams("filename");
         if (filename == null) {
@@ -131,6 +132,7 @@ public class DeploymentController {
                     logMessageAndHalt(req, 400, "The deployment does not have job history or associated server information to construct URI for build artifact. " + uriString);
                     return null;
                 }
+                region = server.ec2Info == null ? null : server.ec2Info.region;
                 uriString = String.format("s3://%s/bundles/%s/%s/%s", server.s3Bucket, deployment.projectId, deployment.id, jobId);
                 LOG.warn("Could not find deploy summary for job. Attempting to use {}", uriString);
             }
@@ -138,10 +140,15 @@ public class DeploymentController {
             // If summary is readily available, just use the ready-to-use build artifacts field.
             uriString = summaryToDownload.buildArtifactsFolder;
             role = summaryToDownload.role;
+            region = summaryToDownload.ec2Info == null ? null : summaryToDownload.ec2Info.region;
         }
         AmazonS3URI uri = new AmazonS3URI(uriString);
         // Assume the alternative role if needed to download the deploy artifact.
-        if (role != null) s3Client = AWSUtils.getS3ClientForRole(role);
+        if (role != null) {
+            s3Client = AWSUtils.getS3ClientForRole(role, region);
+        } else if (region != null) {
+            s3Client = AWSUtils.getS3ClientForCredentials(getAWSCreds(), region);
+        }
         return downloadFromS3(s3Client, uri.getBucket(), String.join("/", uri.getKey(), filename), false, res);
     }
 
@@ -373,7 +380,12 @@ public class DeploymentController {
             }
         }
         // If checks are ok, terminate instances.
-        boolean success = ServerController.deRegisterAndTerminateInstances(credentials, targetGroupArn, idsToTerminate);
+        boolean success = ServerController.deRegisterAndTerminateInstances(
+            credentials,
+            targetGroupArn,
+            latest.ec2Info.region,
+            idsToTerminate
+        );
         if (!success) {
             logMessageAndHalt(req, 400, "Could not complete termination request");
             return false;
@@ -480,22 +492,29 @@ public class DeploymentController {
     }
 
     public static void register (String apiPrefix) {
-        post(apiPrefix + "secure/deployments/:id/deploy/:target", DeploymentController::deploy, json::write);
+        // Construct JSON managers which help serialize the response. Slim JSON is the generic JSON view. Full JSON
+        // contains additional fields (at the moment just #ec2Instances) and should only be used when the controller
+        // returns a single deployment (slimJson is better suited for a collection). If fullJson is attempted for use
+        // with a collection, massive performance issues will ensure (mainly due to multiple calls to AWS EC2).
+        JsonManager<Deployment> slimJson = new JsonManager<>(Deployment.class, JsonViews.UserInterface.class);
+        JsonManager<Deployment> fullJson = new JsonManager<>(Deployment.class, JsonViews.UserInterface.class);
+        fullJson.addMixin(Deployment.class, Deployment.DeploymentWithEc2InstancesMixin.class);
+
+        post(apiPrefix + "secure/deployments/:id/deploy/:target", DeploymentController::deploy, slimJson::write);
         post(apiPrefix + "secure/deployments/:id/deploy/", ((request, response) -> {
             logMessageAndHalt(request, 400, "Must provide valid deployment target name");
             return null;
-        }), json::write);
+        }), slimJson::write);
         options(apiPrefix + "secure/deployments", (q, s) -> "");
         get(apiPrefix + "secure/deployments/:id/download", DeploymentController::downloadDeployment);
         get(apiPrefix + "secure/deployments/:id/artifact", DeploymentController::downloadBuildArtifact);
-        get(apiPrefix + "secure/deployments/:id/ec2", DeploymentController::fetchEC2InstanceSummaries, json::write);
-        delete(apiPrefix + "secure/deployments/:id/ec2", DeploymentController::terminateEC2InstanceForDeployment, json::write);
-        get(apiPrefix + "secure/deployments/:id", DeploymentController::getDeployment, json::write);
-        delete(apiPrefix + "secure/deployments/:id", DeploymentController::deleteDeployment, json::write);
-        get(apiPrefix + "secure/deployments", DeploymentController::getAllDeployments, json::write);
-        post(apiPrefix + "secure/deployments", DeploymentController::createDeployment, json::write);
-//        post(apiPrefix + "secure/deployments/:id/ec2", DeploymentController::addEC2InstanceToDeployment, json::write);
-        put(apiPrefix + "secure/deployments/:id", DeploymentController::updateDeployment, json::write);
-        post(apiPrefix + "secure/deployments/fromfeedsource/:id", DeploymentController::createDeploymentFromFeedSource, json::write);
+        get(apiPrefix + "secure/deployments/:id/ec2", DeploymentController::fetchEC2InstanceSummaries, slimJson::write);
+        delete(apiPrefix + "secure/deployments/:id/ec2", DeploymentController::terminateEC2InstanceForDeployment, slimJson::write);
+        get(apiPrefix + "secure/deployments/:id", DeploymentController::getDeployment, fullJson::write);
+        delete(apiPrefix + "secure/deployments/:id", DeploymentController::deleteDeployment, fullJson::write);
+        get(apiPrefix + "secure/deployments", DeploymentController::getAllDeployments, slimJson::write);
+        post(apiPrefix + "secure/deployments", DeploymentController::createDeployment, fullJson::write);
+        put(apiPrefix + "secure/deployments/:id", DeploymentController::updateDeployment, fullJson::write);
+        post(apiPrefix + "secure/deployments/fromfeedsource/:id", DeploymentController::createDeploymentFromFeedSource, fullJson::write);
     }
 }

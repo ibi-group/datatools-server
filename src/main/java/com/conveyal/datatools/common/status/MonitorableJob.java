@@ -3,7 +3,6 @@ package com.conveyal.datatools.common.status;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.fasterxml.jackson.annotation.JsonProperty;
-import com.google.common.collect.Sets;
 import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -76,6 +75,7 @@ public abstract class MonitorableJob implements Runnable, Serializable {
         }
         this.owner = owner;
         this.name = name;
+        status.name = name;
         this.type = type;
         registerJob();
     }
@@ -150,21 +150,19 @@ public abstract class MonitorableJob implements Runnable, Serializable {
             int subJobsTotal = subJobs.size() + 1;
 
             for (MonitorableJob subJob : subJobs) {
+                String subJobName = subJob.getClass().getSimpleName();
                 if (!parentJobErrored && !subTaskErrored) {
+                    // Calculate completion based on number of sub jobs remaining.
+                    double percentComplete = subJobNumber * 100D / subJobsTotal;
                     // Run sub-task if no error has errored during parent job or previous sub-task execution.
-                    // FIXME this will overwrite a message if message is set somewhere else.
-                    // FIXME If a subtask fails, cancel the parent task and cancel or remove subsequent sub-tasks.
-//                status.message = String.format("Finished %d/%d sub-tasks", subJobNumber, subJobsTotal);
-                    status.percentComplete = subJobNumber * 100D / subJobsTotal;
-                    status.error = false; // FIXME: remove this error=false assignment
+                    status.update(String.format("Waiting on %s...", subJobName), percentComplete);
                     subJob.run();
-
                     // Record if there has been an error in the execution of the sub-task. (Note: this will not
                     // incorrectly overwrite a 'true' value with 'false' because the sub-task is only run if
                     // jobHasErrored is false.
                     if (subJob.status.error) {
                         subTaskErrored = true;
-                        cancelMessage = String.format("Task cancelled due to error in %s task", subJob.getClass().getSimpleName());
+                        cancelMessage = String.format("Task cancelled due to error in %s task", subJobName);
                     }
                 } else {
                     // Cancel (fail) next sub-task and continue.
@@ -178,24 +176,21 @@ public abstract class MonitorableJob implements Runnable, Serializable {
                 // because the error presumably already occurred and has a better error message.
                 cancel(cancelMessage);
             }
-            // Set duration of job in case it is needed by finishing step (e.g., storing the job duration in a database).
-            status.duration = System.currentTimeMillis() - status.startTime;
+            // Complete the job (as success if no errors encountered, as failure otherwise).
+            if (!parentJobErrored && !subTaskErrored) status.completeSuccessfully("Job complete!");
+            else status.complete(true);
             // Run final steps of job pending completion or error. Note: any tasks that depend on job success should
-            // check job status to determine if final step should be executed (e.g., storing feed version in MongoDB).
+            // check job status in jobFinished to determine if final step should be executed (e.g., storing feed
+            // version in MongoDB).
             // TODO: should we add separate hooks depending on state of job/sub-tasks (e.g., success, catch, finally)
             jobFinished();
 
-            status.completed = true;
-
             // We retain finished or errored jobs on the server until they are fetched via the API, which implies they
             // could be displayed by the client.
-        } catch (Exception ex) {
-            // Set job status to failed
-            LOG.error("Job failed", ex);
-            status.update(true, ex.getMessage(), 100, true);
-            status.duration = System.currentTimeMillis() - status.startTime;
+        } catch (Exception e) {
+            status.fail("Job failed due to unhandled exception!", e);
         }
-        LOG.info("{} {} {} in {} ms", type, jobId, status.error ? "errored" : "completed", status.duration);
+        LOG.info("{} (jobId={}) {} in {} ms", type, jobId, status.error ? "errored" : "completed", status.duration);
     }
 
     /**
@@ -206,8 +201,7 @@ public abstract class MonitorableJob implements Runnable, Serializable {
     private void cancel(String message) {
         // Updating the job status with error is all we need to do in order to move the job into completion. Once the
         // user fetches the errored job, it will be automatically removed from the system.
-        status.update(true, message, 100);
-        status.completed = true;
+        status.fail(message);
         // FIXME: Do we need to run any clean up here?
     }
 
@@ -260,39 +254,76 @@ public abstract class MonitorableJob implements Runnable, Serializable {
         // Name of file/item once completed
         public String completedName;
 
+        /**
+         * Update status message and percent complete. This method should be used while job is still in progress.
+         */
         public void update (String message, double percentComplete) {
+            LOG.info("Job updated `{}`: `{}`\n{}", name, message, getCallingMethodTrace());
             this.message = message;
             this.percentComplete = percentComplete;
         }
 
-        public void update (boolean isError, String message, double percentComplete) {
+        /**
+         * Gets stack trace from method calling {@link #update(String, double)} or {@link #fail(String)} for logging
+         * purposes.
+         */
+        private String getCallingMethodTrace() {
+            StackTraceElement[] stackTrace = Thread.currentThread().getStackTrace();
+            // Get trace from method calling update or fail. To trace this back:
+            // 0. this thread
+            // 1. this method
+            // 2. Status#update or Status#fail
+            // 3. line where update/fail is called in server job
+            return stackTrace.length >= 3 ? stackTrace[3].toString() : "WARNING: Stack trace not found.";
+        }
+
+        /**
+         * Shorthand method to update status object on successful job completion.
+         */
+        public void completeSuccessfully(String message) {
+            this.complete(false, message);
+        }
+
+        /**
+         * Set job status to completed with error and message information.
+         */
+        private void complete(boolean isError, String message) {
             this.error = isError;
-            this.message = message;
-            this.percentComplete = percentComplete;
+            // Skip message update if null.
+            if (message != null) this.message = message;
+            this.percentComplete = 100;
+            this.completed = true;
+            this.duration = System.currentTimeMillis() - this.startTime;
         }
 
-        public void update (boolean isError, String message, double percentComplete, boolean isComplete) {
-            this.error = isError;
-            this.message = message;
-            this.percentComplete = percentComplete;
-            this.completed = isComplete;
+        /**
+         * Shorthand method to complete job without overriding current message.
+         */
+        private void complete(boolean isError) {
+            complete(isError, null);
         }
 
+        /**
+         * Fail job status with message and exception.
+         */
         public void fail (String message, Exception e) {
-            this.error = true;
-            this.percentComplete = 100;
-            this.completed = true;
-            this.message = message;
-            this.exceptionDetails = ExceptionUtils.getStackTrace(e);
-            this.exceptionType = e.getMessage();
+            if (e != null) {
+                this.exceptionDetails = ExceptionUtils.getStackTrace(e);
+                this.exceptionType = e.getMessage();
+                // If exception is null, overloaded fail method was called and message already logged with trace.
+                String logMessage = String.format("Job `%s` failed with message: `%s`", name, message);
+                LOG.warn(logMessage, e);
+            }
+            this.complete(true, message);
         }
 
+        /**
+         * Fail job status with message.
+         */
         public void fail (String message) {
-            this.error = true;
-            this.percentComplete = 100;
-            this.completed = true;
-            this.message = message;
+            // Log error with stack trace from calling method in job.
+            LOG.error("Job failed with message {}\n{}", message, getCallingMethodTrace());
+            fail(message, null);
         }
-
     }
 }
