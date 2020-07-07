@@ -4,6 +4,7 @@ import com.amazonaws.AmazonClientException;
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.event.ProgressListener;
 import com.amazonaws.services.ec2.AmazonEC2;
+import com.amazonaws.services.ec2.model.AmazonEC2Exception;
 import com.amazonaws.services.ec2.model.CreateImageRequest;
 import com.amazonaws.services.ec2.model.CreateImageResult;
 import com.amazonaws.services.ec2.model.CreateTagsRequest;
@@ -717,7 +718,15 @@ public class DeployJob extends MonitorableJob {
                 // This will have the instance terminate when it is shut down.
                 .withInstanceInitiatedShutdownBehavior("terminate")
                 .withUserData(Base64.encodeBase64String(userData.getBytes()));
-        final List<Instance> instances = ec2.runInstances(runInstancesRequest).getReservation().getInstances();
+        List<Instance> instances;
+        try {
+            // attempt to start the instances. Sometimes, AWS does not have enough availability of the desired instance
+            // type and can throw an error at this point.
+            instances = ec2.runInstances(runInstancesRequest).getReservation().getInstances();
+        } catch (AmazonEC2Exception e) {
+            status.fail(String.format("DeployJob failed due to a problem with AWS: %s", e.getMessage()), e);
+            return Collections.EMPTY_LIST;
+        }
 
         List<String> instanceIds = getIds(instances);
         Set<String> instanceIpAddresses = new HashSet<>();
@@ -794,7 +803,7 @@ public class DeployJob extends MonitorableJob {
      * Construct the user data script (as string) that should be provided to the AMI and executed upon EC2 instance
      * startup.
      */
-    private String constructUserData(boolean graphAlreadyBuilt) {
+    public String constructUserData(boolean graphAlreadyBuilt) {
         if (deployment.r5) {
             status.fail("Deployments with r5 are not supported at this time");
             return null;
@@ -822,7 +831,7 @@ public class DeployJob extends MonitorableJob {
         manifest.uploadOtpRunnerLogs = true;
         if (!graphAlreadyBuilt) {
             // settings when graph building needs to happen
-            manifest.buildConfigJSON = deployment.generateBuildConfigAsString();
+            manifest.buildConfigJSON = createEchoSafeJSON(deployment.generateBuildConfigAsString());
             manifest.buildGraph = true;
             try {
                 manifest.gtfsAndOsmUrls = deployment.generateGtfsAndOsmUrls();
@@ -838,14 +847,14 @@ public class DeployJob extends MonitorableJob {
                 manifest.runServer = false;
             } else {
                 // This instance will both run a graph and start the OTP server
-                manifest.routerConfigJSON = deployment.generateRouterConfigAsString();
+                manifest.routerConfigJSON = createEchoSafeJSON(deployment.generateRouterConfigAsString());
                 manifest.runServer = true;
                 manifest.uploadServerStartupLogs = true;
             }
         } else {
             // This instance will only start the OTP server with a prebuilt graph
             manifest.buildGraph = false;
-            manifest.routerConfigJSON = deployment.generateRouterConfigAsString();
+            manifest.routerConfigJSON = createEchoSafeJSON(deployment.generateRouterConfigAsString());
             manifest.runServer = true;
             manifest.uploadServerStartupLogs = true;
         }
@@ -892,6 +901,13 @@ public class DeployJob extends MonitorableJob {
         lines.add(String.format("otp-runner %s", otpRunnerManifestFile));
         // Return the entire user data script as a single string.
         return String.join("\n", lines);
+    }
+
+    /**
+     * Provide proper escaping to stringified JSON so that it can be properly included in the otp-runner manifest.json
+     */
+    private String createEchoSafeJSON(String json) {
+        return json.replace("\"", "\\\"").replace("\n", "\\n");
     }
 
     private String getJarName() {

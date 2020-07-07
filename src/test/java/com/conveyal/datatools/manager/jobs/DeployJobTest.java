@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.amazonaws.services.ec2.model.Instance;
 import com.conveyal.datatools.DatatoolsTest;
+import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.common.utils.AWSUtils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
@@ -17,22 +18,26 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
+import static com.conveyal.datatools.TestUtils.getBooleanEnvVar;
 import static com.conveyal.datatools.manager.controllers.api.ServerController.getIds;
 import static com.conveyal.datatools.manager.controllers.api.ServerController.terminateInstances;
+import static com.zenika.snapshotmatcher.SnapshotMatcher.matchesSnapshot;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assume.assumeTrue;
 
 /**
  * This contains a few helpful tests for quickly spinning up a deployment using any bundle of GTFS + OSM or pre-built
  * graph that already exists on S3.
  *
- * Note: these tests require credentials on the IBI AWS account, which is why the class is tagged with Ignore (so that it is
- * not run with the rest of the test suite)
+ * Note: some tests require credentials on the IBI AWS account, which is why those tests contain an assumeTrue statement
+ * (so that they are not run with the rest of the test suite)
  */
-@Ignore
-public class DeployJobTest {
+public class DeployJobTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(DeployJobTest.class);
     private static Project project;
     private static OtpServer server;
@@ -63,10 +68,45 @@ public class DeployJobTest {
         server.ec2Info.iamInstanceProfileArn = "YOUR_VALUE";
         Persistence.servers.create(server);
         deployment = new Deployment();
+        // the feedVersionIds don't get populated during test, so we have to manually do it here
+        deployment.feedVersionIds = new ArrayList<>();
         deployment.projectId = project.id;
         deployment.name = "Test deployment";
         deployment.otpVersion = "otp-latest-trimet-dev";
+        // add in custom build and router config with problematic characters to make sure they are properly escaped
+        deployment.customRouterConfig = "{ \"hi\": \"th\ne're\" }";
+        deployment.customBuildConfig = "{ \"hello\": \"th\ne're\" }";
         Persistence.deployments.create(deployment);
+    }
+
+    /**
+     * Tests that the user data for a graph build + run server instance can be generated properly
+     */
+    @Test
+    public void canMakeGraphBuildUserDataScript () {
+        DeployJob deployJob = new DeployJob(
+            deployment,
+            Auth0UserProfile.createTestAdminUser(),
+            server,
+            "test-deploy",
+            DeployJob.DeployType.REPLACE
+        );
+        assertThat(deployJob.constructUserData(false), matchesSnapshot());
+    }
+
+    /**
+     * Tests that the user data for a run server only instance can be generated properly
+     */
+    @Test
+    public void canMakeServerOnlyUserDataScript () {
+        DeployJob deployJob = new DeployJob(
+            deployment,
+            Auth0UserProfile.createTestAdminUser(),
+            server,
+            "test-deploy",
+            DeployJob.DeployType.REPLACE
+        );
+        assertThat(deployJob.constructUserData(true), matchesSnapshot());
     }
 
     /**
@@ -76,6 +116,7 @@ public class DeployJobTest {
      */
     @Test
     public void canDeployFromPreloadedBundle () {
+        assumeTrue(getBooleanEnvVar("RUN_AWS_DEPLOY_JOB_TESTS"));
         DeployJob deployJob = new DeployJob(deployment, Auth0UserProfile.createTestAdminUser(), server, "test-deploy", DeployJob.DeployType.USE_PRELOADED_BUNDLE);
         deployJob.run();
         // FIXME: Deployment will succeed even if one of the clone servers does not start up properly.
@@ -87,6 +128,7 @@ public class DeployJobTest {
      */
     @Test
     public void canDeployFromPrebuiltGraph () {
+        assumeTrue(getBooleanEnvVar("RUN_AWS_DEPLOY_JOB_TESTS"));
         DeployJob deployJob = new DeployJob(deployment, Auth0UserProfile.createTestAdminUser(), server, "deploy-test", DeployJob.DeployType.USE_PREBUILT_GRAPH);
         deployJob.run();
         // FIXME: Deployment will succeed even if one of the clone servers does not start up properly.
@@ -95,6 +137,7 @@ public class DeployJobTest {
 
     @AfterClass
     public static void cleanUp() {
+        assumeTrue(getBooleanEnvVar("RUN_AWS_DEPLOY_JOB_TESTS"));
         List<Instance> instances = server.retrieveEC2Instances();
         List<String> ids = getIds(instances);
         terminateInstances(

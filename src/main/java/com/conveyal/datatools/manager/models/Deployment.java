@@ -282,7 +282,7 @@ public class Deployment extends Model implements Serializable {
     }
 
     /**
-     * Create an empty deployment, for use with dump/restore.
+     * Create an empty deployment, for use with dump/restore and testing.
      */
     public Deployment() {
         // do nothing.
@@ -550,11 +550,13 @@ public class Deployment extends Model implements Serializable {
      */
     public List<String> generateGtfsAndOsmUrls() throws MalformedURLException {
         Set<String> urls = new HashSet<>();
-        // add OSM data
-        urls.add(getVexUrl(retrieveProjectBounds()).toString());
-        // add GTFS files
-        for (String feedVersionId : feedVersionIds) {
-            urls.add(feedStore.getS3FeedPath(feedVersionId));
+        if (feedVersionIds.size() > 0) {
+            // add OSM data
+            urls.add(getVexUrl(retrieveProjectBounds()).toString());
+            // add GTFS files
+            for (String feedVersionId : feedVersionIds) {
+                urls.add(feedStore.getS3FeedPath(feedVersionId));
+            }
         }
         return new ArrayList<>(urls);
     }
