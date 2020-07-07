@@ -98,7 +98,9 @@ public class CreateSnapshotJob extends MonitorableJob {
 
     @Override
     public void jobLogic() {
-        // Special case where snapshot was created when the
+        // Special case where snapshot was created when a feed version was transformed by DbTransformations (the
+        // snapshot contains the transformed feed). Because the jobs are queued up before the feed has been processed,
+        // the namespace will not exist for the feed version until this jobLogic is actually run.
         if (namespace == null && snapshot.feedVersionId != null) {
             FeedVersion feedVersion = Persistence.feedVersions.getById(snapshot.feedVersionId);
             this.namespace = feedVersion.namespace;
