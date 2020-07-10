@@ -31,11 +31,11 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assume.assumeTrue;
 
 /**
- * This contains a few helpful tests for quickly spinning up a deployment using any bundle of GTFS + OSM or pre-built
- * graph that already exists on S3.
- *
- * Note: some tests require credentials on the IBI AWS account, which is why those tests contain an assumeTrue statement
- * (so that they are not run with the rest of the test suite)
+ * This test suite contains various unit and integration tests to make sure the a DeployJob works properly. The unit
+ * tests are always ran as part of the unit test suite and don't require AWS access. However, some tests will use AWS
+ * services to run an integrations test of deploying to AWS infrastructure. For the tests that require credentials on
+ * the IBI AWS account, these requires changing server.yml#modules.deployment.ec2.enabled to true and also that the
+ * RUN_AWS_DEPLOY_JOB_TESTS environment variable is set to "true".
  */
 public class DeployJobTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(DeployJobTest.class);
@@ -68,7 +68,9 @@ public class DeployJobTest extends UnitTest {
         server.ec2Info.iamInstanceProfileArn = "YOUR_VALUE";
         Persistence.servers.create(server);
         deployment = new Deployment();
-        // the feedVersionIds don't get populated during test, so we have to manually do it here
+        // the feedVersionIds variable does not get set during tests resulting in a null pointer exception. Set the
+        // feedVersionIds to an empty list to avoid this. It is enough to run the tests of the user data generation with
+        // an empty list of feed versions, so it is fine that it is empty.
         deployment.feedVersionIds = new ArrayList<>();
         deployment.projectId = project.id;
         deployment.name = "Test deployment";
@@ -112,7 +114,8 @@ public class DeployJobTest extends UnitTest {
     /**
      * Tests that Data Tools can run an ELB deployment.
      *
-     * Note: this requires changing server.yml#modules.deployment.ec2.enabled to true
+     * Note: this requires changing server.yml#modules.deployment.ec2.enabled to true and also that the
+     * RUN_AWS_DEPLOY_JOB_TESTS environment variable is set to "true"
      */
     @Test
     public void canDeployFromPreloadedBundle () {
@@ -125,6 +128,9 @@ public class DeployJobTest extends UnitTest {
 
     /**
      * Tests that Data Tools can run an ELB deployment from a pre-built graph.
+     *
+     * Note: this requires changing server.yml#modules.deployment.ec2.enabled to true and also that the
+     * RUN_AWS_DEPLOY_JOB_TESTS environment variable is set to "true"
      */
     @Test
     public void canDeployFromPrebuiltGraph () {
@@ -135,6 +141,12 @@ public class DeployJobTest extends UnitTest {
         assertFalse("Deployment did not fail.", deployJob.status.error);
     }
 
+    /**
+     * Terminates any instances that were created during the tests.
+     *
+     * Note: this requires changing server.yml#modules.deployment.ec2.enabled to true and also that the
+     * RUN_AWS_DEPLOY_JOB_TESTS environment variable is set to "true"
+     */
     @AfterClass
     public static void cleanUp() {
         assumeTrue(getBooleanEnvVar("RUN_AWS_DEPLOY_JOB_TESTS"));
