@@ -38,7 +38,6 @@ import static com.conveyal.datatools.TestUtils.zipFolderFiles;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.MANUALLY_UPLOADED;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.VERSION_CLONE;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertThat;
 
 public class ArbitraryTransformJobTest extends UnitTest {

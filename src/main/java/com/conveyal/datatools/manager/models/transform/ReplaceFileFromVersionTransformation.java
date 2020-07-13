@@ -67,7 +67,7 @@ public class ReplaceFileFromVersionTransformation extends ZipTransformation {
                     : TransformType.TABLE_ADDED;
                 // Copy a file into the zip file, replacing it if it already exists.
                 Files.copy(sourceTxtFilePath, targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
-                target.feedTransformResult.addResultForTable(new TableTransformResult(tableName, type));
+                target.feedTransformResult.tableTransformResults.add(new TableTransformResult(tableName, type));
             }
             LOG.info("File replacement zip transformation successful!");
         } catch (NoSuchFileException e) {

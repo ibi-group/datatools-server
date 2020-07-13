@@ -5,7 +5,7 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 /**
  * Target for a DB transformation (e.g., {@link DeleteRecordsTransformation}).
  */
-public class FeedTransformDbTarget implements FeedTransformTarget {
+public class FeedTransformDbTarget extends FeedTransformTarget {
     public String snapshotId;
 
     public FeedTransformDbTarget(String targetSnapshotId) {

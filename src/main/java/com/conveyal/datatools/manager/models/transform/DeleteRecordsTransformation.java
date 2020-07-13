@@ -84,7 +84,7 @@ public class DeleteRecordsTransformation extends DbTransformation {
         }
         String cleanField = JdbcGtfsLoader.sanitize(matchField, null);
         if (!matchField.equals(cleanField)) {
-            status.fail("Input match field contained disallowed special characters (alphanumeric and underscores only).");
+            status.fail("Input match field contained disallowed special characters (only alphanumeric and underscores are permitted).");
             return;
         }
         try {
@@ -111,7 +111,7 @@ public class DeleteRecordsTransformation extends DbTransformation {
             int deleted = preparedStatement.executeUpdate();
             LOG.info("{} deleted {} records", this.getClass().getSimpleName(), deleted);
             connection.commit();
-            target.feedTransformResult.addResultForTable(new TableTransformResult(table, deleted, 0, 0));
+            target.feedTransformResult.tableTransformResults.add(new TableTransformResult(table, deleted, 0, 0));
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }

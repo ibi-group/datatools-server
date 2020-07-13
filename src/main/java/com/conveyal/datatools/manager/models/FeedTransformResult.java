@@ -17,11 +17,4 @@ public class FeedTransformResult implements Serializable {
     public List<TableTransformResult> tableTransformResults = new ArrayList<>();
 
     public FeedTransformResult() {}
-
-    /**
-     * Shorthand to add a table transform result to the appropriate string-keyed table name.
-     */
-    public void addResultForTable (TableTransformResult tableTransformResult) {
-        tableTransformResults.add(tableTransformResult);
-    }
 }

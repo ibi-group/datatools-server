@@ -9,8 +9,6 @@ import com.conveyal.datatools.manager.models.transform.FeedTransformZipTarget;
 import com.conveyal.datatools.manager.models.transform.FeedTransformation;
 import com.conveyal.datatools.manager.models.transform.ZipTransformation;
 
-import java.io.File;
-
 /**
  * This job will apply a {@link ZipTransformation} or {@link DbTransformation} to a GTFS zip file or database namespace,
  * respectively, and generate the required FeedTransformTarget object from those inputs, which is passed into the

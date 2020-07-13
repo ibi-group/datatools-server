@@ -7,7 +7,7 @@ import java.io.File;
 /**
  * Target for a zip transformation (e.g., {@link ReplaceFileFromVersionTransformation}).
  */
-public class FeedTransformZipTarget implements FeedTransformTarget {
+public class FeedTransformZipTarget extends FeedTransformTarget {
     public File gtfsFile;
 
     public FeedTransformZipTarget(File gtfsFile) {
@@ -22,7 +22,6 @@ public class FeedTransformZipTarget implements FeedTransformTarget {
     public void validate(MonitorableJob.Status status) {
         if (gtfsFile == null || !gtfsFile.exists()) {
             status.fail("Target version must not be null.");
-            return;
         }
     }
 }

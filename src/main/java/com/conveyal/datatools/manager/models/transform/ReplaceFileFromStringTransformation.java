@@ -57,7 +57,7 @@ public class ReplaceFileFromStringTransformation extends ZipTransformation {
                 : TransformType.TABLE_ADDED;
             // Copy csv input stream into the zip file, replacing it if it already exists.
             Files.copy(inputStream, targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
-            target.feedTransformResult.addResultForTable(new TableTransformResult(tableName, type));
+            target.feedTransformResult.tableTransformResults.add(new TableTransformResult(tableName, type));
         } catch (Exception e) {
             status.fail("Unknown error encountered while transforming zip file", e);
         }
