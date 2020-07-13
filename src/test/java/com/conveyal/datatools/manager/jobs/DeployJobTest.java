@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.amazonaws.services.ec2.model.Instance;
 import com.conveyal.datatools.DatatoolsTest;
+import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.common.utils.AWSUtils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
@@ -32,7 +33,7 @@ import static org.junit.Assert.assertFalse;
  * not run with the rest of the test suite)
  */
 @Ignore
-public class DeployJobTest {
+public class DeployJobTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(DeployJobTest.class);
     private static Project project;
     private static OtpServer server;

@@ -4,6 +4,7 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.gtfsplus.tables.GtfsPlusTable;
+import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
@@ -46,7 +47,8 @@ import java.util.zip.ZipOutputStream;
 
 import static com.conveyal.datatools.manager.jobs.MergeFeedsType.SERVICE_PERIOD;
 import static com.conveyal.datatools.manager.jobs.MergeFeedsType.REGIONAL;
-import static com.conveyal.datatools.manager.models.FeedSource.FeedRetrievalMethod.REGIONAL_MERGE;
+import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.REGIONAL_MERGE;
+import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.SERVICE_PERIOD_MERGE;
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.conveyal.gtfs.loader.DateField.GTFS_DATE_FORMATTER;
 import static com.conveyal.gtfs.loader.Field.getFieldIndex;
@@ -179,13 +181,11 @@ public class MergeFeedsJob extends MonitorableJob {
         this.feedSource = mergeType.equals(REGIONAL)
             ? regionalFeedSource
             : feedVersions.iterator().next().parentFeedSource();
+        FeedRetrievalMethod retrievalMethod = mergeType.equals(REGIONAL)
+            ? REGIONAL_MERGE
+            : SERVICE_PERIOD_MERGE;
         // Merged version will be null if the new version should not be stored.
-        this.mergedVersion = storeNewVersion ? new FeedVersion(this.feedSource) : null;
-        if (this.mergedVersion != null) {
-            this.mergedVersion.retrievalMethod = mergeType.equals(REGIONAL)
-                ? REGIONAL_MERGE
-                : FeedSource.FeedRetrievalMethod.SERVICE_PERIOD_MERGE;
-        }
+        this.mergedVersion = storeNewVersion ? new FeedVersion(this.feedSource, retrievalMethod) : null;
         this.mergeFeedsResult = new MergeFeedsResult(mergeType);
     }
 
@@ -267,7 +267,6 @@ public class MergeFeedsJob extends MonitorableJob {
         }
         LOG.info("Feed merge is complete.");
         if (mergedVersion != null && !status.error && !mergeFeedsResult.failed) {
-            mergedVersion.hash();
             mergedVersion.inputVersions = feedVersions.stream().map(FeedVersion::retrieveId).collect(Collectors.toSet());
             // Handle the processing of the new version when storing new version (note: s3 upload is handled within this job).
             // We must add this job in jobLogic (rather than jobFinished) because jobFinished is called after this job's
@@ -305,9 +304,9 @@ public class MergeFeedsJob extends MonitorableJob {
         if (mergedVersion != null) {
             // Store the zip file for the merged feed version.
             try {
-                FeedVersion.feedStore.newFeed(mergedVersion.id, new FileInputStream(mergedTempFile), feedSource);
+                mergedVersion.newGtfsFile(new FileInputStream(mergedTempFile));
             } catch (IOException e) {
-                LOG.error("Could not store merged feed for new version");
+                LOG.error("Could not store merged feed for new version", e);
                 throw e;
             }
         }
@@ -325,8 +324,7 @@ public class MergeFeedsJob extends MonitorableJob {
                     FeedVersion.feedStore
                         .newFeed(filename, new FileInputStream(mergedTempFile), null);
                 } catch (IOException e) {
-                    e.printStackTrace();
-                    LOG.error("Could not store feed for project {}", filename);
+                    LOG.error("Could not store feed for project " + filename, e);
                     throw e;
                 }
             }
@@ -540,7 +538,9 @@ public class MergeFeedsJob extends MonitorableJob {
                         // Get index of field from GTFS spec as it appears in feed
                         int index = fieldsFoundList.indexOf(field);
                         String val = csvReader.get(index);
-                        // Default value to write is unchanged from value found in csv.
+                        // Default value to write is unchanged from value found in csv (i.e. val). Note: if looking to
+                        // modify the value that is written in the merged file, you must update valueToWrite (e.g.,
+                        // updating the current feed's end_date or accounting for cases where IDs conflict).
                         String valueToWrite = val;
                         // Handle filling in agency_id if missing when merging regional feeds.
                         if (newAgencyId != null && field.name.equals("agency_id") && mergeType
@@ -647,10 +647,9 @@ public class MergeFeedsJob extends MonitorableJob {
                                             getFieldIndex(fieldsFoundInZip, "end_date");
                                         if (index == endDateIndex) {
                                             LocalDate endDate = LocalDate
-                                                .parse(csvReader.get(endDateIndex),
-                                                    GTFS_DATE_FORMATTER);
+                                                .parse(csvReader.get(endDateIndex), GTFS_DATE_FORMATTER);
                                             if (!endDate.isBefore(futureFeedFirstDate)) {
-                                                val = futureFeedFirstDate
+                                                val = valueToWrite = futureFeedFirstDate
                                                     .minus(1, ChronoUnit.DAYS)
                                                     .format(GTFS_DATE_FORMATTER);
                                             }

@@ -45,6 +45,7 @@ public abstract class MonitorableJob implements Runnable, Serializable {
 
     public enum JobType {
         UNKNOWN_TYPE,
+        ARBITRARY_FEED_TRANSFORM,
         BUILD_TRANSPORT_NETWORK,
         CREATE_FEEDVERSION_FROM_SNAPSHOT,
         // **** Legacy snapshot jobs
@@ -176,12 +177,13 @@ public abstract class MonitorableJob implements Runnable, Serializable {
                 // because the error presumably already occurred and has a better error message.
                 cancel(cancelMessage);
             }
-            // Run final steps of job pending completion or error. Note: any tasks that depend on job success should
-            // check job status to determine if final step should be executed (e.g., storing feed version in MongoDB).
-            // TODO: should we add separate hooks depending on state of job/sub-tasks (e.g., success, catch, finally)
             // Complete the job (as success if no errors encountered, as failure otherwise).
             if (!parentJobErrored && !subTaskErrored) status.completeSuccessfully("Job complete!");
             else status.complete(true);
+            // Run final steps of job pending completion or error. Note: any tasks that depend on job success should
+            // check job status in jobFinished to determine if final step should be executed (e.g., storing feed
+            // version in MongoDB).
+            // TODO: should we add separate hooks depending on state of job/sub-tasks (e.g., success, catch, finally)
             jobFinished();
 
             // We retain finished or errored jobs on the server until they are fetched via the API, which implies they
@@ -213,6 +215,11 @@ public abstract class MonitorableJob implements Runnable, Serializable {
             job.parentJobType = this.type;
             subJobs.add(job);
         }
+    }
+
+    /** Convenience wrapper for a {@link List} of jobs. */
+    public void addNextJob(List<MonitorableJob> jobs) {
+        for (MonitorableJob job : jobs) addNextJob(job);
     }
 
     /**

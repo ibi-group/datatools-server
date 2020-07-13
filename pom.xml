@@ -250,7 +250,7 @@
         <dependency>
             <groupId>com.conveyal</groupId>
             <artifactId>gtfs-lib</artifactId>
-            <version>6.0.1</version>
+            <version>6.0.3</version>
             <!-- Exclusions added in order to silence SLF4J warnings about multiple bindings:
                 http://www.slf4j.org/codes.html#multiple_bindings
             -->
@@ -266,7 +266,7 @@
         <dependency>
             <groupId>org.mongodb</groupId>
             <artifactId>mongodb-driver</artifactId>
-            <version>3.5.0</version>
+            <version>3.6.4</version>
         </dependency>
 
         <!-- Miscellaneous utilities -->

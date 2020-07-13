@@ -16,10 +16,10 @@ import com.amazonaws.services.s3.transfer.Upload;
 import com.conveyal.datatools.common.utils.AWSUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
+import com.google.common.io.ByteStreams;
 import gnu.trove.list.TLongList;
 import gnu.trove.list.array.TLongArrayList;
 import org.apache.commons.io.FileUtils;
-import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -27,14 +27,13 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.OutputStream;
-import java.util.ArrayList;
-import java.util.List;
+import java.nio.file.Files;
+import java.nio.file.Path;
 
 import static com.conveyal.datatools.manager.DataManager.hasConfigProperty;
 
 /**
- * Store a feed on the file system or s3
+ * Store a feed on the file system or S3.
  * @author mattwigway
  *
  */
@@ -54,7 +53,6 @@ public class FeedStore {
     public static AmazonS3 s3Client;
     /** An AWS credentials file to use when uploading to S3 */
     private static final String S3_CREDENTIALS_FILENAME = DataManager.getConfigPropertyAsText("application.data.s3_credentials_file");
-    private static final String S3_CONFIG_FILENAME = DataManager.getConfigPropertyAsText("application.data.s3_credentials_file");
 
     public FeedStore() {
         this(null);
@@ -100,53 +98,16 @@ public class FeedStore {
         return path;
     }
 
-    public List<String> getAllFeeds () {
-        ArrayList<String> ret = new ArrayList<String>();
-        // s3 storage
-        if (DataManager.useS3) {
-            // TODO: add method for retrieval of all s3 feeds
-        }
-        // local storage
-        else {
-            for (File file : path.listFiles()) {
-                ret.add(file.getName());
-            }
-        }
-
-        return ret;
-    }
-
-    public Long getFeedLastModified (String id) {
-        // s3 storage
-        if (DataManager.useS3){
-            return s3Client.doesObjectExist(s3Bucket, getS3Key(id)) ? s3Client.getObjectMetadata(s3Bucket, getS3Key(id)).getLastModified().getTime() : null;
-        }
-        else {
-            File feed = getFeed(id);
-            return feed != null ? feed.lastModified() : null;
-        }
-    }
-
     public void deleteFeed (String id) {
-        // s3 storage
+        // If the application is using s3 storage, delete the remote copy.
         if (DataManager.useS3){
             s3Client.deleteObject(s3Bucket, getS3Key(id));
         }
-        else {
-            File feed = getFeed(id);
-            if (feed != null && feed.exists())
-                feed.delete();
-        }
-    }
-
-    public Long getFeedSize (String id) {
-        // s3 storage
-        if (DataManager.useS3) {
-            return s3Client.doesObjectExist(s3Bucket, getS3Key(id)) ? s3Client.getObjectMetadata(s3Bucket, getS3Key(id)).getContentLength() : null;
-        }
-        else {
-            File feed = getFeed(id);
-            return feed != null ? feed.length() : null;
+        // Always delete local copy (whether storing exclusively on local disk or using s3).
+        File feed = getLocalFeed(id);
+        if (feed != null) {
+            boolean deleted = feed.delete();
+            if (!deleted) LOG.warn("GTFS file {} not deleted. This may contribute to storage space shortages.", feed.getAbsolutePath());
         }
     }
 
@@ -163,47 +124,56 @@ public class FeedStore {
         return s3Prefix + id;
     }
 
-    public String getPathToFeed (String id) {
-        return new File(path, id).getAbsolutePath();
+    /**
+     * Get the File for the provided feed version ID (or other entity ID, depending on the feed store's context).
+     */
+    public File getFeedFile(String id) {
+        return new File(path, id);
     }
 
     /**
      * Get the feed with the given ID.
      */
     public File getFeed (String id) {
-        // local storage
-        File feed = new File(path, id);
-        // Whether storing locally or on s3, return local version if it exists.
-        // Also, don't let folks retrieveById feeds outside of the directory
-        if (feed.getParentFile().equals(path) && feed.exists()) {
-            return feed;
-        }
-
+        // Whether storing locally or on s3, first try returning the local copy if it exists.
+        File feed = getLocalFeed(id);
+        if (feed != null) return feed;
         // s3 storage
         if (DataManager.useS3) {
             String key = getS3Key(id);
-
-            LOG.info("Downloading feed from s3://{}/{}", s3Bucket, key);
-            InputStream objectData = null;
+            String uri = String.format("s3://%s/%s", s3Bucket, key);
+            LOG.info("Downloading feed from {}", uri);
+            InputStream objectData;
             try {
                 S3Object object = s3Client.getObject(
                     new GetObjectRequest(s3Bucket, key));
                 objectData = object.getObjectContent();
             } catch (AmazonServiceException ase) {
-                LOG.error("Error downloading s3://{}/{}", s3Bucket, key);
-                ase.printStackTrace();
+                LOG.error("Error downloading " + uri, ase);
                 return null;
             }
 
-            // FIXME: Figure out how to manage temp files created here. Currently, deleteOnExit is called in createTempFile
             try {
                 return createTempFile(id, objectData);
             } catch (IOException e) {
-                LOG.error("Error creating temp file");
-                e.printStackTrace();
+                // TODO: Log to bugsnag?
+                LOG.error("Error creating temp file", e);
             }
         }
         return null;
+    }
+
+    /**
+     * Shorthand to get the local file for the provided id.
+     */
+    private File getLocalFeed(String id) {
+        File feed = new File(path, id);
+        // Don't let folks retrieveById feeds outside of the directory
+        if (feed.getParentFile().equals(path) && feed.exists()) {
+            return feed;
+        } else {
+            return null;
+        }
     }
 
     /**
@@ -215,44 +185,39 @@ public class FeedStore {
     public File newFeed (String id, InputStream inputStream, FeedSource feedSource) throws IOException {
         // write feed to specified ID.
         // NOTE: depending on the feed store, there may not be a feedSource provided (e.g., gtfsplus)
-
-        File feed = writeFileUsingInputStream(id, inputStream);
+        File file = new File(path, id);
+        LOG.info("Writing file to {}", file.getAbsolutePath());
+        ByteStreams.copy(inputStream, new FileOutputStream(file));
         if (feedSource != null && !DataManager.useS3) {
             // Store latest as feed-source-id.zip if feedSource provided and if not using s3
-            copyVersionToLatest(feed, feedSource);
+            copyVersionToLatest(file, feedSource);
         }
-        return feed;
+        return file;
     }
 
+    /**
+     * Copy the GTFS file for the specified version to feed-source-id.zip, which represents the latest version for the
+     * feed source.
+     */
     private void copyVersionToLatest(File version, FeedSource feedSource) throws IOException {
-        File latest = new File(String.valueOf(path), feedSource.id + ".zip");
+        File latest = new File(path, feedSource.id + ".zip");
         LOG.info("Copying version to latest {}", feedSource);
         FileUtils.copyFile(version, latest, true);
     }
 
-    private File writeFileUsingInputStream(String filename, InputStream inputStream) throws IOException {
-        File out = new File(path, filename);
-        LOG.info("Writing file to {}/{}", path, filename);
-        OutputStream output = new FileOutputStream(out);
-        byte[] buf = new byte[1024];
-        int bytesRead;
-        while ((bytesRead = inputStream.read(buf)) > 0) {
-            output.write(buf, 0, bytesRead);
-        }
-        inputStream.close();
-        output.close();
-        return out;
-    }
-
     private File createTempFile (String name, InputStream in) throws IOException {
-        final File tempFile = new File(new File(System.getProperty("java.io.tmpdir")), name);
+        Path path = Files.createTempFile(name, null);
+        // FIXME: Figure out how to manage temp files created here. Currently, we just call deleteOnExit, but
+        //  this will only delete the file once the java process stops.
+        File tempFile = path.toFile();
         tempFile.deleteOnExit();
-        FileOutputStream out = new FileOutputStream(tempFile);
-        IOUtils.copy(in, out);
-        out.close();
+        ByteStreams.copy(in, new FileOutputStream(tempFile));
         return tempFile;
     }
 
+    /**
+     * Synchronously upload the GTFS file to S3. This should only be called as part of the FeedVersion load stage.
+     */
     public boolean uploadToS3 (File gtfsFile, String s3FileName, FeedSource feedSource) {
         if (s3Bucket != null) {
             try {

@@ -6,6 +6,8 @@ import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
+import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
+import com.conveyal.datatools.manager.models.transform.FeedTransformation;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
@@ -25,10 +27,14 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.mongodb.client.model.Filters.and;
@@ -47,8 +53,17 @@ public class FeedSource extends Model implements Cloneable {
     /**
      * The collection of which this feed is a part
      */
-    //@JsonView(JsonViews.DataDump.class)
     public String projectId;
+
+    /**
+     * When snapshotting a GTFS feed for editing, gtfs-lib currently defaults to normalize stop sequence values to be
+     * zero-based and incrementing. This can muck with GTFS files that are linked to GTFS-rt feeds by stop_sequence, so
+     * this override flag currently provides a workaround for feeds that need to be edited but do not need to edit
+     * stop_times or individual patterns. WARNING: enabling this flag for a feed and then attempting to edit patterns in
+     * complicated ways (e.g., modifying the order of pattern stops) could have unexpected consequences. There is no UI
+     * setting for this and it is not recommended to do this unless absolutely necessary.
+     */
+    public boolean preserveStopTimesSequence;
 
     /**
      * Get the Project of which this feed is a part
@@ -63,10 +78,7 @@ public class FeedSource extends Model implements Cloneable {
         return project == null ? null : project.organizationId;
     }
 
-    // TODO: Add back in regions once they have been refactored
-//    public List<Region> retrieveRegionList () {
-//        return Region.retrieveAll().stream().filter(r -> Arrays.asList(regions).contains(r.id)).collect(Collectors.toList());
-//    }
+    public List<FeedTransformRules> transformRules = new ArrayList<>();
 
     /** The name of this feed source, e.g. MTA New York City Subway */
     public String name;
@@ -167,8 +179,7 @@ public class FeedSource extends Model implements Cloneable {
         // We create a new FeedVersion now, so that the fetched date is (milliseconds) before
         // fetch occurs. That way, in the highly unlikely event that a feed is updated while we're
         // fetching it, we will not miss a new feed.
-        FeedVersion version = new FeedVersion(this);
-        version.retrievalMethod = FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
+        FeedVersion version = new FeedVersion(this, FeedRetrievalMethod.FETCHED_AUTOMATICALLY);
 
         // build the URL from which to fetch
         URL url = null;
@@ -221,6 +232,8 @@ public class FeedSource extends Model implements Cloneable {
                     message = String.format("Saving %s feed.", this.name);
                     LOG.info(message);
                     status.update(message, 75.0);
+                    // Create new file from input stream (this also handles hashing the file and other version fields
+                    // calculated from the GTFS file.
                     newGtfsFile = version.newGtfsFile(conn.getInputStream());
                     break;
                 case HttpURLConnection.HTTP_MOVED_TEMP:
@@ -257,11 +270,6 @@ public class FeedSource extends Model implements Cloneable {
             e.printStackTrace();
             return null;
         }
-
-        // note that anything other than a new feed fetched successfully will have already returned from the function
-        version.hash = HashUtils.hashFile(newGtfsFile);
-
-
         if (latest != null && version.hash.equals(latest.hash)) {
             // If new version hash equals the hash for the latest version, do not error. Simply indicate that server
             // operators should add If-Modified-Since support to avoid wasting bandwidth.
@@ -529,21 +537,6 @@ public class FeedSource extends Model implements Cloneable {
     }
 
     /**
-     * Represents ways feeds can be retrieved. Note: this enum was originally developed for feed sources, which were
-     * limited to a single retrieval method per source; however, use of this software has evolved in such a way that
-     * supports GTFS data for a single feed source to be retrieved in a multitude of ways, including: fetching via URL,
-     * uploading manually, creating with the editor, or transforming in some way (e.g., merging multiple versions or
-     * post-processing a single version).
-     */
-    public enum FeedRetrievalMethod {
-        FETCHED_AUTOMATICALLY, // automatically retrieved over HTTP on some regular basis
-        MANUALLY_UPLOADED, // manually uploaded by someone, perhaps the agency, or perhaps an internal user
-        PRODUCED_IN_HOUSE, // produced in-house in a GTFS Editor instance
-        REGIONAL_MERGE,
-        SERVICE_PERIOD_MERGE
-    }
-
-    /**
      * Delete this feed source and everything that it contains.
      *
      * FIXME: Use a Mongo transaction to handle the deletion of these related objects.
@@ -579,5 +572,32 @@ public class FeedSource extends Model implements Cloneable {
 
     public FeedSource clone () throws CloneNotSupportedException {
         return (FeedSource) super.clone();
+    }
+
+    public <T extends FeedTransformation> boolean hasTransformationsOfType(FeedVersion target, Class<T> clazz) {
+        return getActiveTransformations(target, clazz).size() > 0;
+    }
+
+    public boolean hasRulesForRetrievalMethod(FeedRetrievalMethod retrievalMethod) {
+        return getRulesForRetrievalMethod(retrievalMethod) != null;
+    }
+
+    /**
+     * Get transform rules for the retrieval method or null if none exist. Note: this will return the first rule set
+     * found. There should not be multiple rule sets for a given retrieval method.
+     */
+    public FeedTransformRules getRulesForRetrievalMethod(FeedRetrievalMethod retrievalMethod) {
+        return transformRules.stream()
+            .filter(feedTransformRules -> feedTransformRules.hasRetrievalMethod(retrievalMethod))
+            .findFirst()
+            .orElse(null);
+    }
+
+    public <T extends FeedTransformation> List<T> getActiveTransformations(FeedVersion target, Class<T> clazz) {
+        return transformRules.stream()
+            .filter(FeedTransformRules::isActive)
+            .map(rule -> rule.getActiveTransformations(target, clazz))
+            .flatMap(Collection::stream)
+            .collect(Collectors.toList());
     }
 }
