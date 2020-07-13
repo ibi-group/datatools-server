@@ -134,6 +134,10 @@ public class MergeFeedsJob extends MonitorableJob {
     public final String projectId;
     public final MergeFeedsType mergeType;
     private File mergedTempFile = null;
+    /**
+     * If {@link MergeFeedsJob} storeNewVersion variable is true, a new version will be created from the merged GTFS
+     * dataset. Otherwise, this will be null throughout the life of the job.
+     */
     final FeedVersion mergedVersion;
     public boolean failOnDuplicateTripId = true;
 
