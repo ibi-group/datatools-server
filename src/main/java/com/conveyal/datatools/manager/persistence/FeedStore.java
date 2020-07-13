@@ -163,6 +163,10 @@ public class FeedStore {
         return null;
     }
 
+    public String getS3FeedPath (String id) {
+        return String.format("s3://%s/%s", s3Bucket, getS3Key(id));
+    }
+
     /**
      * Shorthand to get the local file for the provided id.
      */
