@@ -243,7 +243,7 @@
             <scope>test</scope>
         </dependency>
 
-        <!-- Used for loading/fetching/writing GTFS entities. gtfs-lib also provides access to:
+        <!-- Used for loading/fetching/validating/writing GTFS entities. gtfs-lib also provides access to:
          - commons-io - generic utilities
          - AWS S3 SDK - putting/getting objects into/out of S3.
          -->
@@ -266,7 +266,7 @@
         <dependency>
             <groupId>org.mongodb</groupId>
             <artifactId>mongodb-driver</artifactId>
-            <version>3.5.0</version>
+            <version>3.6.4</version>
         </dependency>
 
         <!-- Miscellaneous utilities -->

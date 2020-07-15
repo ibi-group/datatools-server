@@ -39,6 +39,8 @@ public abstract class Model implements Serializable {
 
     public String id;
 
+    public String retrieveId() { return this.id; }
+
     // FIXME: should this be stored here? Should we use lastUpdated as a nonce to protect against race conditions in DB
     // writes?
     public Date lastUpdated;
