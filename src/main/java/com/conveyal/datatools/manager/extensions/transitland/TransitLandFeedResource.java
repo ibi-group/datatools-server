@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.extensions.transitland;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
+import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
@@ -115,7 +116,7 @@ public class TransitLandFeedResource implements ExternalFeedResource {
                     if (source == null) {
                         source = new FeedSource(feedName);
                         source.projectId = project.id;
-                        source.retrievalMethod = FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
+                        source.retrievalMethod = FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
                         try {
                             source.url = new URL(tlFeed.url);
                         } catch (MalformedURLException e) {
@@ -126,7 +127,7 @@ public class TransitLandFeedResource implements ExternalFeedResource {
                     } else {
                         // Feed source already existed. Let's just sync it.
                         URL feedUrl;
-                        source.retrievalMethod = FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
+                        source.retrievalMethod = FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
                         try {
                             feedUrl = new URL(tlFeed.url);
                             Persistence.feedSources.updateField(source.id, "url", feedUrl);
@@ -135,7 +136,7 @@ public class TransitLandFeedResource implements ExternalFeedResource {
                         }
                         // FIXME: These shouldn't be separate updates.
                         Persistence.feedSources.updateField(source.id, "name", feedName);
-                        Persistence.feedSources.updateField(source.id, "retrievalMethod", FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY);
+                        Persistence.feedSources.updateField(source.id, "retrievalMethod", FeedRetrievalMethod.FETCHED_AUTOMATICALLY);
                         LOG.info("Syncing properties: {}", source.name);
                     }
 

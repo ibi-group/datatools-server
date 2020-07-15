@@ -4,9 +4,12 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.gtfsplus.tables.GtfsPlusTable;
+import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.FeedStore;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.error.NewGTFSError;
 import com.conveyal.gtfs.error.NewGTFSErrorType;
 import com.conveyal.gtfs.loader.Field;
@@ -42,8 +45,10 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 
-import static com.conveyal.datatools.manager.jobs.MergeFeedsType.MTC;
+import static com.conveyal.datatools.manager.jobs.MergeFeedsType.SERVICE_PERIOD;
 import static com.conveyal.datatools.manager.jobs.MergeFeedsType.REGIONAL;
+import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.REGIONAL_MERGE;
+import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.SERVICE_PERIOD_MERGE;
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.conveyal.gtfs.loader.DateField.GTFS_DATE_FORMATTER;
 import static com.conveyal.gtfs.loader.Field.getFieldIndex;
@@ -56,7 +61,7 @@ import static com.conveyal.gtfs.loader.Field.getFieldIndex;
  * found in any other feed version. Note: There is absolutely no attempt to merge
  * entities based on either expected shared IDs or entity location (e.g., stop
  * coordinates).
- * - {@link MergeFeedsType#MTC}:      this strategy is defined in detail at https://github.com/conveyal/datatools-server/issues/185,
+ * - {@link MergeFeedsType#SERVICE_PERIOD}:      this strategy is defined in detail at https://github.com/conveyal/datatools-server/issues/185,
  * but in essence, this strategy attempts to merge a current and future feed into
  * a combined file. For certain entities (specifically stops and routes) it uses
  * alternate fields as primary keys (stop_code and route_short_name) if they are
@@ -129,24 +134,29 @@ public class MergeFeedsJob extends MonitorableJob {
     public final String projectId;
     public final MergeFeedsType mergeType;
     private File mergedTempFile = null;
+    /**
+     * If {@link MergeFeedsJob} storeNewVersion variable is true, a new version will be created from the merged GTFS
+     * dataset. Otherwise, this will be null throughout the life of the job.
+     */
     final FeedVersion mergedVersion;
     public boolean failOnDuplicateTripId = true;
 
+    public MergeFeedsJob(Auth0UserProfile owner, Set<FeedVersion> feedVersions, String file, MergeFeedsType mergeType) {
+        this(owner, feedVersions, file, mergeType, true);
+    }
+
     /**
-     * @param owner        user ID that initiated job
-     * @param feedVersions set of feed versions to merge
-     * @param file         resulting merge filename (without .zip)
-     * @param mergeType    the type of merge to perform (@link MergeFeedsType)
+     * @param owner             user ID that initiated job
+     * @param feedVersions      set of feed versions to merge
+     * @param file              resulting merge filename (without .zip)
+     * @param mergeType         the type of merge to perform {@link MergeFeedsType}
+     * @param storeNewVersion   whether to store merged feed as new version
      */
     public MergeFeedsJob(Auth0UserProfile owner, Set<FeedVersion> feedVersions, String file,
-                         MergeFeedsType mergeType) {
+                         MergeFeedsType mergeType, boolean storeNewVersion) {
         super(owner, mergeType.equals(REGIONAL) ? "Merging project feeds" : "Merging feed versions",
             JobType.MERGE_FEED_VERSIONS);
         this.feedVersions = feedVersions;
-        // Grab parent feed source if performing non-regional merge (each version should share the
-        // same feed source).
-        this.feedSource =
-            mergeType.equals(REGIONAL) ? null : feedVersions.iterator().next().parentFeedSource();
         // Construct full filename with extension
         this.filename = String.format("%s.zip", file);
         // If the merge type is regional, the file string should be equivalent to projectId, which
@@ -154,7 +164,32 @@ public class MergeFeedsJob extends MonitorableJob {
         this.projectId = mergeType.equals(REGIONAL) ? file : null;
         this.mergeType = mergeType;
         // Assuming job is successful, mergedVersion will contain the resulting feed version.
-        this.mergedVersion = mergeType.equals(REGIONAL) ? null : new FeedVersion(this.feedSource);
+        Project project = Persistence.projects.getById(projectId);
+        // Grab parent feed source depending on merge type.
+        FeedSource regionalFeedSource = null;
+        // If storing a regional merge as a new version, find the feed source designated by the project.
+        if (mergeType.equals(REGIONAL) && storeNewVersion) {
+            regionalFeedSource = Persistence.feedSources.getById(project.regionalFeedSourceId);
+            // Create new feed source if this is the first regional merge.
+            if (regionalFeedSource == null) {
+                regionalFeedSource = new FeedSource("REGIONAL MERGE", project.id, REGIONAL_MERGE);
+                // Store new feed source.
+                Persistence.feedSources.create(regionalFeedSource);
+                // Update regional feed source ID on project.
+                project.regionalFeedSourceId = regionalFeedSource.id;
+                Persistence.projects.replace(project.id, project);
+            }
+        }
+        // Assign regional feed source or simply the first parent feed source found in the feed version list (these
+        // should all belong to the same feed source if the merge is not regional).
+        this.feedSource = mergeType.equals(REGIONAL)
+            ? regionalFeedSource
+            : feedVersions.iterator().next().parentFeedSource();
+        FeedRetrievalMethod retrievalMethod = mergeType.equals(REGIONAL)
+            ? REGIONAL_MERGE
+            : SERVICE_PERIOD_MERGE;
+        // Merged version will be null if the new version should not be stored.
+        this.mergedVersion = storeNewVersion ? new FeedVersion(this.feedSource, retrievalMethod) : null;
         this.mergeFeedsResult = new MergeFeedsResult(mergeType);
     }
 
@@ -226,21 +261,21 @@ public class MergeFeedsJob extends MonitorableJob {
         }
         // Close output stream for zip file.
         out.close();
-        // Handle writing file to storage (local or s3).
         if (mergeFeedsResult.failed) {
+            // Fail job if the merge result indicates something went wrong.
             status.fail("Merging feed versions failed.");
         } else {
+            // Store feed locally and (if applicable) upload regional feed to S3.
             storeMergedFeed();
             status.completeSuccessfully("Merged feed created successfully.");
         }
         LOG.info("Feed merge is complete.");
-        if (!mergeType.equals(REGIONAL) && !status.error && !mergeFeedsResult.failed) {
-            // Handle the processing of the new version for non-regional merges (note: s3 upload is handled within this job).
+        if (mergedVersion != null && !status.error && !mergeFeedsResult.failed) {
+            mergedVersion.inputVersions = feedVersions.stream().map(FeedVersion::retrieveId).collect(Collectors.toSet());
+            // Handle the processing of the new version when storing new version (note: s3 upload is handled within this job).
             // We must add this job in jobLogic (rather than jobFinished) because jobFinished is called after this job's
             // subJobs are run.
-            ProcessSingleFeedJob processSingleFeedJob =
-                new ProcessSingleFeedJob(mergedVersion, owner, true);
-            addNextJob(processSingleFeedJob);
+            addNextJob(new ProcessSingleFeedJob(mergedVersion, owner, true));
         }
     }
 
@@ -254,8 +289,7 @@ public class MergeFeedsJob extends MonitorableJob {
             try {
                 return new FeedToMerge(version);
             } catch (Exception e) {
-                LOG.error("Could not create zip file for version {}:", version.parentFeedSource(),
-                    version.version);
+                LOG.error("Could not create zip file for version: {}", version.version);
                 return null;
             }
         }).filter(Objects::nonNull).filter(entry -> entry.version.validationResult != null
@@ -271,6 +305,16 @@ public class MergeFeedsJob extends MonitorableJob {
      * Otherwise, it will write to a new version.
      */
     private void storeMergedFeed() throws IOException {
+        if (mergedVersion != null) {
+            // Store the zip file for the merged feed version.
+            try {
+                mergedVersion.newGtfsFile(new FileInputStream(mergedTempFile));
+            } catch (IOException e) {
+                LOG.error("Could not store merged feed for new version", e);
+                throw e;
+            }
+        }
+        // Write the new latest regional merge file to s3://$BUCKET/project/$PROJECT_ID.zip
         if (mergeType.equals(REGIONAL)) {
             status.update("Saving merged feed.", 95);
             // Store the project merged zip locally or on s3
@@ -284,19 +328,9 @@ public class MergeFeedsJob extends MonitorableJob {
                     FeedVersion.feedStore
                         .newFeed(filename, new FileInputStream(mergedTempFile), null);
                 } catch (IOException e) {
-                    e.printStackTrace();
-                    LOG.error("Could not store feed for project {}", filename);
+                    LOG.error("Could not store feed for project " + filename, e);
                     throw e;
                 }
-            }
-        } else {
-            // Store the zip file for the merged feed version.
-            try {
-                FeedVersion.feedStore
-                    .newFeed(mergedVersion.id, new FileInputStream(mergedTempFile), feedSource);
-            } catch (IOException e) {
-                LOG.error("Could not store merged feed for new version");
-                throw e;
             }
         }
     }
@@ -315,7 +349,7 @@ public class MergeFeedsJob extends MonitorableJob {
         CsvListWriter writer = new CsvListWriter(new OutputStreamWriter(out), CsvPreference.STANDARD_PREFERENCE);
         String keyField = table.getKeyFieldName();
         String orderField = table.getOrderFieldName();
-        if (mergeType.equals(MTC)) {
+        if (mergeType.equals(SERVICE_PERIOD) && DataManager.isExtensionEnabled("mtc")) {
             // MTC requires that the stop and route records be merged based on different key fields.
             switch (table.name) {
                 case "stops":
@@ -389,7 +423,7 @@ public class MergeFeedsJob extends MonitorableJob {
                 // Iterate over rows in table, writing them to the out file.
                 while (csvReader.readRecord()) {
                     String keyValue = csvReader.get(keyFieldIndex);
-                    if (feedIndex > 0 && mergeType.equals(MTC)) {
+                    if (feedIndex > 0 && mergeType.equals(SERVICE_PERIOD)) {
                         // Always prefer the "future" file for the feed_info table, which means
                         // we can skip any iterations following the first one. If merging the agency
                         // table, we should only skip the following feeds if performing an MTC merge
@@ -454,7 +488,7 @@ public class MergeFeedsJob extends MonitorableJob {
                             }
                             fieldsFoundList = Arrays.asList(fieldsFoundInZip);
                         }
-                        if (mergeType.equals(MTC) && table.name.equals("stops")) {
+                        if (mergeType.equals(SERVICE_PERIOD) && table.name.equals("stops")) {
                             if (lineNumber == 0) {
                                 // Before reading any lines in stops.txt, first determine whether all records contain
                                 // properly filled stop_codes. The rules governing this logic are as follows:
@@ -576,7 +610,7 @@ public class MergeFeedsJob extends MonitorableJob {
                         // reference tracker will get far too large if we attempt to use it to
                         // track references for a large number of feeds (e.g., every feed in New
                         // York State).
-                        if (mergeType.equals(MTC)) {
+                        if (mergeType.equals(SERVICE_PERIOD)) {
                             Set<NewGTFSError> idErrors;
                             // If analyzing the second feed (non-future feed), the service_id always gets feed scoped.
                             // See https://github.com/ibi-group/datatools-server/issues/244
@@ -868,7 +902,7 @@ public class MergeFeedsJob extends MonitorableJob {
                         rowValues[specFieldIndex] = valueToWrite;
                     } // End of iteration over each field for a row.
                     // Do not write rows that are designated to be skipped.
-                    if (skipRecord && this.mergeType.equals(MTC)) {
+                    if (skipRecord && this.mergeType.equals(SERVICE_PERIOD)) {
                         mergeFeedsResult.recordsSkipCount++;
                         continue;
                     }

@@ -67,22 +67,18 @@ public class JsonManager<T> {
         om.addMixIn(target, mixin);
     }
 
+    /**
+     * Convert an object to its JSON representation or, if object is a string, simply cast and return the string.
+     * @param o the object to convert
+     * @return the JSON string
+     * @throws JsonProcessingException
+     */
     public String write(Object o) throws JsonProcessingException{
         if (o instanceof String) {
             return (String) o;
         }
         return ow.writeValueAsString(o);
     }
-
-    /**
-     * Convert an object to its JSON representation
-     * @param o the object to convert
-     * @return the JSON string
-     * @throws JsonProcessingException
-     */
-    /*public String write (T o) throws JsonProcessingException {
-        return ow.writeValueAsString(o);
-    }*/
 
     /**
      * Convert a collection of objects to their JSON representation.

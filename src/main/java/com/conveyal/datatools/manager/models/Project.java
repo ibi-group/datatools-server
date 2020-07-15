@@ -66,6 +66,12 @@ public class Project extends Model {
     //   the "pinned" deployment are shown and compared to the most recent version in the feed sources.
     public String pinnedDeploymentId;
 
+    /**
+     * Feed source in which to store regionally merged GTFS feeds. If specified, during a regional feed merge all feeds
+     * in the project will be merged except for the feed source defined here.
+     */
+    public String regionalFeedSourceId;
+
     public Project() {
         this.buildConfig = new OtpBuildConfig();
         this.routerConfig = new OtpRouterConfig();
