@@ -262,11 +262,11 @@
             </exclusions>
         </dependency>
 
-        <!-- Used for data-tools application database -->
+        <!-- Used for application database -->
         <dependency>
             <groupId>org.mongodb</groupId>
-            <artifactId>mongodb-driver</artifactId>
-            <version>3.6.4</version>
+            <artifactId>mongodb-driver-sync</artifactId>
+            <version>4.0.5</version>
         </dependency>
 
         <!-- Miscellaneous utilities -->
