@@ -6,7 +6,6 @@ dist
 *.log
 coverage
 .idea
-target/
 .java-version
 datatools.iml
 datatools-manager.iml
