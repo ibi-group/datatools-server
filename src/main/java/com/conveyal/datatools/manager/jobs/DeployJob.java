@@ -907,7 +907,10 @@ public class DeployJob extends MonitorableJob {
      * Provide proper escaping to stringified JSON so that it can be properly included in the otp-runner manifest.json
      */
     private String createEchoSafeJSON(String json) {
-        return json.replace("\"", "\\\"").replace("\n", "\\n");
+        return json
+            .replace("\"", "\\\"")
+            .replace("\n", "\\n")
+            .replace("\t", "\\t");
     }
 
     private String getJarName() {
