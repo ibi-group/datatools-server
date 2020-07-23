@@ -299,6 +299,7 @@ public class ServerController {
                     }
                 }
                 validateInstanceType(server.ec2Info.instanceType, req);
+                validateInstanceType(server.ec2Info.buildInstanceType, req);
                 // Validate target group and get load balancer to validate subnetId and security group ID.
                 LoadBalancer loadBalancer = validateTargetGroupAndGetLoadBalancer(server.ec2Info, req, credentials);
                 validateSubnetId(loadBalancer, server.ec2Info, req, ec2Client);
