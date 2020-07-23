@@ -299,6 +299,7 @@ public class ServerController {
                     }
                 }
                 validateInstanceType(server.ec2Info.instanceType, req);
+                validateInstanceType(server.ec2Info.buildInstanceType, req);
                 // Validate target group and get load balancer to validate subnetId and security group ID.
                 LoadBalancer loadBalancer = validateTargetGroupAndGetLoadBalancer(server.ec2Info, req, credentials);
                 validateSubnetId(loadBalancer, server.ec2Info, req, ec2Client);
@@ -307,6 +308,7 @@ public class ServerController {
                 validateIamInstanceProfileArn(server.ec2Info.iamInstanceProfileArn, req, iamClient);
                 validateKeyName(server.ec2Info.keyName, req, ec2Client);
                 validateAmiId(server.ec2Info.amiId, req, ec2Client);
+                validateAmiId(server.ec2Info.buildAmiId, req, ec2Client);
                 if (server.ec2Info.instanceCount < 0) server.ec2Info.instanceCount = 0;
             }
             // Server must have name.
