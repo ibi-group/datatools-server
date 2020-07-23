@@ -76,8 +76,8 @@ public class DeployJobTest extends UnitTest {
         deployment.name = "Test deployment";
         deployment.otpVersion = "otp-latest-trimet-dev";
         // add in custom build and router config with problematic characters to make sure they are properly escaped
-        deployment.customRouterConfig = "{ \"hi\": \"th\ne're\" }";
-        deployment.customBuildConfig = "{ \"hello\": \"th\ne're\" }";
+        deployment.customRouterConfig = "{ \"hi\": \"th\ne'r\te\" }";
+        deployment.customBuildConfig = "{ \"hello\": \"th\ne'r\te\" }";
         Persistence.deployments.create(deployment);
     }
 
