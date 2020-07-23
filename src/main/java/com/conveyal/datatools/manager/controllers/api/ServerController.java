@@ -307,6 +307,7 @@ public class ServerController {
                 validateIamInstanceProfileArn(server.ec2Info.iamInstanceProfileArn, req, iamClient);
                 validateKeyName(server.ec2Info.keyName, req, ec2Client);
                 validateAmiId(server.ec2Info.amiId, req, ec2Client);
+                validateAmiId(server.ec2Info.buildAmiId, req, ec2Client);
                 if (server.ec2Info.instanceCount < 0) server.ec2Info.instanceCount = 0;
             }
             // Server must have name.
