@@ -17,6 +17,8 @@ import com.amazonaws.services.ec2.model.InstanceNetworkInterfaceSpecification;
 import com.amazonaws.services.ec2.model.InstanceType;
 import com.amazonaws.services.ec2.model.RunInstancesRequest;
 import com.amazonaws.services.ec2.model.Tag;
+import com.amazonaws.services.identitymanagement.AmazonIdentityManagement;
+import com.amazonaws.services.identitymanagement.AmazonIdentityManagementClientBuilder;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3URI;
 import com.amazonaws.services.s3.model.CopyObjectRequest;
@@ -46,6 +48,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Scanner;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -503,6 +506,24 @@ public class DeployJob extends MonitorableJob {
      * them.
      */
     private void replaceEC2Servers() {
+        status.message = "Validating AWS config";
+        try {
+            ServerController.EC2ValidationResult ec2ValidationResult = ServerController.validateEC2Config(
+                otpServer,
+                credentials,
+                ec2,
+                credentials == null
+                    ? AmazonIdentityManagementClientBuilder.defaultClient()
+                    : AmazonIdentityManagementClientBuilder.standard().withCredentials(credentials).build()
+            );
+            if (!ec2ValidationResult.isValid()) {
+                status.fail(ec2ValidationResult.getMessage(), ec2ValidationResult.getException());
+                return;
+            }
+        } catch (ExecutionException | InterruptedException e) {
+            status.fail("An error occurred while validating the ec2 configuration", e);
+            return;
+        }
         try {
             // Track any previous instances running for the server we're deploying to in order to de-register and
             // terminate them later.
@@ -548,33 +569,21 @@ public class DeployJob extends MonitorableJob {
 
                 // Check if a new image of the instance with the completed graph build should be created.
                 if (otpServer.ec2Info.recreateBuildImage) {
-                    status.update("Creating build image", 42.5);
-                    // Create a new image of this instance.
-                    CreateImageRequest createImageRequest = new CreateImageRequest()
-                        .withInstanceId(graphBuildingInstances.get(0).getInstanceId())
-                        .withName(otpServer.ec2Info.buildImageName)
-                        .withDescription(otpServer.ec2Info.buildImageDescription);
-                    CreateImageResult createImageResult = ec2.createImage(createImageRequest);
-                    // Deregister old image if it exists
-                    if (otpServer.ec2Info.buildAmiId != null) {
-                        status.message = "Deregistering old build image";
-                        DeregisterImageRequest deregisterImageRequest = new DeregisterImageRequest()
-                            .withImageId(otpServer.ec2Info.buildAmiId);
-                        ec2.deregisterImage(deregisterImageRequest);
-                    }
-                    status.update("Updating Server build AMI info", 45);
-                    // Update OTP Server info
-                    otpServer.ec2Info.buildAmiId = createImageResult.getImageId();
-                    otpServer.ec2Info.recreateBuildImage = false;
-                    Persistence.servers.replace(otpServer.id, otpServer);
+                    // Begin a new job to create a graph build image so that can happen asynchronously
+                    RecreateBuildImageJob recreateBuildImageJob = new RecreateBuildImageJob(
+                        owner,
+                        graphBuildingInstances,
+                        otpServer,
+                        ec2
+                    );
+                    DataManager.heavyExecutor.execute(recreateBuildImageJob);
                 }
                 // Check whether the graph build instance type or AMI ID is different from the non-graph building type.
                 // If so, terminate the graph building instance. If not, add the graph building instance to the list
                 // of started instances.
                 if (otpServer.ec2Info.hasSeparateGraphBuildConfig()) {
-                    // different instance type and/or ami exists for graph building. Terminate graph building instance
-                    status.update("Terminating build instance", 47.5);
-                    ServerController.terminateInstances(ec2, graphBuildingInstances);
+                    // different instance type and/or ami exists for graph building, so update the number of instances
+                    // to start up to be the full amount of instances.
                     status.numServersRemaining = Math.max(otpServer.ec2Info.instanceCount, 1);
                 } else {
                     // same configuration exists, so keep instance on and add to list of running instances

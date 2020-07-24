@@ -54,11 +54,17 @@ import spark.Response;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.getPOJOFromRequestBody;
@@ -298,17 +304,14 @@ public class ServerController {
                         s3Client = AWSUtils.getS3ClientForCredentials(getAWSCreds(), server.ec2Info.region);
                     }
                 }
-                validateInstanceType(server.ec2Info.instanceType, req);
-                validateInstanceType(server.ec2Info.buildInstanceType, req);
-                // Validate target group and get load balancer to validate subnetId and security group ID.
-                LoadBalancer loadBalancer = validateTargetGroupAndGetLoadBalancer(server.ec2Info, req, credentials);
-                validateSubnetId(loadBalancer, server.ec2Info, req, ec2Client);
-                validateSecurityGroupId(loadBalancer, server.ec2Info, req);
-                // Validate remaining AWS values.
-                validateIamInstanceProfileArn(server.ec2Info.iamInstanceProfileArn, req, iamClient);
-                validateKeyName(server.ec2Info.keyName, req, ec2Client);
-                validateAmiId(server.ec2Info.amiId, req, ec2Client);
-                validateAmiId(server.ec2Info.buildAmiId, req, ec2Client);
+                try {
+                    EC2ValidationResult result = validateEC2Config(server, credentials, ec2Client, iamClient);
+                    if (!result.isValid()) {
+                        logMessageAndHalt(req, 400, result.getMessage(), result.getException());
+                    }
+                } catch (ExecutionException | InterruptedException e) {
+                    logMessageAndHalt(req, 500, "Failed to validate EC2 config", e);
+                }
                 if (server.ec2Info.instanceCount < 0) server.ec2Info.instanceCount = 0;
             }
             // Server must have name.
@@ -326,6 +329,53 @@ public class ServerController {
             if (e instanceof HaltException) throw e;
             else logMessageAndHalt(req, 400, "Error encountered while validating server field", e);
         }
+    }
+
+    /**
+     * Asynchrnously validates all ec2 config of a particular OtpServer instance.
+     */
+    public static EC2ValidationResult validateEC2Config(
+        OtpServer server,
+        AWSStaticCredentialsProvider credentials,
+        AmazonEC2 ec2Client,
+        AmazonIdentityManagement iamClient
+    ) throws ExecutionException, InterruptedException {
+        List<Callable<EC2ValidationResult>> validationTasks = new ArrayList<>();
+        validationTasks.add(() -> validateInstanceType(server.ec2Info.instanceType));
+        validationTasks.add(() -> validateInstanceType(server.ec2Info.buildInstanceType));
+        validationTasks.add(() -> validateIamInstanceProfileArn(server.ec2Info.iamInstanceProfileArn, iamClient));
+        validationTasks.add(() -> validateKeyName(server.ec2Info.keyName, ec2Client));
+        validationTasks.add(() -> validateAmiId(server.ec2Info.amiId, ec2Client));
+        validationTasks.add(() -> validateAmiId(server.ec2Info.buildAmiId, ec2Client));
+        validationTasks.add(() -> validateGraphBuildReplacementAmiName(server.ec2Info, ec2Client));
+        // add the load balancer task to the end since it can produce aggregate messages
+        validationTasks.add(() -> validateTargetGrouptLoadBalancerSubnetIdAndSecurityGroup(
+            server.ec2Info,
+            credentials,
+            ec2Client
+        ));
+
+        // execute all tasks asynchronously in unique threads
+        ExecutorService pool = Executors.newFixedThreadPool(validationTasks.size());
+
+        // compile overall result
+        EC2ValidationResult result = new EC2ValidationResult();
+        // check each individual task result
+        for (Future<EC2ValidationResult> ec2ValidationResultFuture : pool.invokeAll(validationTasks)) {
+            EC2ValidationResult taskValidationResult = ec2ValidationResultFuture.get();
+            // check if task yielded a valid result
+            if (!taskValidationResult.isValid()) {
+                // task had an invalid result, check if overall validation result has been changed to false yet
+                if (result.isValid()) {
+                    // first invalid result. Write a header message.
+                    result.setInvalid("Invalid EC2 config for the following reasons!\n", new Exception());
+                }
+                // add to list of messages and exceptions
+                result.appendResult(taskValidationResult);
+            }
+        }
+        pool.shutdown();
+        return result;
     }
 
     /**
@@ -366,33 +416,76 @@ public class ServerController {
      * TODO: Should we warn user if the AMI provided is older than the default AMI registered with this application as
      *   DEFAULT_AMI_ID?
      */
-    private static void validateAmiId(String amiId, Request req, AmazonEC2 ec2Client) {
-        String message = "Server must have valid AMI ID (or field must be empty)";
-        if (isEmpty(amiId)) return;
-        if (!amiExists(amiId, ec2Client)) logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message);
+    private static EC2ValidationResult validateAmiId(String amiId, AmazonEC2 ec2Client) {
+        EC2ValidationResult result = new EC2ValidationResult();
+        if (isEmpty(amiId)) return result;
+        try {
+            if (!amiExists(amiId, ec2Client)) {
+                result.setInvalid("Server must have valid AMI ID (or field must be empty)");
+            }
+        } catch (AmazonEC2Exception e) {
+            result.setInvalid("AMI does not exist or some error prevented proper checking of the AMI ID.", e);
+        }
+        return result;
     }
 
     /** Determine if AMI ID exists (and is gettable by the application's AWS credentials). */
     public static boolean amiExists(String amiId, AmazonEC2 ec2Client) {
         if (ec2Client == null) ec2Client = ec2;
-        try {
-            DescribeImagesRequest request = new DescribeImagesRequest().withImageIds(amiId);
-            DescribeImagesResult result = ec2Client.describeImages(request);
-            // Iterate over AMIs to find a matching ID.
-            for (Image image : result.getImages()) if (image.getImageId().equals(amiId)) return true;
-        } catch (AmazonEC2Exception e) {
-            LOG.warn("AMI does not exist or some error prevented proper checking of the AMI ID.", e);
+        DescribeImagesRequest request = new DescribeImagesRequest().withImageIds(amiId);
+        DescribeImagesResult result = ec2Client.describeImages(request);
+        // Iterate over AMIs to find a matching ID.
+        for (Image image : result.getImages()) {
+            if (image.getImageId().equals(amiId) && image.getState().toLowerCase().equals("available")) return true;
         }
         return false;
     }
 
+    /**
+     * Validates whether the replacement graph build image name is unique. Although it is possible to have duplicate AMI
+     * names when copying images, they must be unique when creating images.
+     * See https://forums.aws.amazon.com/message.jspa?messageID=845159
+     */
+    private static EC2ValidationResult validateGraphBuildReplacementAmiName(
+        EC2Info ec2Info,
+        AmazonEC2 ec2Client
+    ) {
+        EC2ValidationResult result = new EC2ValidationResult();
+        if (!ec2Info.recreateBuildImage) return result;
+        if (ec2Client == null) ec2Client = ec2;
+        String buildImageName = ec2Info.buildImageName;
+        try {
+            DescribeImagesRequest describeImagesRequest = new DescribeImagesRequest()
+                // limit AMIs to only those owned by the current ec2 user.
+                .withOwners("self");
+            DescribeImagesResult describeImagesResult = ec2Client.describeImages(describeImagesRequest);
+            // Iterate over AMIs to see if any images have a duplicate name.
+            for (Image image : describeImagesResult.getImages()) {
+                if (image.getName().equals(buildImageName)) {
+                    result.setInvalid(String.format("An image with the name `%s` already exists!", buildImageName));
+                    break;
+                }
+            }
+        } catch (AmazonEC2Exception e) {
+            String message = "Some error prevented proper checking of for duplicate AMI names.";
+            LOG.error(message, e);
+            result.setInvalid(message, e);
+        }
+        return result;
+    }
+
     /** Validate that AWS key name (the first part of a .pem key) exists and is not empty. */
-    private static void validateKeyName(String keyName, Request req, AmazonEC2 ec2Client) {
+    private static EC2ValidationResult validateKeyName(String keyName, AmazonEC2 ec2Client) {
         String message = "Server must have valid key name";
-        if (isEmpty(keyName)) logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message);
+        EC2ValidationResult result = new EC2ValidationResult();
+        if (isEmpty(keyName)) {
+            result.setInvalid(message);
+            return result;
+        };
         DescribeKeyPairsResult response = ec2Client.describeKeyPairs();
-        for (KeyPairInfo key_pair : response.getKeyPairs()) if (key_pair.getKeyName().equals(keyName)) return;
-        logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message);
+        for (KeyPairInfo key_pair : response.getKeyPairs()) if (key_pair.getKeyName().equals(keyName)) return result;
+        result.setInvalid(message);
+        return result;
     }
 
     /** Get IAM instance profile for the provided role ARN. */
@@ -404,14 +497,25 @@ public class ServerController {
     }
 
     /** Validate IAM instance profile ARN exists and is not empty. */
-    private static void validateIamInstanceProfileArn(String iamInstanceProfileArn, Request req, AmazonIdentityManagement iamClient) {
+    private static EC2ValidationResult validateIamInstanceProfileArn(
+        String iamInstanceProfileArn,
+        AmazonIdentityManagement iamClient
+    ) {
+        EC2ValidationResult result = new EC2ValidationResult();
         String message = "Server must have valid IAM instance profile ARN (e.g., arn:aws:iam::123456789012:instance-profile/otp-ec2-role).";
-        if (isEmpty(iamInstanceProfileArn)) logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message);
-        if (getIamInstanceProfile(iamInstanceProfileArn, iamClient) == null) logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message);
+        if (isEmpty(iamInstanceProfileArn)) {
+            result.setInvalid(message);
+            return result;
+        }
+        if (getIamInstanceProfile(iamInstanceProfileArn, iamClient) == null) {
+            result.setInvalid(message);
+        };
+        return result;
     }
 
     /** Validate that EC2 security group exists and is not empty. */
-    private static void validateSecurityGroupId(LoadBalancer loadBalancer, EC2Info ec2Info, Request req) {
+    private static EC2ValidationResult validateSecurityGroupId(LoadBalancer loadBalancer, EC2Info ec2Info) {
+        EC2ValidationResult result = new EC2ValidationResult();
         String message = "Server must have valid security group ID";
         List<String> securityGroups = loadBalancer.getSecurityGroups();
         if (isEmpty(ec2Info.securityGroupId)) {
@@ -420,27 +524,34 @@ public class ServerController {
             if (securityGroupId != null) {
                 // Set security group to the first value found attached to ELB.
                 ec2Info.securityGroupId = securityGroupId;
-                return;
+                return result;
             }
             // If no security group found with load balancer (for whatever reason), halt request.
-            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Load balancer for target group does not have valid security group");
+            result.setInvalid("Load balancer for target group does not have valid security group");
+            return result;
         }
         // Iterate over groups. If a matching ID is found, silently return.
-        for (String groupId : securityGroups) if (groupId.equals(ec2Info.securityGroupId)) return;
-        logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message);
+        for (String groupId : securityGroups) if (groupId.equals(ec2Info.securityGroupId)) return result;
+        result.setInvalid(message);
+        return result;
     }
 
     /**
      * Validate that subnet exists and is not empty. If empty, attempt to set to an ID drawn from the load balancer's
      * VPC.
      */
-    private static void validateSubnetId(LoadBalancer loadBalancer, EC2Info ec2Info, Request req, AmazonEC2 ec2Client) {
+    private static EC2ValidationResult validateSubnetId(
+        LoadBalancer loadBalancer,
+        EC2Info ec2Info,
+        AmazonEC2 ec2Client
+    ) {
+        EC2ValidationResult result = new EC2ValidationResult();
         String message = "Server must have valid subnet ID";
         // Make request for all subnets associated with load balancer's vpc
         Filter filter = new Filter("vpc-id").withValues(loadBalancer.getVpcId());
-        DescribeSubnetsRequest request = new DescribeSubnetsRequest().withFilters(filter);
-        DescribeSubnetsResult result = ec2Client.describeSubnets(request);
-        List<Subnet> subnets = result.getSubnets();
+        DescribeSubnetsRequest describeSubnetsRequest = new DescribeSubnetsRequest().withFilters(filter);
+        DescribeSubnetsResult describeSubnetsResult = ec2Client.describeSubnets(describeSubnetsRequest);
+        List<Subnet> subnets = describeSubnetsResult.getSubnets();
         // Attempt to assign subnet by deriving the value from target group/ELB.
         if (isEmpty(ec2Info.subnetId)) {
             // Set subnetID to the first value found.
@@ -449,36 +560,42 @@ public class ServerController {
             Subnet subnet = subnets.iterator().next();
             if (subnet != null) {
                 ec2Info.subnetId = subnet.getSubnetId();
-                return;
+                return result;
             }
-            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message);
+            result.setInvalid(message);
         } else {
             // Otherwise, verify the value set in the EC2Info.
             try {
                 // Iterate over subnets. If a matching ID is found, silently return.
-                for (Subnet subnet : subnets) if (subnet.getSubnetId().equals(ec2Info.subnetId)) return;
+                for (Subnet subnet : subnets) if (subnet.getSubnetId().equals(ec2Info.subnetId)) return result;
             } catch (AmazonEC2Exception e) {
-                logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message, e);
+                result.setInvalid(message, e);
+                return result;
             }
-            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message);
+            result.setInvalid(message);
         }
+        return result;
     }
 
     /**
      * Validate that EC2 instance type (e.g., t2-medium) exists. This value can be empty and will default to
      * {@link com.conveyal.datatools.manager.models.EC2Info#DEFAULT_INSTANCE_TYPE} at deploy time.
      */
-    private static void validateInstanceType(String instanceType, Request req) {
-        if (instanceType == null) return;
+    private static EC2ValidationResult validateInstanceType(String instanceType) {
+        EC2ValidationResult result = new EC2ValidationResult();
+        if (instanceType == null) return result;
         try {
             InstanceType.fromValue(instanceType);
         } catch (IllegalArgumentException e) {
-            String message = String.format(
-                "Must provide valid instance type (if none provided, defaults to %s).",
-                DEFAULT_INSTANCE_TYPE
+            result.setInvalid(
+                String.format(
+                    "Must provide valid instance type (if none provided, defaults to %s).",
+                    DEFAULT_INSTANCE_TYPE
+                ),
+                e
             );
-            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, message, e);
         }
+        return result;
     }
 
     /**
@@ -522,17 +639,44 @@ public class ServerController {
      * Validate that ELB target group exists and is not empty and return associated load balancer for validating related
      * fields.
      */
-    private static LoadBalancer validateTargetGroupAndGetLoadBalancer(EC2Info ec2Info, Request req, AWSStaticCredentialsProvider credentials) {
+    private static EC2ValidationResult validateTargetGrouptLoadBalancerSubnetIdAndSecurityGroup(
+        EC2Info ec2Info,
+        AWSStaticCredentialsProvider credentials,
+        AmazonEC2 ec2Client
+    ) throws ExecutionException, InterruptedException {
+        EC2ValidationResult result = new EC2ValidationResult();
         if (isEmpty(ec2Info.targetGroupArn)) {
-            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Invalid value for Target Group ARN.");
+            result.setInvalid("Invalid value for Target Group ARN.");
+            return result;
         }
         // Get load balancer for target group. This essentially checks that the target group exists and is assigned
         // to a load balancer.
         LoadBalancer loadBalancer = getLoadBalancerForTargetGroup(ec2Info, credentials);
         if (loadBalancer == null) {
-            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Invalid value for Target Group ARN. Could not locate Target Group or Load Balancer.");
+            result.setInvalid("Invalid value for Target Group ARN. Could not locate Target Group or Load Balancer.");
+            return result;
         }
-        return loadBalancer;
+
+        // asynchronously execute the two validation tasks that depend on the load balancer info
+        List<Callable<EC2ValidationResult>> loadBalancerValidationTasks = new ArrayList<>();
+        loadBalancerValidationTasks.add(() -> validateSubnetId(loadBalancer, ec2Info, ec2Client));
+        loadBalancerValidationTasks.add(() -> validateSecurityGroupId(loadBalancer, ec2Info));
+        ExecutorService pool = Executors.newFixedThreadPool(loadBalancerValidationTasks.size());
+        for (Future<EC2ValidationResult> ec2ValidationResultFuture : pool.invokeAll(loadBalancerValidationTasks)) {
+            EC2ValidationResult loadBalancerValidationTaskResult = ec2ValidationResultFuture.get();
+            // check if task yielded a valid result
+            if (!loadBalancerValidationTaskResult.isValid()) {
+                // task had an invalid result, check if overall validation result has been changed to false yet
+                if (result.isValid()) {
+                    // first invalid result. Write a header message.
+                    result.setInvalid("Invalid EC2 load balancer config for the following reasons:\n", new Exception());
+                }
+                // add to list of messages and exceptions
+                result.appendResult(loadBalancerValidationTaskResult);
+            }
+        }
+        pool.shutdown();
+        return result;
     }
 
     /**
@@ -552,5 +696,48 @@ public class ServerController {
         get(apiPrefix + "secure/servers", ServerController::fetchServers, json::write);
         post(apiPrefix + "secure/servers", ServerController::createServer, json::write);
         put(apiPrefix + "secure/servers/:id", ServerController::updateServer, json::write);
+    }
+
+    /**
+     * A helper class that returns a validation result and accompanying message.
+     */
+    public static class EC2ValidationResult {
+        private Exception exception;
+        private String message;
+        private boolean valid = true;
+
+        public Exception getException() {
+            return exception;
+        }
+
+        public String getMessage() {
+            return message;
+        }
+
+        public boolean isValid() {
+            return valid;
+        }
+
+        public void setInvalid(String message) {
+            this.setInvalid(message, null);
+        }
+
+        public void setInvalid(String message, Exception e) {
+            this.exception = e;
+            this.message = message;
+            this.valid = false;
+        }
+
+        public void appendResult(EC2ValidationResult taskValidationResult) {
+            if (this.message == null) throw new IllegalStateException("Must have initialized message before appending");
+            this.message = String.format("%s  - %s\n", this.message, taskValidationResult.message);
+            // add to list of supressed exceptions if needed
+            if (taskValidationResult.exception != null) {
+                if (this.exception == null) {
+                    throw new IllegalStateException("Must have initialized exception before appending");
+                }
+                this.exception.addSuppressed(taskValidationResult.exception);
+            }
+        }
     }
 }
