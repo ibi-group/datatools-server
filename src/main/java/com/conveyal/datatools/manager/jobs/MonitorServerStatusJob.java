@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.services.ec2.AmazonEC2;
+import com.amazonaws.services.ec2.model.AmazonEC2Exception;
 import com.amazonaws.services.ec2.model.DescribeInstancesRequest;
 import com.amazonaws.services.ec2.model.DescribeInstancesResult;
 import com.amazonaws.services.ec2.model.Instance;
@@ -44,6 +45,7 @@ import static com.conveyal.datatools.manager.jobs.DeployJob.OTP_RUNNER_STATUS_FI
  */
 public class MonitorServerStatusJob extends MonitorableJob {
     private static final Logger LOG = LoggerFactory.getLogger(MonitorServerStatusJob.class);
+
     private final DeployJob deployJob;
     private final Deployment deployment;
     private final Instance instance;
@@ -56,6 +58,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
     // Delay checks by four seconds to give user-data script time to upload the instance's user data log if part of the
     // script fails (e.g., uploading or downloading a file).
     private static final int DELAY_SECONDS = 4;
+    private static final int MAX_INSTANCE_HEALTH_RETRIES = 5;
     public long graphTaskSeconds;
 
     public MonitorServerStatusJob(Auth0UserProfile owner, DeployJob deployJob, Instance instance, boolean graphAlreadyBuilt) {
@@ -203,7 +206,12 @@ public class MonitorServerStatusJob extends MonitorableJob {
             // was accidental or intentional, we want the result to be that the job fails and the deployment be aborted.
             // This gives us a failsafe in case we kick off a deployment accidentally or otherwise need to cancel the
             // deployment job (e.g., due to an incorrect configuration).
-            failJob("Ec2 Instance was stopped or terminated before job could complete!");
+            failJob("Ec2 Instance was stopped or terminated before job could complete!", e);
+        } catch (Exception e) {
+            // This catch-all block is needed to make sure any exceptions that are not handled elsewhere are properly
+            // caught here so that the job can be properly failed. If the job is not failed properly this could result
+            // in hanging instances that do not get terminated properly by the parent DeployJob.
+            failJob("An internal datatools error occurred before the job could complete!", e);
         }
     }
 
@@ -219,11 +227,19 @@ public class MonitorServerStatusJob extends MonitorableJob {
     }
 
     /**
-     * Helper that fails with a helpful message about where to find uploaded logs.
+     * Helper for marking the job as failed with just a message.
      */
     private void failJob(String message) {
+        failJob(message, null);
+    }
+
+    /**
+     * Helper that fails with a message and optional exception. A helpful message about where to find uploaded logs is
+     * appended to the failure message.
+     */
+    private void failJob(String message, Exception e) {
         LOG.error(message);
-        status.fail(String.format("%s Check logs at: %s", message, getOtpRunnerLogS3Path()));
+        status.fail(String.format("%s Check logs at: %s", message, getOtpRunnerLogS3Path()), e);
     }
 
     /** Determine if a specific task has passed time limit for its run time. */
@@ -249,13 +265,30 @@ public class MonitorServerStatusJob extends MonitorableJob {
     }
 
     /**
+     * Helper method to initiate to first attempt at checking the instance health.
+     */
+    private void checkInstanceHealth() throws InstanceHealthException {
+        checkInstanceHealth(1);
+    }
+
+    /**
      * Checks whether the instance is running. If it has entered a state where it is stopped, terminated or about to be
      * stopped or terminated, then this method throws an exception.
      */
-    private void checkInstanceHealth() throws InstanceHealthException {
+    private void checkInstanceHealth(int attemptNumber) throws InstanceHealthException {
         DescribeInstancesRequest request = new DescribeInstancesRequest()
             .withInstanceIds(Collections.singletonList(instance.getInstanceId()));
-        DescribeInstancesResult result = ec2.describeInstances(request);
+        DescribeInstancesResult result;
+        try {
+            result = ec2.describeInstances(request);
+        } catch (AmazonEC2Exception e) {
+            LOG.error("Failed on attempt {} to execute request to obtain instance health!", attemptNumber, e);
+            if (attemptNumber > MAX_INSTANCE_HEALTH_RETRIES) {
+                throw new InstanceHealthException("AWS Describe Instances error!");
+            }
+            checkInstanceHealth(attemptNumber + 1);
+            return;
+        }
         for (Reservation reservation : result.getReservations()) {
             for (Instance reservationInstance : reservation.getInstances()) {
                 if (reservationInstance.getInstanceId().equals(instance.getInstanceId())) {
