@@ -52,8 +52,6 @@ public class MonitorServerStatusJob extends MonitorableJob {
     private final boolean graphAlreadyBuilt;
     private final OtpServer otpServer;
     private final AWSStaticCredentialsProvider credentials;
-    private final AmazonEC2 ec2;
-    private final AmazonElasticLoadBalancing elbClient;
     private final CloseableHttpClient httpClient = HttpClients.createDefault();
     // Delay checks by four seconds to give user-data script time to upload the instance's user data log if part of the
     // script fails (e.g., uploading or downloading a file).
@@ -74,14 +72,6 @@ public class MonitorServerStatusJob extends MonitorableJob {
         this.graphAlreadyBuilt = graphAlreadyBuilt;
         status.message = "Checking server status...";
         credentials = AWSUtils.getCredentialsForRole(otpServer.role, "monitor-" + instance.getInstanceId());
-        ec2 = deployJob.getCustomRegion() == null
-            ? AWSUtils.getEC2ClientForCredentials(credentials)
-            : AWSUtils.getEC2ClientForCredentials(credentials, deployJob.getCustomRegion());
-        AmazonElasticLoadBalancingClientBuilder elbBuilder = AmazonElasticLoadBalancingClient.builder()
-            .withCredentials(credentials);
-        elbClient = deployJob.getCustomRegion() == null
-            ? elbBuilder.build()
-            : elbBuilder.withRegion(deployJob.getCustomRegion()).build();
     }
 
     @JsonProperty
@@ -171,6 +161,11 @@ public class MonitorServerStatusJob extends MonitorableJob {
                 .withTargets(new TargetDescription().withId(instance.getInstanceId()));
             boolean targetAddedSuccessfully = false;
             long registerTargetStartTime = System.currentTimeMillis();
+            AmazonElasticLoadBalancingClientBuilder elbBuilder = AmazonElasticLoadBalancingClient.builder()
+                .withCredentials(credentials);
+            AmazonElasticLoadBalancing elbClient = deployJob.getCustomRegion() == null ?
+                elbBuilder.build() :
+                elbBuilder.withRegion(deployJob.getCustomRegion()).build();
             while (!targetAddedSuccessfully) {
                 // Register target with target group.
                 elbClient.registerTargets(registerTargetsRequest);
@@ -280,11 +275,17 @@ public class MonitorServerStatusJob extends MonitorableJob {
             .withInstanceIds(Collections.singletonList(instance.getInstanceId()));
         DescribeInstancesResult result;
         try {
-            result = ec2.describeInstances(request);
+            result = deployJob.getEC2Client().describeInstances(request);
         } catch (AmazonEC2Exception e) {
             LOG.error("Failed on attempt {} to execute request to obtain instance health!", attemptNumber, e);
             if (attemptNumber > MAX_INSTANCE_HEALTH_RETRIES) {
                 throw new InstanceHealthException("AWS Describe Instances error!");
+            }
+            try {
+                LOG.info("Waiting 5 seconds to try to get instance status again");
+                Thread.sleep(5000);
+            } catch (InterruptedException interruptedException) {
+                interruptedException.printStackTrace();
             }
             checkInstanceHealth(attemptNumber + 1);
             return;
@@ -357,9 +358,17 @@ public class MonitorServerStatusJob extends MonitorableJob {
     public void jobFinished() {
         if (status.error) {
             // Terminate server.
-            TerminateInstancesResult terminateInstancesResult = ec2.terminateInstances(
+            TerminateInstancesResult terminateInstancesResult;
+            try {
+                terminateInstancesResult = deployJob.getEC2Client().terminateInstances(
                     new TerminateInstancesRequest().withInstanceIds(instance.getInstanceId())
-            );
+                );
+            } catch (AmazonEC2Exception e) {
+                status.fail(
+                    String.format("%s. During job cleanup, the instance was not properly terminated!", status.message)
+                );
+                return;
+            }
             InstanceStateChange instanceStateChange = terminateInstancesResult.getTerminatingInstances().get(0);
             // If instance state code is 48 that means it has been terminated.
             if (instanceStateChange.getCurrentState().getCode() == 48) {

@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.amazonaws.services.ec2.AmazonEC2;
+import com.amazonaws.services.ec2.model.AmazonEC2Exception;
 import com.amazonaws.services.ec2.model.CreateImageRequest;
 import com.amazonaws.services.ec2.model.CreateImageResult;
 import com.amazonaws.services.ec2.model.DeregisterImageRequest;
@@ -24,20 +25,23 @@ import static com.conveyal.datatools.manager.models.EC2Info.AMI_CONFIG_PATH;
  * image to be created after a graph build has completed.
  */
 public class RecreateBuildImageJob extends MonitorableJob {
-    private final AmazonEC2 ec2;
+    private final DeployJob parentDeployJob;
     private final List<Instance> graphBuildingInstances;
     private final OtpServer otpServer;
 
     public RecreateBuildImageJob(
+        DeployJob parentDeployJob,
         Auth0UserProfile owner,
-        List<Instance> graphBuildingInstances,
-        OtpServer otpServer,
-        AmazonEC2 ec2
+        List<Instance> graphBuildingInstances
     ) {
-        super(owner, String.format("Recreating build image for %s", otpServer.name), JobType.RECREATE_BUILD_IMAGE);
+        super(
+            owner,
+            String.format("Recreating build image for %s", parentDeployJob.getOtpServer().name),
+            JobType.RECREATE_BUILD_IMAGE
+        );
+        this.parentDeployJob = parentDeployJob;
+        this.otpServer = parentDeployJob.getOtpServer();
         this.graphBuildingInstances = graphBuildingInstances;
-        this.otpServer = otpServer;
-        this.ec2 = ec2;
     }
 
     @Override
@@ -48,7 +52,7 @@ public class RecreateBuildImageJob extends MonitorableJob {
             .withInstanceId(graphBuildingInstances.get(0).getInstanceId())
             .withName(otpServer.ec2Info.buildImageName)
             .withDescription(otpServer.ec2Info.buildImageDescription);
-        CreateImageResult createImageResult = ec2.createImage(createImageRequest);
+        CreateImageResult createImageResult = parentDeployJob.getEC2Client().createImage(createImageRequest);
         // Wait for image creation to complete
         String createdImageId = createImageResult.getImageId();
         status.update("Waiting for graph build image to be created...", 25);
@@ -56,7 +60,9 @@ public class RecreateBuildImageJob extends MonitorableJob {
         DescribeImagesRequest describeImagesRequest = new DescribeImagesRequest()
             .withImageIds(createdImageId);
         while (!imageCreated) {
-            DescribeImagesResult describeImagesResult = ec2.describeImages(describeImagesRequest);
+            DescribeImagesResult describeImagesResult = parentDeployJob
+                .getEC2Client()
+                .describeImages(describeImagesRequest);
             for (Image image : describeImagesResult.getImages()) {
                 if (image.getImageId().equals(createdImageId)) {
                     // obtain the image state.
@@ -89,7 +95,7 @@ public class RecreateBuildImageJob extends MonitorableJob {
             status.message = "Deregistering old build image";
             DeregisterImageRequest deregisterImageRequest = new DeregisterImageRequest()
                 .withImageId(graphBuildAmiId);
-            ec2.deregisterImage(deregisterImageRequest);
+            parentDeployJob.getEC2Client().deregisterImage(deregisterImageRequest);
         }
         status.update("Updating Server build AMI info", 80);
         // Update OTP Server info
@@ -100,7 +106,14 @@ public class RecreateBuildImageJob extends MonitorableJob {
         // terminate graph building instance if needed
         if (otpServer.ec2Info.hasSeparateGraphBuildConfig()) {
             status.message = "Terminating graph building instance";
-            ServerController.terminateInstances(ec2, graphBuildingInstances);
+            try {
+                ServerController.terminateInstances(parentDeployJob.getEC2Client(), graphBuildingInstances);
+            } catch (AmazonEC2Exception e) {
+                status.fail(
+                    "Graph build image successfully created, but failed to terminate graph building instance!",
+                    e
+                );
+            }
         }
         status.completeSuccessfully("Graph build image successfully created!");
     }
