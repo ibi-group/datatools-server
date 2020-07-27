@@ -15,6 +15,7 @@ public class OtpRunnerManifest {
     public List<String> gtfsAndOsmUrls;
     public String jarFile;
     public String jarUrl;
+    public String nonce;
     public String otpRunnerLogFile;
     public boolean prefixLogUploadsWithInstanceId;
     public String routerConfigJSON;

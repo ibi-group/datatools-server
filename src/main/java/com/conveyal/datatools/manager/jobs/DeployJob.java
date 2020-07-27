@@ -45,6 +45,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Scanner;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -95,6 +96,7 @@ public class DeployJob extends MonitorableJob {
     // Indicates the node.js version installed by nvm to set the PATH variable to point to
     private static final String NODE_VERSION = "v12.16.3";
     private static final String OTP_GRAPH_FILENAME = "Graph.obj";
+    public static final String OTP_RUNNER_BRANCH = "status-nonce";
     public static final String OTP_RUNNER_STATUS_FILE = "status.json";
     private static final long TEN_MINUTES_IN_MILLISECONDS = 10 * 60 * 1000;
     // Note: using a cloudfront URL for these download repo URLs will greatly increase download/deploy speed.
@@ -113,6 +115,7 @@ public class DeployJob extends MonitorableJob {
     private final DeployType deployType;
     private final AWSStaticCredentialsProvider credentials;
     private final String customRegion;
+    private final String nonce = UUID.randomUUID().toString();
 
     private int tasksCompleted = 0;
     private int totalTasks;
@@ -153,6 +156,10 @@ public class DeployJob extends MonitorableJob {
         int numRemaining = totalServers - status.numServersCompleted;
         double newStatus = status.percentComplete + (100 - status.percentComplete) * numRemaining / totalServers;
         status.update(String.format("Completed %d servers. %d remaining...", status.numServersCompleted, numRemaining), newStatus);
+    }
+
+    public String getNonce() {
+        return nonce;
     }
 
     @JsonProperty
@@ -646,7 +653,12 @@ public class DeployJob extends MonitorableJob {
                 ExecutorService service = Executors.newFixedThreadPool(status.numServersRemaining);
                 for (Instance instance : remainingInstances) {
                     // Note: new instances are added
-                    MonitorServerStatusJob monitorServerStatusJob = new MonitorServerStatusJob(owner, this, instance, true);
+                    MonitorServerStatusJob monitorServerStatusJob = new MonitorServerStatusJob(
+                        owner,
+                        this,
+                        instance,
+                        true
+                    );
                     remainingServerMonitorJobs.add(monitorServerStatusJob);
                     service.submit(monitorServerStatusJob);
                 }
@@ -874,6 +886,7 @@ public class DeployJob extends MonitorableJob {
         manifest.graphObjUrl = getS3GraphURI();
         manifest.jarFile = String.format("/opt/%s/%s", getTripPlannerString(), jarName);
         manifest.jarUrl = s3JarUrl;
+        manifest.nonce = this.nonce;
         // This must be added here because logging starts immediately before defaults are set while validating the
         // manifest
         manifest.otpRunnerLogFile = "/var/log/otp-runner.log";
@@ -947,9 +960,9 @@ public class DeployJob extends MonitorableJob {
             return null;
         }
         // install otp-runner as a global package thus enabling use of the otp-runner command
-        // This will install that latest version of otp-runner from the default github branch. It is not yet published
-        // as an npm package.
-        lines.add("yarn global add https://github.com/ibi-group/otp-runner.git");
+        // This will install that latest version of otp-runner from the configured github branch. otp-runner is not yet
+        // published as an npm package.
+        lines.add(String.format("yarn global add https://github.com/ibi-group/otp-runner.git#%s", OTP_RUNNER_BRANCH));
         // execute otp-runner
         lines.add(String.format("otp-runner %s", otpRunnerManifestFile));
         // Return the entire user data script as a single string.

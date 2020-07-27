@@ -111,8 +111,8 @@ public class MonitorServerStatusJob extends MonitorableJob {
             statusCheckStartTime = System.currentTimeMillis();
             boolean otpRunnerCompleted = false;
             while (!otpRunnerCompleted) {
-                // If the request is successful, the OTP instance has started.
                 waitAndCheckInstanceHealth("otp-runner completion check: " + statusUrl);
+                // Analyze the contents of the otp-runner status file to see if the job is complete
                 otpRunnerCompleted = checkForOtpRunnerCompletion(statusUrl);
                 // Check if an otp-runner status file check has already failed this job.
                 if (status.error) {
@@ -320,6 +320,10 @@ public class MonitorServerStatusJob extends MonitorableJob {
         } catch (IOException e) {
             LOG.error("Could not get otp-runner status from {}", url);
             e.printStackTrace();
+            return false;
+        }
+        if (!otpRunnerStatus.nonce.equals(deployJob.getNonce())) {
+            LOG.warn("otp-runner status nonce does not match deployment nonce");
             return false;
         }
         if (otpRunnerStatus.error) {
