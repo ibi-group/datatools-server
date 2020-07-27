@@ -93,7 +93,13 @@ public class DeployJobTest extends UnitTest {
             "test-deploy",
             DeployJob.DeployType.REPLACE
         );
-        assertThat(deployJob.constructUserData(false), matchesSnapshot());
+        assertThat(
+            replaceNonce(
+                deployJob.constructUserData(false),
+                "canMakeGraphBuildUserDataScript"
+            ),
+            matchesSnapshot()
+        );
     }
 
     /**
@@ -108,7 +114,23 @@ public class DeployJobTest extends UnitTest {
             "test-deploy",
             DeployJob.DeployType.REPLACE
         );
-        assertThat(deployJob.constructUserData(true), matchesSnapshot());
+        assertThat(
+            replaceNonce(
+                deployJob.constructUserData(true),
+                "canMakeServerOnlyUserDataScript"
+            ),
+            matchesSnapshot()
+        );
+    }
+
+    /**
+     * Replaces the nonce in the user data with a deterministic value
+     */
+    private String replaceNonce(String userData, String replacementNonce) {
+        return userData.replaceFirst(
+            "nonce\":\"[\\w-]*",
+            String.format("nonce\":\"%s", replacementNonce)
+        );
     }
 
     /**
