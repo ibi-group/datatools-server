@@ -52,6 +52,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
     private final boolean graphAlreadyBuilt;
     private final OtpServer otpServer;
     private final AWSStaticCredentialsProvider credentials;
+    private final AmazonEC2 ec2;
     private final CloseableHttpClient httpClient = HttpClients.createDefault();
     // Delay checks by four seconds to give user-data script time to upload the instance's user data log if part of the
     // script fails (e.g., uploading or downloading a file).
@@ -71,7 +72,15 @@ public class MonitorServerStatusJob extends MonitorableJob {
         this.instance = instance;
         this.graphAlreadyBuilt = graphAlreadyBuilt;
         status.message = "Checking server status...";
-        credentials = AWSUtils.getCredentialsForRole(otpServer.role, "monitor-" + instance.getInstanceId());
+        int numSecondsToIncludeInSession = (int)(3600 * (graphAlreadyBuilt ? 1.5 : 5.5));
+        credentials = AWSUtils.getCredentialsForRole(
+            otpServer.role,
+            "monitor-" + instance.getInstanceId(),
+            numSecondsToIncludeInSession
+        );
+        ec2 = deployJob.getCustomRegion() == null
+            ? AWSUtils.getEC2ClientForCredentials(credentials)
+            : AWSUtils.getEC2ClientForCredentials(credentials, deployJob.getCustomRegion());
     }
 
     @JsonProperty
@@ -275,7 +284,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
             .withInstanceIds(Collections.singletonList(instance.getInstanceId()));
         DescribeInstancesResult result;
         try {
-            result = deployJob.getEC2Client().describeInstances(request);
+            result = ec2.describeInstances(request);
         } catch (AmazonEC2Exception e) {
             LOG.error("Failed on attempt {} to execute request to obtain instance health!", attemptNumber, e);
             if (attemptNumber > MAX_INSTANCE_HEALTH_RETRIES) {
@@ -364,7 +373,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
             // Terminate server.
             TerminateInstancesResult terminateInstancesResult;
             try {
-                terminateInstancesResult = deployJob.getEC2Client().terminateInstances(
+                terminateInstancesResult = ec2.terminateInstances(
                     new TerminateInstancesRequest().withInstanceIds(instance.getInstanceId())
                 );
             } catch (AmazonEC2Exception e) {
