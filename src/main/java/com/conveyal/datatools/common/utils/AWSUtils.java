@@ -125,14 +125,6 @@ public class AWSUtils {
     }
 
     /**
-     * Shorthande method for getCredentialsForRole with default session seconds.
-     */
-    public static AWSStaticCredentialsProvider getCredentialsForRole(String role, String sessionName) {
-        // 900 is the default seconds that AWS uses internally
-        return getCredentialsForRole(role, sessionName, 900);
-    }
-
-    /**
      * Create credentials for a new session for the provided IAM role and session name. The primary AWS account for the
      * Data Tools application must be able to assume this role (e.g., through delegating access via an account IAM role
      * https://docs.aws.amazon.com/IAM/latest/UserGuide/tutorial_cross-account-with-roles.html). The credentials can be
@@ -140,8 +132,7 @@ public class AWSUtils {
      */
     public static AWSStaticCredentialsProvider getCredentialsForRole(
         String role,
-        String sessionName,
-        int sessionSeconds
+        String sessionName
     ) {
         String roleSessionName = "data-tools-session";
         if (role == null) return null;
@@ -151,7 +142,6 @@ public class AWSUtils {
                 role,
                 roleSessionName
             )
-            .withRoleSessionDurationSeconds(sessionSeconds)
             .build();
         AWSSessionCredentials credentials = sessionProvider.getCredentials();
         return new AWSStaticCredentialsProvider(new BasicSessionCredentials(

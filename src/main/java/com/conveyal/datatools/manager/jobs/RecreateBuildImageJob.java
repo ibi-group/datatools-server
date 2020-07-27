@@ -45,8 +45,7 @@ public class RecreateBuildImageJob extends MonitorableJob {
         this.graphBuildingInstances = graphBuildingInstances;
         AWSCredentialsProvider credentials = AWSUtils.getCredentialsForRole(
             otpServer.role,
-            "recreate-build-image",
-            3600
+            "recreate-build-image"
         );
         ec2 = parentDeployJob.getCustomRegion() == null
             ? AWSUtils.getEC2ClientForCredentials(credentials)

@@ -210,9 +210,8 @@ public class DeployJob extends MonitorableJob {
             // deployment using either a specified bundle or Graph.obj.
             this.jobRelativePath = bundlePath;
         }
-        // CONNECT TO EC2/S3 using long-lasting sessions to make sure requests don't expire
-        int sevenHoursInSeconds = 7 * 3600;
-        credentials = AWSUtils.getCredentialsForRole(otpServer.role, this.jobId, sevenHoursInSeconds);
+        // CONNECT TO EC2/S3
+        credentials = AWSUtils.getCredentialsForRole(otpServer.role, this.jobId);
         this.customRegion = otpServer.ec2Info != null && otpServer.ec2Info.region != null
             ? otpServer.ec2Info.region
             : null;

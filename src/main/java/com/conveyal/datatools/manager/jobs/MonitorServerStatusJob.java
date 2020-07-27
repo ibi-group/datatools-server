@@ -72,12 +72,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
         this.instance = instance;
         this.graphAlreadyBuilt = graphAlreadyBuilt;
         status.message = "Checking server status...";
-        int numSecondsToIncludeInSession = (int)(3600 * (graphAlreadyBuilt ? 1.5 : 5.5));
-        credentials = AWSUtils.getCredentialsForRole(
-            otpServer.role,
-            "monitor-" + instance.getInstanceId(),
-            numSecondsToIncludeInSession
-        );
+        credentials = AWSUtils.getCredentialsForRole(otpServer.role, "monitor-" + instance.getInstanceId());
         ec2 = deployJob.getCustomRegion() == null
             ? AWSUtils.getEC2ClientForCredentials(credentials)
             : AWSUtils.getEC2ClientForCredentials(credentials, deployJob.getCustomRegion());
