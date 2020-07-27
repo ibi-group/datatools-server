@@ -145,7 +145,7 @@ public class DeploymentController {
         AmazonS3URI uri = new AmazonS3URI(uriString);
         // Assume the alternative role if needed to download the deploy artifact.
         if (role != null) {
-            s3Client = AWSUtils.getS3ClientForRole(role, region);
+            s3Client = AWSUtils.getS3Client(role, region);
         } else if (region != null) {
             s3Client = AWSUtils.getS3ClientForCredentials(getAWSCreds(), region);
         }

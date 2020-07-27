@@ -141,7 +141,7 @@ public class Deployment extends Model implements Serializable {
             }
         }
         return DeploymentController.fetchEC2InstanceSummaries(
-            AWSUtils.getEC2ClientForRole(role, region),
+            AWSUtils.getEC2Client(role, region),
             deploymentFilter
         );
     }

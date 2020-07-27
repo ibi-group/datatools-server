@@ -5,7 +5,6 @@ import com.amazonaws.AmazonServiceException;
 import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
 import com.amazonaws.auth.profile.ProfileCredentialsProvider;
-import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.CopyObjectRequest;
 import com.amazonaws.services.s3.model.GetObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectRequest;
@@ -49,10 +48,22 @@ public class FeedStore {
 
     public static final String s3Prefix = "gtfs/";
 
-    // FIXME: this should not be static most likely
-    public static AmazonS3 s3Client;
-    /** An AWS credentials file to use when uploading to S3 */
-    private static final String S3_CREDENTIALS_FILENAME = DataManager.getConfigPropertyAsText("application.data.s3_credentials_file");
+    static {
+        // s3 storage
+        if (DataManager.useS3 || hasConfigProperty("modules.gtfsapi.use_extension")){
+            s3Bucket = DataManager.getConfigPropertyAsText("application.data.gtfs_s3_bucket");
+            try {
+
+                s3Client = AWSUtils.getS3ClientForCredentials(getAWSCreds(), region);
+            } catch (Exception e) {
+                LOG.error("S3 client not initialized correctly.  Must provide config property application.data.s3_region or specify region in ~/.aws/config", e);
+            }
+            // TODO: check for this??
+            if (s3Client == null || s3Bucket == null) {
+                throw new IllegalArgumentException("Fatal error initializing s3Bucket or s3Client");
+            }
+        }
+    }
 
     public FeedStore() {
         this(null);
@@ -70,25 +81,6 @@ public class FeedStore {
         path = getPath(pathString);
     }
 
-    static {
-        // s3 storage
-        if (DataManager.useS3 || hasConfigProperty("modules.gtfsapi.use_extension")){
-            s3Bucket = DataManager.getConfigPropertyAsText("application.data.gtfs_s3_bucket");
-            try {
-                // If region configuration string is provided, use that.
-                // Otherwise defaults to value provided in ~/.aws/config
-                String region = DataManager.getConfigPropertyAsText("application.data.s3_region");
-                s3Client = AWSUtils.getS3ClientForCredentials(getAWSCreds(), region);
-            } catch (Exception e) {
-                LOG.error("S3 client not initialized correctly.  Must provide config property application.data.s3_region or specify region in ~/.aws/config", e);
-            }
-            // TODO: check for this??
-            if (s3Client == null || s3Bucket == null) {
-                throw new IllegalArgumentException("Fatal error initializing s3Bucket or s3Client");
-            }
-        }
-    }
-
     private static File getPath (String pathString) {
         File path = new File(pathString);
         if (!path.exists() || !path.isDirectory()) {
@@ -101,7 +93,7 @@ public class FeedStore {
     public void deleteFeed (String id) {
         // If the application is using s3 storage, delete the remote copy.
         if (DataManager.useS3){
-            s3Client.deleteObject(s3Bucket, getS3Key(id));
+            AWSUtils.getS3Client().deleteObject(s3Bucket, getS3Key(id));
         }
         // Always delete local copy (whether storing exclusively on local disk or using s3).
         File feed = getLocalFeed(id);

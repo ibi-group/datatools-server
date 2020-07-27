@@ -60,7 +60,7 @@ public class OtpServer extends Model {
         if (ec2Info == null) return Collections.EMPTY_LIST;
         Filter serverFilter = new Filter("tag:serverId", Collections.singletonList(id));
         return DeploymentController.fetchEC2InstanceSummaries(
-            AWSUtils.getEC2ClientForRole(this.role, ec2Info.region),
+            AWSUtils.getEC2Client(this.role, ec2Info.region),
             serverFilter
         );
     }
@@ -72,7 +72,7 @@ public class OtpServer extends Model {
         ) return Collections.EMPTY_LIST;
         Filter serverFilter = new Filter("tag:serverId", Collections.singletonList(id));
         return DeploymentController.fetchEC2Instances(
-            AWSUtils.getEC2ClientForRole(this.role, ec2Info.region),
+            AWSUtils.getEC2Client(this.role, ec2Info.region),
             serverFilter
         );
     }

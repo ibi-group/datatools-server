@@ -12,7 +12,6 @@ import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -175,7 +174,7 @@ public class DeployJobTest extends UnitTest {
         List<Instance> instances = server.retrieveEC2Instances();
         List<String> ids = getIds(instances);
         terminateInstances(
-            AWSUtils.getEC2ClientForRole(server.role, server.ec2Info == null ? null : server.ec2Info.region),
+            AWSUtils.getEC2Client(server.role, server.ec2Info == null ? null : server.ec2Info.region),
             ids
         );
     }

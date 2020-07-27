@@ -84,9 +84,6 @@ import static spark.Spark.put;
 public class ServerController {
     private static JsonManager<OtpServer> json = new JsonManager<>(OtpServer.class, JsonViews.UserInterface.class);
     private static final Logger LOG = LoggerFactory.getLogger(ServerController.class);
-    private static final AmazonEC2 ec2 = AmazonEC2Client.builder().build();
-    private static final AmazonIdentityManagement iam = AmazonIdentityManagementClientBuilder.defaultClient();
-    private static final AmazonElasticLoadBalancing elb = AmazonElasticLoadBalancingClient.builder().build();
 
     /**
      * Gets the server specified by the request's id parameter and ensure that user has access to the
@@ -126,7 +123,7 @@ public class ServerController {
         OtpServer server = getServerWithPermissions(req, res);
         List<Instance> instances = server.retrieveEC2Instances();
         List<String> ids = getIds(instances);
-        AmazonEC2 ec2Client = AWSUtils.getEC2ClientForRole(
+        AmazonEC2 ec2Client = AWSUtils.getEC2Client(
             server.role,
             server.ec2Info == null ? null : server.ec2Info.region
         );
@@ -279,7 +276,7 @@ public class ServerController {
                 // build ec2 client
                 ec2Client = AmazonEC2Client.builder().withCredentials(credentials).build();
                 iamClient = AmazonIdentityManagementClientBuilder.standard().withCredentials(credentials).build();
-                s3Client = AWSUtils.getS3ClientForRole(server.role, null);
+                s3Client = AWSUtils.getS3Client(server.role, null);
             }
             // Check that projectId is valid.
             if (server.projectId != null) {
@@ -299,7 +296,7 @@ public class ServerController {
                     builder.withRegion(server.ec2Info.region);
                     ec2Client = builder.build();
                     if (credentials !=  null) {
-                        s3Client = AWSUtils.getS3ClientForRole(server.role, server.ec2Info.region);
+                        s3Client = AWSUtils.getS3Client(server.role, server.ec2Info.region);
                     } else {
                         s3Client = AWSUtils.getS3ClientForCredentials(getAWSCreds(), server.ec2Info.region);
                     }
