@@ -322,7 +322,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
             e.printStackTrace();
             return false;
         }
-        if (!otpRunnerStatus.nonce.equals(deployJob.getNonce())) {
+        if (otpRunnerStatus.nonce != null && !otpRunnerStatus.nonce.equals(deployJob.getNonce())) {
             LOG.warn("otp-runner status nonce does not match deployment nonce");
             return false;
         }
