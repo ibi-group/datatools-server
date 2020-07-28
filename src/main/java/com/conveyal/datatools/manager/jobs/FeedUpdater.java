@@ -1,8 +1,10 @@
 package com.conveyal.datatools.manager.jobs;
 
+import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
+import com.conveyal.datatools.common.utils.NonRuntimeAWSException;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -28,6 +30,7 @@ import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import static com.conveyal.datatools.common.utils.AWSUtils.getDefaultS3Client;
 import static com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource.AGENCY_ID_FIELDNAME;
 import static com.conveyal.datatools.common.utils.Scheduler.schedulerService;
 import static com.mongodb.client.model.Filters.and;
@@ -98,7 +101,13 @@ public class FeedUpdater {
         LOG.debug("Checking for feeds on S3.");
         Map<String, String> newTags = new HashMap<>();
         // iterate over feeds in download_prefix folder and register to (MTC project)
-        ObjectListing gtfsList = FeedStore.s3Client.listObjects(feedBucket, bucketFolder);
+        ObjectListing gtfsList = null;
+        try {
+            gtfsList = getDefaultS3Client().listObjects(feedBucket, bucketFolder);
+        } catch (AmazonServiceException | NonRuntimeAWSException e) {
+            LOG.error("Failed to list S3 Objects", e);
+            return newTags;
+        }
         LOG.debug(eTagForFeed.toString());
         for (S3ObjectSummary objSummary : gtfsList.getObjectSummaries()) {
 
@@ -194,10 +203,13 @@ public class FeedUpdater {
      * Find matching feed version for a feed source based on md5. NOTE: This is no longer in use because MTC's RTD system
      * does NOT preserve MD5 checksums when moving a file from the "waiting" to "completed" folders on S3.
      */
-    private FeedVersion findMatchingFeedVersion(String keyName, FeedSource feedSource) throws IOException {
+    private FeedVersion findMatchingFeedVersion(
+        String keyName,
+        FeedSource feedSource
+    ) throws AmazonServiceException, IOException, NonRuntimeAWSException {
         String filename = keyName.split("/")[1];
         String feedId = filename.replace(".zip", "");
-        S3Object object = FeedStore.s3Client.getObject(feedBucket, keyName);
+        S3Object object = getDefaultS3Client().getObject(feedBucket, keyName);
         InputStream in = object.getObjectContent();
         File file = new File(FeedStore.basePath, filename);
         OutputStream out = new FileOutputStream(file);

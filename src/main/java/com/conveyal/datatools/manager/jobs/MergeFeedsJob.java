@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.utils.NonRuntimeAWSException;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.gtfsplus.tables.GtfsPlusTable;
@@ -8,7 +9,6 @@ import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
-import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.error.NewGTFSError;
 import com.conveyal.gtfs.error.NewGTFSErrorType;
@@ -45,6 +45,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 
+import static com.conveyal.datatools.common.utils.AWSUtils.getDefaultS3Client;
 import static com.conveyal.datatools.manager.jobs.MergeFeedsType.SERVICE_PERIOD;
 import static com.conveyal.datatools.manager.jobs.MergeFeedsType.REGIONAL;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.REGIONAL_MERGE;
@@ -212,7 +213,7 @@ public class MergeFeedsJob extends MonitorableJob {
      * Primary job logic handles collecting and sorting versions, creating a merged table for all versions, and writing
      * the resulting zip file to storage.
      */
-    @Override public void jobLogic() throws IOException {
+    @Override public void jobLogic() throws IOException, NonRuntimeAWSException {
         // Create temp zip file to add merged feed content to.
         mergedTempFile = File.createTempFile(filename, null);
         mergedTempFile.deleteOnExit();
@@ -304,7 +305,7 @@ public class MergeFeedsJob extends MonitorableJob {
      * Handles writing the GTFS zip file to disk. For REGIONAL merges, this will end up in a project subdirectory on s3.
      * Otherwise, it will write to a new version.
      */
-    private void storeMergedFeed() throws IOException {
+    private void storeMergedFeed() throws IOException, NonRuntimeAWSException {
         if (mergedVersion != null) {
             // Store the zip file for the merged feed version.
             try {
@@ -320,7 +321,7 @@ public class MergeFeedsJob extends MonitorableJob {
             // Store the project merged zip locally or on s3
             if (DataManager.useS3) {
                 String s3Key = String.join("/", "project", filename);
-                FeedStore.s3Client.putObject(DataManager.feedBucket, s3Key, mergedTempFile);
+                getDefaultS3Client().putObject(DataManager.feedBucket, s3Key, mergedTempFile);
                 LOG.info("Storing merged project feed at s3://{}/{}", DataManager.feedBucket,
                     s3Key);
             } else {

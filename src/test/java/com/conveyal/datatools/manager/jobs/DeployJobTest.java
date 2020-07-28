@@ -1,9 +1,11 @@
 package com.conveyal.datatools.manager.jobs;
 
+import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.ec2.model.Instance;
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.common.utils.AWSUtils;
+import com.conveyal.datatools.common.utils.NonRuntimeAWSException;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.EC2Info;
@@ -169,7 +171,7 @@ public class DeployJobTest extends UnitTest {
      * RUN_AWS_DEPLOY_JOB_TESTS environment variable is set to "true"
      */
     @AfterClass
-    public static void cleanUp() {
+    public static void cleanUp() throws AmazonServiceException, NonRuntimeAWSException {
         assumeTrue(getBooleanEnvVar("RUN_AWS_DEPLOY_JOB_TESTS"));
         List<Instance> instances = server.retrieveEC2Instances();
         List<String> ids = getIds(instances);

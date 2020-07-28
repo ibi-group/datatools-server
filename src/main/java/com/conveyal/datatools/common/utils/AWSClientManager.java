@@ -1,23 +1,30 @@
 package com.conveyal.datatools.common.utils;
 
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.services.ec2.AmazonEC2;
-import com.amazonaws.services.ec2.AmazonEC2Client;
-import com.amazonaws.services.ec2.AmazonEC2ClientBuilder;
-
 import java.util.HashMap;
 
+import static com.conveyal.datatools.common.utils.AWSUtils.DEFAULT_EXPIRING_AWS_ASSET_VALID_DURATION_MILLIS;
+
 public abstract class AWSClientManager<T> {
-    private final T defaultClient;
+    protected final T defaultClient;
     private HashMap<String, T> nonRoleClientsByRegion = new HashMap<>();
+    private HashMap<String, ExpiringAsset<T>> clientsByRoleAndRegion = new HashMap<>();
 
     public AWSClientManager (T defaultClient) {
         this.defaultClient = defaultClient;
     }
 
-    public abstract T buildDefaultClientWithRegion();
+    public abstract T buildDefaultClientWithRegion(String region);
 
-    public T getClient (String role, String region) throws AWSUtils.NonRuntimeAWSException {
+    protected abstract T buildCredentialedClientForRoleAndRegion(String role, String region)
+        throws NonRuntimeAWSException;
+
+    /**
+     * Obtain a potentially cached AWS client for the provided role ARN and region. If the role and region are null, the
+     * default AWS client will be used. If just the role is null a cached client configured for the specified
+     * region will be returned. For clients that require using a role, a client will be obtained (either via a cache or
+     * by creation and then insertion into the cache) that has obtained the proper credentials.
+     */
+    public T getClient(String role, String region) throws NonRuntimeAWSException {
         // return default client for null region and role
         if (role == null && region == null) {
             return defaultClient;
@@ -28,26 +35,24 @@ public abstract class AWSClientManager<T> {
         if (role == null) {
             client = nonRoleClientsByRegion.get(region);
             if (client == null) {
-                client = buildDefaultClientWithRegion();
-                nonRoleClientsByRegion.put(region, EC2Client);
+                client = buildDefaultClientWithRegion(region);
+                nonRoleClientsByRegion.put(region, client);
             }
-            return EC2Client;
+            return client;
         }
 
         // check for the availability of a EC2 client already associated with the given role and region
         String roleRegionKey = makeRoleRegionKey(role, region);
-        AWSUtils.AmazonEC2ClientWithRole EC2ClientWithRole = EC2ClientsByRoleAndRegion.get(roleRegionKey);
-        if (EC2ClientWithRole != null && EC2ClientWithRole.isActive()) return EC2ClientWithRole.EC2Client;
+        ExpiringAsset<T> clientWithRole = clientsByRoleAndRegion.get(roleRegionKey);
+        if (clientWithRole != null && clientWithRole.isActive()) return clientWithRole.asset;
 
         // Either a new client hasn't been created or it has expired. Create a new client and cache it.
-        AWSStaticCredentialsProvider credentials = getCredentialsForRole(role);
-        AmazonEC2ClientBuilder builder = AmazonEC2Client.builder().withCredentials(credentials);
-        if (region != null) {
-            builder = builder.withRegion(region);
-        }
-        EC2Client = builder.build();
-        EC2ClientsByRoleAndRegion.put(roleRegionKey, new AWSUtils.AmazonEC2ClientWithRole(EC2Client));
-        return EC2Client;
+        T credentialedClientForRoleAndRegion = buildCredentialedClientForRoleAndRegion(role, region);
+        clientsByRoleAndRegion.put(
+            roleRegionKey, 
+            new ExpiringAsset<T>(credentialedClientForRoleAndRegion, DEFAULT_EXPIRING_AWS_ASSET_VALID_DURATION_MILLIS)
+        );
+        return credentialedClientForRoleAndRegion;
     }
 
     private static String makeRoleRegionKey(String role, String region) {

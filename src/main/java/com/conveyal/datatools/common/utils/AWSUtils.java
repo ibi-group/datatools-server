@@ -2,6 +2,7 @@ package com.conveyal.datatools.common.utils;
 
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.HttpMethod;
+import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.auth.AWSSessionCredentials;
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.BasicSessionCredentials;
@@ -13,6 +14,7 @@ import com.amazonaws.services.ec2.AmazonEC2Client;
 import com.amazonaws.services.ec2.AmazonEC2ClientBuilder;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancing;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClient;
+import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClientBuilder;
 import com.amazonaws.services.identitymanagement.AmazonIdentityManagement;
 import com.amazonaws.services.identitymanagement.AmazonIdentityManagementClientBuilder;
 import com.amazonaws.services.s3.AmazonS3;
@@ -21,7 +23,6 @@ import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.GeneratePresignedUrlRequest;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.conveyal.datatools.manager.DataManager;
-import com.conveyal.datatools.manager.persistence.FeedStore;
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,6 +49,7 @@ public class AWSUtils {
 
     private static final Logger LOG = LoggerFactory.getLogger(AWSUtils.class);
     private static final int REQUEST_TIMEOUT_MSEC = 30 * 1000;
+    public static final long DEFAULT_EXPIRING_AWS_ASSET_VALID_DURATION_MILLIS = 800 * 1000;
 
     private static final AmazonEC2 DEFAULT_EC2_CLEINT = AmazonEC2Client.builder().build();
     private static final AmazonElasticLoadBalancing DEFAULT_ELB_CLIENT = AmazonElasticLoadBalancingClient
@@ -55,40 +57,47 @@ public class AWSUtils {
         .build();
     private static final AmazonIdentityManagement DEFAULT_IAM_CLIENT = AmazonIdentityManagementClientBuilder
         .defaultClient();
+    private static final AWSCredentialsProvider DEFAULT_S3_CREDENTIALS;
     private static final AmazonS3 DEFAULT_S3_CLEINT;
 
     static {
         // Configure the default S3 client
         // A temporary variable needs to be used before setting the final variable
         AmazonS3 tempS3Client = null;
+        AWSCredentialsProvider tempS3CredentialsProvider = null;
         try {
+            AmazonS3ClientBuilder builder = AmazonS3ClientBuilder.standard();
+            String credentialsFile = DataManager.getConfigPropertyAsText(
+                "application.data.s3_credentials_file"
+            );
+            tempS3CredentialsProvider = credentialsFile != null
+                ? new ProfileCredentialsProvider(credentialsFile, "default")
+                : new DefaultAWSCredentialsProviderChain(); // default credentials providers, e.g. IAM role
+            builder.withCredentials(tempS3CredentialsProvider);
+
             // If region configuration string is provided, use that.
             // Otherwise defaults to value provided in ~/.aws/config
             String region = DataManager.getConfigPropertyAsText("application.data.s3_region");
-            AmazonS3ClientBuilder S3ClientBuilder = AmazonS3ClientBuilder.standard();
-            String S3CredentialsFile = DataManager.getConfigPropertyAsText(
-                "application.data.s3_credentials_file"
-            );
-            S3ClientBuilder.withCredentials(
-                S3CredentialsFile != null
-                    ? new ProfileCredentialsProvider(S3CredentialsFile, "default")
-                    : new DefaultAWSCredentialsProviderChain() // default credentials providers, e.g. IAM role
-            );
-            tempS3Client = S3ClientBuilder.build();
+            if (region != null) {
+                builder.withRegion(region);
+            }
+            tempS3Client = builder.build();
         } catch (Exception e) {
             LOG.error("S3 client not initialized correctly.  Must provide config property application.data.s3_region or specify region in ~/.aws/config", e);
         }
+        DEFAULT_S3_CREDENTIALS = tempS3CredentialsProvider;
         DEFAULT_S3_CLEINT = tempS3Client;
-        if (DEFAULT_S3_CLEINT == null) {
+        if (DEFAULT_S3_CLEINT == null || DEFAULT_S3_CREDENTIALS == null) {
             throw new IllegalArgumentException("Fatal error initializing the default s3Client");
         }
     }
 
-    private static HashMap<String, CredentialsProviderSession> crendentialsProvidersByRole = new HashMap<>();
-    private static HashMap<String, AmazonEC2> nonRoleEC2ClientsByRegion = new HashMap<>();
-    private static HashMap<String, AmazonEC2ClientWithRole> EC2ClientsByRoleAndRegion = new HashMap<>();
-    private static HashMap<String, AmazonS3> nonRoleS3ClientsByRegion = new HashMap<>();
-    private static HashMap<String, AmazonS3ClientWithRole> S3ClientsByRoleAndRegion = new HashMap<>();
+    private static HashMap<String, ExpiringAsset<AWSStaticCredentialsProvider>> crendentialsProvidersByRole =
+        new HashMap<>();
+    private static EC2ClientManagerImpl EC2ClientManager = new EC2ClientManagerImpl(DEFAULT_EC2_CLEINT);
+    private static ELBClientManagerImpl ELBClientManager = new ELBClientManagerImpl(DEFAULT_ELB_CLIENT);
+    private static IAMClientManagerImpl IAMClientManager = new IAMClientManagerImpl(DEFAULT_IAM_CLIENT);
+    private static S3ClientManagerImpl S3ClientManager = new S3ClientManagerImpl(DEFAULT_S3_CLEINT);
 
     public static String uploadBranding(Request req, String key) {
         String url;
@@ -127,14 +136,13 @@ public class AWSUtils {
             String keyName = "branding/" + key + extension;
             url = "https://s3.amazonaws.com/" + s3Bucket + "/" + keyName;
             // FIXME: This may need to change during feed store refactor
-            AmazonS3 s3client = FeedStore.s3Client;
-            s3client.putObject(new PutObjectRequest(
+            getDefaultS3Client().putObject(new PutObjectRequest(
                     s3Bucket, keyName, tempFile)
                     // grant public read
                     .withCannedAcl(CannedAccessControlList.PublicRead));
             return url;
-        } catch (AmazonServiceException ase) {
-            logMessageAndHalt(req, 500, "Error uploading file to S3", ase);
+        } catch (AmazonServiceException | NonRuntimeAWSException e) {
+            logMessageAndHalt(req, 500, "Error uploading file to S3", e);
             return null;
         } finally {
             boolean deleted = tempFile.delete();
@@ -182,8 +190,8 @@ public class AWSUtils {
         String roleSessionName = "data-tools-session";
         if (role == null) return null;
         // check if an active credentials provider exists for this role
-        CredentialsProviderSession session = crendentialsProvidersByRole.get(role);
-        if (session != null && session.isActive()) return session.credentialsProvider;
+        ExpiringAsset<AWSStaticCredentialsProvider> session = crendentialsProvidersByRole.get(role);
+        if (session != null && session.isActive()) return session.asset;
         // either a session hasn't been created or an existing one has expired. Create a new session.
         STSAssumeRoleSessionCredentialsProvider sessionProvider = new STSAssumeRoleSessionCredentialsProvider
             .Builder(
@@ -205,152 +213,120 @@ public class AWSUtils {
             )
         );
         // store the credentials provider in a lookup by role for future use
-        crendentialsProvidersByRole.put(role, new CredentialsProviderSession(credentialsProvider));
+        crendentialsProvidersByRole.put(
+            role,
+            new ExpiringAsset<>(credentialsProvider, DEFAULT_EXPIRING_AWS_ASSET_VALID_DURATION_MILLIS)
+        );
         return credentialsProvider;
     }
 
-    /**
-     * Obtain a potentially cached EC2 client for the provided role ARN and region. If the role and region are null, the
-     * default EC2 credentials will be used. If just the role is null a cached client configured for the specified
-     * region will be returned. For clients that require using a role, a client will be obtained (either via a cache or
-     * by creation and then insertion into the cache) that has obtained the proper credentials.
-     */
-    public static AmazonEC2 getEC2Client (String role, String region) throws NonRuntimeAWSException {
-        // return default client for null region and role
-        if (role == null && region == null) {
-            return DEFAULT_EC2_CLEINT;
-        }
-
-        // if the role is null, return a potentially cached EC2 client with the region configured
-        AmazonEC2 EC2Client;
-        if (role == null) {
-            EC2Client = nonRoleEC2ClientsByRegion.get(region);
-            if (EC2Client == null) {
-                EC2Client = AmazonEC2Client.builder().withRegion(region).build();
-                nonRoleEC2ClientsByRegion.put(region, EC2Client);
-            }
-            return EC2Client;
-        }
-
-        // check for the availability of a EC2 client already associated with the given role and region
-        String roleRegionKey = makeRoleRegionKey(role, region);
-        AmazonEC2ClientWithRole EC2ClientWithRole = EC2ClientsByRoleAndRegion.get(roleRegionKey);
-        if (EC2ClientWithRole != null && EC2ClientWithRole.isActive()) return EC2ClientWithRole.EC2Client;
-
-        // Either a new client hasn't been created or it has expired. Create a new client and cache it.
-        AWSStaticCredentialsProvider credentials = getCredentialsForRole(role);
-        AmazonEC2ClientBuilder builder = AmazonEC2Client.builder().withCredentials(credentials);
-        if (region != null) {
-            builder = builder.withRegion(region);
-        }
-        EC2Client = builder.build();
-        EC2ClientsByRoleAndRegion.put(roleRegionKey, new AmazonEC2ClientWithRole(EC2Client));
-        return EC2Client;
+    public static AmazonEC2 getEC2Client(String role, String region) throws NonRuntimeAWSException {
+        return EC2ClientManager.getClient(role, region);
     }
 
-    public static AmazonS3 getS3Client () throws NonRuntimeAWSException {
+    public static AmazonElasticLoadBalancing getELBClient(String role, String region) throws NonRuntimeAWSException {
+        return ELBClientManager.getClient(role, region);
+    }
+
+    public static AmazonIdentityManagement getIAMClient(String role, String region) throws NonRuntimeAWSException {
+        return IAMClientManager.getClient(role, region);
+    }
+
+    public static AmazonS3 getDefaultS3Client() throws NonRuntimeAWSException {
         return getS3Client (null, null);
     }
 
-    /**
-     * Obtain an S3 client for the provided role ARN. If role is null, the default EC2 credentials
-     * will be used. Similarly, if the region is null, it will be omitted while building the S3 client.
-     */
     public static AmazonS3 getS3Client(String role, String region) throws NonRuntimeAWSException {
-        // return default client for null region and role
-        if (role == null && region == null) {
-            return DEFAULT_S3_CLEINT;
+        return S3ClientManager.getClient(role, region);
+    }
+
+    private static class EC2ClientManagerImpl extends AWSClientManager<AmazonEC2> {
+        public EC2ClientManagerImpl(AmazonEC2 defaultClient) {
+            super(defaultClient);
         }
 
-        // if the role is null, return a potentially cached S3 client with the region configured
-        AmazonS3 S3Client;
-        if (role == null) {
-            S3Client = nonRoleS3ClientsByRegion.get(region);
-            if (S3Client == null) {
-                S3Client = AmazonS3ClientBuilder.standard().withRegion(region).build();
-                nonRoleS3ClientsByRegion.put(region, S3Client);
+        @Override
+        public AmazonEC2 buildDefaultClientWithRegion(String region) {
+            return AmazonEC2Client.builder().withRegion(region).build();
+        }
+
+        @Override
+        public AmazonEC2 buildCredentialedClientForRoleAndRegion(
+            String role,
+            String region
+        ) throws NonRuntimeAWSException {
+            AWSStaticCredentialsProvider credentials = getCredentialsForRole(role);
+            AmazonEC2ClientBuilder builder = AmazonEC2Client.builder().withCredentials(credentials);
+            if (region != null) {
+                builder = builder.withRegion(region);
             }
-            return S3Client;
-        }
-
-        // check for the availability of a S3 client already associated with the given role and region
-        String roleRegionKey = makeRoleRegionKey(role, region);
-        AmazonS3ClientWithRole S3ClientWithRole = S3ClientsByRoleAndRegion.get(roleRegionKey);
-        if (S3ClientWithRole != null && S3ClientWithRole.isActive()) return S3ClientWithRole.S3Client;
-
-        // Either a new client hasn't been created or it has expired. Create a new client and cache it.
-        AWSStaticCredentialsProvider credentials = getCredentialsForRole(role);
-        AmazonS3ClientBuilder builder = AmazonS3ClientBuilder.standard();
-        if (region != null) builder.withRegion(region);
-        S3Client = builder.withCredentials(credentials).build();
-        S3ClientsByRoleAndRegion.put(roleRegionKey, new AmazonS3ClientWithRole(S3Client));
-        return S3Client;
-    }
-
-    /**
-     * A helper exception class that does not extend the RunTimeException class in order to make the compiler properly
-     * detect possible places where an exception could occur.
-     */
-    public static class NonRuntimeAWSException extends Throwable {
-        public NonRuntimeAWSException(String message) {
-            super(message);
+            return builder.build();
         }
     }
 
-    /**
-     * A util class for storing items that will eventually expire
-     */
-    private static class ExpiringAsset {
-        private final long expirationTime;
-
-        private ExpiringAsset() {
-            // set the expiration time to be in 800 seconds. The default credentials provider session length is 900
-            // seconds, but we want to be sure to refresh well before the expiration in order to make sure no subsequent
-            // requests use an expired session.
-            this.expirationTime = System.currentTimeMillis() + 800 * 1000;
+    private static class ELBClientManagerImpl extends AWSClientManager<AmazonElasticLoadBalancing> {
+        public ELBClientManagerImpl(AmazonElasticLoadBalancing defaultClient) {
+            super(defaultClient);
         }
 
-        /**
-         * @return true if the asset hasn't yet expired
-         */
-        public boolean isActive() {
-            return expirationTime > System.currentTimeMillis();
+        @Override
+        public AmazonElasticLoadBalancing buildDefaultClientWithRegion(String region) {
+            return AmazonElasticLoadBalancingClient.builder().withRegion(region).build();
         }
-    }
 
-    /**
-     * A class that contains credentials provider sessions
-     */
-    private static class CredentialsProviderSession extends ExpiringAsset {
-        private final AWSStaticCredentialsProvider credentialsProvider;
-
-        private CredentialsProviderSession(AWSStaticCredentialsProvider credentialsProvider) {
-            super();
-            this.credentialsProvider = credentialsProvider;
+        @Override
+        public AmazonElasticLoadBalancing buildCredentialedClientForRoleAndRegion(
+            String role,
+            String region
+        ) throws NonRuntimeAWSException {
+            AWSStaticCredentialsProvider credentials = getCredentialsForRole(role);
+            AmazonElasticLoadBalancingClientBuilder builder = AmazonElasticLoadBalancingClient
+                .builder()
+                .withCredentials(credentials);
+            if (region != null) {
+                builder = builder.withRegion(region);
+            }
+            return builder.build();
         }
     }
 
-    /**
-     * A class that contains an AmazonEC2 client that will eventually expire
-     */
-    private static class AmazonEC2ClientWithRole extends ExpiringAsset {
-        private final AmazonEC2 EC2Client;
+    private static class IAMClientManagerImpl extends AWSClientManager<AmazonIdentityManagement> {
+        public IAMClientManagerImpl(AmazonIdentityManagement defaultClient) {
+            super(defaultClient);
+        }
 
-        private AmazonEC2ClientWithRole(AmazonEC2 EC2Client) {
-            super();
-            this.EC2Client = EC2Client;
+        @Override
+        public AmazonIdentityManagement buildDefaultClientWithRegion(String region) {
+            return defaultClient;
+        }
+
+        @Override
+        public AmazonIdentityManagement buildCredentialedClientForRoleAndRegion(String role, String region)
+            throws NonRuntimeAWSException {
+            AWSStaticCredentialsProvider credentials = getCredentialsForRole(role);
+            return AmazonIdentityManagementClientBuilder.standard().withCredentials(credentials).build();
         }
     }
 
-    /**
-     * A class that contains an AmazonS3 client that will eventually expire
-     */
-    private static class AmazonS3ClientWithRole extends ExpiringAsset {
-        private final AmazonS3 S3Client;
+    private static class S3ClientManagerImpl extends AWSClientManager<AmazonS3> {
+        public S3ClientManagerImpl(AmazonS3 defaultClient) {
+            super(defaultClient);
+        }
 
-        private AmazonS3ClientWithRole(AmazonS3 S3Client) {
-            super();
-            this.S3Client = S3Client;
+        @Override
+        public AmazonS3 buildDefaultClientWithRegion(String region) {
+            return AmazonS3ClientBuilder.standard().withCredentials(DEFAULT_S3_CREDENTIALS).withRegion(region).build();
+        }
+
+        @Override
+        public AmazonS3 buildCredentialedClientForRoleAndRegion(
+            String role,
+            String region
+        ) throws NonRuntimeAWSException {
+            AWSStaticCredentialsProvider credentials = getCredentialsForRole(role);
+            AmazonS3ClientBuilder builder = AmazonS3ClientBuilder.standard();
+            if (region != null) builder.withRegion(region);
+            return builder.withCredentials(credentials).build();
         }
     }
 }

@@ -1,6 +1,8 @@
 package com.conveyal.datatools.manager.extensions.mtc;
 
+import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.s3.model.PutObjectRequest;
+import com.conveyal.datatools.common.utils.NonRuntimeAWSException;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
@@ -24,6 +26,7 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Collection;
 
+import static com.conveyal.datatools.common.utils.AWSUtils.getDefaultS3Client;
 import static com.conveyal.datatools.manager.models.ExternalFeedSourceProperty.constructId;
 
 /**
@@ -168,7 +171,10 @@ public class MtcFeedResource implements ExternalFeedResource {
      * When feed version is created/published, write the feed to the shared S3 bucket.
      */
     @Override
-    public void feedVersionCreated(FeedVersion feedVersion, String authHeader) {
+    public void feedVersionCreated(
+        FeedVersion feedVersion,
+        String authHeader
+    ) throws AmazonServiceException, NonRuntimeAWSException {
 
         if(s3Bucket == null) {
             LOG.error("Cannot push {} to S3 bucket. No bucket name specified.", feedVersion.id);
@@ -188,7 +194,7 @@ public class MtcFeedResource implements ExternalFeedResource {
         LOG.info("Pushing to MTC S3 Bucket: s3://{}/{}", s3Bucket, keyName);
         File file = feedVersion.retrieveGtfsFile();
         try {
-            FeedStore.s3Client.putObject(new PutObjectRequest(s3Bucket, keyName, file));
+            getDefaultS3Client().putObject(new PutObjectRequest(s3Bucket, keyName, file));
         } catch (Exception e) {
             LOG.error("Could not upload feed version to s3.");
             e.printStackTrace();

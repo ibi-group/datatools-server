@@ -1,6 +1,9 @@
 package com.conveyal.datatools.editor.controllers.api;
 
 
+import com.amazonaws.AmazonServiceException;
+import com.amazonaws.services.s3.AmazonS3;
+import com.conveyal.datatools.common.utils.NonRuntimeAWSException;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.editor.jobs.CreateSnapshotJob;
 import com.conveyal.datatools.editor.jobs.ExportSnapshotToGTFSJob;
@@ -26,6 +29,7 @@ import java.io.IOException;
 import java.util.Collection;
 
 import static com.conveyal.datatools.common.utils.AWSUtils.downloadFromS3;
+import static com.conveyal.datatools.common.utils.AWSUtils.getDefaultS3Client;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
@@ -193,16 +197,22 @@ public class SnapshotController {
         // an actual object to download.
         // FIXME: use new FeedStore.
         if (DataManager.useS3) {
-            if (!FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, key)) {
-                logMessageAndHalt(
-                    req,
-                    500,
-                    String.format("Error downloading snapshot from S3. Object %s does not exist.", key),
-                    new Exception("s3 object does not exist")
-                );
+            try {
+                AmazonS3 S3Client = getDefaultS3Client();
+                if (!S3Client.doesObjectExist(DataManager.feedBucket, key)) {
+                    logMessageAndHalt(
+                        req,
+                        500,
+                        String.format("Error downloading snapshot from S3. Object %s does not exist.", key),
+                        new Exception("s3 object does not exist")
+                    );
+                }
+                // Return presigned download link if using S3.
+                return downloadFromS3(S3Client, DataManager.feedBucket, key, false, res);
+            } catch (AmazonServiceException |NonRuntimeAWSException e) {
+                logMessageAndHalt(req, 500, "Failed to download snapshot from S3.", e);
+                return null;
             }
-            // Return presigned download link if using S3.
-            return downloadFromS3(FeedStore.s3Client, DataManager.feedBucket, key, false, res);
         } else {
             // If not storing on s3, just use the token download method.
             token = new FeedDownloadToken(snapshot);

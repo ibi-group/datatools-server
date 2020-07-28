@@ -1,5 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
+import com.amazonaws.AmazonServiceException;
+import com.conveyal.datatools.common.utils.NonRuntimeAWSException;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
@@ -29,6 +31,7 @@ import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.AWSUtils.downloadFromS3;
+import static com.conveyal.datatools.common.utils.AWSUtils.getDefaultS3Client;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
@@ -272,7 +275,12 @@ public class ProjectController {
         if (DataManager.useS3) {
             // Return presigned download link if using S3.
             String key = String.format("project/%s.zip", project.id);
-            return downloadFromS3(FeedStore.s3Client, DataManager.feedBucket, key, false, res);
+            try {
+                return downloadFromS3(getDefaultS3Client(), DataManager.feedBucket, key, false, res);
+            } catch (AmazonServiceException | NonRuntimeAWSException e) {
+                logMessageAndHalt(req, 500, "Failed to download file from S3", e);
+                return null;
+            }
         } else {
             // when feeds are stored locally, single-use download token will still be used
             FeedDownloadToken token = new FeedDownloadToken(project);

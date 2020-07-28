@@ -1,6 +1,8 @@
 package com.conveyal.datatools.editor.jobs;
 
+import com.amazonaws.AmazonServiceException;
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.utils.NonRuntimeAWSException;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -15,6 +17,8 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+
+import static com.conveyal.datatools.common.utils.AWSUtils.getDefaultS3Client;
 
 /**
  * This job will export a database snapshot (i.e., namespace) to a GTFS file. If a feed version is supplied in the
@@ -70,7 +74,12 @@ public class ExportSnapshotToGTFSJob extends MonitorableJob {
         status.update("Writing snapshot to GTFS file", 90);
         if (DataManager.useS3) {
             String s3Key = String.format("%s/%s", bucketPrefix, filename);
-            FeedStore.s3Client.putObject(DataManager.feedBucket, s3Key, tempFile);
+            try {
+                getDefaultS3Client().putObject(DataManager.feedBucket, s3Key, tempFile);
+            } catch (AmazonServiceException | NonRuntimeAWSException e) {
+                status.fail("Failed to upload file to S3", e);
+                return;
+            }
             LOG.info("Storing snapshot GTFS at s3://{}/{}", DataManager.feedBucket, s3Key);
         } else {
             try {

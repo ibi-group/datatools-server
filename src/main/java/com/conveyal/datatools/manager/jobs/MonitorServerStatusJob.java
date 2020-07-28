@@ -1,7 +1,5 @@
 package com.conveyal.datatools.manager.jobs;
 
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.model.AmazonEC2Exception;
 import com.amazonaws.services.ec2.model.DescribeInstancesRequest;
 import com.amazonaws.services.ec2.model.DescribeInstancesResult;
@@ -11,15 +9,13 @@ import com.amazonaws.services.ec2.model.Reservation;
 import com.amazonaws.services.ec2.model.TerminateInstancesRequest;
 import com.amazonaws.services.ec2.model.TerminateInstancesResult;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancing;
-import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClient;
-import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClientBuilder;
 import com.amazonaws.services.elasticloadbalancingv2.model.DescribeTargetHealthRequest;
 import com.amazonaws.services.elasticloadbalancingv2.model.DescribeTargetHealthResult;
 import com.amazonaws.services.elasticloadbalancingv2.model.RegisterTargetsRequest;
 import com.amazonaws.services.elasticloadbalancingv2.model.TargetDescription;
 import com.amazonaws.services.elasticloadbalancingv2.model.TargetHealthDescription;
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.common.utils.AWSUtils;
+import com.conveyal.datatools.common.utils.NonRuntimeAWSException;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.OtpServer;
@@ -51,8 +47,6 @@ public class MonitorServerStatusJob extends MonitorableJob {
     private final Instance instance;
     private final boolean graphAlreadyBuilt;
     private final OtpServer otpServer;
-    private final AWSStaticCredentialsProvider credentials;
-    private final AmazonEC2 ec2;
     private final CloseableHttpClient httpClient = HttpClients.createDefault();
     // Delay checks by four seconds to give user-data script time to upload the instance's user data log if part of the
     // script fails (e.g., uploading or downloading a file).
@@ -72,15 +66,6 @@ public class MonitorServerStatusJob extends MonitorableJob {
         this.instance = instance;
         this.graphAlreadyBuilt = graphAlreadyBuilt;
         status.message = "Checking server status...";
-        int numSecondsToIncludeInSession = (int)(3600 * (graphAlreadyBuilt ? 1.5 : 5.5));
-        credentials = AWSUtils.getCredentialsForRole(
-            otpServer.role,
-            "monitor-" + instance.getInstanceId(),
-            numSecondsToIncludeInSession
-        );
-        ec2 = deployJob.getCustomRegion() == null
-            ? AWSUtils.getEC2ClientForCredentials(credentials)
-            : AWSUtils.getEC2ClientForCredentials(credentials, deployJob.getCustomRegion());
     }
 
     @JsonProperty
@@ -170,11 +155,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
                 .withTargets(new TargetDescription().withId(instance.getInstanceId()));
             boolean targetAddedSuccessfully = false;
             long registerTargetStartTime = System.currentTimeMillis();
-            AmazonElasticLoadBalancingClientBuilder elbBuilder = AmazonElasticLoadBalancingClient.builder()
-                .withCredentials(credentials);
-            AmazonElasticLoadBalancing elbClient = deployJob.getCustomRegion() == null ?
-                elbBuilder.build() :
-                elbBuilder.withRegion(deployJob.getCustomRegion()).build();
+            AmazonElasticLoadBalancing elbClient = deployJob.getELBClientForDeployJob();
             while (!targetAddedSuccessfully) {
                 // Register target with target group.
                 elbClient.registerTargets(registerTargetsRequest);
@@ -284,8 +265,8 @@ public class MonitorServerStatusJob extends MonitorableJob {
             .withInstanceIds(Collections.singletonList(instance.getInstanceId()));
         DescribeInstancesResult result;
         try {
-            result = ec2.describeInstances(request);
-        } catch (AmazonEC2Exception e) {
+            result = deployJob.getEC2ClientForDeployJob().describeInstances(request);
+        } catch (AmazonEC2Exception | NonRuntimeAWSException e) {
             LOG.error("Failed on attempt {} to execute request to obtain instance health!", attemptNumber, e);
             if (attemptNumber > MAX_INSTANCE_HEALTH_RETRIES) {
                 throw new InstanceHealthException("AWS Describe Instances error!");
@@ -373,10 +354,10 @@ public class MonitorServerStatusJob extends MonitorableJob {
             // Terminate server.
             TerminateInstancesResult terminateInstancesResult;
             try {
-                terminateInstancesResult = ec2.terminateInstances(
+                terminateInstancesResult = deployJob.getEC2ClientForDeployJob().terminateInstances(
                     new TerminateInstancesRequest().withInstanceIds(instance.getInstanceId())
                 );
-            } catch (AmazonEC2Exception e) {
+            } catch (AmazonEC2Exception | NonRuntimeAWSException e) {
                 status.fail(
                     String.format("%s. During job cleanup, the instance was not properly terminated!", status.message)
                 );

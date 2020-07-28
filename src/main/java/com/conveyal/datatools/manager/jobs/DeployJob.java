@@ -1,7 +1,6 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.amazonaws.AmazonClientException;
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.event.ProgressListener;
 import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.model.AmazonEC2Exception;
@@ -15,7 +14,7 @@ import com.amazonaws.services.ec2.model.InstanceType;
 import com.amazonaws.services.ec2.model.RunInstancesRequest;
 import com.amazonaws.services.ec2.model.Tag;
 import com.amazonaws.services.ec2.model.TerminateInstancesRequest;
-import com.amazonaws.services.identitymanagement.AmazonIdentityManagementClientBuilder;
+import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancing;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3URI;
 import com.amazonaws.services.s3.model.CopyObjectRequest;
@@ -46,7 +45,6 @@ import java.util.List;
 import java.util.Scanner;
 import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
@@ -55,7 +53,7 @@ import java.util.stream.Collectors;
 import com.amazonaws.waiters.Waiter;
 import com.amazonaws.waiters.WaiterParameters;
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.common.utils.AWSUtils;
+import com.conveyal.datatools.common.utils.NonRuntimeAWSException;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.controllers.api.DeploymentController;
@@ -76,6 +74,9 @@ import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import static com.conveyal.datatools.common.utils.AWSUtils.getEC2Client;
+import static com.conveyal.datatools.common.utils.AWSUtils.getELBClient;
+import static com.conveyal.datatools.common.utils.AWSUtils.getS3Client;
 import static com.conveyal.datatools.manager.controllers.api.ServerController.getIds;
 import static com.conveyal.datatools.manager.models.Deployment.DEFAULT_OTP_VERSION;
 import static com.conveyal.datatools.manager.models.Deployment.DEFAULT_R5_VERSION;
@@ -113,15 +114,12 @@ public class DeployJob extends MonitorableJob {
     private final String s3Bucket;
     private final int targetCount;
     private final DeployType deployType;
-    private final AWSStaticCredentialsProvider credentials;
     private final String customRegion;
     private final String nonce = UUID.randomUUID().toString();
 
     private int tasksCompleted = 0;
     private int totalTasks;
 
-    private AmazonEC2 ec2;
-    private AmazonS3 s3Client;
     private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd HH:mm:ss z");
 
     /** The deployment to deploy */
@@ -210,16 +208,9 @@ public class DeployJob extends MonitorableJob {
             // deployment using either a specified bundle or Graph.obj.
             this.jobRelativePath = bundlePath;
         }
-        // CONNECT TO EC2/S3 using long-lasting sessions to make sure requests don't expire
-        int sevenHoursInSeconds = 7 * 3600;
-        credentials = AWSUtils.getCredentialsForRole(otpServer.role, this.jobId, sevenHoursInSeconds);
         this.customRegion = otpServer.ec2Info != null && otpServer.ec2Info.region != null
             ? otpServer.ec2Info.region
             : null;
-        ec2 = customRegion == null
-            ? AWSUtils.getEC2ClientForCredentials(credentials)
-            : AWSUtils.getEC2ClientForCredentials(credentials, customRegion);
-        s3Client = AWSUtils.getS3ClientForCredentials(credentials, customRegion);
     }
 
     public void jobLogic () {
@@ -269,7 +260,7 @@ public class DeployJob extends MonitorableJob {
                 }
                 try {
                     uploadBundleToS3();
-                } catch (AmazonClientException | InterruptedException | IOException e) {
+                } catch (Exception e) {
                     status.fail(String.format("Error uploading/copying deployment bundle to s3://%s", s3Bucket), e);
                 }
 
@@ -300,17 +291,35 @@ public class DeployJob extends MonitorableJob {
         status.completed = true;
     }
 
+    @JsonIgnore
+    public AmazonEC2 getEC2ClientForDeployJob() throws NonRuntimeAWSException {
+        return getEC2Client(otpServer.role, customRegion);
+    }
+
+    @JsonIgnore
+    public AmazonElasticLoadBalancing getELBClientForDeployJob() throws NonRuntimeAWSException {
+        return getELBClient(otpServer.role, customRegion);
+    }
+
+    @JsonIgnore
+    public AmazonS3 getS3ClientForDeployJob() throws NonRuntimeAWSException {
+        return getS3Client(otpServer.role, customRegion);
+    }
+
     /**
      * Upload to S3 the transit data bundle zip that contains GTFS zip files, OSM data, and config files.
      */
-    private void uploadBundleToS3() throws InterruptedException, AmazonClientException, IOException {
+    private void uploadBundleToS3() throws InterruptedException, AmazonClientException, IOException, NonRuntimeAWSException {
         AmazonS3URI uri = new AmazonS3URI(getS3BundleURI());
         String bucket = uri.getBucket();
         status.message = "Uploading bundle to " + getS3BundleURI();
         status.uploadingS3 = true;
         LOG.info("Uploading deployment {} to {}", deployment.name, uri.toString());
         // Use Transfer Manager so we can monitor S3 bundle upload progress.
-        TransferManager transferManager = TransferManagerBuilder.standard().withS3Client(s3Client).build();
+        TransferManager transferManager = TransferManagerBuilder
+            .standard()
+            .withS3Client(getS3ClientForDeployJob())
+            .build();
         final Upload uploadBundle = transferManager.upload(bucket, uri.getKey(), deploymentTempFile);
         uploadBundle.addProgressListener(
             (ProgressListener) progressEvent -> status.percentUploaded = uploadBundle.getProgress().getPercentTransferred()
@@ -341,7 +350,7 @@ public class DeployJob extends MonitorableJob {
         // copy to [name]-latest.zip
         String copyKey = getLatestS3BundleKey();
         CopyObjectRequest copyObjRequest = new CopyObjectRequest(bucket, uri.getKey(), uri.getBucket(), copyKey);
-        s3Client.copyObject(copyObjRequest);
+        getS3ClientForDeployJob().copyObject(copyObjRequest);
         LOG.info("Copied to s3://{}/{}", bucket, copyKey);
         LOG.info("Uploaded to {}", getS3BundleURI());
         status.update("Upload to S3 complete.", status.percentComplete + 10);
@@ -513,19 +522,12 @@ public class DeployJob extends MonitorableJob {
     private void replaceEC2Servers() {
         status.message = "Validating AWS config";
         try {
-            ServerController.EC2ValidationResult ec2ValidationResult = ServerController.validateEC2Config(
-                otpServer,
-                credentials,
-                ec2,
-                credentials == null
-                    ? AmazonIdentityManagementClientBuilder.defaultClient()
-                    : AmazonIdentityManagementClientBuilder.standard().withCredentials(credentials).build()
-            );
+            ServerController.EC2ValidationResult ec2ValidationResult = ServerController.validateEC2Config(otpServer);
             if (!ec2ValidationResult.isValid()) {
                 status.fail(ec2ValidationResult.getMessage(), ec2ValidationResult.getException());
                 return;
             }
-        } catch (ExecutionException | InterruptedException e) {
+        } catch (Exception e) {
             status.fail("An error occurred while validating the ec2 configuration", e);
             return;
         }
@@ -542,7 +544,7 @@ public class DeployJob extends MonitorableJob {
                 // Exit if an error was encountered.
                 if (status.error || graphBuildingInstances.size() == 0) {
                     try {
-                        ServerController.terminateInstances(ec2, graphBuildingInstances);
+                        ServerController.terminateInstances(getEC2ClientForDeployJob(), graphBuildingInstances);
                     } catch (AmazonEC2Exception e){
                         status.message = String.format(
                             "%s During job cleanup, the graph building instance was not properly terminated!",
@@ -565,7 +567,7 @@ public class DeployJob extends MonitorableJob {
                     // build logs.
                     status.fail("Error encountered while building graph. Inspect build logs.");
                     try {
-                        ServerController.terminateInstances(ec2, graphBuildingInstances);
+                        ServerController.terminateInstances(getEC2ClientForDeployJob(), graphBuildingInstances);
                     } catch (AmazonEC2Exception e){
                         status.message = String.format(
                             "%s During job cleanup, the graph building instance was not properly terminated!",
@@ -608,7 +610,7 @@ public class DeployJob extends MonitorableJob {
                         // instance. If image recreation is enabled, the graph building instance is terminated at the
                         // end of the RecreateBuildImageJob.
                         try {
-                            ec2.terminateInstances(
+                            getEC2ClientForDeployJob().terminateInstances(
                                 new TerminateInstancesRequest().withInstanceIds(
                                     graphBuildingInstances.get(0).getInstanceId()
                                 )
@@ -637,7 +639,7 @@ public class DeployJob extends MonitorableJob {
                 remainingInstances.addAll(startEC2Instances(status.numServersRemaining, true));
                 if (remainingInstances.size() == 0 || status.error) {
                     try {
-                        ServerController.terminateInstances(ec2, remainingInstances);
+                        ServerController.terminateInstances(getEC2ClientForDeployJob(), remainingInstances);
                     } catch (AmazonEC2Exception e){
                         status.message = String.format(
                             "%s During job cleanup, an instance was not properly terminated!",
@@ -671,7 +673,7 @@ public class DeployJob extends MonitorableJob {
                     LOG.warn("Error encountered while monitoring server {}. Terminating.", id);
                     remainingInstances.removeIf(instance -> instance.getInstanceId().equals(id));
                     try {
-                        ServerController.terminateInstances(ec2, id);
+                        ServerController.terminateInstances(getEC2ClientForDeployJob(), id);
                     } catch (AmazonEC2Exception e){
                         job.status.message = String.format(
                             "%s During job cleanup, the instance was not properly terminated!",
@@ -697,7 +699,7 @@ public class DeployJob extends MonitorableJob {
                     .collect(Collectors.toList());
                 if (previousInstanceIds.size() > 0) {
                     boolean success = ServerController.deRegisterAndTerminateInstances(
-                        credentials,
+                        otpServer.role,
                         otpServer.ec2Info.targetGroupArn,
                         customRegion,
                         previousInstanceIds
@@ -743,12 +745,18 @@ public class DeployJob extends MonitorableJob {
         // Pick proper ami depending on whether graph is being built and what is defined.
         String amiId = otpServer.ec2Info.getAmiId(graphAlreadyBuilt);
         // Verify that AMI is correctly defined.
-        if (amiId == null || !ServerController.amiExists(amiId, ec2)) {
-            status.fail(String.format(
-                "AMI ID (%s) is missing or bad. Check the deployment settings or the default value in the app config at %s",
-                amiId,
-                AMI_CONFIG_PATH
-            ));
+        String invalidAMIMessage = String.format(
+            "AMI ID (%s) is missing or bad. Check the deployment settings or the default value in the app config at %s",
+            amiId,
+            AMI_CONFIG_PATH
+        );
+        try {
+            if (amiId == null || !ServerController.amiExists(amiId, getEC2ClientForDeployJob())) {
+                status.fail(invalidAMIMessage);
+                return Collections.EMPTY_LIST;
+            }
+        } catch (Exception e) {
+            status.fail(invalidAMIMessage, e);
             return Collections.EMPTY_LIST;
         }
         // Pick proper instance type depending on whether graph is being built and what is defined.
@@ -784,8 +792,8 @@ public class DeployJob extends MonitorableJob {
         try {
             // attempt to start the instances. Sometimes, AWS does not have enough availability of the desired instance
             // type and can throw an error at this point.
-            instances = ec2.runInstances(runInstancesRequest).getReservation().getInstances();
-        } catch (AmazonEC2Exception e) {
+            instances = getEC2ClientForDeployJob().runInstances(runInstancesRequest).getReservation().getInstances();
+        } catch (AmazonEC2Exception | NonRuntimeAWSException e) {
             status.fail(String.format("DeployJob failed due to a problem with AWS: %s", e.getMessage()), e);
             return Collections.EMPTY_LIST;
         }
@@ -794,7 +802,7 @@ public class DeployJob extends MonitorableJob {
         Set<String> instanceIpAddresses = new HashSet<>();
         // Wait so that create tags request does not fail because instances not found.
         try {
-            Waiter<DescribeInstanceStatusRequest> waiter = ec2.waiters().instanceStatusOk();
+            Waiter<DescribeInstanceStatusRequest> waiter = getEC2ClientForDeployJob().waiters().instanceStatusOk();
             long beginWaiting = System.currentTimeMillis();
             waiter.run(new WaiterParameters<>(new DescribeInstanceStatusRequest().withInstanceIds(instanceIds)));
             LOG.info("Instance status is OK after {} ms", (System.currentTimeMillis() - beginWaiting));
@@ -807,16 +815,21 @@ public class DeployJob extends MonitorableJob {
             // initialize.
             String serverName = String.format("%s %s (%s) %d %s", deployment.r5 ? "r5" : "otp", deployment.name, dateString, serverCounter++, graphAlreadyBuilt ? "clone" : "builder");
             LOG.info("Creating tags for new EC2 instance {}", serverName);
-            ec2.createTags(new CreateTagsRequest()
-                    .withTags(new Tag("Name", serverName))
-                    .withTags(new Tag("projectId", deployment.projectId))
-                    .withTags(new Tag("deploymentId", deployment.id))
-                    .withTags(new Tag("jobId", this.jobId))
-                    .withTags(new Tag("serverId", otpServer.id))
-                    .withTags(new Tag("routerId", getRouterId()))
-                    .withTags(new Tag("user", retrieveEmail()))
-                    .withResources(instance.getInstanceId())
-            );
+            try {
+                getEC2ClientForDeployJob().createTags(new CreateTagsRequest()
+                        .withTags(new Tag("Name", serverName))
+                        .withTags(new Tag("projectId", deployment.projectId))
+                        .withTags(new Tag("deploymentId", deployment.id))
+                        .withTags(new Tag("jobId", this.jobId))
+                        .withTags(new Tag("serverId", otpServer.id))
+                        .withTags(new Tag("routerId", getRouterId()))
+                        .withTags(new Tag("user", retrieveEmail()))
+                        .withResources(instance.getInstanceId())
+                );
+            } catch (Exception e) {
+                status.fail("Failed to create tags for instances.", e);
+                return instances;
+            }
         }
         // Store the instances with updated IP addresses here.
         List<Instance> updatedInstances = new ArrayList<>();
@@ -828,7 +841,19 @@ public class DeployJob extends MonitorableJob {
         while (instanceIpAddresses.size() < instances.size()) {
             LOG.info("Checking that public IP addresses have initialized for EC2 instances.");
             // Check that all of the instances have public IPs.
-            List<Instance> instancesWithIps = DeploymentController.fetchEC2Instances(ec2, instanceIdFilter);
+            List<Instance> instancesWithIps;
+            try {
+                instancesWithIps = DeploymentController.fetchEC2Instances(
+                    getEC2ClientForDeployJob(),
+                    instanceIdFilter
+                );
+            } catch (Exception e) {
+                status.fail(
+                    "Failed while waiting for public IP addresses to be assigned to new instance(s)!",
+                    e
+                );
+                return updatedInstances;
+            }
             for (Instance instance : instancesWithIps) {
                 String publicIp = instance.getPublicIpAddress();
                 // If IP has been found, store the updated instance and IP.
@@ -1046,11 +1071,6 @@ public class DeployJob extends MonitorableJob {
         pathList.add(getS3FolderURI().toString());
         pathList.addAll(Arrays.asList(paths));
         return String.join("/", pathList);
-    }
-
-    @JsonIgnore
-    public AmazonS3 getS3Client() {
-        return s3Client;
     }
 
     /**

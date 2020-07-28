@@ -4,9 +4,9 @@ public class ExpiringAsset<T> {
     public final T asset;
     private final long expirationTimeMillis;
 
-    public ExpiringAsset(T asset, long expirationTimeMillis) {
+    public ExpiringAsset(T asset, long validDurationMillis) {
         this.asset = asset;
-        this.expirationTimeMillis = expirationTimeMillis;
+        this.expirationTimeMillis = System.currentTimeMillis() + validDurationMillis;
     }
 
     /**
