@@ -209,7 +209,7 @@ public class FeedStore {
         FileUtils.copyFile(version, latest, true);
     }
 
-    private File createTempFile (String name, InputStream in) throws IOException {
+    protected File createTempFile (String name, InputStream in) throws IOException {
         Path path = Files.createTempFile(name, null);
         // FIXME: Figure out how to manage temp files created here. Currently, we just call deleteOnExit, but
         //  this will only delete the file once the java process stops.
