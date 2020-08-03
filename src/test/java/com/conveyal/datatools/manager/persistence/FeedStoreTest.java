@@ -24,12 +24,16 @@ public class FeedStoreTest extends UnitTest {
         LOG.info("{} setup", FeedStoreTest.class.getSimpleName());
     }
 
+    /**
+     * Verify that {@link FeedStore} will write a temp file with the input file name.
+     */
     @Test
     public void canCreateTempGtfsFile() throws IOException {
+        final String gtfsFileName = "gtfs.zip";
         File gtfsFile = new File(getGtfsResourcePath("bart_new.zip"));
         FileInputStream fileInputStream = new FileInputStream(gtfsFile);
-        File tempFile = FeedVersion.feedStore.createTempFile("gtfs.zip", fileInputStream);
-        Assert.assertTrue(tempFile.getAbsolutePath().endsWith("gtfs.zip"));
-        LOG.info(tempFile.getAbsolutePath());
+        File tempFile = FeedVersion.feedStore.createTempFile(gtfsFileName, fileInputStream);
+        LOG.info("Feed store wrote temp file to: {}", tempFile.getAbsolutePath());
+        Assert.assertEquals(tempFile.getName(), gtfsFileName);
     }
 }
