@@ -49,7 +49,7 @@ public class RecreateBuildImageJob extends MonitorableJob {
             .withName(otpServer.ec2Info.buildImageName)
             .withDescription(otpServer.ec2Info.buildImageDescription);
         CreateImageResult createImageResult = ec2.createImage(createImageRequest);
-        // Wait for image creation to complete
+        // Wait for image creation to complete (it can take a few minutes)
         String createdImageId = createImageResult.getImageId();
         status.update("Waiting for graph build image to be created...", 25);
         boolean imageCreated = false;
