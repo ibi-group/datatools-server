@@ -123,7 +123,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
                     return;
                 }
                 // wait a maximum of 5 hours if building a graph, or 1 hour if just starting a server
-                long maxOtpRunnerWaitTimeMillis = (graphAlreadyBuilt ? 5 : 1) * 60 * 60 * 1000;
+                long maxOtpRunnerWaitTimeMillis = (graphAlreadyBuilt ? 1 : 5) * 60 * 60 * 1000;
                 if (taskHasTimedOut(statusCheckStartTime, maxOtpRunnerWaitTimeMillis)) {
                     failJob("Job timed out while waiting for otp-runner to finish!");
                     return;
