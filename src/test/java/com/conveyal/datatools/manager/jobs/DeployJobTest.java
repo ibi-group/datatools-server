@@ -12,7 +12,6 @@ import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -95,7 +94,7 @@ public class DeployJobTest extends UnitTest {
         );
         assertThat(
             replaceNonce(
-                deployJob.constructUserData(false),
+                deployJob.constructManifestAndUserData(false, true),
                 "canMakeGraphBuildUserDataScript"
             ),
             matchesSnapshot()
@@ -116,7 +115,7 @@ public class DeployJobTest extends UnitTest {
         );
         assertThat(
             replaceNonce(
-                deployJob.constructUserData(true),
+                deployJob.constructManifestAndUserData(true, true),
                 "canMakeServerOnlyUserDataScript"
             ),
             matchesSnapshot()
