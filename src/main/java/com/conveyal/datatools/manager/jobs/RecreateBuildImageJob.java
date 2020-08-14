@@ -61,7 +61,7 @@ public class RecreateBuildImageJob extends MonitorableJob {
             .withName(otpServer.ec2Info.buildImageName)
             .withDescription(otpServer.ec2Info.buildImageDescription);
         CreateImageResult createImageResult = ec2.createImage(createImageRequest);
-        // Wait for image creation to complete
+        // Wait for image creation to complete (it can take a few minutes)
         String createdImageId = createImageResult.getImageId();
         status.update("Waiting for graph build image to be created...", 25);
         boolean imageCreated = false;
@@ -75,14 +75,28 @@ public class RecreateBuildImageJob extends MonitorableJob {
                     // See https://docs.aws.amazon.com/AWSJavaSDK/latest/javadoc/com/amazonaws/services/ec2/model/ImageState.html
                     String imageState = image.getState().toLowerCase();
                     if (imageState.equals("pending")) {
+                        if (System.currentTimeMillis() - status.startTime > 60 * 60 * 1000) {
+                            terminateInstanceAndFailWithMessage(
+                                "It has taken over an hour for the graph build image to be created! Check the AWS console to see if the image ended up being created successfully"
+                            );
+                            return;
+                        }
                         // wait 2.5 seconds before making next request
-                        Thread.sleep(2500);
+                        try {
+                            Thread.sleep(2500);
+                        } catch (InterruptedException e) {
+                            terminateInstanceAndFailWithMessage(
+                                "Failed while waiting for graph build image creation to complete!",
+                                e
+                            );
+                            return;
+                        }
                     } else if (imageState.equals("available")) {
                         // success! Set imageCreated to true.
                         imageCreated = true;
                     } else {
                         // Any other image state is assumed to be a failure
-                        status.fail(
+                        terminateInstanceAndFailWithMessage(
                             String.format("Graph build image creation failed! Image state became `%s`", imageState)
                         );
                         return;
@@ -122,5 +136,17 @@ public class RecreateBuildImageJob extends MonitorableJob {
             }
         }
         status.completeSuccessfully("Graph build image successfully created!");
+    }
+
+    private void terminateInstanceAndFailWithMessage(String message) {
+        terminateInstanceAndFailWithMessage(message, null);
+    }
+
+    /**
+     * Terminates the graph building instance and fails with the given message and Exception.
+     */
+    private void terminateInstanceAndFailWithMessage(String message, Exception e) {
+        ServerController.terminateInstances(ec2, graphBuildingInstances);
+        status.fail(message, e);
     }
 }

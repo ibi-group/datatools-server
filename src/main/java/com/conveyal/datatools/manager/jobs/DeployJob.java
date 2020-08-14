@@ -531,6 +531,8 @@ public class DeployJob extends MonitorableJob {
             status.fail("An error occurred while validating the ec2 configuration", e);
             return;
         }
+        ExecutorService recreateBuildImageExecutor = null;
+        RecreateBuildImageJob recreateBuildImageJob = null;
         try {
             // Track any previous instances running for the server we're deploying to in order to de-register and
             // terminate them later.
@@ -591,12 +593,13 @@ public class DeployJob extends MonitorableJob {
                 // Check if a new image of the instance with the completed graph build should be created.
                 if (otpServer.ec2Info.recreateBuildImage) {
                     // Begin a new job to create a graph build image so that can happen asynchronously
-                    RecreateBuildImageJob recreateBuildImageJob = new RecreateBuildImageJob(
+                    recreateBuildImageJob = new RecreateBuildImageJob(
                         this,
                         owner,
                         graphBuildingInstances
                     );
-                    DataManager.heavyExecutor.execute(recreateBuildImageJob);
+                    recreateBuildImageExecutor = Executors.newSingleThreadExecutor();
+                    recreateBuildImageExecutor.execute(recreateBuildImageJob);
                 }
                 // Check whether the graph build instance type or AMI ID is different from the non-graph building type.
                 // If so, terminate the graph building instance. If not, add the graph building instance to the list
@@ -713,6 +716,21 @@ public class DeployJob extends MonitorableJob {
                         finalMessage = String.format("Server setup is complete! (WARNING: Could not terminate previous EC2 instances: %s", previousInstanceIds);
                     }
                 }
+            }
+            // Wait for a recreate graph build job to complete if one was started
+            if (recreateBuildImageExecutor != null) {
+                status.update("Waiting for recreate graph building image job to complete", 95);
+                while (!recreateBuildImageJob.status.completed) {
+                    try {
+                        // wait 1 second
+                        Thread.sleep(1000);
+                    } catch (InterruptedException e) {
+                        recreateBuildImageExecutor.shutdown();
+                        status.fail("An error occurred while waiting for the graph build image to be recreated", e);
+                        return;
+                    }
+                }
+                recreateBuildImageExecutor.shutdown();
             }
             // Job is complete.
             status.completeSuccessfully(finalMessage);
