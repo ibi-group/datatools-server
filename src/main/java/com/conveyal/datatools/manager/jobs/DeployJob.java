@@ -658,15 +658,17 @@ public class DeployJob extends MonitorableJob {
                     .filter(instance -> "running".equals(instance.state.getName()))
                     .map(instance -> instance.instanceId)
                     .collect(Collectors.toList());
+                // If there were previous instances assigned to the server, deregister/terminate them (now that the new
+                // instances are up and running).
                 if (previousInstanceIds.size() > 0) {
-                    boolean success = ServerController.deRegisterAndTerminateInstances(
+                    boolean previousInstancesTerminated = ServerController.deRegisterAndTerminateInstances(
                         credentials,
                         otpServer.ec2Info.targetGroupArn,
                         customRegion,
                         previousInstanceIds
                     );
                     // If there was a problem during de-registration/termination, notify via status message.
-                    if (!success) {
+                    if (!previousInstancesTerminated) {
                         finalMessage = String.format("Server setup is complete! (WARNING: Could not terminate previous EC2 instances: %s", previousInstanceIds);
                     }
                 }
