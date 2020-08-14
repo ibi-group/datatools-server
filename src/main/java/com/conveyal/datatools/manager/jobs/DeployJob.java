@@ -602,8 +602,9 @@ public class DeployJob extends MonitorableJob {
                     recreateBuildImageExecutor.execute(recreateBuildImageJob);
                 }
                 // Check whether the graph build instance type or AMI ID is different from the non-graph building type.
-                // If so, terminate the graph building instance. If not, add the graph building instance to the list
-                // of started instances.
+                // If so, update the number of servers remaining to the total amount of servers that should be started
+                // and if there was not recreate build image job, terminate the graph building instance. If not, add the
+                // graph building instance to the list of started instances.
                 if (otpServer.ec2Info.hasSeparateGraphBuildConfig()) {
                     // different instance type and/or ami exists for graph building, so update the number of instances
                     // to start up to be the full amount of instances.
