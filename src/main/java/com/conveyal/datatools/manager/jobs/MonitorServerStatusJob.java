@@ -1,6 +1,5 @@
 package com.conveyal.datatools.manager.jobs;
 
-import com.amazonaws.services.ec2.model.AmazonEC2Exception;
 import com.amazonaws.services.ec2.model.DescribeInstancesRequest;
 import com.amazonaws.services.ec2.model.DescribeInstancesResult;
 import com.amazonaws.services.ec2.model.Instance;
@@ -15,7 +14,6 @@ import com.amazonaws.services.elasticloadbalancingv2.model.RegisterTargetsReques
 import com.amazonaws.services.elasticloadbalancingv2.model.TargetDescription;
 import com.amazonaws.services.elasticloadbalancingv2.model.TargetHealthDescription;
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.common.utils.NonRuntimeAWSException;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.OtpServer;
@@ -232,21 +230,17 @@ public class MonitorServerStatusJob extends MonitorableJob {
      * waiting, check the instance health to make sure it is still running. If a user has terminated the instance, the
      * job should be failed.
      */
-    private void waitAndCheckInstanceHealth(String waitingFor) throws InstanceHealthException {
+    private void waitAndCheckInstanceHealth(String waitingFor) throws InstanceHealthException, InterruptedException {
         checkInstanceHealth();
-        try {
-            LOG.info("Waiting {} seconds for {}", DELAY_SECONDS, waitingFor);
-            Thread.sleep(1000 * DELAY_SECONDS);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
+        LOG.info("Waiting {} seconds for {}", DELAY_SECONDS, waitingFor);
+        Thread.sleep(1000 * DELAY_SECONDS);
         checkInstanceHealth();
     }
 
     /**
      * Helper method to initiate to first attempt at checking the instance health.
      */
-    private void checkInstanceHealth() throws InstanceHealthException {
+    private void checkInstanceHealth() throws InstanceHealthException, InterruptedException {
         checkInstanceHealth(1);
     }
 
@@ -254,23 +248,19 @@ public class MonitorServerStatusJob extends MonitorableJob {
      * Checks whether the instance is running. If it has entered a state where it is stopped, terminated or about to be
      * stopped or terminated, then this method throws an exception.
      */
-    private void checkInstanceHealth(int attemptNumber) throws InstanceHealthException {
+    private void checkInstanceHealth(int attemptNumber) throws InstanceHealthException, InterruptedException {
         DescribeInstancesRequest request = new DescribeInstancesRequest()
             .withInstanceIds(Collections.singletonList(instance.getInstanceId()));
         DescribeInstancesResult result;
         try {
             result = deployJob.getEC2ClientForDeployJob().describeInstances(request);
-        } catch (AmazonEC2Exception | NonRuntimeAWSException e) {
+        } catch (Exception e) {
             LOG.error("Failed on attempt {} to execute request to obtain instance health!", attemptNumber, e);
             if (attemptNumber > MAX_INSTANCE_HEALTH_RETRIES) {
                 throw new InstanceHealthException("AWS Describe Instances error!");
             }
-            try {
-                LOG.info("Waiting 5 seconds to try to get instance status again");
-                Thread.sleep(5000);
-            } catch (InterruptedException interruptedException) {
-                interruptedException.printStackTrace();
-            }
+            LOG.info("Waiting 5 seconds to try to get instance status again");
+            Thread.sleep(5000);
             checkInstanceHealth(attemptNumber + 1);
             return;
         }
@@ -351,7 +341,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
                 terminateInstancesResult = deployJob.getEC2ClientForDeployJob().terminateInstances(
                     new TerminateInstancesRequest().withInstanceIds(instance.getInstanceId())
                 );
-            } catch (AmazonEC2Exception | NonRuntimeAWSException e) {
+            } catch (Exception e) {
                 status.fail(
                     String.format("%s. During job cleanup, the instance was not properly terminated!", status.message)
                 );

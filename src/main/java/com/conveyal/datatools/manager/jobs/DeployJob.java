@@ -1,9 +1,7 @@
 package com.conveyal.datatools.manager.jobs;
 
-import com.amazonaws.AmazonClientException;
 import com.amazonaws.event.ProgressListener;
 import com.amazonaws.services.ec2.AmazonEC2;
-import com.amazonaws.services.ec2.model.AmazonEC2Exception;
 import com.amazonaws.services.ec2.model.CreateTagsRequest;
 import com.amazonaws.services.ec2.model.DescribeInstanceStatusRequest;
 import com.amazonaws.services.ec2.model.Filter;
@@ -312,7 +310,7 @@ public class DeployJob extends MonitorableJob {
     /**
      * Upload to S3 the transit data bundle zip that contains GTFS zip files, OSM data, and config files.
      */
-    private void uploadBundleToS3() throws InterruptedException, AmazonClientException, IOException, NonRuntimeAWSException {
+    private void uploadBundleToS3() throws InterruptedException, IOException, NonRuntimeAWSException {
         AmazonS3URI uri = new AmazonS3URI(getS3BundleURI());
         String bucket = uri.getBucket();
         status.message = "Uploading bundle to " + getS3BundleURI();
@@ -542,7 +540,13 @@ public class DeployJob extends MonitorableJob {
         try {
             // Track any previous instances running for the server we're deploying to in order to de-register and
             // terminate them later.
-            List<EC2InstanceSummary> previousInstances = otpServer.retrieveEC2InstanceSummaries();
+            List<EC2InstanceSummary> previousInstances = null;
+            try {
+                previousInstances = otpServer.retrieveEC2InstanceSummaries();
+            } catch (NonRuntimeAWSException e) {
+                status.fail("Failed to retrieve previously running EC2 instances!", e);
+                return;
+            }
             // Track new instances that should be added to target group once the deploy job is completed.
             List<Instance> newInstancesForTargetGroup = new ArrayList<>();
             // Initialize recreate build image job and executor in case they're needed below.
@@ -556,7 +560,7 @@ public class DeployJob extends MonitorableJob {
                 if (status.error || graphBuildingInstances.size() == 0) {
                     try {
                         ServerController.terminateInstances(getEC2ClientForDeployJob(), graphBuildingInstances);
-                    } catch (AmazonEC2Exception e){
+                    } catch (Exception e){
                         status.message = String.format(
                             "%s During job cleanup, the graph building instance was not properly terminated!",
                             status.message
@@ -580,7 +584,7 @@ public class DeployJob extends MonitorableJob {
                     status.fail("Error encountered while building graph. Inspect build logs.");
                     try {
                         ServerController.terminateInstances(getEC2ClientForDeployJob(), graphBuildingInstances);
-                    } catch (AmazonEC2Exception e){
+                    } catch (Exception e){
                         status.message = String.format(
                             "%s During job cleanup, the graph building instance was not properly terminated!",
                             status.message
@@ -594,7 +598,12 @@ public class DeployJob extends MonitorableJob {
                 // do not want to proceed with the rest of the job which would shut down existing servers running for
                 // the deployment.
                 if (deployment.buildGraphOnly) {
-                    ServerController.terminateInstances(ec2, graphBuildingInstances);
+                    try {
+                        ServerController.terminateInstances(getEC2ClientForDeployJob(), graphBuildingInstances);
+                    } catch (Exception e) {
+                        status.fail("Failed to terminate graph building instance!", e);
+                        return;
+                    }
                     status.update("Graph build is complete!", 100);
                     return;
                 }
@@ -628,7 +637,7 @@ public class DeployJob extends MonitorableJob {
                                     graphBuildingInstances.get(0).getInstanceId()
                                 )
                             );
-                        } catch (AmazonEC2Exception e) {
+                        } catch (Exception e) {
                             // failed to terminate graph building instance
                             // TODO make some kind of way to continue the job without failing, but also notify user
                             status.fail("Failed to terminate graph building instance!", e);
@@ -655,7 +664,7 @@ public class DeployJob extends MonitorableJob {
                 if (remainingInstances.size() == 0 || status.error) {
                     try {
                         ServerController.terminateInstances(getEC2ClientForDeployJob(), remainingInstances);
-                    } catch (AmazonEC2Exception e){
+                    } catch (Exception e){
                         status.message = String.format(
                             "%s During job cleanup, an instance was not properly terminated!",
                             status.message
@@ -693,7 +702,7 @@ public class DeployJob extends MonitorableJob {
                     remainingInstances.removeIf(instance -> instance.getInstanceId().equals(id));
                     try {
                         ServerController.terminateInstances(getEC2ClientForDeployJob(), id);
-                    } catch (AmazonEC2Exception e){
+                    } catch (Exception e){
                         job.status.message = String.format(
                             "%s During job cleanup, the instance was not properly terminated!",
                             job.status.message
@@ -720,7 +729,7 @@ public class DeployJob extends MonitorableJob {
                 // instances are up and running).
                 if (previousInstanceIds.size() > 0) {
                     boolean previousInstancesTerminated = ServerController.deRegisterAndTerminateInstances(
-                        otpServer.role
+                        otpServer.role,
                         otpServer.ec2Info.targetGroupArn,
                         customRegion,
                         previousInstanceIds
@@ -831,7 +840,7 @@ public class DeployJob extends MonitorableJob {
             // attempt to start the instances. Sometimes, AWS does not have enough availability of the desired instance
             // type and can throw an error at this point.
             instances = getEC2ClientForDeployJob().runInstances(runInstancesRequest).getReservation().getInstances();
-        } catch (AmazonEC2Exception | NonRuntimeAWSException e) {
+        } catch (Exception e) {
             status.fail(String.format("DeployJob failed due to a problem with AWS: %s", e.getMessage()), e);
             return Collections.EMPTY_LIST;
         }
@@ -1076,8 +1085,8 @@ public class DeployJob extends MonitorableJob {
         if (dryRun) return true;
         status.message = String.format("uploading %s to S3", filename);
         try {
-            s3Client.putObject(s3Bucket, String.format("%s/%s", jobRelativePath, filename), contents);
-        } catch (RuntimeException e) {
+            getS3ClientForDeployJob().putObject(s3Bucket, String.format("%s/%s", jobRelativePath, filename), contents);
+        } catch (Exception e) {
             status.fail(String.format("Failed to upload file %s", filename), e);
             return false;
         }

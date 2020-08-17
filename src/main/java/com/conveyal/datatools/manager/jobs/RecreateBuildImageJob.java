@@ -1,6 +1,5 @@
 package com.conveyal.datatools.manager.jobs;
 
-import com.amazonaws.services.ec2.model.AmazonEC2Exception;
 import com.amazonaws.services.ec2.model.CreateImageRequest;
 import com.amazonaws.services.ec2.model.CreateImageResult;
 import com.amazonaws.services.ec2.model.DeregisterImageRequest;
@@ -46,16 +45,22 @@ public class RecreateBuildImageJob extends MonitorableJob {
     }
 
     @Override
-    public void jobLogic() throws Exception {
+    public void jobLogic() {
         status.update("Creating build image", 5);
         // Create a new image of this instance.
         CreateImageRequest createImageRequest = new CreateImageRequest()
             .withInstanceId(graphBuildingInstances.get(0).getInstanceId())
             .withName(otpServer.ec2Info.buildImageName)
             .withDescription(otpServer.ec2Info.buildImageDescription);
-        CreateImageResult createImageResult = parentDeployJob
-            .getEC2ClientForDeployJob()
-            .createImage(createImageRequest);
+        CreateImageResult createImageResult = null;
+        try {
+            createImageResult = parentDeployJob
+                .getEC2ClientForDeployJob()
+                .createImage(createImageRequest);
+        } catch (Exception e) {
+            status.fail("Failed to make a request to create a new image!", e);
+            return;
+        }
 
         // Wait for the image to be created (it can take a few minutes). Also, make sure the parent DeployJob hasn't
         // failed this job already.
@@ -66,9 +71,15 @@ public class RecreateBuildImageJob extends MonitorableJob {
         DescribeImagesRequest describeImagesRequest = new DescribeImagesRequest()
             .withImageIds(createdImageId);
         while (!imageCreated && !status.error) {
-            DescribeImagesResult describeImagesResult = parentDeployJob
-                .getEC2ClientForDeployJob()
-                .describeImages(describeImagesRequest);
+            DescribeImagesResult describeImagesResult = null;
+            try {
+                describeImagesResult = parentDeployJob
+                    .getEC2ClientForDeployJob()
+                    .describeImages(describeImagesRequest);
+            } catch (Exception e) {
+                terminateInstanceAndFailWithMessage("Failed to make request to get image creation status!", e);
+                return;
+            }
             for (Image image : describeImagesResult.getImages()) {
                 if (image.getImageId().equals(createdImageId)) {
                     // obtain the image state.
@@ -78,16 +89,6 @@ public class RecreateBuildImageJob extends MonitorableJob {
                         if (imageCreationTracker.hasTimedOut()) {
                             terminateInstanceAndFailWithMessage(
                                 "It has taken over an hour for the graph build image to be created! Check the AWS console to see if the image was created successfully."
-                            );
-                            return;
-                        }
-                        // wait 2.5 seconds before making next request
-                        try {
-                            Thread.sleep(2500);
-                        } catch (InterruptedException e) {
-                            terminateInstanceAndFailWithMessage(
-                                "Failed while waiting for graph build image creation to complete!",
-                                e
                             );
                             return;
                         }
@@ -103,6 +104,16 @@ public class RecreateBuildImageJob extends MonitorableJob {
                     }
                 }
             }
+            // wait 2.5 seconds before making next request
+            try {
+                Thread.sleep(2500);
+            } catch (InterruptedException e) {
+                terminateInstanceAndFailWithMessage(
+                    "Failed while waiting for graph build image creation to complete!",
+                    e
+                );
+                return;
+            }
         }
         // If the parent DeployJob has already failed this job, exit immediately.
         if (status.error) return;
@@ -117,7 +128,12 @@ public class RecreateBuildImageJob extends MonitorableJob {
             status.message = "Deregistering old build image";
             DeregisterImageRequest deregisterImageRequest = new DeregisterImageRequest()
                 .withImageId(graphBuildAmiId);
-            parentDeployJob.getEC2ClientForDeployJob().deregisterImage(deregisterImageRequest);
+            try {
+                parentDeployJob.getEC2ClientForDeployJob().deregisterImage(deregisterImageRequest);
+            } catch (Exception e) {
+                terminateInstanceAndFailWithMessage("Failed to deregister previous graph building image!", e);
+                return;
+            }
         }
         status.update("Updating Server build AMI info", 80);
         // Update OTP Server info
@@ -130,11 +146,12 @@ public class RecreateBuildImageJob extends MonitorableJob {
             status.message = "Terminating graph building instance";
             try {
                 ServerController.terminateInstances(parentDeployJob.getEC2ClientForDeployJob(), graphBuildingInstances);
-            } catch (AmazonEC2Exception e) {
+            } catch (Exception e) {
                 status.fail(
                     "Graph build image successfully created, but failed to terminate graph building instance!",
                     e
                 );
+                return;
             }
         }
         status.completeSuccessfully("Graph build image successfully created!");
@@ -148,7 +165,12 @@ public class RecreateBuildImageJob extends MonitorableJob {
      * Terminates the graph building instance and fails with the given message and Exception.
      */
     private void terminateInstanceAndFailWithMessage(String message, Exception e) {
-        ServerController.terminateInstances(ec2, graphBuildingInstances);
+        try {
+            ServerController.terminateInstances(parentDeployJob.getEC2ClientForDeployJob(), graphBuildingInstances);
+        } catch (Exception e2) {
+            status.fail(String.format("%s Also, the graph building instance failed to terminate!", message), e2);
+            return;
+        }
         status.fail(message, e);
     }
 }
