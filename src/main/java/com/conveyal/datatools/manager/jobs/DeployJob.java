@@ -629,6 +629,7 @@ public class DeployJob extends MonitorableJob {
                             // failed to terminate graph building instance
                             // TODO make some kind of way to continue the job without failing, but also notify user
                             status.fail("Failed to terminate graph building instance!", e);
+                            return;
                         }
                     }
                 } else {
