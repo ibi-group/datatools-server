@@ -56,7 +56,8 @@ public class RecreateBuildImageJob extends MonitorableJob {
         boolean imageCreated = false;
         DescribeImagesRequest describeImagesRequest = new DescribeImagesRequest()
             .withImageIds(createdImageId);
-        while (!imageCreated) {
+        // wait for the image to be created. Also, make sure the parent DeployJob hasn't failed this job already.
+        while (!imageCreated && !status.error) {
             DescribeImagesResult describeImagesResult = ec2.describeImages(describeImagesRequest);
             for (Image image : describeImagesResult.getImages()) {
                 if (image.getImageId().equals(createdImageId)) {
@@ -93,6 +94,8 @@ public class RecreateBuildImageJob extends MonitorableJob {
                 }
             }
         }
+        // If the parent DeployJob has already failed this job, exit immediately.
+        if (status.error) return;
         status.update("Graph build image successfully created!", 70);
         // Deregister old image if it exists and is not the default datatools AMI ID and is not the server AMI ID
         String graphBuildAmiId = otpServer.ec2Info.buildAmiId;

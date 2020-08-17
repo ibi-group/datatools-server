@@ -566,15 +566,14 @@ public class DeployJob extends MonitorableJob {
                 }
 
                 status.update("Graph build is complete!", 40);
-                // If only building graph, job is finished. Note: the graph building EC2 instance should automatically shut
-                // itself down if this flag is turned on (happens in user data). We do not want to proceed with the rest of
-                // the job which would shut down existing servers running for the deployment.
+                // If only building graph, terminate the graph building instance and then mark the job as finished. We
+                // do not want to proceed with the rest of the job which would shut down existing servers running for
+                // the deployment.
                 if (deployment.buildGraphOnly) {
+                    ServerController.terminateInstances(ec2, graphBuildingInstances);
                     status.update("Graph build is complete!", 100);
                     return;
                 }
-
-                Persistence.deployments.replace(deployment.id, deployment);
 
                 // Check if a new image of the instance with the completed graph build should be created.
                 if (otpServer.ec2Info.recreateBuildImage) {
@@ -681,6 +680,7 @@ public class DeployJob extends MonitorableJob {
                         // wait 1 second
                         Thread.sleep(1000);
                     } catch (InterruptedException e) {
+                        recreateBuildImageJob.status.fail("An error occurred with the parent DeployJob", e);
                         recreateBuildImageExecutor.shutdown();
                         status.fail("An error occurred while waiting for the graph build image to be recreated", e);
                         return;
