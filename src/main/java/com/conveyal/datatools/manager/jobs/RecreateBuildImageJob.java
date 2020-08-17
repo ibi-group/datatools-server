@@ -19,6 +19,7 @@ import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.persistence.Persistence;
 
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import static com.conveyal.datatools.manager.models.EC2Info.AMI_CONFIG_PATH;
 
@@ -67,7 +68,8 @@ public class RecreateBuildImageJob extends MonitorableJob {
         boolean imageCreated = false;
         DescribeImagesRequest describeImagesRequest = new DescribeImagesRequest()
             .withImageIds(createdImageId);
-        while (!imageCreated) {
+        // wait for the image to be created. Also, make sure the parent DeployJob hasn't failed this job already.
+        while (!imageCreated && !status.error) {
             DescribeImagesResult describeImagesResult = ec2.describeImages(describeImagesRequest);
             for (Image image : describeImagesResult.getImages()) {
                 if (image.getImageId().equals(createdImageId)) {
@@ -75,9 +77,9 @@ public class RecreateBuildImageJob extends MonitorableJob {
                     // See https://docs.aws.amazon.com/AWSJavaSDK/latest/javadoc/com/amazonaws/services/ec2/model/ImageState.html
                     String imageState = image.getState().toLowerCase();
                     if (imageState.equals("pending")) {
-                        if (System.currentTimeMillis() - status.startTime > 60 * 60 * 1000) {
+                        if (System.currentTimeMillis() - status.startTime > TimeUnit.HOURS.toMillis(1)) {
                             terminateInstanceAndFailWithMessage(
-                                "It has taken over an hour for the graph build image to be created! Check the AWS console to see if the image ended up being created successfully"
+                                "It has taken over an hour for the graph build image to be created! Check the AWS console to see if the image was created successfully."
                             );
                             return;
                         }
@@ -104,6 +106,8 @@ public class RecreateBuildImageJob extends MonitorableJob {
                 }
             }
         }
+        // If the parent DeployJob has already failed this job, exit immediately.
+        if (status.error) return;
         status.update("Graph build image successfully created!", 70);
         // Deregister old image if it exists and is not the default datatools AMI ID and is not the server AMI ID
         String graphBuildAmiId = otpServer.ec2Info.buildAmiId;

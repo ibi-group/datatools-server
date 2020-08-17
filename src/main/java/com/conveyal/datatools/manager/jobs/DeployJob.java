@@ -508,11 +508,16 @@ public class DeployJob extends MonitorableJob {
     }
 
     /**
-     * Start up EC2 instances as trip planning servers running on the provided ELB. After monitoring the server statuses
-     * and verifying that they are running, remove the previous EC2 instances that were assigned to the ELB and terminate
-     * them.
+     * Start up EC2 instances as trip planning servers running on the provided ELB. If the graph build and run config are
+     * different, this method will start a separate graph building instance (generally a short-lived, high-powered EC2
+     * instance) that terminates after graph build completion and is replaced with long-lived, smaller instances.
+     * Otherwise, it will simply use the graph build instance as a long-lived instance. After monitoring the server
+     * statuses and verifying that they are running, the previous EC2 instances assigned to the ELB are removed and
+     * terminated.
      */
     private void replaceEC2Servers() {
+        // Before starting any instances, validate the EC2 configuration to save time down the road (e.g., if a config
+        // issue were encountered after a long graph build).
         status.message = "Validating AWS config";
         try {
             ServerController.EC2ValidationResult ec2ValidationResult = ServerController.validateEC2Config(
@@ -531,14 +536,15 @@ public class DeployJob extends MonitorableJob {
             status.fail("An error occurred while validating the ec2 configuration", e);
             return;
         }
-        ExecutorService recreateBuildImageExecutor = null;
-        RecreateBuildImageJob recreateBuildImageJob = null;
         try {
             // Track any previous instances running for the server we're deploying to in order to de-register and
             // terminate them later.
             List<EC2InstanceSummary> previousInstances = otpServer.retrieveEC2InstanceSummaries();
             // Track new instances that should be added to target group once the deploy job is completed.
             List<Instance> newInstancesForTargetGroup = new ArrayList<>();
+            // Initialize recreate build image job and executor in case they're needed below.
+            ExecutorService recreateBuildImageExecutor = null;
+            RecreateBuildImageJob recreateBuildImageJob = null;
             // First start graph-building instance and wait for graph to successfully build.
             if (!deployType.equals(DeployType.USE_PREBUILT_GRAPH)) {
                 status.message = "Starting up graph building EC2 instance";
@@ -556,15 +562,16 @@ public class DeployJob extends MonitorableJob {
                     return;
                 }
                 status.message = "Waiting for graph build to complete...";
-                MonitorServerStatusJob monitorInitialServerJob = new MonitorServerStatusJob(
+                MonitorServerStatusJob monitorGraphBuildServer = new MonitorServerStatusJob(
                     owner,
                     this,
                     graphBuildingInstances.get(0),
                     false
                 );
-                monitorInitialServerJob.run();
+                // Run job synchronously because nothing else can be accomplished while the graph build is underway.
+                monitorGraphBuildServer.run();
 
-                if (monitorInitialServerJob.status.error) {
+                if (monitorGraphBuildServer.status.error) {
                     // If an error occurred while monitoring the initial server, fail this job and instruct user to inspect
                     // build logs.
                     status.fail("Error encountered while building graph. Inspect build logs.");
@@ -580,19 +587,19 @@ public class DeployJob extends MonitorableJob {
                 }
 
                 status.update("Graph build is complete!", 40);
-                // If only building graph, job is finished. Note: the graph building EC2 instance should automatically shut
-                // itself down if this flag is turned on (happens in user data). We do not want to proceed with the rest of
-                // the job which would shut down existing servers running for the deployment.
+                // If only building graph, terminate the graph building instance and then mark the job as finished. We
+                // do not want to proceed with the rest of the job which would shut down existing servers running for
+                // the deployment.
                 if (deployment.buildGraphOnly) {
+                    ServerController.terminateInstances(ec2, graphBuildingInstances);
                     status.update("Graph build is complete!", 100);
                     return;
                 }
 
-                Persistence.deployments.replace(deployment.id, deployment);
-
                 // Check if a new image of the instance with the completed graph build should be created.
                 if (otpServer.ec2Info.recreateBuildImage) {
-                    // Begin a new job to create a graph build image so that can happen asynchronously
+                    // Create a graph build image in a new thread, so that the remaining servers can be booted
+                    // up simultaneously.
                     recreateBuildImageJob = new RecreateBuildImageJob(
                         this,
                         owner,
@@ -603,8 +610,7 @@ public class DeployJob extends MonitorableJob {
                 }
                 // Check whether the graph build instance type or AMI ID is different from the non-graph building type.
                 // If so, update the number of servers remaining to the total amount of servers that should be started
-                // and if there was not recreate build image job, terminate the graph building instance. If not, add the
-                // graph building instance to the list of started instances.
+                // and, if no recreate build image job is in progress, terminate the graph building instance.
                 if (otpServer.ec2Info.hasSeparateGraphBuildConfig()) {
                     // different instance type and/or ami exists for graph building, so update the number of instances
                     // to start up to be the full amount of instances.
@@ -626,7 +632,8 @@ public class DeployJob extends MonitorableJob {
                         }
                     }
                 } else {
-                    // same configuration exists, so keep instance on and add to list of running instances
+                    // The graph build configuration is identical to the run config, so keep the graph building instance
+                    // on and add it to the list of running instances.
                     newInstancesForTargetGroup.addAll(graphBuildingInstances);
                     status.numServersRemaining = otpServer.ec2Info.instanceCount <= 0
                         ? 0
@@ -705,15 +712,17 @@ public class DeployJob extends MonitorableJob {
                     .filter(instance -> "running".equals(instance.state.getName()))
                     .map(instance -> instance.instanceId)
                     .collect(Collectors.toList());
+                // If there were previous instances assigned to the server, deregister/terminate them (now that the new
+                // instances are up and running).
                 if (previousInstanceIds.size() > 0) {
-                    boolean success = ServerController.deRegisterAndTerminateInstances(
+                    boolean previousInstancesTerminated = ServerController.deRegisterAndTerminateInstances(
                         credentials,
                         otpServer.ec2Info.targetGroupArn,
                         customRegion,
                         previousInstanceIds
                     );
                     // If there was a problem during de-registration/termination, notify via status message.
-                    if (!success) {
+                    if (!previousInstancesTerminated) {
                         finalMessage = String.format("Server setup is complete! (WARNING: Could not terminate previous EC2 instances: %s", previousInstanceIds);
                     }
                 }
@@ -726,6 +735,7 @@ public class DeployJob extends MonitorableJob {
                         // wait 1 second
                         Thread.sleep(1000);
                     } catch (InterruptedException e) {
+                        recreateBuildImageJob.status.fail("An error occurred with the parent DeployJob", e);
                         recreateBuildImageExecutor.shutdown();
                         status.fail("An error occurred while waiting for the graph build image to be recreated", e);
                         return;
