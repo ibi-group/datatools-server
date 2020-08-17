@@ -17,6 +17,7 @@ import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.controllers.api.ServerController;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.TimeTracker;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -69,6 +70,7 @@ public class RecreateBuildImageJob extends MonitorableJob {
         DescribeImagesRequest describeImagesRequest = new DescribeImagesRequest()
             .withImageIds(createdImageId);
         // wait for the image to be created. Also, make sure the parent DeployJob hasn't failed this job already.
+        TimeTracker imageCreationTracker = new TimeTracker(1, TimeUnit.HOURS);
         while (!imageCreated && !status.error) {
             DescribeImagesResult describeImagesResult = ec2.describeImages(describeImagesRequest);
             for (Image image : describeImagesResult.getImages()) {
@@ -77,7 +79,7 @@ public class RecreateBuildImageJob extends MonitorableJob {
                     // See https://docs.aws.amazon.com/AWSJavaSDK/latest/javadoc/com/amazonaws/services/ec2/model/ImageState.html
                     String imageState = image.getState().toLowerCase();
                     if (imageState.equals("pending")) {
-                        if (System.currentTimeMillis() - status.startTime > TimeUnit.HOURS.toMillis(1)) {
+                        if (imageCreationTracker.hasTimedOut()) {
                             terminateInstanceAndFailWithMessage(
                                 "It has taken over an hour for the graph build image to be created! Check the AWS console to see if the image was created successfully."
                             );

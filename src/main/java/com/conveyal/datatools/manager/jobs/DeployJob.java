@@ -66,6 +66,7 @@ import com.conveyal.datatools.manager.models.EC2InstanceSummary;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.StringUtils;
+import com.conveyal.datatools.manager.utils.TimeTracker;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -98,7 +99,6 @@ public class DeployJob extends MonitorableJob {
     private static final String OTP_GRAPH_FILENAME = "Graph.obj";
     public static final String OTP_RUNNER_BRANCH = "router-folder-downloads";
     public static final String OTP_RUNNER_STATUS_FILE = "status.json";
-    private static final long TEN_MINUTES_IN_MILLISECONDS = 10 * 60 * 1000;
     // Note: using a cloudfront URL for these download repo URLs will greatly increase download/deploy speed.
     private static final String R5_REPO_URL = DataManager.hasConfigProperty("modules.deployment.r5_download_url")
         ? DataManager.getConfigPropertyAsText("modules.deployment.r5_download_url")
@@ -856,10 +856,10 @@ public class DeployJob extends MonitorableJob {
                     .withResources(instance.getInstanceId())
             );
         }
+        // Wait up to 10 minutes for IP addresses to be available.
+        TimeTracker IPCheckTracker = new TimeTracker(10, TimeUnit.MINUTES);
         // Store the instances with updated IP addresses here.
         List<Instance> updatedInstances = new ArrayList<>();
-        // Store time we began checking for IP addresses for time out.
-        long beginIpCheckTime = System.currentTimeMillis();
         Filter instanceIdFilter = new Filter("instance-id", instanceIds);
         // While all of the IPs have not been established, keep checking the EC2 instances, waiting a few seconds between
         // each check.
@@ -885,7 +885,7 @@ public class DeployJob extends MonitorableJob {
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-            if (System.currentTimeMillis() - beginIpCheckTime > TEN_MINUTES_IN_MILLISECONDS) {
+            if (IPCheckTracker.hasTimedOut()) {
                 status.fail("Job timed out due to public IP assignment taking longer than ten minutes!");
                 return updatedInstances;
             }

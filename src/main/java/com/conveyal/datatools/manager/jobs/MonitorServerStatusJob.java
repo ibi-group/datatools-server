@@ -23,6 +23,7 @@ import com.conveyal.datatools.common.utils.AWSUtils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.OtpServer;
+import com.conveyal.datatools.manager.utils.TimeTracker;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.apache.http.HttpEntity;
@@ -36,6 +37,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.util.concurrent.TimeUnit;
 
 import static com.conveyal.datatools.manager.jobs.DeployJob.OTP_RUNNER_STATUS_FILE;
 
@@ -58,7 +60,6 @@ public class MonitorServerStatusJob extends MonitorableJob {
     // script fails (e.g., uploading or downloading a file).
     private static final int DELAY_SECONDS = 4;
     private static final int MAX_INSTANCE_HEALTH_RETRIES = 5;
-    public long graphTaskSeconds;
 
     public MonitorServerStatusJob(Auth0UserProfile owner, DeployJob deployJob, Instance instance, boolean graphAlreadyBuilt) {
         super(
@@ -98,21 +99,21 @@ public class MonitorServerStatusJob extends MonitorableJob {
         }
         try {
             // Wait for otp-runner to produce first status file
-            long statusCheckStartTime = System.currentTimeMillis();
+            TimeTracker otpRunnerStatusAvailableTracker = new TimeTracker(5, TimeUnit.MINUTES);
             String statusUrl = String.join("/", ipUrl, OTP_RUNNER_STATUS_FILE);
             boolean otpRunnerStatusAvailable = false;
             while (!otpRunnerStatusAvailable) {
                 // If the request is successful, the OTP instance has started.
                 waitAndCheckInstanceHealth("otp-runner status file availability check: " + statusUrl);
                 otpRunnerStatusAvailable = checkForSuccessfulRequest(statusUrl);
-                long maxOtpRunnerStartupTimeMillis = 5 * 60 * 1000;
-                if (taskHasTimedOut(statusCheckStartTime, maxOtpRunnerStartupTimeMillis)) {
+                if (otpRunnerStatusAvailableTracker.hasTimedOut()) {
                     failJob("Job timed out while waiting for otp-runner to produce a status file!");
                     return;
                 }
             }
-            // Wait for otp-runner to write a status that fulfills expectations of this job
-            statusCheckStartTime = System.currentTimeMillis();
+            // Wait for otp-runner to write a status that fulfills expectations of this job. Wait a maximum of 5 hours
+            // if building a graph, or 1 hour if starting a server-only instance.
+            TimeTracker otpRunnerCompletionTracker = new TimeTracker(graphAlreadyBuilt ? 1 : 5, TimeUnit.HOURS);
             boolean otpRunnerCompleted = false;
             while (!otpRunnerCompleted) {
                 waitAndCheckInstanceHealth("otp-runner completion check: " + statusUrl);
@@ -122,15 +123,15 @@ public class MonitorServerStatusJob extends MonitorableJob {
                 if (status.error) {
                     return;
                 }
-                // wait a maximum of 5 hours if building a graph, or 1 hour if just starting a server
-                long maxOtpRunnerWaitTimeMillis = (graphAlreadyBuilt ? 1 : 5) * 60 * 60 * 1000;
-                if (taskHasTimedOut(statusCheckStartTime, maxOtpRunnerWaitTimeMillis)) {
+                if (otpRunnerCompletionTracker.hasTimedOut()) {
                     failJob("Job timed out while waiting for otp-runner to finish!");
                     return;
                 }
             }
-            graphTaskSeconds = (System.currentTimeMillis() - statusCheckStartTime) / 1000;
-            String message = String.format("Graph build/download completed in %d seconds!", graphTaskSeconds);
+            String message = String.format(
+                "Graph build/download completed in %d seconds!",
+                otpRunnerStatusAvailableTracker.elapsedSeconds()
+            );
             LOG.info(message);
             // If only task for this instance is to build the graph (either because that is the deployment purpose or
             // because this instance type/image is for graph building only), this machine's job is complete and we can
@@ -141,18 +142,17 @@ public class MonitorServerStatusJob extends MonitorableJob {
                 return;
             }
             // Once this is confirmed, check for the availability of the router, which will indicate that the graph
-            // load has completed successfully.
+            // load has completed successfully. Wait a maximum of 20 minutes to load the graph and for the router to
+            // become available.
+            TimeTracker routerCheckTracker = new TimeTracker(20, TimeUnit.MINUTES);
             String routerUrl = String.join("/", ipUrl, "otp/routers/default");
-            long routerCheckStartTime = System.currentTimeMillis();
             boolean routerIsAvailable = false;
             while (!routerIsAvailable) {
                 // If the request was successful, the graph build is complete!
                 // TODO: Substitute in specific router ID? Or just default to... "default".
                 waitAndCheckInstanceHealth("router to become available: " + routerUrl);
                 routerIsAvailable = checkForSuccessfulRequest(routerUrl);
-                // wait a maximum of 20 minutes to load the graph and for the router to become available.
-                long maxRouterAvailableWaitTimeMillis = 20 * 60 * 1000;
-                if (taskHasTimedOut(routerCheckStartTime, maxRouterAvailableWaitTimeMillis)) {
+                if (routerCheckTracker.hasTimedOut()) {
                     failJob("Job timed out while waiting for trip planner to start up.");
                     return;
                 }
@@ -164,7 +164,9 @@ public class MonitorServerStatusJob extends MonitorableJob {
                 .withTargetGroupArn(otpServer.ec2Info.targetGroupArn)
                 .withTargets(new TargetDescription().withId(instance.getInstanceId()));
             boolean targetAddedSuccessfully = false;
-            long registerTargetStartTime = System.currentTimeMillis();
+
+            // Wait for two minutes for targets to register.
+            TimeTracker registerTargetTracker = new TimeTracker(2, TimeUnit.MINUTES);
             AmazonElasticLoadBalancingClientBuilder elbBuilder = AmazonElasticLoadBalancingClient.builder()
                 .withCredentials(credentials);
             AmazonElasticLoadBalancing elbClient = deployJob.getCustomRegion() == null ?
@@ -184,8 +186,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
                         targetAddedSuccessfully = true;
                     }
                 }
-                // Wait for two minutes.
-                if (taskHasTimedOut(registerTargetStartTime, 2 * 60 * 1000)) {
+                if (registerTargetTracker.hasTimedOut()) {
                     failJob("Job timed out while waiting to register EC2 instance with load balancer target group.");
                     return;
                 }
@@ -239,12 +240,6 @@ public class MonitorServerStatusJob extends MonitorableJob {
     private void failJob(String message, Exception e) {
         LOG.error(message);
         status.fail(String.format("%s Check logs at: %s", message, getOtpRunnerLogS3Path()), e);
-    }
-
-    /** Determine if a specific task has passed time limit for its run time. */
-    private boolean taskHasTimedOut(long startTime, long maxRunTimeMillis) {
-        long runTimeMillis = System.currentTimeMillis() - startTime;
-        return runTimeMillis > maxRunTimeMillis;
     }
 
     /**
