@@ -14,8 +14,10 @@ import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.controllers.api.ServerController;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.TimeTracker;
 
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import static com.conveyal.datatools.manager.models.EC2Info.AMI_CONFIG_PATH;
 
@@ -54,13 +56,16 @@ public class RecreateBuildImageJob extends MonitorableJob {
         CreateImageResult createImageResult = parentDeployJob
             .getEC2ClientForDeployJob()
             .createImage(createImageRequest);
-        // Wait for image creation to complete
+
+        // Wait for the image to be created (it can take a few minutes). Also, make sure the parent DeployJob hasn't
+        // failed this job already.
+        TimeTracker imageCreationTracker = new TimeTracker(1, TimeUnit.HOURS);
         String createdImageId = createImageResult.getImageId();
         status.update("Waiting for graph build image to be created...", 25);
         boolean imageCreated = false;
         DescribeImagesRequest describeImagesRequest = new DescribeImagesRequest()
             .withImageIds(createdImageId);
-        while (!imageCreated) {
+        while (!imageCreated && !status.error) {
             DescribeImagesResult describeImagesResult = parentDeployJob
                 .getEC2ClientForDeployJob()
                 .describeImages(describeImagesRequest);
@@ -70,14 +75,28 @@ public class RecreateBuildImageJob extends MonitorableJob {
                     // See https://docs.aws.amazon.com/AWSJavaSDK/latest/javadoc/com/amazonaws/services/ec2/model/ImageState.html
                     String imageState = image.getState().toLowerCase();
                     if (imageState.equals("pending")) {
+                        if (imageCreationTracker.hasTimedOut()) {
+                            terminateInstanceAndFailWithMessage(
+                                "It has taken over an hour for the graph build image to be created! Check the AWS console to see if the image was created successfully."
+                            );
+                            return;
+                        }
                         // wait 2.5 seconds before making next request
-                        Thread.sleep(2500);
+                        try {
+                            Thread.sleep(2500);
+                        } catch (InterruptedException e) {
+                            terminateInstanceAndFailWithMessage(
+                                "Failed while waiting for graph build image creation to complete!",
+                                e
+                            );
+                            return;
+                        }
                     } else if (imageState.equals("available")) {
                         // success! Set imageCreated to true.
                         imageCreated = true;
                     } else {
                         // Any other image state is assumed to be a failure
-                        status.fail(
+                        terminateInstanceAndFailWithMessage(
                             String.format("Graph build image creation failed! Image state became `%s`", imageState)
                         );
                         return;
@@ -85,6 +104,8 @@ public class RecreateBuildImageJob extends MonitorableJob {
                 }
             }
         }
+        // If the parent DeployJob has already failed this job, exit immediately.
+        if (status.error) return;
         status.update("Graph build image successfully created!", 70);
         // Deregister old image if it exists and is not the default datatools AMI ID and is not the server AMI ID
         String graphBuildAmiId = otpServer.ec2Info.buildAmiId;
@@ -117,5 +138,17 @@ public class RecreateBuildImageJob extends MonitorableJob {
             }
         }
         status.completeSuccessfully("Graph build image successfully created!");
+    }
+
+    private void terminateInstanceAndFailWithMessage(String message) {
+        terminateInstanceAndFailWithMessage(message, null);
+    }
+
+    /**
+     * Terminates the graph building instance and fails with the given message and Exception.
+     */
+    private void terminateInstanceAndFailWithMessage(String message, Exception e) {
+        ServerController.terminateInstances(ec2, graphBuildingInstances);
+        status.fail(message, e);
     }
 }

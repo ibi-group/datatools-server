@@ -96,7 +96,7 @@ public class DeployJobTest extends UnitTest {
         );
         assertThat(
             replaceNonce(
-                deployJob.constructUserData(false),
+                deployJob.constructManifestAndUserData(false, true),
                 "canMakeGraphBuildUserDataScript"
             ),
             matchesSnapshot()
@@ -117,7 +117,7 @@ public class DeployJobTest extends UnitTest {
         );
         assertThat(
             replaceNonce(
-                deployJob.constructUserData(true),
+                deployJob.constructManifestAndUserData(true, true),
                 "canMakeServerOnlyUserDataScript"
             ),
             matchesSnapshot()

@@ -321,33 +321,16 @@ public class ServerController {
         validationTasks.add(() -> validateAmiId(server.ec2Info.buildAmiId, ec2Client));
         validationTasks.add(() -> validateGraphBuildReplacementAmiName(server.ec2Info, ec2Client));
         // add the load balancer task to the end since it can produce aggregate messages
-        validationTasks.add(() -> validateTargetGrouptLoadBalancerSubnetIdAndSecurityGroup(
+        validationTasks.add(() -> validateTargetGroupLoadBalancerSubnetIdAndSecurityGroup(
             server.ec2Info,
             ec2Client,
             elbClient
         ));
 
-        // execute all tasks asynchronously in unique threads
-        ExecutorService pool = Executors.newFixedThreadPool(validationTasks.size());
-
-        // compile overall result
-        EC2ValidationResult result = new EC2ValidationResult();
-        // check each individual task result
-        for (Future<EC2ValidationResult> ec2ValidationResultFuture : pool.invokeAll(validationTasks)) {
-            EC2ValidationResult taskValidationResult = ec2ValidationResultFuture.get();
-            // check if task yielded a valid result
-            if (!taskValidationResult.isValid()) {
-                // task had an invalid result, check if overall validation result has been changed to false yet
-                if (result.isValid()) {
-                    // first invalid result. Write a header message.
-                    result.setInvalid("Invalid EC2 config for the following reasons!\n", new Exception());
-                }
-                // add to list of messages and exceptions
-                result.appendResult(taskValidationResult);
-            }
-        }
-        pool.shutdown();
-        return result;
+        return executeValidationTasks(
+            validationTasks,
+            "Invalid EC2 config for the following reasons!\n"
+        );
     }
 
     /**
@@ -601,7 +584,7 @@ public class ServerController {
      * Validate that ELB target group exists and is not empty and return associated load balancer for validating related
      * fields.
      */
-    private static EC2ValidationResult validateTargetGrouptLoadBalancerSubnetIdAndSecurityGroup(
+    private static EC2ValidationResult validateTargetGroupLoadBalancerSubnetIdAndSecurityGroup(
         EC2Info ec2Info,
         AmazonEC2 ec2Client,
         AmazonElasticLoadBalancing elbClient
@@ -623,18 +606,36 @@ public class ServerController {
         List<Callable<EC2ValidationResult>> loadBalancerValidationTasks = new ArrayList<>();
         loadBalancerValidationTasks.add(() -> validateSubnetId(loadBalancer, ec2Info, ec2Client));
         loadBalancerValidationTasks.add(() -> validateSecurityGroupId(loadBalancer, ec2Info));
-        ExecutorService pool = Executors.newFixedThreadPool(loadBalancerValidationTasks.size());
-        for (Future<EC2ValidationResult> ec2ValidationResultFuture : pool.invokeAll(loadBalancerValidationTasks)) {
-            EC2ValidationResult loadBalancerValidationTaskResult = ec2ValidationResultFuture.get();
+
+        return executeValidationTasks(
+            loadBalancerValidationTasks,
+            "Invalid EC2 load balancer config for the following reasons:\n"
+        );
+    }
+
+    private static EC2ValidationResult executeValidationTasks(
+        List<Callable<EC2ValidationResult>> validationTasks,
+        String overallInvalidMessage
+    ) throws ExecutionException, InterruptedException {
+        // create overall result
+        EC2ValidationResult result = new EC2ValidationResult();
+
+        // Create a thread pool that is the size of the total number of validation tasks so each task gets its own
+        // thread
+        ExecutorService pool = Executors.newFixedThreadPool(validationTasks.size());
+
+        // Execute all tasks
+        for (Future<EC2ValidationResult> resultFuture : pool.invokeAll(validationTasks)) {
+            EC2ValidationResult taskResult = resultFuture.get();
             // check if task yielded a valid result
-            if (!loadBalancerValidationTaskResult.isValid()) {
+            if (!taskResult.isValid()) {
                 // task had an invalid result, check if overall validation result has been changed to false yet
                 if (result.isValid()) {
                     // first invalid result. Write a header message.
-                    result.setInvalid("Invalid EC2 load balancer config for the following reasons:\n", new Exception());
+                    result.setInvalid(overallInvalidMessage);
                 }
                 // add to list of messages and exceptions
-                result.appendResult(loadBalancerValidationTaskResult);
+                result.appendResult(taskResult);
             }
         }
         pool.shutdown();
