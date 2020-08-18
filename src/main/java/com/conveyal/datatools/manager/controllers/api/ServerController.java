@@ -334,20 +334,10 @@ public class ServerController {
     }
 
     /**
-     * Verify that application has permission to write to/delete from S3 bucket. We're following the recommended
-     * approach from https://stackoverflow.com/a/17284647/915811, but perhaps there is a way to do this
-     * effectively without incurring AWS costs (although writing/deleting an empty file to S3 is probably
-     * miniscule).
-     * @param s3Bucket
-     */
-    private static boolean verifyS3WritePermissions(AmazonS3 s3Client, String s3Bucket, Request req) {
-
-        return true;
-    }
-
-    /**
      * Verify that application can write to S3 bucket either through its own credentials or by assuming the provided IAM
-     * role.
+     * role. We're following the recommended approach from https://stackoverflow.com/a/17284647/915811, but perhaps
+     * there is a way to do this effectively without incurring AWS costs (although writing/deleting an empty file to S3
+     * is probably miniscule).
      */
     private static void verifyS3WritePermissions(OtpServer server, Request req) {
         String bucket = server.s3Bucket;
@@ -358,7 +348,7 @@ public class ServerController {
             AmazonS3 client = getS3Client(server.role, region);
             client.putObject(bucket, key, File.createTempFile("test", ".zip"));
             client.deleteObject(bucket, key);
-        } catch (IOException | AmazonS3Exception | NonRuntimeAWSException e) {
+        } catch (Exception e) {
             logMessageAndHalt(
                 req,
                 400,
