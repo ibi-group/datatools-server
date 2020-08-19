@@ -26,7 +26,8 @@ import static com.conveyal.datatools.manager.models.EC2Info.AMI_CONFIG_PATH;
 
 /**
  * Job that is dispatched during a {@link DeployJob} that spins up EC2 instances. This handles waiting for a graph build
- * image to be created after a graph build has completed.
+ * image to be created after a graph build has completed. If an error occurs, or if the image was created successfully
+ * and has a separate graph build instance type, the EC2 instance will be terminated.
  */
 public class RecreateBuildImageJob extends MonitorableJob {
     private final AmazonEC2 ec2;

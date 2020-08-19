@@ -6,10 +6,7 @@ import com.amazonaws.services.ec2.model.AmazonEC2Exception;
 import com.amazonaws.services.ec2.model.DescribeInstancesRequest;
 import com.amazonaws.services.ec2.model.DescribeInstancesResult;
 import com.amazonaws.services.ec2.model.Instance;
-import com.amazonaws.services.ec2.model.InstanceStateChange;
 import com.amazonaws.services.ec2.model.Reservation;
-import com.amazonaws.services.ec2.model.TerminateInstancesRequest;
-import com.amazonaws.services.ec2.model.TerminateInstancesResult;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancing;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClient;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClientBuilder;
@@ -206,7 +203,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
             // was accidental or intentional, we want the result to be that the job fails and the deployment be aborted.
             // This gives us a failsafe in case we kick off a deployment accidentally or otherwise need to cancel the
             // deployment job (e.g., due to an incorrect configuration).
-            failJob("Ec2 Instance was stopped or terminated before job could complete!", e);
+            failJob("EC2 Instance was stopped or terminated before job could complete!", e);
         } catch (Exception e) {
             // This catch-all block is needed to make sure any exceptions that are not handled elsewhere are properly
             // caught here so that the job can be properly failed. If the job is not failed properly this could result
@@ -238,7 +235,11 @@ public class MonitorServerStatusJob extends MonitorableJob {
      * appended to the failure message.
      */
     private void failJob(String message, Exception e) {
-        LOG.error(message);
+        if (e == null) {
+            LOG.error(message);
+        } else {
+            LOG.error(message, e);
+        }
         status.fail(String.format("%s Check logs at: %s", message, getOtpRunnerLogS3Path()), e);
     }
 
@@ -248,26 +249,22 @@ public class MonitorServerStatusJob extends MonitorableJob {
      * job should be failed.
      */
     private void waitAndCheckInstanceHealth(String waitingFor) throws InstanceHealthException {
-        checkInstanceHealth();
+        checkInstanceHealth(1);
         try {
             LOG.info("Waiting {} seconds for {}", DELAY_SECONDS, waitingFor);
             Thread.sleep(1000 * DELAY_SECONDS);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
-        checkInstanceHealth();
-    }
-
-    /**
-     * Helper method to initiate to first attempt at checking the instance health.
-     */
-    private void checkInstanceHealth() throws InstanceHealthException {
         checkInstanceHealth(1);
     }
 
     /**
      * Checks whether the instance is running. If it has entered a state where it is stopped, terminated or about to be
-     * stopped or terminated, then this method throws an exception.
+     * stopped or terminated, then this method throws an exception. It is possible that some describe instance requests
+     * might fail either during instance startup or due to brief network connectivity issues, so this method will retry
+     * checking the instance health using recursion up to the
+     * ${@link MonitorServerStatusJob#MAX_INSTANCE_HEALTH_RETRIES} value.
      */
     private void checkInstanceHealth(int attemptNumber) throws InstanceHealthException {
         DescribeInstancesRequest request = new DescribeInstancesRequest()
@@ -276,7 +273,12 @@ public class MonitorServerStatusJob extends MonitorableJob {
         try {
             result = ec2.describeInstances(request);
         } catch (AmazonEC2Exception e) {
-            LOG.error("Failed on attempt {} to execute request to obtain instance health!", attemptNumber, e);
+            LOG.warn(
+                "Failed on attempt {}/{} to execute request to obtain instance health!",
+                attemptNumber,
+                MAX_INSTANCE_HEALTH_RETRIES,
+                e
+            );
             if (attemptNumber > MAX_INSTANCE_HEALTH_RETRIES) {
                 throw new InstanceHealthException("AWS Describe Instances error!");
             }
@@ -311,7 +313,17 @@ public class MonitorServerStatusJob extends MonitorableJob {
         }
     }
 
+    /**
+     * Checks the status of otp-runner and returns whether otp-runner has completed (either with success or failure).
+     * The overall job is updated with the percent progress and message from the otp-runner status file as well. This
+     * will make a request to the given URL to retrieve an otp-runner JSON status file. If the otp-runner status file
+     * indicates that an error occurred, this method will fail the job.
+     *
+     * @param url The URL to retrieve the otp-runner status file from
+     * @return true if otp-runner has completed all necessary tasks
+     */
     private boolean checkForOtpRunnerCompletion(String url) {
+        // make request to otp-runner
         HttpGet httpGet = new HttpGet(url);
         OtpRunnerStatus otpRunnerStatus;
         try (CloseableHttpResponse response = httpClient.execute(httpGet)) {
@@ -321,20 +333,31 @@ public class MonitorServerStatusJob extends MonitorableJob {
             e.printStackTrace();
             return false;
         }
+
+        // make sure otp-runner status file contains a matching nonce. Sometimes a otp-runner status from a previous
+        // deploy job could be present, so this makes sure that the otp-runner status file applies to this particular
+        // deploy job
         if (otpRunnerStatus.nonce == null || !otpRunnerStatus.nonce.equals(deployJob.getNonce())) {
             LOG.warn("otp-runner status nonce does not match deployment nonce");
             return false;
         }
+
+        // if the otp-runner status file contains an error message, fail the job
         if (otpRunnerStatus.error) {
             failJob(otpRunnerStatus.message);
             return false;
         }
+
+        // update overall job status and percentage with the status and percentage found in the otp-runner status file
         status.update(otpRunnerStatus.message, otpRunnerStatus.pctProgress);
+
+        // return completion based off of whether this instance is a graph-build only instance or is one that is
+        // exepcted to run an OTP server
         if (graphAlreadyBuilt || !isBuildOnlyServer()) {
-            // server that finishes after OTP server is successfully started
+            // A successful completion is after the OTP server is successfully started
             return otpRunnerStatus.serverStarted;
         } else {
-            // server that finishes after graph is uploaded
+            // A successful completion is after the graph is uploaded
             return otpRunnerStatus.graphUploaded;
         }
     }
@@ -359,26 +382,6 @@ public class MonitorServerStatusJob extends MonitorableJob {
 
     @Override
     public void jobFinished() {
-        if (status.error) {
-            // Terminate server.
-            TerminateInstancesResult terminateInstancesResult;
-            try {
-                terminateInstancesResult = ec2.terminateInstances(
-                    new TerminateInstancesRequest().withInstanceIds(instance.getInstanceId())
-                );
-            } catch (AmazonEC2Exception e) {
-                status.fail(
-                    String.format("%s. During job cleanup, the instance was not properly terminated!", status.message)
-                );
-                return;
-            }
-            InstanceStateChange instanceStateChange = terminateInstancesResult.getTerminatingInstances().get(0);
-            // If instance state code is 48 that means it has been terminated.
-            if (instanceStateChange.getCurrentState().getCode() == 48) {
-                // FIXME: this message will not make it to the client because the status has already been failed. Also,
-                //   I'm not sure if this is even the right way to handle the instance state check.
-                status.update("Instance is terminated!", 100);
-            }
-        }
+        // jobs that failed will have their associated instances terminated in the parent deploy job
     }
 }

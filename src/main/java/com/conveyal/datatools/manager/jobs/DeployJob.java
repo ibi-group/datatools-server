@@ -11,10 +11,11 @@ import com.amazonaws.services.ec2.model.Filter;
 import com.amazonaws.services.ec2.model.IamInstanceProfileSpecification;
 import com.amazonaws.services.ec2.model.Instance;
 import com.amazonaws.services.ec2.model.InstanceNetworkInterfaceSpecification;
+import com.amazonaws.services.ec2.model.InstanceStateChange;
 import com.amazonaws.services.ec2.model.InstanceType;
 import com.amazonaws.services.ec2.model.RunInstancesRequest;
 import com.amazonaws.services.ec2.model.Tag;
-import com.amazonaws.services.ec2.model.TerminateInstancesRequest;
+import com.amazonaws.services.ec2.model.TerminateInstancesResult;
 import com.amazonaws.services.identitymanagement.AmazonIdentityManagementClientBuilder;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3URI;
@@ -97,15 +98,23 @@ public class DeployJob extends MonitorableJob {
     // Indicates the node.js version installed by nvm to set the PATH variable to point to
     private static final String NODE_VERSION = "v12.16.3";
     private static final String OTP_GRAPH_FILENAME = "Graph.obj";
-    public static final String OTP_RUNNER_BRANCH = "router-folder-downloads";
+    public static final String OTP_RUNNER_BRANCH = DataManager.getConfigPropertyAsText(
+        "modules.deployment.ec2.otp_runner_branch",
+        "master"
+    );
     public static final String OTP_RUNNER_STATUS_FILE = "status.json";
     // Note: using a cloudfront URL for these download repo URLs will greatly increase download/deploy speed.
-    private static final String R5_REPO_URL = DataManager.hasConfigProperty("modules.deployment.r5_download_url")
-        ? DataManager.getConfigPropertyAsText("modules.deployment.r5_download_url")
-        : "https://r5-builds.s3.amazonaws.com";
-    private static final String OTP_REPO_URL = DataManager.hasConfigProperty("modules.deployment.otp_download_url")
-        ? DataManager.getConfigPropertyAsText("modules.deployment.otp_download_url")
-        : "https://opentripplanner-builds.s3.amazonaws.com";
+    private static final String R5_REPO_URL = DataManager.getConfigPropertyAsText(
+        "modules.deployment.r5_download_url",
+        "https://r5-builds.s3.amazonaws.com"
+    );
+    private static final String OTP_REPO_URL = DataManager.getConfigPropertyAsText(
+        "modules.deployment.otp_download_url",
+        "https://opentripplanner-builds.s3.amazonaws.com"
+    );
+    private static final String BUILD_CONFIG_FILENAME = "build-config.json";
+    private static final String ROUTER_CONFIG_FILENAME = "router-config.json";
+
     /**
      * S3 bucket to upload deployment to. If not null, uses {@link OtpServer#s3Bucket}. Otherwise, defaults to 
      * {@link DataManager#feedBucket}
@@ -330,7 +339,7 @@ public class DeployJob extends MonitorableJob {
             out.close();
             // Upload router config.
             transferManager
-                .upload(bucket, getS3FolderURI().getKey() + "/router-config.json", routerConfigFile)
+                .upload(bucket, getS3FolderURI().getKey() + "/" + ROUTER_CONFIG_FILENAME, routerConfigFile)
                 .waitForCompletion();
             // Delete temp file.
             routerConfigFile.delete();
@@ -551,14 +560,7 @@ public class DeployJob extends MonitorableJob {
                 List<Instance> graphBuildingInstances = startEC2Instances(1, false);
                 // Exit if an error was encountered.
                 if (status.error || graphBuildingInstances.size() == 0) {
-                    try {
-                        ServerController.terminateInstances(ec2, graphBuildingInstances);
-                    } catch (AmazonEC2Exception e){
-                        status.message = String.format(
-                            "%s During job cleanup, the graph building instance was not properly terminated!",
-                            status.message
-                        );
-                    }
+                    terminateInstances(graphBuildingInstances);
                     return;
                 }
                 status.message = "Waiting for graph build to complete...";
@@ -575,14 +577,7 @@ public class DeployJob extends MonitorableJob {
                     // If an error occurred while monitoring the initial server, fail this job and instruct user to inspect
                     // build logs.
                     status.fail("Error encountered while building graph. Inspect build logs.");
-                    try {
-                        ServerController.terminateInstances(ec2, graphBuildingInstances);
-                    } catch (AmazonEC2Exception e){
-                        status.message = String.format(
-                            "%s During job cleanup, the graph building instance was not properly terminated!",
-                            status.message
-                        );
-                    }
+                    terminateInstances(graphBuildingInstances);
                     return;
                 }
 
@@ -591,8 +586,9 @@ public class DeployJob extends MonitorableJob {
                 // do not want to proceed with the rest of the job which would shut down existing servers running for
                 // the deployment.
                 if (deployment.buildGraphOnly) {
-                    ServerController.terminateInstances(ec2, graphBuildingInstances);
-                    status.update("Graph build is complete!", 100);
+                    if (terminateInstances(graphBuildingInstances)) {
+                        status.update("Graph build is complete!", 100);
+                    }
                     return;
                 }
 
@@ -619,16 +615,8 @@ public class DeployJob extends MonitorableJob {
                         // the build image should not be recreated, so immediately terminate the graph building
                         // instance. If image recreation is enabled, the graph building instance is terminated at the
                         // end of the RecreateBuildImageJob.
-                        try {
-                            ec2.terminateInstances(
-                                new TerminateInstancesRequest().withInstanceIds(
-                                    graphBuildingInstances.get(0).getInstanceId()
-                                )
-                            );
-                        } catch (AmazonEC2Exception e) {
+                        if (!terminateInstances(graphBuildingInstances)) {
                             // failed to terminate graph building instance
-                            // TODO make some kind of way to continue the job without failing, but also notify user
-                            status.fail("Failed to terminate graph building instance!", e);
                             return;
                         }
                     }
@@ -650,14 +638,7 @@ public class DeployJob extends MonitorableJob {
                 status.message = String.format("Spinning up remaining %d instance(s).", status.numServersRemaining);
                 remainingInstances.addAll(startEC2Instances(status.numServersRemaining, true));
                 if (remainingInstances.size() == 0 || status.error) {
-                    try {
-                        ServerController.terminateInstances(ec2, remainingInstances);
-                    } catch (AmazonEC2Exception e){
-                        status.message = String.format(
-                            "%s During job cleanup, an instance was not properly terminated!",
-                            status.message
-                        );
-                    }
+                    terminateInstances(remainingInstances);
                     return;
                 }
                 status.message = String.format(
@@ -800,7 +781,7 @@ public class DeployJob extends MonitorableJob {
             ), e);
             return Collections.EMPTY_LIST;
         }
-        status.message = "Requesting instance reservation";
+        status.message = String.format("Starting up %d new instance(s) to run OTP", count);
         RunInstancesRequest runInstancesRequest = new RunInstancesRequest()
                 .withNetworkInterfaces(interfaceSpecification)
                 .withInstanceType(instanceType)
@@ -857,7 +838,7 @@ public class DeployJob extends MonitorableJob {
             );
         }
         // Wait up to 10 minutes for IP addresses to be available.
-        TimeTracker IPCheckTracker = new TimeTracker(10, TimeUnit.MINUTES);
+        TimeTracker ipCheckTracker = new TimeTracker(10, TimeUnit.MINUTES);
         // Store the instances with updated IP addresses here.
         List<Instance> updatedInstances = new ArrayList<>();
         Filter instanceIdFilter = new Filter("instance-id", instanceIds);
@@ -885,13 +866,60 @@ public class DeployJob extends MonitorableJob {
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
-            if (IPCheckTracker.hasTimedOut()) {
+            if (ipCheckTracker.hasTimedOut()) {
                 status.fail("Job timed out due to public IP assignment taking longer than ten minutes!");
                 return updatedInstances;
             }
         }
         LOG.info("Public IP addresses have all been assigned. {}", String.join(",", instanceIpAddresses));
         return updatedInstances;
+    }
+
+    /**
+     * Attempts to terminate the provided instances. If the instances failed to terminate properly, the deploy job is
+     * failed. Returns true if the instances terminated successfully. Retruns false if instance termination encountered
+     * an error and adds to the status message as needed.
+     */
+    private boolean terminateInstances(List<Instance> instances) {
+        TerminateInstancesResult terminateInstancesResult;
+        try {
+            terminateInstancesResult = ServerController.terminateInstances(ec2, instances);
+        } catch (Exception e) {
+            failJobWithAppendedMessage(
+                "During job cleanup, an instance was not properly terminated!",
+                e
+            );
+            return false;
+        }
+
+        // verify that all instances have terminated
+        boolean allInstancesTerminatedProperly = true;
+        for (InstanceStateChange terminatingInstance : terminateInstancesResult.getTerminatingInstances()) {
+            // If instance state code is 48 that means it has been terminated.
+            if (terminatingInstance.getCurrentState().getCode() != 48) {
+                // TODO: determine if the terminateInstanceResult immediately returns the terminated code or if it needs
+                //  to be verified in subsequent DescribeInstanceRequests
+                failJobWithAppendedMessage(
+                    String.format("Instance %s failed to properly terminate!", terminatingInstance.getInstanceId()),
+                    null
+                );
+                allInstancesTerminatedProperly = false;
+            }
+        }
+        return allInstancesTerminatedProperly;
+    }
+
+    /**
+     * If the status already has been marked as having errored out, the given message will be appended to the current
+     * message, but the given Exception is not added to the status Exception. Otherwise, the status message is set to the
+     * given message contents and the job is marked as failed with the given Exception.
+     */
+    private void failJobWithAppendedMessage(String appendedMessage, Exception e) {
+        if (status.error) {
+            status.message = String.format("%s %s", status.message, appendedMessage);
+        } else {
+            status.fail(appendedMessage, e);
+        }
     }
 
     /**
@@ -936,6 +964,8 @@ public class DeployJob extends MonitorableJob {
         manifest.s3UploadPath = getS3FolderURI().toString();
         manifest.statusFileLocation = String.format("%s/%s", webDir, OTP_RUNNER_STATUS_FILE);
         manifest.uploadOtpRunnerLogs = true;
+        // add settings applicable to current instance. Two different manifest files are generated when deploying with
+        // different instance types for graph building vs server running
         String otpRunnerManifestS3Filename;
         if (!graphAlreadyBuilt) {
             otpRunnerManifestS3Filename = "otp-runner-graph-build-manifest.json";
@@ -948,7 +978,7 @@ public class DeployJob extends MonitorableJob {
                 return null;
             }
             manifest.routerFolderDownloads.add(getBuildConfigS3Path());
-            if (!uploadStringToS3File("build-config.json", deployment.generateBuildConfigAsString(), dryRun)) {
+            if (!uploadStringToS3File(BUILD_CONFIG_FILENAME, deployment.generateBuildConfigAsString(), dryRun)) {
                 return null;
             }
             manifest.uploadGraph = true;
@@ -960,13 +990,7 @@ public class DeployJob extends MonitorableJob {
             } else {
                 // This instance will both run a graph and start the OTP server
                 manifest.routerFolderDownloads.add(getRouterConfigS3Path());
-                if (
-                    !uploadStringToS3File(
-                        "router-config.json",
-                        deployment.generateRouterConfigAsString(),
-                        dryRun
-                    )
-                ) {
+                if (!uploadStringToS3File(ROUTER_CONFIG_FILENAME, deployment.generateRouterConfigAsString(), dryRun)) {
                     return null;
                 }
                 routerConfigUploaded = true;
@@ -981,7 +1005,7 @@ public class DeployJob extends MonitorableJob {
             if (!routerConfigUploaded) {
                 if (
                     !uploadStringToS3File(
-                        "router-config.json",
+                        ROUTER_CONFIG_FILENAME,
                         deployment.generateRouterConfigAsString(),
                         dryRun
                     )
@@ -1131,11 +1155,11 @@ public class DeployJob extends MonitorableJob {
     }
 
     private String getBuildConfigS3Path() {
-        return joinToS3FolderURI("build-config.json");
+        return joinToS3FolderURI(BUILD_CONFIG_FILENAME);
     }
 
     private String getRouterConfigS3Path() {
-        return joinToS3FolderURI("router-config.json");
+        return joinToS3FolderURI(ROUTER_CONFIG_FILENAME);
     }
 
     @JsonIgnore
