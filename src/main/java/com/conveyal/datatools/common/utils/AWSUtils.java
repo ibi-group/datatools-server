@@ -130,14 +130,19 @@ public class AWSUtils {
      * https://docs.aws.amazon.com/IAM/latest/UserGuide/tutorial_cross-account-with-roles.html). The credentials can be
      * then used for creating a temporary S3 or EC2 client.
      */
-    public static AWSStaticCredentialsProvider getCredentialsForRole(String role, String sessionName) {
+    public static AWSStaticCredentialsProvider getCredentialsForRole(
+        String role,
+        String sessionName
+    ) {
         String roleSessionName = "data-tools-session";
         if (role == null) return null;
         if (sessionName != null) roleSessionName = String.join("-", roleSessionName, sessionName);
-        STSAssumeRoleSessionCredentialsProvider sessionProvider = new STSAssumeRoleSessionCredentialsProvider.Builder(
-            role,
-            roleSessionName
-        ).build();
+        STSAssumeRoleSessionCredentialsProvider sessionProvider = new STSAssumeRoleSessionCredentialsProvider
+            .Builder(
+                role,
+                roleSessionName
+            )
+            .build();
         AWSSessionCredentials credentials = sessionProvider.getCredentials();
         return new AWSStaticCredentialsProvider(new BasicSessionCredentials(
             credentials.getAWSAccessKeyId(), credentials.getAWSSecretKey(),

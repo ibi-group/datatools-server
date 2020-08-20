@@ -2,13 +2,11 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.services.ec2.AmazonEC2;
+import com.amazonaws.services.ec2.model.AmazonEC2Exception;
 import com.amazonaws.services.ec2.model.DescribeInstancesRequest;
 import com.amazonaws.services.ec2.model.DescribeInstancesResult;
 import com.amazonaws.services.ec2.model.Instance;
-import com.amazonaws.services.ec2.model.InstanceStateChange;
 import com.amazonaws.services.ec2.model.Reservation;
-import com.amazonaws.services.ec2.model.TerminateInstancesRequest;
-import com.amazonaws.services.ec2.model.TerminateInstancesResult;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancing;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClient;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClientBuilder;
@@ -22,6 +20,7 @@ import com.conveyal.datatools.common.utils.AWSUtils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.OtpServer;
+import com.conveyal.datatools.manager.utils.TimeTracker;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.apache.http.HttpEntity;
@@ -35,6 +34,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.util.concurrent.TimeUnit;
 
 import static com.conveyal.datatools.manager.jobs.DeployJob.OTP_RUNNER_STATUS_FILE;
 
@@ -44,6 +44,7 @@ import static com.conveyal.datatools.manager.jobs.DeployJob.OTP_RUNNER_STATUS_FI
  */
 public class MonitorServerStatusJob extends MonitorableJob {
     private static final Logger LOG = LoggerFactory.getLogger(MonitorServerStatusJob.class);
+
     private final DeployJob deployJob;
     private final Deployment deployment;
     private final Instance instance;
@@ -51,12 +52,11 @@ public class MonitorServerStatusJob extends MonitorableJob {
     private final OtpServer otpServer;
     private final AWSStaticCredentialsProvider credentials;
     private final AmazonEC2 ec2;
-    private final AmazonElasticLoadBalancing elbClient;
     private final CloseableHttpClient httpClient = HttpClients.createDefault();
     // Delay checks by four seconds to give user-data script time to upload the instance's user data log if part of the
     // script fails (e.g., uploading or downloading a file).
     private static final int DELAY_SECONDS = 4;
-    public long graphTaskSeconds;
+    private static final int MAX_INSTANCE_HEALTH_RETRIES = 5;
 
     public MonitorServerStatusJob(Auth0UserProfile owner, DeployJob deployJob, Instance instance, boolean graphAlreadyBuilt) {
         super(
@@ -74,11 +74,6 @@ public class MonitorServerStatusJob extends MonitorableJob {
         ec2 = deployJob.getCustomRegion() == null
             ? AWSUtils.getEC2ClientForCredentials(credentials)
             : AWSUtils.getEC2ClientForCredentials(credentials, deployJob.getCustomRegion());
-        AmazonElasticLoadBalancingClientBuilder elbBuilder = AmazonElasticLoadBalancingClient.builder()
-            .withCredentials(credentials);
-        elbClient = deployJob.getCustomRegion() == null
-            ? elbBuilder.build()
-            : elbBuilder.withRegion(deployJob.getCustomRegion()).build();
     }
 
     @JsonProperty
@@ -101,39 +96,39 @@ public class MonitorServerStatusJob extends MonitorableJob {
         }
         try {
             // Wait for otp-runner to produce first status file
-            long statusCheckStartTime = System.currentTimeMillis();
+            TimeTracker otpRunnerStatusAvailableTracker = new TimeTracker(5, TimeUnit.MINUTES);
             String statusUrl = String.join("/", ipUrl, OTP_RUNNER_STATUS_FILE);
             boolean otpRunnerStatusAvailable = false;
             while (!otpRunnerStatusAvailable) {
                 // If the request is successful, the OTP instance has started.
                 waitAndCheckInstanceHealth("otp-runner status file availability check: " + statusUrl);
                 otpRunnerStatusAvailable = checkForSuccessfulRequest(statusUrl);
-                long maxOtpRunnerStartupTimeMillis = 5 * 60 * 1000;
-                if (taskHasTimedOut(statusCheckStartTime, maxOtpRunnerStartupTimeMillis)) {
+                if (otpRunnerStatusAvailableTracker.hasTimedOut()) {
                     failJob("Job timed out while waiting for otp-runner to produce a status file!");
                     return;
                 }
             }
-            // Wait for otp-runner to write a status that fulfills expectations of this job
-            statusCheckStartTime = System.currentTimeMillis();
+            // Wait for otp-runner to write a status that fulfills expectations of this job. Wait a maximum of 5 hours
+            // if building a graph, or 1 hour if starting a server-only instance.
+            TimeTracker otpRunnerCompletionTracker = new TimeTracker(graphAlreadyBuilt ? 1 : 5, TimeUnit.HOURS);
             boolean otpRunnerCompleted = false;
             while (!otpRunnerCompleted) {
-                // If the request is successful, the OTP instance has started.
                 waitAndCheckInstanceHealth("otp-runner completion check: " + statusUrl);
+                // Analyze the contents of the otp-runner status file to see if the job is complete
                 otpRunnerCompleted = checkForOtpRunnerCompletion(statusUrl);
                 // Check if an otp-runner status file check has already failed this job.
                 if (status.error) {
                     return;
                 }
-                // wait a maximum of 5 hours if building a graph, or 1 hour if just starting a server
-                long maxOtpRunnerWaitTimeMillis = (graphAlreadyBuilt ? 5 : 1) * 60 * 60 * 1000;
-                if (taskHasTimedOut(statusCheckStartTime, maxOtpRunnerWaitTimeMillis)) {
+                if (otpRunnerCompletionTracker.hasTimedOut()) {
                     failJob("Job timed out while waiting for otp-runner to finish!");
                     return;
                 }
             }
-            graphTaskSeconds = (System.currentTimeMillis() - statusCheckStartTime) / 1000;
-            String message = String.format("Graph build/download completed in %d seconds!", graphTaskSeconds);
+            String message = String.format(
+                "Graph build/download completed in %d seconds!",
+                otpRunnerStatusAvailableTracker.elapsedSeconds()
+            );
             LOG.info(message);
             // If only task for this instance is to build the graph (either because that is the deployment purpose or
             // because this instance type/image is for graph building only), this machine's job is complete and we can
@@ -144,18 +139,17 @@ public class MonitorServerStatusJob extends MonitorableJob {
                 return;
             }
             // Once this is confirmed, check for the availability of the router, which will indicate that the graph
-            // load has completed successfully.
+            // load has completed successfully. Wait a maximum of 20 minutes to load the graph and for the router to
+            // become available.
+            TimeTracker routerCheckTracker = new TimeTracker(20, TimeUnit.MINUTES);
             String routerUrl = String.join("/", ipUrl, "otp/routers/default");
-            long routerCheckStartTime = System.currentTimeMillis();
             boolean routerIsAvailable = false;
             while (!routerIsAvailable) {
                 // If the request was successful, the graph build is complete!
                 // TODO: Substitute in specific router ID? Or just default to... "default".
                 waitAndCheckInstanceHealth("router to become available: " + routerUrl);
                 routerIsAvailable = checkForSuccessfulRequest(routerUrl);
-                // wait a maximum of 20 minutes to load the graph and for the router to become available.
-                long maxRouterAvailableWaitTimeMillis = 20 * 60 * 1000;
-                if (taskHasTimedOut(routerCheckStartTime, maxRouterAvailableWaitTimeMillis)) {
+                if (routerCheckTracker.hasTimedOut()) {
                     failJob("Job timed out while waiting for trip planner to start up.");
                     return;
                 }
@@ -167,7 +161,14 @@ public class MonitorServerStatusJob extends MonitorableJob {
                 .withTargetGroupArn(otpServer.ec2Info.targetGroupArn)
                 .withTargets(new TargetDescription().withId(instance.getInstanceId()));
             boolean targetAddedSuccessfully = false;
-            long registerTargetStartTime = System.currentTimeMillis();
+
+            // Wait for two minutes for targets to register.
+            TimeTracker registerTargetTracker = new TimeTracker(2, TimeUnit.MINUTES);
+            AmazonElasticLoadBalancingClientBuilder elbBuilder = AmazonElasticLoadBalancingClient.builder()
+                .withCredentials(credentials);
+            AmazonElasticLoadBalancing elbClient = deployJob.getCustomRegion() == null ?
+                elbBuilder.build() :
+                elbBuilder.withRegion(deployJob.getCustomRegion()).build();
             while (!targetAddedSuccessfully) {
                 // Register target with target group.
                 elbClient.registerTargets(registerTargetsRequest);
@@ -182,8 +183,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
                         targetAddedSuccessfully = true;
                     }
                 }
-                // Wait for two minutes.
-                if (taskHasTimedOut(registerTargetStartTime, 2 * 60 * 1000)) {
+                if (registerTargetTracker.hasTimedOut()) {
                     failJob("Job timed out while waiting to register EC2 instance with load balancer target group.");
                     return;
                 }
@@ -203,7 +203,12 @@ public class MonitorServerStatusJob extends MonitorableJob {
             // was accidental or intentional, we want the result to be that the job fails and the deployment be aborted.
             // This gives us a failsafe in case we kick off a deployment accidentally or otherwise need to cancel the
             // deployment job (e.g., due to an incorrect configuration).
-            failJob("Ec2 Instance was stopped or terminated before job could complete!");
+            failJob("EC2 Instance was stopped or terminated before job could complete!", e);
+        } catch (Exception e) {
+            // This catch-all block is needed to make sure any exceptions that are not handled elsewhere are properly
+            // caught here so that the job can be properly failed. If the job is not failed properly this could result
+            // in hanging instances that do not get terminated properly by the parent DeployJob.
+            failJob("An internal datatools error occurred before the job could complete!", e);
         }
     }
 
@@ -219,17 +224,23 @@ public class MonitorServerStatusJob extends MonitorableJob {
     }
 
     /**
-     * Helper that fails with a helpful message about where to find uploaded logs.
+     * Helper for marking the job as failed with just a message.
      */
     private void failJob(String message) {
-        LOG.error(message);
-        status.fail(String.format("%s Check logs at: %s", message, getOtpRunnerLogS3Path()));
+        failJob(message, null);
     }
 
-    /** Determine if a specific task has passed time limit for its run time. */
-    private boolean taskHasTimedOut(long startTime, long maxRunTimeMillis) {
-        long runTimeMillis = System.currentTimeMillis() - startTime;
-        return runTimeMillis > maxRunTimeMillis;
+    /**
+     * Helper that fails with a message and optional exception. A helpful message about where to find uploaded logs is
+     * appended to the failure message.
+     */
+    private void failJob(String message, Exception e) {
+        if (e == null) {
+            LOG.error(message);
+        } else {
+            LOG.error(message, e);
+        }
+        status.fail(String.format("%s Check logs at: %s", message, getOtpRunnerLogS3Path()), e);
     }
 
     /**
@@ -238,24 +249,48 @@ public class MonitorServerStatusJob extends MonitorableJob {
      * job should be failed.
      */
     private void waitAndCheckInstanceHealth(String waitingFor) throws InstanceHealthException {
-        checkInstanceHealth();
+        checkInstanceHealth(1);
         try {
             LOG.info("Waiting {} seconds for {}", DELAY_SECONDS, waitingFor);
             Thread.sleep(1000 * DELAY_SECONDS);
         } catch (InterruptedException e) {
             e.printStackTrace();
         }
-        checkInstanceHealth();
+        checkInstanceHealth(1);
     }
 
     /**
      * Checks whether the instance is running. If it has entered a state where it is stopped, terminated or about to be
-     * stopped or terminated, then this method throws an exception.
+     * stopped or terminated, then this method throws an exception. It is possible that some describe instance requests
+     * might fail either during instance startup or due to brief network connectivity issues, so this method will retry
+     * checking the instance health using recursion up to the
+     * ${@link MonitorServerStatusJob#MAX_INSTANCE_HEALTH_RETRIES} value.
      */
-    private void checkInstanceHealth() throws InstanceHealthException {
+    private void checkInstanceHealth(int attemptNumber) throws InstanceHealthException {
         DescribeInstancesRequest request = new DescribeInstancesRequest()
             .withInstanceIds(Collections.singletonList(instance.getInstanceId()));
-        DescribeInstancesResult result = ec2.describeInstances(request);
+        DescribeInstancesResult result;
+        try {
+            result = ec2.describeInstances(request);
+        } catch (AmazonEC2Exception e) {
+            LOG.warn(
+                "Failed on attempt {}/{} to execute request to obtain instance health!",
+                attemptNumber,
+                MAX_INSTANCE_HEALTH_RETRIES,
+                e
+            );
+            if (attemptNumber > MAX_INSTANCE_HEALTH_RETRIES) {
+                throw new InstanceHealthException("AWS Describe Instances error!");
+            }
+            try {
+                LOG.info("Waiting 5 seconds to try to get instance status again");
+                Thread.sleep(5000);
+            } catch (InterruptedException interruptedException) {
+                interruptedException.printStackTrace();
+            }
+            checkInstanceHealth(attemptNumber + 1);
+            return;
+        }
         for (Reservation reservation : result.getReservations()) {
             for (Instance reservationInstance : reservation.getInstances()) {
                 if (reservationInstance.getInstanceId().equals(instance.getInstanceId())) {
@@ -278,7 +313,17 @@ public class MonitorServerStatusJob extends MonitorableJob {
         }
     }
 
+    /**
+     * Checks the status of otp-runner and returns whether otp-runner has completed (either with success or failure).
+     * The overall job is updated with the percent progress and message from the otp-runner status file as well. This
+     * will make a request to the given URL to retrieve an otp-runner JSON status file. If the otp-runner status file
+     * indicates that an error occurred, this method will fail the job.
+     *
+     * @param url The URL to retrieve the otp-runner status file from
+     * @return true if otp-runner has completed all necessary tasks
+     */
     private boolean checkForOtpRunnerCompletion(String url) {
+        // make request to otp-runner
         HttpGet httpGet = new HttpGet(url);
         OtpRunnerStatus otpRunnerStatus;
         try (CloseableHttpResponse response = httpClient.execute(httpGet)) {
@@ -288,16 +333,31 @@ public class MonitorServerStatusJob extends MonitorableJob {
             e.printStackTrace();
             return false;
         }
+
+        // make sure otp-runner status file contains a matching nonce. Sometimes a otp-runner status from a previous
+        // deploy job could be present, so this makes sure that the otp-runner status file applies to this particular
+        // deploy job
+        if (otpRunnerStatus.nonce == null || !otpRunnerStatus.nonce.equals(deployJob.getNonce())) {
+            LOG.warn("otp-runner status nonce does not match deployment nonce");
+            return false;
+        }
+
+        // if the otp-runner status file contains an error message, fail the job
         if (otpRunnerStatus.error) {
             failJob(otpRunnerStatus.message);
             return false;
         }
+
+        // update overall job status and percentage with the status and percentage found in the otp-runner status file
         status.update(otpRunnerStatus.message, otpRunnerStatus.pctProgress);
+
+        // return completion based off of whether this instance is a graph-build only instance or is one that is
+        // exepcted to run an OTP server
         if (graphAlreadyBuilt || !isBuildOnlyServer()) {
-            // server that finishes after OTP server is successfully started
+            // A successful completion is after the OTP server is successfully started
             return otpRunnerStatus.serverStarted;
         } else {
-            // server that finishes after graph is uploaded
+            // A successful completion is after the graph is uploaded
             return otpRunnerStatus.graphUploaded;
         }
     }
@@ -322,18 +382,6 @@ public class MonitorServerStatusJob extends MonitorableJob {
 
     @Override
     public void jobFinished() {
-        if (status.error) {
-            // Terminate server.
-            TerminateInstancesResult terminateInstancesResult = ec2.terminateInstances(
-                    new TerminateInstancesRequest().withInstanceIds(instance.getInstanceId())
-            );
-            InstanceStateChange instanceStateChange = terminateInstancesResult.getTerminatingInstances().get(0);
-            // If instance state code is 48 that means it has been terminated.
-            if (instanceStateChange.getCurrentState().getCode() == 48) {
-                // FIXME: this message will not make it to the client because the status has already been failed. Also,
-                //   I'm not sure if this is even the right way to handle the instance state check.
-                status.update("Instance is terminated!", 100);
-            }
-        }
+        // jobs that failed will have their associated instances terminated in the parent deploy job
     }
 }

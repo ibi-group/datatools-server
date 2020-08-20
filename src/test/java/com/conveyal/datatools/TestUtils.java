@@ -74,7 +74,7 @@ public class TestUtils {
     /**
      * Helper to get a File for the given file or folder that should be in the gtfs folder of the test resources
      */
-    private static String getGtfsResourcePath(String gtfsFileName) {
+    public static String getGtfsResourcePath(String gtfsFileName) {
         return TestUtils.class.getResource("gtfs/" + gtfsFileName).getFile();
     }
 

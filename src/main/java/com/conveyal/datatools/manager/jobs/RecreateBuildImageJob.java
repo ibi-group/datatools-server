@@ -1,6 +1,8 @@
 package com.conveyal.datatools.manager.jobs;
 
+import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.services.ec2.AmazonEC2;
+import com.amazonaws.services.ec2.model.AmazonEC2Exception;
 import com.amazonaws.services.ec2.model.CreateImageRequest;
 import com.amazonaws.services.ec2.model.CreateImageResult;
 import com.amazonaws.services.ec2.model.DeregisterImageRequest;
@@ -9,11 +11,13 @@ import com.amazonaws.services.ec2.model.DescribeImagesResult;
 import com.amazonaws.services.ec2.model.Image;
 import com.amazonaws.services.ec2.model.Instance;
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.utils.AWSUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.controllers.api.ServerController;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.TimeTracker;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -22,7 +26,8 @@ import static com.conveyal.datatools.manager.models.EC2Info.AMI_CONFIG_PATH;
 
 /**
  * Job that is dispatched during a {@link DeployJob} that spins up EC2 instances. This handles waiting for a graph build
- * image to be created after a graph build has completed.
+ * image to be created after a graph build has completed. If an error occurs, or if the image was created successfully
+ * and has a separate graph build instance type, the EC2 instance will be terminated.
  */
 public class RecreateBuildImageJob extends MonitorableJob {
     private final AmazonEC2 ec2;
@@ -30,15 +35,24 @@ public class RecreateBuildImageJob extends MonitorableJob {
     private final OtpServer otpServer;
 
     public RecreateBuildImageJob(
+        DeployJob parentDeployJob,
         Auth0UserProfile owner,
-        List<Instance> graphBuildingInstances,
-        OtpServer otpServer,
-        AmazonEC2 ec2
+        List<Instance> graphBuildingInstances
     ) {
-        super(owner, String.format("Recreating build image for %s", otpServer.name), JobType.RECREATE_BUILD_IMAGE);
+        super(
+            owner,
+            String.format("Recreating build image for %s", parentDeployJob.getOtpServer().name),
+            JobType.RECREATE_BUILD_IMAGE
+        );
+        this.otpServer = parentDeployJob.getOtpServer();
         this.graphBuildingInstances = graphBuildingInstances;
-        this.otpServer = otpServer;
-        this.ec2 = ec2;
+        AWSCredentialsProvider credentials = AWSUtils.getCredentialsForRole(
+            otpServer.role,
+            "recreate-build-image"
+        );
+        ec2 = parentDeployJob.getCustomRegion() == null
+            ? AWSUtils.getEC2ClientForCredentials(credentials)
+            : AWSUtils.getEC2ClientForCredentials(credentials, parentDeployJob.getCustomRegion());
     }
 
     @Override
@@ -57,6 +71,7 @@ public class RecreateBuildImageJob extends MonitorableJob {
         DescribeImagesRequest describeImagesRequest = new DescribeImagesRequest()
             .withImageIds(createdImageId);
         // wait for the image to be created. Also, make sure the parent DeployJob hasn't failed this job already.
+        TimeTracker imageCreationTracker = new TimeTracker(1, TimeUnit.HOURS);
         while (!imageCreated && !status.error) {
             DescribeImagesResult describeImagesResult = ec2.describeImages(describeImagesRequest);
             for (Image image : describeImagesResult.getImages()) {
@@ -65,7 +80,7 @@ public class RecreateBuildImageJob extends MonitorableJob {
                     // See https://docs.aws.amazon.com/AWSJavaSDK/latest/javadoc/com/amazonaws/services/ec2/model/ImageState.html
                     String imageState = image.getState().toLowerCase();
                     if (imageState.equals("pending")) {
-                        if (System.currentTimeMillis() - status.startTime > TimeUnit.HOURS.toMillis(1)) {
+                        if (imageCreationTracker.hasTimedOut()) {
                             terminateInstanceAndFailWithMessage(
                                 "It has taken over an hour for the graph build image to be created! Check the AWS console to see if the image was created successfully."
                             );
@@ -118,7 +133,14 @@ public class RecreateBuildImageJob extends MonitorableJob {
         // terminate graph building instance if needed
         if (otpServer.ec2Info.hasSeparateGraphBuildConfig()) {
             status.message = "Terminating graph building instance";
-            ServerController.terminateInstances(ec2, graphBuildingInstances);
+            try {
+                ServerController.terminateInstances(ec2, graphBuildingInstances);
+            } catch (AmazonEC2Exception e) {
+                status.fail(
+                    "Graph build image successfully created, but failed to terminate graph building instance!",
+                    e
+                );
+            }
         }
         status.completeSuccessfully("Graph build image successfully created!");
     }

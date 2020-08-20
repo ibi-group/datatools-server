@@ -12,7 +12,6 @@ import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -93,7 +92,13 @@ public class DeployJobTest extends UnitTest {
             "test-deploy",
             DeployJob.DeployType.REPLACE
         );
-        assertThat(deployJob.constructUserData(false), matchesSnapshot());
+        assertThat(
+            replaceNonce(
+                deployJob.constructManifestAndUserData(false, true),
+                "canMakeGraphBuildUserDataScript"
+            ),
+            matchesSnapshot()
+        );
     }
 
     /**
@@ -108,7 +113,23 @@ public class DeployJobTest extends UnitTest {
             "test-deploy",
             DeployJob.DeployType.REPLACE
         );
-        assertThat(deployJob.constructUserData(true), matchesSnapshot());
+        assertThat(
+            replaceNonce(
+                deployJob.constructManifestAndUserData(true, true),
+                "canMakeServerOnlyUserDataScript"
+            ),
+            matchesSnapshot()
+        );
+    }
+
+    /**
+     * Replaces the nonce in the user data with a deterministic value
+     */
+    private String replaceNonce(String userData, String replacementNonce) {
+        return userData.replaceFirst(
+            "nonce\":\"[\\w-]*",
+            String.format("nonce\":\"%s", replacementNonce)
+        );
     }
 
     /**

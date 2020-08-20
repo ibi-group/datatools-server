@@ -209,11 +209,12 @@ public class FeedStore {
         FileUtils.copyFile(version, latest, true);
     }
 
-    private File createTempFile (String name, InputStream in) throws IOException {
-        Path path = Files.createTempFile(name, null);
+    protected File createTempFile (String name, InputStream in) throws IOException {
+        // Create temp file in such a way that filename is preserved (no tmp suffix added).
+        final File tempFile = new File(new File(System.getProperty("java.io.tmpdir")), name);
+        LOG.info("Storing temp GTFS file at {}", tempFile.getAbsolutePath());
         // FIXME: Figure out how to manage temp files created here. Currently, we just call deleteOnExit, but
         //  this will only delete the file once the java process stops.
-        File tempFile = path.toFile();
         tempFile.deleteOnExit();
         ByteStreams.copy(in, new FileOutputStream(tempFile));
         return tempFile;

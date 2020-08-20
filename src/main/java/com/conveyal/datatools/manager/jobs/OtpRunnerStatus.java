@@ -10,6 +10,7 @@ public class OtpRunnerStatus {
     public boolean graphUploaded;
     public boolean serverStarted;
     public String message;
+    public String nonce;
     public int numFilesDownloaded;
     public double pctProgress;
     public int totalFilesToDownload;
