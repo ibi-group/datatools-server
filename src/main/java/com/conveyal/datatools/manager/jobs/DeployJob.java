@@ -907,7 +907,7 @@ public class DeployJob extends MonitorableJob {
 
     /**
      * Attempts to terminate the provided instances. If the instances failed to terminate properly, the deploy job is
-     * failed. Returns true if the instances terminated successfully. Retruns false if instance termination encountered
+     * failed. Returns true if the instances terminated successfully. Returns false if instance termination encountered
      * an error and adds to the status message as needed.
      */
     private boolean terminateInstances(List<Instance> instances) {
