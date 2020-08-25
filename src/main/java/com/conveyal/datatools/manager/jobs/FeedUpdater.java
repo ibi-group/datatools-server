@@ -4,7 +4,7 @@ import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
-import com.conveyal.datatools.common.utils.NonRuntimeAWSException;
+import com.conveyal.datatools.common.utils.CheckedAWSException;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -104,7 +104,7 @@ public class FeedUpdater {
         ObjectListing gtfsList = null;
         try {
             gtfsList = getDefaultS3Client().listObjects(feedBucket, bucketFolder);
-        } catch (AmazonServiceException | NonRuntimeAWSException e) {
+        } catch (AmazonServiceException | CheckedAWSException e) {
             LOG.error("Failed to list S3 Objects", e);
             return newTags;
         }
@@ -206,7 +206,7 @@ public class FeedUpdater {
     private FeedVersion findMatchingFeedVersion(
         String keyName,
         FeedSource feedSource
-    ) throws AmazonServiceException, IOException, NonRuntimeAWSException {
+    ) throws AmazonServiceException, IOException, CheckedAWSException {
         String filename = keyName.split("/")[1];
         String feedId = filename.replace(".zip", "");
         S3Object object = getDefaultS3Client().getObject(feedBucket, keyName);

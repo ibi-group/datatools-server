@@ -1,5 +1,9 @@
 package com.conveyal.datatools.common.utils;
 
+/**
+ * A class that holds another variable and keeps track of whether the variable is still considered to be active (ie not
+ * expired)
+ */
 public class ExpiringAsset<T> {
     public final T asset;
     private final long expirationTimeMillis;

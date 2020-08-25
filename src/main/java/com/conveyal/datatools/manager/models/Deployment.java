@@ -1,7 +1,7 @@
 package com.conveyal.datatools.manager.models;
 
 import com.amazonaws.services.ec2.model.Filter;
-import com.conveyal.datatools.common.utils.NonRuntimeAWSException;
+import com.conveyal.datatools.common.utils.CheckedAWSException;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.controllers.api.DeploymentController;
 import com.conveyal.datatools.manager.jobs.DeployJob;
@@ -126,7 +126,7 @@ public class Deployment extends Model implements Serializable {
     }
 
     /** Fetch ec2 instances tagged with this deployment's ID. */
-    public List<EC2InstanceSummary> retrieveEC2Instances() throws NonRuntimeAWSException {
+    public List<EC2InstanceSummary> retrieveEC2Instances() throws CheckedAWSException {
         if (!"true".equals(DataManager.getConfigPropertyAsText("modules.deployment.ec2.enabled"))) return Collections.EMPTY_LIST;
         Filter deploymentFilter = new Filter("tag:deploymentId", Collections.singletonList(id));
         // Check if the latest deployment used alternative credentials/AWS role.

@@ -9,7 +9,7 @@ import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.transfer.TransferManager;
 import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
 import com.amazonaws.services.s3.transfer.Upload;
-import com.conveyal.datatools.common.utils.NonRuntimeAWSException;
+import com.conveyal.datatools.common.utils.CheckedAWSException;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.google.common.io.ByteStreams;
@@ -23,8 +23,6 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
 
 import static com.conveyal.datatools.common.utils.AWSUtils.getDefaultS3Client;
 import static com.conveyal.datatools.manager.DataManager.hasConfigProperty;
@@ -81,7 +79,7 @@ public class FeedStore {
         return path;
     }
 
-    public void deleteFeed (String id) throws NonRuntimeAWSException {
+    public void deleteFeed (String id) throws CheckedAWSException {
         // If the application is using s3 storage, delete the remote copy.
         if (DataManager.useS3){
             getDefaultS3Client().deleteObject(s3Bucket, getS3Key(id));
@@ -122,7 +120,7 @@ public class FeedStore {
                 S3Object object = getDefaultS3Client().getObject(
                     new GetObjectRequest(s3Bucket, key));
                 objectData = object.getObjectContent();
-            } catch (AmazonServiceException | NonRuntimeAWSException e) {
+            } catch (AmazonServiceException | CheckedAWSException e) {
                 LOG.error("Error downloading " + uri, e);
                 return null;
             }
@@ -244,7 +242,7 @@ public class FeedStore {
                     getDefaultS3Client().copyObject(copyObjRequest);
                 }
                 return true;
-            } catch (AmazonServiceException | NonRuntimeAWSException e) {
+            } catch (AmazonServiceException | CheckedAWSException e) {
                 LOG.error("Error uploading feed to S3", e);
                 return false;
             }

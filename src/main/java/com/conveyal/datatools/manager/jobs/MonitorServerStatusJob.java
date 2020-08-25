@@ -151,6 +151,9 @@ public class MonitorServerStatusJob extends MonitorableJob {
             boolean targetAddedSuccessfully = false;
             // Wait for two minutes for targets to register.
             TimeTracker registerTargetTracker = new TimeTracker(2, TimeUnit.MINUTES);
+            // obtain an ELB client suitable for this deploy job. It is important to obtain a client this way to ensure
+            // that the proper AWS credentials are used and that the client has a valid session if it is obtained from a
+            // role.
             AmazonElasticLoadBalancing elbClient = deployJob.getELBClientForDeployJob();
             while (!targetAddedSuccessfully) {
                 // Register target with target group.

@@ -71,7 +71,7 @@ public class PublishProjectFeedsJob extends MonitorableJob {
                         try {
                             fs.makePublic();
                         } catch (Exception e) {
-                            status.fail("Failed to make s3 folder public", e);
+                            status.fail("Failed to make GTFS files public on S3", e);
                             return;
                         }
                         url = String.join("/", "https://s3.amazonaws.com", DataManager.feedBucket, fs.toPublicKey());

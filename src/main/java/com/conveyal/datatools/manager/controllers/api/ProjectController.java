@@ -1,7 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.amazonaws.AmazonServiceException;
-import com.conveyal.datatools.common.utils.NonRuntimeAWSException;
+import com.conveyal.datatools.common.utils.CheckedAWSException;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
@@ -15,7 +15,6 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Project;
-import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import org.bson.Document;
@@ -277,7 +276,7 @@ public class ProjectController {
             String key = String.format("project/%s.zip", project.id);
             try {
                 return downloadFromS3(getDefaultS3Client(), DataManager.feedBucket, key, false, res);
-            } catch (AmazonServiceException | NonRuntimeAWSException e) {
+            } catch (AmazonServiceException | CheckedAWSException e) {
                 logMessageAndHalt(req, 500, "Failed to download file from S3", e);
                 return null;
             }

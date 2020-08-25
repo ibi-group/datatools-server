@@ -168,8 +168,11 @@ public class RecreateBuildImageJob extends MonitorableJob {
     private void terminateInstanceAndFailWithMessage(String message, Exception e) {
         try {
             ServerController.terminateInstances(parentDeployJob.getEC2ClientForDeployJob(), graphBuildingInstances);
-        } catch (Exception e2) {
-            status.fail(String.format("%s Also, the graph building instance failed to terminate!", message), e2);
+        } catch (Exception terminationException) {
+            status.fail(
+                String.format("%s Also, the graph building instance failed to terminate!", message),
+                terminationException
+            );
             return;
         }
         status.fail(message, e);

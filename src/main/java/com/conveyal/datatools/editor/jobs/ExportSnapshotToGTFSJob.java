@@ -2,12 +2,11 @@ package com.conveyal.datatools.editor.jobs;
 
 import com.amazonaws.AmazonServiceException;
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.common.utils.NonRuntimeAWSException;
+import com.conveyal.datatools.common.utils.CheckedAWSException;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Snapshot;
-import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.gtfs.loader.FeedLoadResult;
 import com.conveyal.gtfs.loader.JdbcGtfsExporter;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -76,7 +75,7 @@ public class ExportSnapshotToGTFSJob extends MonitorableJob {
             String s3Key = String.format("%s/%s", bucketPrefix, filename);
             try {
                 getDefaultS3Client().putObject(DataManager.feedBucket, s3Key, tempFile);
-            } catch (AmazonServiceException | NonRuntimeAWSException e) {
+            } catch (AmazonServiceException | CheckedAWSException e) {
                 status.fail("Failed to upload file to S3", e);
                 return;
             }

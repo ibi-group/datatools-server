@@ -1,6 +1,6 @@
 package com.conveyal.datatools.manager.extensions;
 
-import com.conveyal.datatools.common.utils.NonRuntimeAWSException;
+import com.conveyal.datatools.common.utils.CheckedAWSException;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -21,5 +21,5 @@ public interface ExternalFeedResource {
 
     public void propertyUpdated(ExternalFeedSourceProperty property, String previousValue, String authHeader) throws IOException;
 
-    public void feedVersionCreated(FeedVersion feedVersion, String authHeader) throws NonRuntimeAWSException;
+    public void feedVersionCreated(FeedVersion feedVersion, String authHeader) throws CheckedAWSException;
 }

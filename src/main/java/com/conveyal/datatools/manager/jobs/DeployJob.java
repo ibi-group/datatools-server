@@ -52,7 +52,7 @@ import java.util.stream.Collectors;
 import com.amazonaws.waiters.Waiter;
 import com.amazonaws.waiters.WaiterParameters;
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.common.utils.NonRuntimeAWSException;
+import com.conveyal.datatools.common.utils.CheckedAWSException;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.controllers.api.DeploymentController;
@@ -301,25 +301,40 @@ public class DeployJob extends MonitorableJob {
         status.completed = true;
     }
 
+    /**
+     * Obtains an EC2 client from the AWS Utils client manager that is applicable to this deploy job's AWS
+     * configuration. It is important to obtain a client this way so that the client is assured to be valid in the event
+     * that a client is obtained that has a session that eventually expires.
+     */
     @JsonIgnore
-    public AmazonEC2 getEC2ClientForDeployJob() throws NonRuntimeAWSException {
+    public AmazonEC2 getEC2ClientForDeployJob() throws CheckedAWSException {
         return getEC2Client(otpServer.role, customRegion);
     }
 
+    /**
+     * Obtains an ELB client from the AWS Utils client manager that is applicable to this deploy job's AWS
+     * configuration. It is important to obtain a client this way so that the client is assured to be valid in the event
+     * that a client is obtained that has a session that eventually expires.
+     */
     @JsonIgnore
-    public AmazonElasticLoadBalancing getELBClientForDeployJob() throws NonRuntimeAWSException {
+    public AmazonElasticLoadBalancing getELBClientForDeployJob() throws CheckedAWSException {
         return getELBClient(otpServer.role, customRegion);
     }
 
+    /**
+     * Obtains an S3 client from the AWS Utils client manager that is applicable to this deploy job's AWS
+     * configuration. It is important to obtain a client this way so that the client is assured to be valid in the event
+     * that a client is obtained that has a session that eventually expires.
+     */
     @JsonIgnore
-    public AmazonS3 getS3ClientForDeployJob() throws NonRuntimeAWSException {
+    public AmazonS3 getS3ClientForDeployJob() throws CheckedAWSException {
         return getS3Client(otpServer.role, customRegion);
     }
 
     /**
      * Upload to S3 the transit data bundle zip that contains GTFS zip files, OSM data, and config files.
      */
-    private void uploadBundleToS3() throws InterruptedException, IOException, NonRuntimeAWSException {
+    private void uploadBundleToS3() throws InterruptedException, IOException, CheckedAWSException {
         AmazonS3URI uri = new AmazonS3URI(getS3BundleURI());
         String bucket = uri.getBucket();
         status.message = "Uploading bundle to " + getS3BundleURI();
@@ -484,10 +499,6 @@ public class DeployJob extends MonitorableJob {
         return joinToS3FolderURI("bundle.zip");
     }
 
-    public String getCustomRegion() {
-        return customRegion;
-    }
-
     private String  getLatestS3BundleKey() {
         String name = StringUtils.getCleanName(deployment.parentProject().name.toLowerCase());
         return String.format("%s/%s/%s-latest.zip", bundlePrefix, deployment.projectId, name);
@@ -552,7 +563,7 @@ public class DeployJob extends MonitorableJob {
             List<EC2InstanceSummary> previousInstances = null;
             try {
                 previousInstances = otpServer.retrieveEC2InstanceSummaries();
-            } catch (NonRuntimeAWSException e) {
+            } catch (CheckedAWSException e) {
                 status.fail("Failed to retrieve previously running EC2 instances!", e);
                 return;
             }
@@ -937,6 +948,14 @@ public class DeployJob extends MonitorableJob {
             }
         }
         return allInstancesTerminatedProperly;
+    }
+
+    /**
+     * Helper for ${@link DeployJob#failJobWithAppendedMessage(String, Exception)} that doesn't take an exception
+     * argument.
+     */
+    private void failJobWithAppendedMessage(String appendedMessage) {
+        failJobWithAppendedMessage(appendedMessage, null);
     }
 
     /**

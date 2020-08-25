@@ -29,9 +29,7 @@ import com.amazonaws.services.identitymanagement.AmazonIdentityManagement;
 import com.amazonaws.services.identitymanagement.model.InstanceProfile;
 import com.amazonaws.services.identitymanagement.model.ListInstanceProfilesResult;
 import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.model.AmazonS3Exception;
-import com.conveyal.datatools.common.utils.AWSUtils;
-import com.conveyal.datatools.common.utils.NonRuntimeAWSException;
+import com.conveyal.datatools.common.utils.CheckedAWSException;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.EC2Info;
@@ -103,7 +101,7 @@ public class ServerController {
     }
 
     /** HTTP endpoint for deleting an {@link OtpServer}. */
-    private static OtpServer deleteServer(Request req, Response res) throws NonRuntimeAWSException {
+    private static OtpServer deleteServer(Request req, Response res) throws CheckedAWSException {
         OtpServer server = getServerWithPermissions(req, res);
         // Ensure that there are no active EC2 instances associated with server. Halt deletion if so.
         List<Instance> activeInstances = server.retrieveEC2Instances().stream()
@@ -117,17 +115,14 @@ public class ServerController {
     }
 
     /** HTTP method for terminating EC2 instances associated with an ELB OTP server. */
-    private static OtpServer terminateEC2InstancesForServer(Request req, Response res) throws NonRuntimeAWSException {
+    private static OtpServer terminateEC2InstancesForServer(Request req, Response res) throws CheckedAWSException {
         OtpServer server = getServerWithPermissions(req, res);
         List<Instance> instances = server.retrieveEC2Instances();
         List<String> ids = getIds(instances);
         try {
-            AmazonEC2 ec2Client = getEC2Client(
-                server.role,
-                server.ec2Info == null ? null : server.ec2Info.region
-            );
+            AmazonEC2 ec2Client = getEC2Client(server);
             terminateInstances(ec2Client, ids);
-        } catch (AmazonServiceException | NonRuntimeAWSException e) {
+        } catch (AmazonServiceException | CheckedAWSException e) {
             logMessageAndHalt(req, 500, "Failed to terminate instances!", e);
         }
         for (Deployment deployment : Deployment.retrieveDeploymentForServerAndRouterId(server.id, null)) {
@@ -147,7 +142,7 @@ public class ServerController {
     public static TerminateInstancesResult terminateInstances(
         AmazonEC2 ec2Client,
         Collection<String> instanceIds
-    ) throws NonRuntimeAWSException {
+    ) throws CheckedAWSException {
         if (instanceIds.size() == 0) {
             LOG.warn("No instance IDs provided in list. Skipping termination request.");
             return null;
@@ -157,7 +152,7 @@ public class ServerController {
         try {
             return ec2Client.terminateInstances(request);
         } catch (AmazonEC2Exception e) {
-            throw new NonRuntimeAWSException(e);
+            throw new CheckedAWSException(e);
         }
     }
 
@@ -165,7 +160,7 @@ public class ServerController {
     public static TerminateInstancesResult terminateInstances(
         AmazonEC2 ec2Client,
         String... instanceIds
-    ) throws NonRuntimeAWSException {
+    ) throws CheckedAWSException {
         return terminateInstances(ec2Client, Arrays.asList(instanceIds));
     }
 
@@ -173,7 +168,7 @@ public class ServerController {
     public static TerminateInstancesResult terminateInstances(
         AmazonEC2 ec2Client,
         List<Instance> instances
-    ) throws NonRuntimeAWSException {
+    ) throws CheckedAWSException {
         return terminateInstances(ec2Client, getIds(instances));
     }
 
@@ -197,7 +192,7 @@ public class ServerController {
                 .withTargets(targetDescriptions);
             getELBClient(role, region).deregisterTargets(request);
             ServerController.terminateInstances(getEC2Client(role, region), instanceIds);
-        } catch (AmazonServiceException | NonRuntimeAWSException e) {
+        } catch (AmazonServiceException | CheckedAWSException e) {
             LOG.warn("Could not terminate EC2 instances: " + String.join(",", instanceIds), e);
             return false;
         }
@@ -208,7 +203,7 @@ public class ServerController {
      * Create a new server for the project. All feed sources with a valid latest version are added to the new
      * deployment.
      */
-    private static OtpServer createServer(Request req, Response res) throws IOException, NonRuntimeAWSException {
+    private static OtpServer createServer(Request req, Response res) throws IOException, CheckedAWSException {
         Auth0UserProfile userProfile = req.attribute("user");
         OtpServer newServer = getPOJOFromRequestBody(req, OtpServer.class);
         // If server has no project ID specified, user must be an application admin to create it. Otherwise, they must
@@ -245,7 +240,7 @@ public class ServerController {
     /**
      * Update a single OTP server.
      */
-    private static OtpServer updateServer(Request req, Response res) throws IOException, NonRuntimeAWSException {
+    private static OtpServer updateServer(Request req, Response res) throws IOException, CheckedAWSException {
         OtpServer serverToUpdate = getServerWithPermissions(req, res);
         OtpServer updatedServer = getPOJOFromRequestBody(req, OtpServer.class);
         Auth0UserProfile user = req.attribute("user");
@@ -261,7 +256,7 @@ public class ServerController {
      * Validate certain fields found in the document representing a server. This also currently modifies the document by
      * removing problematic date fields.
      */
-    private static void validateFields(Request req, OtpServer server) throws HaltException, NonRuntimeAWSException {
+    private static void validateFields(Request req, OtpServer server) throws HaltException, CheckedAWSException {
         try {
             // Check that projectId is valid.
             if (server.projectId != null) {
@@ -304,7 +299,7 @@ public class ServerController {
      */
     public static EC2ValidationResult validateEC2Config(
         OtpServer server
-    ) throws ExecutionException, InterruptedException, NonRuntimeAWSException {
+    ) throws ExecutionException, InterruptedException, CheckedAWSException {
         String region = null;
         if (server.ec2Info != null && server.ec2Info.region != null) region = server.ec2Info.region;
 

@@ -1,7 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.amazonaws.AmazonServiceException;
-import com.conveyal.datatools.common.utils.NonRuntimeAWSException;
+import com.conveyal.datatools.common.utils.CheckedAWSException;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
@@ -214,7 +214,7 @@ public class FeedVersionController  {
             // Return pre-signed download link if using S3.
             try {
                 return downloadFromS3(getDefaultS3Client(), DataManager.feedBucket, FeedStore.s3Prefix + version.id, false, res);
-            } catch (AmazonServiceException | NonRuntimeAWSException e) {
+            } catch (AmazonServiceException | CheckedAWSException e) {
                 logMessageAndHalt(req, 500, "Failed to download file", e);
                 return null;
             }

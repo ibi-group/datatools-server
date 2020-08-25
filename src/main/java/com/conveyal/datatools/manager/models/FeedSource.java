@@ -5,7 +5,7 @@ import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.DeleteObjectsRequest;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.common.utils.NonRuntimeAWSException;
+import com.conveyal.datatools.common.utils.CheckedAWSException;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
@@ -459,7 +459,10 @@ public class FeedSource extends Model implements Cloneable {
         return "public/" + getCleanName(this.name) + ".zip";
     }
 
-    public void makePublic() throws NonRuntimeAWSException {
+    /**
+     * Makes the feed source's latest version have public access on AWS S3.
+     */
+    public void makePublic() throws CheckedAWSException {
         String sourceKey = FeedStore.s3Prefix + this.id + ".zip";
         String publicKey = toPublicKey();
         String versionId = this.latestVersionId();
@@ -500,7 +503,10 @@ public class FeedSource extends Model implements Cloneable {
         }
     }
 
-    public void makePrivate() throws NonRuntimeAWSException {
+    /**
+     * Makes the feed source's latest version have private access on AWS S3.
+     */
+    public void makePrivate() throws CheckedAWSException {
         String sourceKey = FeedStore.s3Prefix + this.id + ".zip";
         String publicKey = toPublicKey();
         AmazonS3 defaultS3Client = getDefaultS3Client();

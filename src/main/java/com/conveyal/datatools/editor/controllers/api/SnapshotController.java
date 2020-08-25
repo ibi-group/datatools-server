@@ -3,7 +3,7 @@ package com.conveyal.datatools.editor.controllers.api;
 
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.s3.AmazonS3;
-import com.conveyal.datatools.common.utils.NonRuntimeAWSException;
+import com.conveyal.datatools.common.utils.CheckedAWSException;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.editor.jobs.CreateSnapshotJob;
 import com.conveyal.datatools.editor.jobs.ExportSnapshotToGTFSJob;
@@ -17,7 +17,6 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Snapshot;
-import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import org.slf4j.Logger;
@@ -209,7 +208,7 @@ public class SnapshotController {
                 }
                 // Return presigned download link if using S3.
                 return downloadFromS3(S3Client, DataManager.feedBucket, key, false, res);
-            } catch (AmazonServiceException |NonRuntimeAWSException e) {
+            } catch (AmazonServiceException | CheckedAWSException e) {
                 logMessageAndHalt(req, 500, "Failed to download snapshot from S3.", e);
                 return null;
             }

@@ -23,6 +23,7 @@ import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.GeneratePresignedUrlRequest;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.models.OtpServer;
 import org.apache.commons.io.IOUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,7 +44,10 @@ import java.util.HashMap;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 
 /**
- * Created by landon on 8/2/16.
+ * This class mainly has utility functions for obtaining a new AWS client for a various AWS service. This class will
+ * create new clients only when they are needed and will refresh the clients in case they have expired. It is expected
+ * that all AWS clients are obtained from this class and not created elsewhere in order to properly manage AWS clients
+ * and to avoid repetition of code that creates clients.
  */
 public class AWSUtils {
 
@@ -51,14 +55,14 @@ public class AWSUtils {
     private static final int REQUEST_TIMEOUT_MSEC = 30 * 1000;
     public static final long DEFAULT_EXPIRING_AWS_ASSET_VALID_DURATION_MILLIS = 800 * 1000;
 
-    private static final AmazonEC2 DEFAULT_EC2_CLEINT = AmazonEC2Client.builder().build();
+    private static final AmazonEC2 DEFAULT_EC2_CLIENT = AmazonEC2Client.builder().build();
     private static final AmazonElasticLoadBalancing DEFAULT_ELB_CLIENT = AmazonElasticLoadBalancingClient
         .builder()
         .build();
     private static final AmazonIdentityManagement DEFAULT_IAM_CLIENT = AmazonIdentityManagementClientBuilder
         .defaultClient();
     private static final AWSCredentialsProvider DEFAULT_S3_CREDENTIALS;
-    private static final AmazonS3 DEFAULT_S3_CLEINT;
+    private static final AmazonS3 DEFAULT_S3_CLIENT;
 
     static {
         // Configure the default S3 client
@@ -86,18 +90,18 @@ public class AWSUtils {
             LOG.error("S3 client not initialized correctly.  Must provide config property application.data.s3_region or specify region in ~/.aws/config", e);
         }
         DEFAULT_S3_CREDENTIALS = tempS3CredentialsProvider;
-        DEFAULT_S3_CLEINT = tempS3Client;
-        if (DEFAULT_S3_CLEINT == null || DEFAULT_S3_CREDENTIALS == null) {
+        DEFAULT_S3_CLIENT = tempS3Client;
+        if (DEFAULT_S3_CLIENT == null || DEFAULT_S3_CREDENTIALS == null) {
             throw new IllegalArgumentException("Fatal error initializing the default s3Client");
         }
     }
 
     private static HashMap<String, ExpiringAsset<AWSStaticCredentialsProvider>> crendentialsProvidersByRole =
         new HashMap<>();
-    private static EC2ClientManagerImpl EC2ClientManager = new EC2ClientManagerImpl(DEFAULT_EC2_CLEINT);
+    private static EC2ClientManagerImpl EC2ClientManager = new EC2ClientManagerImpl(DEFAULT_EC2_CLIENT);
     private static ELBClientManagerImpl ELBClientManager = new ELBClientManagerImpl(DEFAULT_ELB_CLIENT);
     private static IAMClientManagerImpl IAMClientManager = new IAMClientManagerImpl(DEFAULT_IAM_CLIENT);
-    private static S3ClientManagerImpl S3ClientManager = new S3ClientManagerImpl(DEFAULT_S3_CLEINT);
+    private static S3ClientManagerImpl S3ClientManager = new S3ClientManagerImpl(DEFAULT_S3_CLIENT);
 
     public static String uploadBranding(Request req, String key) {
         String url;
@@ -141,7 +145,7 @@ public class AWSUtils {
                     // grant public read
                     .withCannedAcl(CannedAccessControlList.PublicRead));
             return url;
-        } catch (AmazonServiceException | NonRuntimeAWSException e) {
+        } catch (AmazonServiceException | CheckedAWSException e) {
             logMessageAndHalt(req, 500, "Error uploading file to S3", e);
             return null;
         } finally {
@@ -186,7 +190,7 @@ public class AWSUtils {
      * https://docs.aws.amazon.com/IAM/latest/UserGuide/tutorial_cross-account-with-roles.html). The credentials can be
      * then used for creating a temporary S3 or EC2 client.
      */
-    private static AWSStaticCredentialsProvider getCredentialsForRole(String role) throws NonRuntimeAWSException {
+    private static AWSStaticCredentialsProvider getCredentialsForRole(String role) throws CheckedAWSException {
         String roleSessionName = "data-tools-session";
         if (role == null) return null;
         // check if an active credentials provider exists for this role
@@ -203,7 +207,7 @@ public class AWSUtils {
         try {
             credentials = sessionProvider.getCredentials();
         } catch (AmazonServiceException e) {
-            throw new NonRuntimeAWSException("Failed to obtain AWS credentials");
+            throw new CheckedAWSException("Failed to obtain AWS credentials");
         }
         AWSStaticCredentialsProvider credentialsProvider = new AWSStaticCredentialsProvider(
             new BasicSessionCredentials(
@@ -220,26 +224,36 @@ public class AWSUtils {
         return credentialsProvider;
     }
 
-    public static AmazonEC2 getEC2Client(String role, String region) throws NonRuntimeAWSException {
+    public static AmazonEC2 getEC2Client(String role, String region) throws CheckedAWSException {
         return EC2ClientManager.getClient(role, region);
     }
 
-    public static AmazonElasticLoadBalancing getELBClient(String role, String region) throws NonRuntimeAWSException {
+    public static AmazonEC2 getEC2Client(OtpServer server) throws CheckedAWSException {
+        return getEC2Client(
+            server.role,
+            server.ec2Info == null ? null : server.ec2Info.region
+        );
+    }
+
+    public static AmazonElasticLoadBalancing getELBClient(String role, String region) throws CheckedAWSException {
         return ELBClientManager.getClient(role, region);
     }
 
-    public static AmazonIdentityManagement getIAMClient(String role, String region) throws NonRuntimeAWSException {
+    public static AmazonIdentityManagement getIAMClient(String role, String region) throws CheckedAWSException {
         return IAMClientManager.getClient(role, region);
     }
 
-    public static AmazonS3 getDefaultS3Client() throws NonRuntimeAWSException {
+    public static AmazonS3 getDefaultS3Client() throws CheckedAWSException {
         return getS3Client (null, null);
     }
 
-    public static AmazonS3 getS3Client(String role, String region) throws NonRuntimeAWSException {
+    public static AmazonS3 getS3Client(String role, String region) throws CheckedAWSException {
         return S3ClientManager.getClient(role, region);
     }
 
+    /**
+     * A class that manages the creation of EC2 clients.
+     */
     private static class EC2ClientManagerImpl extends AWSClientManager<AmazonEC2> {
         public EC2ClientManagerImpl(AmazonEC2 defaultClient) {
             super(defaultClient);
@@ -254,7 +268,7 @@ public class AWSUtils {
         public AmazonEC2 buildCredentialedClientForRoleAndRegion(
             String role,
             String region
-        ) throws NonRuntimeAWSException {
+        ) throws CheckedAWSException {
             AWSStaticCredentialsProvider credentials = getCredentialsForRole(role);
             AmazonEC2ClientBuilder builder = AmazonEC2Client.builder().withCredentials(credentials);
             if (region != null) {
@@ -264,6 +278,9 @@ public class AWSUtils {
         }
     }
 
+    /**
+     * A class that manages the creation of ELB clients.
+     */
     private static class ELBClientManagerImpl extends AWSClientManager<AmazonElasticLoadBalancing> {
         public ELBClientManagerImpl(AmazonElasticLoadBalancing defaultClient) {
             super(defaultClient);
@@ -278,7 +295,7 @@ public class AWSUtils {
         public AmazonElasticLoadBalancing buildCredentialedClientForRoleAndRegion(
             String role,
             String region
-        ) throws NonRuntimeAWSException {
+        ) throws CheckedAWSException {
             AWSStaticCredentialsProvider credentials = getCredentialsForRole(role);
             AmazonElasticLoadBalancingClientBuilder builder = AmazonElasticLoadBalancingClient
                 .builder()
@@ -290,6 +307,9 @@ public class AWSUtils {
         }
     }
 
+    /**
+     * A class that manages the creation of IAM clients.
+     */
     private static class IAMClientManagerImpl extends AWSClientManager<AmazonIdentityManagement> {
         public IAMClientManagerImpl(AmazonIdentityManagement defaultClient) {
             super(defaultClient);
@@ -302,12 +322,15 @@ public class AWSUtils {
 
         @Override
         public AmazonIdentityManagement buildCredentialedClientForRoleAndRegion(String role, String region)
-            throws NonRuntimeAWSException {
+            throws CheckedAWSException {
             AWSStaticCredentialsProvider credentials = getCredentialsForRole(role);
             return AmazonIdentityManagementClientBuilder.standard().withCredentials(credentials).build();
         }
     }
 
+    /**
+     * A class that manages the creation of S3 clients.
+     */
     private static class S3ClientManagerImpl extends AWSClientManager<AmazonS3> {
         public S3ClientManagerImpl(AmazonS3 defaultClient) {
             super(defaultClient);
@@ -322,7 +345,7 @@ public class AWSUtils {
         public AmazonS3 buildCredentialedClientForRoleAndRegion(
             String role,
             String region
-        ) throws NonRuntimeAWSException {
+        ) throws CheckedAWSException {
             AWSStaticCredentialsProvider credentials = getCredentialsForRole(role);
             AmazonS3ClientBuilder builder = AmazonS3ClientBuilder.standard();
             if (region != null) builder.withRegion(region);

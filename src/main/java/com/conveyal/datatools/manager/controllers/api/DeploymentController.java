@@ -1,16 +1,14 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.amazonaws.services.ec2.AmazonEC2;
-import com.amazonaws.services.ec2.AmazonEC2Client;
 import com.amazonaws.services.ec2.model.DescribeInstancesRequest;
 import com.amazonaws.services.ec2.model.DescribeInstancesResult;
 import com.amazonaws.services.ec2.model.Filter;
 import com.amazonaws.services.ec2.model.Instance;
 import com.amazonaws.services.ec2.model.Reservation;
-import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3URI;
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.common.utils.NonRuntimeAWSException;
+import com.conveyal.datatools.common.utils.CheckedAWSException;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
@@ -59,7 +57,6 @@ import static spark.Spark.put;
 public class DeploymentController {
     private static final Logger LOG = LoggerFactory.getLogger(DeploymentController.class);
     private static Map<String, DeployJob> deploymentJobsByServer = new HashMap<>();
-    private static final AmazonEC2 ec2 = AmazonEC2Client.builder().build();
 
     /**
      * Gets the deployment specified by the request's id parameter and ensure that user has access to the
@@ -93,10 +90,9 @@ public class DeploymentController {
     /**
      * HTTP endpoint for downloading a build artifact (e.g., otp build log or Graph.obj) from S3.
      */
-    private static String downloadBuildArtifact (Request req, Response res) throws NonRuntimeAWSException {
+    private static String downloadBuildArtifact (Request req, Response res) throws CheckedAWSException {
         Deployment deployment = getDeploymentWithPermissions(req, res);
         DeployJob.DeploySummary summaryToDownload = null;
-        AmazonS3 s3Client;
         String role = null;
         String region = null;
         String uriString;
@@ -339,7 +335,7 @@ public class DeploymentController {
      * instances has out-of-date data).
      */
     private static boolean terminateEC2InstanceForDeployment(Request req, Response res)
-        throws NonRuntimeAWSException {
+        throws CheckedAWSException {
         Deployment deployment = getDeploymentWithPermissions(req, res);
         String instanceIds = req.queryParams("instanceIds");
         if (instanceIds == null) {
@@ -392,7 +388,7 @@ public class DeploymentController {
     private static List<EC2InstanceSummary> fetchEC2InstanceSummaries(
         Request req,
         Response res
-    ) throws NonRuntimeAWSException {
+    ) throws CheckedAWSException {
         Deployment deployment = getDeploymentWithPermissions(req, res);
         return deployment.retrieveEC2Instances();
     }
@@ -408,7 +404,7 @@ public class DeploymentController {
      * Fetch EC2 instances from AWS that match the provided set of filters (e.g., tags, instance ID, or other properties).
      */
     public static List<Instance> fetchEC2Instances(AmazonEC2 ec2Client, Filter... filters) {
-        if (ec2Client == null) ec2Client = ec2;
+        if (ec2Client == null) throw new IllegalArgumentException("Must provide EC2Client");
         List<Instance> instances = new ArrayList<>();
         DescribeInstancesRequest request = new DescribeInstancesRequest().withFilters(filters);
         DescribeInstancesResult result = ec2Client.describeInstances(request);

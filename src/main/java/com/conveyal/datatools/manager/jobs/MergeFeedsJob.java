@@ -1,7 +1,7 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.common.utils.NonRuntimeAWSException;
+import com.conveyal.datatools.common.utils.CheckedAWSException;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.gtfsplus.tables.GtfsPlusTable;
@@ -213,7 +213,7 @@ public class MergeFeedsJob extends MonitorableJob {
      * Primary job logic handles collecting and sorting versions, creating a merged table for all versions, and writing
      * the resulting zip file to storage.
      */
-    @Override public void jobLogic() throws IOException, NonRuntimeAWSException {
+    @Override public void jobLogic() throws IOException, CheckedAWSException {
         // Create temp zip file to add merged feed content to.
         mergedTempFile = File.createTempFile(filename, null);
         mergedTempFile.deleteOnExit();
@@ -305,7 +305,7 @@ public class MergeFeedsJob extends MonitorableJob {
      * Handles writing the GTFS zip file to disk. For REGIONAL merges, this will end up in a project subdirectory on s3.
      * Otherwise, it will write to a new version.
      */
-    private void storeMergedFeed() throws IOException, NonRuntimeAWSException {
+    private void storeMergedFeed() throws IOException, CheckedAWSException {
         if (mergedVersion != null) {
             // Store the zip file for the merged feed version.
             try {
