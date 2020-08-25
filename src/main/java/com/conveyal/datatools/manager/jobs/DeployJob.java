@@ -682,12 +682,15 @@ public class DeployJob extends MonitorableJob {
                 service.awaitTermination(4, TimeUnit.HOURS);
             }
             // Check if any of the monitor jobs encountered any errors and terminate the job's associated instance.
+            int numFailedInstances = 0;
             for (MonitorServerStatusJob job : remainingServerMonitorJobs) {
                 if (job.status.error) {
+                    numFailedInstances++;
                     String id = job.getInstanceId();
                     LOG.warn("Error encountered while monitoring server {}. Terminating.", id);
                     remainingInstances.removeIf(instance -> instance.getInstanceId().equals(id));
                     try {
+                        // terminate instance without failing overall deploy job. That happens later.
                         ServerController.terminateInstances(getEC2ClientForDeployJob(), id);
                     } catch (Exception e){
                         job.status.message = String.format(
@@ -703,32 +706,40 @@ public class DeployJob extends MonitorableJob {
             // and the graph loading instance(s) failed to load graph successfully).
             if (newInstancesForTargetGroup.size() == 0) {
                 status.fail("Job failed because no running instances remain.");
-                return;
-            }
-            String finalMessage = "Server setup is complete!";
-            // Get EC2 servers running that are associated with this server.
-            if (deployType.equals(DeployType.REPLACE)) {
-                List<String> previousInstanceIds = previousInstances.stream()
-                    .filter(instance -> "running".equals(instance.state.getName()))
-                    .map(instance -> instance.instanceId)
-                    .collect(Collectors.toList());
-                // If there were previous instances assigned to the server, deregister/terminate them (now that the new
-                // instances are up and running).
-                if (previousInstanceIds.size() > 0) {
-                    boolean previousInstancesTerminated = ServerController.deRegisterAndTerminateInstances(
-                        otpServer.role,
-                        otpServer.ec2Info.targetGroupArn,
-                        customRegion,
-                        previousInstanceIds
-                    );
-                    // If there was a problem during de-registration/termination, notify via status message.
-                    if (!previousInstancesTerminated) {
-                        finalMessage = String.format("Server setup is complete! (WARNING: Could not terminate previous EC2 instances: %s", previousInstanceIds);
+            } else {
+                // Deregister and terminate previous EC2 servers running that were associated with this server.
+                if (deployType.equals(DeployType.REPLACE)) {
+                    List<String> previousInstanceIds = previousInstances.stream().filter(instance -> "running".equals(instance.state.getName()))
+                        .map(instance -> instance.instanceId).collect(Collectors.toList());
+                    // If there were previous instances assigned to the server, deregister/terminate them (now that the new
+                    // instances are up and running).
+                    if (previousInstanceIds.size() > 0) {
+                        boolean previousInstancesTerminated = ServerController.deRegisterAndTerminateInstances(otpServer.role,
+                            otpServer.ec2Info.targetGroupArn,
+                            customRegion,
+                            previousInstanceIds
+                        );
+                        // If there was a problem during de-registration/termination, notify via status message.
+                        if (!previousInstancesTerminated) {
+                            failJobWithAppendedMessage(String.format(
+                                "Server setup is complete! (WARNING: Could not terminate previous EC2 instances: %s",
+                                previousInstanceIds
+                            ));
+                        }
                     }
                 }
+                if (numFailedInstances > 0) {
+                    failJobWithAppendedMessage(String.format(
+                        "%d instances failed to properly start.",
+                        numFailedInstances
+                    ));
+                }
             }
-            // Wait for a recreate graph build job to complete if one was started
+            // Wait for a recreate graph build job to complete if one was started. This must always occur even if the
+            // job has already been failed in order to shutdown the recreateBuildImageExecutor.
             if (recreateBuildImageExecutor != null) {
+                // store previous message in case of a previous failure.
+                String previousMessage = status.message;
                 status.update("Waiting for recreate graph building image job to complete", 95);
                 while (!recreateBuildImageJob.status.completed) {
                     try {
@@ -736,15 +747,20 @@ public class DeployJob extends MonitorableJob {
                         Thread.sleep(1000);
                     } catch (InterruptedException e) {
                         recreateBuildImageJob.status.fail("An error occurred with the parent DeployJob", e);
-                        recreateBuildImageExecutor.shutdown();
-                        status.fail("An error occurred while waiting for the graph build image to be recreated", e);
-                        return;
+                        status.message = previousMessage;
+                        failJobWithAppendedMessage(
+                            "An error occurred while waiting for the graph build image to be recreated",
+                            e
+                        );
+                        break;
                     }
                 }
                 recreateBuildImageExecutor.shutdown();
             }
-            // Job is complete.
-            status.completeSuccessfully(finalMessage);
+            if (!status.error) {
+                // Job is complete.
+                status.completeSuccessfully("Server setup is complete!");
+            }
         } catch (Exception e) {
             LOG.error("Could not deploy to EC2 server", e);
             status.fail("Could not deploy to EC2 server", e);
@@ -941,8 +957,7 @@ public class DeployJob extends MonitorableJob {
                 // TODO: determine if the terminateInstanceResult immediately returns the terminated code or if it needs
                 //  to be verified in subsequent DescribeInstanceRequests
                 failJobWithAppendedMessage(
-                    String.format("Instance %s failed to properly terminate!", terminatingInstance.getInstanceId()),
-                    null
+                    String.format("Instance %s failed to properly terminate!", terminatingInstance.getInstanceId())
                 );
                 allInstancesTerminatedProperly = false;
             }
