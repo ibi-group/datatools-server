@@ -89,7 +89,10 @@ before_deploy:
 - ls target/*.jar
   # Copy packaged jar over to deploy dir.
 - cp target/dt-*.jar deploy/
-- cp target/dt-*.jar "deploy/dt-latest-$BRANCH_CLEAN.jar"
+  # get first jar file and copy it into a new file that adds the current branch name
+- ALL_JARS=(target/dt-*.jar)
+- FIRST_JAR="${ALL_JARS[0]}"
+- cp FIRST_JAR "deploy/dt-latest-$BRANCH_CLEAN.jar"
 deploy:
   provider: s3
   skip_cleanup: true
