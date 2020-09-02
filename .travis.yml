@@ -89,7 +89,10 @@ before_deploy:
 - ls target/*.jar
   # Copy packaged jar over to deploy dir.
 - cp target/dt-*.jar deploy/
-  # get first jar file and copy it into a new file that adds the current branch name
+  # Get the first jar file and copy it into a new file that adds the current branch name. During a
+  # merge to master, there are multiple jar files produced, but they're each effectively the same
+  # code (there may be slight differences in the version shown in the `pom.xml`, but that's not
+  # important for the purposes of creating this "latest branch" jar).
 - ALL_JARS=(target/dt-*.jar)
 - FIRST_JAR="${ALL_JARS[0]}"
 - cp "$FIRST_JAR" "deploy/dt-latest-$BRANCH_CLEAN.jar"
