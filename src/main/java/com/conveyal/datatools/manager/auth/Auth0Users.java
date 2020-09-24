@@ -45,16 +45,22 @@ public class Auth0Users {
     private static final ObjectMapper mapper = new ObjectMapper();
     private static final Logger LOG = LoggerFactory.getLogger(Auth0Users.class);
 
+    private static URI getUrl(String searchQuery, int page, int perPage, boolean includeTotals) {
+        return getUrl(searchQuery, page, perPage, includeTotals, true);
+    }
+
     /**
      * Constructs a user search query URL.
      * @param searchQuery   search query to perform (null value implies default query)
      * @param page          which page of users to return
      * @param perPage       number of users to return per page
      * @param includeTotals whether to include the total number of users in search results
+     * @param includeDefaultQuery whether to include the default query in the search criteria
      * @return              URI to perform the search query
      */
-    private static URI getUrl(String searchQuery, int page, int perPage, boolean includeTotals) {
-        // always filter users by datatools client_id
+    private static URI getUrl(String searchQuery, int page, int perPage, boolean includeTotals, boolean includeDefaultQuery) {
+        // Filter users by datatools client_id, unless excluded (by includeDefaultQuery) and a search query is provided.
+        // This allows for a less restricted, wider search to be carried out on tenant users.
         String defaultQuery = "app_metadata.datatools.client_id:" + clientId;
         URIBuilder builder = getURIBuilder();
         builder.setPath(USERS_API_PATH);
@@ -64,7 +70,7 @@ public class Auth0Users {
         builder.setParameter("include_totals", Boolean.toString(includeTotals));
         if (searchQuery != null) {
             builder.setParameter("search_engine", SEARCH_API_VERSION);
-            builder.setParameter("q", searchQuery + " AND " + defaultQuery);
+            builder.setParameter("q", includeDefaultQuery ? searchQuery + " AND " + defaultQuery : searchQuery);
         }
         else {
             builder.setParameter("search_engine", SEARCH_API_VERSION);
@@ -217,6 +223,18 @@ public class Auth0Users {
     public static String getAuth0Users(String searchQuery, int page) {
 
         URI uri = getUrl(searchQuery, page, 10, false);
+        return doRequest(uri);
+    }
+
+    /**
+     * Wrapper method for performing user search with default per page count. It also excludes the default query so all
+     * tenant users are included in the search.
+     *
+     * @param searchQuery The search criteria.
+     * @return JSON string of users matching search query.
+     */
+    public static String getAuth0UsersExcludeDefaultQuery(String searchQuery) {
+        URI uri = getUrl(searchQuery, 0, 10, false, false);
         return doRequest(uri);
     }
 
