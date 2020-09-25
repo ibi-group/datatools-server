@@ -45,6 +45,9 @@ public class Auth0Users {
     private static final ObjectMapper mapper = new ObjectMapper();
     private static final Logger LOG = LoggerFactory.getLogger(Auth0Users.class);
 
+    /**
+     * Overload of user search query URL to restrict search to current users only.
+     */
     private static URI getUrl(String searchQuery, int page, int perPage, boolean includeTotals) {
         return getUrl(searchQuery, page, perPage, includeTotals, true);
     }
@@ -55,13 +58,13 @@ public class Auth0Users {
      * @param page          which page of users to return
      * @param perPage       number of users to return per page
      * @param includeTotals whether to include the total number of users in search results
-     * @param includeDefaultQuery whether to include the default query in the search criteria
+     * @param limitToCurrentUsers whether to restrict the search to current users only
      * @return              URI to perform the search query
      */
-    private static URI getUrl(String searchQuery, int page, int perPage, boolean includeTotals, boolean includeDefaultQuery) {
-        // Filter users by datatools client_id, unless excluded (by includeDefaultQuery) and a search query is provided.
+    private static URI getUrl(String searchQuery, int page, int perPage, boolean includeTotals, boolean limitToCurrentUsers) {
+        // Filter users by datatools client_id, unless excluded (by limitToCurrentUsers) and a search query is provided.
         // This allows for a less restricted, wider search to be carried out on tenant users.
-        String defaultQuery = "app_metadata.datatools.client_id:" + clientId;
+        String searchCurrentUsersOnly = "app_metadata.datatools.client_id:" + clientId;
         URIBuilder builder = getURIBuilder();
         builder.setPath(USERS_API_PATH);
         builder.setParameter("sort", "email:1");
@@ -70,11 +73,10 @@ public class Auth0Users {
         builder.setParameter("include_totals", Boolean.toString(includeTotals));
         if (searchQuery != null) {
             builder.setParameter("search_engine", SEARCH_API_VERSION);
-            builder.setParameter("q", includeDefaultQuery ? searchQuery + " AND " + defaultQuery : searchQuery);
-        }
-        else {
+            builder.setParameter("q", limitToCurrentUsers ? searchQuery + " AND " + searchCurrentUsersOnly : searchQuery);
+        } else {
             builder.setParameter("search_engine", SEARCH_API_VERSION);
-            builder.setParameter("q", defaultQuery);
+            builder.setParameter("q", searchCurrentUsersOnly);
         }
 
         URI uri;
@@ -227,13 +229,12 @@ public class Auth0Users {
     }
 
     /**
-     * Wrapper method for performing user search with default per page count. It also excludes the default query so all
-     * tenant users are included in the search.
-     *
+     * Wrapper method for performing user search with default per page count. It also opens the search to all tenant
+     * users by excluding the restriction to current datatool users.
      * @param searchQuery The search criteria.
      * @return JSON string of users matching search query.
      */
-    public static String getAuth0UsersExcludeDefaultQuery(String searchQuery) {
+    public static String getUnrestrictedAuth0Users(String searchQuery) {
         URI uri = getUrl(searchQuery, 0, 10, false, false);
         return doRequest(uri);
     }

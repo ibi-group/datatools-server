@@ -15,6 +15,8 @@ import org.junit.Rule;
 import org.junit.Test;
 
 import java.io.IOException;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 
 import static com.conveyal.datatools.TestUtils.parseJson;
 import static com.conveyal.datatools.manager.auth.Auth0Users.USERS_API_PATH;
@@ -29,6 +31,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.patch;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
 import static com.zenika.snapshotmatcher.SnapshotMatcher.matchesSnapshot;
@@ -114,11 +117,85 @@ public class UserControllerTest extends UnitTest {
     }
 
     /**
+     * When creating a new datatools user which matches an existing Auth0 user, make sure the permissions for the
+     * existing Auth0 users can be updated.
+     */
+    @Test
+    public void canUpdatePermissionsOfExistingAuth0User() throws IOException {
+        String newUserEmail = "test-existing-user@test.com";
+
+        // create wiremock stub for user search that matches existing user
+        String url = USERS_API_PATH + "?sort=email%3A1&per_page=10&page=0&include_totals=false&search_engine=v3&q=email%3A" + URLEncoder.encode(newUserEmail, "UTF-8") + "*";
+        stubFor(
+            get(urlEqualTo(url))
+                .willReturn(
+                    aResponse()
+                        .withBodyFile("userSearchResponse.json")
+                )
+        );
+
+        // create wiremock stub for update users endpoint
+        stubFor(
+            patch(urlPathEqualTo(USERS_API_PATH + "/auth0%7Ctest-existing-user"))
+                .withRequestBody(
+                    matchingJsonPath(
+                        "$.app_metadata.datatools[0].permissions[0].type",
+                        equalTo("administer-application")
+                    )
+                )
+                .willReturn(
+                    aResponse()
+                        .withBodyFile("updateExistingUserResponse.json")
+                )
+        );
+
+        ObjectNode requestJson = mapper.createObjectNode();
+        requestJson.put("email", emailForExistingAccount);
+
+        ObjectNode testClientPermissions = mapper.createObjectNode();
+        testClientPermissions.put("type", "administer-application");
+
+        ObjectNode testClientData = mapper.createObjectNode();
+        testClientData.putArray("permissions").add(testClientPermissions);
+        testClientData.putArray("projects");
+        testClientData.putArray("organizations");
+        testClientData.put("client_id", "testing-client-id");
+
+        requestJson.putArray("permissions").add(testClientData);
+
+        // make request and parse the json response
+        JsonNode updateUserResponse = parseJson(
+            given()
+                .port(4000)
+                .body(requestJson)
+                .post("/api/manager/secure/user")
+                .then()
+                .extract()
+                .response()
+                .asString()
+        );
+
+        // make sure the response matches the saved snapshot
+        assertThat(updateUserResponse, matchesSnapshot());
+
+    }
+
+    /**
      * Make sure a user can be created
      */
     @Test
     public void canCreateUser() throws IOException {
         String newUserEmail = "test-new-user@test.com";
+
+        // create wiremock stub for empty user search
+        String url = USERS_API_PATH + "?sort=email%3A1&per_page=10&page=0&include_totals=false&search_engine=v3&q=email%3A" + URLEncoder.encode(newUserEmail, "UTF-8") + "*";
+        stubFor(
+            get(urlEqualTo(url))
+                .willReturn(
+                    aResponse()
+                        .withBody("[]")
+                )
+        );
 
         // create wiremock stub for create users endpoint
         stubFor(
@@ -154,6 +231,16 @@ public class UserControllerTest extends UnitTest {
      */
     @Test
     public void canReturnMeaningfulAuth0Error() throws IOException {
+
+        String url = USERS_API_PATH + "?sort=email%3A1&per_page=10&page=0&include_totals=false&search_engine=v3&q=email%3A" + URLEncoder.encode(emailForExistingAccount, "UTF-8") + "*";
+        stubFor(
+            get(urlEqualTo(url))
+                .willReturn(
+                    aResponse()
+                        .withBody("[]")
+                )
+        );
+
         // create wiremock stub for create users endpoint that responds with a message saying a user with the email
         // already exists
         stubFor(
@@ -293,14 +380,14 @@ public class UserControllerTest extends UnitTest {
                 )
         );
 
-        // Create wiremock stub for get user by id endpoint.
-        stubFor(
-            get(urlPathEqualTo(USERS_API_PATH + "/auth0%7Ctest-existing-user"))
-                .willReturn(
-                    aResponse()
-                        .withBodyFile("getExistingUserResponse.json")
-                )
-        );
+//        // Create wiremock stub for get user by id endpoint.
+//        stubFor(
+//            get(urlPathEqualTo(USERS_API_PATH + "/auth0%7Ctest-existing-user"))
+//                .willReturn(
+//                    aResponse()
+//                        .withBodyFile("getExistingUserResponse.json")
+//                )
+//        );
 
         ObjectNode requestJson = mapper.createObjectNode();
         requestJson.put("email", emailForExistingAccount);

@@ -15,6 +15,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
@@ -156,7 +157,7 @@ public class UserController {
     private static String createPublicUser(Request req, Response res) {
         JsonNode jsonNode = parseJsonFromBody(req);
         String email = jsonNode.get("email").asText();
-        Auth0UserProfile user = checkForExistingAuth0User(email);
+        Auth0UserProfile user = checkForExistingAuth0User(req, email);
 
         // User already exists, update permissions
         if (user != null) {
@@ -166,19 +167,7 @@ public class UserController {
             return updateUserPermissions(req, user, json);
         }
 
-        // Create new user
-        HttpPost createUserRequest = new HttpPost(baseUsersUrl);
-        setHeaders(req, createUserRequest);
-
-        String json = String.format("{" +
-                "\"connection\": \"Username-Password-Authentication\"," +
-                "\"email\": %s," +
-                "\"password\": %s," +
-                "\"app_metadata\": {\"datatools\": [{\"permissions\": [], \"projects\": [], \"subscriptions\": [], \"client_id\": \"%s\" }] } }",
-                jsonNode.get("email"), jsonNode.get("password"), AUTH0_CLIENT_ID);
-        setRequestEntityUsingJson(createUserRequest, json, req);
-
-        return executeRequestAndGetResult(createUserRequest, req);
+        return createUserRequest(req, email, jsonNode.get("password").asText());
     }
 
     /**
@@ -188,25 +177,59 @@ public class UserController {
     private static String createUser(Request req, Response res) {
         JsonNode jsonNode = parseJsonFromBody(req);
         String email = jsonNode.get("email").asText();
-        Auth0UserProfile user = checkForExistingAuth0User(email);
+        Auth0UserProfile user = checkForExistingAuth0User(req, email);
 
         // User already exists, update permissions
         if (user != null) {
+            // The square brackets are not required around the permissions parameter because they are already included
+            // within the permissions value.
             String json = String.format("{ \"app_metadata\": { \"datatools\" : %s  }}", jsonNode.get("permissions"));
             return updateUserPermissions(req, user, json);
         }
 
-        // Create new user
+        String requestBody = String.format("{" +
+                            "\"connection\": \"Username-Password-Authentication\"," +
+                            "\"email\": %s," +
+                            "\"password\": %s," +
+                            "\"app_metadata\": {\"datatools\": [%s] } }"
+                            , jsonNode.get("email"), jsonNode.get("password"), jsonNode.get("permissions"));
         HttpPost createUserRequest = new HttpPost(baseUsersUrl);
         setHeaders(req, createUserRequest);
-        String json = String.format("{" +
-                "\"connection\": \"Username-Password-Authentication\"," +
-                "\"email\": %s," +
-                "\"password\": %s," +
-                "\"app_metadata\": {\"datatools\": [%s] } }"
-                , jsonNode.get("email"), jsonNode.get("password"), jsonNode.get("permissions"));
-        setRequestEntityUsingJson(createUserRequest, json, req);
+        setRequestEntityUsingJson(createUserRequest, requestBody, req);
         return executeRequestAndGetResult(createUserRequest, req);
+    }
+
+    /**
+     * Create user request.
+     */
+    private static String createUserRequest(Request req, String email, String password) {
+        HttpPost createUserRequest = new HttpPost(baseUsersUrl);
+        setHeaders(req, createUserRequest);
+        String requestBody = createUserRequestBody(email, password);
+        setRequestEntityUsingJson(createUserRequest, requestBody, req);
+        return executeRequestAndGetResult(createUserRequest, req);
+    }
+
+    /**
+     * Produce JSON request body for create public user with default/blank permissions.
+     */
+    private static String createUserRequestBody(String email, String password) {
+        ArrayNode emptyArrayNode = mapper.createArrayNode();
+        ObjectNode permissions = mapper.createObjectNode();
+        permissions.set("permissions", emptyArrayNode);
+        permissions.set("projects", emptyArrayNode);
+        permissions.set("subscriptions", emptyArrayNode);
+        permissions.put("client_id", AUTH0_CLIENT_ID);
+        ArrayNode dataTools = mapper.createArrayNode();
+        dataTools.add(permissions);
+        ObjectNode appMetaData = mapper.createObjectNode();
+        appMetaData.set("datatools", dataTools);
+        ObjectNode createUserRequestBody = mapper.createObjectNode();
+        createUserRequestBody.put("connection", "Username-Password-Authentication");
+        createUserRequestBody.put("email", email);
+        createUserRequestBody.put("password", password);
+        createUserRequestBody.set("app_metadata", appMetaData);
+        return createUserRequestBody.toString();
     }
 
     /**
@@ -224,11 +247,11 @@ public class UserController {
      * Check for an existing Auth0 user based on email address. If the Auth0 search returns a matching email, create
      * an Auth0UserProfile and return else return null.
      */
-    private static Auth0UserProfile checkForExistingAuth0User(String email) {
+    private static Auth0UserProfile checkForExistingAuth0User(Request req, String email) {
         String query = String.format("email:%s*", email);
-        String searchResult = Auth0Users.getAuth0UsersExcludeDefaultQuery(query);
+        String searchResult = Auth0Users.getUnrestrictedAuth0Users(query);
         // Only ever expecting at most one user.
-        List<Auth0UserProfile> users = getPOJOFromJSONAsList(searchResult, Auth0UserProfile.class);
+        List<Auth0UserProfile> users = getPOJOFromJSONAsList(req, searchResult, Auth0UserProfile.class);
         return (users == null || users.isEmpty()) ? null : users.get(0);
     }
 
@@ -407,7 +430,6 @@ public class UserController {
 
     /**
      * Safely parse the userId and create an Auth0 url.
-     *
      * @param req The initiating request that came into datatools-server
      */
     private static String getUserIdUrl(Request req) {
@@ -416,7 +438,6 @@ public class UserController {
 
     /**
      * Safely parse the userId and create an Auth0 url.
-     *
      * @param req The initiating request that came into datatools-server
      * @param id The user id to be encoded
      */
@@ -438,11 +459,9 @@ public class UserController {
         return null;
     }
 
-
     /**
      * Safely parse the request body into a JsonNode.
-     *
-     * @param req The initating request that came into datatools-server
+     * @param req The initiating request that came into datatools-server
      */
     private static JsonNode parseJsonFromBody(Request req) {
         try {
@@ -455,14 +474,16 @@ public class UserController {
 
     /**
      * Utility method to parse generic objects from JSON String and return as list.
+     * @param req The initiating request that came into datatools-server
      * @param json The string representation of JSON to be parsed.
      * @param clazz The class used to map each JSON object extracted.
      */
-    private static <T> List<T> getPOJOFromJSONAsList(String json, Class<T> clazz) {
+    private static <T> List<T> getPOJOFromJSONAsList(Request req, String json, Class<T> clazz) {
         try {
             JavaType type = mapper.getTypeFactory().constructCollectionType(List.class, clazz);
             return mapper.readValue(json, type);
         } catch (JsonProcessingException e) {
+            logMessageAndHalt(req, 400, "Failed to parse JSON String", e);
             return null;
         }
     }
@@ -492,7 +513,6 @@ public class UserController {
     /**
      * Executes and logs an outgoing HTTP request, makes sure it worked and then returns the
      * stringified response body.
-     *
      * @param httpRequest The outgoing HTTP request
      * @param req The initating request that came into datatools-server
      */
