@@ -380,15 +380,6 @@ public class UserControllerTest extends UnitTest {
                 )
         );
 
-//        // Create wiremock stub for get user by id endpoint.
-//        stubFor(
-//            get(urlPathEqualTo(USERS_API_PATH + "/auth0%7Ctest-existing-user"))
-//                .willReturn(
-//                    aResponse()
-//                        .withBodyFile("getExistingUserResponse.json")
-//                )
-//        );
-
         ObjectNode requestJson = mapper.createObjectNode();
         requestJson.put("email", emailForExistingAccount);
 
