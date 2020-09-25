@@ -557,6 +557,14 @@ public class MergeFeedsJobTest extends UnitTest {
             ),
             1
         );
+        // cal_to_remove service_id should be scoped for earlier feed version.
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format(
+                "SELECT count(*) FROM %s.trips WHERE service_id='Fake_Agency4:cal_to_remove'",
+                mergedNamespace
+            ),
+            1
+        );
         // Amended calendar record from earlier feed version should also have a modified end date (one day before the
         // earliest start_date from the future feed).
         assertThatSqlCountQueryYieldsExpectedCount(
