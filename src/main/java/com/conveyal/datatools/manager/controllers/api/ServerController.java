@@ -295,7 +295,7 @@ public class ServerController {
     }
 
     /**
-     * Asynchrnously validates all ec2 config of a particular OtpServer instance.
+     * Asynchronously validates all ec2 config of a particular OtpServer instance.
      */
     public static EC2ValidationResult validateEC2Config(
         OtpServer server
