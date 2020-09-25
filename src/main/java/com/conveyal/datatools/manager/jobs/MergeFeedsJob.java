@@ -710,15 +710,6 @@ public class MergeFeedsJob extends MonitorableJob {
                                             String key = getTableScopedValue(table, idScope, keyValue);
                                             mergeFeedsResult.skippedIds.add(key);
                                             skipRecord = true;
-                                            // Next, check that the service_id does not exist in calendar.txt (which has
-                                            // already been processed). If the service_id is not found,
-                                            // add the table-scoped value for calendar.txt in skippedIds. This is the
-                                            // only way to trigger the removal of trips or other entities that reference
-                                            // this now removed service_id.
-                                            String calendarKey = getTableScopedValue(Table.CALENDAR, idScope, keyValue);
-                                            if (!mergeFeedsResult.remappedIds.containsKey(calendarKey)) {
-                                                mergeFeedsResult.skippedIds.add(calendarKey);
-                                            }
                                             continue;
                                         }
                                     }
@@ -879,10 +870,12 @@ public class MergeFeedsJob extends MonitorableJob {
 
                         if (field.isForeignReference()) {
                             String key = getTableScopedValue(field.referenceTable, idScope, val);
-                            // If the current foreign ref points to another record that has been skipped, skip this
-                            // record and add its primary key to the list of skipped IDs (so that other references can
-                            // be properly omitted).
-                            if (mergeFeedsResult.skippedIds.contains(key)) {
+                            // Check if this ref field is a service_id and if it is not found in the list of service_ids.
+                            boolean serviceIdMissing = field.name.equals("service_id") && !mergeFeedsResult.serviceIds.contains(valueToWrite);
+                            // If the current foreign ref points to another record that has been skipped or is a ref to
+                            // a non-existent service_id, skip this record and add its primary key to the list of skipped
+                            // IDs (so that other references can be properly omitted).
+                            if (mergeFeedsResult.skippedIds.contains(key) || serviceIdMissing) {
                                 // If a calendar#service_id has been skipped, but there were valid service_ids found in
                                 // calendar_dates, do not skip that record for both the calendar_date and any related
                                 // trips.
