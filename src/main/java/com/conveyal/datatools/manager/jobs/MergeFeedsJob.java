@@ -668,10 +668,9 @@ public class MergeFeedsJob extends MonitorableJob {
                                         // for the ignored trips shall also be removed.
                                         if (!startDate.isBefore(futureFeedFirstDate)) {
                                             LOG.warn(
-                                                "Skipping calendar entry {} because it operates in the time span of future feed.",
+                                                "Skipping calendar entry {} because it operates fully within the time span of future feed.",
                                                 keyValue);
-                                            String key =
-                                                getTableScopedValue(table, idScope, keyValue);
+                                            String key = getTableScopedValue(table, idScope, keyValue);
                                             mergeFeedsResult.skippedIds.add(key);
                                             skipRecord = true;
                                             continue;
@@ -711,13 +710,22 @@ public class MergeFeedsJob extends MonitorableJob {
                                             String key = getTableScopedValue(table, idScope, keyValue);
                                             mergeFeedsResult.skippedIds.add(key);
                                             skipRecord = true;
+                                            // Next, check that the service_id does not exist in calendar.txt (which has
+                                            // already been processed). If the service_id is not found,
+                                            // add the table-scoped value for calendar.txt in skippedIds. This is the
+                                            // only way to trigger the removal of trips or other entities that reference
+                                            // this now removed service_id.
+                                            String calendarKey = getTableScopedValue(Table.CALENDAR, idScope, keyValue);
+                                            if (!mergeFeedsResult.remappedIds.containsKey(calendarKey)) {
+                                                mergeFeedsResult.skippedIds.add(calendarKey);
+                                            }
                                             continue;
                                         }
                                     }
                                     // Track service ID because we want to avoid removing trips that may reference this
                                     // service_id when the service_id is used by calendar.txt records that operate in
                                     // the valid date range, i.e., before the future feed's first date.
-                                    if (field.name.equals("service_id")) mergeFeedsResult.serviceIds.add(keyValue);
+                                    if (field.name.equals("service_id")) mergeFeedsResult.serviceIds.add(valueToWrite);
                                     break;
                                 case "shapes":
                                     // If a shape_id is found in both future and active datasets, all shape points from
@@ -878,8 +886,8 @@ public class MergeFeedsJob extends MonitorableJob {
                                 // If a calendar#service_id has been skipped, but there were valid service_ids found in
                                 // calendar_dates, do not skip that record for both the calendar_date and any related
                                 // trips.
-                                if (field.name.equals("service_id") && mergeFeedsResult.serviceIds.contains(val)) {
-                                    LOG.warn("Not skipping valid service_id {} for {} {}", val, table.name, keyValue);
+                                if (field.name.equals("service_id") && mergeFeedsResult.serviceIds.contains(valueToWrite)) {
+                                    LOG.warn("Not skipping valid service_id {} for {} {}", valueToWrite, table.name, keyValue);
                                 } else {
                                     String skippedKey = getTableScopedValue(table, idScope, keyValue);
                                     if (orderField != null) {
