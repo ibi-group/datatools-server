@@ -157,22 +157,57 @@ public class AWSUtils {
     }
 
     /**
-     * Download an object in the selected format from S3, using presigned URLs.
-     * @param s3
-     * @param bucket name of the bucket
-     * @param filename both the key and the format
-     * @param redirect
-     * @param res
-     * @return
+     * Helper for downloading a file using the default S3 client.
      */
-    public static String downloadFromS3(AmazonS3 s3, String bucket, String filename, boolean redirect, Response res){
+    public static String downloadFromS3(String bucket, String key, boolean redirect, Request req, Response res) {
+        try {
+            return downloadFromS3(getDefaultS3Client(), bucket, key, redirect, req, res);
+        } catch (CheckedAWSException e) {
+            logMessageAndHalt(req, 500, "Failed to download file from S3.", e);
+            return null;
+        }
+    }
+
+    /**
+     * Given a Spark request, download an object in the selected format from S3, using presigned URLs.
+     *
+     * @param s3 The s3 client to use
+     * @param bucket name of the bucket
+     * @param key both the key and the format
+     * @param redirect whether or not to redirect to the presigned url
+     * @param req The underlying Spark request this came from
+     * @param res The response to write the download info to
+     */
+    public static String downloadFromS3(
+        AmazonS3 s3,
+        String bucket,
+        String key,
+        boolean redirect,
+        Request req,
+        Response res
+    ) {
+        if (!s3.doesObjectExist(DataManager.feedBucket, key)) {
+            logMessageAndHalt(
+                req,
+                500,
+                String.format("Error downloading file from S3. Object %s does not exist.", key)
+            );
+            return null;
+        }
+
         Date expiration = new Date();
         expiration.setTime(expiration.getTime() + REQUEST_TIMEOUT_MSEC);
 
-        GeneratePresignedUrlRequest presigned = new GeneratePresignedUrlRequest(bucket, filename);
+        GeneratePresignedUrlRequest presigned = new GeneratePresignedUrlRequest(bucket, key);
         presigned.setExpiration(expiration);
         presigned.setMethod(HttpMethod.GET);
-        URL url = s3.generatePresignedUrl(presigned);
+        URL url;
+        try {
+            url = s3.generatePresignedUrl(presigned);
+        } catch (AmazonServiceException e) {
+            logMessageAndHalt(req, 500, "Failed to download file from S3.", e);
+            return null;
+        }
 
         if (redirect) {
             res.type("text/plain"); // override application/json

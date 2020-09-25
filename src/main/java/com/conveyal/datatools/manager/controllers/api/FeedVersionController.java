@@ -212,12 +212,13 @@ public class FeedVersionController  {
 
         if (DataManager.useS3) {
             // Return pre-signed download link if using S3.
-            try {
-                return downloadFromS3(getDefaultS3Client(), DataManager.feedBucket, FeedStore.s3Prefix + version.id, false, res);
-            } catch (AmazonServiceException | CheckedAWSException e) {
-                logMessageAndHalt(req, 500, "Failed to download file", e);
-                return null;
-            }
+            return downloadFromS3(
+                DataManager.feedBucket,
+                FeedStore.s3Prefix + version.id,
+                false,
+                req,
+                res
+            );
         } else {
             // when feeds are stored locally, single-use download token will still be used
             FeedDownloadToken token = new FeedDownloadToken(version);

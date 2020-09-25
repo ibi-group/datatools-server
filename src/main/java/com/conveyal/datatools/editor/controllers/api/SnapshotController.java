@@ -196,22 +196,8 @@ public class SnapshotController {
         // an actual object to download.
         // FIXME: use new FeedStore.
         if (DataManager.useS3) {
-            try {
-                AmazonS3 S3Client = getDefaultS3Client();
-                if (!S3Client.doesObjectExist(DataManager.feedBucket, key)) {
-                    logMessageAndHalt(
-                        req,
-                        500,
-                        String.format("Error downloading snapshot from S3. Object %s does not exist.", key),
-                        new Exception("s3 object does not exist")
-                    );
-                }
-                // Return presigned download link if using S3.
-                return downloadFromS3(S3Client, DataManager.feedBucket, key, false, res);
-            } catch (AmazonServiceException | CheckedAWSException e) {
-                logMessageAndHalt(req, 500, "Failed to download snapshot from S3.", e);
-                return null;
-            }
+            // Return presigned download link if using S3.
+            return downloadFromS3(DataManager.feedBucket, key, false, req, res);
         } else {
             // If not storing on s3, just use the token download method.
             token = new FeedDownloadToken(snapshot);

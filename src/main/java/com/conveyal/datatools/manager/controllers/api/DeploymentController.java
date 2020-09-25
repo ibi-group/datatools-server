@@ -142,6 +142,7 @@ public class DeploymentController {
             uri.getBucket(),
             String.join("/", uri.getKey(), filename),
             false,
+            req,
             res
         );
     }

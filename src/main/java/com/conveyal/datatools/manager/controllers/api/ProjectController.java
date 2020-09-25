@@ -274,12 +274,7 @@ public class ProjectController {
         if (DataManager.useS3) {
             // Return presigned download link if using S3.
             String key = String.format("project/%s.zip", project.id);
-            try {
-                return downloadFromS3(getDefaultS3Client(), DataManager.feedBucket, key, false, res);
-            } catch (AmazonServiceException | CheckedAWSException e) {
-                logMessageAndHalt(req, 500, "Failed to download file from S3", e);
-                return null;
-            }
+            return downloadFromS3(DataManager.feedBucket, key, false, req, res);
         } else {
             // when feeds are stored locally, single-use download token will still be used
             FeedDownloadToken token = new FeedDownloadToken(project);
