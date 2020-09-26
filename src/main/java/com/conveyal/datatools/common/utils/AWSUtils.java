@@ -186,11 +186,11 @@ public class AWSUtils {
         Request req,
         Response res
     ) {
-        if (!s3.doesObjectExist(DataManager.feedBucket, key)) {
+        if (!s3.doesObjectExist(bucket, key)) {
             logMessageAndHalt(
                 req,
                 500,
-                String.format("Error downloading file from S3. Object %s does not exist.", key)
+                String.format("Error downloading file from S3. Object s3://%s/%s does not exist.", bucket, key)
             );
             return null;
         }
