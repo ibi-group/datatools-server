@@ -30,6 +30,7 @@ import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import org.bson.codecs.pojo.annotations.BsonIgnore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -126,11 +127,13 @@ public class OtpServer extends Model {
     }
 
     @JsonIgnore
+    @BsonIgnore
     public AmazonEC2 getEC2Client() throws CheckedAWSException {
         return EC2Utils.getEC2Client(role, getRegion());
     }
 
     @JsonIgnore
+    @BsonIgnore
     private String getRegion() {
         return ec2Info != null && ec2Info.region != null
             ? ec2Info.region
@@ -141,6 +144,7 @@ public class OtpServer extends Model {
      * Asynchronously validates all ec2 config of a the OtpServer instance.
      */
     @JsonIgnore
+    @BsonIgnore
     public EC2ValidationResult validateEC2Config()
         throws ExecutionException, InterruptedException, CheckedAWSException {
 
@@ -168,6 +172,7 @@ public class OtpServer extends Model {
      *   DEFAULT_AMI_ID?
      */
     @JsonIgnore
+    @BsonIgnore
     private EC2ValidationResult validateAmiId(String amiId) {
         EC2ValidationResult result = new EC2ValidationResult();
         if (isEmpty(amiId)) return result;
@@ -187,6 +192,7 @@ public class OtpServer extends Model {
      * See https://forums.aws.amazon.com/message.jspa?messageID=845159
      */
     @JsonIgnore
+    @BsonIgnore
     private EC2ValidationResult validateGraphBuildReplacementAmiName() {
         EC2ValidationResult result = new EC2ValidationResult();
         if (!ec2Info.recreateBuildImage) return result;
@@ -213,6 +219,7 @@ public class OtpServer extends Model {
 
     /** Validate that AWS key name (the first part of a .pem key) exists and is not empty. */
     @JsonIgnore
+    @BsonIgnore
     private EC2ValidationResult validateKeyName() throws CheckedAWSException {
         String message = "Server must have valid key name";
         EC2ValidationResult result = new EC2ValidationResult();
@@ -230,6 +237,7 @@ public class OtpServer extends Model {
 
     /** Validate IAM instance profile ARN exists and is not empty. */
     @JsonIgnore
+    @BsonIgnore
     private EC2ValidationResult validateIamInstanceProfileArn() throws CheckedAWSException {
         EC2ValidationResult result = new EC2ValidationResult();
         String message = "Server must have valid IAM instance profile ARN (e.g., arn:aws:iam::123456789012:instance-profile/otp-ec2-role).";
@@ -250,6 +258,7 @@ public class OtpServer extends Model {
 
     /** Validate that EC2 security group exists and is not empty. */
     @JsonIgnore
+    @BsonIgnore
     private EC2ValidationResult validateSecurityGroupId(LoadBalancer loadBalancer) {
         EC2ValidationResult result = new EC2ValidationResult();
         String message = "Server must have valid security group ID";
@@ -277,6 +286,7 @@ public class OtpServer extends Model {
      * VPC.
      */
     @JsonIgnore
+    @BsonIgnore
     private EC2ValidationResult validateSubnetId(LoadBalancer loadBalancer) {
         EC2ValidationResult result = new EC2ValidationResult();
         String message = "Server must have valid subnet ID";
@@ -324,6 +334,7 @@ public class OtpServer extends Model {
      *  - https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-limits.html
      */
     @JsonIgnore
+    @BsonIgnore
     private LoadBalancer getLoadBalancerForTargetGroup () {
         try {
             AmazonElasticLoadBalancing elbClient = EC2Utils.getELBClient(role, getRegion());
@@ -349,6 +360,7 @@ public class OtpServer extends Model {
      * fields.
      */
     @JsonIgnore
+    @BsonIgnore
     private EC2ValidationResult validateTargetGroupLoadBalancerSubnetIdAndSecurityGroup()
         throws ExecutionException, InterruptedException {
         EC2ValidationResult result = new EC2ValidationResult();
