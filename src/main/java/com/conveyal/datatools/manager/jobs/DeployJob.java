@@ -959,10 +959,10 @@ public class DeployJob extends MonitorableJob {
         // verify that all instances have terminated
         boolean allInstancesTerminatedProperly = true;
         for (InstanceStateChange terminatingInstance : terminateInstancesResult.getTerminatingInstances()) {
-            // If instance state code is 48 that means it has been terminated.
-            if (terminatingInstance.getCurrentState().getCode() != 48) {
-                // TODO: determine if the terminateInstanceResult immediately returns the terminated code or if it needs
-                //  to be verified in subsequent DescribeInstanceRequests
+            // instance state code == 32 means the instance is preparing to be terminated.
+            // instance state code == 48 means it has been terminated.
+            int instanceStateCode = terminatingInstance.getCurrentState().getCode();
+            if (instanceStateCode != 32 && instanceStateCode != 48) {
                 failJobWithAppendedMessage(
                     String.format("Instance %s failed to properly terminate!", terminatingInstance.getInstanceId())
                 );
