@@ -52,10 +52,12 @@ import java.util.stream.Collectors;
 import com.amazonaws.waiters.Waiter;
 import com.amazonaws.waiters.WaiterParameters;
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.common.utils.CheckedAWSException;
+import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
+import com.conveyal.datatools.common.utils.aws.EC2Utils;
+import com.conveyal.datatools.common.utils.aws.EC2ValidationResult;
+import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
-import com.conveyal.datatools.manager.controllers.api.DeploymentController;
 import com.conveyal.datatools.manager.controllers.api.ServerController;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.EC2Info;
@@ -74,9 +76,6 @@ import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.conveyal.datatools.common.utils.AWSUtils.getEC2Client;
-import static com.conveyal.datatools.common.utils.AWSUtils.getELBClient;
-import static com.conveyal.datatools.common.utils.AWSUtils.getS3Client;
 import static com.conveyal.datatools.manager.controllers.api.ServerController.getIds;
 import static com.conveyal.datatools.manager.models.Deployment.DEFAULT_OTP_VERSION;
 import static com.conveyal.datatools.manager.models.Deployment.DEFAULT_R5_VERSION;
@@ -116,7 +115,7 @@ public class DeployJob extends MonitorableJob {
 
     /**
      * S3 bucket to upload deployment to. If not null, uses {@link OtpServer#s3Bucket}. Otherwise, defaults to 
-     * {@link DataManager#feedBucket}
+     * {@link S3Utils#DEFAULT_BUCKET}
      * */
     private final String s3Bucket;
     private final int targetCount;
@@ -198,7 +197,7 @@ public class DeployJob extends MonitorableJob {
         super(owner, jobName, JobType.DEPLOY_TO_OTP);
         this.deployment = deployment;
         this.otpServer = otpServer;
-        this.s3Bucket = otpServer.s3Bucket != null ? otpServer.s3Bucket : DataManager.feedBucket;
+        this.s3Bucket = otpServer.s3Bucket != null ? otpServer.s3Bucket : S3Utils.DEFAULT_BUCKET;
         // Use a special subclass of status here that has additional fields
         this.status = new DeployStatus();
         this.status.name = jobName;
@@ -308,7 +307,7 @@ public class DeployJob extends MonitorableJob {
      */
     @JsonIgnore
     public AmazonEC2 getEC2ClientForDeployJob() throws CheckedAWSException {
-        return getEC2Client(otpServer.role, customRegion);
+        return EC2Utils.getEC2Client(otpServer.role, customRegion);
     }
 
     /**
@@ -318,7 +317,7 @@ public class DeployJob extends MonitorableJob {
      */
     @JsonIgnore
     public AmazonElasticLoadBalancing getELBClientForDeployJob() throws CheckedAWSException {
-        return getELBClient(otpServer.role, customRegion);
+        return EC2Utils.getELBClient(otpServer.role, customRegion);
     }
 
     /**
@@ -328,7 +327,7 @@ public class DeployJob extends MonitorableJob {
      */
     @JsonIgnore
     public AmazonS3 getS3ClientForDeployJob() throws CheckedAWSException {
-        return getS3Client(otpServer.role, customRegion);
+        return S3Utils.getS3Client(otpServer.role, customRegion);
     }
 
     /**
@@ -548,7 +547,7 @@ public class DeployJob extends MonitorableJob {
         // issue were encountered after a long graph build).
         status.message = "Validating AWS config";
         try {
-            ServerController.EC2ValidationResult ec2ValidationResult = ServerController.validateEC2Config(otpServer);
+            EC2ValidationResult ec2ValidationResult = otpServer.validateEC2Config();
             if (!ec2ValidationResult.isValid()) {
                 status.fail(ec2ValidationResult.getMessage(), ec2ValidationResult.getException());
                 return;
@@ -691,7 +690,7 @@ public class DeployJob extends MonitorableJob {
                     remainingInstances.removeIf(instance -> instance.getInstanceId().equals(id));
                     try {
                         // terminate instance without failing overall deploy job. That happens later.
-                        ServerController.terminateInstances(getEC2ClientForDeployJob(), id);
+                        EC2Utils.terminateInstances(getEC2ClientForDeployJob(), id);
                     } catch (Exception e){
                         job.status.message = String.format(
                             "%s During job cleanup, the instance was not properly terminated!",
@@ -800,7 +799,7 @@ public class DeployJob extends MonitorableJob {
             AMI_CONFIG_PATH
         );
         try {
-            if (amiId == null || !ServerController.amiExists(amiId, getEC2ClientForDeployJob())) {
+            if (amiId == null || !EC2Utils.amiExists(getEC2ClientForDeployJob(), amiId)) {
                 status.fail(invalidAMIMessage);
                 return Collections.EMPTY_LIST;
             }
@@ -896,7 +895,7 @@ public class DeployJob extends MonitorableJob {
             // Check that all of the instances have public IPs.
             List<Instance> instancesWithIps;
             try {
-                instancesWithIps = DeploymentController.fetchEC2Instances(
+                instancesWithIps = EC2Utils.fetchEC2Instances(
                     getEC2ClientForDeployJob(),
                     instanceIdFilter
                 );
@@ -940,7 +939,7 @@ public class DeployJob extends MonitorableJob {
     private boolean terminateInstances(List<Instance> instances) {
         TerminateInstancesResult terminateInstancesResult;
         try {
-            terminateInstancesResult = ServerController.terminateInstances(getEC2ClientForDeployJob(), instances);
+            terminateInstancesResult = EC2Utils.terminateInstances(getEC2ClientForDeployJob(), instances);
         } catch (Exception e) {
             failJobWithAppendedMessage(
                 "During job cleanup, an instance was not properly terminated!",

@@ -1,8 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.amazonaws.AmazonServiceException;
-import com.conveyal.datatools.common.utils.CheckedAWSException;
 import com.conveyal.datatools.common.utils.SparkUtils;
+import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.auth.Actions;
@@ -17,7 +16,6 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Snapshot;
-import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 
@@ -37,8 +35,6 @@ import java.util.List;
 import java.util.HashSet;
 import java.util.Set;
 
-import static com.conveyal.datatools.common.utils.AWSUtils.downloadFromS3;
-import static com.conveyal.datatools.common.utils.AWSUtils.getDefaultS3Client;
 import static com.conveyal.datatools.common.utils.SparkUtils.copyRequestStreamIntoFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
@@ -212,9 +208,9 @@ public class FeedVersionController  {
 
         if (DataManager.useS3) {
             // Return pre-signed download link if using S3.
-            return downloadFromS3(
-                DataManager.feedBucket,
-                FeedStore.s3Prefix + version.id,
+            return S3Utils.downloadObject(
+                S3Utils.DEFAULT_BUCKET,
+                S3Utils.DEFAULT_BUCKET_GTFS_FOLDER + version.id,
                 false,
                 req,
                 res

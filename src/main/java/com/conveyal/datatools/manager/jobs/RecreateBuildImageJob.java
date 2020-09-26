@@ -8,9 +8,9 @@ import com.amazonaws.services.ec2.model.DescribeImagesResult;
 import com.amazonaws.services.ec2.model.Image;
 import com.amazonaws.services.ec2.model.Instance;
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.utils.aws.EC2Utils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
-import com.conveyal.datatools.manager.controllers.api.ServerController;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.TimeTracker;
@@ -146,7 +146,7 @@ public class RecreateBuildImageJob extends MonitorableJob {
         if (otpServer.ec2Info.hasSeparateGraphBuildConfig()) {
             status.message = "Terminating graph building instance";
             try {
-                ServerController.terminateInstances(parentDeployJob.getEC2ClientForDeployJob(), graphBuildingInstances);
+                EC2Utils.terminateInstances(parentDeployJob.getEC2ClientForDeployJob(), graphBuildingInstances);
             } catch (Exception e) {
                 status.fail(
                     "Graph build image successfully created, but failed to terminate graph building instance!",
@@ -167,7 +167,7 @@ public class RecreateBuildImageJob extends MonitorableJob {
      */
     private void terminateInstanceAndFailWithMessage(String message, Exception e) {
         try {
-            ServerController.terminateInstances(parentDeployJob.getEC2ClientForDeployJob(), graphBuildingInstances);
+            EC2Utils.terminateInstances(parentDeployJob.getEC2ClientForDeployJob(), graphBuildingInstances);
         } catch (Exception terminationException) {
             status.fail(
                 String.format("%s Also, the graph building instance failed to terminate!", message),

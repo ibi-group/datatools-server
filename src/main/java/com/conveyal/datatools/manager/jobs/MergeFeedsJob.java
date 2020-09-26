@@ -1,7 +1,8 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.common.utils.CheckedAWSException;
+import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
+import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.gtfsplus.tables.GtfsPlusTable;
@@ -45,7 +46,6 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 
-import static com.conveyal.datatools.common.utils.AWSUtils.getDefaultS3Client;
 import static com.conveyal.datatools.manager.jobs.MergeFeedsType.SERVICE_PERIOD;
 import static com.conveyal.datatools.manager.jobs.MergeFeedsType.REGIONAL;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.REGIONAL_MERGE;
@@ -321,9 +321,8 @@ public class MergeFeedsJob extends MonitorableJob {
             // Store the project merged zip locally or on s3
             if (DataManager.useS3) {
                 String s3Key = String.join("/", "project", filename);
-                getDefaultS3Client().putObject(DataManager.feedBucket, s3Key, mergedTempFile);
-                LOG.info("Storing merged project feed at s3://{}/{}", DataManager.feedBucket,
-                    s3Key);
+                S3Utils.getDefaultS3Client().putObject(S3Utils.DEFAULT_BUCKET, s3Key, mergedTempFile);
+                LOG.info("Storing merged project feed at {}", S3Utils.getDefaultBucketUriForKey(s3Key));
             } else {
                 try {
                     FeedVersion.feedStore
