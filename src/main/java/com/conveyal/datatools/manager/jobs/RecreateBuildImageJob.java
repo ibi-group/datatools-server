@@ -18,8 +18,6 @@ import com.conveyal.datatools.manager.utils.TimeTracker;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
-import static com.conveyal.datatools.manager.models.EC2Info.AMI_CONFIG_PATH;
-
 /**
  * Job that is dispatched during a {@link DeployJob} that spins up EC2 instances. This handles waiting for a graph build
  * image to be created after a graph build has completed. If an error occurs, or if the image was created successfully
@@ -123,7 +121,7 @@ public class RecreateBuildImageJob extends MonitorableJob {
         String graphBuildAmiId = otpServer.ec2Info.buildAmiId;
         if (
             graphBuildAmiId != null &&
-                !DataManager.getConfigPropertyAsText(AMI_CONFIG_PATH).equals(graphBuildAmiId) &&
+                !EC2Utils.DEFAULT_AMI_ID.equals(graphBuildAmiId) &&
                 !graphBuildAmiId.equals(otpServer.ec2Info.amiId)
         ) {
             status.message = "Deregistering old build image";

@@ -19,10 +19,9 @@ import com.amazonaws.services.ec2.model.TerminateInstancesResult;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancing;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClient;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClientBuilder;
+import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.controllers.api.ServerController;
-import com.conveyal.datatools.manager.models.EC2Info;
 import com.conveyal.datatools.manager.models.EC2InstanceSummary;
-import com.conveyal.datatools.manager.models.OtpServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -33,14 +32,16 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import static com.conveyal.datatools.manager.models.EC2Info.DEFAULT_INSTANCE_TYPE;
-
 /**
  * This class has some base utility fields and also methods for managing AWS credential creation when using roles. It is
  *     * expected that whenever a client is created, it will end up using AWS client for a various AWS service. This class will
  */
 public class EC2Utils {
     private static final Logger LOG = LoggerFactory.getLogger(EC2Utils.class);
+
+    public static final String AMI_CONFIG_PATH = "modules.deployment.ec2.default_ami";
+    public static final String DEFAULT_AMI_ID = DataManager.getConfigPropertyAsText(AMI_CONFIG_PATH);
+    public static final String DEFAULT_INSTANCE_TYPE = "t2.medium";
 
     private static final AmazonEC2 DEFAULT_EC2_CLIENT = AmazonEC2Client.builder().build();
     private static final AmazonElasticLoadBalancing DEFAULT_ELB_CLIENT = AmazonElasticLoadBalancingClient
@@ -179,7 +180,7 @@ public class EC2Utils {
 
     /**
      * Validate that EC2 instance type (e.g., t2-medium) exists. This value can be empty and will default to
-     * {@link EC2Info#DEFAULT_INSTANCE_TYPE} at deploy time.
+     * {@link EC2Utils#DEFAULT_INSTANCE_TYPE} at deploy time.
      */
     public static EC2ValidationResult validateInstanceType(String instanceType) {
         EC2ValidationResult result = new EC2ValidationResult();

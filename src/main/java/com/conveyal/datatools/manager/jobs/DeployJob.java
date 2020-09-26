@@ -79,8 +79,6 @@ import org.slf4j.LoggerFactory;
 import static com.conveyal.datatools.manager.controllers.api.ServerController.getIds;
 import static com.conveyal.datatools.manager.models.Deployment.DEFAULT_OTP_VERSION;
 import static com.conveyal.datatools.manager.models.Deployment.DEFAULT_R5_VERSION;
-import static com.conveyal.datatools.manager.models.EC2Info.AMI_CONFIG_PATH;
-import static com.conveyal.datatools.manager.models.EC2Info.DEFAULT_INSTANCE_TYPE;
 
 /**
  * Deploy the given deployment to the OTP servers specified by targets.
@@ -808,7 +806,7 @@ public class DeployJob extends MonitorableJob {
                 String.format(
                     "AMI ID (%s) is missing or bad. Check the deployment settings or the default value in the app config at %s",
                     amiId,
-                    AMI_CONFIG_PATH
+                    EC2Utils.AMI_CONFIG_PATH
                 ),
                 amiCheckException
             );
@@ -824,7 +822,7 @@ public class DeployJob extends MonitorableJob {
             status.fail(String.format(
                 "Instance type (%s) is bad. Check the deployment settings. The default value is %s",
                 instanceType,
-                DEFAULT_INSTANCE_TYPE
+                EC2Utils.DEFAULT_INSTANCE_TYPE
             ), e);
             return Collections.EMPTY_LIST;
         }
