@@ -156,7 +156,7 @@ public class S3Utils {
             logMessageAndHalt(
                 req,
                 500,
-                String.format("Error downloading file from S3. Object %s does not exist.", key)
+                String.format("Error downloading file from S3. Object s3://%s/%s does not exist.", bucket, key)
             );
             return null;
         }
