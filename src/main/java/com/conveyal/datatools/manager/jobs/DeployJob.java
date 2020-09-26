@@ -793,20 +793,27 @@ public class DeployJob extends MonitorableJob {
         // Pick proper ami depending on whether graph is being built and what is defined.
         String amiId = otpServer.ec2Info.getAmiId(graphAlreadyBuilt);
         // Verify that AMI is correctly defined.
-        String invalidAMIMessage = String.format(
-            "AMI ID (%s) is missing or bad. Check the deployment settings or the default value in the app config at %s",
-            amiId,
-            AMI_CONFIG_PATH
-        );
+        boolean amiIdValid;
+        Exception amiCheckException = null;
         try {
-            if (amiId == null || !EC2Utils.amiExists(getEC2ClientForDeployJob(), amiId)) {
-                status.fail(invalidAMIMessage);
-                return Collections.EMPTY_LIST;
-            }
+            amiIdValid = amiId != null && EC2Utils.amiExists(getEC2ClientForDeployJob(), amiId);
         } catch (Exception e) {
-            status.fail(invalidAMIMessage, e);
+            amiIdValid = false;
+            amiCheckException = e;
+        }
+
+        if (!amiIdValid) {
+            status.fail(
+                String.format(
+                    "AMI ID (%s) is missing or bad. Check the deployment settings or the default value in the app config at %s",
+                    amiId,
+                    AMI_CONFIG_PATH
+                ),
+                amiCheckException
+            );
             return Collections.EMPTY_LIST;
         }
+
         // Pick proper instance type depending on whether graph is being built and what is defined.
         String instanceType = otpServer.ec2Info.getInstanceType(graphAlreadyBuilt);
         // Verify that instance type is correctly defined.
