@@ -69,7 +69,7 @@ public class S3Utils {
 
             // s3 storage
             tempGtfsS3Bucket = DataManager.getConfigPropertyAsText("application.data.gtfs_s3_bucket");
-            if (DEFAULT_BUCKET == null) {
+            if (tempGtfsS3Bucket == null) {
                 throw new IllegalArgumentException("Required config param `application.data.gtfs_s3_bucket` missing!");
             }
         }
