@@ -1,5 +1,6 @@
 package com.conveyal.datatools.common.utils.aws;
 
+import com.amazonaws.AmazonServiceException;
 import com.amazonaws.auth.AWSCredentialsProvider;
 import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.AmazonEC2Client;
@@ -19,6 +20,8 @@ import com.amazonaws.services.ec2.model.TerminateInstancesResult;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancing;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClient;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClientBuilder;
+import com.amazonaws.services.elasticloadbalancingv2.model.DeregisterTargetsRequest;
+import com.amazonaws.services.elasticloadbalancingv2.model.TargetDescription;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.controllers.api.ServerController;
 import com.conveyal.datatools.manager.models.EC2InstanceSummary;
@@ -114,6 +117,33 @@ public class EC2Utils {
     }
 
     /**
+     * De-register instances from the specified target group/load balancer and terminate the instances.
+     *
+     */
+    public static boolean deRegisterAndTerminateInstances(
+        String role,
+        String targetGroupArn,
+        String region,
+        List<String> instanceIds
+    ) {
+        LOG.info("De-registering instances from load balancer {}", instanceIds);
+        TargetDescription[] targetDescriptions = instanceIds.stream()
+            .map(id -> new TargetDescription().withId(id))
+            .toArray(TargetDescription[]::new);
+        try {
+            DeregisterTargetsRequest request = new DeregisterTargetsRequest()
+                .withTargetGroupArn(targetGroupArn)
+                .withTargets(targetDescriptions);
+            getELBClient(role, region).deregisterTargets(request);
+            terminateInstances(getEC2Client(role, region), instanceIds);
+        } catch (AmazonServiceException | CheckedAWSException e) {
+            LOG.warn("Could not terminate EC2 instances: " + String.join(",", instanceIds), e);
+            return false;
+        }
+        return true;
+    }
+
+    /**
      * Fetches list of {@link EC2InstanceSummary} for all instances matching the provided filters.
      */
     public static List<EC2InstanceSummary> fetchEC2InstanceSummaries(AmazonEC2 ec2Client, Filter... filters) {
@@ -175,7 +205,14 @@ public class EC2Utils {
         AmazonEC2 ec2Client,
         List<Instance> instances
     ) throws CheckedAWSException {
-        return terminateInstances(ec2Client, ServerController.getIds(instances));
+        return terminateInstances(ec2Client, getIds(instances));
+    }
+
+    /**
+     * Shorthand method for getting list of string identifiers from a list of EC2 instances.
+     */
+    public static List<String> getIds (List<Instance> instances) {
+        return instances.stream().map(Instance::getInstanceId).collect(Collectors.toList());
     }
 
     /**

@@ -3,8 +3,6 @@ package com.conveyal.datatools.manager.controllers.api;
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.ec2.AmazonEC2;
 import com.amazonaws.services.ec2.model.Instance;
-import com.amazonaws.services.elasticloadbalancingv2.model.DeregisterTargetsRequest;
-import com.amazonaws.services.elasticloadbalancingv2.model.TargetDescription;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.EC2Utils;
 import com.conveyal.datatools.common.utils.aws.EC2ValidationResult;
@@ -71,7 +69,11 @@ public class ServerController {
             .filter(instance -> "running".equals(instance.getState().getName()))
             .collect(Collectors.toList());
         if (activeInstances.size() > 0) {
-            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Cannot delete server with active EC2 instances: " + getIds(activeInstances));
+            logMessageAndHalt(
+                req,
+                HttpStatus.BAD_REQUEST_400,
+                "Cannot delete server with active EC2 instances: " + EC2Utils.getIds(activeInstances)
+            );
         }
         server.delete();
         return server;
@@ -81,7 +83,7 @@ public class ServerController {
     private static OtpServer terminateEC2InstancesForServer(Request req, Response res) throws CheckedAWSException {
         OtpServer server = getServerWithPermissions(req, res);
         List<Instance> instances = server.retrieveEC2Instances();
-        List<String> ids = getIds(instances);
+        List<String> ids = EC2Utils.getIds(instances);
         try {
             AmazonEC2 ec2Client = server.getEC2Client();
             EC2Utils.terminateInstances(ec2Client, ids);
@@ -92,40 +94,6 @@ public class ServerController {
             Persistence.deployments.updateField(deployment.id, "deployedTo", null);
         }
         return server;
-    }
-
-    /**
-     * Shorthand method for getting list of string identifiers from a list of EC2 instances.
-     */
-    public static List<String> getIds (List<Instance> instances) {
-        return instances.stream().map(Instance::getInstanceId).collect(Collectors.toList());
-    }
-
-    /**
-     * De-register instances from the specified target group/load balancer and terminate the instances.
-     *
-     */
-    public static boolean deRegisterAndTerminateInstances(
-        String role,
-        String targetGroupArn,
-        String region,
-        List<String> instanceIds
-    ) {
-        LOG.info("De-registering instances from load balancer {}", instanceIds);
-        TargetDescription[] targetDescriptions = instanceIds.stream()
-            .map(id -> new TargetDescription().withId(id))
-            .toArray(TargetDescription[]::new);
-        try {
-            DeregisterTargetsRequest request = new DeregisterTargetsRequest()
-                .withTargetGroupArn(targetGroupArn)
-                .withTargets(targetDescriptions);
-            EC2Utils.getELBClient(role, region).deregisterTargets(request);
-            EC2Utils.terminateInstances(EC2Utils.getEC2Client(role, region), instanceIds);
-        } catch (AmazonServiceException | CheckedAWSException e) {
-            LOG.warn("Could not terminate EC2 instances: " + String.join(",", instanceIds), e);
-            return false;
-        }
-        return true;
     }
 
     /**

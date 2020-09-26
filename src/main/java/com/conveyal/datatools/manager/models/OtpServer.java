@@ -429,12 +429,9 @@ public class OtpServer extends Model {
      * is probably miniscule).
      */
     public void verifyS3WritePermissions() throws IOException, CheckedAWSException {
-        String bucket = s3Bucket;
         String key = UUID.randomUUID().toString();
-        String region = null;
-        if (ec2Info != null && ec2Info.region != null) region = ec2Info.region;
-        AmazonS3 client = S3Utils.getS3Client(role, region);
-        client.putObject(bucket, key, File.createTempFile("test", ".zip"));
-        client.deleteObject(bucket, key);
+        AmazonS3 client = S3Utils.getS3Client(role, getRegion());
+        client.putObject(s3Bucket, key, File.createTempFile("test", ".zip"));
+        client.deleteObject(s3Bucket, key);
     }
 }

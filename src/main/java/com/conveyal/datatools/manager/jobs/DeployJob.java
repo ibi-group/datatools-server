@@ -58,7 +58,6 @@ import com.conveyal.datatools.common.utils.aws.EC2ValidationResult;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
-import com.conveyal.datatools.manager.controllers.api.ServerController;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.EC2Info;
 import com.conveyal.datatools.manager.models.EC2InstanceSummary;
@@ -76,7 +75,6 @@ import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.conveyal.datatools.manager.controllers.api.ServerController.getIds;
 import static com.conveyal.datatools.manager.models.Deployment.DEFAULT_OTP_VERSION;
 import static com.conveyal.datatools.manager.models.Deployment.DEFAULT_R5_VERSION;
 
@@ -712,7 +710,8 @@ public class DeployJob extends MonitorableJob {
                     // If there were previous instances assigned to the server, deregister/terminate them (now that the new
                     // instances are up and running).
                     if (previousInstanceIds.size() > 0) {
-                        boolean previousInstancesTerminated = ServerController.deRegisterAndTerminateInstances(otpServer.role,
+                        boolean previousInstancesTerminated = EC2Utils.deRegisterAndTerminateInstances(
+                            otpServer.role,
                             otpServer.ec2Info.targetGroupArn,
                             customRegion,
                             previousInstanceIds
@@ -854,7 +853,7 @@ public class DeployJob extends MonitorableJob {
         }
 
         status.message = "Waiting for instance(s) to start";
-        List<String> instanceIds = getIds(instances);
+        List<String> instanceIds = EC2Utils.getIds(instances);
         Set<String> instanceIpAddresses = new HashSet<>();
         // Wait so that create tags request does not fail because instances not found.
         try {

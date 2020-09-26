@@ -4,6 +4,7 @@ import com.amazonaws.services.s3.AmazonS3URI;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.SparkUtils;
+import com.conveyal.datatools.common.utils.aws.EC2Utils;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
@@ -362,7 +363,7 @@ public class DeploymentController {
             }
         }
         // If checks are ok, terminate instances.
-        boolean success = ServerController.deRegisterAndTerminateInstances(
+        boolean success = EC2Utils.deRegisterAndTerminateInstances(
             latest.role,
             targetGroupArn,
             latest.ec2Info.region,

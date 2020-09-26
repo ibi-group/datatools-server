@@ -24,7 +24,6 @@ import java.util.Date;
 import java.util.List;
 
 import static com.conveyal.datatools.TestUtils.getBooleanEnvVar;
-import static com.conveyal.datatools.manager.controllers.api.ServerController.getIds;
 import static com.zenika.snapshotmatcher.SnapshotMatcher.matchesSnapshot;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.assertFalse;
@@ -173,7 +172,7 @@ public class DeployJobTest extends UnitTest {
     public static void cleanUp() throws AmazonServiceException, CheckedAWSException {
         assumeTrue(getBooleanEnvVar("RUN_AWS_DEPLOY_JOB_TESTS"));
         List<Instance> instances = server.retrieveEC2Instances();
-        List<String> ids = getIds(instances);
+        List<String> ids = EC2Utils.getIds(instances);
         EC2Utils.terminateInstances(
             EC2Utils.getEC2Client(server.role, server.ec2Info == null ? null : server.ec2Info.region),
             ids

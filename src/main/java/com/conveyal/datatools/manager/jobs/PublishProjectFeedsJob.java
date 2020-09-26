@@ -20,7 +20,7 @@ import java.text.SimpleDateFormat;
  * Publish the latest GTFS files for all public feeds in a project.
  */
 public class PublishProjectFeedsJob extends MonitorableJob {
-    public static final Logger LOG = LoggerFactory.getLogger(MonitorableJob.class);
+    public static final Logger LOG = LoggerFactory.getLogger(PublishProjectFeedsJob.class);
 
     private Project project;
 
