@@ -1,0 +1,33 @@
+{
+  "email": "test-existing-user@test.com",
+  "email_verified": false,
+  "updated_at": "2019-02-16T01:27:19.810Z",
+  "user_id": "auth0|test-existing-user",
+  "name": "test-existing-user@test.com",
+  "picture": "https://i0.wp.com/cdn.auth0.com/avatars/tu.png?ssl=1",
+  "nickname": "test-existing-user",
+  "identities": [{
+    "connection": "Username-Password-Authentication",
+    "user_id": "test-existing-user",
+    "provider": "auth0",
+    "isSocial": false
+  }],
+  "created_at": "2019-02-16T01:27:19.810Z",
+  "app_metadata": {
+    "datatools": [{
+      "permissions": [{
+        "type": "administer-application"
+      }],
+      "projects": [],
+      "organizations": [],
+      "client_id": "testing-client-id-different-instance"
+    },
+      {"permissions": [{
+        "type": "administer-application"
+      }],
+      "projects": [],
+      "organizations": [],
+      "client_id": "testing-client-id"
+    }]
+  }
+}

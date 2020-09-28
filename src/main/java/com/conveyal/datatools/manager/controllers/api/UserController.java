@@ -33,7 +33,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
 import spark.Response;
-
 import java.io.IOException;
 import java.io.Serializable;
 import java.io.UnsupportedEncodingException;
@@ -43,10 +42,7 @@ import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
-import java.util.Iterator;
 import java.util.List;
-import java.util.Map;
-
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.auth.Auth0Users.API_PATH;
 import static com.conveyal.datatools.manager.auth.Auth0Connection.authDisabled;
@@ -157,16 +153,16 @@ public class UserController {
     private static String createPublicUser(Request req, Response res) {
         JsonNode jsonNode = parseJsonFromBody(req);
         String email = jsonNode.get("email").asText();
-        Auth0UserProfile user = checkForExistingAuth0User(req, email);
+        Auth0UserSearchResult searchResult = checkForExistingAuth0User(req, email);
 
-        // User already exists, update permissions
-        if (user != null) {
-            String json = String.format("{" +
-                    "\"app_metadata\": {\"datatools\": [{\"permissions\": [], \"projects\": [], \"subscriptions\": [], \"client_id\": \"%s\" }] } }",
-                    AUTH0_CLIENT_ID);
-            return updateUserPermissions(req, user, json);
+        // Auth0 user already exists.
+        if (searchResult != null) {
+            String permissions = String.format("{\"permissions\": [], \"projects\": [], \"subscriptions\": [], " +
+                "\"client_id\": \"%s\" }", AUTH0_CLIENT_ID);
+            return updateUserPermissions(req, searchResult, permissions);
         }
 
+        // Create new user.
         return createUserRequest(req, email, jsonNode.get("password").asText());
     }
 
@@ -177,16 +173,14 @@ public class UserController {
     private static String createUser(Request req, Response res) {
         JsonNode jsonNode = parseJsonFromBody(req);
         String email = jsonNode.get("email").asText();
-        Auth0UserProfile user = checkForExistingAuth0User(req, email);
+        Auth0UserSearchResult searchResult = checkForExistingAuth0User(req, email);
 
-        // User already exists, update permissions
-        if (user != null) {
-            // The square brackets are not required around the permissions parameter because they are already included
-            // within the permissions value.
-            String json = String.format("{ \"app_metadata\": { \"datatools\" : %s  }}", jsonNode.get("permissions"));
-            return updateUserPermissions(req, user, json);
+        // Auth0 user already exists, update permissions.
+        if (searchResult != null) {
+            return updateUserPermissions(req, searchResult, jsonNode.get("permissions").toString());
         }
 
+        // Create new user.
         String requestBody = String.format("{" +
                             "\"connection\": \"Username-Password-Authentication\"," +
                             "\"email\": %s," +
@@ -197,6 +191,50 @@ public class UserController {
         setHeaders(req, createUserRequest);
         setRequestEntityUsingJson(createUserRequest, requestBody, req);
         return executeRequestAndGetResult(createUserRequest, req);
+    }
+
+    /**
+     * Check for an existing Auth0 user based on email address. If the Auth0 search returns a matching email, create
+     * an {@link Auth0UserSearchResult} containing an {@link Auth0UserProfile} and the raw JSON datatools permissions.
+     * If there is no match, return null.
+     */
+    private static Auth0UserSearchResult checkForExistingAuth0User(Request req, String email) {
+        String query = String.format("email:%s*", email);
+        String searchResult = Auth0Users.getUnrestrictedAuth0Users(query);
+        // Only ever expecting at most one user.
+        List<Auth0UserProfile> users = getPOJOFromJSONAsList(req, searchResult, Auth0UserProfile.class);
+
+        if (users == null || users.isEmpty()) {
+            return null;
+        } else {
+            Auth0UserSearchResult result = new Auth0UserSearchResult();
+            result.user = users.get(0);
+            JsonNode jsonNode = parseJsonFromString(req, searchResult);
+            JsonNode parent = jsonNode.elements().next();
+            JsonNode appMetaData = parent.get("app_metadata");
+            if (appMetaData != null && appMetaData.size() != 0) {
+                String permissions = appMetaData.get("datatools").toString();
+                // Remove enclosing square brackets
+                result.existingPermissions = permissions.substring(1, permissions.length() - 1);
+            }
+            return result;
+        }
+    }
+
+    /**
+     * Class to hold a user's profile and raw JSON permissions.
+     */
+    public static class Auth0UserSearchResult {
+        /**
+         * If the tenant user already has permissions related to another instance of datatools they are preserved here.
+         * This will prevent them from being overwritten when creating permissions for other datatools instances.
+         */
+        String existingPermissions = "";
+
+        /**
+         * Used to hold email, userId and expanded datatools parameters if they match the AUTH0_CLIENT_ID parameter.
+         */
+        Auth0UserProfile user;
     }
 
     /**
@@ -233,26 +271,32 @@ public class UserController {
     }
 
     /**
-     * Update user permissions. Only used in cases where the Auth0 user already exists.
+     * Update user permissions. Only used in cases where the Auth0 user already exists and permissions for the current
+     * instance of datatools has not been set previously.
      */
-    private static String updateUserPermissions(Request req, Auth0UserProfile user, String json) {
-        LOG.info("Auth0 user {} already exists, updating permissions", user.getEmail());
-        HttpPatch updateUserRequest = new HttpPatch(getUserIdUrl(req, user.getUser_id()));
+    private static String updateUserPermissions(Request req, Auth0UserSearchResult searchResult, String newPermissions) {
+        // if there are existing permissions the assumption is that the datatools info has been set, but, only if it
+        // matches the current instance of datatools (AUTH0_CLIENT_ID).
+        if(!searchResult.existingPermissions.isEmpty() && searchResult.user.getApp_metadata().getDatatoolsInfo() != null) {
+            LOG.info("Permissions for this Auth0 user {} already exist for this instance {} of datatools",
+                searchResult.user.getEmail(), AUTH0_CLIENT_ID);
+            logMessageAndHalt(
+                req,
+                400,
+                String.format("User %s already exists", searchResult.user.getEmail())
+            );
+        }
+
+        LOG.info("Auth0 user {} already exists, updating permissions", searchResult.user.getEmail());
+        // User is unknown to this instance (AUTH0_CLIENT_ID) of datatools, update permissions, making sure to
+        // preserve any previously held permissions.
+        String permissions = (searchResult.existingPermissions.isEmpty()) ?
+            newPermissions : String.format("%s,%s", searchResult.existingPermissions, newPermissions);
+        String json = String.format("{ \"app_metadata\": { \"datatools\" : [%s]  }}",permissions);
+        HttpPatch updateUserRequest = new HttpPatch(getUserIdUrl(req, searchResult.user.getUser_id()));
         setHeaders(req, updateUserRequest);
         setRequestEntityUsingJson(updateUserRequest, json, req);
         return executeRequestAndGetResult(updateUserRequest, req);
-    }
-
-    /**
-     * Check for an existing Auth0 user based on email address. If the Auth0 search returns a matching email, create
-     * an Auth0UserProfile and return else return null.
-     */
-    private static Auth0UserProfile checkForExistingAuth0User(Request req, String email) {
-        String query = String.format("email:%s*", email);
-        String searchResult = Auth0Users.getUnrestrictedAuth0Users(query);
-        // Only ever expecting at most one user.
-        List<Auth0UserProfile> users = getPOJOFromJSONAsList(req, searchResult, Auth0UserProfile.class);
-        return (users == null || users.isEmpty()) ? null : users.get(0);
     }
 
     private static String updateUser(Request req, Response res) {
@@ -271,21 +315,9 @@ public class UserController {
 
         HttpPatch updateUserRequest = new HttpPatch(getUserIdUrl(req));
         setHeaders(req, updateUserRequest);
-
         JsonNode jsonNode = parseJsonFromBody(req);
-
-//        JsonNode data = mapper.readValue(jsonNode.retrieveById("data"), Auth0UserProfile.DatatoolsInfo.class); //jsonNode.retrieveById("data");
         JsonNode data = jsonNode.get("data");
-
-        Iterator<Map.Entry<String, JsonNode>> fieldsIter = data.fields();
-        while (fieldsIter.hasNext()) {
-            Map.Entry<String, JsonNode> entry = fieldsIter.next();
-        }
-//        if (!data.has("client_id")) {
-//            ((ObjectNode)data).put("client_id", DataManager.config.retrieveById("auth0").retrieveById("client_id").asText());
-//        }
         String json = "{ \"app_metadata\": { \"datatools\" : " + data + " }}";
-
         setRequestEntityUsingJson(updateUserRequest, json, req);
 
         return executeRequestAndGetResult(updateUserRequest, req);
@@ -464,13 +496,18 @@ public class UserController {
      * @param req The initiating request that came into datatools-server
      */
     private static JsonNode parseJsonFromBody(Request req) {
+        return parseJsonFromString(req, req.body());
+    }
+
+    private static JsonNode parseJsonFromString(Request req, String json) {
         try {
-            return mapper.readTree(req.body());
+            return mapper.readTree(json);
         } catch (IOException e) {
             logMessageAndHalt(req, 400, "Failed to parse request body", e);
             return null;
         }
     }
+
 
     /**
      * Utility method to parse generic objects from JSON String and return as list.

@@ -151,17 +151,14 @@ public class UserControllerTest extends UnitTest {
 
         ObjectNode requestJson = mapper.createObjectNode();
         requestJson.put("email", emailForExistingAccount);
-
         ObjectNode testClientPermissions = mapper.createObjectNode();
         testClientPermissions.put("type", "administer-application");
-
         ObjectNode testClientData = mapper.createObjectNode();
         testClientData.putArray("permissions").add(testClientPermissions);
         testClientData.putArray("projects");
         testClientData.putArray("organizations");
         testClientData.put("client_id", "testing-client-id");
-
-        requestJson.putArray("permissions").add(testClientData);
+        requestJson.set("permissions", testClientData);
 
         // make request and parse the json response
         JsonNode updateUserResponse = parseJson(
@@ -176,6 +173,118 @@ public class UserControllerTest extends UnitTest {
         );
 
         // make sure the response matches the saved snapshot
+        assertThat(updateUserResponse, matchesSnapshot());
+
+    }
+
+    /**
+     * When creating a new datatools user which matches an existing Auth0 user, make sure the permissions for the
+     * existing Auth0 users can be updated when permissions for another instance already exists.
+     */
+    @Test
+    public void canUpdatePermsOfExistingAuth0UserWithExistingPerms() throws IOException {
+        String newUserEmail = "test-existing-user@test.com";
+
+        // create wiremock stub for user search that matches existing user
+        String url = USERS_API_PATH + "?sort=email%3A1&per_page=10&page=0&include_totals=false&search_engine=v3&q=email%3A" + URLEncoder.encode(newUserEmail, "UTF-8") + "*";
+        stubFor(
+            get(urlEqualTo(url))
+                .willReturn(
+                    aResponse()
+                        .withBodyFile("userSearchExistingPermsResponse.json")
+                )
+        );
+
+        // create wiremock stub for update users endpoint
+        stubFor(
+            patch(urlPathEqualTo(USERS_API_PATH + "/auth0%7Ctest-existing-user"))
+                .willReturn(
+                    aResponse()
+                        .withBodyFile("updateExistingUserPermsResponse.json")
+                )
+        );
+
+        ObjectNode requestJson = mapper.createObjectNode();
+        requestJson.put("email", emailForExistingAccount);
+        ObjectNode testClientPermissions = mapper.createObjectNode();
+        testClientPermissions.put("type", "administer-application");
+        ObjectNode testClientData = mapper.createObjectNode();
+        testClientData.putArray("permissions").add(testClientPermissions);
+        testClientData.putArray("projects");
+        testClientData.putArray("organizations");
+        testClientData.put("client_id", "testing-client-id");
+        requestJson.set("permissions", testClientData);
+
+        // make request and parse the json response
+        JsonNode updateUserResponse = parseJson(
+            given()
+                .port(4000)
+                .body(requestJson)
+                .post("/api/manager/secure/user")
+                .then()
+                .extract()
+                .response()
+                .asString()
+        );
+
+        // make sure the response matches the saved snapshot
+        System.out.println(updateUserResponse.toPrettyString());
+        assertThat(updateUserResponse, matchesSnapshot());
+
+    }
+
+    /**
+     * When creating a new datatools user which matches an existing Auth0 user, make sure the permissions for the
+     * existing Auth0 user can not be updated for the same datatools instance.
+     */
+    @Test
+    public void canNotUpdatePermsOfExistingAuth0UserWithExistingPerms() throws IOException {
+        String newUserEmail = "test-existing-user@test.com";
+
+        // create wiremock stub for user search that matches existing user
+        String url = USERS_API_PATH + "?sort=email%3A1&per_page=10&page=0&include_totals=false&search_engine=v3&q=email%3A" + URLEncoder.encode(newUserEmail, "UTF-8") + "*";
+        stubFor(
+            get(urlEqualTo(url))
+                .willReturn(
+                    aResponse()
+                        .withBodyFile("userSearchMatchingPermsResponse.json")
+                )
+        );
+
+        // create wiremock stub for update users endpoint
+        stubFor(
+            patch(urlPathEqualTo(USERS_API_PATH + "/auth0%7Ctest-existing-user"))
+                .willReturn(
+                    aResponse()
+                        .withBodyFile("updateMatchingPermsResponse.json")
+                )
+        );
+
+        ObjectNode requestJson = mapper.createObjectNode();
+        requestJson.put("email", emailForExistingAccount);
+        ObjectNode testClientPermissions = mapper.createObjectNode();
+        testClientPermissions.put("type", "administer-application");
+        ObjectNode testClientData = mapper.createObjectNode();
+        testClientData.putArray("permissions").add(testClientPermissions);
+        testClientData.putArray("projects");
+        testClientData.putArray("organizations");
+        testClientData.put("client_id", "your-auth0-client-id");
+        requestJson.set("permissions", testClientData);
+
+        // make request and parse the json response
+        JsonNode updateUserResponse = parseJson(
+            given()
+                .port(4000)
+                .body(requestJson)
+                .post("/api/manager/secure/user")
+                .then()
+                .extract()
+                .response()
+                .asString()
+        );
+
+        // make sure the response matches the saved snapshot
+        System.out.println(updateUserResponse.toPrettyString());
         assertThat(updateUserResponse, matchesSnapshot());
 
     }
