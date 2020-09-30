@@ -1,22 +1,16 @@
 package com.conveyal.datatools.manager.jobs;
 
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.services.ec2.AmazonEC2;
-import com.amazonaws.services.ec2.model.AmazonEC2Exception;
 import com.amazonaws.services.ec2.model.DescribeInstancesRequest;
 import com.amazonaws.services.ec2.model.DescribeInstancesResult;
 import com.amazonaws.services.ec2.model.Instance;
 import com.amazonaws.services.ec2.model.Reservation;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancing;
-import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClient;
-import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClientBuilder;
 import com.amazonaws.services.elasticloadbalancingv2.model.DescribeTargetHealthRequest;
 import com.amazonaws.services.elasticloadbalancingv2.model.DescribeTargetHealthResult;
 import com.amazonaws.services.elasticloadbalancingv2.model.RegisterTargetsRequest;
 import com.amazonaws.services.elasticloadbalancingv2.model.TargetDescription;
 import com.amazonaws.services.elasticloadbalancingv2.model.TargetHealthDescription;
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.common.utils.AWSUtils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.OtpServer;
@@ -50,8 +44,6 @@ public class MonitorServerStatusJob extends MonitorableJob {
     private final Instance instance;
     private final boolean graphAlreadyBuilt;
     private final OtpServer otpServer;
-    private final AWSStaticCredentialsProvider credentials;
-    private final AmazonEC2 ec2;
     private final CloseableHttpClient httpClient = HttpClients.createDefault();
     // Delay checks by four seconds to give user-data script time to upload the instance's user data log if part of the
     // script fails (e.g., uploading or downloading a file).
@@ -70,10 +62,6 @@ public class MonitorServerStatusJob extends MonitorableJob {
         this.instance = instance;
         this.graphAlreadyBuilt = graphAlreadyBuilt;
         status.message = "Checking server status...";
-        credentials = AWSUtils.getCredentialsForRole(otpServer.role, "monitor-" + instance.getInstanceId());
-        ec2 = deployJob.getCustomRegion() == null
-            ? AWSUtils.getEC2ClientForCredentials(credentials)
-            : AWSUtils.getEC2ClientForCredentials(credentials, deployJob.getCustomRegion());
     }
 
     @JsonProperty
@@ -161,14 +149,12 @@ public class MonitorServerStatusJob extends MonitorableJob {
                 .withTargetGroupArn(otpServer.ec2Info.targetGroupArn)
                 .withTargets(new TargetDescription().withId(instance.getInstanceId()));
             boolean targetAddedSuccessfully = false;
-
             // Wait for two minutes for targets to register.
             TimeTracker registerTargetTracker = new TimeTracker(2, TimeUnit.MINUTES);
-            AmazonElasticLoadBalancingClientBuilder elbBuilder = AmazonElasticLoadBalancingClient.builder()
-                .withCredentials(credentials);
-            AmazonElasticLoadBalancing elbClient = deployJob.getCustomRegion() == null ?
-                elbBuilder.build() :
-                elbBuilder.withRegion(deployJob.getCustomRegion()).build();
+            // obtain an ELB client suitable for this deploy job. It is important to obtain a client this way to ensure
+            // that the proper AWS credentials are used and that the client has a valid session if it is obtained from a
+            // role.
+            AmazonElasticLoadBalancing elbClient = deployJob.getELBClientForDeployJob();
             while (!targetAddedSuccessfully) {
                 // Register target with target group.
                 elbClient.registerTargets(registerTargetsRequest);
@@ -248,14 +234,10 @@ public class MonitorServerStatusJob extends MonitorableJob {
      * waiting, check the instance health to make sure it is still running. If a user has terminated the instance, the
      * job should be failed.
      */
-    private void waitAndCheckInstanceHealth(String waitingFor) throws InstanceHealthException {
+    private void waitAndCheckInstanceHealth(String waitingFor) throws InstanceHealthException, InterruptedException {
         checkInstanceHealth(1);
-        try {
-            LOG.info("Waiting {} seconds for {}", DELAY_SECONDS, waitingFor);
-            Thread.sleep(1000 * DELAY_SECONDS);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
+        LOG.info("Waiting {} seconds for {}", DELAY_SECONDS, waitingFor);
+        Thread.sleep(1000 * DELAY_SECONDS);
         checkInstanceHealth(1);
     }
 
@@ -266,13 +248,13 @@ public class MonitorServerStatusJob extends MonitorableJob {
      * checking the instance health using recursion up to the
      * ${@link MonitorServerStatusJob#MAX_INSTANCE_HEALTH_RETRIES} value.
      */
-    private void checkInstanceHealth(int attemptNumber) throws InstanceHealthException {
+    private void checkInstanceHealth(int attemptNumber) throws InstanceHealthException, InterruptedException {
         DescribeInstancesRequest request = new DescribeInstancesRequest()
             .withInstanceIds(Collections.singletonList(instance.getInstanceId()));
         DescribeInstancesResult result;
         try {
-            result = ec2.describeInstances(request);
-        } catch (AmazonEC2Exception e) {
+            result = deployJob.getEC2ClientForDeployJob().describeInstances(request);
+        } catch (Exception e) {
             LOG.warn(
                 "Failed on attempt {}/{} to execute request to obtain instance health!",
                 attemptNumber,
@@ -282,12 +264,8 @@ public class MonitorServerStatusJob extends MonitorableJob {
             if (attemptNumber > MAX_INSTANCE_HEALTH_RETRIES) {
                 throw new InstanceHealthException("AWS Describe Instances error!");
             }
-            try {
-                LOG.info("Waiting 5 seconds to try to get instance status again");
-                Thread.sleep(5000);
-            } catch (InterruptedException interruptedException) {
-                interruptedException.printStackTrace();
-            }
+            LOG.info("Waiting 5 seconds to try to get instance status again");
+            Thread.sleep(5000);
             checkInstanceHealth(attemptNumber + 1);
             return;
         }

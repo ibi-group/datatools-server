@@ -1,5 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
+import com.amazonaws.AmazonServiceException;
+import com.conveyal.datatools.common.utils.CheckedAWSException;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
@@ -36,6 +38,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import static com.conveyal.datatools.common.utils.AWSUtils.downloadFromS3;
+import static com.conveyal.datatools.common.utils.AWSUtils.getDefaultS3Client;
 import static com.conveyal.datatools.common.utils.SparkUtils.copyRequestStreamIntoFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
@@ -209,7 +212,13 @@ public class FeedVersionController  {
 
         if (DataManager.useS3) {
             // Return pre-signed download link if using S3.
-            return downloadFromS3(FeedStore.s3Client, DataManager.feedBucket, FeedStore.s3Prefix + version.id, false, res);
+            return downloadFromS3(
+                DataManager.feedBucket,
+                FeedStore.s3Prefix + version.id,
+                false,
+                req,
+                res
+            );
         } else {
             // when feeds are stored locally, single-use download token will still be used
             FeedDownloadToken token = new FeedDownloadToken(version);
