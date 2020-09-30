@@ -1,9 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
+import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.ec2.AmazonEC2;
-import com.amazonaws.services.ec2.AmazonEC2Client;
-import com.amazonaws.services.ec2.AmazonEC2ClientBuilder;
 import com.amazonaws.services.ec2.model.AmazonEC2Exception;
 import com.amazonaws.services.ec2.model.DescribeImagesRequest;
 import com.amazonaws.services.ec2.model.DescribeImagesResult;
@@ -19,8 +17,6 @@ import com.amazonaws.services.ec2.model.Subnet;
 import com.amazonaws.services.ec2.model.TerminateInstancesRequest;
 import com.amazonaws.services.ec2.model.TerminateInstancesResult;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancing;
-import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClient;
-import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancingClientBuilder;
 import com.amazonaws.services.elasticloadbalancingv2.model.AmazonElasticLoadBalancingException;
 import com.amazonaws.services.elasticloadbalancingv2.model.DeregisterTargetsRequest;
 import com.amazonaws.services.elasticloadbalancingv2.model.DescribeLoadBalancersRequest;
@@ -30,19 +26,16 @@ import com.amazonaws.services.elasticloadbalancingv2.model.LoadBalancer;
 import com.amazonaws.services.elasticloadbalancingv2.model.TargetDescription;
 import com.amazonaws.services.elasticloadbalancingv2.model.TargetGroup;
 import com.amazonaws.services.identitymanagement.AmazonIdentityManagement;
-import com.amazonaws.services.identitymanagement.AmazonIdentityManagementClientBuilder;
 import com.amazonaws.services.identitymanagement.model.InstanceProfile;
 import com.amazonaws.services.identitymanagement.model.ListInstanceProfilesResult;
 import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.model.AmazonS3Exception;
-import com.conveyal.datatools.common.utils.AWSUtils;
+import com.conveyal.datatools.common.utils.CheckedAWSException;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.EC2Info;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
-import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import org.eclipse.jetty.http.HttpStatus;
@@ -67,10 +60,13 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.stream.Collectors;
 
+import static com.conveyal.datatools.common.utils.AWSUtils.getEC2Client;
+import static com.conveyal.datatools.common.utils.AWSUtils.getELBClient;
+import static com.conveyal.datatools.common.utils.AWSUtils.getIAMClient;
+import static com.conveyal.datatools.common.utils.AWSUtils.getS3Client;
 import static com.conveyal.datatools.common.utils.SparkUtils.getPOJOFromRequestBody;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.models.EC2Info.DEFAULT_INSTANCE_TYPE;
-import static com.conveyal.datatools.manager.persistence.FeedStore.getAWSCreds;
 import static spark.Spark.delete;
 import static spark.Spark.get;
 import static spark.Spark.options;
@@ -84,9 +80,6 @@ import static spark.Spark.put;
 public class ServerController {
     private static JsonManager<OtpServer> json = new JsonManager<>(OtpServer.class, JsonViews.UserInterface.class);
     private static final Logger LOG = LoggerFactory.getLogger(ServerController.class);
-    private static final AmazonEC2 ec2 = AmazonEC2Client.builder().build();
-    private static final AmazonIdentityManagement iam = AmazonIdentityManagementClientBuilder.defaultClient();
-    private static final AmazonElasticLoadBalancing elb = AmazonElasticLoadBalancingClient.builder().build();
 
     /**
      * Gets the server specified by the request's id parameter and ensure that user has access to the
@@ -108,7 +101,7 @@ public class ServerController {
     }
 
     /** HTTP endpoint for deleting an {@link OtpServer}. */
-    private static OtpServer deleteServer(Request req, Response res) {
+    private static OtpServer deleteServer(Request req, Response res) throws CheckedAWSException {
         OtpServer server = getServerWithPermissions(req, res);
         // Ensure that there are no active EC2 instances associated with server. Halt deletion if so.
         List<Instance> activeInstances = server.retrieveEC2Instances().stream()
@@ -122,15 +115,16 @@ public class ServerController {
     }
 
     /** HTTP method for terminating EC2 instances associated with an ELB OTP server. */
-    private static OtpServer terminateEC2InstancesForServer(Request req, Response res) {
+    private static OtpServer terminateEC2InstancesForServer(Request req, Response res) throws CheckedAWSException {
         OtpServer server = getServerWithPermissions(req, res);
         List<Instance> instances = server.retrieveEC2Instances();
         List<String> ids = getIds(instances);
-        AmazonEC2 ec2Client = AWSUtils.getEC2ClientForRole(
-            server.role,
-            server.ec2Info == null ? null : server.ec2Info.region
-        );
-        terminateInstances(ec2Client, ids);
+        try {
+            AmazonEC2 ec2Client = getEC2Client(server);
+            terminateInstances(ec2Client, ids);
+        } catch (AmazonServiceException | CheckedAWSException e) {
+            logMessageAndHalt(req, 500, "Failed to terminate instances!", e);
+        }
         for (Deployment deployment : Deployment.retrieveDeploymentForServerAndRouterId(server.id, null)) {
             Persistence.deployments.updateField(deployment.id, "deployedTo", null);
         }
@@ -145,23 +139,36 @@ public class ServerController {
     }
 
     /** Terminate the list of EC2 instance IDs. */
-    public static TerminateInstancesResult terminateInstances(AmazonEC2 ec2Client, Collection<String> instanceIds) throws AmazonEC2Exception {
+    public static TerminateInstancesResult terminateInstances(
+        AmazonEC2 ec2Client,
+        Collection<String> instanceIds
+    ) throws CheckedAWSException {
         if (instanceIds.size() == 0) {
             LOG.warn("No instance IDs provided in list. Skipping termination request.");
             return null;
         }
         LOG.info("Terminating EC2 instances {}", instanceIds);
         TerminateInstancesRequest request = new TerminateInstancesRequest().withInstanceIds(instanceIds);
-        return ec2Client.terminateInstances(request);
+        try {
+            return ec2Client.terminateInstances(request);
+        } catch (AmazonEC2Exception e) {
+            throw new CheckedAWSException(e);
+        }
     }
 
     /** Convenience method to override terminateInstances. */
-    public static TerminateInstancesResult terminateInstances(AmazonEC2 ec2Client, String... instanceIds) throws AmazonEC2Exception {
+    public static TerminateInstancesResult terminateInstances(
+        AmazonEC2 ec2Client,
+        String... instanceIds
+    ) throws CheckedAWSException {
         return terminateInstances(ec2Client, Arrays.asList(instanceIds));
     }
 
     /** Convenience method to override. */
-    public static TerminateInstancesResult terminateInstances(AmazonEC2 ec2Client, List<Instance> instances) throws AmazonEC2Exception {
+    public static TerminateInstancesResult terminateInstances(
+        AmazonEC2 ec2Client,
+        List<Instance> instances
+    ) throws CheckedAWSException {
         return terminateInstances(ec2Client, getIds(instances));
     }
 
@@ -170,7 +177,7 @@ public class ServerController {
      *
      */
     public static boolean deRegisterAndTerminateInstances(
-        AWSStaticCredentialsProvider credentials,
+        String role,
         String targetGroupArn,
         String region,
         List<String> instanceIds
@@ -183,26 +190,9 @@ public class ServerController {
             DeregisterTargetsRequest request = new DeregisterTargetsRequest()
                 .withTargetGroupArn(targetGroupArn)
                 .withTargets(targetDescriptions);
-            AmazonElasticLoadBalancing elbClient = elb;
-            AmazonEC2 ec2Client = ec2;
-            // If OTP Server has role defined/alt credentials, override default AWS clients.
-            if (credentials != null || region != null) {
-                AmazonElasticLoadBalancingClientBuilder elbBuilder = AmazonElasticLoadBalancingClient.builder();
-                AmazonEC2ClientBuilder ec2Builder = AmazonEC2Client.builder();
-                if (credentials != null) {
-                    elbBuilder.withCredentials(credentials);
-                    ec2Builder.withCredentials(credentials);
-                }
-                if (region != null) {
-                    elbBuilder.withRegion(region);
-                    ec2Builder.withRegion(region);
-                }
-                elbClient = elbBuilder.build();
-                ec2Client = ec2Builder.build();
-            }
-            elbClient.deregisterTargets(request);
-            ServerController.terminateInstances(ec2Client, instanceIds);
-        } catch (AmazonEC2Exception | AmazonElasticLoadBalancingException e) {
+            getELBClient(role, region).deregisterTargets(request);
+            ServerController.terminateInstances(getEC2Client(role, region), instanceIds);
+        } catch (AmazonServiceException | CheckedAWSException e) {
             LOG.warn("Could not terminate EC2 instances: " + String.join(",", instanceIds), e);
             return false;
         }
@@ -213,7 +203,7 @@ public class ServerController {
      * Create a new server for the project. All feed sources with a valid latest version are added to the new
      * deployment.
      */
-    private static OtpServer createServer(Request req, Response res) throws IOException {
+    private static OtpServer createServer(Request req, Response res) throws IOException, CheckedAWSException {
         Auth0UserProfile userProfile = req.attribute("user");
         OtpServer newServer = getPOJOFromRequestBody(req, OtpServer.class);
         // If server has no project ID specified, user must be an application admin to create it. Otherwise, they must
@@ -250,7 +240,7 @@ public class ServerController {
     /**
      * Update a single OTP server.
      */
-    private static OtpServer updateServer(Request req, Response res) throws IOException {
+    private static OtpServer updateServer(Request req, Response res) throws IOException, CheckedAWSException {
         OtpServer serverToUpdate = getServerWithPermissions(req, res);
         OtpServer updatedServer = getPOJOFromRequestBody(req, OtpServer.class);
         Auth0UserProfile user = req.attribute("user");
@@ -266,21 +256,8 @@ public class ServerController {
      * Validate certain fields found in the document representing a server. This also currently modifies the document by
      * removing problematic date fields.
      */
-    private static void validateFields(Request req, OtpServer server) throws HaltException {
-        // Default to standard AWS clients.
-        AmazonEC2 ec2Client = ec2;
-        AmazonIdentityManagement iamClient = iam;
-        AmazonS3 s3Client = FeedStore.s3Client;
+    private static void validateFields(Request req, OtpServer server) throws HaltException, CheckedAWSException {
         try {
-            // Construct credentials if role is provided.
-            AWSStaticCredentialsProvider credentials = AWSUtils.getCredentialsForRole(server.role, "validate");
-            // If alternative credentials exist, override the default AWS clients.
-            if (credentials != null) {
-                // build ec2 client
-                ec2Client = AmazonEC2Client.builder().withCredentials(credentials).build();
-                iamClient = AmazonIdentityManagementClientBuilder.standard().withCredentials(credentials).build();
-                s3Client = AWSUtils.getS3ClientForRole(server.role, null);
-            }
             // Check that projectId is valid.
             if (server.projectId != null) {
                 Project project = Persistence.projects.getById(server.projectId);
@@ -290,22 +267,8 @@ public class ServerController {
             // If a server's ec2 info object is not null, it must pass a few validation checks on various fields related to
             // AWS. (e.g., target group ARN and instance type).
             if (server.ec2Info != null) {
-                // create custom clients if credentials and or a custom region exist
-                if (server.ec2Info.region != null) {
-                    AmazonEC2ClientBuilder builder = AmazonEC2Client.builder();
-                    if (credentials != null) {
-                        builder.withCredentials(credentials);
-                    }
-                    builder.withRegion(server.ec2Info.region);
-                    ec2Client = builder.build();
-                    if (credentials !=  null) {
-                        s3Client = AWSUtils.getS3ClientForRole(server.role, server.ec2Info.region);
-                    } else {
-                        s3Client = AWSUtils.getS3ClientForCredentials(getAWSCreds(), server.ec2Info.region);
-                    }
-                }
                 try {
-                    EC2ValidationResult result = validateEC2Config(server, credentials, ec2Client, iamClient);
+                    EC2ValidationResult result = validateEC2Config(server);
                     if (!result.isValid()) {
                         logMessageAndHalt(req, 400, result.getMessage(), result.getException());
                     }
@@ -323,7 +286,7 @@ public class ServerController {
                     logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Server must contain either internal URL(s) or s3 bucket name.");
                 }
             } else {
-                verifyS3WritePermissions(server, req, s3Client);
+                verifyS3WritePermissions(server, req);
             }
         } catch (Exception e) {
             if (e instanceof HaltException) throw e;
@@ -332,14 +295,18 @@ public class ServerController {
     }
 
     /**
-     * Asynchrnously validates all ec2 config of a particular OtpServer instance.
+     * Asynchronously validates all ec2 config of a particular OtpServer instance.
      */
     public static EC2ValidationResult validateEC2Config(
-        OtpServer server,
-        AWSStaticCredentialsProvider credentials,
-        AmazonEC2 ec2Client,
-        AmazonIdentityManagement iamClient
-    ) throws ExecutionException, InterruptedException {
+        OtpServer server
+    ) throws ExecutionException, InterruptedException, CheckedAWSException {
+        String region = null;
+        if (server.ec2Info != null && server.ec2Info.region != null) region = server.ec2Info.region;
+
+        AmazonEC2 ec2Client = getEC2Client(server.role, region);
+        AmazonElasticLoadBalancing elbClient = getELBClient(server.role, region);
+        AmazonIdentityManagement iamClient = getIAMClient(server.role, region);
+
         List<Callable<EC2ValidationResult>> validationTasks = new ArrayList<>();
         validationTasks.add(() -> validateInstanceType(server.ec2Info.instanceType));
         validationTasks.add(() -> validateInstanceType(server.ec2Info.buildInstanceType));
@@ -351,8 +318,8 @@ public class ServerController {
         // add the load balancer task to the end since it can produce aggregate messages
         validationTasks.add(() -> validateTargetGroupLoadBalancerSubnetIdAndSecurityGroup(
             server.ec2Info,
-            credentials,
-            ec2Client
+            ec2Client,
+            elbClient
         ));
 
         return executeValidationTasks(
@@ -362,34 +329,27 @@ public class ServerController {
     }
 
     /**
-     * Verify that application has permission to write to/delete from S3 bucket. We're following the recommended
-     * approach from https://stackoverflow.com/a/17284647/915811, but perhaps there is a way to do this
-     * effectively without incurring AWS costs (although writing/deleting an empty file to S3 is probably
-     * miniscule).
-     * @param s3Bucket
+     * Verify that application can write to S3 bucket either through its own credentials or by assuming the provided IAM
+     * role. We're following the recommended approach from https://stackoverflow.com/a/17284647/915811, but perhaps
+     * there is a way to do this effectively without incurring AWS costs (although writing/deleting an empty file to S3
+     * is probably miniscule).
      */
-    private static boolean verifyS3WritePermissions(AmazonS3 s3Client, String s3Bucket, Request req) {
+    private static void verifyS3WritePermissions(OtpServer server, Request req) {
+        String bucket = server.s3Bucket;
         String key = UUID.randomUUID().toString();
         try {
-            s3Client.putObject(s3Bucket, key, File.createTempFile("test", ".zip"));
-            s3Client.deleteObject(s3Bucket, key);
-        } catch (IOException | AmazonS3Exception e) {
-            LOG.warn("S3 client cannot write to bucket: " + s3Bucket, e);
-            return false;
-        }
-        return true;
-    }
-
-    /**
-     * Verify that application can write to S3 bucket either through its own credentials or by assuming the provided IAM
-     * role.
-     */
-    private static void verifyS3WritePermissions(OtpServer server, Request req, AmazonS3 s3Client) {
-        if (!verifyS3WritePermissions(s3Client, server.s3Bucket, req)) {
-            // Else, verify that this application can write to the S3 bucket, which is needed to write the transit bundle
-            // file to S3.
-            String message = "Application cannot write to specified S3 bucket: " + server.s3Bucket;
-            logMessageAndHalt(req, 400, message);
+            String region = null;
+            if (server.ec2Info != null && server.ec2Info.region != null) region = server.ec2Info.region;
+            AmazonS3 client = getS3Client(server.role, region);
+            client.putObject(bucket, key, File.createTempFile("test", ".zip"));
+            client.deleteObject(bucket, key);
+        } catch (Exception e) {
+            logMessageAndHalt(
+                req,
+                400,
+                "Application cannot write to specified S3 bucket: " + server.s3Bucket,
+                e
+            );
         }
     }
 
@@ -414,7 +374,6 @@ public class ServerController {
 
     /** Determine if AMI ID exists (and is gettable by the application's AWS credentials). */
     public static boolean amiExists(String amiId, AmazonEC2 ec2Client) {
-        if (ec2Client == null) ec2Client = ec2;
         DescribeImagesRequest request = new DescribeImagesRequest().withImageIds(amiId);
         DescribeImagesResult result = ec2Client.describeImages(request);
         // Iterate over AMIs to find a matching ID.
@@ -435,7 +394,6 @@ public class ServerController {
     ) {
         EC2ValidationResult result = new EC2ValidationResult();
         if (!ec2Info.recreateBuildImage) return result;
-        if (ec2Client == null) ec2Client = ec2;
         String buildImageName = ec2Info.buildImageName;
         try {
             DescribeImagesRequest describeImagesRequest = new DescribeImagesRequest()
@@ -588,18 +546,7 @@ public class ServerController {
      *  - https://serverfault.com/a/865422
      *  - https://docs.aws.amazon.com/elasticloadbalancing/latest/application/load-balancer-limits.html
      */
-    private static LoadBalancer getLoadBalancerForTargetGroup (EC2Info ec2Info, AWSStaticCredentialsProvider credentials) {
-        // If alternative credentials exist, use them to assume the role. Otherwise, use default ELB client.
-        AmazonElasticLoadBalancingClientBuilder builder = AmazonElasticLoadBalancingClient.builder();
-        if (credentials != null) {
-            builder.withCredentials(credentials);
-        }
-
-        if (ec2Info.region != null) {
-            builder.withRegion(ec2Info.region);
-        }
-
-        AmazonElasticLoadBalancing elbClient = builder.build();
+    private static LoadBalancer getLoadBalancerForTargetGroup (EC2Info ec2Info, AmazonElasticLoadBalancing elbClient) {
         try {
             DescribeTargetGroupsRequest targetGroupsRequest = new DescribeTargetGroupsRequest()
                 .withTargetGroupArns(ec2Info.targetGroupArn);
@@ -624,8 +571,8 @@ public class ServerController {
      */
     private static EC2ValidationResult validateTargetGroupLoadBalancerSubnetIdAndSecurityGroup(
         EC2Info ec2Info,
-        AWSStaticCredentialsProvider credentials,
-        AmazonEC2 ec2Client
+        AmazonEC2 ec2Client,
+        AmazonElasticLoadBalancing elbClient
     ) throws ExecutionException, InterruptedException {
         EC2ValidationResult result = new EC2ValidationResult();
         if (isEmpty(ec2Info.targetGroupArn)) {
@@ -634,7 +581,7 @@ public class ServerController {
         }
         // Get load balancer for target group. This essentially checks that the target group exists and is assigned
         // to a load balancer.
-        LoadBalancer loadBalancer = getLoadBalancerForTargetGroup(ec2Info, credentials);
+        LoadBalancer loadBalancer = getLoadBalancerForTargetGroup(ec2Info, elbClient);
         if (loadBalancer == null) {
             result.setInvalid("Invalid value for Target Group ARN. Could not locate Target Group or Load Balancer.");
             return result;

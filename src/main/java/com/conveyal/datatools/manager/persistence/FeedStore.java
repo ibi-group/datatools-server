@@ -2,10 +2,6 @@ package com.conveyal.datatools.manager.persistence;
 
 import com.amazonaws.AmazonClientException;
 import com.amazonaws.AmazonServiceException;
-import com.amazonaws.auth.AWSCredentialsProvider;
-import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
-import com.amazonaws.auth.profile.ProfileCredentialsProvider;
-import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.CopyObjectRequest;
 import com.amazonaws.services.s3.model.GetObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectRequest;
@@ -13,7 +9,7 @@ import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.transfer.TransferManager;
 import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
 import com.amazonaws.services.s3.transfer.Upload;
-import com.conveyal.datatools.common.utils.AWSUtils;
+import com.conveyal.datatools.common.utils.CheckedAWSException;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.google.common.io.ByteStreams;
@@ -27,9 +23,8 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.nio.file.Files;
-import java.nio.file.Path;
 
+import static com.conveyal.datatools.common.utils.AWSUtils.getDefaultS3Client;
 import static com.conveyal.datatools.manager.DataManager.hasConfigProperty;
 
 /**
@@ -49,10 +44,15 @@ public class FeedStore {
 
     public static final String s3Prefix = "gtfs/";
 
-    // FIXME: this should not be static most likely
-    public static AmazonS3 s3Client;
-    /** An AWS credentials file to use when uploading to S3 */
-    private static final String S3_CREDENTIALS_FILENAME = DataManager.getConfigPropertyAsText("application.data.s3_credentials_file");
+    static {
+        // s3 storage
+        if (DataManager.useS3 || hasConfigProperty("modules.gtfsapi.use_extension")){
+            s3Bucket = DataManager.getConfigPropertyAsText("application.data.gtfs_s3_bucket");
+            if (s3Bucket == null) {
+                throw new IllegalArgumentException("Fatal error initializing s3Bucket or s3Client");
+            }
+        }
+    }
 
     public FeedStore() {
         this(null);
@@ -70,25 +70,6 @@ public class FeedStore {
         path = getPath(pathString);
     }
 
-    static {
-        // s3 storage
-        if (DataManager.useS3 || hasConfigProperty("modules.gtfsapi.use_extension")){
-            s3Bucket = DataManager.getConfigPropertyAsText("application.data.gtfs_s3_bucket");
-            try {
-                // If region configuration string is provided, use that.
-                // Otherwise defaults to value provided in ~/.aws/config
-                String region = DataManager.getConfigPropertyAsText("application.data.s3_region");
-                s3Client = AWSUtils.getS3ClientForCredentials(getAWSCreds(), region);
-            } catch (Exception e) {
-                LOG.error("S3 client not initialized correctly.  Must provide config property application.data.s3_region or specify region in ~/.aws/config", e);
-            }
-            // TODO: check for this??
-            if (s3Client == null || s3Bucket == null) {
-                throw new IllegalArgumentException("Fatal error initializing s3Bucket or s3Client");
-            }
-        }
-    }
-
     private static File getPath (String pathString) {
         File path = new File(pathString);
         if (!path.exists() || !path.isDirectory()) {
@@ -98,25 +79,16 @@ public class FeedStore {
         return path;
     }
 
-    public void deleteFeed (String id) {
+    public void deleteFeed (String id) throws CheckedAWSException {
         // If the application is using s3 storage, delete the remote copy.
         if (DataManager.useS3){
-            s3Client.deleteObject(s3Bucket, getS3Key(id));
+            getDefaultS3Client().deleteObject(s3Bucket, getS3Key(id));
         }
         // Always delete local copy (whether storing exclusively on local disk or using s3).
         File feed = getLocalFeed(id);
         if (feed != null) {
             boolean deleted = feed.delete();
             if (!deleted) LOG.warn("GTFS file {} not deleted. This may contribute to storage space shortages.", feed.getAbsolutePath());
-        }
-    }
-
-    public static AWSCredentialsProvider getAWSCreds () {
-        if (S3_CREDENTIALS_FILENAME != null) {
-            return new ProfileCredentialsProvider(S3_CREDENTIALS_FILENAME, "default");
-        } else {
-            // default credentials providers, e.g. IAM role
-            return new DefaultAWSCredentialsProviderChain();
         }
     }
 
@@ -145,11 +117,11 @@ public class FeedStore {
             LOG.info("Downloading feed from {}", uri);
             InputStream objectData;
             try {
-                S3Object object = s3Client.getObject(
+                S3Object object = getDefaultS3Client().getObject(
                     new GetObjectRequest(s3Bucket, key));
                 objectData = object.getObjectContent();
-            } catch (AmazonServiceException ase) {
-                LOG.error("Error downloading " + uri, ase);
+            } catch (AmazonServiceException | CheckedAWSException e) {
+                LOG.error("Error downloading " + uri, e);
                 return null;
             }
 
@@ -227,7 +199,7 @@ public class FeedStore {
         if (s3Bucket != null) {
             try {
                 LOG.info("Uploading feed {} to S3 from {}", s3FileName, gtfsFile.getAbsolutePath());
-                TransferManager tm = TransferManagerBuilder.standard().withS3Client(s3Client).build();
+                TransferManager tm = TransferManagerBuilder.standard().withS3Client(getDefaultS3Client()).build();
                 PutObjectRequest request = new PutObjectRequest(s3Bucket, getS3Key(s3FileName), gtfsFile);
                 // Subscribe to the event and provide event handler.
                 TLongList transferredBytes = new TLongArrayList();
@@ -267,10 +239,10 @@ public class FeedStore {
                     String copyKey = s3Prefix + feedSource.id + ".zip";
                     CopyObjectRequest copyObjRequest = new CopyObjectRequest(
                             s3Bucket, getS3Key(s3FileName), s3Bucket, copyKey);
-                    s3Client.copyObject(copyObjRequest);
+                    getDefaultS3Client().copyObject(copyObjRequest);
                 }
                 return true;
-            } catch (AmazonServiceException e) {
+            } catch (AmazonServiceException | CheckedAWSException e) {
                 LOG.error("Error uploading feed to S3", e);
                 return false;
             }

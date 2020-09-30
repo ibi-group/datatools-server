@@ -2,7 +2,7 @@ package com.conveyal.datatools.manager.models;
 
 import com.amazonaws.services.ec2.model.Filter;
 import com.amazonaws.services.ec2.model.Instance;
-import com.conveyal.datatools.common.utils.AWSUtils;
+import com.conveyal.datatools.common.utils.CheckedAWSException;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.controllers.api.DeploymentController;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -11,6 +11,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 
 import java.util.Collections;
 import java.util.List;
+
+import static com.conveyal.datatools.common.utils.AWSUtils.getEC2Client;
 
 /**
  * An OtpServer represents a deployment target for deploying transit and OSM data to. This can take the shape of a number
@@ -55,26 +57,20 @@ public class OtpServer extends Model {
 
     /** The EC2 instances that are associated with this serverId. */
     @JsonProperty("ec2Instances")
-    public List<EC2InstanceSummary> retrieveEC2InstanceSummaries() {
+    public List<EC2InstanceSummary> retrieveEC2InstanceSummaries() throws CheckedAWSException {
         // Prevent calling EC2 method on servers that do not have EC2 info defined because this is a JSON property.
         if (ec2Info == null) return Collections.EMPTY_LIST;
         Filter serverFilter = new Filter("tag:serverId", Collections.singletonList(id));
-        return DeploymentController.fetchEC2InstanceSummaries(
-            AWSUtils.getEC2ClientForRole(this.role, ec2Info.region),
-            serverFilter
-        );
+        return DeploymentController.fetchEC2InstanceSummaries(getEC2Client(this), serverFilter);
     }
 
-    public List<Instance> retrieveEC2Instances() {
+    public List<Instance> retrieveEC2Instances() throws CheckedAWSException {
         if (
             !"true".equals(DataManager.getConfigPropertyAsText("modules.deployment.ec2.enabled")) ||
                 ec2Info == null
         ) return Collections.EMPTY_LIST;
         Filter serverFilter = new Filter("tag:serverId", Collections.singletonList(id));
-        return DeploymentController.fetchEC2Instances(
-            AWSUtils.getEC2ClientForRole(this.role, ec2Info.region),
-            serverFilter
-        );
+        return DeploymentController.fetchEC2Instances(getEC2Client(this), serverFilter);
     }
 
     @JsonProperty("organizationId")
