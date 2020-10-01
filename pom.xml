@@ -334,6 +334,8 @@
             <artifactId>gt-api</artifactId>
             <version>${geotools.version}</version>
         </dependency>
+        <!-- gt-epsg-hsql includes coordinate reference libraries that were removed from gtfs-lib in
+             https://github.com/conveyal/gtfs-lib/pull/290 -->
         <dependency>
             <groupId>org.geotools</groupId>
             <artifactId>gt-epsg-hsql</artifactId>

@@ -867,19 +867,27 @@ public class MergeFeedsJob extends MonitorableJob {
                                     break;
                             }
                         }
-
+                        // If the current field is a foreign reference, check if the reference has been removed in the
+                        // merged result. If this is the case (or other conditions are met), we will need to skip this
+                        // record. Likewise, if the reference has been modified, ensure that the value written to the
+                        // merged result is correctly updated.
                         if (field.isForeignReference()) {
                             String key = getTableScopedValue(field.referenceTable, idScope, val);
-                            // Check if this ref field is a service_id and if it is not found in the list of service_ids.
-                            boolean serviceIdMissing = field.name.equals("service_id") && !mergeFeedsResult.serviceIds.contains(valueToWrite);
-                            // If the current foreign ref points to another record that has been skipped or is a ref to
-                            // a non-existent service_id, skip this record and add its primary key to the list of skipped
-                            // IDs (so that other references can be properly omitted).
-                            if (mergeFeedsResult.skippedIds.contains(key) || serviceIdMissing) {
-                                // If a calendar#service_id has been skipped, but there were valid service_ids found in
-                                // calendar_dates, do not skip that record for both the calendar_date and any related
-                                // trips.
-                                if (field.name.equals("service_id") && mergeFeedsResult.serviceIds.contains(valueToWrite)) {
+                            // Check if we're performing a service period merge, this ref field is a service_id, and it
+                            // is not found in the list of service_ids (e.g., it was removed).
+                            boolean isValidServiceId = mergeFeedsResult.serviceIds.contains(valueToWrite);
+                            boolean serviceIdShouldBeSkipped = mergeType.equals(SERVICE_PERIOD) &&
+                                field.name.equals("service_id") &&
+                                !isValidServiceId;
+                            // If the current foreign ref points to another record that has
+                            // been skipped or is a ref to a non-existent service_id during a service period merge, skip
+                            // this record and add its primary key to the list of skipped IDs (so that other references
+                            // can be properly omitted).
+                            if (mergeFeedsResult.skippedIds.contains(key) || serviceIdShouldBeSkipped) {
+                                // If a calendar#service_id has been skipped (it's listed in skippedIds), but there were
+                                // valid service_ids found in calendar_dates, do not skip that record for both the
+                                // calendar_date and any related trips.
+                                if (field.name.equals("service_id") && isValidServiceId) {
                                     LOG.warn("Not skipping valid service_id {} for {} {}", valueToWrite, table.name, keyValue);
                                 } else {
                                     String skippedKey = getTableScopedValue(table, idScope, keyValue);
