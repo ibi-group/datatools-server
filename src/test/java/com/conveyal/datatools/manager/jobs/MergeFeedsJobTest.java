@@ -42,6 +42,7 @@ public class MergeFeedsJobTest extends UnitTest {
     private static FeedVersion napaVersion;
     private static FeedVersion bothCalendarFilesVersion;
     private static FeedVersion bothCalendarFilesVersion2;
+    private static FeedVersion bothCalendarFilesVersion3;
     private static FeedVersion onlyCalendarVersion;
     private static FeedVersion onlyCalendarDatesVersion;
 
@@ -92,6 +93,10 @@ public class MergeFeedsJobTest extends UnitTest {
         bothCalendarFilesVersion2 = createFeedVersion(
             fakeAgency,
             zipFolderFiles("fake-agency-with-calendar-and-calendar-dates-2")
+        );
+        bothCalendarFilesVersion3 = createFeedVersion(
+            fakeAgency,
+            zipFolderFiles("fake-agency-with-calendar-and-calendar-dates-3")
         );
     }
 
@@ -557,6 +562,14 @@ public class MergeFeedsJobTest extends UnitTest {
             ),
             1
         );
+        // cal_to_remove service_id should be scoped for earlier feed version.
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format(
+                "SELECT count(*) FROM %s.trips WHERE service_id='Fake_Agency4:cal_to_remove'",
+                mergedNamespace
+            ),
+            1
+        );
         // Amended calendar record from earlier feed version should also have a modified end date (one day before the
         // earliest start_date from the future feed).
         assertThatSqlCountQueryYieldsExpectedCount(
@@ -572,6 +585,60 @@ public class MergeFeedsJobTest extends UnitTest {
         assertThatSqlCountQueryYieldsExpectedCount(
             String.format(
                 "SELECT count(*) FROM %s.calendar_dates WHERE service_id='Fake_Agency4:cal_to_remove'",
+                mergedNamespace
+            ),
+            1
+        );
+    }
+
+    /**
+     * Tests whether a MTC feed merge of two feed versions correctly removes calendar records that have overlapping
+     * service but keeps calendar_dates records that share service_id with the removed calendar and trips that reference
+     * that service_id.
+     */
+    @Test
+    public void canMergeFeedsWithMTCForServiceIds4 () throws SQLException {
+        Set<FeedVersion> versions = new HashSet<>();
+        versions.add(bothCalendarFilesVersion);
+        versions.add(bothCalendarFilesVersion3);
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.SERVICE_PERIOD);
+        // Run the job in this thread (we're not concerned about concurrency here).
+        mergeFeedsJob.run();
+        assertFeedMergeSucceeded(mergeFeedsJob);
+        // assert service_ids have been feed scoped properly
+        String mergedNamespace = mergeFeedsJob.mergedVersion.namespace;
+        // - calendar table
+        // expect a total of 3 records in calendar table
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.calendar", mergedNamespace),
+            3
+        );
+        // - calendar_dates table
+        // expect 2 records in calendar_dates table (all records from future feed removed)
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.calendar_dates", mergedNamespace),
+            3
+        );
+
+        // - trips table
+        // expect 3 records in trips table
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.trips", mergedNamespace),
+            3
+        );
+        // common_id service_id should be scoped for earlier feed version.
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format(
+                "SELECT count(*) FROM %s.trips WHERE service_id='Fake_Agency5:common_id'",
+                mergedNamespace
+            ),
+            1
+        );
+        // Amended calendar record from earlier feed version should also have a modified end date (one day before the
+        // earliest start_date from the future feed).
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format(
+                "SELECT count(*) FROM %s.calendar WHERE service_id='Fake_Agency5:common_id' AND end_date='20170914'",
                 mergedNamespace
             ),
             1
