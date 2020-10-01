@@ -1,0 +1,5 @@
+service_id,date,exception_type
+common_id,20170916,2
+keep_one,20170915,2
+keep_one,20170913,2
+remove,20170916,2
