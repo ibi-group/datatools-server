@@ -51,7 +51,7 @@ public abstract class AWSClientManager<T> {
         // check if an active credentials provider exists for this role
         ExpiringAsset<AWSStaticCredentialsProvider> session = crendentialsProvidersByRole.get(role);
         if (session != null && session.isActive()) {
-            LOG.info("Returning active role-based session credentials");
+            LOG.debug("Returning active role-based session credentials");
             return session;
         }
         // either a session hasn't been created or an existing one has expired. Create a new session.
@@ -102,7 +102,7 @@ public abstract class AWSClientManager<T> {
     public T getClient(String role, String region) throws CheckedAWSException {
         // return default client for null region and role
         if (role == null && region == null) {
-            LOG.info("Using default {} client", getClientClassName());
+            LOG.debug("Using default {} client", getClientClassName());
             return defaultClient;
         }
 
@@ -115,7 +115,7 @@ public abstract class AWSClientManager<T> {
                 LOG.info("Successfully built a {} client for region {}", getClientClassName(), region);
                 nonRoleClientsByRegion.put(region, client);
             }
-            LOG.info("Using a non-role based {} client for region {}", getClientClassName(), region);
+            LOG.debug("Using a non-role based {} client for region {}", getClientClassName(), region);
             return client;
         }
 
@@ -123,7 +123,7 @@ public abstract class AWSClientManager<T> {
         String roleRegionKey = makeRoleRegionKey(role, region);
         ExpiringAsset<T> clientWithRole = clientsByRoleAndRegion.get(roleRegionKey);
         if (clientWithRole != null && clientWithRole.isActive()) {
-            LOG.info("Using previously created role-based {} client", getClientClassName());
+            LOG.debug("Using previously created role-based {} client", getClientClassName());
             return clientWithRole.asset;
         }
 
