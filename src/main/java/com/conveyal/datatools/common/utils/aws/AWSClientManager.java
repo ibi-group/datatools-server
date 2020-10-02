@@ -7,6 +7,8 @@ import com.amazonaws.auth.AWSStaticCredentialsProvider;
 import com.amazonaws.auth.BasicSessionCredentials;
 import com.amazonaws.auth.STSAssumeRoleSessionCredentialsProvider;
 import com.conveyal.datatools.common.utils.ExpiringAsset;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 
@@ -21,6 +23,8 @@ import java.util.HashMap;
  * role and region inputs.
  */
 public abstract class AWSClientManager<T> {
+    private static final Logger LOG = LoggerFactory.getLogger(AWSClientManager.class);
+
     private static final long DEFAULT_EXPIRING_AWS_ASSET_VALID_DURATION_MILLIS = 800 * 1000;
     private static HashMap<String, ExpiringAsset<AWSStaticCredentialsProvider>> crendentialsProvidersByRole =
         new HashMap<>();
@@ -39,12 +43,17 @@ public abstract class AWSClientManager<T> {
      * https://docs.aws.amazon.com/IAM/latest/UserGuide/tutorial_cross-account-with-roles.html). The credentials can be
      * then used for creating a temporary client.
      */
-    private static AWSStaticCredentialsProvider getCredentialsForRole(String role) throws CheckedAWSException {
+    private static ExpiringAsset<AWSStaticCredentialsProvider> getCredentialsForRole(
+        String role
+    ) throws CheckedAWSException {
         String roleSessionName = "data-tools-session";
         if (role == null) return null;
         // check if an active credentials provider exists for this role
         ExpiringAsset<AWSStaticCredentialsProvider> session = crendentialsProvidersByRole.get(role);
-        if (session != null && session.isActive()) return session.asset;
+        if (session != null && session.isActive()) {
+            LOG.info("Returning active role-based session credentials");
+            return session;
+        }
         // either a session hasn't been created or an existing one has expired. Create a new session.
         STSAssumeRoleSessionCredentialsProvider sessionProvider = new STSAssumeRoleSessionCredentialsProvider
             .Builder(
@@ -58,6 +67,7 @@ public abstract class AWSClientManager<T> {
         } catch (AmazonServiceException e) {
             throw new CheckedAWSException("Failed to obtain AWS credentials");
         }
+        LOG.info("Successfully created role-based session credentials");
         AWSStaticCredentialsProvider credentialsProvider = new AWSStaticCredentialsProvider(
             new BasicSessionCredentials(
                 credentials.getAWSAccessKeyId(),
@@ -65,12 +75,10 @@ public abstract class AWSClientManager<T> {
                 credentials.getSessionToken()
             )
         );
+        session = new ExpiringAsset<>(credentialsProvider, DEFAULT_EXPIRING_AWS_ASSET_VALID_DURATION_MILLIS);
         // store the credentials provider in a lookup by role for future use
-        crendentialsProvidersByRole.put(
-            role,
-            new ExpiringAsset<>(credentialsProvider, DEFAULT_EXPIRING_AWS_ASSET_VALID_DURATION_MILLIS)
-        );
-        return credentialsProvider;
+        crendentialsProvidersByRole.put(role, session);
+        return session;
     }
 
     /**
@@ -94,6 +102,7 @@ public abstract class AWSClientManager<T> {
     public T getClient(String role, String region) throws CheckedAWSException {
         // return default client for null region and role
         if (role == null && region == null) {
+            LOG.info("Using default {} client", getClientClassName());
             return defaultClient;
         }
 
@@ -103,24 +112,34 @@ public abstract class AWSClientManager<T> {
             client = nonRoleClientsByRegion.get(region);
             if (client == null) {
                 client = buildDefaultClientWithRegion(region);
+                LOG.info("Successfully built a {} client for region {}", getClientClassName(), region);
                 nonRoleClientsByRegion.put(region, client);
             }
+            LOG.info("Using a non-role based {} client for region {}", getClientClassName(), region);
             return client;
         }
 
         // check for the availability of a client already associated with the given role and region
         String roleRegionKey = makeRoleRegionKey(role, region);
         ExpiringAsset<T> clientWithRole = clientsByRoleAndRegion.get(roleRegionKey);
-        if (clientWithRole != null && clientWithRole.isActive()) return clientWithRole.asset;
+        if (clientWithRole != null && clientWithRole.isActive()) {
+            LOG.info("Using previously created role-based {} client", getClientClassName());
+            return clientWithRole.asset;
+        }
 
         // Either a new client hasn't been created or it has expired. Create a new client and cache it.
-        AWSStaticCredentialsProvider credentials = getCredentialsForRole(role);
-        T credentialedClientForRoleAndRegion = buildCredentialedClientForRoleAndRegion(credentials, region, role);
+        ExpiringAsset<AWSStaticCredentialsProvider> session = getCredentialsForRole(role);
+        T credentialedClientForRoleAndRegion = buildCredentialedClientForRoleAndRegion(session.asset, region, role);
+        LOG.info("Successfully created role-based {} client", getClientClassName());
         clientsByRoleAndRegion.put(
             roleRegionKey, 
-            new ExpiringAsset<T>(credentialedClientForRoleAndRegion, DEFAULT_EXPIRING_AWS_ASSET_VALID_DURATION_MILLIS)
+            new ExpiringAsset<T>(credentialedClientForRoleAndRegion, session.timeRemainingMillis())
         );
         return credentialedClientForRoleAndRegion;
+    }
+
+    private String getClientClassName() {
+        return defaultClient.getClass().getSimpleName();
     }
 
     private static String makeRoleRegionKey(String role, String region) {
