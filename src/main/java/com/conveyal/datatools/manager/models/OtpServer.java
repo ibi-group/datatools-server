@@ -37,6 +37,7 @@ import org.slf4j.LoggerFactory;
 import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
@@ -433,5 +434,18 @@ public class OtpServer extends Model {
         AmazonS3 client = S3Utils.getS3Client(role, getRegion());
         client.putObject(s3Bucket, key, File.createTempFile("test", ".zip"));
         client.deleteObject(s3Bucket, key);
+    }
+
+    /**
+     * A MixIn to be applied to this OtpServer, for returning a single OtpServer, without EC2InstanceSummaries that
+     * don't need to be written in JSON output.
+     *
+     * Usually a mixin would be used on an external class, but since we are changing one thing about a single class, it
+     * seemed unnecessary to define a new view.
+     */
+    public abstract static class OtpServerWithoutEc2Instances {
+
+        @JsonIgnore
+        public abstract List<EC2InstanceSummary> retrieveEC2InstanceSummaries();
     }
 }

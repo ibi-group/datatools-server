@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
@@ -127,6 +128,19 @@ public class Project extends Model {
     public abstract static class ProjectWithOtpServers {
 
         @JsonProperty("otpServers")
+        public abstract Collection<OtpServer> availableOtpServers ();
+    }
+
+    /**
+     * A MixIn to be applied to this project, for returning a single project, so that the list of otpServers is
+     * included in the JSON response.
+     *
+     * Usually a mixin would be used on an external class, but since we are changing one thing about a single class, it
+     * seemed unnecessary to define a new view.
+     */
+    public abstract static class ProjectWithoutOtpServers {
+
+        @JsonIgnore
         public abstract Collection<OtpServer> availableOtpServers ();
     }
 }
