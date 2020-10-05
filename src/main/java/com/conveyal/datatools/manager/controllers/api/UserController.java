@@ -146,40 +146,32 @@ public class UserController {
     }
 
     /**
-     * HTTP endpoint to create a "public user" that has no permissions to access projects in the application.
-     *
-     * Note, this passes a "blank" app_metadata object to the newly created user, so there is no risk of someone
-     * injecting permissions somehow into the create user request. If the Auth0 user already exists, update the user
-     * permissions instead.
-     */
-    private static String createPublicUser(Request req, Response res) {
-        JsonNode jsonNode = parseJsonFromBody(req);
-        String email = jsonNode.get("email").asText();
-        Auth0UserSearchResult searchResult = checkForExistingAuth0User(req, email);
-
-        // Auth0 user already exists.
-        if (searchResult != null) {
-            String permissions = String.format("{\"permissions\": [], \"projects\": [], \"subscriptions\": [], " +
-                "\"client_id\": \"%s\" }", AUTH0_CLIENT_ID);
-            return updateUserPermissions(req, searchResult, permissions);
-        }
-
-        // Create new user.
-        return createUserRequest(req, email, jsonNode.get("password").asText());
-    }
-
-    /**
      * HTTP endpoint to create new Auth0 user for the application. If the Auth0 user already exists, update the user
      * permissions instead.
      */
     private static String createUser(Request req, Response res) {
         JsonNode jsonNode = parseJsonFromBody(req);
         String email = jsonNode.get("email").asText();
+        // Check whether a user already exists for the email address.
         Auth0UserSearchResult searchResult = checkForExistingAuth0User(req, email);
-
-        // Auth0 user already exists, update permissions.
+        // Handle creating a Data Tools user for a pre-existing Auth0 account.
         if (searchResult != null) {
-            return updateUserPermissions(req, searchResult, jsonNode.get("permissions").toString());
+            // Ensure that the pre-existing user does not contain permissions for this Auth0 clientId (otherwise the
+            // create user request should fail).
+            if(!searchResult.existingPermissions.isEmpty() && searchResult.user.getApp_metadata().getDatatoolsInfo() != null) {
+                LOG.info("Permissions for this Auth0 user {} already exist for this instance {} of datatools",
+                    searchResult.user.getEmail(), AUTH0_CLIENT_ID);
+                logMessageAndHalt(
+                    req,
+                    400,
+                    String.format("User %s already exists. Try updating permissions for existing user.", email)
+                );
+            }
+            LOG.info("Auth0 user {} already exists, updating permissions", email);
+            String newPermissions = jsonNode.get("permissions").toString();
+            // FIXME: I did not check this piece...
+            String json = "{ \"app_metadata\": { \"datatools\" : " + newPermissions + " }}";
+            return updateUser(searchResult.user, json, req);
         }
 
         // Create new user.
@@ -240,88 +232,39 @@ public class UserController {
     }
 
     /**
-     * Create user request.
+     * HTTP endpoint to update the permissions for an existing user.
      */
-    private static String createUserRequest(Request req, String email, String password) {
-        HttpPost createUserRequest = new HttpPost(baseUsersUrl);
-        setHeaders(req, createUserRequest);
-        String requestBody = createUserRequestBody(email, password);
-        setRequestEntityUsingJson(createUserRequest, requestBody, req);
-        return executeRequestAndGetResult(createUserRequest, req);
-    }
-
-    /**
-     * Produce JSON request body for create public user with default/blank permissions.
-     */
-    private static String createUserRequestBody(String email, String password) {
-        ArrayNode emptyArrayNode = mapper.createArrayNode();
-        ObjectNode permissions = mapper.createObjectNode();
-        permissions.set("permissions", emptyArrayNode);
-        permissions.set("projects", emptyArrayNode);
-        permissions.set("subscriptions", emptyArrayNode);
-        permissions.put("client_id", AUTH0_CLIENT_ID);
-        ArrayNode dataTools = mapper.createArrayNode();
-        dataTools.add(permissions);
-        ObjectNode appMetaData = mapper.createObjectNode();
-        appMetaData.set("datatools", dataTools);
-        ObjectNode createUserRequestBody = mapper.createObjectNode();
-        createUserRequestBody.put("connection", "Username-Password-Authentication");
-        createUserRequestBody.put("email", email);
-        createUserRequestBody.put("password", password);
-        createUserRequestBody.set("app_metadata", appMetaData);
-        return createUserRequestBody.toString();
-    }
-
-    /**
-     * Update user permissions. Only used in cases where the Auth0 user already exists and permissions for the current
-     * instance of datatools has not been set previously.
-     */
-    private static String updateUserPermissions(Request req, Auth0UserSearchResult searchResult, String newPermissions) {
-        // if there are existing permissions the assumption is that the datatools info has been set, but, only if it
-        // matches the current instance of datatools (AUTH0_CLIENT_ID).
-        if(!searchResult.existingPermissions.isEmpty() && searchResult.user.getApp_metadata().getDatatoolsInfo() != null) {
-            LOG.info("Permissions for this Auth0 user {} already exist for this instance {} of datatools",
-                searchResult.user.getEmail(), AUTH0_CLIENT_ID);
-            logMessageAndHalt(
-                req,
-                400,
-                String.format("User %s already exists", searchResult.user.getEmail())
-            );
-        }
-
-        LOG.info("Auth0 user {} already exists, updating permissions", searchResult.user.getEmail());
-        // User is unknown to this instance (AUTH0_CLIENT_ID) of datatools, update permissions, making sure to
-        // preserve any previously held permissions.
-        String permissions = (searchResult.existingPermissions.isEmpty()) ?
-            newPermissions : String.format("%s,%s", searchResult.existingPermissions, newPermissions);
-        String json = String.format("{ \"app_metadata\": { \"datatools\" : [%s]  }}",permissions);
-        HttpPatch updateUserRequest = new HttpPatch(getUserIdUrl(req, searchResult.user.getUser_id()));
-        setHeaders(req, updateUserRequest);
-        setRequestEntityUsingJson(updateUserRequest, json, req);
-        return executeRequestAndGetResult(updateUserRequest, req);
-    }
-
     private static String updateUser(Request req, Response res) {
         String userId = req.params("id");
         Auth0UserProfile user = getUserById(userId);
+        JsonNode jsonNode = parseJsonFromBody(req);
+        JsonNode data = jsonNode.get("data");
+        String json = "{ \"app_metadata\": { \"datatools\" : " + data + " }}";
+        return updateUser(user, json, req);
+    }
 
+    /**
+     * Perform an update user request with Auth0.
+     * @param user - the user to update
+     * @param json - the permissions (or other object) as a JSON string
+     * @param req - the original HTTP request
+     * @return the response string
+     */
+    private static String updateUser(Auth0UserProfile user, String json, Request req) {
         if (user == null) {
             logMessageAndHalt(
                 req,
                 404,
-                String.format("Could not update user: User with id %s not found (or there are issues with the Auth0 configuration)", userId)
+                String.format(
+                    "Could not update user: User with id %s not found (or there are issues with the Auth0 configuration)",
+                    user.getUser_id()
+                )
             );
         }
-
         LOG.info("Updating user {}", user.getEmail());
-
         HttpPatch updateUserRequest = new HttpPatch(getUserIdUrl(req));
         setHeaders(req, updateUserRequest);
-        JsonNode jsonNode = parseJsonFromBody(req);
-        JsonNode data = jsonNode.get("data");
-        String json = "{ \"app_metadata\": { \"datatools\" : " + data + " }}";
         setRequestEntityUsingJson(updateUserRequest, json, req);
-
         return executeRequestAndGetResult(updateUserRequest, req);
     }
 
@@ -725,7 +668,5 @@ public class UserController {
         post(apiPrefix + "secure/user", UserController::createUser, json::write);
         put(apiPrefix + "secure/user/:id", UserController::updateUser, json::write);
         delete(apiPrefix + "secure/user/:id", UserController::deleteUser, json::write);
-
-        post(apiPrefix + "public/user", UserController::createPublicUser, json::write);
     }
 }
