@@ -16,7 +16,6 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 
 import static com.conveyal.datatools.TestUtils.parseJson;
 import static com.conveyal.datatools.manager.auth.Auth0Users.USERS_API_PATH;
@@ -45,7 +44,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 public class UserControllerTest extends UnitTest {
     private String emailForExistingAccount = "test-existing-user@test.com";
     private ObjectMapper mapper = new ObjectMapper();
-
+    private final String USER_SEARCH_API_PATH = USERS_API_PATH + "?sort=email%3A1&per_page=10&page=0&include_totals=false&search_engine=v3&q=email%3A";
     /**
      * This sets up a mock server that accepts requests and sends predefined responses to mock an Auth0 server.
      */
@@ -106,7 +105,7 @@ public class UserControllerTest extends UnitTest {
             given()
                 .port(4000)
                 .get("/api/manager/secure/user?page=1")
-            .then()
+                .then()
                 .extract()
                 .response()
                 .asString()
@@ -117,15 +116,15 @@ public class UserControllerTest extends UnitTest {
     }
 
     /**
-     * When creating a new datatools user which matches an existing Auth0 user, make sure the permissions for the
-     * existing Auth0 users can be updated.
+     * When creating a new datatools user for an email address that already exists as an Auth0 user (for a different
+     * datatools client/application in Auth0), make sure the permissions for the existing Auth0 users can be updated.
      */
     @Test
     public void canUpdatePermissionsOfExistingAuth0User() throws IOException {
         String newUserEmail = "test-existing-user@test.com";
 
         // create wiremock stub for user search that matches existing user
-        String url = USERS_API_PATH + "?sort=email%3A1&per_page=10&page=0&include_totals=false&search_engine=v3&q=email%3A" + URLEncoder.encode(newUserEmail, "UTF-8") + "*";
+        String url = USER_SEARCH_API_PATH + URLEncoder.encode(newUserEmail, "UTF-8") + "*";
         stubFor(
             get(urlEqualTo(url))
                 .willReturn(
@@ -149,16 +148,7 @@ public class UserControllerTest extends UnitTest {
                 )
         );
 
-        ObjectNode requestJson = mapper.createObjectNode();
-        requestJson.put("email", emailForExistingAccount);
-        ObjectNode testClientPermissions = mapper.createObjectNode();
-        testClientPermissions.put("type", "administer-application");
-        ObjectNode testClientData = mapper.createObjectNode();
-        testClientData.putArray("permissions").add(testClientPermissions);
-        testClientData.putArray("projects");
-        testClientData.putArray("organizations");
-        testClientData.put("client_id", "testing-client-id");
-        requestJson.set("permissions", testClientData);
+        ObjectNode requestJson = createJsonRequestBody("testing-client-id", false);
 
         // make request and parse the json response
         JsonNode updateUserResponse = parseJson(
@@ -186,7 +176,7 @@ public class UserControllerTest extends UnitTest {
         String newUserEmail = "test-existing-user@test.com";
 
         // create wiremock stub for user search that matches existing user
-        String url = USERS_API_PATH + "?sort=email%3A1&per_page=10&page=0&include_totals=false&search_engine=v3&q=email%3A" + URLEncoder.encode(newUserEmail, "UTF-8") + "*";
+        String url = USER_SEARCH_API_PATH + URLEncoder.encode(newUserEmail, "UTF-8") + "*";
         stubFor(
             get(urlEqualTo(url))
                 .willReturn(
@@ -204,16 +194,7 @@ public class UserControllerTest extends UnitTest {
                 )
         );
 
-        ObjectNode requestJson = mapper.createObjectNode();
-        requestJson.put("email", emailForExistingAccount);
-        ObjectNode testClientPermissions = mapper.createObjectNode();
-        testClientPermissions.put("type", "administer-application");
-        ObjectNode testClientData = mapper.createObjectNode();
-        testClientData.putArray("permissions").add(testClientPermissions);
-        testClientData.putArray("projects");
-        testClientData.putArray("organizations");
-        testClientData.put("client_id", "testing-client-id");
-        requestJson.set("permissions", testClientData);
+        ObjectNode requestJson = createJsonRequestBody("testing-client-id", false);
 
         // make request and parse the json response
         JsonNode updateUserResponse = parseJson(
@@ -228,7 +209,6 @@ public class UserControllerTest extends UnitTest {
         );
 
         // make sure the response matches the saved snapshot
-        System.out.println(updateUserResponse.toPrettyString());
         assertThat(updateUserResponse, matchesSnapshot());
 
     }
@@ -238,11 +218,11 @@ public class UserControllerTest extends UnitTest {
      * existing Auth0 user can not be updated for the same datatools instance.
      */
     @Test
-    public void canNotUpdatePermsOfExistingAuth0UserWithExistingPerms() throws IOException {
+    public void willNotUpdatePermsOfExistingAuth0UserWithExistingPerms() throws IOException {
         String newUserEmail = "test-existing-user@test.com";
 
         // create wiremock stub for user search that matches existing user
-        String url = USERS_API_PATH + "?sort=email%3A1&per_page=10&page=0&include_totals=false&search_engine=v3&q=email%3A" + URLEncoder.encode(newUserEmail, "UTF-8") + "*";
+        String url = USER_SEARCH_API_PATH + URLEncoder.encode(newUserEmail, "UTF-8") + "*";
         stubFor(
             get(urlEqualTo(url))
                 .willReturn(
@@ -260,16 +240,7 @@ public class UserControllerTest extends UnitTest {
                 )
         );
 
-        ObjectNode requestJson = mapper.createObjectNode();
-        requestJson.put("email", emailForExistingAccount);
-        ObjectNode testClientPermissions = mapper.createObjectNode();
-        testClientPermissions.put("type", "administer-application");
-        ObjectNode testClientData = mapper.createObjectNode();
-        testClientData.putArray("permissions").add(testClientPermissions);
-        testClientData.putArray("projects");
-        testClientData.putArray("organizations");
-        testClientData.put("client_id", "your-auth0-client-id");
-        requestJson.set("permissions", testClientData);
+        ObjectNode requestJson = createJsonRequestBody("your-auth0-client-id", false);
 
         // make request and parse the json response
         JsonNode updateUserResponse = parseJson(
@@ -284,7 +255,6 @@ public class UserControllerTest extends UnitTest {
         );
 
         // make sure the response matches the saved snapshot
-        System.out.println(updateUserResponse.toPrettyString());
         assertThat(updateUserResponse, matchesSnapshot());
 
     }
@@ -297,7 +267,7 @@ public class UserControllerTest extends UnitTest {
         String newUserEmail = "test-new-user@test.com";
 
         // create wiremock stub for empty user search
-        String url = USERS_API_PATH + "?sort=email%3A1&per_page=10&page=0&include_totals=false&search_engine=v3&q=email%3A" + URLEncoder.encode(newUserEmail, "UTF-8") + "*";
+        String url = USER_SEARCH_API_PATH + URLEncoder.encode(newUserEmail, "UTF-8") + "*";
         stubFor(
             get(urlEqualTo(url))
                 .willReturn(
@@ -325,7 +295,7 @@ public class UserControllerTest extends UnitTest {
                 .port(4000)
                 .body(requestJson)
                 .post("/api/manager/secure/user")
-            .then()
+                .then()
                 .extract()
                 .response()
                 .asString()
@@ -341,7 +311,7 @@ public class UserControllerTest extends UnitTest {
     @Test
     public void canReturnMeaningfulAuth0Error() throws IOException {
 
-        String url = USERS_API_PATH + "?sort=email%3A1&per_page=10&page=0&include_totals=false&search_engine=v3&q=email%3A" + URLEncoder.encode(emailForExistingAccount, "UTF-8") + "*";
+        String url = USER_SEARCH_API_PATH + URLEncoder.encode(emailForExistingAccount, "UTF-8") + "*";
         stubFor(
             get(urlEqualTo(url))
                 .willReturn(
@@ -368,7 +338,7 @@ public class UserControllerTest extends UnitTest {
                 .port(DataManager.PORT)
                 .body(getBaseUserObject())
                 .post(DataManager.API_PREFIX + "secure/user")
-            .then()
+                .then()
                 .extract()
                 .response()
                 .asString()
@@ -407,19 +377,7 @@ public class UserControllerTest extends UnitTest {
                 )
         );
 
-        ObjectNode requestJson = mapper.createObjectNode();
-        requestJson.put("email", emailForExistingAccount);
-
-        ObjectNode testClientPermissions = mapper.createObjectNode();
-        testClientPermissions.put("type", "administer-application");
-
-        ObjectNode testClientData = mapper.createObjectNode();
-        testClientData.putArray("permissions").add(testClientPermissions);
-        testClientData.putArray("projects");
-        testClientData.putArray("organizations");
-        testClientData.put("client_id", "testing-client-id");
-
-        requestJson.putArray("data").add(testClientData);
+        ObjectNode requestJson = createJsonRequestBody("testing-client-id", true);
 
         // make request and parse the json response
         JsonNode updateUserResponse = parseJson(
@@ -427,7 +385,7 @@ public class UserControllerTest extends UnitTest {
                 .port(4000)
                 .body(requestJson)
                 .put("/api/manager/secure/user/auth0|test-existing-user")
-            .then()
+                .then()
                 .extract()
                 .response()
                 .asString()
@@ -454,7 +412,7 @@ public class UserControllerTest extends UnitTest {
             given()
                 .port(4000)
                 .delete("/api/manager/secure/user/auth0|test-existing-user")
-            .then()
+                .then()
                 .extract()
                 .response()
                 .asString()
@@ -489,19 +447,7 @@ public class UserControllerTest extends UnitTest {
                 )
         );
 
-        ObjectNode requestJson = mapper.createObjectNode();
-        requestJson.put("email", emailForExistingAccount);
-
-        ObjectNode testClientPermissions = mapper.createObjectNode();
-        testClientPermissions.put("type", "administer-application");
-
-        ObjectNode testClientData = mapper.createObjectNode();
-        testClientData.putArray("permissions").add(testClientPermissions);
-        testClientData.putArray("projects");
-        testClientData.putArray("organizations");
-        testClientData.put("client_id", "testing-client-id");
-
-        requestJson.putArray("data").add(testClientData);
+        ObjectNode requestJson = createJsonRequestBody("testing-client-id", true);
 
         // make request and parse the json response
         JsonNode updateUserResponse = parseJson(
@@ -538,6 +484,28 @@ public class UserControllerTest extends UnitTest {
         requestJson.put("email", emailForExistingAccount);
         requestJson.put("password", "password");
         requestJson.putObject("permissions");
+        return requestJson;
+    }
+
+    /**
+     * Create a request body containing email and datatool permissions. The permissions are structured slightly
+     * differently if updating.
+     */
+    private ObjectNode createJsonRequestBody(String clientId, boolean updateUserRequest) {
+        ObjectNode requestJson = mapper.createObjectNode();
+        requestJson.put("email", emailForExistingAccount);
+        ObjectNode testClientPermissions = mapper.createObjectNode();
+        testClientPermissions.put("type", "administer-application");
+        ObjectNode testClientData = mapper.createObjectNode();
+        testClientData.putArray("permissions").add(testClientPermissions);
+        testClientData.putArray("projects");
+        testClientData.putArray("organizations");
+        testClientData.put("client_id", clientId);
+        if (updateUserRequest) {
+            requestJson.putArray("data").add(testClientData);
+        } else {
+            requestJson.set("permissions", testClientData);
+        }
         return requestJson;
     }
 }

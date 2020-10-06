@@ -11,11 +11,7 @@ import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
@@ -66,7 +62,6 @@ public class UserController {
     public static final int TEST_AUTH0_PORT = 8089;
     public static final String TEST_AUTH0_DOMAIN = String.format("localhost:%d", TEST_AUTH0_PORT);
     private static Logger LOG = LoggerFactory.getLogger(UserController.class);
-    private static ObjectMapper mapper = new ObjectMapper();
     private static final String UTF_8 = "UTF-8";
     public static final String DEFAULT_BASE_USERS_URL = "https://" + AUTH0_DOMAIN  + USERS_API_PATH;
     /** Users URL uses Auth0 domain by default, but can be overridden with {@link #setBaseUsersUrl(String)} for testing. */
@@ -146,34 +141,11 @@ public class UserController {
     }
 
     /**
-     * HTTP endpoint to create a "public user" that has no permissions to access projects in the application.
-     *
-     * Note, this passes a "blank" app_metadata object to the newly created user, so there is no risk of someone
-     * injecting permissions somehow into the create user request. If the Auth0 user already exists, update the user
-     * permissions instead.
-     */
-    private static String createPublicUser(Request req, Response res) {
-        JsonNode jsonNode = parseJsonFromBody(req);
-        String email = jsonNode.get("email").asText();
-        Auth0UserSearchResult searchResult = checkForExistingAuth0User(req, email);
-
-        // Auth0 user already exists.
-        if (searchResult != null) {
-            String permissions = String.format("{\"permissions\": [], \"projects\": [], \"subscriptions\": [], " +
-                "\"client_id\": \"%s\" }", AUTH0_CLIENT_ID);
-            return updateUserPermissions(req, searchResult, permissions);
-        }
-
-        // Create new user.
-        return createUserRequest(req, email, jsonNode.get("password").asText());
-    }
-
-    /**
      * HTTP endpoint to create new Auth0 user for the application. If the Auth0 user already exists, update the user
      * permissions instead.
      */
     private static String createUser(Request req, Response res) {
-        JsonNode jsonNode = parseJsonFromBody(req);
+        JsonNode jsonNode = JsonUtil.parseJsonFromBody(req);
         String email = jsonNode.get("email").asText();
         Auth0UserSearchResult searchResult = checkForExistingAuth0User(req, email);
 
@@ -204,14 +176,14 @@ public class UserController {
         String query = String.format("email:%s*", email);
         String searchResult = Auth0Users.getUnrestrictedAuth0Users(query);
         // Only ever expecting at most one user.
-        List<Auth0UserProfile> users = getPOJOFromJSONAsList(req, searchResult, Auth0UserProfile.class);
+        List<Auth0UserProfile> users = JsonUtil.getPOJOFromJSONAsList(req, searchResult, Auth0UserProfile.class);
 
         if (users == null || users.isEmpty()) {
             return null;
         } else {
             Auth0UserSearchResult result = new Auth0UserSearchResult();
             result.user = users.get(0);
-            JsonNode jsonNode = parseJsonFromString(req, searchResult);
+            JsonNode jsonNode = JsonUtil.parseJsonFromString(req, searchResult);
             JsonNode parent = jsonNode.elements().next();
             JsonNode appMetaData = parent.get("app_metadata");
             if (appMetaData != null && appMetaData.size() != 0) {
@@ -237,39 +209,6 @@ public class UserController {
          * Used to hold email, userId and expanded datatools parameters if they match the AUTH0_CLIENT_ID parameter.
          */
         Auth0UserProfile user;
-    }
-
-    /**
-     * Create user request.
-     */
-    private static String createUserRequest(Request req, String email, String password) {
-        HttpPost createUserRequest = new HttpPost(baseUsersUrl);
-        setHeaders(req, createUserRequest);
-        String requestBody = createUserRequestBody(email, password);
-        setRequestEntityUsingJson(createUserRequest, requestBody, req);
-        return executeRequestAndGetResult(createUserRequest, req);
-    }
-
-    /**
-     * Produce JSON request body for create public user with default/blank permissions.
-     */
-    private static String createUserRequestBody(String email, String password) {
-        ArrayNode emptyArrayNode = mapper.createArrayNode();
-        ObjectNode permissions = mapper.createObjectNode();
-        permissions.set("permissions", emptyArrayNode);
-        permissions.set("projects", emptyArrayNode);
-        permissions.set("subscriptions", emptyArrayNode);
-        permissions.put("client_id", AUTH0_CLIENT_ID);
-        ArrayNode dataTools = mapper.createArrayNode();
-        dataTools.add(permissions);
-        ObjectNode appMetaData = mapper.createObjectNode();
-        appMetaData.set("datatools", dataTools);
-        ObjectNode createUserRequestBody = mapper.createObjectNode();
-        createUserRequestBody.put("connection", "Username-Password-Authentication");
-        createUserRequestBody.put("email", email);
-        createUserRequestBody.put("password", password);
-        createUserRequestBody.set("app_metadata", appMetaData);
-        return createUserRequestBody.toString();
     }
 
     /**
@@ -317,7 +256,7 @@ public class UserController {
 
         HttpPatch updateUserRequest = new HttpPatch(getUserIdUrl(req));
         setHeaders(req, updateUserRequest);
-        JsonNode jsonNode = parseJsonFromBody(req);
+        JsonNode jsonNode = JsonUtil.parseJsonFromBody(req);
         JsonNode data = jsonNode.get("data");
         String json = "{ \"app_metadata\": { \"datatools\" : " + data + " }}";
         setRequestEntityUsingJson(updateUserRequest, json, req);
@@ -494,40 +433,6 @@ public class UserController {
     }
 
     /**
-     * Safely parse the request body into a JsonNode.
-     * @param req The initiating request that came into datatools-server
-     */
-    private static JsonNode parseJsonFromBody(Request req) {
-        return parseJsonFromString(req, req.body());
-    }
-
-    private static JsonNode parseJsonFromString(Request req, String json) {
-        try {
-            return mapper.readTree(json);
-        } catch (IOException e) {
-            logMessageAndHalt(req, 400, "Failed to parse request body", e);
-            return null;
-        }
-    }
-
-
-    /**
-     * Utility method to parse generic objects from JSON String and return as list.
-     * @param req The initiating request that came into datatools-server
-     * @param json The string representation of JSON to be parsed.
-     * @param clazz The class used to map each JSON object extracted.
-     */
-    private static <T> List<T> getPOJOFromJSONAsList(Request req, String json, Class<T> clazz) {
-        try {
-            JavaType type = mapper.getTypeFactory().constructCollectionType(List.class, clazz);
-            return mapper.readValue(json, type);
-        } catch (JsonProcessingException e) {
-            logMessageAndHalt(req, 400, "Failed to parse JSON String", e);
-            return null;
-        }
-    }
-
-    /**
      * Safely set the HTTP request body with a json string.
      *
      * @param request the outgoing HTTP post request
@@ -602,7 +507,7 @@ public class UserController {
             String auth0Message = "An Auth0 error occurred";
             JsonNode jsonResponse = null;
             try {
-                jsonResponse = mapper.readTree(result);
+                jsonResponse = JsonUtil.objectMapper.readTree(result);
             } catch (IOException e) {
                 LOG.warn("Could not parse json from auth0 error message. Body: {}", result != null ? result : "");
                 e.printStackTrace();
@@ -725,7 +630,5 @@ public class UserController {
         post(apiPrefix + "secure/user", UserController::createUser, json::write);
         put(apiPrefix + "secure/user/:id", UserController::updateUser, json::write);
         delete(apiPrefix + "secure/user/:id", UserController::deleteUser, json::write);
-
-        post(apiPrefix + "public/user", UserController::createPublicUser, json::write);
     }
 }
