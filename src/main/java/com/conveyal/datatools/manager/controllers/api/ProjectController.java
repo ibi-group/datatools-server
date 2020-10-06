@@ -343,7 +343,6 @@ public class ProjectController {
         // with a collection, massive performance issues will ensure (mainly due to multiple calls to AWS EC2).
         JsonManager<Project> slimJson = new JsonManager<>(Project.class, JsonViews.UserInterface.class);
         JsonManager<Project> fullJson = new JsonManager<>(Project.class, JsonViews.UserInterface.class);
-        slimJson.addMixin(Project.class, Project.ProjectWithoutOtpServers.class);
         fullJson.addMixin(Project.class, Project.ProjectWithOtpServers.class);
         fullJson.addMixin(OtpServer.class, OtpServer.OtpServerWithoutEc2Instances.class);
 

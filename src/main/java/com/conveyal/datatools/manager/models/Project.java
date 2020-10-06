@@ -130,17 +130,4 @@ public class Project extends Model {
         @JsonProperty("otpServers")
         public abstract Collection<OtpServer> availableOtpServers ();
     }
-
-    /**
-     * A MixIn to be applied to this project, for returning a single project, so that the list of otpServers is
-     * included in the JSON response.
-     *
-     * Usually a mixin would be used on an external class, but since we are changing one thing about a single class, it
-     * seemed unnecessary to define a new view.
-     */
-    public abstract static class ProjectWithoutOtpServers {
-
-        @JsonIgnore
-        public abstract Collection<OtpServer> availableOtpServers ();
-    }
 }
