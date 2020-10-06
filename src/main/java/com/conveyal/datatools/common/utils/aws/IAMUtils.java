@@ -28,7 +28,13 @@ public class IAMUtils {
         public AmazonIdentityManagement buildCredentialedClientForRoleAndRegion(
             AWSCredentialsProvider credentials, String region, String role
         ) {
-            return AmazonIdentityManagementClientBuilder.standard().withCredentials(credentials).build();
+            AmazonIdentityManagementClientBuilder builder = AmazonIdentityManagementClientBuilder
+                .standard()
+                .withCredentials(credentials);
+            if (region != null) {
+                builder = builder.withRegion(region);
+            }
+            return builder.build();
         }
     }
 
