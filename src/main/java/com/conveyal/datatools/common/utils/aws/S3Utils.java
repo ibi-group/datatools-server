@@ -28,7 +28,7 @@ public class S3Utils {
     private static final AWSCredentialsProvider DEFAULT_S3_CREDENTIALS;
     private static final S3ClientManagerImpl S3ClientManager;
 
-    public static String DEFAULT_BUCKET;
+    public static final String DEFAULT_BUCKET;
     public static final String DEFAULT_BUCKET_GTFS_FOLDER = "gtfs/";
 
     static {
@@ -81,7 +81,7 @@ public class S3Utils {
     }
 
     /**
-     * Makes a key for a object id that is assumed to be in the default bucket's GTFS folder
+     * Makes a key for an object id that is assumed to be in the default bucket's GTFS folder
      */
     public static String makeGtfsFolderObjectKey(String id) {
         return DEFAULT_BUCKET_GTFS_FOLDER + id;
