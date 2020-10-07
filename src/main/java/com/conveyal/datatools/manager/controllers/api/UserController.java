@@ -200,17 +200,7 @@ public class UserController {
         if (users == null || users.isEmpty()) {
             return null;
         } else {
-            Auth0UserSearchResult result = new Auth0UserSearchResult();
-            result.user = users.get(0);
-            JsonNode jsonNode = JsonUtil.parseJsonFromString(req, searchResult);
-            JsonNode parent = jsonNode.elements().next();
-            JsonNode appMetaData = parent.get("app_metadata");
-            if (appMetaData != null && appMetaData.size() != 0) {
-                String permissions = appMetaData.get("datatools").toString();
-                // Remove enclosing square brackets
-                result.existingPermissions = permissions.substring(1, permissions.length() - 1);
-            }
-            return result;
+            return new Auth0UserSearchResult(users.get(0), JsonUtil.parseJsonFromString(req, searchResult));
         }
     }
 
@@ -218,6 +208,25 @@ public class UserController {
      * Class to hold a user's profile and raw JSON permissions.
      */
     public static class Auth0UserSearchResult {
+
+        /**
+         * Constructor to define the Auth0 user and extract app meta data if present.
+         * @param user Auth0 user associated with this search.
+         * @param jsonNode JSON representation of user's app meta data.
+         */
+        Auth0UserSearchResult(Auth0UserProfile user, JsonNode jsonNode) {
+            this.user = user;
+            if (jsonNode != null) {
+                JsonNode parent = jsonNode.elements().next();
+                JsonNode appMetaData = parent.get("app_metadata");
+                if (appMetaData != null && appMetaData.size() != 0) {
+                    String permissions = appMetaData.get("datatools").toString();
+                    // Remove enclosing square brackets
+                    existingPermissions = permissions.substring(1, permissions.length() - 1);
+                }
+            }
+        }
+
         /**
          * If the tenant user already has permissions related to another instance of datatools they are preserved here.
          * This will prevent them from being overwritten when creating permissions for other datatools instances.
@@ -229,35 +238,6 @@ public class UserController {
          */
         Auth0UserProfile user;
     }
-
-    /**
-     * Update user permissions. Only used in cases where the Auth0 user already exists and permissions for the current
-     * instance of datatools has not been set previously.
-     */
-//    private static String updateUserPermissions(Request req, Auth0UserSearchResult searchResult, String newPermissions) {
-//        // if there are existing permissions the assumption is that the datatools info has been set, but, only if it
-//        // matches the current instance of datatools (AUTH0_CLIENT_ID).
-//        if(!searchResult.existingPermissions.isEmpty() && searchResult.user.getApp_metadata().getDatatoolsInfo() != null) {
-//            LOG.info("Permissions for this Auth0 user {} already exist for this instance {} of datatools",
-//                searchResult.user.getEmail(), AUTH0_CLIENT_ID);
-//            logMessageAndHalt(
-//                req,
-//                400,
-//                String.format("User %s already exists", searchResult.user.getEmail())
-//            );
-//        }
-//
-//        LOG.info("Auth0 user {} already exists, updating permissions", searchResult.user.getEmail());
-//        // User is unknown to this instance (AUTH0_CLIENT_ID) of datatools, update permissions, making sure to
-//        // preserve any previously held permissions.
-//        String permissions = (searchResult.existingPermissions.isEmpty()) ?
-//            newPermissions : String.format("%s,%s", searchResult.existingPermissions, newPermissions);
-//        String json = String.format("{ \"app_metadata\": { \"datatools\" : [%s]  }}",permissions);
-//        HttpPatch updateUserRequest = new HttpPatch(getUserIdUrl(req, searchResult.user.getUser_id()));
-//        setHeaders(req, updateUserRequest);
-//        setRequestEntityUsingJson(updateUserRequest, json, req);
-//        return executeRequestAndGetResult(updateUserRequest, req);
-//    }
 
     private static String updateUser(Request req, Response res) {
         String userId = req.params("id");
@@ -271,6 +251,7 @@ public class UserController {
     /**
      * Perform an update user request with Auth0.
      * @param user - the user to update
+     * @param userId - the user Auth0 id
      * @param json - the permissions (or other object) as a JSON string
      * @param req - the original HTTP request
      * @return the response string
@@ -289,9 +270,6 @@ public class UserController {
         LOG.info("Updating user {}", user.getEmail());
         HttpPatch updateUserRequest = new HttpPatch(getUserIdUrl(req, user.getUser_id()));
         setHeaders(req, updateUserRequest);
-//        JsonNode jsonNode = JsonUtil.parseJsonFromBody(req);
-//        JsonNode data = jsonNode.get("data");
-//        String json = "{ \"app_metadata\": { \"datatools\" : " + data + " }}";
         setRequestEntityUsingJson(updateUserRequest, json, req);
         return executeRequestAndGetResult(updateUserRequest, req);
     }
