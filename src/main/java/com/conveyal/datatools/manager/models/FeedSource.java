@@ -98,6 +98,13 @@ public class FeedSource extends Model implements Cloneable {
     public FeedRetrievalMethod retrievalMethod;
 
     /**
+     * How frequenty should we fetch this feed (at the feed's {@link #url} if {@link #retrievalMethod} is
+     * {@link FeedRetrievalMethod#FETCHED_AUTOMATICALLY}). Daily defaults to using time defined in
+     * {@link Project#autoFetchHour}:{@link Project#autoFetchMinute}.
+     */
+    public FetchFrequency fetchFrequency = FetchFrequency.DAILY;
+
+    /**
      * When was this feed last fetched?
      */
     public Date lastFetched;
