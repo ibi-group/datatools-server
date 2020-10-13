@@ -6,6 +6,7 @@ import com.amazonaws.services.ec2.model.Instance;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.EC2Utils;
 import com.conveyal.datatools.common.utils.aws.EC2ValidationResult;
+import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.JsonViews;
@@ -13,6 +14,7 @@ import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
+import org.apache.commons.lang3.StringUtils;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -39,31 +41,32 @@ import static spark.Spark.put;
  * These methods are mapped to API endpoints by Spark.
  */
 public class ServerController {
-    private static JsonManager<OtpServer> json = new JsonManager<>(OtpServer.class, JsonViews.UserInterface.class);
+    private static final JsonManager<OtpServer> json = new JsonManager<>(OtpServer.class, JsonViews.UserInterface.class);
     private static final Logger LOG = LoggerFactory.getLogger(ServerController.class);
 
     /**
      * Gets the server specified by the request's id parameter and ensure that user has access to the
      * deployment. If the user does not have permission the Spark request is halted with an error.
      */
-    private static OtpServer getServerWithPermissions(Request req, Response res) {
+    private static OtpServer getServerWithPermissions(Request req) {
         Auth0UserProfile userProfile = req.attribute("user");
         String serverId = req.params("id");
         OtpServer server = Persistence.servers.getById(serverId);
         if (server == null) {
             logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Server does not exist.");
-        }
-        boolean isProjectAdmin = userProfile.canAdministerProject(server.projectId, server.organizationId());
-        if (!isProjectAdmin && !userProfile.getUser_id().equals(server.user())) {
-            // If user is not a project admin and did not create the deployment, access to the deployment is denied.
-            logMessageAndHalt(req, HttpStatus.UNAUTHORIZED_401, "User not authorized for deployment.");
+        } else {
+            boolean isProjectAdmin = userProfile.canAdministerProject(server.projectId, server.organizationId());
+            if (!isProjectAdmin && !userProfile.getUser_id().equals(server.user())) {
+                // If user is not a project admin and did not create the deployment, access to the deployment is denied.
+                logMessageAndHalt(req, HttpStatus.UNAUTHORIZED_401, "User not authorized for deployment.");
+            }
         }
         return server;
     }
 
     /** HTTP endpoint for deleting an {@link OtpServer}. */
     private static OtpServer deleteServer(Request req, Response res) throws CheckedAWSException {
-        OtpServer server = getServerWithPermissions(req, res);
+        OtpServer server = getServerWithPermissions(req);
         // Ensure that there are no active EC2 instances associated with server. Halt deletion if so.
         List<Instance> activeInstances = server.retrieveEC2Instances().stream()
             .filter(instance -> "running".equals(instance.getState().getName()))
@@ -81,7 +84,7 @@ public class ServerController {
 
     /** HTTP method for terminating EC2 instances associated with an ELB OTP server. */
     private static OtpServer terminateEC2InstancesForServer(Request req, Response res) throws CheckedAWSException {
-        OtpServer server = getServerWithPermissions(req, res);
+        OtpServer server = getServerWithPermissions(req);
         List<Instance> instances = server.retrieveEC2Instances();
         List<String> ids = EC2Utils.getIds(instances);
         try {
@@ -100,7 +103,7 @@ public class ServerController {
      * Create a new server for the project. All feed sources with a valid latest version are added to the new
      * deployment.
      */
-    private static OtpServer createServer(Request req, Response res) throws IOException, CheckedAWSException {
+    private static OtpServer createServer(Request req, Response res) throws IOException {
         Auth0UserProfile userProfile = req.attribute("user");
         OtpServer newServer = getPOJOFromRequestBody(req, OtpServer.class);
         // If server has no project ID specified, user must be an application admin to create it. Otherwise, they must
@@ -137,8 +140,8 @@ public class ServerController {
     /**
      * Update a single OTP server.
      */
-    private static OtpServer updateServer(Request req, Response res) throws IOException, CheckedAWSException {
-        OtpServer serverToUpdate = getServerWithPermissions(req, res);
+    private static OtpServer updateServer(Request req, Response res) throws IOException {
+        OtpServer serverToUpdate = getServerWithPermissions(req);
         OtpServer updatedServer = getPOJOFromRequestBody(req, OtpServer.class);
         Auth0UserProfile user = req.attribute("user");
         if ((serverToUpdate.admin || serverToUpdate.projectId == null) && !user.canAdministerApplication()) {
@@ -153,7 +156,7 @@ public class ServerController {
      * Validate certain fields found in the document representing a server. This also currently modifies the document by
      * removing problematic date fields.
      */
-    private static void validateFields(Request req, OtpServer server) throws HaltException, CheckedAWSException {
+    private static void validateFields(Request req, OtpServer server) throws HaltException {
         try {
             // Check that projectId is valid.
             if (server.projectId != null) {
@@ -169,22 +172,22 @@ public class ServerController {
                     if (!result.isValid()) {
                         logMessageAndHalt(req, 400, result.getMessage(), result.getException());
                     }
-                } catch (ExecutionException | InterruptedException e) {
+                } catch (Exception e) {
                     logMessageAndHalt(req, 500, "Failed to validate EC2 config", e);
                 }
                 if (server.ec2Info.instanceCount < 0) server.ec2Info.instanceCount = 0;
             }
             // Server must have name.
-            if (OtpServer.isEmpty(server.name))
+            if (StringUtils.isEmpty(server.name))
                 logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Server must have valid name.");
             // Server must have an internal URL (for build graph over wire) or an s3 bucket (for auto deploy ec2).
-            if (OtpServer.isEmpty(server.s3Bucket)) {
+            if (StringUtils.isEmpty(server.s3Bucket)) {
                 if (server.internalUrl == null || server.internalUrl.size() == 0) {
                     logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Server must contain either internal URL(s) or s3 bucket name.");
                 }
             } else {
                 try {
-                    server.verifyS3WritePermissions();
+                    S3Utils.verifyS3WritePermissions(S3Utils.getS3Client(server), server.s3Bucket);
                 } catch (Exception e) {
                     logMessageAndHalt(
                         req,

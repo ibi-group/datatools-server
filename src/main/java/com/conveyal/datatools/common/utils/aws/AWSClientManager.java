@@ -26,12 +26,12 @@ public abstract class AWSClientManager<T> {
     private static final Logger LOG = LoggerFactory.getLogger(AWSClientManager.class);
 
     private static final long DEFAULT_EXPIRING_AWS_ASSET_VALID_DURATION_MILLIS = 800 * 1000;
-    private static HashMap<String, ExpiringAsset<AWSStaticCredentialsProvider>> crendentialsProvidersByRole =
+    private static final HashMap<String, ExpiringAsset<AWSStaticCredentialsProvider>> crendentialsProvidersByRole =
         new HashMap<>();
 
     protected final T defaultClient;
-    private HashMap<String, T> nonRoleClientsByRegion = new HashMap<>();
-    private HashMap<String, ExpiringAsset<T>> clientsByRoleAndRegion = new HashMap<>();
+    private final HashMap<String, T> nonRoleClientsByRegion = new HashMap<>();
+    private final HashMap<String, ExpiringAsset<T>> clientsByRoleAndRegion = new HashMap<>();
 
     public AWSClientManager (T defaultClient) {
         this.defaultClient = defaultClient;
@@ -47,7 +47,6 @@ public abstract class AWSClientManager<T> {
         String role
     ) throws CheckedAWSException {
         String roleSessionName = "data-tools-session";
-        if (role == null) return null;
         // check if an active credentials provider exists for this role
         ExpiringAsset<AWSStaticCredentialsProvider> session = crendentialsProvidersByRole.get(role);
         if (session != null && session.isActive()) {
@@ -133,7 +132,7 @@ public abstract class AWSClientManager<T> {
         LOG.info("Successfully created role-based {} client", getClientClassName());
         clientsByRoleAndRegion.put(
             roleRegionKey, 
-            new ExpiringAsset<T>(credentialedClientForRoleAndRegion, session.timeRemainingMillis())
+            new ExpiringAsset<>(credentialedClientForRoleAndRegion, session.timeRemainingMillis())
         );
         return credentialedClientForRoleAndRegion;
     }

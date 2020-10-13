@@ -5,11 +5,15 @@ import com.amazonaws.services.identitymanagement.AmazonIdentityManagement;
 import com.amazonaws.services.identitymanagement.AmazonIdentityManagementClientBuilder;
 import com.amazonaws.services.identitymanagement.model.InstanceProfile;
 import com.amazonaws.services.identitymanagement.model.ListInstanceProfilesResult;
+import org.apache.commons.lang3.StringUtils;
 
+/**
+ * This class contains utilities related to using AWS IAM services.
+ */
 public class IAMUtils {
     private static final AmazonIdentityManagement DEFAULT_IAM_CLIENT = AmazonIdentityManagementClientBuilder
         .defaultClient();
-    private static IAMClientManagerImpl IAMClientManager = new IAMClientManagerImpl(DEFAULT_IAM_CLIENT);
+    private static final IAMClientManagerImpl IAMClientManager = new IAMClientManagerImpl(DEFAULT_IAM_CLIENT);
 
     /**
      * A class that manages the creation of IAM clients.
@@ -52,5 +56,23 @@ public class IAMUtils {
             if (profile.getArn().equals(iamInstanceProfileArn)) return profile;
         }
         return null;
+    }
+
+    /** Validate that IAM instance profile ARN exists and is not empty. */
+    public static EC2ValidationResult validateIamInstanceProfileArn(
+        AmazonIdentityManagement client, String iamInstanceProfileArn
+    ) {
+        EC2ValidationResult result = new EC2ValidationResult();
+        String message = "Server must have valid IAM instance profile ARN (e.g., arn:aws:iam::123456789012:instance-profile/otp-ec2-role).";
+        if (StringUtils.isEmpty(iamInstanceProfileArn)) {
+            result.setInvalid(message);
+            return result;
+        }
+        if (
+            IAMUtils.getIamInstanceProfile(client, iamInstanceProfileArn) == null
+        ) {
+            result.setInvalid(message);
+        }
+        return result;
     }
 }

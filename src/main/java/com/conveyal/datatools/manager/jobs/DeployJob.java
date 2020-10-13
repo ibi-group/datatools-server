@@ -548,7 +548,7 @@ public class DeployJob extends MonitorableJob {
                 status.fail(ec2ValidationResult.getMessage(), ec2ValidationResult.getException());
                 return;
             }
-            otpServer.verifyS3WritePermissions();
+            S3Utils.verifyS3WritePermissions(S3Utils.getS3Client(otpServer), otpServer.s3Bucket);
         } catch (Exception e) {
             status.fail("An error occurred while validating the AWS configuration", e);
             return;
