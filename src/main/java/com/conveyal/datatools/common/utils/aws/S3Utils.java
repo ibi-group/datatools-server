@@ -10,17 +10,24 @@ import com.amazonaws.services.s3.AmazonS3ClientBuilder;
 import com.amazonaws.services.s3.model.GeneratePresignedUrlRequest;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.models.OtpServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
 import spark.Response;
 
+import java.io.File;
+import java.io.IOException;
 import java.net.URL;
 import java.util.Date;
+import java.util.UUID;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.DataManager.hasConfigProperty;
 
+/**
+ * This class contains utilities related to using AWS S3 services.
+ */
 public class S3Utils {
     private static final Logger LOG = LoggerFactory.getLogger(S3Utils.class);
 
@@ -28,11 +35,11 @@ public class S3Utils {
     private static final AWSCredentialsProvider DEFAULT_S3_CREDENTIALS;
     private static final S3ClientManagerImpl S3ClientManager;
 
-    public static String DEFAULT_BUCKET;
+    public static final String DEFAULT_BUCKET;
     public static final String DEFAULT_BUCKET_GTFS_FOLDER = "gtfs/";
 
     static {
-        // Placeholder variables needs to be used before setting the final variable to make sure initialization occurs
+        // Placeholder variables need to be used before setting the final variable to make sure initialization occurs
         AmazonS3 tempS3Client = null;
         AWSCredentialsProvider tempS3CredentialsProvider = null;
         String tempGtfsS3Bucket = null;
@@ -62,7 +69,7 @@ public class S3Utils {
                 );
             }
 
-            if (tempS3Client == null || tempS3CredentialsProvider == null) {
+            if (tempS3Client == null) {
                 throw new IllegalArgumentException("Fatal error initializing the default s3Client");
             }
             tempS3ClientManager = new S3ClientManagerImpl(tempS3Client);
@@ -81,7 +88,7 @@ public class S3Utils {
     }
 
     /**
-     * Makes a key for a object id that is assumed to be in the default bucket's GTFS folder
+     * Makes a key for an object id that is assumed to be in the default bucket's GTFS folder
      */
     public static String makeGtfsFolderObjectKey(String id) {
         return DEFAULT_BUCKET_GTFS_FOLDER + id;
@@ -191,5 +198,21 @@ public class S3Utils {
 
     public static AmazonS3 getS3Client(String role, String region) throws CheckedAWSException {
         return S3ClientManager.getClient(role, region);
+    }
+
+    public static AmazonS3 getS3Client(OtpServer server) throws CheckedAWSException {
+        return S3Utils.getS3Client(server.role, server.getRegion());
+    }
+
+    /**
+     * Verify that application can write to S3 bucket either through its own credentials or by assuming the provided IAM
+     * role. We're following the recommended approach from https://stackoverflow.com/a/17284647/915811, but perhaps
+     * there is a way to do this effectively without incurring AWS costs (although writing/deleting an empty file to S3
+     * is probably minuscule).
+     */
+    public static void verifyS3WritePermissions(AmazonS3 client, String s3Bucket) throws IOException {
+        String key = UUID.randomUUID().toString();
+        client.putObject(s3Bucket, key, File.createTempFile("test", ".zip"));
+        client.deleteObject(s3Bucket, key);
     }
 }

@@ -1,0 +1,5 @@
+{
+  "code" : 400,
+  "message" : "User test-existing-user@test.com already exists. Try updating permissions for existing user.",
+  "result" : "ERR"
+}
