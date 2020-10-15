@@ -145,4 +145,16 @@ public class OtpServer extends Model {
         );
     }
 
+    /**
+     * A MixIn to be applied to this OtpServer that will not include EC2InstanceSummaries when they are not needed in
+     * the JSON output. This will avoid making unneeded AWS requests.
+     *
+     * Usually a mixin would be used on an external class, but since we are changing one thing about a single class, it
+     * seemed unnecessary to define a new view.
+     */
+    public abstract static class OtpServerWithoutEc2Instances {
+
+        @JsonIgnore
+        public abstract List<EC2InstanceSummary> retrieveEC2InstanceSummaries();
+    }
 }

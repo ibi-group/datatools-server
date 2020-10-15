@@ -13,6 +13,7 @@ import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
+import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
@@ -343,6 +344,7 @@ public class ProjectController {
         JsonManager<Project> slimJson = new JsonManager<>(Project.class, JsonViews.UserInterface.class);
         JsonManager<Project> fullJson = new JsonManager<>(Project.class, JsonViews.UserInterface.class);
         fullJson.addMixin(Project.class, Project.ProjectWithOtpServers.class);
+        fullJson.addMixin(OtpServer.class, OtpServer.OtpServerWithoutEc2Instances.class);
 
         get(apiPrefix + "secure/project/:id", ProjectController::getProject, fullJson::write);
         get(apiPrefix + "secure/project", ProjectController::getAllProjects, slimJson::write);

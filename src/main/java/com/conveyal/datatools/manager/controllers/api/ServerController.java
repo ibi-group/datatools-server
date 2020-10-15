@@ -41,7 +41,6 @@ import static spark.Spark.put;
  * These methods are mapped to API endpoints by Spark.
  */
 public class ServerController {
-    private static final JsonManager<OtpServer> json = new JsonManager<>(OtpServer.class, JsonViews.UserInterface.class);
     private static final Logger LOG = LoggerFactory.getLogger(ServerController.class);
 
     /**
@@ -138,6 +137,25 @@ public class ServerController {
     }
 
     /**
+     * HTTP controller to fetch a single server.
+     */
+    private static OtpServer fetchServer (Request req, Response res) {
+        String serverId = req.params("id");
+        Auth0UserProfile userProfile = req.attribute("user");
+        OtpServer server = Persistence.servers.getById(serverId);
+        if (
+            server != null &&
+            server.projectId != null &&
+                !userProfile.canAdministerApplication() &&
+                !userProfile.canAdministerProject(server.projectId)
+        ) {
+            logMessageAndHalt(req, 403, "Not authorized to view this server");
+            return null;
+        }
+        return server;
+    }
+
+    /**
      * Update a single OTP server.
      */
     private static OtpServer updateServer(Request req, Response res) throws IOException {
@@ -207,12 +225,20 @@ public class ServerController {
      * Register HTTP methods with handler methods.
      */
     public static void register (String apiPrefix) {
+        // Construct JSON managers which help serialize the response. Slim JSON is used for the fetchServers method
+        // while the Full JSON also contains the ec2Instances field. This is to make sure no unnecessary requests to AWS
+        // are made.
+        JsonManager<OtpServer> slimJson = new JsonManager<>(OtpServer.class, JsonViews.UserInterface.class);
+        JsonManager<OtpServer> fullJson = new JsonManager<>(OtpServer.class, JsonViews.UserInterface.class);
+        slimJson.addMixin(OtpServer.class, OtpServer.OtpServerWithoutEc2Instances.class);
+
         options(apiPrefix + "secure/servers", (q, s) -> "");
-        delete(apiPrefix + "secure/servers/:id", ServerController::deleteServer, json::write);
-        delete(apiPrefix + "secure/servers/:id/ec2", ServerController::terminateEC2InstancesForServer, json::write);
-        get(apiPrefix + "secure/servers", ServerController::fetchServers, json::write);
-        post(apiPrefix + "secure/servers", ServerController::createServer, json::write);
-        put(apiPrefix + "secure/servers/:id", ServerController::updateServer, json::write);
+        delete(apiPrefix + "secure/servers/:id", ServerController::deleteServer, fullJson::write);
+        delete(apiPrefix + "secure/servers/:id/ec2", ServerController::terminateEC2InstancesForServer, fullJson::write);
+        get(apiPrefix + "secure/servers", ServerController::fetchServers, slimJson::write);
+        get(apiPrefix + "secure/servers/:id", ServerController::fetchServer, fullJson::write);
+        post(apiPrefix + "secure/servers", ServerController::createServer, fullJson::write);
+        put(apiPrefix + "secure/servers/:id", ServerController::updateServer, fullJson::write);
     }
 
 }
