@@ -8,17 +8,15 @@ import com.amazonaws.services.ec2.model.DescribeImagesResult;
 import com.amazonaws.services.ec2.model.Image;
 import com.amazonaws.services.ec2.model.Instance;
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.utils.aws.EC2Utils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
-import com.conveyal.datatools.manager.controllers.api.ServerController;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.TimeTracker;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
-
-import static com.conveyal.datatools.manager.models.EC2Info.AMI_CONFIG_PATH;
 
 /**
  * Job that is dispatched during a {@link DeployJob} that spins up EC2 instances. This handles waiting for a graph build
@@ -123,7 +121,7 @@ public class RecreateBuildImageJob extends MonitorableJob {
         String graphBuildAmiId = otpServer.ec2Info.buildAmiId;
         if (
             graphBuildAmiId != null &&
-                !DataManager.getConfigPropertyAsText(AMI_CONFIG_PATH).equals(graphBuildAmiId) &&
+                !EC2Utils.DEFAULT_AMI_ID.equals(graphBuildAmiId) &&
                 !graphBuildAmiId.equals(otpServer.ec2Info.amiId)
         ) {
             status.message = "Deregistering old build image";
@@ -146,7 +144,7 @@ public class RecreateBuildImageJob extends MonitorableJob {
         if (otpServer.ec2Info.hasSeparateGraphBuildConfig()) {
             status.message = "Terminating graph building instance";
             try {
-                ServerController.terminateInstances(parentDeployJob.getEC2ClientForDeployJob(), graphBuildingInstances);
+                EC2Utils.terminateInstances(parentDeployJob.getEC2ClientForDeployJob(), graphBuildingInstances);
             } catch (Exception e) {
                 status.fail(
                     "Graph build image successfully created, but failed to terminate graph building instance!",
@@ -167,7 +165,7 @@ public class RecreateBuildImageJob extends MonitorableJob {
      */
     private void terminateInstanceAndFailWithMessage(String message, Exception e) {
         try {
-            ServerController.terminateInstances(parentDeployJob.getEC2ClientForDeployJob(), graphBuildingInstances);
+            EC2Utils.terminateInstances(parentDeployJob.getEC2ClientForDeployJob(), graphBuildingInstances);
         } catch (Exception terminationException) {
             status.fail(
                 String.format("%s Also, the graph building instance failed to terminate!", message),

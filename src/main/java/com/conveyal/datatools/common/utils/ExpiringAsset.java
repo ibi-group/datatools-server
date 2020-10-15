@@ -19,4 +19,11 @@ public class ExpiringAsset<T> {
     public boolean isActive() {
         return expirationTimeMillis > System.currentTimeMillis();
     }
+
+    /**
+     * @return the amount of time that the asset is still valid for in milliseconds.
+     */
+    public long timeRemainingMillis() {
+        return expirationTimeMillis - System.currentTimeMillis();
+    }
 }

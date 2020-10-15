@@ -1,10 +1,8 @@
 package com.conveyal.datatools.editor.controllers.api;
 
 
-import com.amazonaws.AmazonServiceException;
-import com.amazonaws.services.s3.AmazonS3;
-import com.conveyal.datatools.common.utils.CheckedAWSException;
 import com.conveyal.datatools.common.utils.SparkUtils;
+import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.editor.jobs.CreateSnapshotJob;
 import com.conveyal.datatools.editor.jobs.ExportSnapshotToGTFSJob;
 import com.conveyal.datatools.manager.DataManager;
@@ -27,8 +25,6 @@ import spark.Response;
 import java.io.IOException;
 import java.util.Collection;
 
-import static com.conveyal.datatools.common.utils.AWSUtils.downloadFromS3;
-import static com.conveyal.datatools.common.utils.AWSUtils.getDefaultS3Client;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
@@ -197,7 +193,7 @@ public class SnapshotController {
         // FIXME: use new FeedStore.
         if (DataManager.useS3) {
             // Return presigned download link if using S3.
-            return downloadFromS3(DataManager.feedBucket, key, false, req, res);
+            return S3Utils.downloadObject(S3Utils.DEFAULT_BUCKET, key, false, req, res);
         } else {
             // If not storing on s3, just use the token download method.
             token = new FeedDownloadToken(snapshot);

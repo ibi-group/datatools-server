@@ -4,8 +4,8 @@ import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.ec2.model.Instance;
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
-import com.conveyal.datatools.common.utils.AWSUtils;
-import com.conveyal.datatools.common.utils.CheckedAWSException;
+import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
+import com.conveyal.datatools.common.utils.aws.EC2Utils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.EC2Info;
@@ -24,8 +24,6 @@ import java.util.Date;
 import java.util.List;
 
 import static com.conveyal.datatools.TestUtils.getBooleanEnvVar;
-import static com.conveyal.datatools.manager.controllers.api.ServerController.getIds;
-import static com.conveyal.datatools.manager.controllers.api.ServerController.terminateInstances;
 import static com.zenika.snapshotmatcher.SnapshotMatcher.matchesSnapshot;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.assertFalse;
@@ -174,9 +172,9 @@ public class DeployJobTest extends UnitTest {
     public static void cleanUp() throws AmazonServiceException, CheckedAWSException {
         assumeTrue(getBooleanEnvVar("RUN_AWS_DEPLOY_JOB_TESTS"));
         List<Instance> instances = server.retrieveEC2Instances();
-        List<String> ids = getIds(instances);
-        terminateInstances(
-            AWSUtils.getEC2Client(server.role, server.ec2Info == null ? null : server.ec2Info.region),
+        List<String> ids = EC2Utils.getIds(instances);
+        EC2Utils.terminateInstances(
+            EC2Utils.getEC2Client(server.role, server.ec2Info == null ? null : server.ec2Info.region),
             ids
         );
     }

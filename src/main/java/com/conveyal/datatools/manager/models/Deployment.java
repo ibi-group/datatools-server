@@ -1,9 +1,10 @@
 package com.conveyal.datatools.manager.models;
 
 import com.amazonaws.services.ec2.model.Filter;
-import com.conveyal.datatools.common.utils.CheckedAWSException;
+import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
+import com.conveyal.datatools.common.utils.aws.EC2Utils;
+import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
-import com.conveyal.datatools.manager.controllers.api.DeploymentController;
 import com.conveyal.datatools.manager.jobs.DeployJob;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.StringUtils;
@@ -48,8 +49,6 @@ import com.mongodb.client.FindIterable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.conveyal.datatools.common.utils.AWSUtils.getEC2Client;
-import static com.conveyal.datatools.manager.models.FeedVersion.feedStore;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 
@@ -141,8 +140,8 @@ public class Deployment extends Model implements Serializable {
                 }
             }
         }
-        return DeploymentController.fetchEC2InstanceSummaries(
-            getEC2Client(role, region),
+        return EC2Utils.fetchEC2InstanceSummaries(
+            EC2Utils.getEC2Client(role, region),
             deploymentFilter
         );
     }
@@ -556,7 +555,7 @@ public class Deployment extends Model implements Serializable {
             urls.add(getVexUrl(retrieveProjectBounds()).toString());
             // add GTFS files
             for (String feedVersionId : feedVersionIds) {
-                urls.add(feedStore.getS3FeedPath(feedVersionId));
+                urls.add(S3Utils.getS3FeedUri(feedVersionId));
             }
         }
         return new ArrayList<>(urls);

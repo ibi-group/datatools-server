@@ -1,15 +1,11 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.amazonaws.services.ec2.AmazonEC2;
-import com.amazonaws.services.ec2.model.DescribeInstancesRequest;
-import com.amazonaws.services.ec2.model.DescribeInstancesResult;
-import com.amazonaws.services.ec2.model.Filter;
-import com.amazonaws.services.ec2.model.Instance;
-import com.amazonaws.services.ec2.model.Reservation;
 import com.amazonaws.services.s3.AmazonS3URI;
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.common.utils.CheckedAWSException;
+import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.SparkUtils;
+import com.conveyal.datatools.common.utils.aws.EC2Utils;
+import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.DeployJob;
@@ -35,14 +31,11 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static com.conveyal.datatools.common.utils.AWSUtils.downloadFromS3;
-import static com.conveyal.datatools.common.utils.AWSUtils.getS3Client;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static spark.Spark.delete;
 import static spark.Spark.get;
@@ -137,8 +130,8 @@ public class DeploymentController {
         }
         AmazonS3URI uri = new AmazonS3URI(uriString);
         // Assume the alternative role if needed to download the deploy artifact.
-        return downloadFromS3(
-            getS3Client(role, region),
+        return S3Utils.downloadObject(
+            S3Utils.getS3Client(role, region),
             uri.getBucket(),
             String.join("/", uri.getKey(), filename),
             false,
@@ -370,7 +363,7 @@ public class DeploymentController {
             }
         }
         // If checks are ok, terminate instances.
-        boolean success = ServerController.deRegisterAndTerminateInstances(
+        boolean success = EC2Utils.deRegisterAndTerminateInstances(
             latest.role,
             targetGroupArn,
             latest.ec2Info.region,
@@ -392,29 +385,6 @@ public class DeploymentController {
     ) throws CheckedAWSException {
         Deployment deployment = getDeploymentWithPermissions(req, res);
         return deployment.retrieveEC2Instances();
-    }
-
-    /**
-     * Fetches list of {@link EC2InstanceSummary} for all instances matching the provided filters.
-     */
-    public static List<EC2InstanceSummary> fetchEC2InstanceSummaries(AmazonEC2 ec2Client, Filter... filters) {
-        return fetchEC2Instances(ec2Client, filters).stream().map(EC2InstanceSummary::new).collect(Collectors.toList());
-    }
-
-    /**
-     * Fetch EC2 instances from AWS that match the provided set of filters (e.g., tags, instance ID, or other properties).
-     */
-    public static List<Instance> fetchEC2Instances(AmazonEC2 ec2Client, Filter... filters) {
-        if (ec2Client == null) throw new IllegalArgumentException("Must provide EC2Client");
-        List<Instance> instances = new ArrayList<>();
-        DescribeInstancesRequest request = new DescribeInstancesRequest().withFilters(filters);
-        DescribeInstancesResult result = ec2Client.describeInstances(request);
-        for (Reservation reservation : result.getReservations()) {
-            instances.addAll(reservation.getInstances());
-        }
-        // Sort by launch time (most recent first).
-        instances.sort(Comparator.comparing(Instance::getLaunchTime).reversed());
-        return instances;
     }
 
     /**

@@ -3,7 +3,7 @@ package com.conveyal.datatools.manager.jobs;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
@@ -16,13 +16,11 @@ import java.io.File;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 
-import static com.conveyal.datatools.common.utils.AWSUtils.getDefaultS3Client;
-
 /**
  * Publish the latest GTFS files for all public feeds in a project.
  */
 public class PublishProjectFeedsJob extends MonitorableJob {
-    public static final Logger LOG = LoggerFactory.getLogger(MonitorableJob.class);
+    public static final Logger LOG = LoggerFactory.getLogger(PublishProjectFeedsJob.class);
 
     private Project project;
 
@@ -74,7 +72,7 @@ public class PublishProjectFeedsJob extends MonitorableJob {
                             status.fail("Failed to make GTFS files public on S3", e);
                             return;
                         }
-                        url = String.join("/", "https://s3.amazonaws.com", DataManager.feedBucket, fs.toPublicKey());
+                        url = S3Utils.getDefaultBucketUrlForKey(fs.toPublicKey());
                     }
                     FeedVersion latest = fs.retrieveLatest();
                     r.append("<li>");
@@ -106,9 +104,9 @@ public class PublishProjectFeedsJob extends MonitorableJob {
             e.printStackTrace();
         }
         try {
-            AmazonS3 defaultS3Client = getDefaultS3Client();
-            defaultS3Client.putObject(DataManager.feedBucket, folder + fileName, file);
-            defaultS3Client.setObjectAcl(DataManager.feedBucket, folder + fileName, CannedAccessControlList.PublicRead);
+            AmazonS3 defaultS3Client = S3Utils.getDefaultS3Client();
+            defaultS3Client.putObject(S3Utils.DEFAULT_BUCKET, folder + fileName, file);
+            defaultS3Client.setObjectAcl(S3Utils.DEFAULT_BUCKET, folder + fileName, CannedAccessControlList.PublicRead);
         } catch (Exception e) {
             status.fail("Failed to perform S3 actions", e);
             return;

@@ -1,9 +1,8 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.amazonaws.AmazonServiceException;
-import com.conveyal.datatools.common.utils.CheckedAWSException;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.common.utils.SparkUtils;
+import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.FetchProjectFeedsJob;
@@ -29,8 +28,6 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.conveyal.datatools.common.utils.AWSUtils.downloadFromS3;
-import static com.conveyal.datatools.common.utils.AWSUtils.getDefaultS3Client;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
@@ -274,7 +271,7 @@ public class ProjectController {
         if (DataManager.useS3) {
             // Return presigned download link if using S3.
             String key = String.format("project/%s.zip", project.id);
-            return downloadFromS3(DataManager.feedBucket, key, false, req, res);
+            return S3Utils.downloadObject(S3Utils.DEFAULT_BUCKET, key, false, req, res);
         } else {
             // when feeds are stored locally, single-use download token will still be used
             FeedDownloadToken token = new FeedDownloadToken(project);
