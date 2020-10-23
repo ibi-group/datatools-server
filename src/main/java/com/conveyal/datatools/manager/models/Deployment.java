@@ -46,6 +46,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import com.mongodb.client.FindIterable;
+import org.bson.codecs.pojo.annotations.BsonIgnore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -461,6 +462,8 @@ public class Deployment extends Model implements Serializable {
      * Gets the preferred extract URL for a deployment. If {@link #skipOsmExtract} is true or the osmExtractUrl or vex URL
      * is invalid, this will return null.
      */
+    @JsonIgnore
+    @BsonIgnore
     public URL getOsmExtractUrl() throws MalformedURLException {
         // Return null if deployment should skip extract.
         if (skipOsmExtract) return null;
