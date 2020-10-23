@@ -435,7 +435,7 @@ public class Deployment extends Model implements Serializable {
      * Get OSM extract from OSM extract URL (vex server or static URL) as input stream.
      */
     public InputStream downloadOsmExtract() throws IOException {
-        URL extractUrl = getOsmExtractUrl();
+        URL extractUrl = getUrlForOsmExtract();
         if (extractUrl == null) {
             throw new IllegalArgumentException("Cannot download OSM extract. Extract URL is invalid.");
         }
@@ -461,10 +461,13 @@ public class Deployment extends Model implements Serializable {
     /**
      * Gets the preferred extract URL for a deployment. If {@link #skipOsmExtract} is true or the osmExtractUrl or vex URL
      * is invalid, this will return null.
+     *
+     * Note: this method name must not be getOsmExtractUrl because {@link #osmExtractUrl} is an instance field and ignore
+     * annotations will cause it to disappear during de-/serialization.
      */
     @JsonIgnore
     @BsonIgnore
-    public URL getOsmExtractUrl() throws MalformedURLException {
+    public URL getUrlForOsmExtract() throws MalformedURLException {
         // Return null if deployment should skip extract.
         if (skipOsmExtract) return null;
         URL osmUrl = null;
@@ -579,7 +582,7 @@ public class Deployment extends Model implements Serializable {
     public List<String> generateGtfsAndOsmUrls() throws MalformedURLException {
         Set<String> urls = new HashSet<>();
         if (feedVersionIds.size() > 0) {
-            URL osmUrl = getOsmExtractUrl();
+            URL osmUrl = getUrlForOsmExtract();
             // add OSM data
             if (osmUrl != null) urls.add(osmUrl.toString());
             // add GTFS files
