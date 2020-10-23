@@ -343,7 +343,7 @@ public class Deployment extends Model implements Serializable {
             // Extract OSM and insert it into the deployment bundle
             ZipEntry e = new ZipEntry("osm.pbf");
             out.putNextEntry(e);
-            InputStream is = downloadOsmExtract(retrieveProjectBounds());
+            InputStream is = downloadOsmExtract();
             ByteStreams.copy(is, out);
             try {
                 is.close();
@@ -431,12 +431,15 @@ public class Deployment extends Model implements Serializable {
     }
 
     /**
-     * Get OSM extract from OSM vex server as input stream.
+     * Get OSM extract from OSM extract URL (vex server or static URL) as input stream.
      */
-    public static InputStream downloadOsmExtract(Rectangle2D rectangle2D) throws IOException {
-        URL vexUrl = getVexUrl(rectangle2D);
-        LOG.info("Getting OSM extract at {}", vexUrl.toString());
-        HttpURLConnection conn = (HttpURLConnection) vexUrl.openConnection();
+    public InputStream downloadOsmExtract() throws IOException {
+        URL extractUrl = getOsmExtractUrl();
+        if (extractUrl == null) {
+            throw new IllegalArgumentException("Cannot download OSM extract. Extract URL is invalid.");
+        }
+        LOG.info("Getting OSM extract at {}", extractUrl.toString());
+        HttpURLConnection conn = (HttpURLConnection) extractUrl.openConnection();
         conn.connect();
         return conn.getInputStream();
     }
@@ -452,6 +455,28 @@ public class Deployment extends Model implements Serializable {
         return new URL(String.format(Locale.ROOT, "%s/%s.pbf",
             DataManager.getConfigPropertyAsText("OSM_VEX"),
             bounds.toVexString()));
+    }
+
+    /**
+     * Gets the preferred extract URL for a deployment. If {@link #skipOsmExtract} is true or the osmExtractUrl or vex URL
+     * is invalid, this will return null.
+     */
+    public URL getOsmExtractUrl() throws MalformedURLException {
+        // Return null if deployment should skip extract.
+        if (skipOsmExtract) return null;
+        URL osmUrl = null;
+        // Otherwise, prefer the static extract URL if defined.
+        if (osmExtractUrl != null) {
+            try {
+                osmUrl = new URL(osmExtractUrl);
+            } catch (MalformedURLException e) {
+                LOG.error("Could not construct extract URL from {}", osmExtractUrl, e);
+            }
+        } else {
+            // Finally, if no custom extract URL is provided, default to a vex URL.
+            osmUrl = getVexUrl(retrieveProjectBounds());
+        }
+        return osmUrl;
     }
 
     /**
@@ -551,8 +576,9 @@ public class Deployment extends Model implements Serializable {
     public List<String> generateGtfsAndOsmUrls() throws MalformedURLException {
         Set<String> urls = new HashSet<>();
         if (feedVersionIds.size() > 0) {
+            URL osmUrl = getOsmExtractUrl();
             // add OSM data
-            urls.add(getVexUrl(retrieveProjectBounds()).toString());
+            if (osmUrl != null) urls.add(osmUrl.toString());
             // add GTFS files
             for (String feedVersionId : feedVersionIds) {
                 urls.add(S3Utils.getS3FeedUri(feedVersionId));
