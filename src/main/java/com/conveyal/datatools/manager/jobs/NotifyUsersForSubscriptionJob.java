@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.jobs;
 
+import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -16,9 +17,8 @@ import static com.conveyal.datatools.manager.utils.NotificationsUtils.sendNotifi
 /**
  * Created by landon on 6/6/16.
  */
-public class NotifyUsersForSubscriptionJob implements Runnable {
+public class NotifyUsersForSubscriptionJob extends MonitorableJob {
 
-    private static final ObjectMapper mapper = new ObjectMapper();
     public static final Logger LOG = LoggerFactory.getLogger(NotifyUsersForSubscriptionJob.class);
     private String subscriptionType;
     private String target;
@@ -27,32 +27,19 @@ public class NotifyUsersForSubscriptionJob implements Runnable {
     private static final String APPLICATION_NAME = DataManager.getConfigPropertyAsText("application.title");
     private static final String APPLICATION_URL = DataManager.getConfigPropertyAsText("application.public_url");
 
-    private NotifyUsersForSubscriptionJob(String subscriptionType, String target, String message) {
+    public NotifyUsersForSubscriptionJob(String subscriptionType, String target, String message) {
+        super();
         this.subscriptionType = subscriptionType;
         this.target = target;
         this.message = message;
     }
 
-    /**
-     * Convenience method to create and schedule a notification job to notify subscribed users.
-     */
-    public static void createNotification(String subscriptionType, String target, String message) {
+    @Override
+    public void jobLogic () {
         if (APPLICATION_URL == null || !(APPLICATION_URL.startsWith("https://") || APPLICATION_URL.startsWith("http://"))) {
             LOG.error("application.public_url (value={}) property must be set to a valid URL in order to send notifications to users.", APPLICATION_URL);
             return;
         }
-        NotifyUsersForSubscriptionJob notifyJob = new NotifyUsersForSubscriptionJob(subscriptionType, target, message);
-        DataManager.lightExecutor.execute(notifyJob);
-        LOG.info("Notification job scheduled in light executor");
-    }
-
-    @Override
-    public void run() {
-        notifyUsersForSubscription();
-    }
-
-    // TODO: modify method so that it receives both a feed param and a updateFor param?
-    private void notifyUsersForSubscription() {
         String subject;
         String html = String.format("<p>%s</p>", this.message);
         String applicationName;
@@ -65,38 +52,38 @@ public class NotifyUsersForSubscriptionJob implements Runnable {
         }
         String[] subType = this.subscriptionType.split("-");
         switch (subType[0]) {
-        case "feed":
-            FeedSource fs = Persistence.feedSources.getById(this.target);
-            // Format subject header
-            subject = String.format("%s Notification: %s (%s)", applicationName, subscriptionToString, fs.name);
-            // Add action text.
-            html += String.format("<p>View <a href='%s/feed/%s'>this feed</a>.</p>", APPLICATION_URL, fs.id);
-            break;
-        case "project":
-            Project p = Persistence.projects.getById(this.target);
-            // Format subject header
-            subject = String.format("%s Notification: %s (%s)", applicationName, subscriptionToString, p.name);
-            // Add action text.
-            html += String.format("<p>View <a href='%s/project/%s'>this project</a>.</p>", APPLICATION_URL, p.id);
-            break;
-        case "deployment":
-            Deployment deployment = Persistence.deployments.getById(this.target);
-            // Format subject header
-            subject = String.format(
-                "%s Notification: %s (%s)",
-                applicationName,
-                subscriptionToString,
-                deployment.name);
-            // Add action text.
-            html += String.format(
-                "<p>View <a href='%s/project/%s/deployments/%s'>this deployment</a>.</p>",
-                APPLICATION_URL,
-                deployment.projectId,
-                deployment.id);
-            break;
-        default:
-            LOG.warn("Notifications not supported for subscription type {}", subType[0]);
-            return;
+            case "feed":
+                FeedSource fs = Persistence.feedSources.getById(this.target);
+                // Format subject header
+                subject = String.format("%s Notification: %s (%s)", applicationName, subscriptionToString, fs.name);
+                // Add action text.
+                html += String.format("<p>View <a href='%s/feed/%s'>this feed</a>.</p>", APPLICATION_URL, fs.id);
+                break;
+            case "project":
+                Project p = Persistence.projects.getById(this.target);
+                // Format subject header
+                subject = String.format("%s Notification: %s (%s)", applicationName, subscriptionToString, p.name);
+                // Add action text.
+                html += String.format("<p>View <a href='%s/project/%s'>this project</a>.</p>", APPLICATION_URL, p.id);
+                break;
+            case "deployment":
+                Deployment deployment = Persistence.deployments.getById(this.target);
+                // Format subject header
+                subject = String.format(
+                    "%s Notification: %s (%s)",
+                    applicationName,
+                    subscriptionToString,
+                    deployment.name);
+                // Add action text.
+                html += String.format(
+                    "<p>View <a href='%s/project/%s/deployments/%s'>this deployment</a>.</p>",
+                    APPLICATION_URL,
+                    deployment.projectId,
+                    deployment.id);
+                break;
+            default:
+                LOG.warn("Notifications not supported for subscription type {}", subType[0]);
+                return;
         }
         // Add manage subscriptions blurb.
         html += String.format(

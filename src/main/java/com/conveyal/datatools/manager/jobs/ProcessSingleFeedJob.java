@@ -12,6 +12,7 @@ import com.conveyal.datatools.manager.models.transform.FeedTransformDbTarget;
 import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
 import com.conveyal.datatools.manager.models.transform.FeedTransformZipTarget;
 import com.conveyal.datatools.manager.models.transform.ZipTransformation;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -178,21 +179,38 @@ public class ProcessSingleFeedJob extends MonitorableJob {
             // TODO: Get deployment, update feed version for feed source, and kick off deployment to server that
             //  deployment is currently pointed at.
         }
-
-        // FIXME: Add notification here on in jobFinished below?
     }
 
+    /**
+     * Once the job is complete, notify subscribers and provide feedback on the job creation status.
+     */
     @Override
     public void jobFinished () {
+        String message;
         if (!status.error) {
             // Note: storing a new feed version in database is handled at completion of the ValidateFeedJob subtask.
             status.completeSuccessfully("New version saved.");
+            if (feedVersion.validationResult.errorCount > 0) {
+                message = String.format("New feed version created for %s between %s - %s. During validation, we found %s issue(s)",
+                    feedSource.name,
+                    feedVersion.validationResult.firstCalendarDate,
+                    feedVersion.validationResult.lastCalendarDate,
+                    feedVersion.validationResult.errorCount);
+            } else {
+                message = String.format("New feed version created for %s. The validation check found no issues with this new dataset!", feedSource.name);
+            }
         } else {
             // Processing did not complete. Depending on which sub-task this occurred in,
             // there may or may not have been a successful load/validation of the feed.
             String errorReason = status.exceptionType != null ? String.format("error due to %s", status.exceptionType) : "unknown error";
             LOG.warn("Error processing version {} because of {}.", feedVersion.id, errorReason);
+            message = String.format("While attempting to process a new feed version for %s, Data Tools encountered an " +
+                "unrecoverable error. More details: %s", feedSource.name, errorReason);
         }
+        // Send notification to those subscribed to feed version updates.
+        NotifyUsersForSubscriptionJob notifyUsersForSubscriptionJob
+            = new NotifyUsersForSubscriptionJob("feed-updated", feedSource.id, message);
+        notifyUsersForSubscriptionJob.run();
     }
 
 }

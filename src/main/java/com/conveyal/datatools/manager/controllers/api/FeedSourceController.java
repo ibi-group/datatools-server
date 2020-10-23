@@ -107,11 +107,12 @@ public class FeedSourceController {
             }
             // Notify project subscribers of new feed source creation.
             Project parentProject = Persistence.projects.getById(newFeedSource.projectId);
-            NotifyUsersForSubscriptionJob.createNotification(
+            NotifyUsersForSubscriptionJob notifyUsersForSubscriptionJob = new NotifyUsersForSubscriptionJob(
                 "project-updated",
                 newFeedSource.projectId,
                 String.format("New feed %s created in project %s.", newFeedSource.name, parentProject.name)
             );
+            notifyUsersForSubscriptionJob.run();
             return newFeedSource;
         } catch (Exception e) {
             logMessageAndHalt(req, 500, "Unknown error encountered creating feed source", e);
@@ -166,14 +167,16 @@ public class FeedSourceController {
         }
         Persistence.feedSources.replace(feedSourceId, updatedFeedSource);
         // Notify feed- and project-subscribed users after successful save
-        NotifyUsersForSubscriptionJob.createNotification(
+        NotifyUsersForSubscriptionJob notifyUsersForFeedSubscriptionJob = new NotifyUsersForSubscriptionJob(
             "feed-updated",
             updatedFeedSource.id,
             String.format("Feed property updated for %s.", updatedFeedSource.name));
-        NotifyUsersForSubscriptionJob.createNotification(
+        notifyUsersForFeedSubscriptionJob.run();
+        NotifyUsersForSubscriptionJob notifyUsersForProjectSubscriptionJob = new NotifyUsersForSubscriptionJob(
             "project-updated",
             updatedFeedSource.projectId,
             String.format("Project updated (feed source property changed for %s).", updatedFeedSource.name));
+        notifyUsersForProjectSubscriptionJob.run();
         return updatedFeedSource;
     }
 

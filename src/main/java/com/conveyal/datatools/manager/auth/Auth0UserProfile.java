@@ -1,7 +1,6 @@
 package com.conveyal.datatools.manager.auth;
 
 import com.conveyal.datatools.manager.DataManager;
-import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -44,10 +43,7 @@ public class Auth0UserProfile {
             }
         );
         adminDatatoolsInfo.setClientId(DataManager.getConfigPropertyAsText("AUTH0_CLIENT_ID"));
-
-        Auth0UserProfile.AppMetadata adminAppMetaData = new Auth0UserProfile.AppMetadata();
-        adminAppMetaData.setDatatoolsInfo(adminDatatoolsInfo);
-
+        Auth0UserProfile.AppMetadata adminAppMetaData = createDefaultAppMetaData();
         Auth0UserProfile adminUser = new Auth0UserProfile("mock@example.com", "user_id:string");
         adminUser.setApp_metadata(adminAppMetaData);
         return adminUser;
@@ -64,13 +60,26 @@ public class Auth0UserProfile {
             }
         );
         adminDatatoolsInfo.setClientId(DataManager.getConfigPropertyAsText("AUTH0_CLIENT_ID"));
-
-        Auth0UserProfile.AppMetadata adminAppMetaData = new Auth0UserProfile.AppMetadata();
-        adminAppMetaData.setDatatoolsInfo(adminDatatoolsInfo);
-
+        Auth0UserProfile.AppMetadata adminAppMetaData = createDefaultAppMetaData();
         Auth0UserProfile adminUser = new Auth0UserProfile("system", "user_id:system");
         adminUser.setApp_metadata(adminAppMetaData);
         return adminUser;
+    }
+
+    /**
+     * Create app meta data to be used by methods constructing an {@link Auth0UserProfile}.
+     */
+    private static Auth0UserProfile.AppMetadata createDefaultAppMetaData() {
+        Auth0UserProfile.DatatoolsInfo adminDatatoolsInfo = new Auth0UserProfile.DatatoolsInfo();
+        adminDatatoolsInfo.setPermissions(
+            new Auth0UserProfile.Permission[]{
+                new Auth0UserProfile.Permission("administer-application", new String[]{})
+            }
+        );
+        adminDatatoolsInfo.setClientId(DataManager.getConfigPropertyAsText("AUTH0_CLIENT_ID"));
+        Auth0UserProfile.AppMetadata adminAppMetaData = new Auth0UserProfile.AppMetadata();
+        adminAppMetaData.setDatatoolsInfo(adminDatatoolsInfo);
+        return adminAppMetaData;
     }
 
     public String getUser_id() {
