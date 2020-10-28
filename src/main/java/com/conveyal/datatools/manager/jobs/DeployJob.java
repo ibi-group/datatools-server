@@ -527,9 +527,7 @@ public class DeployJob extends MonitorableJob {
         deployment.deployJobSummaries.add(0, new DeploySummary(this));
         Persistence.deployments.replace(deployment.id, deployment);
         // Send notification to those subscribed to updates for the deployment.
-        NotifyUsersForSubscriptionJob notifyUsersForSubscriptionJob
-            = new NotifyUsersForSubscriptionJob("deployment-updated", deployment.id, message);
-        notifyUsersForSubscriptionJob.run();
+        NotifyUsersForSubscriptionJob.createNotification("deployment-updated", deployment.id, message);
     }
 
     /**

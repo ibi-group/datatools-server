@@ -283,7 +283,6 @@ public class FeedSource extends Model implements Cloneable {
             status.completeSuccessfully(message);
             return null;
         } else {
-            // If there is a new version, notify subscribed users about the new data and continue processing.
             version.userId = this.userId;
 
             // Update last fetched value for feed source.

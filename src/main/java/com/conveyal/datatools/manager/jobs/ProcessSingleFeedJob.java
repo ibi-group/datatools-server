@@ -5,14 +5,13 @@ import com.conveyal.datatools.editor.jobs.CreateSnapshotJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedSource;
-import com.conveyal.datatools.manager.models.transform.DbTransformation;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Snapshot;
+import com.conveyal.datatools.manager.models.transform.DbTransformation;
 import com.conveyal.datatools.manager.models.transform.FeedTransformDbTarget;
 import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
 import com.conveyal.datatools.manager.models.transform.FeedTransformZipTarget;
 import com.conveyal.datatools.manager.models.transform.ZipTransformation;
-import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,21 +28,23 @@ import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.VERSION_
  * be loaded into the GTFS database. This job acts as a parent job that chains together multiple server jobs. Loading
  * the feed and validating the feed are a part of this chain unconditionally. However, depending on which modules are
  * enabled, other jobs may be included here if desired.
- * @author mattwigway
  *
+ * @author mattwigway
  */
 public class ProcessSingleFeedJob extends MonitorableJob {
     private final FeedVersion feedVersion;
     private final boolean isNewVersion;
     private static final Logger LOG = LoggerFactory.getLogger(ProcessSingleFeedJob.class);
-    /** Following the process feed job, whether the feed version should be cloned. */
+    /**
+     * Following the process feed job, whether the feed version should be cloned.
+     */
     private final boolean shouldClone;
     private final FeedSource feedSource;
 
     /**
      * Create a job for the given feed version.
      */
-    public ProcessSingleFeedJob (FeedVersion feedVersion, Auth0UserProfile owner, boolean isNewVersion) {
+    public ProcessSingleFeedJob(FeedVersion feedVersion, Auth0UserProfile owner, boolean isNewVersion) {
         super(owner, "Processing GTFS for " + (feedVersion.parentFeedSource() != null ? feedVersion.parentFeedSource().name : "unknown feed source"), JobType.PROCESS_FEED);
         this.feedVersion = feedVersion;
         this.feedSource = feedVersion.parentFeedSource();
@@ -63,12 +64,12 @@ public class ProcessSingleFeedJob extends MonitorableJob {
      * processing is completed. This prevents clients from manipulating GTFS data before it is entirely imported.
      */
     @JsonProperty
-    public String getFeedVersionId () {
+    public String getFeedVersionId() {
         return feedVersion.id;
     }
 
     @JsonProperty
-    public String getFeedSourceId () {
+    public String getFeedSourceId() {
         return feedSource.id;
     }
 
@@ -77,24 +78,21 @@ public class ProcessSingleFeedJob extends MonitorableJob {
      * there are important secondary functions that run {@link ArbitraryTransformJob} to modify either the input GTFS
      * zip file or the resulting database representation.
      *
-     * There are a few different transformation possibilities:
-     * 1. We only have zip transformations. These can either apply directly to the imported zip
-     *    or they can apply to a cloned version of the import. In the second case, the retrieval method should be set to
-     *    VERSION_CLONE (otherwise, it can be set to any other combination of retrieval methods).
-     * 2. We only have db transformations. These will always apply to a cloned snapshot of a feed version to
-     *    prevent the feed version's namespace from having different contents from the zip file. Following this, the
-     *    snapshot can either end up hanging (i.e., not published) or once all of the transformations have been
-     *    applied, we can create a new feed version from the snapshot (retrieval method being produced in house??).
-     * 3. Let's say we have zip transformations and db transformations.
-     *    a. Zip transformations apply to imported version, db transformations apply to new snapshot or get published as
-     *       additional feed version (no big deal).
-     *    b. Zip transformations apply to cloned version, db transformations apply to snapshot or get published.
-     *       This case is a little trickier, because we could end up with two cloned_versions. Let's say we want
-     *       a SQL query to run on the original data, create a new GTFS file, and then replace a GTFS+ file from some
-     *       other version.
+     * There are a few different transformation possibilities: 1. We only have zip transformations. These can either
+     * apply directly to the imported zip or they can apply to a cloned version of the import. In the second case, the
+     * retrieval method should be set to VERSION_CLONE (otherwise, it can be set to any other combination of retrieval
+     * methods). 2. We only have db transformations. These will always apply to a cloned snapshot of a feed version to
+     * prevent the feed version's namespace from having different contents from the zip file. Following this, the
+     * snapshot can either end up hanging (i.e., not published) or once all of the transformations have been applied, we
+     * can create a new feed version from the snapshot (retrieval method being produced in house??). 3. Let's say we
+     * have zip transformations and db transformations. a. Zip transformations apply to imported version, db
+     * transformations apply to new snapshot or get published as additional feed version (no big deal). b. Zip
+     * transformations apply to cloned version, db transformations apply to snapshot or get published. This case is a
+     * little trickier, because we could end up with two cloned_versions. Let's say we want a SQL query to run on the
+     * original data, create a new GTFS file, and then replace a GTFS+ file from some other version.
      */
     @Override
-    public void jobLogic () {
+    public void jobLogic() {
         LOG.info("Processing feed for {}", feedVersion.id);
         FeedTransformRules rules = feedSource.getRulesForRetrievalMethod(feedVersion.retrievalMethod);
         boolean shouldTransform = rules != null;
@@ -185,32 +183,41 @@ public class ProcessSingleFeedJob extends MonitorableJob {
      * Once the job is complete, notify subscribers and provide feedback on the job creation status.
      */
     @Override
-    public void jobFinished () {
-        String message;
+    public void jobFinished() {
+        if (!status.error) status.completeSuccessfully("New version saved.");
+        // Send notification to those subscribed to feed version updates.
+        NotifyUsersForSubscriptionJob.createNotification(
+            "feed-updated",
+            feedSource.id,
+            getNotificationMessage(feedSource.name, status, feedVersion));
+
+    }
+
+    /**
+     * Create notification message based on the feed version validation result.
+     */
+    public static String getNotificationMessage(String feedSourceName, Status status, FeedVersion feedVersion) {
+        StringBuilder message = new StringBuilder();
         if (!status.error) {
-            // Note: storing a new feed version in database is handled at completion of the ValidateFeedJob subtask.
-            status.completeSuccessfully("New version saved.");
+            message.append(String.format("New feed version created for %s between %s - %s. ",
+                feedSourceName,
+                feedVersion.validationResult.firstCalendarDate,
+                feedVersion.validationResult.lastCalendarDate));
             if (feedVersion.validationResult.errorCount > 0) {
-                message = String.format("New feed version created for %s between %s - %s. During validation, we found %s issue(s)",
-                    feedSource.name,
-                    feedVersion.validationResult.firstCalendarDate,
-                    feedVersion.validationResult.lastCalendarDate,
-                    feedVersion.validationResult.errorCount);
+                message.append(String.format("During validation, we found %s issue(s)",
+                    feedVersion.validationResult.errorCount));
             } else {
-                message = String.format("New feed version created for %s. The validation check found no issues with this new dataset!", feedSource.name);
+                message.append("The validation check found no issues with this new dataset!");
             }
         } else {
             // Processing did not complete. Depending on which sub-task this occurred in,
             // there may or may not have been a successful load/validation of the feed.
             String errorReason = status.exceptionType != null ? String.format("error due to %s", status.exceptionType) : "unknown error";
             LOG.warn("Error processing version {} because of {}.", feedVersion.id, errorReason);
-            message = String.format("While attempting to process a new feed version for %s, Data Tools encountered an " +
-                "unrecoverable error. More details: %s", feedSource.name, errorReason);
+            message.append(String.format("While attempting to process a new feed version for %s, Data Tools encountered an " +
+                "unrecoverable error. More details: %s", feedSourceName, errorReason));
         }
-        // Send notification to those subscribed to feed version updates.
-        NotifyUsersForSubscriptionJob notifyUsersForSubscriptionJob
-            = new NotifyUsersForSubscriptionJob("feed-updated", feedSource.id, message);
-        notifyUsersForSubscriptionJob.run();
+        return message.toString();
     }
 
 }

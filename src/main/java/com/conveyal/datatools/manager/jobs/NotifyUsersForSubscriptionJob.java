@@ -1,12 +1,10 @@
 package com.conveyal.datatools.manager.jobs;
 
-import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,7 +15,7 @@ import static com.conveyal.datatools.manager.utils.NotificationsUtils.sendNotifi
 /**
  * Created by landon on 6/6/16.
  */
-public class NotifyUsersForSubscriptionJob extends MonitorableJob {
+public class NotifyUsersForSubscriptionJob implements Runnable {
 
     public static final Logger LOG = LoggerFactory.getLogger(NotifyUsersForSubscriptionJob.class);
     private String subscriptionType;
@@ -28,18 +26,31 @@ public class NotifyUsersForSubscriptionJob extends MonitorableJob {
     private static final String APPLICATION_URL = DataManager.getConfigPropertyAsText("application.public_url");
 
     public NotifyUsersForSubscriptionJob(String subscriptionType, String target, String message) {
-        super();
         this.subscriptionType = subscriptionType;
         this.target = target;
         this.message = message;
     }
 
-    @Override
-    public void jobLogic () {
+    /**
+     * Convenience method to create and schedule a notification job to notify subscribed users.
+     */
+    public static void createNotification(String subscriptionType, String target, String message) {
         if (APPLICATION_URL == null || !(APPLICATION_URL.startsWith("https://") || APPLICATION_URL.startsWith("http://"))) {
             LOG.error("application.public_url (value={}) property must be set to a valid URL in order to send notifications to users.", APPLICATION_URL);
             return;
         }
+        NotifyUsersForSubscriptionJob notifyJob = new NotifyUsersForSubscriptionJob(subscriptionType, target, message);
+        DataManager.lightExecutor.execute(notifyJob);
+        LOG.info("Notification job scheduled in light executor");
+    }
+
+    @Override
+    public void run() {
+        notifyUsersForSubscription();
+    }
+
+    // TODO: modify method so that it receives both a feed param and a updateFor param?
+    private void notifyUsersForSubscription() {
         String subject;
         String html = String.format("<p>%s</p>", this.message);
         String applicationName;
