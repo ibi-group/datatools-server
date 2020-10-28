@@ -189,18 +189,18 @@ public class ProcessSingleFeedJob extends MonitorableJob {
         NotifyUsersForSubscriptionJob.createNotification(
             "feed-updated",
             feedSource.id,
-            getNotificationMessage(feedSource.name, status, feedVersion));
-
+            this.getNotificationMessage()
+        );
     }
 
     /**
      * Create notification message based on the feed version validation result.
      */
-    public static String getNotificationMessage(String feedSourceName, Status status, FeedVersion feedVersion) {
+    public String getNotificationMessage() {
         StringBuilder message = new StringBuilder();
         if (!status.error) {
             message.append(String.format("New feed version created for %s between %s - %s. ",
-                feedSourceName,
+                feedSource.name,
                 feedVersion.validationResult.firstCalendarDate,
                 feedVersion.validationResult.lastCalendarDate));
             if (feedVersion.validationResult.errorCount > 0) {
@@ -212,10 +212,17 @@ public class ProcessSingleFeedJob extends MonitorableJob {
         } else {
             // Processing did not complete. Depending on which sub-task this occurred in,
             // there may or may not have been a successful load/validation of the feed.
-            String errorReason = status.exceptionType != null ? String.format("error due to %s", status.exceptionType) : "unknown error";
+            String errorReason = status.exceptionType != null
+                ? String.format("error due to %s", status.exceptionType)
+                : "unknown error";
             LOG.warn("Error processing version {} because of {}.", feedVersion.id, errorReason);
-            message.append(String.format("While attempting to process a new feed version for %s, Data Tools encountered an " +
-                "unrecoverable error. More details: %s", feedSourceName, errorReason));
+            message.append(
+                String.format(
+                    "While attempting to process a new feed version for %s, Data Tools encountered an unrecoverable error. More details: %s",
+                    feedSource.name,
+                    errorReason
+                )
+            );
         }
         return message.toString();
     }
