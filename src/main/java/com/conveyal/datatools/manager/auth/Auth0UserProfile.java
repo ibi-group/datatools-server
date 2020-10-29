@@ -36,40 +36,20 @@ public class Auth0UserProfile {
      * Utility method for creating a test admin (with application-admin permissions) user.
      */
     public static Auth0UserProfile createTestAdminUser() {
-        Auth0UserProfile.DatatoolsInfo adminDatatoolsInfo = new Auth0UserProfile.DatatoolsInfo();
-        adminDatatoolsInfo.setPermissions(
-            new Auth0UserProfile.Permission[]{
-                new Auth0UserProfile.Permission("administer-application", new String[]{})
-            }
-        );
-        adminDatatoolsInfo.setClientId(DataManager.getConfigPropertyAsText("AUTH0_CLIENT_ID"));
-        Auth0UserProfile.AppMetadata adminAppMetaData = createDefaultAppMetaData();
-        Auth0UserProfile adminUser = new Auth0UserProfile("mock@example.com", "user_id:string");
-        adminUser.setApp_metadata(adminAppMetaData);
-        return adminUser;
+        return createAdminUser("mock@example.com", "user_id:string");
     }
 
     /**
      * Utility method for creating a system user (for autonomous server jobs).
      */
     public static Auth0UserProfile createSystemUser() {
-        Auth0UserProfile.DatatoolsInfo adminDatatoolsInfo = new Auth0UserProfile.DatatoolsInfo();
-        adminDatatoolsInfo.setPermissions(
-            new Auth0UserProfile.Permission[]{
-                new Auth0UserProfile.Permission("administer-application", new String[]{})
-            }
-        );
-        adminDatatoolsInfo.setClientId(DataManager.getConfigPropertyAsText("AUTH0_CLIENT_ID"));
-        Auth0UserProfile.AppMetadata adminAppMetaData = createDefaultAppMetaData();
-        Auth0UserProfile adminUser = new Auth0UserProfile("system", "user_id:system");
-        adminUser.setApp_metadata(adminAppMetaData);
-        return adminUser;
+        return createAdminUser("system", "user_id:system");
     }
 
     /**
-     * Create app meta data to be used by methods constructing an {@link Auth0UserProfile}.
+     * Create an {@link Auth0UserProfile} with application admin permissions.
      */
-    private static Auth0UserProfile.AppMetadata createDefaultAppMetaData() {
+    private static Auth0UserProfile createAdminUser(String email, String userId) {
         Auth0UserProfile.DatatoolsInfo adminDatatoolsInfo = new Auth0UserProfile.DatatoolsInfo();
         adminDatatoolsInfo.setPermissions(
             new Auth0UserProfile.Permission[]{
@@ -79,7 +59,9 @@ public class Auth0UserProfile {
         adminDatatoolsInfo.setClientId(DataManager.getConfigPropertyAsText("AUTH0_CLIENT_ID"));
         Auth0UserProfile.AppMetadata adminAppMetaData = new Auth0UserProfile.AppMetadata();
         adminAppMetaData.setDatatoolsInfo(adminDatatoolsInfo);
-        return adminAppMetaData;
+        Auth0UserProfile adminUser = new Auth0UserProfile(email, userId);
+        adminUser.setApp_metadata(adminAppMetaData);
+        return adminUser;
     }
 
     public String getUser_id() {

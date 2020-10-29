@@ -188,24 +188,37 @@ public class ProcessSingleFeedJob extends MonitorableJob {
      */
     @Override
     public void jobFinished() {
-        if (!status.error) status.completeSuccessfully("New version saved.");
+        if (!status.error) {
+            status.completeSuccessfully("New version saved.");
+        } else {
+            LOG.warn("Error processing version {} because of {}.", feedVersion.id, getErrorReasonMessage());
+        }
         // Send notification to those subscribed to feed version updates.
         NotifyUsersForSubscriptionJob.createNotification(
             "feed-updated",
             feedSource.id,
-            getNotificationMessage(feedSource.name, status, feedVersion));
-
+            this.getNotificationMessage()
+        );
     }
 
     /**
-     * Create notification message based on the feed version validation result.
+     * Create error reason message based on job status.
+     */
+    private String getErrorReasonMessage() {
+        return status.exceptionType != null
+            ? String.format("error due to %s", status.exceptionType)
+            : "unknown error";
+    }
+
+    /**
+     * Create message for new feed version notification based on job status and validation result.
      */
     @JsonIgnore
-    public static String getNotificationMessage(String feedSourceName, Status status, FeedVersion feedVersion) {
+    public String getNotificationMessage() {
         StringBuilder message = new StringBuilder();
         if (!status.error) {
-            message.append(String.format("New feed version created for %s between %s - %s. ",
-                feedSourceName,
+            message.append(String.format("New feed version created for %s (valid from %s - %s). ",
+                feedSource.name,
                 feedVersion.validationResult.firstCalendarDate,
                 feedVersion.validationResult.lastCalendarDate));
             if (feedVersion.validationResult.errorCount > 0) {
@@ -217,10 +230,13 @@ public class ProcessSingleFeedJob extends MonitorableJob {
         } else {
             // Processing did not complete. Depending on which sub-task this occurred in,
             // there may or may not have been a successful load/validation of the feed.
-            String errorReason = status.exceptionType != null ? String.format("error due to %s", status.exceptionType) : "unknown error";
-            LOG.warn("Error processing version {} because of {}.", feedVersion.id, errorReason);
-            message.append(String.format("While attempting to process a new feed version for %s, Data Tools encountered an " +
-                "unrecoverable error. More details: %s", feedSourceName, errorReason));
+            message.append(
+                String.format(
+                    "While attempting to process a new feed version for %s, Data Tools encountered an unrecoverable error. More details: %s",
+                    feedSource.name,
+                    getErrorReasonMessage()
+                )
+            );
         }
         return message.toString();
     }
