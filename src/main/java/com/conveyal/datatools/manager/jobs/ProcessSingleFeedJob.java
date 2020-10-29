@@ -12,6 +12,7 @@ import com.conveyal.datatools.manager.models.transform.FeedTransformDbTarget;
 import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
 import com.conveyal.datatools.manager.models.transform.FeedTransformZipTarget;
 import com.conveyal.datatools.manager.models.transform.ZipTransformation;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -78,18 +79,21 @@ public class ProcessSingleFeedJob extends MonitorableJob {
      * there are important secondary functions that run {@link ArbitraryTransformJob} to modify either the input GTFS
      * zip file or the resulting database representation.
      *
-     * There are a few different transformation possibilities: 1. We only have zip transformations. These can either
-     * apply directly to the imported zip or they can apply to a cloned version of the import. In the second case, the
-     * retrieval method should be set to VERSION_CLONE (otherwise, it can be set to any other combination of retrieval
-     * methods). 2. We only have db transformations. These will always apply to a cloned snapshot of a feed version to
-     * prevent the feed version's namespace from having different contents from the zip file. Following this, the
-     * snapshot can either end up hanging (i.e., not published) or once all of the transformations have been applied, we
-     * can create a new feed version from the snapshot (retrieval method being produced in house??). 3. Let's say we
-     * have zip transformations and db transformations. a. Zip transformations apply to imported version, db
-     * transformations apply to new snapshot or get published as additional feed version (no big deal). b. Zip
-     * transformations apply to cloned version, db transformations apply to snapshot or get published. This case is a
-     * little trickier, because we could end up with two cloned_versions. Let's say we want a SQL query to run on the
-     * original data, create a new GTFS file, and then replace a GTFS+ file from some other version.
+     * There are a few different transformation possibilities:
+     * 1. We only have zip transformations. These can either apply directly to the imported zip
+     *    or they can apply to a cloned version of the import. In the second case, the retrieval method should be set to
+     *    VERSION_CLONE (otherwise, it can be set to any other combination of retrieval methods).
+     * 2. We only have db transformations. These will always apply to a cloned snapshot of a feed version to
+     *    prevent the feed version's namespace from having different contents from the zip file. Following this, the
+     *    snapshot can either end up hanging (i.e., not published) or once all of the transformations have been
+     *    applied, we can create a new feed version from the snapshot (retrieval method being produced in house??).
+     * 3. Let's say we have zip transformations and db transformations.
+     *    a. Zip transformations apply to imported version, db transformations apply to new snapshot or get published as
+     *       additional feed version (no big deal).
+     *    b. Zip transformations apply to cloned version, db transformations apply to snapshot or get published.
+     *       This case is a little trickier, because we could end up with two cloned_versions. Let's say we want
+     *       a SQL query to run on the original data, create a new GTFS file, and then replace a GTFS+ file from some
+     *       other version.
      */
     @Override
     public void jobLogic() {
@@ -196,6 +200,7 @@ public class ProcessSingleFeedJob extends MonitorableJob {
     /**
      * Create notification message based on the feed version validation result.
      */
+    @JsonIgnore
     public static String getNotificationMessage(String feedSourceName, Status status, FeedVersion feedVersion) {
         StringBuilder message = new StringBuilder();
         if (!status.error) {

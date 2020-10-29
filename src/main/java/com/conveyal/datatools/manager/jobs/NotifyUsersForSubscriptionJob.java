@@ -25,7 +25,7 @@ public class NotifyUsersForSubscriptionJob implements Runnable {
     private static final String APPLICATION_NAME = DataManager.getConfigPropertyAsText("application.title");
     private static final String APPLICATION_URL = DataManager.getConfigPropertyAsText("application.public_url");
 
-    public NotifyUsersForSubscriptionJob(String subscriptionType, String target, String message) {
+    private NotifyUsersForSubscriptionJob(String subscriptionType, String target, String message) {
         this.subscriptionType = subscriptionType;
         this.target = target;
         this.message = message;
