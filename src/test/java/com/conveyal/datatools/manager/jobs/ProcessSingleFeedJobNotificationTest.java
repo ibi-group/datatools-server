@@ -90,7 +90,7 @@ public class ProcessSingleFeedJobNotificationTest extends DatatoolsTest {
         processSingleFeedJob.status.error = true;
         assertThat(
             processSingleFeedJob.getNotificationMessage(),
-            equalTo("While attempting to process a new feed version for Mock Feed Source, Data Tools encountered an unrecoverable error. More details: unknown error")
+            equalTo("While attempting to process a new feed version for Mock Feed Source, an unrecoverable error was encountered. More details: unknown error")
         );
     }
 

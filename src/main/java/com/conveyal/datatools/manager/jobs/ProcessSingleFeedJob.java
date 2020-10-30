@@ -232,7 +232,7 @@ public class ProcessSingleFeedJob extends MonitorableJob {
             // there may or may not have been a successful load/validation of the feed.
             message.append(
                 String.format(
-                    "While attempting to process a new feed version for %s, Data Tools encountered an unrecoverable error. More details: %s",
+                    "While attempting to process a new feed version for %s, an unrecoverable error was encountered. More details: %s",
                     feedSource.name,
                     getErrorReasonMessage()
                 )
