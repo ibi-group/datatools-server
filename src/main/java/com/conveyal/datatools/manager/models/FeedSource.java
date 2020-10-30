@@ -8,7 +8,6 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
-import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
 import com.conveyal.datatools.manager.models.transform.FeedTransformation;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -283,8 +282,7 @@ public class FeedSource extends Model implements Cloneable {
             }
             status.completeSuccessfully(message);
             return null;
-        }
-        else {
+        } else {
             version.userId = this.userId;
 
             // Update last fetched value for feed source.
@@ -292,10 +290,6 @@ public class FeedSource extends Model implements Cloneable {
 
             // Set file timestamp according to last modified header from connection
             version.fileTimestamp = conn.getLastModified();
-            NotifyUsersForSubscriptionJob.createNotification(
-                    "feed-updated",
-                    this.id,
-                    String.format("New feed version created for %s.", this.name));
             String message = String.format("Fetch complete for %s", this.name);
             LOG.info(message);
             status.completeSuccessfully(message);
