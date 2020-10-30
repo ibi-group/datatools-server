@@ -5,6 +5,7 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.CorsFilter;
 import com.conveyal.datatools.common.utils.RequestSummary;
 import com.conveyal.datatools.common.utils.Scheduler;
+import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.editor.controllers.EditorLockController;
 import com.conveyal.datatools.editor.controllers.api.EditorControllerImpl;
 import com.conveyal.datatools.editor.controllers.api.SnapshotController;
@@ -34,13 +35,11 @@ import com.conveyal.gtfs.loader.Table;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import com.google.common.collect.EvictingQueue;
 import com.google.common.collect.Sets;
 import com.google.common.io.Resources;
 import org.apache.commons.io.Charsets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import spark.Request;
 import spark.utils.IOUtils;
 
 import javax.sql.DataSource;
@@ -56,7 +55,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.common.utils.SparkUtils.logRequest;
@@ -104,9 +102,6 @@ public class DataManager {
     // light executor is for tasks for things that should finish quickly (e.g., email notifications)
     public static Executor lightExecutor = Executors.newSingleThreadExecutor();
 
-    public static String feedBucket;
-    public static String bucketFolder;
-
     public static String repoUrl;
     public static String commit = "";
 
@@ -140,9 +135,6 @@ public class DataManager {
 
         getBugsnag();
 
-        // FIXME: hack to statically load FeedStore
-        LOG.info(FeedStore.class.getSimpleName());
-
         // Optionally set port for server. Otherwise, Spark defaults to 4567.
         if (hasConfigProperty("application.port")) {
             PORT = Integer.parseInt(getConfigPropertyAsText("application.port"));
@@ -155,9 +147,6 @@ public class DataManager {
             getConfigPropertyAsText("GTFS_DATABASE_USER"),
             getConfigPropertyAsText("GTFS_DATABASE_PASSWORD")
         );
-
-        feedBucket = getConfigPropertyAsText("application.data.gtfs_s3_bucket");
-        bucketFolder = FeedStore.s3Prefix;
 
         // create application gtfs folder if it doesn't already exist
         new File(getConfigPropertyAsText("application.data.gtfs")).mkdirs();
@@ -261,12 +250,17 @@ public class DataManager {
         }
         if (isModuleEnabled("gtfsapi")) {
             // Check that update interval (in seconds) and use_extension are specified and initialize feedUpdater.
-            if (hasConfigProperty("modules.gtfsapi.update_frequency") && hasConfigProperty("modules.gtfsapi.use_extension")) {
+            if (
+                hasConfigProperty("modules.gtfsapi.update_frequency") &&
+                    hasConfigProperty("modules.gtfsapi.use_extension")
+            ) {
                 String extensionType = getConfigPropertyAsText("modules.gtfsapi.use_extension");
                 String extensionFeedBucket = getExtensionPropertyAsText(extensionType, "s3_bucket");
                 String extensionBucketFolder = getExtensionPropertyAsText(extensionType, "s3_download_prefix");
                 int updateFrequency = getConfigProperty("modules.gtfsapi.update_frequency").asInt();
-                if (feedBucket != null && extensionBucketFolder != null) FeedUpdater.schedule(updateFrequency, extensionFeedBucket, extensionBucketFolder);
+                if (S3Utils.DEFAULT_BUCKET != null && extensionBucketFolder != null) {
+                    FeedUpdater.schedule(updateFrequency, extensionFeedBucket, extensionBucketFolder);
+                }
                 else LOG.warn("FeedUpdater not initialized. S3 bucket and folder not provided.");
             }
         }
@@ -422,6 +416,20 @@ public class DataManager {
             return null;
         }
     }
+
+    /**
+     * @return a config value (nested fields defined by dot notation "data.use_s3_storage") as text or the default value
+     * if the config value is not defined (null).
+     */
+    public static String getConfigPropertyAsText(String name, String defaultValue) {
+        JsonNode node = getConfigProperty(name);
+        if (node != null) {
+            return node.asText();
+        } else {
+            return defaultValue;
+        }
+    }
+
     public static String getExtensionPropertyAsText (String extensionType, String name) {
         return getConfigPropertyAsText(String.join(".", "extensions", extensionType.toLowerCase(), name));
     }

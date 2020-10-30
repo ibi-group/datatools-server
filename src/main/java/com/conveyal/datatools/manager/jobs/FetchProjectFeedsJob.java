@@ -4,6 +4,7 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -38,7 +39,7 @@ public class FetchProjectFeedsJob extends MonitorableJob {
         Collection<FeedSource> projectFeeds = project.retrieveProjectFeedSources();
         for(FeedSource feedSource : projectFeeds) {
             // skip feed if not fetched automatically
-            if (!FeedSource.FeedRetrievalMethod.FETCHED_AUTOMATICALLY.equals(feedSource.retrievalMethod)) {
+            if (!FeedRetrievalMethod.FETCHED_AUTOMATICALLY.equals(feedSource.retrievalMethod)) {
                 continue;
             }
             // warn if a feed is setup to be fetched automatically, but doesn't have a url defined

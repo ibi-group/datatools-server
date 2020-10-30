@@ -2,20 +2,23 @@ package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.common.utils.SparkUtils;
+import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.FetchProjectFeedsJob;
 import com.conveyal.datatools.manager.jobs.PublishProjectFeedsJob;
 import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
+import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
+import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
-import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import org.bson.Document;
+import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.Request;
@@ -26,7 +29,6 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 
-import static com.conveyal.datatools.common.utils.AWSUtils.downloadFromS3;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
@@ -216,20 +218,42 @@ public class ProjectController {
     static String mergeProjectFeeds(Request req, Response res) {
         Project project = requestProjectById(req, "view");
         Auth0UserProfile userProfile = req.attribute("user");
-        // TODO: make this an authenticated call?
+        if (!userProfile.canAdministerProject(project.id)) {
+            logMessageAndHalt(req, HttpStatus.UNAUTHORIZED_401, "Must be a project admin to merge project feeds.");
+        }
         Set<FeedVersion> feedVersions = new HashSet<>();
         // Get latest version for each feed source in project
         Collection<FeedSource> feedSources = project.retrieveProjectFeedSources();
-        for (FeedSource fs : feedSources) {
-            // check if feed version exists
-            FeedVersion version = fs.retrieveLatest();
-            if (version == null) {
-                LOG.warn("Skipping {} because it has no feed versions", fs.name);
+        for (FeedSource feedSource : feedSources) {
+            if (feedSource.retrievalMethod.equals(FeedRetrievalMethod.REGIONAL_MERGE)) {
+                LOG.warn("Skipping {} feed source because it contains the regionally merged feed.", feedSource.name);
                 continue;
             }
-            // modify feed version to use prepended feed id
-            LOG.info("Adding {} feed to merged zip", fs.name);
+            // Check if feed version exists.
+            // TODO: check that version passes baseline validation checks?
+            FeedVersion version = feedSource.retrieveLatest();
+            if (version == null) {
+                LOG.warn("Skipping {} because it has no feed versions", feedSource.name);
+                continue;
+            }
+            LOG.info("Adding {} feed to merged zip", feedSource.name);
             feedVersions.add(version);
+        }
+        // Check that the latest regionally merged feed does not already contain input feed versions.
+        if (project.regionalFeedSourceId != null) {
+            Set<String> versionIds = feedVersions.stream().map(FeedVersion::retrieveId).collect(Collectors.toSet());
+            // Check that latest merged feed version is not a copy of what has already been merged.
+            FeedSource regionalFeedSource = Persistence.feedSources.getById(project.regionalFeedSourceId);
+            if (regionalFeedSource != null) {
+                FeedVersion latest = regionalFeedSource.retrieveLatest();
+                if (latest != null && latest.inputVersions.equals(versionIds)) {
+                    logMessageAndHalt(
+                        req,
+                        HttpStatus.BAD_REQUEST_400,
+                        "Merge feeds job aborted. Regional merge already exists for latest feed versions found in project."
+                        );
+                }
+            }
         }
         MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(userProfile, feedVersions, project.id, REGIONAL);
         DataManager.heavyExecutor.execute(mergeFeedsJob);
@@ -248,7 +272,7 @@ public class ProjectController {
         if (DataManager.useS3) {
             // Return presigned download link if using S3.
             String key = String.format("project/%s.zip", project.id);
-            return downloadFromS3(FeedStore.s3Client, DataManager.feedBucket, key, false, res);
+            return S3Utils.downloadObject(S3Utils.DEFAULT_BUCKET, key, false, req, res);
         } else {
             // when feeds are stored locally, single-use download token will still be used
             FeedDownloadToken token = new FeedDownloadToken(project);
@@ -320,6 +344,7 @@ public class ProjectController {
         JsonManager<Project> slimJson = new JsonManager<>(Project.class, JsonViews.UserInterface.class);
         JsonManager<Project> fullJson = new JsonManager<>(Project.class, JsonViews.UserInterface.class);
         fullJson.addMixin(Project.class, Project.ProjectWithOtpServers.class);
+        fullJson.addMixin(OtpServer.class, OtpServer.OtpServerWithoutEc2Instances.class);
 
         get(apiPrefix + "secure/project/:id", ProjectController::getProject, fullJson::write);
         get(apiPrefix + "secure/project", ProjectController::getAllProjects, slimJson::write);

@@ -1,18 +1,11 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.services.ec2.AmazonEC2;
-import com.amazonaws.services.ec2.AmazonEC2Client;
-import com.amazonaws.services.ec2.model.DescribeInstancesRequest;
-import com.amazonaws.services.ec2.model.DescribeInstancesResult;
-import com.amazonaws.services.ec2.model.Filter;
-import com.amazonaws.services.ec2.model.Instance;
-import com.amazonaws.services.ec2.model.Reservation;
-import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3URI;
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.common.utils.AWSUtils;
+import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.SparkUtils;
+import com.conveyal.datatools.common.utils.aws.EC2Utils;
+import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.DeployJob;
@@ -23,7 +16,6 @@ import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
-import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import org.bson.Document;
@@ -39,15 +31,12 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
 
-import static com.conveyal.datatools.common.utils.AWSUtils.downloadFromS3;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
-import static com.conveyal.datatools.manager.persistence.FeedStore.getAWSCreds;
 import static spark.Spark.delete;
 import static spark.Spark.get;
 import static spark.Spark.options;
@@ -61,7 +50,6 @@ import static spark.Spark.put;
 public class DeploymentController {
     private static final Logger LOG = LoggerFactory.getLogger(DeploymentController.class);
     private static Map<String, DeployJob> deploymentJobsByServer = new HashMap<>();
-    private static final AmazonEC2 ec2 = AmazonEC2Client.builder().build();
 
     /**
      * Gets the deployment specified by the request's id parameter and ensure that user has access to the
@@ -95,11 +83,9 @@ public class DeploymentController {
     /**
      * HTTP endpoint for downloading a build artifact (e.g., otp build log or Graph.obj) from S3.
      */
-    private static String downloadBuildArtifact (Request req, Response res) {
+    private static String downloadBuildArtifact (Request req, Response res) throws CheckedAWSException {
         Deployment deployment = getDeploymentWithPermissions(req, res);
         DeployJob.DeploySummary summaryToDownload = null;
-        // Default client to use if no role was used during the deployment.
-        AmazonS3 s3Client = FeedStore.s3Client;
         String role = null;
         String region = null;
         String uriString;
@@ -144,12 +130,14 @@ public class DeploymentController {
         }
         AmazonS3URI uri = new AmazonS3URI(uriString);
         // Assume the alternative role if needed to download the deploy artifact.
-        if (role != null) {
-            s3Client = AWSUtils.getS3ClientForRole(role, region);
-        } else if (region != null) {
-            s3Client = AWSUtils.getS3ClientForCredentials(getAWSCreds(), region);
-        }
-        return downloadFromS3(s3Client, uri.getBucket(), String.join("/", uri.getKey(), filename), false, res);
+        return S3Utils.downloadObject(
+            S3Utils.getS3Client(role, region),
+            uri.getBucket(),
+            String.join("/", uri.getKey(), filename),
+            false,
+            req,
+            res
+        );
     }
 
     /**
@@ -340,7 +328,8 @@ public class DeploymentController {
      * perhaps two people somehow kicked off a deploy job for the same deployment simultaneously and one of the EC2
      * instances has out-of-date data).
      */
-    private static boolean terminateEC2InstanceForDeployment(Request req, Response res) {
+    private static boolean terminateEC2InstanceForDeployment(Request req, Response res)
+        throws CheckedAWSException {
         Deployment deployment = getDeploymentWithPermissions(req, res);
         String instanceIds = req.queryParams("instanceIds");
         if (instanceIds == null) {
@@ -355,18 +344,12 @@ public class DeploymentController {
             .collect(Collectors.toList());
         // Get the target group ARN from the latest deployment. Surround in a try/catch in case of NPEs.
         // TODO: Perhaps provide some other way to provide the target group ARN.
-        String targetGroupArn;
-        DeployJob.DeploySummary latest;
-        AWSStaticCredentialsProvider credentials;
-        try {
-            latest = deployment.latest();
-            targetGroupArn = latest.ec2Info.targetGroupArn;
-            // Also, get credentials for role (if exists), which are needed to terminate instances in external AWS account.
-            credentials = AWSUtils.getCredentialsForRole(latest.role, "deregister-instances");
-        } catch (Exception e) {
+        DeployJob.DeploySummary latest = deployment.latest();
+        if (latest == null || latest.ec2Info == null) {
             logMessageAndHalt(req, 400, "Latest deploy job does not exist or is missing target group ARN.");
             return false;
         }
+        String targetGroupArn = latest.ec2Info.targetGroupArn;
         for (String id : idsToTerminate) {
             if (!instanceIdsForDeployment.contains(id)) {
                 logMessageAndHalt(req, HttpStatus.UNAUTHORIZED_401, "It is not permitted to terminate an instance that is not associated with deployment " + deployment.id);
@@ -380,8 +363,8 @@ public class DeploymentController {
             }
         }
         // If checks are ok, terminate instances.
-        boolean success = ServerController.deRegisterAndTerminateInstances(
-            credentials,
+        boolean success = EC2Utils.deRegisterAndTerminateInstances(
+            latest.role,
             targetGroupArn,
             latest.ec2Info.region,
             idsToTerminate
@@ -396,32 +379,12 @@ public class DeploymentController {
     /**
      * HTTP controller to fetch information about provided EC2 machines that power ELBs running a trip planner.
      */
-    private static List<EC2InstanceSummary> fetchEC2InstanceSummaries(Request req, Response res) {
+    private static List<EC2InstanceSummary> fetchEC2InstanceSummaries(
+        Request req,
+        Response res
+    ) throws CheckedAWSException {
         Deployment deployment = getDeploymentWithPermissions(req, res);
         return deployment.retrieveEC2Instances();
-    }
-
-    /**
-     * Fetches list of {@link EC2InstanceSummary} for all instances matching the provided filters.
-     */
-    public static List<EC2InstanceSummary> fetchEC2InstanceSummaries(AmazonEC2 ec2Client, Filter... filters) {
-        return fetchEC2Instances(ec2Client, filters).stream().map(EC2InstanceSummary::new).collect(Collectors.toList());
-    }
-
-    /**
-     * Fetch EC2 instances from AWS that match the provided set of filters (e.g., tags, instance ID, or other properties).
-     */
-    public static List<Instance> fetchEC2Instances(AmazonEC2 ec2Client, Filter... filters) {
-        if (ec2Client == null) ec2Client = ec2;
-        List<Instance> instances = new ArrayList<>();
-        DescribeInstancesRequest request = new DescribeInstancesRequest().withFilters(filters);
-        DescribeInstancesResult result = ec2Client.describeInstances(request);
-        for (Reservation reservation : result.getReservations()) {
-            instances.addAll(reservation.getInstances());
-        }
-        // Sort by launch time (most recent first).
-        instances.sort(Comparator.comparing(Instance::getLaunchTime).reversed());
-        return instances;
     }
 
     /**

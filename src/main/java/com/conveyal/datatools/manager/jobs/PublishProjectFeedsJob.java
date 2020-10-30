@@ -1,14 +1,16 @@
 package com.conveyal.datatools.manager.jobs;
 
+import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
-import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.apache.commons.io.FileUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.File;
 import java.io.IOException;
@@ -18,6 +20,8 @@ import java.text.SimpleDateFormat;
  * Publish the latest GTFS files for all public feeds in a project.
  */
 public class PublishProjectFeedsJob extends MonitorableJob {
+    public static final Logger LOG = LoggerFactory.getLogger(PublishProjectFeedsJob.class);
+
     private Project project;
 
     public PublishProjectFeedsJob(Project project, Auth0UserProfile owner) {
@@ -62,8 +66,13 @@ public class PublishProjectFeedsJob extends MonitorableJob {
                     }
                     else {
                         // ensure latest feed is written to the s3 public folder
-                        fs.makePublic();
-                        url = String.join("/", "https://s3.amazonaws.com", DataManager.feedBucket, fs.toPublicKey());
+                        try {
+                            fs.makePublic();
+                        } catch (Exception e) {
+                            status.fail("Failed to make GTFS files public on S3", e);
+                            return;
+                        }
+                        url = S3Utils.getDefaultBucketUrlForKey(fs.toPublicKey());
                     }
                     FeedVersion latest = fs.retrieveLatest();
                     r.append("<li>");
@@ -91,14 +100,23 @@ public class PublishProjectFeedsJob extends MonitorableJob {
         try {
             FileUtils.writeStringToFile(file, output);
         } catch (IOException e) {
+            LOG.error("Failed to write string to file", e);
             e.printStackTrace();
         }
-        FeedStore.s3Client.putObject(DataManager.feedBucket, folder + fileName, file);
-        FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, folder + fileName, CannedAccessControlList.PublicRead);
+        try {
+            AmazonS3 defaultS3Client = S3Utils.getDefaultS3Client();
+            defaultS3Client.putObject(S3Utils.DEFAULT_BUCKET, folder + fileName, file);
+            defaultS3Client.setObjectAcl(S3Utils.DEFAULT_BUCKET, folder + fileName, CannedAccessControlList.PublicRead);
+        } catch (Exception e) {
+            status.fail("Failed to perform S3 actions", e);
+            return;
+        }
     }
 
     @Override
     public void jobFinished() {
-        status.completeSuccessfully("Public page updated successfully!");
+        if (!status.error) {
+            status.completeSuccessfully("Public page updated successfully!");
+        }
     }
 }

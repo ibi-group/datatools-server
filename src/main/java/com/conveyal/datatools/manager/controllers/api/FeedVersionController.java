@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.common.utils.SparkUtils;
+import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.auth.Actions;
@@ -10,13 +11,12 @@ import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
 import com.conveyal.datatools.manager.jobs.MergeFeedsType;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
+import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Snapshot;
-import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
-import com.conveyal.datatools.manager.utils.HashUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -35,7 +35,6 @@ import java.util.List;
 import java.util.HashSet;
 import java.util.Set;
 
-import static com.conveyal.datatools.common.utils.AWSUtils.downloadFromS3;
 import static com.conveyal.datatools.common.utils.SparkUtils.copyRequestStreamIntoFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
@@ -98,29 +97,18 @@ public class FeedVersionController  {
         Auth0UserProfile userProfile = req.attribute("user");
         FeedSource feedSource = requestFeedSourceById(req, Actions.MANAGE);
         FeedVersion latestVersion = feedSource.retrieveLatest();
-        FeedVersion newFeedVersion = new FeedVersion(feedSource);
-        newFeedVersion.retrievalMethod = FeedSource.FeedRetrievalMethod.MANUALLY_UPLOADED;
-
-
-        // FIXME: Make the creation of new GTFS files generic to handle other feed creation methods, including fetching
-        // by URL and loading from the editor.
-        File newGtfsFile = new File(DataManager.getConfigPropertyAsText("application.data.gtfs"), newFeedVersion.id);
+        FeedVersion newFeedVersion = new FeedVersion(feedSource, FeedRetrievalMethod.MANUALLY_UPLOADED);
+        // Get path to GTFS file for storage.
+        File newGtfsFile = FeedVersion.feedStore.getFeedFile(newFeedVersion.id);
         copyRequestStreamIntoFile(req, newGtfsFile);
         // Set last modified based on value of query param. This is determined/supplied by the client
         // request because this data gets lost in the uploadStream otherwise.
         Long lastModified = req.queryParams("lastModified") != null
             ? Long.valueOf(req.queryParams("lastModified"))
             : null;
-        if (lastModified != null) {
-            newGtfsFile.setLastModified(lastModified);
-            newFeedVersion.fileTimestamp = lastModified;
-        }
-        LOG.info("Last modified: {}", new Date(newGtfsFile.lastModified()));
+        newFeedVersion.assignGtfsFileAttributes(newGtfsFile, lastModified);
 
-        // TODO: fix FeedVersion.hash() call when called in this context. Nothing gets hashed because the file has not been saved yet.
-        // newFeedVersion.hash();
-        newFeedVersion.fileSize = newGtfsFile.length();
-        newFeedVersion.hash = HashUtils.hashFile(newGtfsFile);
+        LOG.info("Last modified: {}", new Date(newGtfsFile.lastModified()));
 
         // Check that the hashes of the feeds don't match, i.e. that the feed has changed since the last version.
         // (as long as there is a latest version, i.e. the feed source is not completely new)
@@ -220,7 +208,13 @@ public class FeedVersionController  {
 
         if (DataManager.useS3) {
             // Return pre-signed download link if using S3.
-            return downloadFromS3(FeedStore.s3Client, DataManager.feedBucket, FeedStore.s3Prefix + version.id, false, res);
+            return S3Utils.downloadObject(
+                S3Utils.DEFAULT_BUCKET,
+                S3Utils.DEFAULT_BUCKET_GTFS_FOLDER + version.id,
+                false,
+                req,
+                res
+            );
         } else {
             // when feeds are stored locally, single-use download token will still be used
             FeedDownloadToken token = new FeedDownloadToken(version);

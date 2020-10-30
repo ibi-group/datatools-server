@@ -13,20 +13,18 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.File;
 import java.io.IOException;
 import java.sql.SQLException;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.UUID;
 
 import static com.conveyal.datatools.TestUtils.assertThatFeedHasNoErrorsOfType;
 import static com.conveyal.datatools.TestUtils.assertThatSqlCountQueryYieldsExpectedCount;
-import static com.conveyal.datatools.TestUtils.assertThatSqlQueryYieldsRowCount;
 import static com.conveyal.datatools.TestUtils.createFeedVersion;
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static com.conveyal.datatools.TestUtils.zipFolderFiles;
+import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.MANUALLY_UPLOADED;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -44,6 +42,7 @@ public class MergeFeedsJobTest extends UnitTest {
     private static FeedVersion napaVersion;
     private static FeedVersion bothCalendarFilesVersion;
     private static FeedVersion bothCalendarFilesVersion2;
+    private static FeedVersion bothCalendarFilesVersion3;
     private static FeedVersion onlyCalendarVersion;
     private static FeedVersion onlyCalendarDatesVersion;
 
@@ -61,27 +60,23 @@ public class MergeFeedsJobTest extends UnitTest {
         Persistence.projects.create(project);
 
         // Bart
-        FeedSource bart = new FeedSource("BART");
-        bart.projectId = project.id;
+        FeedSource bart = new FeedSource("BART", project.id, MANUALLY_UPLOADED);
         Persistence.feedSources.create(bart);
         bartVersion1 = createFeedVersionFromGtfsZip(bart, "bart_old.zip");
         bartVersion2 = createFeedVersionFromGtfsZip(bart, "bart_new.zip");
 
         // Caltrain
-        FeedSource caltrain = new FeedSource("Caltrain");
-        caltrain.projectId = project.id;
+        FeedSource caltrain = new FeedSource("Caltrain", project.id, MANUALLY_UPLOADED);
         Persistence.feedSources.create(caltrain);
         calTrainVersion = createFeedVersionFromGtfsZip(caltrain, "caltrain_gtfs.zip");
 
         // Napa
-        FeedSource napa = new FeedSource("Napa");
-        napa.projectId = project.id;
+        FeedSource napa = new FeedSource("Napa", project.id, MANUALLY_UPLOADED);
         Persistence.feedSources.create(napa);
         napaVersion = createFeedVersionFromGtfsZip(napa, "napa-no-agency-id.zip");
 
         // Fake agencies (for testing calendar service_id merges with MTC strategy).
-        FeedSource fakeAgency = new FeedSource("Fake Agency");
-        fakeAgency.projectId = project.id;
+        FeedSource fakeAgency = new FeedSource("Fake Agency", project.id, MANUALLY_UPLOADED);
         Persistence.feedSources.create(fakeAgency);
         bothCalendarFilesVersion = createFeedVersion(
             fakeAgency,
@@ -98,6 +93,10 @@ public class MergeFeedsJobTest extends UnitTest {
         bothCalendarFilesVersion2 = createFeedVersion(
             fakeAgency,
             zipFolderFiles("fake-agency-with-calendar-and-calendar-dates-2")
+        );
+        bothCalendarFilesVersion3 = createFeedVersion(
+            fakeAgency,
+            zipFolderFiles("fake-agency-with-calendar-and-calendar-dates-3")
         );
     }
 
@@ -223,13 +222,13 @@ public class MergeFeedsJobTest extends UnitTest {
         );
 
         // - trips table
-        // expect only 2 records in trips table
+        // expect 2 + 1 = 3 records in trips table
         assertThatSqlCountQueryYieldsExpectedCount(
             String.format(
                 "SELECT count(*) FROM %s.trips",
                 mergedNamespace
             ),
-            2
+            3
         );
         // onlyCalendarDatesVersion's common_id service_id should be scoped
         assertThatSqlCountQueryYieldsExpectedCount(
@@ -239,13 +238,13 @@ public class MergeFeedsJobTest extends UnitTest {
             ),
             1
         );
-        // onlyCalendarVersion's common_id service_id should be scoped
+        // 2 trips with onlyCalendarVersion's common_id service_id should be scoped
         assertThatSqlCountQueryYieldsExpectedCount(
             String.format(
                 "SELECT count(*) FROM %s.trips WHERE service_id='Fake_Agency2:common_id'",
                 mergedNamespace
             ),
-            1
+            2
         );
     }
 
@@ -257,7 +256,7 @@ public class MergeFeedsJobTest extends UnitTest {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(bartVersion1);
         versions.add(bartVersion2);
-        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.MTC);
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.SERVICE_PERIOD);
         // Run the job in this thread (we're not concerned about concurrency here).
         mergeFeedsJob.run();
         // Result should fail.
@@ -277,7 +276,7 @@ public class MergeFeedsJobTest extends UnitTest {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(bartVersion1);
         versions.add(bartVersion2);
-        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.MTC);
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.SERVICE_PERIOD);
         // This time, turn off the failOnDuplicateTripId flag.
         mergeFeedsJob.failOnDuplicateTripId = false;
         // Result should succeed this time.
@@ -338,7 +337,7 @@ public class MergeFeedsJobTest extends UnitTest {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(bothCalendarFilesVersion);
         versions.add(onlyCalendarVersion);
-        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.MTC);
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.SERVICE_PERIOD);
         // Run the job in this thread (we're not concerned about concurrency here).
         mergeFeedsJob.run();
         assertFeedMergeSucceeded(mergeFeedsJob);
@@ -408,10 +407,10 @@ public class MergeFeedsJobTest extends UnitTest {
         );
 
         // - trips table
-        // expect only 2 records in trips table
+        // expect 2 + 1 = 3 records in trips table
         assertThatSqlCountQueryYieldsExpectedCount(
             String.format("SELECT count(*) FROM %s.trips", mergedNamespace),
-            2
+            3
         );
         // bothCalendarFilesVersion's common_id service_id should be scoped
         assertThatSqlCountQueryYieldsExpectedCount(
@@ -421,13 +420,13 @@ public class MergeFeedsJobTest extends UnitTest {
             ),
             1
         );
-        // onlyCalendarVersion's common_id service_id should not be scoped
+        // 2 trips with onlyCalendarVersion's common_id service_id should not be scoped
         assertThatSqlCountQueryYieldsExpectedCount(
             String.format(
                 "SELECT count(*) FROM %s.trips WHERE service_id='common_id'",
                 mergedNamespace
             ),
-            1
+            2
         );
     }
 
@@ -441,7 +440,7 @@ public class MergeFeedsJobTest extends UnitTest {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(onlyCalendarDatesVersion);
         versions.add(onlyCalendarVersion);
-        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.MTC);
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.SERVICE_PERIOD);
         // Run the job in this thread (we're not concerned about concurrency here).
         mergeFeedsJob.run();
         assertFeedMergeSucceeded(mergeFeedsJob);
@@ -495,10 +494,10 @@ public class MergeFeedsJobTest extends UnitTest {
         );
 
         // - trips table
-        // expect only 2 records in trips table
+        // expect 2 + 1 = 3 records in trips table
         assertThatSqlCountQueryYieldsExpectedCount(
             String.format("SELECT count(*) FROM %s.trips", mergedNamespace),
-            2
+            3
         );
         // bothCalendarFilesVersion's common_id service_id should be scoped
         assertThatSqlCountQueryYieldsExpectedCount(
@@ -508,13 +507,13 @@ public class MergeFeedsJobTest extends UnitTest {
             ),
             1
         );
-        // onlyCalendarVersion's common_id service_id should not be scoped
+        // 2 trips with onlyCalendarVersion's common_id service_id should not be scoped
         assertThatSqlCountQueryYieldsExpectedCount(
             String.format(
                 "SELECT count(*) FROM %s.trips WHERE service_id='common_id'",
                 mergedNamespace
             ),
-            1
+            2
         );
         // This fails, but if remappedReferences isn't actually needed maybe the current implementation is good-to-go
         // assertThat(mergeFeedsJob.mergeFeedsResult.remappedReferences, equalTo(1));
@@ -530,7 +529,7 @@ public class MergeFeedsJobTest extends UnitTest {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(bothCalendarFilesVersion);
         versions.add(bothCalendarFilesVersion2);
-        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.MTC);
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.SERVICE_PERIOD);
         // Run the job in this thread (we're not concerned about concurrency here).
         mergeFeedsJob.run();
         assertFeedMergeSucceeded(mergeFeedsJob);
@@ -563,6 +562,14 @@ public class MergeFeedsJobTest extends UnitTest {
             ),
             1
         );
+        // cal_to_remove service_id should be scoped for earlier feed version.
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format(
+                "SELECT count(*) FROM %s.trips WHERE service_id='Fake_Agency4:cal_to_remove'",
+                mergedNamespace
+            ),
+            1
+        );
         // Amended calendar record from earlier feed version should also have a modified end date (one day before the
         // earliest start_date from the future feed).
         assertThatSqlCountQueryYieldsExpectedCount(
@@ -585,6 +592,60 @@ public class MergeFeedsJobTest extends UnitTest {
     }
 
     /**
+     * Tests whether a MTC feed merge of two feed versions correctly removes calendar records that have overlapping
+     * service but keeps calendar_dates records that share service_id with the removed calendar and trips that reference
+     * that service_id.
+     */
+    @Test
+    public void canMergeFeedsWithMTCForServiceIds4 () throws SQLException {
+        Set<FeedVersion> versions = new HashSet<>();
+        versions.add(bothCalendarFilesVersion);
+        versions.add(bothCalendarFilesVersion3);
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.SERVICE_PERIOD);
+        // Run the job in this thread (we're not concerned about concurrency here).
+        mergeFeedsJob.run();
+        assertFeedMergeSucceeded(mergeFeedsJob);
+        // assert service_ids have been feed scoped properly
+        String mergedNamespace = mergeFeedsJob.mergedVersion.namespace;
+        // - calendar table
+        // expect a total of 3 records in calendar table
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.calendar", mergedNamespace),
+            3
+        );
+        // - calendar_dates table
+        // expect 2 records in calendar_dates table (all records from future feed removed)
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.calendar_dates", mergedNamespace),
+            3
+        );
+
+        // - trips table
+        // expect 3 records in trips table
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.trips", mergedNamespace),
+            3
+        );
+        // common_id service_id should be scoped for earlier feed version.
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format(
+                "SELECT count(*) FROM %s.trips WHERE service_id='Fake_Agency5:common_id'",
+                mergedNamespace
+            ),
+            1
+        );
+        // Amended calendar record from earlier feed version should also have a modified end date (one day before the
+        // earliest start_date from the future feed).
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format(
+                "SELECT count(*) FROM %s.calendar WHERE service_id='Fake_Agency5:common_id' AND end_date='20170914'",
+                mergedNamespace
+            ),
+            1
+        );
+    }
+
+    /**
      * Verifies that a completed merge feeds job did not fail.
      * @param mergeFeedsJob
      */
@@ -598,16 +659,10 @@ public class MergeFeedsJobTest extends UnitTest {
      * Merges a set of FeedVersions and then creates a new FeedSource and FeedVersion of the merged feed.
      */
     private FeedVersion regionallyMergeVersions(Set<FeedVersion> versions) {
-        String mergeName = UUID.randomUUID().toString();
-        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, mergeName, MergeFeedsType.REGIONAL);
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, project.id, MergeFeedsType.REGIONAL);
         // Run the job in this thread (we're not concerned about concurrency here).
         mergeFeedsJob.run();
-        // Create a new feed source/version for the merged feed, so we can easily analyze its contents.
-        FeedSource source = new FeedSource(mergeName);
-        source.projectId = project.id;
-        Persistence.feedSources.create(source);
-        File feed = FeedVersion.feedStore.getFeed(mergeName + ".zip");
-        LOG.info("Regional merged file: {}", feed.getAbsolutePath());
-        return createFeedVersion(source, feed);
+        LOG.info("Regional merged file: {}", mergeFeedsJob.mergedVersion.retrieveGtfsFile().getAbsolutePath());
+        return mergeFeedsJob.mergedVersion;
     }
 }

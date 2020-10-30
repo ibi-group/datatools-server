@@ -5,7 +5,6 @@ import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -18,7 +17,6 @@ import static com.conveyal.datatools.manager.utils.NotificationsUtils.sendNotifi
  */
 public class NotifyUsersForSubscriptionJob implements Runnable {
 
-    private static final ObjectMapper mapper = new ObjectMapper();
     public static final Logger LOG = LoggerFactory.getLogger(NotifyUsersForSubscriptionJob.class);
     private String subscriptionType;
     private String target;
@@ -65,38 +63,38 @@ public class NotifyUsersForSubscriptionJob implements Runnable {
         }
         String[] subType = this.subscriptionType.split("-");
         switch (subType[0]) {
-        case "feed":
-            FeedSource fs = Persistence.feedSources.getById(this.target);
-            // Format subject header
-            subject = String.format("%s Notification: %s (%s)", applicationName, subscriptionToString, fs.name);
-            // Add action text.
-            html += String.format("<p>View <a href='%s/feed/%s'>this feed</a>.</p>", APPLICATION_URL, fs.id);
-            break;
-        case "project":
-            Project p = Persistence.projects.getById(this.target);
-            // Format subject header
-            subject = String.format("%s Notification: %s (%s)", applicationName, subscriptionToString, p.name);
-            // Add action text.
-            html += String.format("<p>View <a href='%s/project/%s'>this project</a>.</p>", APPLICATION_URL, p.id);
-            break;
-        case "deployment":
-            Deployment deployment = Persistence.deployments.getById(this.target);
-            // Format subject header
-            subject = String.format(
-                "%s Notification: %s (%s)",
-                applicationName,
-                subscriptionToString,
-                deployment.name);
-            // Add action text.
-            html += String.format(
-                "<p>View <a href='%s/project/%s/deployments/%s'>this deployment</a>.</p>",
-                APPLICATION_URL,
-                deployment.projectId,
-                deployment.id);
-            break;
-        default:
-            LOG.warn("Notifications not supported for subscription type {}", subType[0]);
-            return;
+            case "feed":
+                FeedSource fs = Persistence.feedSources.getById(this.target);
+                // Format subject header
+                subject = String.format("%s Notification: %s (%s)", applicationName, subscriptionToString, fs.name);
+                // Add action text.
+                html += String.format("<p>View <a href='%s/feed/%s'>this feed</a>.</p>", APPLICATION_URL, fs.id);
+                break;
+            case "project":
+                Project p = Persistence.projects.getById(this.target);
+                // Format subject header
+                subject = String.format("%s Notification: %s (%s)", applicationName, subscriptionToString, p.name);
+                // Add action text.
+                html += String.format("<p>View <a href='%s/project/%s'>this project</a>.</p>", APPLICATION_URL, p.id);
+                break;
+            case "deployment":
+                Deployment deployment = Persistence.deployments.getById(this.target);
+                // Format subject header
+                subject = String.format(
+                    "%s Notification: %s (%s)",
+                    applicationName,
+                    subscriptionToString,
+                    deployment.name);
+                // Add action text.
+                html += String.format(
+                    "<p>View <a href='%s/project/%s/deployments/%s'>this deployment</a>.</p>",
+                    APPLICATION_URL,
+                    deployment.projectId,
+                    deployment.id);
+                break;
+            default:
+                LOG.warn("Notifications not supported for subscription type {}", subType[0]);
+                return;
         }
         // Add manage subscriptions blurb.
         html += String.format(

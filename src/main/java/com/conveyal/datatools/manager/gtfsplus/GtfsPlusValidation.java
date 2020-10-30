@@ -60,12 +60,13 @@ public class GtfsPlusValidation implements Serializable {
         FeedVersion feedVersion = Persistence.feedVersions.getById(feedVersionId);
         // Load the main GTFS file.
         // FIXME: Swap MapDB-backed GTFSFeed for use of SQL data?
-        String gtfsFeedDbFilePath = gtfsPlusStore.getPathToFeed(feedVersionId + ".db");
+        File gtfsFeedDbFile = gtfsPlusStore.getFeedFile(feedVersionId + ".db");
+        String gtfsFeedDbFilePath = gtfsFeedDbFile.getAbsolutePath();
         GTFSFeed gtfsFeed;
         try {
             // This check for existence must occur before GTFSFeed is instantiated (and the file must be discarded
             // immediately).
-            boolean dbExists = new File(gtfsFeedDbFilePath).isFile();
+            boolean dbExists = gtfsFeedDbFile.isFile();
             gtfsFeed = new GTFSFeed(gtfsFeedDbFilePath);
             if (!dbExists) {
                 LOG.info("Loading GTFS file into new MapDB file (.db).");
@@ -74,7 +75,7 @@ public class GtfsPlusValidation implements Serializable {
         } catch (Exception e) {
             LOG.error("MapDB file for GTFSFeed appears to be corrupted. Deleting and trying to load from zip file.", e);
             // Error loading MapDB file. Delete and try to reload.
-            new File(gtfsFeedDbFilePath).delete();
+            gtfsFeedDbFile.delete();
             new File(gtfsFeedDbFilePath + ".p").delete();
             LOG.info("Attempt #2 to load GTFS file into new MapDB file (.db).");
             gtfsFeed = new GTFSFeed(gtfsFeedDbFilePath);

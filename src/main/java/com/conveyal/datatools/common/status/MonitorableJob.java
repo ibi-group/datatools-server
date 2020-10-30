@@ -45,6 +45,7 @@ public abstract class MonitorableJob implements Runnable, Serializable {
 
     public enum JobType {
         UNKNOWN_TYPE,
+        ARBITRARY_FEED_TRANSFORM,
         BUILD_TRANSPORT_NETWORK,
         CREATE_FEEDVERSION_FROM_SNAPSHOT,
         // **** Legacy snapshot jobs
@@ -65,7 +66,8 @@ public abstract class MonitorableJob implements Runnable, Serializable {
         CONVERT_EDITOR_MAPDB_TO_SQL,
         VALIDATE_ALL_FEEDS,
         MONITOR_SERVER_STATUS,
-        MERGE_FEED_VERSIONS
+        MERGE_FEED_VERSIONS,
+        RECREATE_BUILD_IMAGE
     }
 
     public MonitorableJob(Auth0UserProfile owner, String name, JobType type) {
@@ -214,6 +216,11 @@ public abstract class MonitorableJob implements Runnable, Serializable {
             job.parentJobType = this.type;
             subJobs.add(job);
         }
+    }
+
+    /** Convenience wrapper for a {@link List} of jobs. */
+    public void addNextJob(List<MonitorableJob> jobs) {
+        for (MonitorableJob job : jobs) addNextJob(job);
     }
 
     /**

@@ -36,8 +36,8 @@ before_script:
   # Create dir for GTFS+ files (used during testing)
   - mkdir /tmp/gtfsplus
 script:
-  # run mvn package to make sure unit tests and packaging can work
-  - mvn package
+  # run mvn package (only print errors) to make sure unit tests and packaging can work
+  - mvn -q package
   # Restart/clear MongoDB so that E2E tests run on clean DB.
   - ./scripts/restart-mongo-with-fresh-db.sh
   # recursively copy coverage results into another folder so the e2e tests don't overwrite them
@@ -89,7 +89,13 @@ before_deploy:
 - ls target/*.jar
   # Copy packaged jar over to deploy dir.
 - cp target/dt-*.jar deploy/
-- cp target/dt-*.jar "deploy/dt-latest-$BRANCH_CLEAN.jar"
+  # Get the first jar file and copy it into a new file that adds the current branch name. During a
+  # merge to master, there are multiple jar files produced, but they're each effectively the same
+  # code (there may be slight differences in the version shown in the `pom.xml`, but that's not
+  # important for the purposes of creating this "latest branch" jar).
+- ALL_JARS=(target/dt-*.jar)
+- FIRST_JAR="${ALL_JARS[0]}"
+- cp "$FIRST_JAR" "deploy/dt-latest-$BRANCH_CLEAN.jar"
 deploy:
   provider: s3
   skip_cleanup: true

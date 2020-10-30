@@ -1,9 +1,10 @@
 package com.conveyal.datatools.manager.models;
 
 import com.amazonaws.services.ec2.model.Filter;
-import com.conveyal.datatools.common.utils.AWSUtils;
+import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
+import com.conveyal.datatools.common.utils.aws.EC2Utils;
+import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
-import com.conveyal.datatools.manager.controllers.api.DeploymentController;
 import com.conveyal.datatools.manager.jobs.DeployJob;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.StringUtils;
@@ -45,10 +46,10 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import com.mongodb.client.FindIterable;
+import org.bson.codecs.pojo.annotations.BsonIgnore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.conveyal.datatools.manager.models.FeedVersion.feedStore;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 
@@ -125,7 +126,7 @@ public class Deployment extends Model implements Serializable {
     }
 
     /** Fetch ec2 instances tagged with this deployment's ID. */
-    public List<EC2InstanceSummary> retrieveEC2Instances() {
+    public List<EC2InstanceSummary> retrieveEC2Instances() throws CheckedAWSException {
         if (!"true".equals(DataManager.getConfigPropertyAsText("modules.deployment.ec2.enabled"))) return Collections.EMPTY_LIST;
         Filter deploymentFilter = new Filter("tag:deploymentId", Collections.singletonList(id));
         // Check if the latest deployment used alternative credentials/AWS role.
@@ -140,8 +141,8 @@ public class Deployment extends Model implements Serializable {
                 }
             }
         }
-        return DeploymentController.fetchEC2InstanceSummaries(
-            AWSUtils.getEC2ClientForRole(role, region),
+        return EC2Utils.fetchEC2InstanceSummaries(
+            EC2Utils.getEC2Client(role, region),
             deploymentFilter
         );
     }
@@ -282,7 +283,7 @@ public class Deployment extends Model implements Serializable {
     }
 
     /**
-     * Create an empty deployment, for use with dump/restore.
+     * Create an empty deployment, for use with dump/restore and testing.
      */
     public Deployment() {
         // do nothing.
@@ -343,7 +344,7 @@ public class Deployment extends Model implements Serializable {
             // Extract OSM and insert it into the deployment bundle
             ZipEntry e = new ZipEntry("osm.pbf");
             out.putNextEntry(e);
-            InputStream is = downloadOsmExtract(retrieveProjectBounds());
+            InputStream is = downloadOsmExtract();
             ByteStreams.copy(is, out);
             try {
                 is.close();
@@ -431,12 +432,15 @@ public class Deployment extends Model implements Serializable {
     }
 
     /**
-     * Get OSM extract from OSM vex server as input stream.
+     * Get OSM extract from OSM extract URL (vex server or static URL) as input stream.
      */
-    public static InputStream downloadOsmExtract(Rectangle2D rectangle2D) throws IOException {
-        URL vexUrl = getVexUrl(rectangle2D);
-        LOG.info("Getting OSM extract at {}", vexUrl.toString());
-        HttpURLConnection conn = (HttpURLConnection) vexUrl.openConnection();
+    public InputStream downloadOsmExtract() throws IOException {
+        URL extractUrl = getUrlForOsmExtract();
+        if (extractUrl == null) {
+            throw new IllegalArgumentException("Cannot download OSM extract. Extract URL is invalid.");
+        }
+        LOG.info("Getting OSM extract at {}", extractUrl.toString());
+        HttpURLConnection conn = (HttpURLConnection) extractUrl.openConnection();
         conn.connect();
         return conn.getInputStream();
     }
@@ -452,6 +456,33 @@ public class Deployment extends Model implements Serializable {
         return new URL(String.format(Locale.ROOT, "%s/%s.pbf",
             DataManager.getConfigPropertyAsText("OSM_VEX"),
             bounds.toVexString()));
+    }
+
+    /**
+     * Gets the preferred extract URL for a deployment. If {@link #skipOsmExtract} is true or the osmExtractUrl or vex URL
+     * is invalid, this will return null.
+     *
+     * Note: this method name must not be getOsmExtractUrl because {@link #osmExtractUrl} is an instance field and ignore
+     * annotations will cause it to disappear during de-/serialization.
+     */
+    @JsonIgnore
+    @BsonIgnore
+    public URL getUrlForOsmExtract() throws MalformedURLException {
+        // Return null if deployment should skip extract.
+        if (skipOsmExtract) return null;
+        URL osmUrl = null;
+        // Otherwise, prefer the static extract URL if defined.
+        if (osmExtractUrl != null) {
+            try {
+                osmUrl = new URL(osmExtractUrl);
+            } catch (MalformedURLException e) {
+                LOG.error("Could not construct extract URL from {}", osmExtractUrl, e);
+            }
+        } else {
+            // Finally, if no custom extract URL is provided, default to a vex URL.
+            osmUrl = getVexUrl(retrieveProjectBounds());
+        }
+        return osmUrl;
     }
 
     /**
@@ -550,11 +581,14 @@ public class Deployment extends Model implements Serializable {
      */
     public List<String> generateGtfsAndOsmUrls() throws MalformedURLException {
         Set<String> urls = new HashSet<>();
-        // add OSM data
-        urls.add(getVexUrl(retrieveProjectBounds()).toString());
-        // add GTFS files
-        for (String feedVersionId : feedVersionIds) {
-            urls.add(feedStore.getS3FeedPath(feedVersionId));
+        if (feedVersionIds.size() > 0) {
+            URL osmUrl = getUrlForOsmExtract();
+            // add OSM data
+            if (osmUrl != null) urls.add(osmUrl.toString());
+            // add GTFS files
+            for (String feedVersionId : feedVersionIds) {
+                urls.add(S3Utils.getS3FeedUri(feedVersionId));
+            }
         }
         return new ArrayList<>(urls);
     }
