@@ -3,6 +3,7 @@ package com.conveyal.datatools.common.utils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.FeedExpirationNotificationJob;
 import com.conveyal.datatools.manager.jobs.FetchProjectFeedsJob;
+import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
@@ -164,16 +165,19 @@ public class Scheduler {
 
             LOG.info("Auto fetch begins in {} hours and runs every {} hours", String.valueOf(delayInMinutes / 60.0), TimeUnit.DAYS.toHours(intervalInDays));
             long intervalInMinutes = TimeUnit.DAYS.toMinutes(intervalInDays);
-            // system is defined as owner because owner field must not be null
-            FetchProjectFeedsJob fetchProjectFeedsJob = new FetchProjectFeedsJob(project, Auth0UserProfile.createSystemUser());
-            ScheduledFuture scheduledFuture = schedulerService.scheduleAtFixedRate(
-                fetchProjectFeedsJob,
-                delayInMinutes,
-                intervalInMinutes,
-                TimeUnit.MINUTES
-            );
-            ScheduledJob scheduledJob = new ScheduledJob(fetchProjectFeedsJob, scheduledFuture);
-            scheduledJobsForProjects.put(project.id, scheduledJob);
+            for (FeedSource feedSource : project.retrieveProjectFeedSources()) {
+                // system is defined as owner because owner field must not be null
+                FetchSingleFeedJob fetchSingleFeedJob = new FetchSingleFeedJob(feedSource, Auth0UserProfile.createSystemUser(), false);
+                ScheduledFuture scheduledFuture = schedulerService.scheduleAtFixedRate(
+                    // FIXME: All of these timing params need to change to reflect the frequency
+                    fetchSingleFeedJob,
+                    delayInMinutes,
+                    intervalInMinutes,
+                    feedSource.fetchFrequency
+                );
+                ScheduledJob scheduledJob = new ScheduledJob(fetchSingleFeedJob, scheduledFuture);
+                scheduledJobsForFeedSources.put(feedSource.id, scheduledJob);
+            }
         } catch (Exception e) {
             LOG.error("Error scheduling project {} feed fetch.", project.id);
             e.printStackTrace();

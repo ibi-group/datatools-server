@@ -34,6 +34,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.AWSUtils.getDefaultS3Client;
@@ -102,7 +103,7 @@ public class FeedSource extends Model implements Cloneable {
      * {@link FeedRetrievalMethod#FETCHED_AUTOMATICALLY}). Daily defaults to using time defined in
      * {@link Project#autoFetchHour}:{@link Project#autoFetchMinute}.
      */
-    public FetchFrequency fetchFrequency = FetchFrequency.DAILY;
+    public TimeUnit fetchFrequency = TimeUnit.DAYS;
 
     /**
      * When was this feed last fetched?
