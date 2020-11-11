@@ -4,7 +4,8 @@ import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.s3.model.ObjectListing;
 import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
-import com.conveyal.datatools.common.utils.CheckedAWSException;
+import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
+import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -30,7 +31,6 @@ import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-import static com.conveyal.datatools.common.utils.AWSUtils.getDefaultS3Client;
 import static com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource.AGENCY_ID_FIELDNAME;
 import static com.conveyal.datatools.common.utils.Scheduler.schedulerService;
 import static com.mongodb.client.model.Filters.and;
@@ -103,7 +103,7 @@ public class FeedUpdater {
         // iterate over feeds in download_prefix folder and register to (MTC project)
         ObjectListing gtfsList = null;
         try {
-            gtfsList = getDefaultS3Client().listObjects(feedBucket, bucketFolder);
+            gtfsList = S3Utils.getDefaultS3Client().listObjects(feedBucket, bucketFolder);
         } catch (AmazonServiceException | CheckedAWSException e) {
             LOG.error("Failed to list S3 Objects", e);
             return newTags;
@@ -209,7 +209,7 @@ public class FeedUpdater {
     ) throws AmazonServiceException, IOException, CheckedAWSException {
         String filename = keyName.split("/")[1];
         String feedId = filename.replace(".zip", "");
-        S3Object object = getDefaultS3Client().getObject(feedBucket, keyName);
+        S3Object object = S3Utils.getDefaultS3Client().getObject(feedBucket, keyName);
         InputStream in = object.getObjectContent();
         File file = new File(FeedStore.basePath, filename);
         OutputStream out = new FileOutputStream(file);

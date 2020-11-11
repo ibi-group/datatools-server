@@ -31,7 +31,7 @@ public class NotificationsUtils {
                     subject,
                     text,
                     html);
-            System.out.println(response.getResponseMessage());
+            LOG.info(response.getResponseMessage());
         } catch (Exception e) {
             LOG.error("Could not send notification to {}", to_email);
             e.printStackTrace();

@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.models;
 
+import com.conveyal.datatools.common.utils.aws.EC2Utils;
 import com.conveyal.datatools.manager.DataManager;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 
@@ -13,14 +14,11 @@ import java.io.Serializable;
 public class EC2Info implements Serializable {
     private static final long serialVersionUID = 1L;
 
-    public static final String AMI_CONFIG_PATH = "modules.deployment.ec2.default_ami";
-    public static final String DEFAULT_INSTANCE_TYPE = "t2.medium";
-
     /** Empty constructor for serialization. */
     public EC2Info () {}
     /**
      * The AWS-style instance type (e.g., t2.medium) to use for new EC2 machines. Defaults to
-     * {@link com.conveyal.datatools.manager.models.EC2Info#DEFAULT_INSTANCE_TYPE} if null during deployment.
+     * {@link EC2Utils#DEFAULT_INSTANCE_TYPE} if null during deployment.
      */
     public String instanceType;
     /** Number of instances to spin up and add to target group. If zero, defaults to 1. */
@@ -31,7 +29,7 @@ public class EC2Info implements Serializable {
     public String securityGroupId;
     /**
      * The Amazon machine image (AMI) to be used for the OTP EC2 machines. Defaults to the app config value at
-     * {@link com.conveyal.datatools.manager.models.EC2Info#AMI_CONFIG_PATH} if null during deployment.
+     * {@link EC2Utils#AMI_CONFIG_PATH} if null during deployment.
      */
     public String amiId;
     /**
@@ -89,7 +87,7 @@ public class EC2Info implements Serializable {
         } else if (amiId != null) {
             return amiId;
         } else {
-            return DataManager.getConfigPropertyAsText(AMI_CONFIG_PATH);
+            return EC2Utils.DEFAULT_AMI_ID;
         }
     }
 
@@ -105,7 +103,7 @@ public class EC2Info implements Serializable {
         } else if (instanceType != null) {
             return instanceType;
         } else {
-            return DEFAULT_INSTANCE_TYPE;
+            return EC2Utils.DEFAULT_INSTANCE_TYPE;
         }
     }
 }

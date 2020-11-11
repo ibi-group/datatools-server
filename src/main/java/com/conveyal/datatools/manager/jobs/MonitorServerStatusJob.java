@@ -235,7 +235,6 @@ public class MonitorServerStatusJob extends MonitorableJob {
      * job should be failed.
      */
     private void waitAndCheckInstanceHealth(String waitingFor) throws InstanceHealthException, InterruptedException {
-        checkInstanceHealth(1);
         LOG.info("Waiting {} seconds for {}", DELAY_SECONDS, waitingFor);
         Thread.sleep(1000 * DELAY_SECONDS);
         checkInstanceHealth(1);

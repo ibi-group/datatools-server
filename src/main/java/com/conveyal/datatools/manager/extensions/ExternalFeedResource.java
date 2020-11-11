@@ -1,6 +1,6 @@
 package com.conveyal.datatools.manager.extensions;
 
-import com.conveyal.datatools.common.utils.CheckedAWSException;
+import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;

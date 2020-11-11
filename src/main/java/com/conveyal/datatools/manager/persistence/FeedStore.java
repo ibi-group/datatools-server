@@ -9,7 +9,8 @@ import com.amazonaws.services.s3.model.S3Object;
 import com.amazonaws.services.s3.transfer.TransferManager;
 import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
 import com.amazonaws.services.s3.transfer.Upload;
-import com.conveyal.datatools.common.utils.CheckedAWSException;
+import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
+import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.google.common.io.ByteStreams;
@@ -24,9 +25,6 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 
-import static com.conveyal.datatools.common.utils.AWSUtils.getDefaultS3Client;
-import static com.conveyal.datatools.manager.DataManager.hasConfigProperty;
-
 /**
  * Store a feed on the file system or S3.
  * @author mattwigway
@@ -39,20 +37,6 @@ public class FeedStore {
     /** Local file storage path if working offline */
     public static final File basePath = new File(DataManager.getConfigPropertyAsText("application.data.gtfs"));
     private final File path;
-    /** An optional AWS S3 bucket to store the feeds */
-    private static String s3Bucket;
-
-    public static final String s3Prefix = "gtfs/";
-
-    static {
-        // s3 storage
-        if (DataManager.useS3 || hasConfigProperty("modules.gtfsapi.use_extension")){
-            s3Bucket = DataManager.getConfigPropertyAsText("application.data.gtfs_s3_bucket");
-            if (s3Bucket == null) {
-                throw new IllegalArgumentException("Fatal error initializing s3Bucket or s3Client");
-            }
-        }
-    }
 
     public FeedStore() {
         this(null);
@@ -82,7 +66,7 @@ public class FeedStore {
     public void deleteFeed (String id) throws CheckedAWSException {
         // If the application is using s3 storage, delete the remote copy.
         if (DataManager.useS3){
-            getDefaultS3Client().deleteObject(s3Bucket, getS3Key(id));
+            S3Utils.getDefaultS3Client().deleteObject(S3Utils.DEFAULT_BUCKET, S3Utils.makeGtfsFolderObjectKey(id));
         }
         // Always delete local copy (whether storing exclusively on local disk or using s3).
         File feed = getLocalFeed(id);
@@ -90,10 +74,6 @@ public class FeedStore {
             boolean deleted = feed.delete();
             if (!deleted) LOG.warn("GTFS file {} not deleted. This may contribute to storage space shortages.", feed.getAbsolutePath());
         }
-    }
-
-    private static String getS3Key (String id) {
-        return s3Prefix + id;
     }
 
     /**
@@ -112,13 +92,13 @@ public class FeedStore {
         if (feed != null) return feed;
         // s3 storage
         if (DataManager.useS3) {
-            String key = getS3Key(id);
-            String uri = String.format("s3://%s/%s", s3Bucket, key);
+            String key = S3Utils.makeGtfsFolderObjectKey(id);
+            String uri = S3Utils.getDefaultBucketUriForKey(key);
             LOG.info("Downloading feed from {}", uri);
             InputStream objectData;
             try {
-                S3Object object = getDefaultS3Client().getObject(
-                    new GetObjectRequest(s3Bucket, key));
+                S3Object object = S3Utils.getDefaultS3Client().getObject(
+                    new GetObjectRequest(S3Utils.DEFAULT_BUCKET, key));
                 objectData = object.getObjectContent();
             } catch (AmazonServiceException | CheckedAWSException e) {
                 LOG.error("Error downloading " + uri, e);
@@ -133,10 +113,6 @@ public class FeedStore {
             }
         }
         return null;
-    }
-
-    public String getS3FeedPath (String id) {
-        return String.format("s3://%s/%s", s3Bucket, getS3Key(id));
     }
 
     /**
@@ -196,11 +172,11 @@ public class FeedStore {
      * Synchronously upload the GTFS file to S3. This should only be called as part of the FeedVersion load stage.
      */
     public boolean uploadToS3 (File gtfsFile, String s3FileName, FeedSource feedSource) {
-        if (s3Bucket != null) {
+        if (S3Utils.DEFAULT_BUCKET != null) {
             try {
                 LOG.info("Uploading feed {} to S3 from {}", s3FileName, gtfsFile.getAbsolutePath());
-                TransferManager tm = TransferManagerBuilder.standard().withS3Client(getDefaultS3Client()).build();
-                PutObjectRequest request = new PutObjectRequest(s3Bucket, getS3Key(s3FileName), gtfsFile);
+                TransferManager tm = TransferManagerBuilder.standard().withS3Client(S3Utils.getDefaultS3Client()).build();
+                PutObjectRequest request = new PutObjectRequest(S3Utils.DEFAULT_BUCKET, S3Utils.makeGtfsFolderObjectKey(s3FileName), gtfsFile);
                 // Subscribe to the event and provide event handler.
                 TLongList transferredBytes = new TLongArrayList();
                 long totalBytes = gtfsFile.length();
@@ -236,10 +212,14 @@ public class FeedStore {
                     LOG.info("Copying feed on s3 to latest version");
 
                     // copy to [feedSourceId].zip
-                    String copyKey = s3Prefix + feedSource.id + ".zip";
+                    String copyKey = S3Utils.DEFAULT_BUCKET_GTFS_FOLDER + feedSource.id + ".zip";
                     CopyObjectRequest copyObjRequest = new CopyObjectRequest(
-                            s3Bucket, getS3Key(s3FileName), s3Bucket, copyKey);
-                    getDefaultS3Client().copyObject(copyObjRequest);
+                        S3Utils.DEFAULT_BUCKET,
+                        S3Utils.makeGtfsFolderObjectKey(s3FileName),
+                        S3Utils.DEFAULT_BUCKET,
+                        copyKey
+                    );
+                    S3Utils.getDefaultS3Client().copyObject(copyObjRequest);
                 }
                 return true;
             } catch (AmazonServiceException | CheckedAWSException e) {

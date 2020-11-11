@@ -5,13 +5,14 @@ import com.conveyal.datatools.editor.jobs.CreateSnapshotJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedSource;
-import com.conveyal.datatools.manager.models.transform.DbTransformation;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Snapshot;
+import com.conveyal.datatools.manager.models.transform.DbTransformation;
 import com.conveyal.datatools.manager.models.transform.FeedTransformDbTarget;
 import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
 import com.conveyal.datatools.manager.models.transform.FeedTransformZipTarget;
 import com.conveyal.datatools.manager.models.transform.ZipTransformation;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,21 +29,23 @@ import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.VERSION_
  * be loaded into the GTFS database. This job acts as a parent job that chains together multiple server jobs. Loading
  * the feed and validating the feed are a part of this chain unconditionally. However, depending on which modules are
  * enabled, other jobs may be included here if desired.
- * @author mattwigway
  *
+ * @author mattwigway
  */
 public class ProcessSingleFeedJob extends MonitorableJob {
     private final FeedVersion feedVersion;
     private final boolean isNewVersion;
     private static final Logger LOG = LoggerFactory.getLogger(ProcessSingleFeedJob.class);
-    /** Following the process feed job, whether the feed version should be cloned. */
+    /**
+     * Following the process feed job, whether the feed version should be cloned.
+     */
     private final boolean shouldClone;
     private final FeedSource feedSource;
 
     /**
      * Create a job for the given feed version.
      */
-    public ProcessSingleFeedJob (FeedVersion feedVersion, Auth0UserProfile owner, boolean isNewVersion) {
+    public ProcessSingleFeedJob(FeedVersion feedVersion, Auth0UserProfile owner, boolean isNewVersion) {
         super(owner, "Processing GTFS for " + (feedVersion.parentFeedSource() != null ? feedVersion.parentFeedSource().name : "unknown feed source"), JobType.PROCESS_FEED);
         this.feedVersion = feedVersion;
         this.feedSource = feedVersion.parentFeedSource();
@@ -62,12 +65,12 @@ public class ProcessSingleFeedJob extends MonitorableJob {
      * processing is completed. This prevents clients from manipulating GTFS data before it is entirely imported.
      */
     @JsonProperty
-    public String getFeedVersionId () {
+    public String getFeedVersionId() {
         return feedVersion.id;
     }
 
     @JsonProperty
-    public String getFeedSourceId () {
+    public String getFeedSourceId() {
         return feedSource.id;
     }
 
@@ -93,7 +96,7 @@ public class ProcessSingleFeedJob extends MonitorableJob {
      *       other version.
      */
     @Override
-    public void jobLogic () {
+    public void jobLogic() {
         LOG.info("Processing feed for {}", feedVersion.id);
         FeedTransformRules rules = feedSource.getRulesForRetrievalMethod(feedVersion.retrievalMethod);
         boolean shouldTransform = rules != null;
@@ -180,17 +183,62 @@ public class ProcessSingleFeedJob extends MonitorableJob {
         }
     }
 
+    /**
+     * Once the job is complete, notify subscribers and provide feedback on the job creation status.
+     */
     @Override
-    public void jobFinished () {
+    public void jobFinished() {
         if (!status.error) {
-            // Note: storing a new feed version in database is handled at completion of the ValidateFeedJob subtask.
             status.completeSuccessfully("New version saved.");
+        } else {
+            LOG.warn("Error processing version {} because of {}.", feedVersion.id, getErrorReasonMessage());
+        }
+        // Send notification to those subscribed to feed version updates.
+        NotifyUsersForSubscriptionJob.createNotification(
+            "feed-updated",
+            feedSource.id,
+            this.getNotificationMessage()
+        );
+    }
+
+    /**
+     * Create error reason message based on job status.
+     */
+    private String getErrorReasonMessage() {
+        return status.exceptionType != null
+            ? String.format("error due to %s", status.exceptionType)
+            : "unknown error";
+    }
+
+    /**
+     * Create message for new feed version notification based on job status and validation result.
+     */
+    @JsonIgnore
+    public String getNotificationMessage() {
+        StringBuilder message = new StringBuilder();
+        if (!status.error) {
+            message.append(String.format("New feed version created for %s (valid from %s - %s). ",
+                feedSource.name,
+                feedVersion.validationResult.firstCalendarDate,
+                feedVersion.validationResult.lastCalendarDate));
+            if (feedVersion.validationResult.errorCount > 0) {
+                message.append(String.format("During validation, we found %s issue(s)",
+                    feedVersion.validationResult.errorCount));
+            } else {
+                message.append("The validation check found no issues with this new dataset!");
+            }
         } else {
             // Processing did not complete. Depending on which sub-task this occurred in,
             // there may or may not have been a successful load/validation of the feed.
-            String errorReason = status.exceptionType != null ? String.format("error due to %s", status.exceptionType) : "unknown error";
-            LOG.warn("Error processing version {} because of {}.", feedVersion.id, errorReason);
+            message.append(
+                String.format(
+                    "While attempting to process a new feed version for %s, an unrecoverable error was encountered. More details: %s",
+                    feedSource.name,
+                    getErrorReasonMessage()
+                )
+            );
         }
+        return message.toString();
     }
 
 }

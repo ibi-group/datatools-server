@@ -1,4 +1,4 @@
-package com.conveyal.datatools.common.utils;
+package com.conveyal.datatools.common.utils.aws;
 
 import com.amazonaws.AmazonServiceException;
 

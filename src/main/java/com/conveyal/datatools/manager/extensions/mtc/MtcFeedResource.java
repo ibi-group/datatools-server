@@ -2,7 +2,8 @@ package com.conveyal.datatools.manager.extensions.mtc;
 
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.s3.model.PutObjectRequest;
-import com.conveyal.datatools.common.utils.CheckedAWSException;
+import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
+import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
@@ -22,7 +23,6 @@ import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Collection;
 
-import static com.conveyal.datatools.common.utils.AWSUtils.getDefaultS3Client;
 import static com.conveyal.datatools.manager.models.ExternalFeedSourceProperty.constructId;
 
 /**
@@ -190,7 +190,7 @@ public class MtcFeedResource implements ExternalFeedResource {
         LOG.info("Pushing to MTC S3 Bucket: s3://{}/{}", s3Bucket, keyName);
         File file = feedVersion.retrieveGtfsFile();
         try {
-            getDefaultS3Client().putObject(new PutObjectRequest(s3Bucket, keyName, file));
+            S3Utils.getDefaultS3Client().putObject(new PutObjectRequest(s3Bucket, keyName, file));
         } catch (Exception e) {
             LOG.error("Could not upload feed version to s3.");
             e.printStackTrace();

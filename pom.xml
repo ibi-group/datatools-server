@@ -6,7 +6,7 @@
 
     <groupId>com.conveyal</groupId>
     <artifactId>datatools-server</artifactId>
-    <version>3.7.1-SNAPSHOT</version>
+    <version>3.8.1-SNAPSHOT</version>
 
     <licenses>
         <license>
@@ -239,7 +239,7 @@
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
-            <version>4.12</version>
+            <version>4.13.1</version>
             <scope>test</scope>
         </dependency>
 
@@ -250,7 +250,7 @@
         <dependency>
             <groupId>com.conveyal</groupId>
             <artifactId>gtfs-lib</artifactId>
-            <version>6.0.4</version>
+            <version>6.1.0</version>
             <!-- Exclusions added in order to silence SLF4J warnings about multiple bindings:
                 http://www.slf4j.org/codes.html#multiple_bindings
             -->
