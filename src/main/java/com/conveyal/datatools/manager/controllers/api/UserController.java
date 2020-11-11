@@ -44,6 +44,7 @@ import java.util.List;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.auth.Auth0Users.API_PATH;
 import static com.conveyal.datatools.manager.auth.Auth0Connection.authDisabled;
+import static com.conveyal.datatools.manager.auth.Auth0Users.DEFAULT_PER_PAGE;
 import static com.conveyal.datatools.manager.auth.Auth0Users.USERS_API_PATH;
 import static com.conveyal.datatools.manager.auth.Auth0Users.getAuth0Users;
 import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
@@ -92,8 +93,9 @@ public class UserController {
     private static String getAllUsers(Request req, Response res) {
         res.type("application/json");
         int page = Integer.parseInt(req.queryParams("page"));
+        int perPage = Integer.parseInt(req.queryParamOrDefault("perPage", Integer.toString(DEFAULT_PER_PAGE)));
         String queryString = filterUserSearchQuery(req);
-        String users = getAuth0Users(queryString, page);
+        String users = getAuth0Users(queryString, page, perPage);
         return users;
     }
 

@@ -40,6 +40,7 @@ public class Auth0Users {
     private static final String SEARCH_API_VERSION = "v3";
     public static final String API_PATH = "/api/" + MANAGEMENT_API_VERSION;
     public static final String USERS_API_PATH = API_PATH + "/users";
+    public static final int DEFAULT_PER_PAGE = 10;
     // Cached API token so that we do not have to request a new one each time a Management API request is made.
     private static Auth0AccessToken cachedToken = null;
     private static final ObjectMapper mapper = new ObjectMapper();
@@ -48,20 +49,20 @@ public class Auth0Users {
     /**
      * Overload of user search query URL to restrict search to current users only.
      */
-    private static URI getUrl(String searchQuery, int page, int perPage, boolean includeTotals) {
-        return getUrl(searchQuery, page, perPage, includeTotals, true);
+    private static URI getSearchUrl(String searchQuery, int page, int perPage, boolean includeTotals) {
+        return getSearchUrl(searchQuery, page, perPage, includeTotals, true);
     }
 
     /**
      * Constructs a user search query URL.
      * @param searchQuery   search query to perform (null value implies default query)
      * @param page          which page of users to return
-     * @param perPage       number of users to return per page
+     * @param perPage       number of users to return per page (limited to 1000)
      * @param includeTotals whether to include the total number of users in search results
      * @param limitToCurrentUsers whether to restrict the search to current users only
      * @return              URI to perform the search query
      */
-    private static URI getUrl(String searchQuery, int page, int perPage, boolean includeTotals, boolean limitToCurrentUsers) {
+    private static URI getSearchUrl(String searchQuery, int page, int perPage, boolean includeTotals, boolean limitToCurrentUsers) {
         // Filter users by datatools client_id, unless excluded (by limitToCurrentUsers) and a search query is provided.
         // This allows for a less restricted, wider search to be carried out on tenant users.
         String searchCurrentUsersOnly = "app_metadata.datatools.client_id:" + clientId;
@@ -223,8 +224,15 @@ public class Auth0Users {
      * @return JSON string of users matching search query
      */
     public static String getAuth0Users(String searchQuery, int page) {
+        return getAuth0Users(searchQuery, page, DEFAULT_PER_PAGE);
+    }
 
-        URI uri = getUrl(searchQuery, page, 10, false);
+    /**
+     * Wrapper method for performing user search.
+     * @return JSON string of users matching search query
+     */
+    public static String getAuth0Users(String searchQuery, int page, int perPage) {
+        URI uri = getSearchUrl(searchQuery, page, perPage, false);
         return doRequest(uri);
     }
 
@@ -235,7 +243,7 @@ public class Auth0Users {
      * @return JSON string of users matching search query.
      */
     public static String getUnrestrictedAuth0Users(String searchQuery) {
-        URI uri = getUrl(searchQuery, 0, 10, false, false);
+        URI uri = getSearchUrl(searchQuery, 0, DEFAULT_PER_PAGE, false, false);
         return doRequest(uri);
     }
 
@@ -280,7 +288,7 @@ public class Auth0Users {
      */
     private static URIBuilder getURIBuilder() {
         URIBuilder builder = new URIBuilder();
-        if (AUTH0_DOMAIN.equals("your-auth0-domain")) {
+        if ("your-auth0-domain".equals(AUTH0_DOMAIN)) {
             // set items for testing purposes assuming use of a Wiremock server
             builder.setScheme("http");
             builder.setPort(8089);
@@ -315,7 +323,7 @@ public class Auth0Users {
                 continue;
             }
             String email = user.get("email").asText();
-            Boolean emailVerified = user.get("email_verified").asBoolean();
+            boolean emailVerified = user.get("email_verified").asBoolean();
             // only send email if address has been verified
             if (!emailVerified) {
                 LOG.warn("Skipping user {}. User's email address has not been verified.", email);
@@ -331,7 +339,7 @@ public class Auth0Users {
      * Get number of users for the application.
      */
     public static int getAuth0UserCount(String searchQuery) throws IOException {
-        URI uri = getUrl(searchQuery, 0, 1, true);
+        URI uri = getSearchUrl(searchQuery, 0, 1, true);
         String result = doRequest(uri);
         JsonNode jsonNode = new ObjectMapper().readTree(result);
         return jsonNode.get("total").asInt();
