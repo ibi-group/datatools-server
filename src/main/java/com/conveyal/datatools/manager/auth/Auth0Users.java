@@ -40,7 +40,7 @@ public class Auth0Users {
     private static final String SEARCH_API_VERSION = "v3";
     public static final String API_PATH = "/api/" + MANAGEMENT_API_VERSION;
     public static final String USERS_API_PATH = API_PATH + "/users";
-    public static final int DEFAULT_PER_PAGE = 10;
+    public static final int DEFAULT_ITEMS_PER_PAGE = 10;
     // Cached API token so that we do not have to request a new one each time a Management API request is made.
     private static Auth0AccessToken cachedToken = null;
     private static final ObjectMapper mapper = new ObjectMapper();
@@ -57,7 +57,8 @@ public class Auth0Users {
      * Constructs a user search query URL.
      * @param searchQuery   search query to perform (null value implies default query)
      * @param page          which page of users to return
-     * @param perPage       number of users to return per page (limited to 1000)
+     * @param perPage       number of users to return per page. Max value is 1000 per Auth0 docs:
+     *                      https://auth0.com/docs/users/user-search/view-search-results-by-page#limitation
      * @param includeTotals whether to include the total number of users in search results
      * @param limitToCurrentUsers whether to restrict the search to current users only
      * @return              URI to perform the search query
@@ -224,7 +225,7 @@ public class Auth0Users {
      * @return JSON string of users matching search query
      */
     public static String getAuth0Users(String searchQuery, int page) {
-        return getAuth0Users(searchQuery, page, DEFAULT_PER_PAGE);
+        return getAuth0Users(searchQuery, page, DEFAULT_ITEMS_PER_PAGE);
     }
 
     /**
@@ -243,7 +244,7 @@ public class Auth0Users {
      * @return JSON string of users matching search query.
      */
     public static String getUnrestrictedAuth0Users(String searchQuery) {
-        URI uri = getSearchUrl(searchQuery, 0, DEFAULT_PER_PAGE, false, false);
+        URI uri = getSearchUrl(searchQuery, 0, DEFAULT_ITEMS_PER_PAGE, false, false);
         return doRequest(uri);
     }
 
