@@ -97,11 +97,9 @@ public class FeedSource extends Model implements Cloneable {
     public FeedRetrievalMethod retrievalMethod;
 
     /**
-     * How frequenty should we fetch this feed (at the feed's {@link #url} if {@link #retrievalMethod} is
+     * How frequently should we fetch this feed (at the feed's {@link #url} if {@link #retrievalMethod} is
      * {@link FeedRetrievalMethod#FETCHED_AUTOMATICALLY}). Daily defaults to using time defined in
      * {@link Project#autoFetchHour}:{@link Project#autoFetchMinute}.
-     *
-     * FIXME: Should we use TimeUnit or our own Enum {@link FetchFrequency} (delete if we use TimeUnit).
      */
     public TimeUnit fetchFrequency = TimeUnit.DAYS;
     /**

@@ -4,6 +4,7 @@ import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.FeedExpirationNotificationJob;
 import com.conveyal.datatools.manager.jobs.FetchProjectFeedsJob;
 import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
+import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
@@ -159,21 +160,29 @@ public class Scheduler {
             // Get diff between start time and current time
             long diffInMinutes = (startTime.toEpochSecond() - now.toEpochSecond()) / 60;
             // Delay is equivalent to diff or (if negative) one day plus (negative) diff.
-            long delayInMinutes = diffInMinutes >= 0
+            long projectDelayInMinutes = diffInMinutes >= 0
                 ? diffInMinutes
                 : 24 * 60 + diffInMinutes;
-
-            LOG.info("Auto fetch begins in {} hours and runs every {} hours", String.valueOf(delayInMinutes / 60.0), TimeUnit.DAYS.toHours(intervalInDays));
-            long intervalInMinutes = TimeUnit.DAYS.toMinutes(intervalInDays);
+            LOG.info("Project auto fetch begins in {} hours and runs every {} hours", (projectDelayInMinutes / 60.0), TimeUnit.DAYS.toHours(intervalInDays));
+            long projectIntervalInMinutes = TimeUnit.DAYS.toMinutes(intervalInDays);
             for (FeedSource feedSource : project.retrieveProjectFeedSources()) {
+                // Default feed source frequency to the project cycle frequency to cover feed sources that are not
+                // fetched automatically.
+                long feedSourceDelayInMinutes = projectDelayInMinutes;
+                long feedSourceInterval = projectIntervalInMinutes;
+                TimeUnit feedSourceFrequency = TimeUnit.DAYS;
+                if (feedSource.retrievalMethod == FeedRetrievalMethod.FETCHED_AUTOMATICALLY) {
+                    feedSourceDelayInMinutes = 0;
+                    feedSourceInterval = feedSource.fetchInterval;
+                    feedSourceFrequency = feedSource.fetchFrequency;
+                }
                 // system is defined as owner because owner field must not be null
                 FetchSingleFeedJob fetchSingleFeedJob = new FetchSingleFeedJob(feedSource, Auth0UserProfile.createSystemUser(), false);
                 ScheduledFuture scheduledFuture = schedulerService.scheduleAtFixedRate(
-                    // FIXME: All of these timing params need to change to reflect the frequency
                     fetchSingleFeedJob,
-                    delayInMinutes,
-                    intervalInMinutes,
-                    feedSource.fetchFrequency
+                    feedSourceDelayInMinutes,
+                    feedSourceInterval,
+                    feedSourceFrequency
                 );
                 ScheduledJob scheduledJob = new ScheduledJob(fetchSingleFeedJob, scheduledFuture);
                 scheduledJobsForFeedSources.put(feedSource.id, scheduledJob);

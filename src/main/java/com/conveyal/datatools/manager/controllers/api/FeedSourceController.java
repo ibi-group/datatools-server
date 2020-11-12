@@ -29,6 +29,7 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
@@ -142,6 +143,19 @@ public class FeedSourceController {
                 req,
                 HttpStatus.BAD_REQUEST_400,
                 "Retrieval methods cannot be defined more than once in transformation rules."
+            );
+            return false;
+        }
+
+        // If the retrieval method is automatic make sure one of the permitted fetch frequencies has been provided.
+        if (retrievalMethodSet.contains(FeedRetrievalMethod.FETCHED_AUTOMATICALLY)
+            && feedSource.fetchFrequency != TimeUnit.MINUTES
+            && feedSource.fetchFrequency != TimeUnit.HOURS
+            && feedSource.fetchFrequency != TimeUnit.DAYS) {
+            logMessageAndHalt(
+                req,
+                HttpStatus.BAD_REQUEST_400,
+                "Fetch frequency must be one of MINUTES, HOURS or DAYS when fetch retrieval method is automatic."
             );
             return false;
         }

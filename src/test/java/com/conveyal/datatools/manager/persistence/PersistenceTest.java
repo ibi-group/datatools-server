@@ -4,6 +4,7 @@ import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Project;
+import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 import org.slf4j.Logger;
@@ -16,6 +17,8 @@ import static org.junit.Assert.assertEquals;
  */
 public class PersistenceTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(PersistenceTest.class);
+    private static FeedSource feedSource;
+    private static Project project;
 
     @BeforeClass
     public static void setUp() throws Exception {
@@ -25,13 +28,20 @@ public class PersistenceTest extends UnitTest {
         Persistence.initialize();
     }
 
+    @AfterClass
+    public static void tearDown() {
+        if (feedSource != null) Persistence.feedSources.removeById(feedSource.id);
+        if (project != null) Persistence.projects.removeById(project.id);
+    }
+
     @Test
     public void createFeedSource() {
-        FeedSource feedSource = new FeedSource("test feed source");
+        feedSource = new FeedSource("test feed source");
         String id = feedSource.id;
         Persistence.feedSources.create(feedSource);
-        String retrievedId = Persistence.feedSources.getById(id).id;
-        assertEquals("Found FeedSource ID should equal inserted ID.", id, retrievedId);
+        FeedSource feedSourceFromDB = Persistence.feedSources.getById(id);
+        assertEquals(feedSource.fetchFrequency, feedSourceFromDB.fetchFrequency);
+        assertEquals("Found FeedSource ID should equal inserted ID.", id, feedSourceFromDB.id);
     }
 
 //    @Test
@@ -56,7 +66,7 @@ public class PersistenceTest extends UnitTest {
 //
     @Test
     public void createProject() {
-        Project project = new Project();
+        project = new Project();
         String id = project.id;
         Persistence.projects.create(project);
         String retrievedId = Persistence.projects.getById(id).id;
