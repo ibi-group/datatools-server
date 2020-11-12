@@ -31,8 +31,8 @@ public class FetchProjectFeedsJob extends MonitorableJob {
     public void jobLogic() {
         Project project = Persistence.projects.getById(projectId);
         if (project == null) {
-            LOG.error("Fetch feeds job failed because project {} does not exist in database. Clearing the project's scheduled fetch jobs.");
-            Scheduler.removeProjectJobsOfType(projectId, FetchProjectFeedsJob.class, true);
+            // FIXME: Since this is no longer running in a scheduled context, perhaps this should be removed?
+            LOG.error("Fetch feeds job failed because project {} does not exist in database.", projectId);
             return;
         }
         LOG.info("Fetch job running for {} project at {}", project.name, ZonedDateTime.now(ZoneId.of("America/New_York")));

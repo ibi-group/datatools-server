@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.jobs;
 
+import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Project;
@@ -28,7 +29,9 @@ public class FeedExpirationNotificationJob implements Runnable {
     public void run() {
         FeedSource source = Persistence.feedSources.getById(feedSourceId);
         Project project = source.retrieveProject();
-
+        if (source == null) {
+            Scheduler.removeAllFeedSourceJobs(feedSourceId, true);
+        }
         if (project == null) {
             // parent project has already been deleted, this notification should've been canceled
             // but it's still around for some reason.  Return as nothing further should be done.
