@@ -2,9 +2,7 @@ package com.conveyal.datatools.common.utils;
 
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.FeedExpirationNotificationJob;
-import com.conveyal.datatools.manager.jobs.FetchProjectFeedsJob;
 import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
-import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
@@ -29,39 +27,36 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 import static com.conveyal.datatools.common.utils.Utils.getTimezone;
+import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
 import static com.google.common.collect.Multimaps.synchronizedListMultimap;
 
 /**
  * This class centralizes the logic associated with scheduling and cancelling tasks (organized as a {@link ScheduledJob})
  * for the Data Tools application. These tasks can be auto-scheduled according to application data (e.g., feed expiration
  * notifications based on the latest feed version's last date of service) or enabled by users (e.g., scheduling a project
- * auto feed fetch nightly at 2AM). The jobs are tracked in {@link #scheduledJobsForFeedSources} and
- * {@link #scheduledJobsForProjects} so that they can be cancelled at a later point in time should the associated
- * feeds/projects be deleted or if the user changes the fetch behavior.
+ * auto feed fetch nightly at 2AM). The jobs are tracked in {@link #scheduledJobsForFeedSources} so that they can be
+ * cancelled at a later point in time should the associated feeds/projects be deleted or if the user changes the fetch
+ * behavior.
  */
 public class Scheduler {
     private static final Logger LOG = LoggerFactory.getLogger(Scheduler.class);
+    private static final int DEFAULT_FETCH_INTERVAL_DAYS = 1;
 
     // Scheduled executor that handles running scheduled jobs.
     public final static ScheduledExecutorService schedulerService = Executors.newScheduledThreadPool(1);
     /** Stores {@link ScheduledJob} objects containing scheduled tasks keyed on the tasks's associated {@link FeedSource} ID. */
     public final static ListMultimap<String, ScheduledJob> scheduledJobsForFeedSources =
         synchronizedListMultimap(ArrayListMultimap.create());
-    /** Stores {@link ScheduledJob} objects containing scheduled tasks keyed on the tasks's associated {@link Project} ID. */
-    public final static ListMultimap<String, ScheduledJob> scheduledJobsForProjects =
-        synchronizedListMultimap(ArrayListMultimap.create());
 
     /**
      * A method to initialize all scheduled tasks upon server startup.
      */
     public static void initialize() {
-        LOG.info("Scheduling recurring project auto fetches");
+        LOG.info("Scheduling recurring feed auto fetches for all projects.");
         for (Project project : Persistence.projects.getAll()) {
-            if (project.autoFetchFeeds) {
-                scheduleAutoFeedFetch(project, 1);
-            }
+            handleAutoFeedFetch(project);
         }
-        LOG.info("Scheduling feed expiration notifications");
+        LOG.info("Scheduling feed expiration notifications for all feed sources.");
         // Get all active feed sources
         for (FeedSource feedSource : Persistence.feedSources.getAll()) {
             // Schedule expiration notification jobs for the latest feed version
@@ -73,7 +68,20 @@ public class Scheduler {
      * Convenience method for scheduling one-off jobs for a feed source.
      */
     public static ScheduledJob scheduleFeedSourceJob (FeedSource feedSource, Runnable job, long delay, TimeUnit timeUnit) {
-        ScheduledFuture scheduledFuture = schedulerService.schedule(job, delay, timeUnit);
+        ScheduledFuture<?> scheduledFuture = schedulerService.schedule(job, delay, timeUnit);
+        ScheduledJob scheduledJob = new ScheduledJob(job, scheduledFuture);
+        scheduledJobsForFeedSources.put(feedSource.id, scheduledJob);
+        return scheduledJob;
+    }
+
+    /**
+     * Convenience method for scheduling auto fetch job for a feed source. Expects delay/interval values in minutes.
+     */
+    public static ScheduledJob scheduleAutoFeedFetch(FeedSource feedSource, Runnable job, long delayMinutes, long intervalMinutes) {
+        long delayHours = TimeUnit.MINUTES.toHours(delayMinutes);
+        long intervalHours = TimeUnit.MINUTES.toHours(intervalMinutes);
+        LOG.info("Auto fetch for feed {} runs every {} hours. Beginning in {} hours.", feedSource.id, intervalHours, delayHours);
+        ScheduledFuture<?> scheduledFuture = schedulerService.scheduleAtFixedRate(job, delayMinutes, intervalMinutes, TimeUnit.MINUTES);
         ScheduledJob scheduledJob = new ScheduledJob(job, scheduledFuture);
         scheduledJobsForFeedSources.put(feedSource.id, scheduledJob);
         return scheduledJob;
@@ -82,7 +90,7 @@ public class Scheduler {
     /**
      * Cancels and removes all scheduled jobs for a given entity id and job class. NOTE: This is intended as an internal
      * method that should operate on one of the scheduledJobsForXYZ fields of this class. A wrapper method (such as
-     * {@link #removeProjectJobsOfType(String, Class, boolean)}) should be provided for any new entity types with
+     * {@link #removeFeedSourceJobsOfType(String, Class, boolean)} should be provided for any new entity types with
      * scheduled jobs (e.g., if feed version-specific scheduled jobs are needed).
      */
     private static int removeJobsOfType(ListMultimap<String, ScheduledJob> scheduledJobs, String id, Class<?> clazz, boolean mayInterruptIfRunning) {
@@ -95,13 +103,21 @@ public class Scheduler {
         // See https://stackoverflow.com/q/8104692/269834
         for (Iterator<ScheduledJob> iterator = jobs.iterator(); iterator.hasNext(); ) {
             ScheduledJob scheduledJob = iterator.next();
-            if (clazz.isInstance(scheduledJob.job)) {
+            // If clazz is null, remove all job types. Or, just remove the job if it matches the input type.
+            if (clazz == null || clazz.isInstance(scheduledJob.job)) {
                 scheduledJob.scheduledFuture.cancel(mayInterruptIfRunning);
                 iterator.remove();
                 jobsCancelled++;
             }
         }
         return jobsCancelled;
+    }
+
+    /**
+     * Convenience wrapper around {@link #removeJobsOfType} that removes all job types for the provided id.
+     */
+    private static int removeAllJobs(ListMultimap<String, ScheduledJob> scheduledJobs, String id, boolean mayInterruptIfRunning) {
+        return removeJobsOfType(scheduledJobs, id, null, mayInterruptIfRunning);
     }
 
     /**
@@ -113,82 +129,93 @@ public class Scheduler {
     }
 
     /**
-     * Cancels and removes all scheduled jobs for a given project id and job class.
+     * Cancels and removes all scheduled jobs for a given feed source id (of any job type).
      */
-    public static void removeProjectJobsOfType(String id, Class<?> clazz, boolean mayInterruptIfRunning) {
-        int cancelled = removeJobsOfType(scheduledJobsForProjects, id, clazz, mayInterruptIfRunning);
-        if (cancelled > 0) LOG.info("Cancelled/removed {} {} jobs for project {}", cancelled, clazz.getSimpleName(), id);
+    public static void removeAllFeedSourceJobs(String id, boolean mayInterruptIfRunning) {
+        int cancelled = removeAllJobs(scheduledJobsForFeedSources, id, mayInterruptIfRunning);
+        if (cancelled > 0) LOG.info("Cancelled/removed {} jobs for feed source {}", cancelled, id);
     }
 
     /**
-     * Schedule or cancel auto feed fetch for a project as needed.  This should be called whenever a
-     * project is created or updated.  If a project is deleted, the auto feed fetch jobs will
+     * Schedule or cancel auto feed fetch for a project's feeds as needed.  This should be called whenever a
+     * project is created or updated.  If a feed source is deleted, the auto feed fetch jobs will
      * automatically cancel itself.
      */
-    public static void scheduleAutoFeedFetch(Project project) {
-        // If auto fetch flag is turned on, schedule auto fetch.
-        if (project.autoFetchFeeds) Scheduler.scheduleAutoFeedFetch(project, 1);
-        // Otherwise, cancel any existing task for this id.
-        else Scheduler.removeProjectJobsOfType(project.id, FetchProjectFeedsJob.class, true);
+    public static void handleAutoFeedFetch(Project project) {
+        long defaultDelay = getDefaultDelayMinutes(project);
+        for (FeedSource feedSource : project.retrieveProjectFeedSources()) {
+            scheduleAutoFeedFetch(feedSource, defaultDelay);
+        }
+    }
+
+    private static long getDefaultDelayMinutes(Project project) {
+        ZoneId timezone = getTimezone(project.defaultTimeZone);
+        // NOW in project's timezone.
+        ZonedDateTime now = ZonedDateTime.ofInstant(Instant.now(), timezone);
+
+        // Scheduled start time for fetch (in project timezone)
+        ZonedDateTime startTime = LocalDateTime.of(
+            LocalDate.now(),
+            LocalTime.of(project.autoFetchHour, project.autoFetchMinute)
+        ).atZone(timezone);
+        LOG.debug("Now: {}", now.format(DateTimeFormatter.ISO_ZONED_DATE_TIME));
+        LOG.debug("Scheduled start time: {}", startTime.format(DateTimeFormatter.ISO_ZONED_DATE_TIME));
+
+        // Get diff between start time and current time
+        long diffInMinutes = (startTime.toEpochSecond() - now.toEpochSecond()) / 60;
+        // Delay is equivalent to diff or (if negative) one day plus (negative) diff.
+        long projectDelayInMinutes = diffInMinutes >= 0
+            ? diffInMinutes
+            : 24 * 60 + diffInMinutes;
+        LOG.debug(
+            "Default auto fetch for feeds begins in {} hours and runs every {} hours",
+            (projectDelayInMinutes / 60.0),
+            TimeUnit.DAYS.toHours(DEFAULT_FETCH_INTERVAL_DAYS)
+        );
+        return projectDelayInMinutes;
     }
 
     /**
-     * Schedule an action that fetches all the feeds in the given project according to the autoFetch fields of that project.
-     * Currently feeds are not auto-fetched independently, they must be all fetched together as part of a project.
-     * This method is called when a Project's auto-fetch settings are updated, and when the system starts up to populate
-     * the auto-fetch scheduler.
+     * Convenience wrapper for calling scheduling a feed source auto fetch with the parent project's
+     * default delay minutes.
      */
-    public static void scheduleAutoFeedFetch (Project project, int intervalInDays) {
+    public static void handleAutoFeedFetch(FeedSource feedSource) {
+        long defaultDelayMinutes = getDefaultDelayMinutes(feedSource.retrieveProject());
+        scheduleAutoFeedFetch(feedSource, defaultDelayMinutes);
+    }
+
+    /**
+     * Internal method for scheduling an auto fetch for a {@link FeedSource}. This method's internals handle checking
+     * that the auto fetch fields are filled correctly (at the project and feed source level).
+     * @param feedSource          feed source for which to schedule auto fetch
+     * @param defaultDelayMinutes default delay in minutes for scheduling the first fetch
+     */
+    private static void scheduleAutoFeedFetch(FeedSource feedSource, long defaultDelayMinutes) {
         try {
-            // First cancel any already scheduled auto fetch task for this project id.
-            removeProjectJobsOfType(project.id, FetchProjectFeedsJob.class, true);
-
-            ZoneId timezone = getTimezone(project.defaultTimeZone);
-            LOG.info("Scheduling auto-fetch for projectID: {}", project.id);
-
-            // NOW in default timezone
-            ZonedDateTime now = ZonedDateTime.ofInstant(Instant.now(), timezone);
-
-            // Scheduled start time
-            ZonedDateTime startTime = LocalDateTime.of(
-                LocalDate.now(),
-                LocalTime.of(project.autoFetchHour, project.autoFetchMinute)
-            ).atZone(timezone);
-            LOG.info("Now: {}", now.format(DateTimeFormatter.ISO_ZONED_DATE_TIME));
-            LOG.info("Scheduled start time: {}", startTime.format(DateTimeFormatter.ISO_ZONED_DATE_TIME));
-
-            // Get diff between start time and current time
-            long diffInMinutes = (startTime.toEpochSecond() - now.toEpochSecond()) / 60;
-            // Delay is equivalent to diff or (if negative) one day plus (negative) diff.
-            long projectDelayInMinutes = diffInMinutes >= 0
-                ? diffInMinutes
-                : 24 * 60 + diffInMinutes;
-            LOG.info("Project auto fetch begins in {} hours and runs every {} hours", (projectDelayInMinutes / 60.0), TimeUnit.DAYS.toHours(intervalInDays));
-            long projectIntervalInMinutes = TimeUnit.DAYS.toMinutes(intervalInDays);
-            for (FeedSource feedSource : project.retrieveProjectFeedSources()) {
-                // Default feed source frequency to the project cycle frequency to cover feed sources that are not
-                // fetched automatically.
-                long feedSourceDelayInMinutes = projectDelayInMinutes;
-                long feedSourceInterval = projectIntervalInMinutes;
-                TimeUnit feedSourceFrequency = TimeUnit.DAYS;
-                if (feedSource.retrievalMethod == FeedRetrievalMethod.FETCHED_AUTOMATICALLY) {
-                    feedSourceDelayInMinutes = 0;
-                    feedSourceInterval = feedSource.fetchInterval;
-                    feedSourceFrequency = feedSource.fetchFrequency;
-                }
-                // system is defined as owner because owner field must not be null
-                FetchSingleFeedJob fetchSingleFeedJob = new FetchSingleFeedJob(feedSource, Auth0UserProfile.createSystemUser(), false);
-                ScheduledFuture scheduledFuture = schedulerService.scheduleAtFixedRate(
-                    fetchSingleFeedJob,
-                    feedSourceDelayInMinutes,
-                    feedSourceInterval,
-                    feedSourceFrequency
-                );
-                ScheduledJob scheduledJob = new ScheduledJob(fetchSingleFeedJob, scheduledFuture);
-                scheduledJobsForFeedSources.put(feedSource.id, scheduledJob);
+            // First, remove any scheduled fetch jobs for the current feed source.
+            removeFeedSourceJobsOfType(feedSource.id, FetchSingleFeedJob.class, true);
+            Project project = feedSource.retrieveProject();
+            // Do not schedule fetch job if missing URL, not fetched automatically, or auto fetch disabled for project.
+            if (feedSource.url == null || !FETCHED_AUTOMATICALLY.equals(feedSource.retrievalMethod) || !project.autoFetchFeeds) {
+                return;
             }
+            LOG.info("Scheduling auto fetch for feed source {}", feedSource.id);
+            // Default fetch frequency to daily if null/missing.
+            TimeUnit frequency = feedSource.fetchFrequency == null
+                ? TimeUnit.DAYS
+                : feedSource.fetchFrequency.toTimeUnit();
+            // Convert interval to minutes. Note: Min interval is one (i.e., we cannot have zero fetches per day).
+            // TODO: should this be higher if frequency is in minutes?
+            long intervalMinutes = frequency.toMinutes(Math.max(feedSource.fetchInterval, 1));
+            // Use system user as owner of job.
+            Auth0UserProfile systemUser = Auth0UserProfile.createSystemUser();
+            // Set delay to default delay for daily fetch (usually derived from project fetch time, e.g. 2am) OR zero
+            // (begin checks immediately).
+            long delayMinutes = TimeUnit.DAYS.equals(frequency) ? defaultDelayMinutes : 0;
+            FetchSingleFeedJob fetchSingleFeedJob = new FetchSingleFeedJob(feedSource, systemUser, false);
+            scheduleAutoFeedFetch(feedSource, fetchSingleFeedJob, delayMinutes, intervalMinutes);
         } catch (Exception e) {
-            LOG.error("Error scheduling project {} feed fetch.", project.id);
+            LOG.error("Error scheduling feed source {} auto fetch.", feedSource.id);
             e.printStackTrace();
         }
     }

@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.controllers.api;
 
+import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.auth.Actions;
@@ -15,6 +16,7 @@ import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.commons.lang3.StringUtils;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -29,7 +31,6 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
@@ -106,6 +107,8 @@ public class FeedSourceController {
             for (String resourceType : DataManager.feedResources.keySet()) {
                 DataManager.feedResources.get(resourceType).feedSourceCreated(newFeedSource, req.headers("Authorization"));
             }
+            // After successful save, handle auto fetch job setup.
+            Scheduler.handleAutoFeedFetch(newFeedSource);
             // Notify project subscribers of new feed source creation.
             Project parentProject = Persistence.projects.getById(newFeedSource.projectId);
             NotifyUsersForSubscriptionJob.createNotification(
@@ -120,14 +123,26 @@ public class FeedSourceController {
         }
     }
 
+    private static boolean stringIsPresent(String value, String fieldName, Request req) {
+        if (StringUtils.isEmpty(value)) {
+            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, String.format("Feed source %s must not be empty", fieldName));
+            return false;
+        }
+
+        return true;
+    }
+
     /**
      * Check that updated or new feedSource object is valid. This method should be called before a feedSource is
      * persisted to the database.
      * TODO: Determine if other checks ought to be applied here.
      */
     private static boolean validate(Request req, FeedSource feedSource) {
-        if (feedSource.name == null || feedSource.name.isEmpty()) {
-            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Feed source name must be provided");
+        if (!stringIsPresent(feedSource.name, "name", req)) {
+            return false;
+        }
+        if (feedSource.retrieveProject() == null) {
+            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Valid project ID must be provided.");
             return false;
         }
         // Collect all retrieval methods found in tranform rules into a list.
@@ -143,19 +158,6 @@ public class FeedSourceController {
                 req,
                 HttpStatus.BAD_REQUEST_400,
                 "Retrieval methods cannot be defined more than once in transformation rules."
-            );
-            return false;
-        }
-
-        // If the retrieval method is automatic make sure one of the permitted fetch frequencies has been provided.
-        if (retrievalMethodSet.contains(FeedRetrievalMethod.FETCHED_AUTOMATICALLY)
-            && feedSource.fetchFrequency != TimeUnit.MINUTES
-            && feedSource.fetchFrequency != TimeUnit.HOURS
-            && feedSource.fetchFrequency != TimeUnit.DAYS) {
-            logMessageAndHalt(
-                req,
-                HttpStatus.BAD_REQUEST_400,
-                "Fetch frequency must be one of MINUTES, HOURS or DAYS when fetch retrieval method is automatic."
             );
             return false;
         }
@@ -179,6 +181,8 @@ public class FeedSourceController {
             updatedFeedSource.lastFetched = null;
         }
         Persistence.feedSources.replace(feedSourceId, updatedFeedSource);
+        // After successful save, handle auto fetch job setup.
+        Scheduler.handleAutoFeedFetch(updatedFeedSource);
         // Notify feed- and project-subscribed users after successful save
         NotifyUsersForSubscriptionJob.createNotification(
             "feed-updated",
