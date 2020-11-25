@@ -1,0 +1,127 @@
+package com.conveyal.datatools.manager.controllers.api;
+
+import com.conveyal.datatools.DatatoolsTest;
+import com.conveyal.datatools.TestUtils;
+import com.conveyal.datatools.common.utils.ScheduledJob;
+import com.conveyal.datatools.common.utils.Scheduler;
+import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
+import com.conveyal.datatools.manager.models.FeedSource;
+import com.conveyal.datatools.manager.models.FetchFrequency;
+import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.HttpUtils;
+import com.conveyal.datatools.manager.utils.json.JsonUtil;
+import com.google.common.collect.ListMultimap;
+import org.apache.http.HttpResponse;
+import org.junit.AfterClass;
+import org.junit.BeforeClass;
+import org.junit.Test;
+
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+public class FeedSourceControllerTest {
+    private static Project project = null;
+    private static FeedSource feedSourceWithUrl = null;
+    private static FeedSource feedSourceWithNoUrl = null;
+
+    @BeforeClass
+    public static void setUp() throws Exception {
+        // start server if it isn't already running
+        DatatoolsTest.setUp();
+        project = new Project();
+        project.name = "ProjectOne";
+        project.autoFetchFeeds = true;
+        Persistence.projects.create(project);
+
+        feedSourceWithUrl = new FeedSource();
+        feedSourceWithUrl.fetchFrequency = FetchFrequency.MINUTES;
+        feedSourceWithUrl.fetchInterval = 1;
+        feedSourceWithUrl.deployable = false;
+        feedSourceWithUrl.name = "FeedSourceOne";
+        feedSourceWithUrl.projectId = project.id;
+        feedSourceWithUrl.retrievalMethod = FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
+        feedSourceWithUrl.url = new java.net.URL("http://www.feedsource.com");
+
+        feedSourceWithNoUrl = new FeedSource();
+        feedSourceWithNoUrl.fetchFrequency = FetchFrequency.MINUTES;
+        feedSourceWithNoUrl.fetchInterval = 1;
+        feedSourceWithNoUrl.deployable = false;
+        feedSourceWithNoUrl.name = "FeedSourceTwo";
+        feedSourceWithNoUrl.projectId = project.id;
+        feedSourceWithNoUrl.retrievalMethod = FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
+    }
+
+    @AfterClass
+    public static void tearDown() {
+        if (project != null) {
+            Persistence.projects.removeById(project.id);
+        }
+        if (feedSourceWithUrl != null) {
+            Persistence.feedSources.removeById(feedSourceWithUrl.id);
+        }
+        if (feedSourceWithNoUrl != null) {
+            Persistence.feedSources.removeById(feedSourceWithNoUrl.id);
+        }
+    }
+
+    /**
+     * Manipulate a feed source and confirm that it is correctly scheduled:
+     *  1. Create a feed source with auto fetch enabled and confirm it is scheduled.
+     *  2. Update the same feed source turning off auth fetch and confirm it is no longer scheduled.
+     *  3. Update the same feed source turning auth fetch back on and confirm it is scheduled once more.
+     */
+    @Test
+    public void createFeedSourceWithUrlTest() {
+        // create a feed source.
+        HttpResponse createFeedSourceResponse = TestUtils.makeRequest("/api/manager/secure/feedsource",
+            JsonUtil.toJson(feedSourceWithUrl),
+            HttpUtils.REQUEST_METHOD.POST
+        );
+
+        assertEquals(200, createFeedSourceResponse.getStatusLine().getStatusCode());
+
+        ListMultimap<String, ScheduledJob> scheduledJobsForFeedSources = Scheduler.scheduledJobsForFeedSources;
+        assertEquals(1, scheduledJobsForFeedSources.get(feedSourceWithUrl.id).size());
+
+        // update feed source to disable auth fetch.
+        feedSourceWithUrl.retrievalMethod = FeedRetrievalMethod.MANUALLY_UPLOADED;
+        HttpResponse updateFeedSourceResponse
+            = TestUtils.makeRequest(String.format("/api/manager/secure/feedsource/%s", feedSourceWithUrl.id),
+            JsonUtil.toJson(feedSourceWithUrl),
+            HttpUtils.REQUEST_METHOD.PUT
+        );
+
+        assertEquals(200, updateFeedSourceResponse.getStatusLine().getStatusCode());
+
+        scheduledJobsForFeedSources = Scheduler.scheduledJobsForFeedSources;
+        assertEquals(0, scheduledJobsForFeedSources.get(feedSourceWithUrl.id).size());
+
+        // update feed source to enable auth fetch once more.
+        feedSourceWithUrl.retrievalMethod = FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
+        updateFeedSourceResponse
+            = TestUtils.makeRequest(String.format("/api/manager/secure/feedsource/%s", feedSourceWithUrl.id),
+            JsonUtil.toJson(feedSourceWithUrl),
+            HttpUtils.REQUEST_METHOD.PUT
+        );
+
+        assertEquals(200, updateFeedSourceResponse.getStatusLine().getStatusCode());
+
+        scheduledJobsForFeedSources = Scheduler.scheduledJobsForFeedSources;
+        assertEquals(1, scheduledJobsForFeedSources.get(feedSourceWithUrl.id).size());
+
+    }
+
+    /**
+     * Create a feed source without defining the feed source url. Confirm that the feed source is not scheduled.
+     */
+    @Test
+    public void createFeedSourceWithNoUrlTest() {
+        HttpResponse createFeedSourceResponse = TestUtils.makeRequest("/api/manager/secure/feedsource",
+            JsonUtil.toJson(feedSourceWithNoUrl),
+            HttpUtils.REQUEST_METHOD.POST
+        );
+        assertEquals(200, createFeedSourceResponse.getStatusLine().getStatusCode());
+        ListMultimap<String, ScheduledJob> scheduledJobsForFeedSources = Scheduler.scheduledJobsForFeedSources;
+        assertEquals(0, scheduledJobsForFeedSources.get(feedSourceWithNoUrl.id).size());
+    }
+}
