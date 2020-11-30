@@ -42,8 +42,8 @@ import java.util.Date;
 import java.util.List;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
+import static com.conveyal.datatools.manager.auth.Auth0Connection.getDefaultAuthDisabled;
 import static com.conveyal.datatools.manager.auth.Auth0Users.API_PATH;
-import static com.conveyal.datatools.manager.auth.Auth0Connection.authDisabled;
 import static com.conveyal.datatools.manager.auth.Auth0Users.DEFAULT_ITEMS_PER_PAGE;
 import static com.conveyal.datatools.manager.auth.Auth0Users.USERS_API_PATH;
 import static com.conveyal.datatools.manager.auth.Auth0Users.getAuth0Users;
@@ -294,7 +294,7 @@ public class UserController {
         Auth0UserProfile.DatatoolsInfo datatools = userProfile.getApp_metadata().getDatatoolsInfo();
         // NOTE: this condition will also occur if DISABLE_AUTH is set to true
         if (datatools == null) {
-            if (authDisabled()) return Collections.emptyList();
+            if (getDefaultAuthDisabled()) return Collections.emptyList();
             logMessageAndHalt(req, 403, "User does not have permission to access to this application");
         }
 

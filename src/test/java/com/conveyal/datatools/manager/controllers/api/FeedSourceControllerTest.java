@@ -4,6 +4,7 @@ import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.TestUtils;
 import com.conveyal.datatools.common.utils.ScheduledJob;
 import com.conveyal.datatools.common.utils.Scheduler;
+import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FetchFrequency;
@@ -17,42 +18,31 @@ import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import java.io.IOException;
+import java.net.URL;
+
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-public class FeedSourceControllerTest {
+public class FeedSourceControllerTest extends DatatoolsTest {
     private static Project project = null;
     private static FeedSource feedSourceWithUrl = null;
     private static FeedSource feedSourceWithNoUrl = null;
 
     @BeforeClass
-    public static void setUp() throws Exception {
-        // start server if it isn't already running
+    public static void setUp() throws IOException {
         DatatoolsTest.setUp();
+        Auth0Connection.setAuthDisabled(true);
         project = new Project();
         project.name = "ProjectOne";
         project.autoFetchFeeds = true;
         Persistence.projects.create(project);
-
-        feedSourceWithUrl = new FeedSource();
-        feedSourceWithUrl.fetchFrequency = FetchFrequency.MINUTES;
-        feedSourceWithUrl.fetchInterval = 1;
-        feedSourceWithUrl.deployable = false;
-        feedSourceWithUrl.name = "FeedSourceOne";
-        feedSourceWithUrl.projectId = project.id;
-        feedSourceWithUrl.retrievalMethod = FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
-        feedSourceWithUrl.url = new java.net.URL("http://www.feedsource.com");
-
-        feedSourceWithNoUrl = new FeedSource();
-        feedSourceWithNoUrl.fetchFrequency = FetchFrequency.MINUTES;
-        feedSourceWithNoUrl.fetchInterval = 1;
-        feedSourceWithNoUrl.deployable = false;
-        feedSourceWithNoUrl.name = "FeedSourceTwo";
-        feedSourceWithNoUrl.projectId = project.id;
-        feedSourceWithNoUrl.retrievalMethod = FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
+        feedSourceWithUrl = createFeedSource("FeedSourceOne", new URL("http://www.feedsource.com"));
+        feedSourceWithNoUrl = createFeedSource("FeedSourceTwo", null);
     }
 
     @AfterClass
     public static void tearDown() {
+        Auth0Connection.getDefaultAuthDisabled();
         if (project != null) {
             Persistence.projects.removeById(project.id);
         }
@@ -123,5 +113,20 @@ public class FeedSourceControllerTest {
         assertEquals(200, createFeedSourceResponse.getStatusLine().getStatusCode());
         ListMultimap<String, ScheduledJob> scheduledJobsForFeedSources = Scheduler.scheduledJobsForFeedSources;
         assertEquals(0, scheduledJobsForFeedSources.get(feedSourceWithNoUrl.id).size());
+    }
+
+    /**
+     * Helper method to create feed source
+     */
+    private static FeedSource createFeedSource(String name, URL url) {
+        FeedSource feedSource = new FeedSource();
+        feedSource.fetchFrequency = FetchFrequency.MINUTES;
+        feedSource.fetchInterval = 1;
+        feedSource.deployable = false;
+        feedSource.name = name;
+        feedSource.projectId = project.id;
+        feedSource.retrievalMethod = FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
+        feedSource.url = url;
+        return feedSource;
     }
 }

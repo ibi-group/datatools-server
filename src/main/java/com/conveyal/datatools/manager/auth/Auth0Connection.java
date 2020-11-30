@@ -40,12 +40,19 @@ public class Auth0Connection {
     private static JWTVerifier verifier;
 
     /**
+     * Whether authentication is disabled for the HTTP endpoints. This defaults to the value in the config file, but can
+     * be overridden (e.g., in tests) with {@link #setAuthDisabled(boolean)}.
+     */
+    private static boolean authDisabled = getDefaultAuthDisabled();
+
+
+    /**
      * Check the incoming API request for the user token (and verify it) and assign as the "user" attribute on the
      * incoming request object for use in downstream controllers.
      * @param req Spark request object
      */
     public static void checkUser(Request req) {
-        if (authDisabled() || inTestingEnvironment()) {
+        if (authDisabled || inTestingEnvironment()) {
             // If in a development or testing environment, assign a mock profile of an admin user to the request
             // attribute and skip authentication.
             req.attribute("user", Auth0UserProfile.createTestAdminUser());
@@ -138,7 +145,7 @@ public class Auth0Connection {
      * tables in the database.
      */
     public static void checkEditPrivileges(Request request) {
-        if (authDisabled() || inTestingEnvironment()) {
+        if (getDefaultAuthDisabled() || inTestingEnvironment()) {
             // If in a development or testing environment, skip privileges check. This is done so that basically any API
             // endpoint can function.
             // TODO: make unit tests of the below items or do some more stuff as mentioned in PR review here:
@@ -170,7 +177,7 @@ public class Auth0Connection {
     /**
      * Check whether authentication has been disabled via the DISABLE_AUTH config variable.
      */
-    public static boolean authDisabled() {
+    public static boolean getDefaultAuthDisabled() {
         return DataManager.hasConfigProperty("DISABLE_AUTH") && "true".equals(getConfigPropertyAsText("DISABLE_AUTH"));
     }
 
@@ -197,4 +204,13 @@ public class Auth0Connection {
             }
         }
     }
+
+    /**
+     * Override the current {@link #authDisabled} value. This is used principally for setting up test environments that
+     * require auth to be disabled.
+     */
+    public static void setAuthDisabled(boolean authDisabled) {
+        Auth0Connection.authDisabled = authDisabled;
+    }
+
 }

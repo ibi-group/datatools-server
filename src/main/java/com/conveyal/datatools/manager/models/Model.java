@@ -100,7 +100,7 @@ public abstract class Model implements Serializable {
      */
     public void storeUser(String id) {
         userId = id;
-        if (!Auth0Connection.authDisabled()) {
+        if (!Auth0Connection.getDefaultAuthDisabled()) {
             Auth0UserProfile profile = null;
             // Try to fetch Auth0 user to store email address. This is surrounded by a try/catch because in the event of
             // a failure we do not want to cause issues from this low-level operation.
