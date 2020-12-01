@@ -42,7 +42,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
 
     @AfterClass
     public static void tearDown() {
-        Auth0Connection.getDefaultAuthDisabled();
+        Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
         if (project != null) {
             Persistence.projects.removeById(project.id);
         }
@@ -116,7 +116,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
     }
 
     /**
-     * Helper method to create feed source
+     * Helper method to create feed source.
      */
     private static FeedSource createFeedSource(String name, URL url) {
         FeedSource feedSource = new FeedSource();

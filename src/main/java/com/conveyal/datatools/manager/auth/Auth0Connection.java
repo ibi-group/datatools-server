@@ -145,7 +145,7 @@ public class Auth0Connection {
      * tables in the database.
      */
     public static void checkEditPrivileges(Request request) {
-        if (getDefaultAuthDisabled() || inTestingEnvironment()) {
+        if (isAuthDisabled() || inTestingEnvironment()) {
             // If in a development or testing environment, skip privileges check. This is done so that basically any API
             // endpoint can function.
             // TODO: make unit tests of the below items or do some more stuff as mentioned in PR review here:
@@ -182,6 +182,21 @@ public class Auth0Connection {
     }
 
     /**
+     * Whether authentication is disabled.
+     */
+    public static boolean isAuthDisabled() {
+        return authDisabled;
+    }
+
+    /**
+     * Override the current {@link #authDisabled} value. This is used principally for setting up test environments that
+     * require auth to be disabled.
+     */
+    public static void setAuthDisabled(boolean authDisabled) {
+        Auth0Connection.authDisabled = authDisabled;
+    }
+
+    /**
      * TODO: Check that user has access to query namespace provided in GraphQL query (see https://github.com/catalogueglobal/datatools-server/issues/94).
      */
     public static void checkGTFSPrivileges(Request request) {
@@ -204,13 +219,4 @@ public class Auth0Connection {
             }
         }
     }
-
-    /**
-     * Override the current {@link #authDisabled} value. This is used principally for setting up test environments that
-     * require auth to be disabled.
-     */
-    public static void setAuthDisabled(boolean authDisabled) {
-        Auth0Connection.authDisabled = authDisabled;
-    }
-
 }

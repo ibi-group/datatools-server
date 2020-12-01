@@ -103,7 +103,7 @@ public class Auth0UserProfile {
 
         @JsonIgnore
         public void setDatatoolsInfo(DatatoolsInfo datatools) {
-            if (Auth0Connection.getDefaultAuthDisabled()) return;
+            if (Auth0Connection.isAuthDisabled()) return;
 
             // check if the datatools field hasn't yet been created. Although new users that get created automatically
             // have this set, when running in a test environment, this won't be set, so it should be created.
@@ -121,7 +121,7 @@ public class Auth0UserProfile {
         }
         @JsonIgnore
         public DatatoolsInfo getDatatoolsInfo() {
-            if (Auth0Connection.getDefaultAuthDisabled()) return null;
+            if (Auth0Connection.isAuthDisabled()) return null;
 
             for(int i = 0; i < this.datatools.size(); i++) {
                 DatatoolsInfo dt = this.datatools.get(i);
@@ -287,7 +287,7 @@ public class Auth0UserProfile {
 
     public boolean canAdministerApplication() {
         // NOTE: user can administer application by default if running without authentication
-        if (Auth0Connection.getDefaultAuthDisabled()) return true;
+        if (Auth0Connection.isAuthDisabled()) return true;
 
         if(app_metadata.getDatatoolsInfo() != null && app_metadata.getDatatoolsInfo().permissions != null) {
             for(Permission permission : app_metadata.getDatatoolsInfo().permissions) {
