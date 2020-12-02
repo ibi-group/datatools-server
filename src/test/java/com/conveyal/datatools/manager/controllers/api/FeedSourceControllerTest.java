@@ -2,7 +2,6 @@ package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.TestUtils;
-import com.conveyal.datatools.common.utils.ScheduledJob;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
@@ -12,7 +11,6 @@ import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HttpUtils;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
-import com.google.common.collect.ListMultimap;
 import org.apache.http.HttpResponse;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -21,7 +19,7 @@ import org.junit.Test;
 import java.io.IOException;
 import java.net.URL;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.Assert.assertEquals;
 
 public class FeedSourceControllerTest extends DatatoolsTest {
     private static Project project = null;
@@ -67,24 +65,18 @@ public class FeedSourceControllerTest extends DatatoolsTest {
             JsonUtil.toJson(feedSourceWithUrl),
             HttpUtils.REQUEST_METHOD.POST
         );
-
         assertEquals(200, createFeedSourceResponse.getStatusLine().getStatusCode());
+        assertEquals(1, jobCountForFeed(feedSourceWithUrl.id));
 
-        ListMultimap<String, ScheduledJob> scheduledJobsForFeedSources = Scheduler.scheduledJobsForFeedSources;
-        assertEquals(1, scheduledJobsForFeedSources.get(feedSourceWithUrl.id).size());
-
-        // update feed source to disable auth fetch.
+        // update feed source to disable feed fetch.
         feedSourceWithUrl.retrievalMethod = FeedRetrievalMethod.MANUALLY_UPLOADED;
         HttpResponse updateFeedSourceResponse
             = TestUtils.makeRequest(String.format("/api/manager/secure/feedsource/%s", feedSourceWithUrl.id),
             JsonUtil.toJson(feedSourceWithUrl),
             HttpUtils.REQUEST_METHOD.PUT
         );
-
         assertEquals(200, updateFeedSourceResponse.getStatusLine().getStatusCode());
-
-        scheduledJobsForFeedSources = Scheduler.scheduledJobsForFeedSources;
-        assertEquals(0, scheduledJobsForFeedSources.get(feedSourceWithUrl.id).size());
+        assertEquals(0, jobCountForFeed(feedSourceWithUrl.id));
 
         // update feed source to enable auth fetch once more.
         feedSourceWithUrl.retrievalMethod = FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
@@ -93,12 +85,8 @@ public class FeedSourceControllerTest extends DatatoolsTest {
             JsonUtil.toJson(feedSourceWithUrl),
             HttpUtils.REQUEST_METHOD.PUT
         );
-
         assertEquals(200, updateFeedSourceResponse.getStatusLine().getStatusCode());
-
-        scheduledJobsForFeedSources = Scheduler.scheduledJobsForFeedSources;
-        assertEquals(1, scheduledJobsForFeedSources.get(feedSourceWithUrl.id).size());
-
+        assertEquals(1, jobCountForFeed(feedSourceWithUrl.id));
     }
 
     /**
@@ -111,8 +99,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
             HttpUtils.REQUEST_METHOD.POST
         );
         assertEquals(200, createFeedSourceResponse.getStatusLine().getStatusCode());
-        ListMultimap<String, ScheduledJob> scheduledJobsForFeedSources = Scheduler.scheduledJobsForFeedSources;
-        assertEquals(0, scheduledJobsForFeedSources.get(feedSourceWithNoUrl.id).size());
+        assertEquals(0, jobCountForFeed(feedSourceWithNoUrl.id));
     }
 
     /**
@@ -128,5 +115,12 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         feedSource.retrievalMethod = FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
         feedSource.url = url;
         return feedSource;
+    }
+
+    /**
+     * Provide the job count for a given feed source.
+     */
+    private int jobCountForFeed(String feedSourceId) {
+        return Scheduler.scheduledJobsForFeedSources.get(feedSourceId).size();
     }
 }

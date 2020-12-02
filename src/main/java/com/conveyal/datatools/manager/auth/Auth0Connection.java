@@ -52,7 +52,7 @@ public class Auth0Connection {
      * @param req Spark request object
      */
     public static void checkUser(Request req) {
-        if (authDisabled || inTestingEnvironment()) {
+        if (isAuthDisabled() || inTestingEnvironment()) {
             // If in a development or testing environment, assign a mock profile of an admin user to the request
             // attribute and skip authentication.
             req.attribute("user", Auth0UserProfile.createTestAdminUser());

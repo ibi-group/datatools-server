@@ -148,6 +148,9 @@ public class Scheduler {
         }
     }
 
+    /**
+     * Get the default project delay in minutes corrected to the project's timezone.
+     */
     private static long getDefaultDelayMinutes(Project project) {
         ZoneId timezone = getTimezone(project.defaultTimeZone);
         // NOW in project's timezone.
