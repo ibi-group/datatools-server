@@ -19,6 +19,7 @@ import org.junit.Test;
 import java.io.IOException;
 import java.net.URL;
 
+import static org.eclipse.jetty.http.HttpStatus.OK_200;
 import static org.junit.Assert.assertEquals;
 
 public class FeedSourceControllerTest extends DatatoolsTest {
@@ -65,7 +66,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
             JsonUtil.toJson(feedSourceWithUrl),
             HttpUtils.REQUEST_METHOD.POST
         );
-        assertEquals(200, createFeedSourceResponse.getStatusLine().getStatusCode());
+        assertEquals(OK_200, createFeedSourceResponse.getStatusLine().getStatusCode());
         assertEquals(1, jobCountForFeed(feedSourceWithUrl.id));
 
         // update feed source to disable feed fetch.
@@ -75,7 +76,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
             JsonUtil.toJson(feedSourceWithUrl),
             HttpUtils.REQUEST_METHOD.PUT
         );
-        assertEquals(200, updateFeedSourceResponse.getStatusLine().getStatusCode());
+        assertEquals(OK_200, updateFeedSourceResponse.getStatusLine().getStatusCode());
         assertEquals(0, jobCountForFeed(feedSourceWithUrl.id));
 
         // update feed source to enable auth fetch once more.
@@ -85,7 +86,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
             JsonUtil.toJson(feedSourceWithUrl),
             HttpUtils.REQUEST_METHOD.PUT
         );
-        assertEquals(200, updateFeedSourceResponse.getStatusLine().getStatusCode());
+        assertEquals(OK_200, updateFeedSourceResponse.getStatusLine().getStatusCode());
         assertEquals(1, jobCountForFeed(feedSourceWithUrl.id));
     }
 
@@ -98,7 +99,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
             JsonUtil.toJson(feedSourceWithNoUrl),
             HttpUtils.REQUEST_METHOD.POST
         );
-        assertEquals(200, createFeedSourceResponse.getStatusLine().getStatusCode());
+        assertEquals(OK_200, createFeedSourceResponse.getStatusLine().getStatusCode());
         assertEquals(0, jobCountForFeed(feedSourceWithNoUrl.id));
     }
 
