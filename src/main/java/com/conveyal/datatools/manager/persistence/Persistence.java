@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.persistence;
 
+import com.conveyal.datatools.manager.codec.FetchFrequencyCodec;
 import com.conveyal.datatools.manager.codec.IntArrayCodec;
 import com.conveyal.datatools.manager.codec.LocalDateCodec;
 import com.conveyal.datatools.manager.codec.URLCodec;
@@ -65,6 +66,7 @@ public class Persistence {
 
         // Register our custom codecs which cannot be properly auto-built by reflection
         CodecRegistry customRegistry = CodecRegistries.fromCodecs(
+            new FetchFrequencyCodec(),
             new IntArrayCodec(),
             new URLCodec(),
             new LocalDateCodec()
