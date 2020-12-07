@@ -1,7 +1,6 @@
-dist: trusty # jdk 8 not available on xenial
 language: java
 java:
-  - oraclejdk8
+  - openjdk15
 sudo: false
 # Install mongoDB to perform persistence tests
 services:
