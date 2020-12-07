@@ -47,7 +47,7 @@ public class ReplaceFileFromStringTransformation extends ZipTransformation {
         String tableNamePath = "/" + tableName;
         // Run the replace transformation
         Path targetZipPath = Paths.get(zipTarget.gtfsFile.getAbsolutePath());
-        try( FileSystem targetZipFs = FileSystems.newFileSystem(targetZipPath, null) ){
+        try( FileSystem targetZipFs = FileSystems.newFileSystem(targetZipPath) ){
             // Convert csv data to input stream.
             InputStream inputStream = new ByteArrayInputStream(csvData.getBytes(StandardCharsets.UTF_8));
             Path targetTxtFilePath = targetZipFs.getPath(tableNamePath);
