@@ -1,6 +1,6 @@
 language: java
 java:
-  - openjdk15
+  - openjdk11
 sudo: false
 # Install mongoDB to perform persistence tests
 services:
