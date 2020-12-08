@@ -1,0 +1,3 @@
+service_id,date,exception_type
+common_id,20170916,2
+cal_to_remove,20170913,2

@@ -2,18 +2,19 @@ package com.conveyal.datatools.editor.controllers.api;
 
 
 import com.conveyal.datatools.common.utils.SparkUtils;
+import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.editor.jobs.CreateSnapshotJob;
 import com.conveyal.datatools.editor.jobs.ExportSnapshotToGTFSJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.auth.Actions;
 import com.conveyal.datatools.manager.controllers.api.FeedVersionController;
+import com.conveyal.datatools.manager.jobs.CreateFeedVersionFromSnapshotJob;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Snapshot;
-import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import org.slf4j.Logger;
@@ -24,7 +25,6 @@ import spark.Response;
 import java.io.IOException;
 import java.util.Collection;
 
-import static com.conveyal.datatools.common.utils.AWSUtils.downloadFromS3;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
@@ -80,8 +80,11 @@ public class SnapshotController {
      */
     private static String createSnapshot (Request req, Response res) throws IOException {
         Auth0UserProfile userProfile = req.attribute("user");
+        boolean publishNewVersion = Boolean.parseBoolean(
+            req.queryParamOrDefault("publishNewVersion", Boolean.FALSE.toString())
+        );
         FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, Actions.EDIT, "feedId");
-        // Take fields from request body for creating snapshot.
+        // Take fields from request body for creating snapshot (i.e., feedId/feedSourceId, name, comment).
         Snapshot snapshot = json.read(req.body());
         // Ensure feed source ID and snapshotOf namespace is correct
         snapshot.feedSourceId = feedSource.id;
@@ -93,6 +96,10 @@ public class SnapshotController {
         // Create new non-buffer snapshot.
         CreateSnapshotJob createSnapshotJob =
                 new CreateSnapshotJob(userProfile, snapshot, bufferIsEmpty, !bufferIsEmpty, false);
+        // Add publish feed version job if specified by request.
+        if (publishNewVersion) {
+            createSnapshotJob.addNextJob(new CreateFeedVersionFromSnapshotJob(feedSource, snapshot, userProfile));
+        }
         // Begin asynchronous execution.
         DataManager.heavyExecutor.execute(createSnapshotJob);
         return SparkUtils.formatJobMessage(createSnapshotJob.jobId, "Creating snapshot.");
@@ -185,16 +192,8 @@ public class SnapshotController {
         // an actual object to download.
         // FIXME: use new FeedStore.
         if (DataManager.useS3) {
-            if (!FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, key)) {
-                logMessageAndHalt(
-                    req,
-                    500,
-                    String.format("Error downloading snapshot from S3. Object %s does not exist.", key),
-                    new Exception("s3 object does not exist")
-                );
-            }
             // Return presigned download link if using S3.
-            return downloadFromS3(FeedStore.s3Client, DataManager.feedBucket, key, false, res);
+            return S3Utils.downloadObject(S3Utils.DEFAULT_BUCKET, key, false, req, res);
         } else {
             // If not storing on s3, just use the token download method.
             token = new FeedDownloadToken(snapshot);

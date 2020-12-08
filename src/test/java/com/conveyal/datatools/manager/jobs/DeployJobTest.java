@@ -1,8 +1,11 @@
 package com.conveyal.datatools.manager.jobs;
 
+import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.ec2.model.Instance;
 import com.conveyal.datatools.DatatoolsTest;
-import com.conveyal.datatools.common.utils.AWSUtils;
+import com.conveyal.datatools.UnitTest;
+import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
+import com.conveyal.datatools.common.utils.aws.EC2Utils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.EC2Info;
@@ -11,28 +14,29 @@ import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
-import static com.conveyal.datatools.manager.controllers.api.ServerController.getIds;
-import static com.conveyal.datatools.manager.controllers.api.ServerController.terminateInstances;
+import static com.conveyal.datatools.TestUtils.getBooleanEnvVar;
+import static com.zenika.snapshotmatcher.SnapshotMatcher.matchesSnapshot;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assume.assumeTrue;
 
 /**
- * This contains a few helpful tests for quickly spinning up a deployment using any bundle of GTFS + OSM or pre-built
- * graph that already exists on S3.
- *
- * Note: these tests require credentials on the IBI AWS account, which is why the class is tagged with Ignore (so that it is
- * not run with the rest of the test suite)
+ * This test suite contains various unit and integration tests to make sure the a DeployJob works properly. The unit
+ * tests are always ran as part of the unit test suite and don't require AWS access. However, some tests will use AWS
+ * services to run an integrations test of deploying to AWS infrastructure. For the tests that require credentials on
+ * the IBI AWS account, these requires changing server.yml#modules.deployment.ec2.enabled to true and also that the
+ * RUN_AWS_DEPLOY_JOB_TESTS environment variable is set to "true".
  */
-@Ignore
-public class DeployJobTest {
+public class DeployJobTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(DeployJobTest.class);
     private static Project project;
     private static OtpServer server;
@@ -63,19 +67,80 @@ public class DeployJobTest {
         server.ec2Info.iamInstanceProfileArn = "YOUR_VALUE";
         Persistence.servers.create(server);
         deployment = new Deployment();
+        // the feedVersionIds variable does not get set during tests resulting in a null pointer exception. Set the
+        // feedVersionIds to an empty list to avoid this. It is enough to run the tests of the user data generation with
+        // an empty list of feed versions, so it is fine that it is empty.
+        deployment.feedVersionIds = new ArrayList<>();
         deployment.projectId = project.id;
         deployment.name = "Test deployment";
         deployment.otpVersion = "otp-latest-trimet-dev";
+        // add in custom build and router config with problematic characters to make sure they are properly escaped
+        deployment.customRouterConfig = "{ \"hi\": \"th\ne'r\te\" }";
+        deployment.customBuildConfig = "{ \"hello\": \"th\ne'r\te\" }";
         Persistence.deployments.create(deployment);
+    }
+
+    /**
+     * Tests that the user data for a graph build + run server instance can be generated properly
+     */
+    @Test
+    public void canMakeGraphBuildUserDataScript () {
+        DeployJob deployJob = new DeployJob(
+            deployment,
+            Auth0UserProfile.createTestAdminUser(),
+            server,
+            "test-deploy",
+            DeployJob.DeployType.REPLACE
+        );
+        assertThat(
+            replaceNonce(
+                deployJob.constructManifestAndUserData(false, true),
+                "canMakeGraphBuildUserDataScript"
+            ),
+            matchesSnapshot()
+        );
+    }
+
+    /**
+     * Tests that the user data for a run server only instance can be generated properly
+     */
+    @Test
+    public void canMakeServerOnlyUserDataScript () {
+        DeployJob deployJob = new DeployJob(
+            deployment,
+            Auth0UserProfile.createTestAdminUser(),
+            server,
+            "test-deploy",
+            DeployJob.DeployType.REPLACE
+        );
+        assertThat(
+            replaceNonce(
+                deployJob.constructManifestAndUserData(true, true),
+                "canMakeServerOnlyUserDataScript"
+            ),
+            matchesSnapshot()
+        );
+    }
+
+    /**
+     * Replaces the nonce in the user data with a deterministic value
+     */
+    private String replaceNonce(String userData, String replacementNonce) {
+        return userData.replaceFirst(
+            "nonce\":\"[\\w-]*",
+            String.format("nonce\":\"%s", replacementNonce)
+        );
     }
 
     /**
      * Tests that Data Tools can run an ELB deployment.
      *
-     * Note: this requires changing server.yml#modules.deployment.ec2.enabled to true
+     * Note: this requires changing server.yml#modules.deployment.ec2.enabled to true and also that the
+     * RUN_AWS_DEPLOY_JOB_TESTS environment variable is set to "true"
      */
     @Test
     public void canDeployFromPreloadedBundle () {
+        assumeTrue(getBooleanEnvVar("RUN_AWS_DEPLOY_JOB_TESTS"));
         DeployJob deployJob = new DeployJob(deployment, Auth0UserProfile.createTestAdminUser(), server, "test-deploy", DeployJob.DeployType.USE_PRELOADED_BUNDLE);
         deployJob.run();
         // FIXME: Deployment will succeed even if one of the clone servers does not start up properly.
@@ -84,20 +149,34 @@ public class DeployJobTest {
 
     /**
      * Tests that Data Tools can run an ELB deployment from a pre-built graph.
+     *
+     * Note: this requires changing server.yml#modules.deployment.ec2.enabled to true and also that the
+     * RUN_AWS_DEPLOY_JOB_TESTS environment variable is set to "true"
      */
     @Test
     public void canDeployFromPrebuiltGraph () {
+        assumeTrue(getBooleanEnvVar("RUN_AWS_DEPLOY_JOB_TESTS"));
         DeployJob deployJob = new DeployJob(deployment, Auth0UserProfile.createTestAdminUser(), server, "deploy-test", DeployJob.DeployType.USE_PREBUILT_GRAPH);
         deployJob.run();
         // FIXME: Deployment will succeed even if one of the clone servers does not start up properly.
         assertFalse("Deployment did not fail.", deployJob.status.error);
     }
 
+    /**
+     * Terminates any instances that were created during the tests.
+     *
+     * Note: this requires changing server.yml#modules.deployment.ec2.enabled to true and also that the
+     * RUN_AWS_DEPLOY_JOB_TESTS environment variable is set to "true"
+     */
     @AfterClass
-    public static void cleanUp() {
+    public static void cleanUp() throws AmazonServiceException, CheckedAWSException {
+        assumeTrue(getBooleanEnvVar("RUN_AWS_DEPLOY_JOB_TESTS"));
         List<Instance> instances = server.retrieveEC2Instances();
-        List<String> ids = getIds(instances);
-        terminateInstances(AWSUtils.getEC2ClientForRole(server.role), ids);
+        List<String> ids = EC2Utils.getIds(instances);
+        EC2Utils.terminateInstances(
+            EC2Utils.getEC2Client(server.role, server.ec2Info == null ? null : server.ec2Info.region),
+            ids
+        );
     }
 
 }

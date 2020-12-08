@@ -4,6 +4,8 @@
 yum install java-1.8.0 -y
 yum remove java-1.7.0-openjdk -y
 
+source jmeter-version.sh
+
 # install jmeter
 ./install-jmeter.sh
 
@@ -11,4 +13,4 @@ yum remove java-1.7.0-openjdk -y
 # http://www.testingdiaries.com/jmeter-on-aws/
 
 # start up jmeter server
-apache-jmeter-3.3/bin/jmeter-server
+apache-jmeter-$JMETER_VER/bin/jmeter-server

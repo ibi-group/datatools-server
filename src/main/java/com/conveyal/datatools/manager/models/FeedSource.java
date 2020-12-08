@@ -1,16 +1,17 @@
 package com.conveyal.datatools.manager.models;
 
+import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.DeleteObjectsRequest;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
+import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
-import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
-import com.conveyal.datatools.manager.persistence.FeedStore;
+import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
+import com.conveyal.datatools.manager.models.transform.FeedTransformation;
 import com.conveyal.datatools.manager.persistence.Persistence;
-import com.conveyal.datatools.manager.utils.HashUtils;
 import com.conveyal.gtfs.GTFS;
-import com.conveyal.gtfs.validator.ValidationResult;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -26,10 +27,13 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.mongodb.client.model.Filters.and;
@@ -48,8 +52,17 @@ public class FeedSource extends Model implements Cloneable {
     /**
      * The collection of which this feed is a part
      */
-    //@JsonView(JsonViews.DataDump.class)
     public String projectId;
+
+    /**
+     * When snapshotting a GTFS feed for editing, gtfs-lib currently defaults to normalize stop sequence values to be
+     * zero-based and incrementing. This can muck with GTFS files that are linked to GTFS-rt feeds by stop_sequence, so
+     * this override flag currently provides a workaround for feeds that need to be edited but do not need to edit
+     * stop_times or individual patterns. WARNING: enabling this flag for a feed and then attempting to edit patterns in
+     * complicated ways (e.g., modifying the order of pattern stops) could have unexpected consequences. There is no UI
+     * setting for this and it is not recommended to do this unless absolutely necessary.
+     */
+    public boolean preserveStopTimesSequence;
 
     /**
      * Get the Project of which this feed is a part
@@ -64,10 +77,7 @@ public class FeedSource extends Model implements Cloneable {
         return project == null ? null : project.organizationId;
     }
 
-    // TODO: Add back in regions once they have been refactored
-//    public List<Region> retrieveRegionList () {
-//        return Region.retrieveAll().stream().filter(r -> Arrays.asList(regions).contains(r.id)).collect(Collectors.toList());
-//    }
+    public List<FeedTransformRules> transformRules = new ArrayList<>();
 
     /** The name of this feed source, e.g. MTA New York City Subway */
     public String name;
@@ -135,6 +145,13 @@ public class FeedSource extends Model implements Cloneable {
         this.retrievalMethod = FeedRetrievalMethod.MANUALLY_UPLOADED;
     }
 
+    public FeedSource (String name, String projectId, FeedRetrievalMethod retrievalMethod) {
+        super();
+        this.name = name;
+        this.projectId = projectId;
+        this.retrievalMethod = retrievalMethod;
+    }
+
     /**
      * No-arg constructor to yield an uninitialized feed source, for dump/restore.
      * Should not be used in general code.
@@ -161,8 +178,7 @@ public class FeedSource extends Model implements Cloneable {
         // We create a new FeedVersion now, so that the fetched date is (milliseconds) before
         // fetch occurs. That way, in the highly unlikely event that a feed is updated while we're
         // fetching it, we will not miss a new feed.
-        FeedVersion version = new FeedVersion(this);
-        version.retrievalMethod = FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
+        FeedVersion version = new FeedVersion(this, FeedRetrievalMethod.FETCHED_AUTOMATICALLY);
 
         // build the URL from which to fetch
         URL url = null;
@@ -186,10 +202,7 @@ public class FeedSource extends Model implements Cloneable {
                     "Mozilla/5.0 (Windows NT 6.1; WOW64) AppleWebKit/537.11 (KHTML, like Gecko) Chrome/23.0.1271.95 Safari/537.11"
             );
         } catch (IOException e) {
-            String message = String.format("Unable to open connection to %s; not fetching feed %s", url, this.name);
-            LOG.error(message);
-            // TODO use this update function throughout this class
-            status.update(true, message, 0);
+            status.fail(String.format("Unable to open connection to %s; not fetching feed %s", url, this.name), e);
             return null;
         }
 
@@ -211,13 +224,15 @@ public class FeedSource extends Model implements Cloneable {
                 case HttpURLConnection.HTTP_NOT_MODIFIED:
                     message = String.format("Feed %s has not been modified", this.name);
                     LOG.warn(message);
-                    status.update(false, message, 100.0);
+                    status.completeSuccessfully(message);
                     return null;
                 case HttpURLConnection.HTTP_OK:
                     // Response is OK. Continue on to save the GTFS file.
                     message = String.format("Saving %s feed.", this.name);
                     LOG.info(message);
-                    status.update(false, message, 75.0);
+                    status.update(message, 75.0);
+                    // Create new file from input stream (this also handles hashing the file and other version fields
+                    // calculated from the GTFS file.
                     newGtfsFile = version.newGtfsFile(conn.getInputStream());
                     break;
                 case HttpURLConnection.HTTP_MOVED_TEMP:
@@ -254,11 +269,6 @@ public class FeedSource extends Model implements Cloneable {
             e.printStackTrace();
             return null;
         }
-
-        // note that anything other than a new feed fetched successfully will have already returned from the function
-        version.hash = HashUtils.hashFile(newGtfsFile);
-
-
         if (latest != null && version.hash.equals(latest.hash)) {
             // If new version hash equals the hash for the latest version, do not error. Simply indicate that server
             // operators should add If-Modified-Since support to avoid wasting bandwidth.
@@ -270,10 +280,9 @@ public class FeedSource extends Model implements Cloneable {
             } else {
                 LOG.warn("Failed to delete unneeded GTFS file at: {}", filePath);
             }
-            status.update(false, message, 100.0, true);
+            status.completeSuccessfully(message);
             return null;
-        }
-        else {
+        } else {
             version.userId = this.userId;
 
             // Update last fetched value for feed source.
@@ -281,13 +290,9 @@ public class FeedSource extends Model implements Cloneable {
 
             // Set file timestamp according to last modified header from connection
             version.fileTimestamp = conn.getLastModified();
-            NotifyUsersForSubscriptionJob.createNotification(
-                    "feed-updated",
-                    this.id,
-                    String.format("New feed version created for %s.", this.name));
             String message = String.format("Fetch complete for %s", this.name);
             LOG.info(message);
-            status.update(false, message, 100.0);
+            status.completeSuccessfully(message);
             return version;
         }
     }
@@ -447,53 +452,61 @@ public class FeedSource extends Model implements Cloneable {
         return "public/" + getCleanName(this.name) + ".zip";
     }
 
-    public void makePublic() {
-        String sourceKey = FeedStore.s3Prefix + this.id + ".zip";
+    /**
+     * Makes the feed source's latest version have public access on AWS S3.
+     */
+    public void makePublic() throws CheckedAWSException {
+        String sourceKey = S3Utils.DEFAULT_BUCKET_GTFS_FOLDER + this.id + ".zip";
         String publicKey = toPublicKey();
         String versionId = this.latestVersionId();
-        String latestVersionKey = FeedStore.s3Prefix + versionId;
+        String latestVersionKey = S3Utils.DEFAULT_BUCKET_GTFS_FOLDER + versionId;
 
         // only deploy to public if storing feeds on s3 (no mechanism for downloading/publishing
         // them otherwise)
         if (DataManager.useS3) {
-            boolean sourceExists = FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, sourceKey);
+            AmazonS3 defaultS3Client = S3Utils.getDefaultS3Client();
+            boolean sourceExists = defaultS3Client.doesObjectExist(S3Utils.DEFAULT_BUCKET, sourceKey);
             ObjectMetadata sourceMetadata = sourceExists
-                    ? FeedStore.s3Client.getObjectMetadata(DataManager.feedBucket, sourceKey)
+                    ? defaultS3Client.getObjectMetadata(S3Utils.DEFAULT_BUCKET, sourceKey)
                     : null;
-            boolean latestExists = FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, latestVersionKey);
+            boolean latestExists = defaultS3Client.doesObjectExist(S3Utils.DEFAULT_BUCKET, latestVersionKey);
             ObjectMetadata latestVersionMetadata = latestExists
-                    ? FeedStore.s3Client.getObjectMetadata(DataManager.feedBucket, latestVersionKey)
+                    ? defaultS3Client.getObjectMetadata(S3Utils.DEFAULT_BUCKET, latestVersionKey)
                     : null;
             boolean latestVersionMatchesSource = sourceMetadata != null &&
                     latestVersionMetadata != null &&
                     sourceMetadata.getETag().equals(latestVersionMetadata.getETag());
             if (sourceExists && latestVersionMatchesSource) {
                 LOG.info("copying feed {} to s3 public folder", this);
-                FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, sourceKey, CannedAccessControlList.PublicRead);
-                FeedStore.s3Client.copyObject(DataManager.feedBucket, sourceKey, DataManager.feedBucket, publicKey);
-                FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, publicKey, CannedAccessControlList.PublicRead);
+                defaultS3Client.setObjectAcl(S3Utils.DEFAULT_BUCKET, sourceKey, CannedAccessControlList.PublicRead);
+                defaultS3Client.copyObject(S3Utils.DEFAULT_BUCKET, sourceKey, S3Utils.DEFAULT_BUCKET, publicKey);
+                defaultS3Client.setObjectAcl(S3Utils.DEFAULT_BUCKET, publicKey, CannedAccessControlList.PublicRead);
             } else {
                 LOG.warn("Latest feed source {} on s3 at {} does not exist or does not match latest version. Using latest version instead.", this, sourceKey);
-                if (FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, latestVersionKey)) {
+                if (defaultS3Client.doesObjectExist(S3Utils.DEFAULT_BUCKET, latestVersionKey)) {
                     LOG.info("copying feed version {} to s3 public folder", versionId);
-                    FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, latestVersionKey, CannedAccessControlList.PublicRead);
-                    FeedStore.s3Client.copyObject(DataManager.feedBucket, latestVersionKey, DataManager.feedBucket, publicKey);
-                    FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, publicKey, CannedAccessControlList.PublicRead);
+                    defaultS3Client.setObjectAcl(S3Utils.DEFAULT_BUCKET, latestVersionKey, CannedAccessControlList.PublicRead);
+                    defaultS3Client.copyObject(S3Utils.DEFAULT_BUCKET, latestVersionKey, S3Utils.DEFAULT_BUCKET, publicKey);
+                    defaultS3Client.setObjectAcl(S3Utils.DEFAULT_BUCKET, publicKey, CannedAccessControlList.PublicRead);
 
                     // also copy latest version to feedStore latest
-                    FeedStore.s3Client.copyObject(DataManager.feedBucket, latestVersionKey, DataManager.feedBucket, sourceKey);
+                    defaultS3Client.copyObject(S3Utils.DEFAULT_BUCKET, latestVersionKey, S3Utils.DEFAULT_BUCKET, sourceKey);
                 }
             }
         }
     }
 
-    public void makePrivate() {
-        String sourceKey = FeedStore.s3Prefix + this.id + ".zip";
+    /**
+     * Makes the feed source's latest version have private access on AWS S3.
+     */
+    public void makePrivate() throws CheckedAWSException {
+        String sourceKey = S3Utils.DEFAULT_BUCKET_GTFS_FOLDER + this.id + ".zip";
         String publicKey = toPublicKey();
-        if (FeedStore.s3Client.doesObjectExist(DataManager.feedBucket, sourceKey)) {
+        AmazonS3 defaultS3Client = S3Utils.getDefaultS3Client();
+        if (defaultS3Client.doesObjectExist(S3Utils.DEFAULT_BUCKET, sourceKey)) {
             LOG.info("removing feed {} from s3 public folder", this);
-            FeedStore.s3Client.setObjectAcl(DataManager.feedBucket, sourceKey, CannedAccessControlList.AuthenticatedRead);
-            FeedStore.s3Client.deleteObject(DataManager.feedBucket, publicKey);
+            defaultS3Client.setObjectAcl(S3Utils.DEFAULT_BUCKET, sourceKey, CannedAccessControlList.AuthenticatedRead);
+            defaultS3Client.deleteObject(S3Utils.DEFAULT_BUCKET, publicKey);
         }
     }
 
@@ -526,15 +539,6 @@ public class FeedSource extends Model implements Cloneable {
     }
 
     /**
-     * Represents ways feeds can be retrieved
-     */
-    public enum FeedRetrievalMethod {
-        FETCHED_AUTOMATICALLY, // automatically retrieved over HTTP on some regular basis
-        MANUALLY_UPLOADED, // manually uploaded by someone, perhaps the agency, or perhaps an internal user
-        PRODUCED_IN_HOUSE // produced in-house in a GTFS Editor instance
-    }
-
-    /**
      * Delete this feed source and everything that it contains.
      *
      * FIXME: Use a Mongo transaction to handle the deletion of these related objects.
@@ -551,9 +555,10 @@ public class FeedSource extends Model implements Cloneable {
             }
             // Delete latest copy of feed source on S3.
             if (DataManager.useS3) {
-                DeleteObjectsRequest delete = new DeleteObjectsRequest(DataManager.feedBucket);
-                delete.withKeys("public/" + this.name + ".zip", FeedStore.s3Prefix + this.id + ".zip");
-                FeedStore.s3Client.deleteObjects(delete);
+                AmazonS3 defaultS3Client = S3Utils.getDefaultS3Client();
+                DeleteObjectsRequest delete = new DeleteObjectsRequest(S3Utils.DEFAULT_BUCKET);
+                delete.withKeys("public/" + this.name + ".zip", S3Utils.DEFAULT_BUCKET_GTFS_FOLDER + this.id + ".zip");
+                defaultS3Client.deleteObjects(delete);
             }
             // Remove all external properties for this feed source.
             Persistence.externalFeedSourceProperties.removeFiltered(eq("feedSourceId", this.id));
@@ -570,5 +575,32 @@ public class FeedSource extends Model implements Cloneable {
 
     public FeedSource clone () throws CloneNotSupportedException {
         return (FeedSource) super.clone();
+    }
+
+    public <T extends FeedTransformation> boolean hasTransformationsOfType(FeedVersion target, Class<T> clazz) {
+        return getActiveTransformations(target, clazz).size() > 0;
+    }
+
+    public boolean hasRulesForRetrievalMethod(FeedRetrievalMethod retrievalMethod) {
+        return getRulesForRetrievalMethod(retrievalMethod) != null;
+    }
+
+    /**
+     * Get transform rules for the retrieval method or null if none exist. Note: this will return the first rule set
+     * found. There should not be multiple rule sets for a given retrieval method.
+     */
+    public FeedTransformRules getRulesForRetrievalMethod(FeedRetrievalMethod retrievalMethod) {
+        return transformRules.stream()
+            .filter(feedTransformRules -> feedTransformRules.hasRetrievalMethod(retrievalMethod))
+            .findFirst()
+            .orElse(null);
+    }
+
+    public <T extends FeedTransformation> List<T> getActiveTransformations(FeedVersion target, Class<T> clazz) {
+        return transformRules.stream()
+            .filter(FeedTransformRules::isActive)
+            .map(rule -> rule.getActiveTransformations(target, clazz))
+            .flatMap(Collection::stream)
+            .collect(Collectors.toList());
     }
 }

@@ -234,6 +234,8 @@ public class SparkUtils {
             LOG.warn("Request object is null. Cannot log.");
             return;
         }
+        // don't log job status requests/responses, they clutter things up
+        if (request.pathInfo().contains("status/jobs")) return;
         Auth0UserProfile userProfile = request.attribute("user");
         String userEmail = userProfile != null ? userProfile.getEmail() : "no-auth";
         String queryString = request.queryParams().size() > 0 ? "?" + request.queryString() : "";

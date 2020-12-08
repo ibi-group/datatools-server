@@ -6,7 +6,7 @@
 
     <groupId>com.conveyal</groupId>
     <artifactId>datatools-server</artifactId>
-    <version>3.6.1-SNAPSHOT</version>
+    <version>3.8.1-SNAPSHOT</version>
 
     <licenses>
         <license>
@@ -167,14 +167,13 @@
                 <updatePolicy>always</updatePolicy>
             </snapshots>
         </repository>
+        <!--  Repository for geotools (as of April 2020)  -->
         <repository>
             <id>osgeo</id>
-            <name>Open Source Geospatial Foundation Repository</name>
-            <url>http://download.osgeo.org/webdav/geotools/</url>
-            <snapshots>
-                <enabled>true</enabled>
-                <updatePolicy>always</updatePolicy>
-            </snapshots>
+            <name>OSGeo Release Repository</name>
+            <url>https://repo.osgeo.org/repository/release/</url>
+            <snapshots><enabled>false</enabled></snapshots>
+            <releases><enabled>true</enabled></releases>
         </repository>
         <repository>
             <id>sonatype</id>
@@ -240,18 +239,18 @@
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
-            <version>4.12</version>
+            <version>4.13.1</version>
             <scope>test</scope>
         </dependency>
 
-        <!-- Used for loading/fetching/writing GTFS entities. gtfs-lib also provides access to:
+        <!-- Used for loading/fetching/validating/writing GTFS entities. gtfs-lib also provides access to:
          - commons-io - generic utilities
          - AWS S3 SDK - putting/getting objects into/out of S3.
          -->
         <dependency>
             <groupId>com.conveyal</groupId>
             <artifactId>gtfs-lib</artifactId>
-            <version>5.0.7</version>
+            <version>6.1.0</version>
             <!-- Exclusions added in order to silence SLF4J warnings about multiple bindings:
                 http://www.slf4j.org/codes.html#multiple_bindings
             -->
@@ -263,11 +262,11 @@
             </exclusions>
         </dependency>
 
-        <!-- Used for data-tools application database -->
+        <!-- Used for application database -->
         <dependency>
             <groupId>org.mongodb</groupId>
-            <artifactId>mongodb-driver</artifactId>
-            <version>3.5.0</version>
+            <artifactId>mongodb-driver-sync</artifactId>
+            <version>4.0.5</version>
         </dependency>
 
         <!-- Miscellaneous utilities -->
@@ -333,6 +332,13 @@
         <dependency>
             <groupId>org.geotools</groupId>
             <artifactId>gt-api</artifactId>
+            <version>${geotools.version}</version>
+        </dependency>
+        <!-- gt-epsg-hsql includes coordinate reference libraries that were removed from gtfs-lib in
+             https://github.com/conveyal/gtfs-lib/pull/290 -->
+        <dependency>
+            <groupId>org.geotools</groupId>
+            <artifactId>gt-epsg-hsql</artifactId>
             <version>${geotools.version}</version>
         </dependency>
 

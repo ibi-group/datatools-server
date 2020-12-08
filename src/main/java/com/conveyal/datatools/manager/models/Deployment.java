@@ -1,9 +1,10 @@
 package com.conveyal.datatools.manager.models;
 
 import com.amazonaws.services.ec2.model.Filter;
-import com.conveyal.datatools.common.utils.AWSUtils;
+import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
+import com.conveyal.datatools.common.utils.aws.EC2Utils;
+import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
-import com.conveyal.datatools.manager.controllers.api.DeploymentController;
 import com.conveyal.datatools.manager.jobs.DeployJob;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.StringUtils;
@@ -14,6 +15,7 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.io.ByteStreams;
 
@@ -27,6 +29,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
 import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.text.DateFormat;
@@ -35,12 +38,15 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import com.mongodb.client.FindIterable;
+import org.bson.codecs.pojo.annotations.BsonIgnore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -68,10 +74,14 @@ public class Deployment extends Model implements Serializable {
 
     public List<DeployJob.DeploySummary> deployJobSummaries = new ArrayList<>();
 
-    @JsonView(JsonViews.DataDump.class)
     public String projectId;
 
-    @JsonProperty("project")
+    private ObjectMapper otpConfigMapper = new ObjectMapper().setSerializationInclusion(Include.NON_NULL);
+
+    /**
+     * Get parent project for deployment. Note: at one point this was a JSON property of this class, but severe
+     * performance issues prevent this field from scaling to be fetched/assigned to a large collection of deployments.
+     */
     public Project parentProject() {
         return Persistence.projects.getById(projectId);
     }
@@ -115,30 +125,36 @@ public class Deployment extends Model implements Serializable {
         return ret;
     }
 
-    /** All of the feed versions used in this deployment, summarized so that the Internet won't break */
-    @JsonProperty("ec2Instances")
-    public List<EC2InstanceSummary> retrieveEC2Instances() {
+    /** Fetch ec2 instances tagged with this deployment's ID. */
+    public List<EC2InstanceSummary> retrieveEC2Instances() throws CheckedAWSException {
         if (!"true".equals(DataManager.getConfigPropertyAsText("modules.deployment.ec2.enabled"))) return Collections.EMPTY_LIST;
         Filter deploymentFilter = new Filter("tag:deploymentId", Collections.singletonList(id));
         // Check if the latest deployment used alternative credentials/AWS role.
         String role = null;
+        String region = null;
         if (this.latest() != null) {
             OtpServer server = Persistence.servers.getById(this.latest().serverId);
-            if (server != null) role = server.role;
+            if (server != null) {
+                role = server.role;
+                if (server.ec2Info != null) {
+                    region = server.ec2Info.region;
+                }
+            }
         }
-        return DeploymentController.fetchEC2InstanceSummaries(AWSUtils.getEC2ClientForRole(role), deploymentFilter);
+        return EC2Utils.fetchEC2InstanceSummaries(
+            EC2Utils.getEC2Client(role, region),
+            deploymentFilter
+        );
     }
 
-    public void storeFeedVersions(Collection<FeedVersion> versions) {
-        feedVersionIds = new ArrayList<>(versions.size());
+    /**
+     * Public URL at which the OSM extract should be downloaded. This should be null if the extract should be downloaded
+     * from an extract server. Extract type should be a .pbf.
+     */
+    public String osmExtractUrl;
 
-        for (FeedVersion version : versions) {
-            feedVersionIds.add(version.id);
-        }
-    }
-
-    // future use
-    public String osmFileId;
+    /** If true, OSM extract will be skipped entirely (extract will be fetched from neither extract server nor URL. */
+    public boolean skipOsmExtract;
 
     /**
      * The version (according to git describe) of OTP being used on this deployment This should default to
@@ -267,7 +283,7 @@ public class Deployment extends Model implements Serializable {
     }
 
     /**
-     * Create an empty deployment, for use with dump/restore.
+     * Create an empty deployment, for use with dump/restore and testing.
      */
     public Deployment() {
         // do nothing.
@@ -328,7 +344,7 @@ public class Deployment extends Model implements Serializable {
             // Extract OSM and insert it into the deployment bundle
             ZipEntry e = new ZipEntry("osm.pbf");
             out.putNextEntry(e);
-            InputStream is = downloadOsmExtract(retrieveProjectBounds());
+            InputStream is = downloadOsmExtract();
             ByteStreams.copy(is, out);
             try {
                 is.close();
@@ -340,34 +356,22 @@ public class Deployment extends Model implements Serializable {
         }
 
         if (includeOtpConfig) {
-            // Write build-config.json and router-config.json
-            Project project = this.parentProject();
-            ObjectMapper mapper = new ObjectMapper();
+            // Write build-config.json and router-config.json into zip file.
             // Use custom build config if it is not null, otherwise default to project build config.
-            byte[] buildConfigAsBytes = customBuildConfig != null
-                ? customBuildConfig.getBytes(StandardCharsets.UTF_8)
-                : project.buildConfig != null
-                    ? mapper.writer().writeValueAsBytes(project.buildConfig)
-                    : null;
+            byte[] buildConfigAsBytes = generateBuildConfig();
             if (buildConfigAsBytes != null) {
                 // Include build config if not null.
                 ZipEntry buildConfigEntry = new ZipEntry("build-config.json");
                 out.putNextEntry(buildConfigEntry);
-                mapper.setSerializationInclusion(Include.NON_NULL);
                 out.write(buildConfigAsBytes);
                 out.closeEntry();
             }
             // Use custom router config if it is not null, otherwise default to project router config.
-            byte[] routerConfigAsBytes = customRouterConfig != null
-                ? customRouterConfig.getBytes(StandardCharsets.UTF_8)
-                : project.routerConfig != null
-                    ? mapper.writer().writeValueAsBytes(project.routerConfig)
-                    : null;
+            byte[] routerConfigAsBytes = generateRouterConfig();
             if (routerConfigAsBytes != null) {
                 // Include router config if not null.
                 ZipEntry routerConfigEntry = new ZipEntry("router-config.json");
                 out.putNextEntry(routerConfigEntry);
-                mapper.setSerializationInclusion(Include.NON_NULL);
                 out.write(routerConfigAsBytes);
                 out.closeEntry();
             }
@@ -376,21 +380,109 @@ public class Deployment extends Model implements Serializable {
         out.close();
     }
 
+    /** Generate build config for deployment as byte array (for writing to file output stream). */
+    public byte[] generateBuildConfig() {
+        Project project = this.parentProject();
+        return customBuildConfig != null
+            ? customBuildConfig.getBytes(StandardCharsets.UTF_8)
+            : project.buildConfig != null
+                ? writeToBytes(project.buildConfig)
+                : null;
+    }
+
+    public String generateBuildConfigAsString() {
+        if (customBuildConfig != null) return customBuildConfig;
+        return writeToString(this.parentProject().buildConfig);
+    }
+
+    /** Convenience method to write serializable object (primarily for router/build config objects) to byte array. */
+    private <O extends Serializable> byte[] writeToBytes(O object) {
+        try {
+            return otpConfigMapper.writer().writeValueAsBytes(object);
+        } catch (JsonProcessingException e) {
+            LOG.error("Value contains malformed JSON", e);
+            return null;
+        }
+    }
+
+    /** Convenience method to write serializable object (primarily for router/build config objects) to string. */
+    private <O extends Serializable> String writeToString(O object) {
+        try {
+            return otpConfigMapper.writer().writeValueAsString(object);
+        } catch (JsonProcessingException e) {
+            LOG.error("Value contains malformed JSON", e);
+            return null;
+        }
+    }
+
+    /** Generate router config for deployment as string. */
+    public byte[] generateRouterConfig() {
+        Project project = this.parentProject();
+        return customRouterConfig != null
+            ? customRouterConfig.getBytes(StandardCharsets.UTF_8)
+            : project.routerConfig != null
+                ? writeToBytes(project.routerConfig)
+                : null;
+    }
+
+    /** Generate router config for deployment as byte array (for writing to file output stream). */
+    public String generateRouterConfigAsString() {
+        if (customRouterConfig != null) return customRouterConfig;
+        return writeToString(this.parentProject().routerConfig);
+    }
+
     /**
-     * Get OSM extract from OSM vex server as input stream.
+     * Get OSM extract from OSM extract URL (vex server or static URL) as input stream.
      */
-    public static InputStream downloadOsmExtract(Rectangle2D rectangle2D) throws IOException {
+    public InputStream downloadOsmExtract() throws IOException {
+        URL extractUrl = getUrlForOsmExtract();
+        if (extractUrl == null) {
+            throw new IllegalArgumentException("Cannot download OSM extract. Extract URL is invalid.");
+        }
+        LOG.info("Getting OSM extract at {}", extractUrl.toString());
+        HttpURLConnection conn = (HttpURLConnection) extractUrl.openConnection();
+        conn.connect();
+        return conn.getInputStream();
+    }
+
+    /**
+     * Gets the URL for downloading an OSM PBF file from the osm vex server for the desired bounding box.
+     */
+    public static URL getVexUrl (Rectangle2D rectangle2D) throws MalformedURLException {
         Bounds bounds = new Bounds(rectangle2D);
         if (!bounds.areValid()) {
             throw new IllegalArgumentException(String.format("Provided bounds %s are not valid", bounds.toVexString()));
         }
-        URL vexUrl = new URL(String.format(Locale.ROOT, "%s/%s.pbf",
-                DataManager.getConfigPropertyAsText("OSM_VEX"),
-                bounds.toVexString()));
-        LOG.info("Getting OSM extract at {}", vexUrl.toString());
-        HttpURLConnection conn = (HttpURLConnection) vexUrl.openConnection();
-        conn.connect();
-        return conn.getInputStream();
+        return new URL(String.format(Locale.ROOT, "%s/%s.pbf",
+            DataManager.getConfigPropertyAsText("OSM_VEX"),
+            bounds.toVexString()));
+    }
+
+    /**
+     * Gets the preferred extract URL for a deployment. If {@link #skipOsmExtract} is true or the osmExtractUrl or vex URL
+     * is invalid, this will return null.
+     *
+     * Note: this method name must not be getOsmExtractUrl because {@link #osmExtractUrl} is an instance field and ignore
+     * annotations will cause it to disappear during de-/serialization.
+     */
+    @JsonIgnore
+    @BsonIgnore
+    public URL getUrlForOsmExtract() throws MalformedURLException {
+        // Return null if deployment should skip extract.
+        if (skipOsmExtract) return null;
+        URL osmUrl = null;
+        // Otherwise, prefer the static extract URL if defined.
+        if (osmExtractUrl != null) {
+            try {
+                osmUrl = new URL(osmExtractUrl);
+            } catch (MalformedURLException e) {
+                LOG.error("Could not construct extract URL from {}", osmExtractUrl, e);
+            }
+        } else {
+            // Finally, if no custom extract URL is provided, default to a vex URL.
+            osmUrl = getVexUrl(retrieveProjectBounds());
+        }
+        return osmUrl;
     }
 
     /**
@@ -484,6 +576,24 @@ public class Deployment extends Model implements Serializable {
     }
 
     /**
+     * Creates a list of all of the download URLs for all of the OSM and GTFS files that would be needed to build an OTP
+     * graph.
+     */
+    public List<String> generateGtfsAndOsmUrls() throws MalformedURLException {
+        Set<String> urls = new HashSet<>();
+        if (feedVersionIds.size() > 0) {
+            URL osmUrl = getUrlForOsmExtract();
+            // add OSM data
+            if (osmUrl != null) urls.add(osmUrl.toString());
+            // add GTFS files
+            for (String feedVersionId : feedVersionIds) {
+                urls.add(S3Utils.getS3FeedUri(feedVersionId));
+            }
+        }
+        return new ArrayList<>(urls);
+    }
+
+    /**
      * A summary of a FeedVersion, leaving out all of the individual validation errors.
      */
     public static class SummarizedFeedVersion {
@@ -522,10 +632,23 @@ public class Deployment extends Model implements Serializable {
      */
     public abstract static class DeploymentFullFeedVersionMixin {
         @JsonIgnore
-        public abstract Collection<SummarizedFeedVersion> retrievefeedVersions();
+        public abstract Collection<SummarizedFeedVersion> retrieveFeedVersions();
 
-//        @JsonProperty("feedVersions")
+        @JsonProperty("feedVersions")
         @JsonIgnore(false)
         public abstract Collection<FeedVersion> retrieveFullFeedVersions ();
+    }
+
+    /**
+     * A MixIn to be applied to this deployment, for returning a single deployment, so that the list of ec2Instances is
+     * included in the JSON response.
+     *
+     * Usually a mixin would be used on an external class, but since we are changing one thing about a single class, it seemed
+     * unnecessary to define a new view.
+     */
+    public abstract static class DeploymentWithEc2InstancesMixin {
+
+        @JsonProperty("ec2Instances")
+        public abstract Collection<FeedVersion> retrieveEC2Instances ();
     }
 }

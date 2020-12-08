@@ -4,6 +4,7 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedSource;
+import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Snapshot;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.loader.FeedLoadResult;
@@ -56,9 +57,17 @@ import static com.conveyal.gtfs.GTFS.makeSnapshot;
  */
 public class CreateSnapshotJob extends MonitorableJob {
     private static final Logger LOG = LoggerFactory.getLogger(CreateSnapshotJob.class);
-    private final String namespace;
+    /** The namespace to snapshot. (Note: namespace resulting from snapshot can be found at {@link Snapshot#namespace} */
+    private String namespace;
+    /** Whether to update working buffer for the feed source to the newly created snapshot namespace. */
     private final boolean updateBuffer;
+    /** Whether to persist the snapshot in the Snapshots collection. */
     private final boolean storeSnapshot;
+    /**
+     * Whether to preserve the existing editor buffer as its own snapshot. This is essentially a shorthand for creating
+     * a snapshot and then separately loading something new into the buffer (if used with updateBuffer). It can also be
+     * thought of as an autosave.
+     */
     private final boolean preserveBuffer;
     private Snapshot snapshot;
     private FeedSource feedSource;
@@ -70,7 +79,16 @@ public class CreateSnapshotJob extends MonitorableJob {
         this.updateBuffer = updateBufferNamespace;
         this.storeSnapshot = storeSnapshot;
         this.preserveBuffer = preserveBufferAsSnapshot;
-        status.update(false,  "Initializing...", 0);
+        status.update( "Initializing...", 0);
+    }
+
+    public CreateSnapshotJob(Auth0UserProfile owner, Snapshot snapshot) {
+        super(owner, "Creating snapshot for " + snapshot.feedSourceId, JobType.CREATE_SNAPSHOT);
+        this.snapshot = snapshot;
+        this.updateBuffer = false;
+        this.storeSnapshot = true;
+        this.preserveBuffer = false;
+        status.update( "Initializing...", 0);
     }
 
     @JsonProperty
@@ -80,14 +98,21 @@ public class CreateSnapshotJob extends MonitorableJob {
 
     @Override
     public void jobLogic() {
+        // Special case where snapshot was created when a feed version was transformed by DbTransformations (the
+        // snapshot contains the transformed feed). Because the jobs are queued up before the feed has been processed,
+        // the namespace will not exist for the feed version until this jobLogic is actually run.
+        if (namespace == null && snapshot.feedVersionId != null) {
+            FeedVersion feedVersion = Persistence.feedVersions.getById(snapshot.feedVersionId);
+            this.namespace = feedVersion.namespace;
+        }
         // Get count of snapshots to set new version number.
         feedSource = Persistence.feedSources.getById(snapshot.feedSourceId);
         // Update job name to use feed source name (rather than ID).
         this.name = String.format("Creating snapshot for %s", feedSource.name);
         Collection<Snapshot> existingSnapshots = feedSource.retrieveSnapshots();
         int version = existingSnapshots.size();
-        status.update(false,  "Creating snapshot...", 20);
-        FeedLoadResult loadResult = makeSnapshot(namespace, DataManager.GTFS_DATA_SOURCE);
+        status.update("Creating snapshot...", 20);
+        FeedLoadResult loadResult = makeSnapshot(namespace, DataManager.GTFS_DATA_SOURCE, !feedSource.preserveStopTimesSequence);
         snapshot.version = version;
         snapshot.namespace = loadResult.uniqueIdentifier;
         snapshot.feedLoadResult = loadResult;
@@ -95,6 +120,7 @@ public class CreateSnapshotJob extends MonitorableJob {
             snapshot.generateName();
         }
         snapshot.snapshotTime = loadResult.completionTime;
+        status.update("Database snapshot finished.", 80);
     }
 
     @Override
@@ -107,8 +133,9 @@ public class CreateSnapshotJob extends MonitorableJob {
             if (preserveBuffer) {
                 // Preserve the existing buffer as a snapshot if requested. This is essentially a shorthand for creating
                 // a snapshot and then separately loading something new into the buffer. It can be thought of as an
-                // autosave. FIXME: the buffer would still exist even if not "preserved" here. Should it be deleted if
-                // requester opts to not preserve it?
+                // autosave.
+                // FIXME: the buffer would still exist even if not "preserved" here. Should it be deleted if
+                //   requester opts to not preserve it?
                 if (feedSource.editorNamespace == null) {
                     LOG.error("Cannot preserve snapshot with null namespace for feed source {}", feedSource.id);
                 } else {
@@ -131,7 +158,7 @@ public class CreateSnapshotJob extends MonitorableJob {
                         snapshot.namespace
                 );
             }
-            status.update(false, "Created snapshot!", 100, true);
+            status.completeSuccessfully("Created snapshot!");
         }
     }
 }

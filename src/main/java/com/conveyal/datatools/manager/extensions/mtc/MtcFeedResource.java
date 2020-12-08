@@ -1,24 +1,23 @@
 package com.conveyal.datatools.manager.extensions.mtc;
 
+import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.s3.model.PutObjectRequest;
+import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
+import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
-import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
-import java.lang.reflect.Field;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
@@ -168,7 +167,10 @@ public class MtcFeedResource implements ExternalFeedResource {
      * When feed version is created/published, write the feed to the shared S3 bucket.
      */
     @Override
-    public void feedVersionCreated(FeedVersion feedVersion, String authHeader) {
+    public void feedVersionCreated(
+        FeedVersion feedVersion,
+        String authHeader
+    ) throws AmazonServiceException, CheckedAWSException {
 
         if(s3Bucket == null) {
             LOG.error("Cannot push {} to S3 bucket. No bucket name specified.", feedVersion.id);
@@ -188,7 +190,7 @@ public class MtcFeedResource implements ExternalFeedResource {
         LOG.info("Pushing to MTC S3 Bucket: s3://{}/{}", s3Bucket, keyName);
         File file = feedVersion.retrieveGtfsFile();
         try {
-            FeedStore.s3Client.putObject(new PutObjectRequest(s3Bucket, keyName, file));
+            S3Utils.getDefaultS3Client().putObject(new PutObjectRequest(s3Bucket, keyName, file));
         } catch (Exception e) {
             LOG.error("Could not upload feed version to s3.");
             e.printStackTrace();

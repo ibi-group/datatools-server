@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
@@ -43,7 +44,6 @@ public class Project extends Model {
      * project as well as those that belong to no project.
      * @return
      */
-    @JsonProperty("otpServers")
     public List<OtpServer> availableOtpServers() {
         return Persistence.servers.getFiltered(or(
             eq("projectId", this.id),
@@ -66,6 +66,12 @@ public class Project extends Model {
     // 2. In the project feed source table, if a "pinned" deployment exists, the status of the versions that were in
     //   the "pinned" deployment are shown and compared to the most recent version in the feed sources.
     public String pinnedDeploymentId;
+
+    /**
+     * Feed source in which to store regionally merged GTFS feeds. If specified, during a regional feed merge all feeds
+     * in the project will be merged except for the feed source defined here.
+     */
+    public String regionalFeedSourceId;
 
     public Project() {
         this.buildConfig = new OtpBuildConfig();
@@ -110,5 +116,18 @@ public class Project extends Model {
         retrieveDeployments().forEach(Deployment::delete);
         // Finally, delete the project.
         Persistence.projects.removeById(this.id);
+    }
+
+    /**
+     * A MixIn to be applied to this project, for returning a single project, so that the list of otpServers is
+     * included in the JSON response.
+     *
+     * Usually a mixin would be used on an external class, but since we are changing one thing about a single class, it
+     * seemed unnecessary to define a new view.
+     */
+    public abstract static class ProjectWithOtpServers {
+
+        @JsonProperty("otpServers")
+        public abstract Collection<OtpServer> availableOtpServers ();
     }
 }

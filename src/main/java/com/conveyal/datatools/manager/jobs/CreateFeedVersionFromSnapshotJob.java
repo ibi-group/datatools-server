@@ -11,36 +11,39 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Created by demory on 7/27/16.
+ * Create (i.e., publish) a new feed version in the manager derived from an editor snapshot. NOTE: This could just
+ * create a new snapshot, and then validate those tables. However, we want to verify that we're exporting correctly to
+ * GTFS, so it's probably best to export the snapshot to a GTFS zip file and then run that zip file through the
+ * standard processing to construct a new feed version. There may be a more clever way to handle this, but storage is
+ * cheap enough.
  */
 public class CreateFeedVersionFromSnapshotJob extends MonitorableJob {
     public static final Logger LOG = LoggerFactory.getLogger(CreateFeedVersionFromSnapshotJob.class);
 
-    public FeedVersion feedVersion;
+    private final FeedVersion feedVersion;
     private final Snapshot snapshot;
 
-    public CreateFeedVersionFromSnapshotJob(FeedVersion feedVersion, Snapshot snapshot, Auth0UserProfile owner) {
-        super(owner, "Creating Feed Version from Snapshot for " + feedVersion.parentFeedSource().name, JobType.CREATE_FEEDVERSION_FROM_SNAPSHOT);
-        this.feedVersion = feedVersion;
+    public CreateFeedVersionFromSnapshotJob(FeedSource feedSource, Snapshot snapshot, Auth0UserProfile owner) {
+        super(owner, "Creating Feed Version from Snapshot for " + feedSource.name, JobType.CREATE_FEEDVERSION_FROM_SNAPSHOT);
+        this.feedVersion = new FeedVersion(feedSource, snapshot);
         this.snapshot = snapshot;
-        status.message = "Initializing...";
     }
 
     @Override
     public void jobLogic() {
-        // Set feed version properties.
-        feedVersion.originNamespace = snapshot.namespace;
-        feedVersion.retrievalMethod = FeedSource.FeedRetrievalMethod.PRODUCED_IN_HOUSE;
-        feedVersion.name = snapshot.name + " Snapshot Export";
-        // FIXME: This should probably just create a new snapshot, and then validate those tables.
-        // First export the snapshot to GTFS.
-        ExportSnapshotToGTFSJob exportSnapshotToGTFSJob = new ExportSnapshotToGTFSJob(owner, snapshot, feedVersion.id);
-        // Process feed version once GTFS file written.
-        ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(feedVersion, owner, true);
-        addNextJob(exportSnapshotToGTFSJob, processSingleFeedJob);
-        status.update("Beginning export...", 10);
+        status.update("Exporting snapshot to GTFS...", 10);
+        // Add the jobs to handle this operation in order.
+        addNextJob(
+            // First export the snapshot to GTFS.
+            new ExportSnapshotToGTFSJob(owner, snapshot, feedVersion),
+            // Then, process feed version once GTFS file written.
+            new ProcessSingleFeedJob(feedVersion, owner, true)
+        );
     }
 
+    /**
+     * @return feed source ID for the requestor to use to re-fetch versions once job is complete
+     */
     @JsonProperty
     public String getFeedSourceId () {
         return snapshot.feedSourceId;
