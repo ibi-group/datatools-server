@@ -357,8 +357,8 @@ public class FeedVersion extends Model implements Serializable {
     }
 
     /**
-     * Does this feed version have any critical errors that would prevent it being loaded to OTP?
-     * @return whether feed version has critical errors
+     * Does this feed version have any critical errors that would prevent it being loaded to OTP? This check includes
+     * whether the version has bad calendar dates and will also return false if the version is expired.
      */
     public boolean hasCriticalErrors() {
         return hasCriticalErrorsExceptingDate() ||
@@ -373,7 +373,7 @@ public class FeedVersion extends Model implements Serializable {
     private boolean hasCriticalErrorsExceptingDate() {
         if (validationResult == null)
             return true;
-
+        // FIXME: We need to get all GTFS error types from the SQL table and also return false if any have high severity.
         return validationResult.fatalException != null ||
             !validationSummary().bounds.areValid() ||
             feedLoadResult.stopTimes.rowCount == 0 ||

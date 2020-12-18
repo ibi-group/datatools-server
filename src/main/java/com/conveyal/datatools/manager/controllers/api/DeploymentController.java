@@ -18,6 +18,7 @@ import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
+import com.mongodb.client.FindIterable;
 import org.bson.Document;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
@@ -49,7 +50,7 @@ import static spark.Spark.put;
  */
 public class DeploymentController {
     private static final Logger LOG = LoggerFactory.getLogger(DeploymentController.class);
-    private static Map<String, DeployJob> deploymentJobsByServer = new HashMap<>();
+    private static final Map<String, DeployJob> deploymentJobsByServer = new HashMap<>();
 
     /**
      * Gets the deployment specified by the request's id parameter and ensure that user has access to the
@@ -377,6 +378,51 @@ public class DeploymentController {
     }
 
     /**
+     * Queue a new {@link DeployJob} if there are no conflicting jobs assigned to the specified server.
+     * @param deployJob new deploy job to queue
+     * @return whether the deploy job was successfully queued or not
+     */
+    public static boolean queueDeployJob(DeployJob deployJob) {
+        String serverId = deployJob.getServerId();
+        // Check that we can deploy to the specified target. (Any deploy job for the target that is presently active will
+        // cause a halt.)
+        if (deploymentJobsByServer.containsKey(serverId)) {
+            // There is a deploy job for the server. Check if it is active.
+            DeployJob conflictingDeployJob = deploymentJobsByServer.get(serverId);
+            if (conflictingDeployJob != null && !conflictingDeployJob.status.completed) {
+                // Another deploy job is actively being deployed to the server target.
+                LOG.error("New deploy job will not be queued due to active job in progress.");
+                return false;
+            }
+        }
+
+        // For any previous deployments sent to the server/router combination, set deployedTo to null because
+        // this new one will overwrite it. NOTE: deployedTo for the current deployment will only be updated after the
+        // successful completion of the deploy job.
+        FindIterable<Deployment> deploymentsWithSameTarget = Deployment.retrieveDeploymentForServerAndRouterId(
+            serverId,
+            deployJob.getDeployment().routerId
+        );
+        for (Deployment oldDeployment : deploymentsWithSameTarget) {
+            LOG.info("Setting deployment target to null id={}", oldDeployment.id);
+            Persistence.deployments.updateField(oldDeployment.id, "deployedTo", null);
+        }
+        // Finally, add deploy job to the heavy executor.
+        DataManager.heavyExecutor.execute(deployJob);
+        deploymentJobsByServer.put(serverId, deployJob);
+        return true;
+    }
+
+    public static DeployJob checkDeploymentInProgress(String deploymentId) {
+        for (DeployJob job : deploymentJobsByServer.values()) {
+            if (job.getDeploymentId().equals(deploymentId)) {
+                return job;
+            }
+        }
+        return null;
+    }
+
+    /**
      * HTTP controller to fetch information about provided EC2 machines that power ELBs running a trip planner.
      */
     private static List<EC2InstanceSummary> fetchEC2InstanceSummaries(
@@ -396,8 +442,9 @@ public class DeploymentController {
         String target = req.params("target");
         Deployment deployment = getDeploymentWithPermissions(req, res);
         Project project = Persistence.projects.getById(deployment.projectId);
-        if (project == null)
+        if (project == null) {
             logMessageAndHalt(req, 400, "Internal reference error. Deployment's project ID is invalid");
+        }
         // Get server by ID
         OtpServer otpServer = Persistence.servers.getById(target);
         if (otpServer == null) {
@@ -411,23 +458,6 @@ public class DeploymentController {
             logMessageAndHalt(req, 401, "User not authorized to deploy to admin-only target OTP server.");
         }
 
-        // Check that we can deploy to the specified target. (Any deploy job for the target that is presently active will
-        // cause a halt.)
-        if (deploymentJobsByServer.containsKey(target)) {
-            // There is a deploy job for the server. Check if it is active.
-            DeployJob deployJob = deploymentJobsByServer.get(target);
-            if (deployJob != null && !deployJob.status.completed) {
-                // Job for the target is still active! Send a 202 to the requester to indicate that it is not possible
-                // to deploy to this target right now because someone else is deploying.
-                String message = String.format(
-                        "Will not process request to deploy %s. Deployment currently in progress for target: %s",
-                        deployment.name,
-                        target);
-                LOG.warn(message);
-                logMessageAndHalt(req, HttpStatus.ACCEPTED_202, message);
-            }
-        }
-
         // Get the URLs to deploy to.
         List<String> targetUrls = otpServer.internalUrl;
         if ((targetUrls == null || targetUrls.isEmpty()) && (otpServer.s3Bucket == null || otpServer.s3Bucket.isEmpty())) {
@@ -438,19 +468,17 @@ public class DeploymentController {
             );
         }
 
-        // For any previous deployments sent to the server/router combination, set deployedTo to null because
-        // this new one will overwrite it. NOTE: deployedTo for the current deployment will only be updated after the
-        // successful completion of the deploy job.
-        for (Deployment oldDeployment : Deployment.retrieveDeploymentForServerAndRouterId(target, deployment.routerId)) {
-            LOG.info("Setting deployment target to null id={}", oldDeployment.id);
-            Persistence.deployments.updateField(oldDeployment.id, "deployedTo", null);
-        }
-
         // Execute the deployment job and keep track of it in the jobs for server map.
         DeployJob job = new DeployJob(deployment, userProfile, otpServer);
-        DataManager.heavyExecutor.execute(job);
-        deploymentJobsByServer.put(target, job);
-
+        if (!queueDeployJob(job)) {
+            // Job for the target is still active! Send a 202 to the requester to indicate that it is not possible
+            // to deploy to this target right now because someone else is deploying.
+            String message = String.format(
+                "Will not process request to deploy %s. Deployment currently in progress for target: %s",
+                deployment.name,
+                target);
+            logMessageAndHalt(req, HttpStatus.ACCEPTED_202, message);
+        }
         return SparkUtils.formatJobMessage(job.jobId, "Deployment initiating.");
     }
 

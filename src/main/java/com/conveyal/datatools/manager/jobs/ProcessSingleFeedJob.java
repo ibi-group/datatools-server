@@ -4,14 +4,19 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.editor.jobs.CreateSnapshotJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.controllers.api.DeploymentController;
+import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.models.OtpServer;
+import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.models.Snapshot;
 import com.conveyal.datatools.manager.models.transform.DbTransformation;
 import com.conveyal.datatools.manager.models.transform.FeedTransformDbTarget;
 import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
 import com.conveyal.datatools.manager.models.transform.FeedTransformZipTarget;
 import com.conveyal.datatools.manager.models.transform.ZipTransformation;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
@@ -174,12 +179,69 @@ public class ProcessSingleFeedJob extends MonitorableJob {
 
         // FIXME: Should we overwrite the input GTFS dataset if transforming in place?
 
-        // TODO: Any other activities that need to be run (e.g., module-specific activities).
-        if (DataManager.isModuleEnabled("deployment")) {
-//            Project project = feedSource.retrieveProject();
-//            if (project.autoDeployId)
+        // Make the necessary checks and update the OTP deployment with this new dataset if required.
+        autoDeployIfRequired();
+    }
+
+    /**
+     * Trigger new deployment to OTP server if {@link Project#autoDeploy} is enabled and other conditions are met
+     * (e.g., feed version has no critical errors, active deployment is not in progress, etc.).
+     */
+    private void autoDeployIfRequired() {
+        if (!DataManager.isModuleEnabled("deployment")) {
+            // Do not attempt to deploy if module is disabled.
+            return;
+        }
+        Project project = feedSource.retrieveProject();
+        if (feedSource.deployable && project.pinnedDeploymentId != null && project.autoDeploy) {
             // TODO: Get deployment, update feed version for feed source, and kick off deployment to server that
             //  deployment is currently pointed at.
+            Deployment deployment = Persistence.deployments.getById(project.pinnedDeploymentId);
+            if (deployment == null) {
+                LOG.error("Pinned deployment no longer exists.");
+                // FIXME: Remove pinned deployment?
+                return;
+            } else {
+                // If the deployment is already in progress, do not attempt auto-deploy.
+                // FIXME: Should this be placed in the DeploymentController#queueDeployJob body? Perhaps, since things
+                //  could get jumbled when updating the deployment object in MongoDB if we're trying to simultaneously
+                //  deploy to two servers at once.
+                DeployJob activeJob = DeploymentController.checkDeploymentInProgress(deployment.id);
+                if (activeJob != null) {
+                    LOG.warn("Skipping deployment (deployment by {} in progress already)", activeJob.retrieveEmail());
+                    return;
+                }
+                // As long as the feed does not have any critical errors, move forward with auto-deployment.
+                if (!feedVersion.hasCriticalErrors()) {
+                    // Remove previously defined version for this feed source.
+                    for (FeedVersion versionToReplace : deployment.retrieveFullFeedVersions()) {
+                        if (versionToReplace.feedSourceId.equals(feedSource.id)) {
+                            deployment.feedVersionIds.remove(versionToReplace.id);
+                        }
+                    }
+                    // Add new version ID TODO: Should we not do this if the feed source was not already applied?
+                    deployment.feedVersionIds.add(feedVersion.id);
+                    Persistence.deployments.replace(deployment.id, deployment);
+                    // Send deployment (with new feed version) to most recently used server.
+                    OtpServer server;
+                    if (deployment.latest() != null) {
+                        String latestServerId = deployment.latest().serverId;
+                        server = Persistence.servers.getById(latestServerId);
+                        if (server == null) {
+                            LOG.error("Server with id {} no longer exists. Skipping deployment.", latestServerId);
+                            return;
+                        }
+                    } else {
+                        // FIXME: Should we deploy some other server if deployment has not previously been deployed?
+                        LOG.error("Deployment {} has never been deployed. Skipping auto-deploy.", deployment.id);
+                        return;
+                    }
+                    // Finally, queue up the new deploy job.
+                    boolean success = DeploymentController.queueDeployJob(new DeployJob(deployment, owner, server));
+                    if (success) LOG.info("New deploy job initiated for {}", server.name);
+                    else LOG.warn("Could not auto-deploy to {} due to conflicting active deployment.", server.name);
+                }
+            }
         }
     }
 

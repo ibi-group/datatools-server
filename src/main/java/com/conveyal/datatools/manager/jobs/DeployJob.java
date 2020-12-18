@@ -180,15 +180,24 @@ public class DeployJob extends MonitorableJob {
         return otpServer;
     }
 
+    /**
+     * Primary constructor for kicking off a deployment of transit/OSM/config data to OpenTripPlanner.
+     *
+     * FIXME: It appears that DeployType#Replace is the only type used in the non-test code. Should the others be
+     *  removed?
+     * @param deployment the deployment (set of feed versions and configurations) to deploy
+     * @param owner the requesting user
+     * @param otpServer the server/ELB target for the deployment
+     */
     public DeployJob(Deployment deployment, Auth0UserProfile owner, OtpServer otpServer) {
         this(deployment, owner, otpServer, null, DeployType.REPLACE);
     }
 
-    public DeployJob(Deployment deployment, Auth0UserProfile owner, OtpServer otpServer, String bundlePath, DeployType deployType) {
+    protected DeployJob(Deployment deployment, Auth0UserProfile owner, OtpServer otpServer, String bundlePath, DeployType deployType) {
         this("Deploying " + deployment.name, deployment, owner, otpServer, bundlePath, deployType);
     }
 
-    public DeployJob(String jobName, Deployment deployment, Auth0UserProfile owner, OtpServer otpServer, String bundlePath, DeployType deployType) {
+    private DeployJob(String jobName, Deployment deployment, Auth0UserProfile owner, OtpServer otpServer, String bundlePath, DeployType deployType) {
         // TODO add new job type or get rid of enum in favor of just using class names
         super(owner, jobName, JobType.DEPLOY_TO_OTP);
         this.deployment = deployment;
