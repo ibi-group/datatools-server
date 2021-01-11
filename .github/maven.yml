@@ -1,0 +1,78 @@
+name: Java CI
+
+on: [push]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:10.8
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        # needed because the postgres container does not provide a healthcheck
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      # TODO: Re-enable end to end test prep.
+      # #- sed -i.bak -e 's|https://nexus.codehaus.org/snapshots/|https://oss.sonatype.org/content/repositories/codehaus-snapshots/|g' ~/.m2/settings.xml
+      #  # run a script to see if the e2e tests should be ran. This script will set the environment variable SHOULD_RUN_E2E
+      #  # which is used in later travis commands.
+      #  # FIXME: E2E is disabled because it has broken for months. PR to fix e2e should uncomment this line.
+      #  # - source ./scripts/check-if-e2e-tests-should-run-on-travis.sh
+      #  # set region in AWS config for S3 setup
+      #  # - mkdir ~/.aws && printf '%s\n' '[default]' 'aws_access_key_id=foo' 'aws_secret_access_key=bar' 'region=us-east-1' > ~/.aws/config
+      #  # add aws credentials for datatools-server
+      #  - if [ "$SHOULD_RUN_E2E" = "true" ]; then mkdir ~/.aws && printf '%s\n' '[default]' 'aws_access_key_id=${AWS_ACCESS_KEY_ID}' 'aws_secret_access_key=${AWS_SECRET_ACCESS_KEY}' 'region=us-east-1' > ~/.aws/config; else mkdir ~/.aws && printf '%s\n' '[default]' 'aws_access_key_id=foo' 'aws_secret_access_key=bar' 'region=us-east-1' > ~/.aws/config; fi
+      #  - cp configurations/default/server.yml.tmp configurations/default/server.yml
+      #  # create database for e2e (and unit) tests
+      #  - psql -U postgres -c 'CREATE DATABASE catalogue;'
+      #  # install node v12 here in order to run the e2e tests (and for maven-semantic-release).
+      #  - nvm install '12'
+      - uses: actions/checkout@v2
+      - name: Set up JDK 1.8
+        uses: actions/setup-java@v1
+        with:
+          java-version: 1.8
+      - name: Start MongoDB
+        uses: supercharge/mongodb-github-action@1.3.0
+        with:
+          mongodb-version: 4.2
+      - name: Setup Maven Cache
+        uses: actions/cache@v2
+        id: cache
+        with:
+          path: ~/.m2
+          key: maven-local-repo
+      - name: Add profile credentials to ~/.aws/credentials
+        run: ./scripts/add-aws-credentials.sh
+      # FIXME Add semantic-release
+      # - yarn global add @conveyal/maven-semantic-release semantic-release@15
+      - name: Setup directory for GTFS+ files (used during testing)
+        run: mkdir /tmp/gtfsplus
+      - name: Build with Maven (run unit tests)
+        run: mvn --no-transfer-progress package
+        # TODO: End to end steps
+        #  # Restart/clear MongoDB so that E2E tests run on clean DB.
+        #  - ./scripts/restart-mongo-with-fresh-db.sh
+        #  # recursively copy coverage results into another folder so the e2e tests don't overwrite them
+        #  - cp -R target target-unit-test-results
+        #  # run just the e2e tests
+        #  - if [ "$SHOULD_RUN_E2E" = "true" ]; then RUN_E2E=true mvn test; fi
+        #  # recursively copy coverage results into another folder so the deployment results don't overwrite them
+        #  - if [ "$SHOULD_RUN_E2E" = "true" ]; then cp -R target target-e2e-test-results; fi
+#      - name: Run E2E tests
+#        run: mvn --no-transfer-progress test
+#        env:
+#          RUN_E2E: true
+      - name: Codecov
+        run: bash <(curl -s https://codecov.io/bash) -s target-unit-test-results -F unit_tests
+        # TODO: use codecov script flags to upload the coverage report for the e2e tests
+          #  - |
+          #    if [ "$SHOULD_RUN_E2E" = "true" ]; then
+        #      bash <(curl -s https://codecov.io/bash) -s target-e2e-test-results -F end_to_end_tests;
+        #    fi
