@@ -117,6 +117,13 @@
                     -->
                     <generateGitPropertiesFile>true</generateGitPropertiesFile>
                     <injectAllReactorProjects>true</injectAllReactorProjects>
+                    <!-- `git describe --always` needed to keep GitHub actions from failing
+                          See: https://github.com/git-commit-id/git-commit-id-maven-plugin/issues/61#issuecomment-68037525
+                     -->
+                    <gitDescribe>
+                        <skip>false</skip>
+                        <always>true</always>
+                    </gitDescribe>
                 </configuration>
             </plugin>
             <plugin>
