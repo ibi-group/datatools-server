@@ -45,6 +45,23 @@ jobs:
           key: maven-local-repo
       - name: Inject slug/short variables # so that we can reference $GITHUB_HEAD_REF_SLUG for branch name
         uses: rlespinasse/github-slug-action@v3.x
+      - name: Print slug variables
+        run: |
+          echo "Slug variables"
+          echo "   ref                 : ${{ env.GITHUB_REF_SLUG }}"
+          echo "   head ref            : ${{ env.GITHUB_HEAD_REF_SLUG }}"
+          echo "   base ref            : ${{ env.GITHUB_BASE_REF_SLUG }}"
+          echo "   event ref           : ${{ env.GITHUB_EVENT_REF_SLUG }}"
+          echo "   repository          : ${{ env.GITHUB_REPOSITORY_SLUG }}"
+          echo "Slug URL variables"
+          echo "   ref                 : ${{ env.GITHUB_REF_SLUG_URL }}"
+          echo "   head ref            : ${{ env.GITHUB_HEAD_REF_SLUG_URL }}"
+          echo "   base ref            : ${{ env.GITHUB_BASE_REF_SLUG_URL }}"
+          echo "   event ref           : ${{ env.GITHUB_EVENT_REF_SLUG_URL }}"
+          echo "   repository          : ${{ env.GITHUB_REPOSITORY_SLUG_URL }}"
+          echo "Short SHA variables"
+          echo "   sha                 : ${{ env.GITHUB_SHA_SHORT }}"
+          echo "   pull request sha    : ${{ env.GITHUB_EVENT_PULL_REQUEST_HEAD_SHA_SHORT }}"
       - name: Install maven-semantic-release
         # FIXME: Enable cache (add package.json?)
         run: |
