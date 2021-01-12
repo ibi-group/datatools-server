@@ -5,7 +5,7 @@ if [[ "$GITHUB_BASE_REF_SLUG" = "master" ]]; then
   echo "SHOULD_RUN_E2E=true" >> $GITHUB_ENV
   echo 'Will run E2E tests because this is a PR to master'
 else
-  if [[ "$GITHUB_REPOSITORY" = "ibi-group/datatools-server" ]] && [[ "$GITHUB_SLUG_REF" = "master" || "$GITHUB_SLUG_REF" = "dev" ]]; then
+  if [[ "$GITHUB_REPOSITORY" = "ibi-group/datatools-server" ]] && [[ "$GITHUB_REF_SLUG" = "master" || "$GITHUB_REF_SLUG" = "dev" ]]; then
     echo "SHOULD_RUN_E2E=true" >> $GITHUB_ENV
     echo 'Will run E2E tests because this is a commit to master or dev'
   fi
