@@ -43,6 +43,8 @@ jobs:
         with:
           path: ~/.m2
           key: maven-local-repo
+      - name: Inject slug/short variables # so that we can reference $GITHUB_SLUG_REF for branch name
+        uses: rlespinasse/github-slug-action@v3.x
       - name: Install maven-semantic-release
         # FIXME: Enable cache (add package.json?)
         run: yarn global add @conveyal/maven-semantic-release semantic-release
@@ -74,3 +76,50 @@ jobs:
           if [ "$SHOULD_RUN_E2E" = "true" ]; then
           bash <(curl -s https://codecov.io/bash) -s target-e2e-test-results -F end_to_end_tests;
           fi
+
+      # Run maven-semantic-release to potentially create a new release of datatools-server. The flag --skip-maven-deploy is
+      # used to avoid deploying to maven central. So essentially, this just creates a release with a changelog on github.
+      #
+      # If maven-semantic-release finishes successfully and the current branch is master, upload coverage reports for the
+      # commits that maven-semantic-release generated. Since the above codecov run is associated with the commit that
+      # initiated the Travis build, the report will not be associated with the commits that maven-semantic-release performed
+      # (if it ended up creating a release and the two commits that were a part of that workflow). Therefore, if on master
+      # codecov needs to be ran two more times to create codecov reports for the commits made by maven-semantic-release.
+      # See https://github.com/conveyal/gtfs-lib/issues/193. In order to create reports for both the unit and e2e tsts,
+      # the codecov scripts must be ran twice.
+      #
+      # The git commands get the commit hash of the HEAD commit and the commit just before HEAD.
+      - name: Run maven-semantic-release
+        run: |
+          semantic-release --prepare @conveyal/maven-semantic-release --publish @semantic-release/github,@conveyal/maven-semantic-release --verify-conditions @semantic-release/github,@conveyal/maven-semantic-release --verify-release @conveyal/maven-semantic-release --use-conveyal-workflow --dev-branch=dev --skip-maven-deploy
+          if [[ "$TRAVIS_BRANCH" = "master" ]]; then
+            bash <(curl -s https://codecov.io/bash) -C "$(git rev-parse HEAD)" -s target-unit-test-results -F unit_tests
+            bash <(curl -s https://codecov.io/bash) -C "$(git rev-parse HEAD^)" -s target-unit-test-results -F unit_tests
+            if [ "$SHOULD_RUN_E2E" = "true" ]; then
+              bash <(curl -s https://codecov.io/bash) -C "$(git rev-parse HEAD)" -s target-e2e-test-results -F end_to_end_tests;
+              bash <(curl -s https://codecov.io/bash) -C "$(git rev-parse HEAD^)" -s target-e2e-test-results -F end_to_end_tests;
+            fi
+          fi
+
+
+      - name: Prepare deploy artifacts
+        run: |
+          # get branch name of current branch for use in jar name
+          export BRANCH=$GITHUB_SLUG_REF
+          # Replace forward slashes with underscores in branch name.
+          export BRANCH_CLEAN=${BRANCH//\//_}
+          # Create directory that will contain artifacts to deploy to s3.
+          mkdir deploy
+          # Display contents of target directory (for logging purposes only).
+          ls target/*.jar
+          # Copy packaged jar over to deploy dir.
+          cp target/dt-*.jar deploy/
+          # Get the first jar file and copy it into a new file that adds the current branch name. During a
+          # merge to master, there are multiple jar files produced, but they're each effectively the same
+          # code (there may be slight differences in the version shown in the `pom.xml`, but that's not
+          # important for the purposes of creating this "latest branch" jar).
+          ALL_JARS=(target/dt-*.jar)
+          FIRST_JAR="${ALL_JARS[0]}"
+          cp "$FIRST_JAR" "deploy/dt-latest-$BRANCH_CLEAN.jar"
+      - name: Deploy to S3
+        run: aws s3 sync ./deploy s3://datatools-builds --acl public-read
