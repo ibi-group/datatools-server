@@ -17,7 +17,7 @@ import static org.junit.Assume.assumeTrue;
 /**
  * This test suite runs the datatools-ui end-to-end tests in an effort to collect code coverage on
  * this library during those tests.  This test is only ran if the `RUN_E2E` environment variable
- * is set to `true`. This e2e test can be ran either locally or on Travis.
+ * is set to `true`. This e2e test can be ran either locally or on CI.
  */
 public class EndToEndTest {
     private static final Logger LOG = LoggerFactory.getLogger(EndToEndTest.class);

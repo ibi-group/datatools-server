@@ -69,10 +69,9 @@ jobs:
           # Add yarn path to GITHUB_PATH so that global package is executable.
           echo "$(yarn global bin)" >> $GITHUB_PATH
         # run a script to see if the e2e tests should be ran. This script will set the environment variable SHOULD_RUN_E2E
-        # which is used in later travis commands.
-        # FIXME: E2E is disabled because it has broken for months. PR to fix e2e should uncomment this line.
+        # which is used in later CI commands.
       - name: Check if end-to-end tests should run
-        run: ./scripts/check-if-e2e-tests-should-run-on-travis.sh
+        run: ./scripts/check-if-e2e-tests-should-run-on-ci.sh
       - name: Add profile credentials to ~/.aws/credentials
         run: ./scripts/add-aws-credentials.sh
       - name: Setup GTFS+ directory (used during testing)
@@ -102,7 +101,7 @@ jobs:
       #
       # If maven-semantic-release finishes successfully and the current branch is master, upload coverage reports for the
       # commits that maven-semantic-release generated. Since the above codecov run is associated with the commit that
-      # initiated the Travis build, the report will not be associated with the commits that maven-semantic-release performed
+      # initiated the CI build, the report will not be associated with the commits that maven-semantic-release performed
       # (if it ended up creating a release and the two commits that were a part of that workflow). Therefore, if on master
       # codecov needs to be ran two more times to create codecov reports for the commits made by maven-semantic-release.
       # See https://github.com/conveyal/gtfs-lib/issues/193. In order to create reports for both the unit and e2e tsts,
@@ -112,7 +111,7 @@ jobs:
       - name: Run maven-semantic-release
         run: |
           semantic-release --prepare @conveyal/maven-semantic-release --publish @semantic-release/github,@conveyal/maven-semantic-release --verify-conditions @semantic-release/github,@conveyal/maven-semantic-release --verify-release @conveyal/maven-semantic-release --use-conveyal-workflow --dev-branch=dev --skip-maven-deploy
-          if [[ "$TRAVIS_BRANCH" = "master" ]]; then
+          if [[ "$GITHUB_REF_SLUG" = "master" ]]; then
             bash <(curl -s https://codecov.io/bash) -C "$(git rev-parse HEAD)" -s target-unit-test-results -F unit_tests
             bash <(curl -s https://codecov.io/bash) -C "$(git rev-parse HEAD^)" -s target-unit-test-results -F unit_tests
             if [ "$SHOULD_RUN_E2E" = "true" ]; then
