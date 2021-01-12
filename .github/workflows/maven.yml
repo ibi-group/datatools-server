@@ -6,24 +6,6 @@ jobs:
   build:
 
     runs-on: ubuntu-latest
-    env:
-      AUTH0_API_CLIENT: ${{ secrets.AUTH0_API_CLIENT }}
-      AUTH0_API_SECRET: ${{ secrets.AUTH0_API_SECRET }}
-      AUTH0_CLIENT_ID: ${{ secrets.AUTH0_CLIENT_ID }}
-      AUTH0_DOMAIN: ${{ secrets.AUTH0_DOMAIN }}
-      AUTH0_SECRET: ${{ secrets.AUTH0_SECRET }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_REGION: ${{ secrets.AWS_REGION }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      GRAPH_HOPPER_KEY: ${{ secrets.GRAPH_HOPPER_KEY }}
-      GTFS_DATABASE_PASSWORD: ${{ secrets.GTFS_DATABASE_PASSWORD }}
-      GTFS_DATABASE_URL: ${{ secrets.GTFS_DATABASE_URL }}
-      GTFS_DATABASE_USER: ${{ secrets.GTFS_DATABASE_USER }}
-      MAPBOX_ACCESS_TOKEN: ${{ secrets.MAPBOX_ACCESS_TOKEN }}
-      MONGO_DB_NAME: ${{ secrets.MONGO_DB_NAME }}
-      OSM_VEX: ${{ secrets.OSM_VEX }}
-      SPARKPOST_EMAIL: ${{ secrets.SPARKPOST_EMAIL }}
-      SPARKPOST_KEY: ${{ secrets.SPARKPOST_KEY }}
     services:
       postgres:
         image: postgres:10.8
@@ -87,7 +69,28 @@ jobs:
         if: env.SHOULD_RUN_E2E == 'true'
         run: mvn test
         env:
+          AUTH0_API_CLIENT: ${{ secrets.AUTH0_API_CLIENT }}
+          AUTH0_API_SECRET: ${{ secrets.AUTH0_API_SECRET }}
+          AUTH0_CLIENT_ID: ${{ secrets.AUTH0_CLIENT_ID }}
+          AUTH0_DOMAIN: ${{ secrets.AUTH0_DOMAIN }}
+          AUTH0_SECRET: ${{ secrets.AUTH0_SECRET }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_REGION: ${{ secrets.AWS_REGION }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          E2E_AUTH0_PASSWORD: ${{ secrets.E2E_AUTH0_PASSWORD }}
+          E2E_AUTH0_USERNAME: ${{ secrets.E2E_AUTH0_USERNAME }}
+          GRAPH_HOPPER_KEY: ${{ secrets.GRAPH_HOPPER_KEY }}
+          GTFS_DATABASE_PASSWORD: ${{ secrets.GTFS_DATABASE_PASSWORD }}
+          GTFS_DATABASE_URL: ${{ secrets.GTFS_DATABASE_URL }}
+          GTFS_DATABASE_USER: ${{ secrets.GTFS_DATABASE_USER }}
+          MAPBOX_ACCESS_TOKEN: ${{ secrets.MAPBOX_ACCESS_TOKEN }}
+          MONGO_DB_NAME: ${{ secrets.MONGO_DB_NAME }}
+          OSM_VEX: ${{ secrets.OSM_VEX }}
           RUN_E2E: "true"
+          S3_BUCKET: ${{ secrets.S3_BUCKET }}
+          SPARKPOST_EMAIL: ${{ secrets.SPARKPOST_EMAIL }}
+          SPARKPOST_KEY: ${{ secrets.SPARKPOST_KEY }}
+          TRANSITFEEDS_KEY: ${{ secrets.TRANSITFEEDS_KEY }}
       - name: Copy e2e coverage results into another folder # so the deployment results don't overwrite them
         run: if [ "$SHOULD_RUN_E2E" = "true" ]; then cp -R target target-e2e-test-results; fi
           # these first codecov runs will upload a report associated with the commit set through CI environment variables
