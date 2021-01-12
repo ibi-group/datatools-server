@@ -9,6 +9,7 @@ jobs:
     services:
       postgres:
         image: postgres:10.8
+        # Set postgres env variables according to test env.yml config
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
