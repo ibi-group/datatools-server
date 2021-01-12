@@ -49,6 +49,7 @@ jobs:
         # FIXME: Enable cache (add package.json?)
         run: |
           yarn global add @conveyal/maven-semantic-release semantic-release
+          # Add yarn path to GITHUB_PATH so that global package is executable.
           echo "$(yarn global bin)" >> $GITHUB_PATH
         # run a script to see if the e2e tests should be ran. This script will set the environment variable SHOULD_RUN_E2E
         # which is used in later travis commands.
