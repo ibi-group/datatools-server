@@ -64,7 +64,7 @@ jobs:
       - name: Inject slug/short variables # so that we can reference $GITHUB_HEAD_REF_SLUG for branch name
         uses: rlespinasse/github-slug-action@v3.x
       - name: Install maven-semantic-release
-        # FIXME: Enable cache (add package.json?)
+        # FIXME: Enable cache for node packages (add package.json?)
         run: |
           yarn global add @conveyal/maven-semantic-release semantic-release
           # Add yarn path to GITHUB_PATH so that global package is executable.
