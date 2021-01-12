@@ -43,7 +43,7 @@ jobs:
         with:
           path: ~/.m2
           key: maven-local-repo
-      - name: Inject slug/short variables # so that we can reference $GITHUB_SLUG_REF for branch name
+      - name: Inject slug/short variables # so that we can reference $GITHUB_HEAD_REF_SLUG for branch name
         uses: rlespinasse/github-slug-action@v3.x
       - name: Install maven-semantic-release
         # FIXME: Enable cache (add package.json?)
@@ -105,7 +105,7 @@ jobs:
       - name: Prepare deploy artifacts
         run: |
           # get branch name of current branch for use in jar name
-          export BRANCH=$GITHUB_SLUG_REF
+          export BRANCH=$GITHUB_HEAD_REF_SLUG
           # Replace forward slashes with underscores in branch name.
           export BRANCH_CLEAN=${BRANCH//\//_}
           # Create directory that will contain artifacts to deploy to s3.
