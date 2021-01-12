@@ -84,7 +84,10 @@ jobs:
       - name: Copy unit test coverage results into another folder # so the e2e tests don't overwrite them
         run: cp -R target target-unit-test-results
       - name: Run e2e tests
-        run: if [ "$SHOULD_RUN_E2E" = "true" ]; then echo "RUN_E2E=true" >> $GITHUB_ENV; mvn test; fi
+        if: env.SHOULD_RUN_E2E == "true"
+        run: mvn test
+        env:
+          RUN_E2E: "true"
       - name: Copy e2e coverage results into another folder # so the deployment results don't overwrite them
         run: if [ "$SHOULD_RUN_E2E" = "true" ]; then cp -R target target-e2e-test-results; fi
           # these first codecov runs will upload a report associated with the commit set through CI environment variables
