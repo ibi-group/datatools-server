@@ -47,7 +47,9 @@ jobs:
         uses: rlespinasse/github-slug-action@v3.x
       - name: Install maven-semantic-release
         # FIXME: Enable cache (add package.json?)
-        run: yarn global add @conveyal/maven-semantic-release semantic-release
+        run: |
+          yarn global add @conveyal/maven-semantic-release semantic-release
+          echo "$(yarn global bin)" >> $GITHUB_PATH
         # run a script to see if the e2e tests should be ran. This script will set the environment variable SHOULD_RUN_E2E
         # which is used in later travis commands.
         # FIXME: E2E is disabled because it has broken for months. PR to fix e2e should uncomment this line.
