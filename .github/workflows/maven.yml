@@ -84,7 +84,7 @@ jobs:
       - name: Copy unit test coverage results into another folder # so the e2e tests don't overwrite them
         run: cp -R target target-unit-test-results
       - name: Run e2e tests
-        if: env.SHOULD_RUN_E2E == "true"
+        if: env.SHOULD_RUN_E2E == 'true'
         run: mvn test
         env:
           RUN_E2E: "true"
