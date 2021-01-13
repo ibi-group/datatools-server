@@ -53,8 +53,7 @@ public class TestUtils {
      * Returns true only if an environment variable exists and is set to "true".
      */
     public static boolean getBooleanEnvVar (String var) {
-        String variable = System.getenv(var);
-        return variable != null && variable.equals("true");
+        return "true".equals(System.getenv(var));
     }
 
     /**
@@ -62,6 +61,13 @@ public class TestUtils {
      */
     public static boolean isCi () {
         return getBooleanEnvVar("CI");
+    }
+
+    /**
+     * Checks whether the E2E environment variable is enabled.
+     */
+    public static boolean isRunningE2E() {
+        return getBooleanEnvVar("RUN_E2E");
     }
 
     /**

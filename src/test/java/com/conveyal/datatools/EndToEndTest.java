@@ -10,8 +10,6 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.file.Paths;
 
-import static com.conveyal.datatools.TestUtils.getBooleanEnvVar;
-import static com.conveyal.datatools.TestUtils.isCi;
 import static org.junit.Assume.assumeTrue;
 
 /**
@@ -29,14 +27,14 @@ public class EndToEndTest {
         // make sure the RUN_E2E environment variable is set to true.  Otherwise, this test should
         // be skipped and the overall build should not depend on this test passing in order to save
         // time.
-        assumeTrue(getBooleanEnvVar("RUN_E2E"));
+        assumeTrue(TestUtils.isRunningE2E());
 
         // all code after this point only runs with the assumption that the e2e test should be ran
         // check if additional setup should be done if in a CI environment.  It is assumed that a
         // dev instance of datatools-ui has already been manually started if this test is not being
         // ran in a CI environment.  It is also assumed that the datatools-ui directory is a sibling
         // directory to this installation and that it's possible to run the end-to-end command.
-        if (isCi()) {
+        if (TestUtils.isCi()) {
             // do extra setup for CI environment
 
             // clone dev datatools-ui
