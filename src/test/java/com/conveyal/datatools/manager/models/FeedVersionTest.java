@@ -3,10 +3,15 @@ package com.conveyal.datatools.manager.models;
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.gtfs.error.NewGTFSErrorType;
+import com.conveyal.gtfs.validator.model.Priority;
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import java.util.Date;
+import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
@@ -14,7 +19,9 @@ import static org.hamcrest.Matchers.not;
 
 public class FeedVersionTest extends UnitTest {
 
-    /** Initialize application for tests to run. */
+    /**
+     * Initialize application for tests to run.
+     */
     @BeforeClass
     public static void setUp() throws Exception {
         // start server if it isn't already running

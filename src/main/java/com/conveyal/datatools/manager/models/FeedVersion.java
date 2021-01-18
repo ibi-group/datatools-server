@@ -8,10 +8,12 @@ import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
 import com.conveyal.gtfs.BaseGTFSCache;
 import com.conveyal.gtfs.GTFS;
+import com.conveyal.gtfs.error.NewGTFSErrorType;
 import com.conveyal.gtfs.loader.Feed;
 import com.conveyal.gtfs.loader.FeedLoadResult;
 import com.conveyal.gtfs.validator.MTCValidator;
 import com.conveyal.gtfs.validator.ValidationResult;
+import com.conveyal.gtfs.validator.model.Priority;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
@@ -25,13 +27,17 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
+import java.sql.Connection;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
-import java.util.Date;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
+import static com.conveyal.datatools.manager.DataManager.GTFS_DATA_SOURCE;
 import static com.conveyal.datatools.manager.DataManager.isExtensionEnabled;
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.mongodb.client.model.Filters.and;
@@ -56,6 +62,10 @@ public class FeedVersion extends Model implements Serializable {
      * Input feed versions used to create a merged version.
      */
     public Set<String> inputVersions;
+
+    /** Has this feed version been successfully auto deployed? */
+    // FIXME: Only required for testing.
+    public boolean autoDeployed = false;
 
     /**
      * This is not the recommended way to create a new feed version. This constructor should primarily be used in
@@ -361,25 +371,61 @@ public class FeedVersion extends Model implements Serializable {
      * whether the version has bad calendar dates and will also return false if the version is expired.
      */
     public boolean hasCriticalErrors() {
-        return hasCriticalErrorsExceptingDate() ||
-                validationResult.lastCalendarDate == null ||
-                (LocalDate.now()).isAfter(validationResult.lastCalendarDate);
+        return hasValidationAndLoadErrors() ||
+            hasFeedVersionExpired() ||
+            hasHighSeverityErrorTypes();
     }
 
     /**
-     * Does this feed have any critical errors other than possibly being expired?
-     * @return whether feed version has critical errors (outside of expiration)
+     * Does this feed have any critical errors?
+     * @return whether feed version has critical errors
      */
-    private boolean hasCriticalErrorsExceptingDate() {
+    private boolean hasValidationAndLoadErrors() {
         if (validationResult == null)
             return true;
-        // FIXME: We need to get all GTFS error types from the SQL table and also return false if any have high severity.
         return validationResult.fatalException != null ||
             !validationSummary().bounds.areValid() ||
             feedLoadResult.stopTimes.rowCount == 0 ||
             feedLoadResult.trips.rowCount == 0 ||
             feedLoadResult.agency.rowCount == 0;
+    }
 
+    /**
+     * Has this feed expired?
+     * @return whether feed version is outside of expiration
+     */
+    private boolean hasFeedVersionExpired() {
+        return validationResult.lastCalendarDate == null ||
+        // FIXME: When testing with static data this is always true.
+            LocalDate.now().isAfter(validationResult.lastCalendarDate);
+    }
+
+    /**
+     * Has this feed version produced any high severity error types when being validated?
+     * @return whether high severity error types have been flagged.
+     */
+    private boolean hasHighSeverityErrorTypes() {
+        List<String> highSeverityErrorTypes = Stream.of(
+            NewGTFSErrorType.values())
+            .filter(type -> type.priority == Priority.HIGH)
+            .map(type -> String.format("'%s'", type))
+            .collect(Collectors.toList()
+            );
+        int count = 1;
+        String sql = String.format("select count(*) from %s.errors where error_type in (%s)",
+            namespace,
+            String.join(", ", highSeverityErrorTypes.toString())
+                .replaceFirst("\\[","")
+                .replaceFirst("]",""));
+        try (Connection connection = GTFS_DATA_SOURCE.getConnection()) {
+            ResultSet resultSet = connection.prepareStatement(sql).executeQuery();
+            while (resultSet.next()) {
+                count = resultSet.getInt(1);
+            }
+        } catch (SQLException e) {
+            LOG.error("Unable to determine if feed version {} produced any high severity error types", version, e);
+        }
+        return count > 0;
     }
 
     @JsonView(JsonViews.UserInterface.class)

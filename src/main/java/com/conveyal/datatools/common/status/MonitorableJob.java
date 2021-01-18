@@ -44,6 +44,7 @@ public abstract class MonitorableJob implements Runnable, Serializable {
     protected List<MonitorableJob> subJobs = new ArrayList<>();
 
     public enum JobType {
+        AUTO_DEPLOY_FEED_VERSION,
         UNKNOWN_TYPE,
         ARBITRARY_FEED_TRANSFORM,
         BUILD_TRANSPORT_NETWORK,
