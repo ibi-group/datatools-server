@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.DatatoolsTest;
+import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.models.*;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import org.junit.AfterClass;
@@ -26,6 +27,7 @@ public class AutoDeployFeedVersionTest extends DatatoolsTest {
     @BeforeClass
     public static void setUp() throws IOException {
         DatatoolsTest.setUp();
+        Auth0Connection.setAuthDisabled(true);
         LOG.info("{} setup", AutoDeployFeedVersionTest.class.getSimpleName());
         String testName = String.format("Test %s", new Date().toString());
 
@@ -54,6 +56,7 @@ public class AutoDeployFeedVersionTest extends DatatoolsTest {
 
     @AfterClass
     public static void tearDown() throws InterruptedException {
+        Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
         // FIXME: Sleep to allow sub-jobs (in child threads) to complete.
         Thread.sleep(1000);
         server.delete();
@@ -98,7 +101,7 @@ public class AutoDeployFeedVersionTest extends DatatoolsTest {
         setFeedSourceDeployable(true);
         setProjectAutoDeploy(true);
         setProjectPinnedDeploymentId(deployment.id);
-        mockFeedVersion = triggerCreateFeedVersion("fake-agency-with-calendar-and-calendar-dates");
+        mockFeedVersion = triggerCreateFeedVersion("fake-agency-expire-in-2099");
         // FIXME: Sleep to allow sub-jobs (e.g. feed version validation and auto deploy) to complete.
         Thread.sleep(1000);
         // FIXME: Currently fails because of {@Link FeedVersion#hasFeedVersionExpired}.
