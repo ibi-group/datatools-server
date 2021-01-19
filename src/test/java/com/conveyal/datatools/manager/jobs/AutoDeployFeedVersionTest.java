@@ -38,6 +38,7 @@ public class AutoDeployFeedVersionTest extends DatatoolsTest {
         DeployJob.DeploySummary deploySummary = new DeployJob.DeploySummary();
         deploySummary.serverId  = server.id;
 
+        // a project is required so the pinned deployment id can be defined
         project = new Project();
         project.name = testName;
         Persistence.projects.create(project);
@@ -65,7 +66,8 @@ public class AutoDeployFeedVersionTest extends DatatoolsTest {
         setFeedSourceDeployable(false);
         setProjectAutoDeploy(true);
         setProjectPinnedDeploymentId(deployment.id);
-        mockFeedVersion = triggerCreateFeedVersion();
+        mockFeedVersion = triggerCreateFeedVersion("fake-agency-with-calendar-and-calendar-dates");
+        // FIXME: Sleep to allow sub-jobs (e.g. feed version validation and auto deploy) to complete.
         Thread.sleep(1000);
         assertFalse(mockFeedVersion.autoDeployed);
     }
@@ -74,7 +76,8 @@ public class AutoDeployFeedVersionTest extends DatatoolsTest {
     public void failIfProjectNotPinned() throws IOException, InterruptedException {
         setFeedSourceDeployable(true);
         setProjectAutoDeploy(true);
-        mockFeedVersion = triggerCreateFeedVersion();
+        mockFeedVersion = triggerCreateFeedVersion("fake-agency-with-calendar-and-calendar-dates");
+        // FIXME: Sleep to allow sub-jobs (e.g. feed version validation and auto deploy) to complete.
         Thread.sleep(1000);
         assertFalse(mockFeedVersion.autoDeployed);
     }
@@ -84,7 +87,8 @@ public class AutoDeployFeedVersionTest extends DatatoolsTest {
         setFeedSourceDeployable(true);
         setProjectAutoDeploy(false);
         setProjectPinnedDeploymentId(deployment.id);
-        mockFeedVersion = triggerCreateFeedVersion();
+        mockFeedVersion = triggerCreateFeedVersion("fake-agency-with-calendar-and-calendar-dates");
+        // FIXME: Sleep to allow sub-jobs (e.g. feed version validation and auto deploy) to complete.
         Thread.sleep(1000);
         assertFalse(mockFeedVersion.autoDeployed);
     }
@@ -94,15 +98,24 @@ public class AutoDeployFeedVersionTest extends DatatoolsTest {
         setFeedSourceDeployable(true);
         setProjectAutoDeploy(true);
         setProjectPinnedDeploymentId(deployment.id);
-        mockFeedVersion = triggerCreateFeedVersion();
+        mockFeedVersion = triggerCreateFeedVersion("fake-agency-with-calendar-and-calendar-dates");
+        // FIXME: Sleep to allow sub-jobs (e.g. feed version validation and auto deploy) to complete.
         Thread.sleep(1000);
+        // FIXME: Currently fails because of {@Link FeedVersion#hasFeedVersionExpired}.
         assertTrue(mockFeedVersion.autoDeployed);
     }
 
-//    @Test
-//    public void failIfFeedVersionHasHighSeverityErrorTypes() throws IOException {
-//        //'COLUMN_NAME_UNSAFE', 'NO_SERVICE', 'REFERENTIAL_INTEGRITY', 'ROUTE_UNUSED', 'STOP_GEOGRAPHIC_OUTLIER', 'STOP_LOW_POPULATION_DENSITY', 'TABLE_IN_SUBDIRECTORY', 'TABLE_MISSING_COLUMN_HEADERS', 'TRAVEL_TIME_NEGATIVE', 'TRAVEL_TIME_ZERO', 'TRIP_EMPTY', 'VALIDATOR_FAILED'
-//    }
+    @Test
+    public void failIfFeedVersionHasHighSeverityErrorTypes() throws IOException, InterruptedException {
+        setFeedSourceDeployable(true);
+        setProjectAutoDeploy(true);
+        setProjectPinnedDeploymentId(deployment.id);
+        mockFeedVersion = triggerCreateFeedVersion("fake-agency-with-unused-route");
+        // FIXME: Sleep to allow sub-jobs (e.g. feed version validation and auto deploy) to complete.
+        Thread.sleep(1000);
+        // FIXME: Currently fails because of {@Link FeedVersion#hasFeedVersionExpired}.
+        assertFalse(mockFeedVersion.autoDeployed);
+    }
 
     private void setFeedSourceDeployable(boolean deployable) {
         mockFeedSource.deployable = deployable;
@@ -122,10 +135,10 @@ public class AutoDeployFeedVersionTest extends DatatoolsTest {
     /**
      * Create a feed version and start processing a single feed job.
      */
-    private FeedVersion triggerCreateFeedVersion() throws IOException {
+    private FeedVersion triggerCreateFeedVersion(String zipFolderName) throws IOException {
         return createFeedVersion(
             mockFeedSource,
-            zipFolderFiles("fake-agency-with-calendar-and-calendar-dates")
+            zipFolderFiles(zipFolderName)
         );
     }
 }

@@ -396,7 +396,7 @@ public class FeedVersion extends Model implements Serializable {
      */
     private boolean hasFeedVersionExpired() {
         return validationResult.lastCalendarDate == null ||
-        // FIXME: When testing with static data this is always true.
+        // FIXME: When testing with static data this is always true (providing my understanding of this is correct!).
             LocalDate.now().isAfter(validationResult.lastCalendarDate);
     }
 
