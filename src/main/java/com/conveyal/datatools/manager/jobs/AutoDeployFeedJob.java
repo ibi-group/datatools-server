@@ -75,7 +75,7 @@ public class AutoDeployFeedJob extends MonitorableJob {
                 status.completed = true;
                 LOG.info("New deploy job initiated for {}", server.name);
             } else {
-                LOG.warn("Could not auto-deploy to {} due to conflicting active deployment.", server.name);
+                status.fail(String.format("Could not auto-deploy to %s due to conflicting active deployment.", server.name));
             }
         } else {
             status.fail("Required conditions for auto deploy not met. Skipping auto-deploy");
