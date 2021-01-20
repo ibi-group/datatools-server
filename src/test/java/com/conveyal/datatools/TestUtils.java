@@ -23,7 +23,6 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -106,6 +105,23 @@ public class TestUtils {
         processSingleFeedJob.run();
         return version;
     }
+
+    /**
+     * Utility function to create a {@Link ProcessSingleFeedJob} during tests.
+     */
+    public static ProcessSingleFeedJob createProcessSingleFeedJob(FeedSource source, File gtfsFile) {
+        FeedVersion version = new FeedVersion(source);
+        InputStream is;
+        try {
+            is = new FileInputStream(gtfsFile);
+            version.newGtfsFile(is);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
+        return new ProcessSingleFeedJob(version, user, true);
+    }
+
 
     /**
      * Zip files in a folder into a temporary zip file

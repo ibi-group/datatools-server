@@ -28,12 +28,16 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
 import java.sql.Connection;
+import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
-import java.util.*;
+import java.util.Date;
+import java.util.List;
+import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -62,10 +66,6 @@ public class FeedVersion extends Model implements Serializable {
      * Input feed versions used to create a merged version.
      */
     public Set<String> inputVersions;
-
-    /** Has this feed version been successfully auto deployed? */
-    // FIXME: Only required for testing.
-    public boolean autoDeployed = false;
 
     /**
      * This is not the recommended way to create a new feed version. This constructor should primarily be used in
@@ -367,8 +367,8 @@ public class FeedVersion extends Model implements Serializable {
     }
 
     /**
-     * Does this feed version have any critical errors that would prevent it being loaded to OTP? This check includes
-     * whether the version has bad calendar dates and will also return false if the version is expired.
+     * Does this feed version have any critical errors that would prevent it being loaded to OTP?
+     * @return whether the feed version has any critical errors
      */
     public boolean hasCriticalErrors() {
         return hasValidationAndLoadErrors() ||
@@ -377,8 +377,8 @@ public class FeedVersion extends Model implements Serializable {
     }
 
     /**
-     * Does this feed have any critical errors?
-     * @return whether feed version has critical errors
+     * Does this feed have any validation or load errors?
+     * @return whether feed version has any validationi or load errors
      */
     private boolean hasValidationAndLoadErrors() {
         if (validationResult == null)
@@ -396,7 +396,6 @@ public class FeedVersion extends Model implements Serializable {
      */
     private boolean hasFeedVersionExpired() {
         return validationResult.lastCalendarDate == null ||
-        // FIXME: When testing with static data this is always true (providing my understanding of this is correct!).
             LocalDate.now().isAfter(validationResult.lastCalendarDate);
     }
 
@@ -408,22 +407,30 @@ public class FeedVersion extends Model implements Serializable {
         List<String> highSeverityErrorTypes = Stream.of(
             NewGTFSErrorType.values())
             .filter(type -> type.priority == Priority.HIGH)
-            .map(type -> String.format("'%s'", type))
-            .collect(Collectors.toList()
-            );
+            .map(type -> String.format("%s", type))
+            .collect(Collectors.toList());
+        StringBuilder markers = new StringBuilder();
+        int k = 0;
+        while (k < highSeverityErrorTypes.size()) {
+            markers.append(",?");
+            k++;
+        }
         int count = 1;
-        String sql = String.format("select count(*) from %s.errors where error_type in (%s)",
-            namespace,
-            String.join(", ", highSeverityErrorTypes.toString())
-                .replaceFirst("\\[","")
-                .replaceFirst("]",""));
         try (Connection connection = GTFS_DATA_SOURCE.getConnection()) {
-            ResultSet resultSet = connection.prepareStatement(sql).executeQuery();
+            PreparedStatement preparedStatement =
+                connection.prepareStatement(
+                    String.format("select count(*) from %s.errors where error_type in (%s)",
+                        namespace,
+                        markers.substring(1)));
+            for (int i=0; i < highSeverityErrorTypes.size(); i++) {
+                preparedStatement.setString(i + 1, highSeverityErrorTypes.get(i));
+            }
+            ResultSet resultSet = preparedStatement.executeQuery();
             while (resultSet.next()) {
                 count = resultSet.getInt(1);
             }
         } catch (SQLException e) {
-            LOG.error("Unable to determine if feed version {} produced any high severity error types", version, e);
+            LOG.error("Unable to determine if feed version {} produced any high severity error types", name, e);
         }
         return count > 0;
     }

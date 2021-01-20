@@ -14,7 +14,8 @@ import java.io.IOException;
 import java.util.Date;
 
 import static com.conveyal.datatools.TestUtils.*;
-import static org.junit.Assert.*;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.Matchers.equalTo;
 
 public class AutoDeployFeedVersionTest extends DatatoolsTest {
     private static final Logger LOG = LoggerFactory.getLogger(AutoDeployFeedVersionTest.class);
@@ -22,7 +23,8 @@ public class AutoDeployFeedVersionTest extends DatatoolsTest {
     private static Deployment deployment;
     private static Project project;
     private static FeedSource mockFeedSource;
-    private static FeedVersion mockFeedVersion;
+    //FIXME: Too generic. Is there a way of passing sub job messages (status.fail) to the parent job?
+    private String expectedResult = "While attempting to process a new feed version for Mock Feed Source, an unrecoverable error was encountered. More details: unknown error";
 
     @BeforeClass
     public static void setUp() throws IOException {
@@ -55,69 +57,71 @@ public class AutoDeployFeedVersionTest extends DatatoolsTest {
     }
 
     @AfterClass
-    public static void tearDown() throws InterruptedException {
+    public static void tearDown() {
         Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
-        // FIXME: Sleep to allow sub-jobs (in child threads) to complete.
-        Thread.sleep(1000);
         server.delete();
         deployment.delete();
         project.delete();
     }
 
     @Test
-    public void failIfFeedSourceNotDeployable() throws IOException, InterruptedException {
+    public void failIfFeedSourceNotDeployable() throws IOException {
         setFeedSourceDeployable(false);
         setProjectAutoDeploy(true);
         setProjectPinnedDeploymentId(deployment.id);
-        mockFeedVersion = triggerCreateFeedVersion("fake-agency-with-calendar-and-calendar-dates");
-        // FIXME: Sleep to allow sub-jobs (e.g. feed version validation and auto deploy) to complete.
-        Thread.sleep(1000);
-        assertFalse(mockFeedVersion.autoDeployed);
+        ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob("fake-agency-expire-in-2099");
+        assertThat(
+            processSingleFeedJob.getNotificationMessage(),
+            equalTo(expectedResult)
+        );
     }
 
     @Test
-    public void failIfProjectNotPinned() throws IOException, InterruptedException {
+    public void failIfProjectNotPinned() throws IOException {
         setFeedSourceDeployable(true);
         setProjectAutoDeploy(true);
-        mockFeedVersion = triggerCreateFeedVersion("fake-agency-with-calendar-and-calendar-dates");
-        // FIXME: Sleep to allow sub-jobs (e.g. feed version validation and auto deploy) to complete.
-        Thread.sleep(1000);
-        assertFalse(mockFeedVersion.autoDeployed);
+        ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob("fake-agency-expire-in-2099");
+        assertThat(
+            processSingleFeedJob.getNotificationMessage(),
+            equalTo(expectedResult)
+        );
     }
 
     @Test
-    public void failIfProjectNotAutoDeploy() throws IOException, InterruptedException {
+    public void failIfProjectNotAutoDeploy() throws IOException {
         setFeedSourceDeployable(true);
         setProjectAutoDeploy(false);
         setProjectPinnedDeploymentId(deployment.id);
-        mockFeedVersion = triggerCreateFeedVersion("fake-agency-with-calendar-and-calendar-dates");
-        // FIXME: Sleep to allow sub-jobs (e.g. feed version validation and auto deploy) to complete.
-        Thread.sleep(1000);
-        assertFalse(mockFeedVersion.autoDeployed);
+        ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob("fake-agency-expire-in-2099");
+        assertThat(
+            processSingleFeedJob.getNotificationMessage(),
+            equalTo(expectedResult)
+        );
     }
 
     @Test
-    public void autoDeployFeedVersion() throws IOException, InterruptedException {
+    public void autoDeployFeedVersion() throws IOException {
         setFeedSourceDeployable(true);
         setProjectAutoDeploy(true);
         setProjectPinnedDeploymentId(deployment.id);
-        mockFeedVersion = triggerCreateFeedVersion("fake-agency-expire-in-2099");
-        // FIXME: Sleep to allow sub-jobs (e.g. feed version validation and auto deploy) to complete.
-        Thread.sleep(1000);
-        // FIXME: Currently fails because of {@Link FeedVersion#hasFeedVersionExpired}.
-        assertTrue(mockFeedVersion.autoDeployed);
+        ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob("fake-agency-expire-in-2099");
+        String expectedResult = "New feed version created for Mock Feed Source (valid from 2017-09-15 - 2099-09-17). During validation, we found 8 issue(s)";
+        assertThat(
+            processSingleFeedJob.getNotificationMessage(),
+            equalTo(expectedResult)
+        );
     }
 
     @Test
-    public void failIfFeedVersionHasHighSeverityErrorTypes() throws IOException, InterruptedException {
+    public void failIfFeedVersionHasHighSeverityErrorTypes() throws IOException {
         setFeedSourceDeployable(true);
         setProjectAutoDeploy(true);
         setProjectPinnedDeploymentId(deployment.id);
-        mockFeedVersion = triggerCreateFeedVersion("fake-agency-with-unused-route");
-        // FIXME: Sleep to allow sub-jobs (e.g. feed version validation and auto deploy) to complete.
-        Thread.sleep(1000);
-        // FIXME: Currently fails because of {@Link FeedVersion#hasFeedVersionExpired}.
-        assertFalse(mockFeedVersion.autoDeployed);
+        ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob("fake-agency-expire-in-2099-with-unused-route");
+        assertThat(
+            processSingleFeedJob.getNotificationMessage(),
+            equalTo(expectedResult)
+        );
     }
 
     private void setFeedSourceDeployable(boolean deployable) {
@@ -136,12 +140,13 @@ public class AutoDeployFeedVersionTest extends DatatoolsTest {
     }
 
     /**
-     * Create a feed version and start processing a single feed job.
+     * Create and run a {@Link ProcessSingleFeedJob}.
      */
-    private FeedVersion triggerCreateFeedVersion(String zipFolderName) throws IOException {
-        return createFeedVersion(
-            mockFeedSource,
-            zipFolderFiles(zipFolderName)
-        );
+    private ProcessSingleFeedJob triggerProcessSingleFeedJob(String zipFolderName) throws IOException {
+        ProcessSingleFeedJob processSingleFeedJob
+            = createProcessSingleFeedJob(mockFeedSource,zipFolderFiles(zipFolderName));
+        processSingleFeedJob.run();
+        return processSingleFeedJob;
     }
+
 }
