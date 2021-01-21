@@ -27,6 +27,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
+import java.sql.Array;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -404,35 +405,27 @@ public class FeedVersion extends Model implements Serializable {
      * @return whether high severity error types have been flagged.
      */
     private boolean hasHighSeverityErrorTypes() {
-        List<String> highSeverityErrorTypes = Stream.of(
-            NewGTFSErrorType.values())
-            .filter(type -> type.priority == Priority.HIGH)
-            .map(type -> String.format("%s", type))
-            .collect(Collectors.toList());
-        StringBuilder markers = new StringBuilder();
-        int k = 0;
-        while (k < highSeverityErrorTypes.size()) {
-            markers.append(",?");
-            k++;
-        }
-        int count = 1;
+        Set<String> highSeverityErrorTypes = Stream.of(NewGTFSErrorType.values())
+                .filter(type -> type.priority == Priority.HIGH)
+                .map(NewGTFSErrorType::toString)
+                .collect(Collectors.toSet());
         try (Connection connection = GTFS_DATA_SOURCE.getConnection()) {
-            PreparedStatement preparedStatement =
-                connection.prepareStatement(
-                    String.format("select count(*) from %s.errors where error_type in (%s)",
-                        namespace,
-                        markers.substring(1)));
-            for (int i=0; i < highSeverityErrorTypes.size(); i++) {
-                preparedStatement.setString(i + 1, highSeverityErrorTypes.get(i));
-            }
+            String sql = String.format("select distinct error_type from %s.errors", namespace);
+            PreparedStatement preparedStatement = connection.prepareStatement(sql);
+            LOG.info(preparedStatement.toString());
             ResultSet resultSet = preparedStatement.executeQuery();
+            // Check if any of the error types found in the table are "high priority/severity"
             while (resultSet.next()) {
-                count = resultSet.getInt(1);
+                String errorType = resultSet.getString(1);
+                if (highSeverityErrorTypes.contains(errorType)) return true;
             }
         } catch (SQLException e) {
             LOG.error("Unable to determine if feed version {} produced any high severity error types", name, e);
+            // If the SQL query failed, there is likely something wrong with the error table, which suggests the feed
+            // is invalid for one reason or another.
+            return true;
         }
-        return count > 0;
+        return false;
     }
 
     @JsonView(JsonViews.UserInterface.class)
