@@ -177,8 +177,11 @@ public class ProcessSingleFeedJob extends MonitorableJob {
             }
         }
         // FIXME: Should we overwrite the input GTFS dataset if transforming in place?
-        // Make the necessary checks and update the OTP deployment with this new dataset if required.
-        addNextJob(new AutoDeployFeedJob(feedVersion, owner, feedSource));
+        // If deployment module is enabled, feed source is deployable, and project is set to auto-deploy, add auto
+        // deploy job. Note: other checks occur within job to ensure appropriate conditions are met.
+        if (DataManager.isModuleEnabled("deployment") && feedSource.deployable && feedSource.retrieveProject().autoDeploy){
+            addNextJob(new AutoDeployFeedJob(feedVersion, owner, feedSource));
+        }
     }
 
     /**

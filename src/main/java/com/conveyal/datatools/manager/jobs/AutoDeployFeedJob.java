@@ -26,7 +26,7 @@ public class AutoDeployFeedJob extends MonitorableJob {
     private FeedVersion feedVersion;
     private final FeedSource feedSource;
 
-    AutoDeployFeedJob(FeedVersion version, Auth0UserProfile owner, FeedSource source) {
+    public AutoDeployFeedJob(FeedVersion version, Auth0UserProfile owner, FeedSource source) {
         super(owner, "Auto Deploy Feed", JobType.AUTO_DEPLOY_FEED_VERSION);
         feedVersion = version;
         feedSource = source;
@@ -36,48 +36,46 @@ public class AutoDeployFeedJob extends MonitorableJob {
     public void jobLogic () {
         Project project = feedSource.retrieveProject();
         Deployment deployment = Persistence.deployments.getById(project.pinnedDeploymentId);
-        if (DataManager.isModuleEnabled("deployment") &&
-            feedSource.deployable &&
-            project.pinnedDeploymentId != null &&
-            project.autoDeploy &&
-            deployment != null &&
-            !feedVersion.hasCriticalErrors()) {
-
-            if (deployment.feedVersionIds == null) {
-                // FIXME: is it possible that no previous versions have been deployed?
-                deployment.feedVersionIds = new ArrayList<>();
+        // Verify that a pinned deployment exists.
+        if (project.pinnedDeploymentId == null || deployment == null) {
+            status.fail("Pinned deployment does not exist. Cancelling auto-deploy.");
+            return;
+        } else if (feedVersion.hasCriticalErrors()) {
+            status.fail("Feed version has critical errors or is out of date. Cancelling auto-deploy.");
+            return;
+        }
+        if (deployment.feedVersionIds == null) {
+            // FIXME: is it possible that no previous versions have been deployed?
+            deployment.feedVersionIds = new ArrayList<>();
+        }
+        // Remove previously defined version for this feed source.
+        for (FeedVersion versionToReplace : deployment.retrieveFullFeedVersions()) {
+            if (versionToReplace.feedSourceId.equals(feedSource.id)) {
+                deployment.feedVersionIds.remove(versionToReplace.id);
             }
-            // Remove previously defined version for this feed source.
-            for (FeedVersion versionToReplace : deployment.retrieveFullFeedVersions()) {
-                if (versionToReplace.feedSourceId.equals(feedSource.id)) {
-                    deployment.feedVersionIds.remove(versionToReplace.id);
-                }
-            }
-            // Add new version ID TODO: Should we not do this if the feed source was not already applied?
-            deployment.feedVersionIds.add(feedVersion.id);
-            Persistence.deployments.replace(deployment.id, deployment);
-            // Send deployment (with new feed version) to most recently used server.
-            OtpServer server;
-            if (deployment.latest() != null) {
-                String latestServerId = deployment.latest().serverId;
-                server = Persistence.servers.getById(latestServerId);
-                if (server == null) {
-                    status.fail(String.format("Server with id %s no longer exists. Skipping deployment.", latestServerId));
-                    return;
-                }
-            } else {
-                // FIXME: Should we deploy some other server if deployment has not previously been deployed?
-                status.fail(String.format("Deployment %s has never been deployed. Skipping auto-deploy.", deployment.id));
+        }
+        // Add new version ID TODO: Should we not do this if the feed source was not already applied?
+        deployment.feedVersionIds.add(feedVersion.id);
+        Persistence.deployments.replace(deployment.id, deployment);
+        // Send deployment (with new feed version) to most recently used server.
+        OtpServer server;
+        if (deployment.latest() != null) {
+            String latestServerId = deployment.latest().serverId;
+            server = Persistence.servers.getById(latestServerId);
+            if (server == null) {
+                status.fail(String.format("Server with id %s no longer exists. Skipping deployment.", latestServerId));
                 return;
             }
-            // Finally, queue up the new deploy job.
-            if (DeploymentController.queueDeployJob(new DeployJob(deployment, owner, server))) {
-                status.completeSuccessfully(String.format("New deploy job initiated for %s", server.name));
-            } else {
-                status.fail(String.format("Could not auto-deploy to %s due to conflicting active deployment.", server.name));
-            }
         } else {
-            status.fail("Required conditions for auto deploy not met. Skipping auto-deploy");
+            // FIXME: Should we deploy some other server if deployment has not previously been deployed?
+            status.fail(String.format("Deployment %s has never been deployed. Skipping auto-deploy.", deployment.id));
+            return;
+        }
+        // Finally, queue up the new deploy job.
+        if (DeploymentController.queueDeployJob(new DeployJob(deployment, owner, server))) {
+            status.completeSuccessfully(String.format("New deploy job initiated for %s", server.name));
+        } else {
+            status.fail(String.format("Could not auto-deploy to %s due to conflicting active deployment.", server.name));
         }
     }
 }
