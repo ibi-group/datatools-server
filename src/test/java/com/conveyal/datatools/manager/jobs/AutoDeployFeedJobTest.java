@@ -72,7 +72,7 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
         setProjectPinnedDeploymentId(deployment.id);
         ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob("fake-agency-expire-in-2099");
         AutoDeployFeedJob autoDeployJob = getAutoDeployJobFromParent(processSingleFeedJob);
-        assertThat(autoDeployJob.status.message, equalTo(""));
+        assertThat(autoDeployJob.status.message, equalTo("Required conditions for auto deploy not met. Skipping auto-deploy"));
     }
 
     @Test
@@ -81,7 +81,7 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
         setProjectAutoDeploy(true);
         ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob("fake-agency-expire-in-2099");
         AutoDeployFeedJob autoDeployJob = getAutoDeployJobFromParent(processSingleFeedJob);
-        assertThat(autoDeployJob.status.message, equalTo(""));
+        assertThat(autoDeployJob.status.message, equalTo("Required conditions for auto deploy not met. Skipping auto-deploy"));
     }
 
     @Test
@@ -91,7 +91,7 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
         setProjectPinnedDeploymentId(deployment.id);
         ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob("fake-agency-expire-in-2099");
         AutoDeployFeedJob autoDeployJob = getAutoDeployJobFromParent(processSingleFeedJob);
-        assertThat(autoDeployJob.status.message, equalTo(""));
+        assertThat(autoDeployJob.status.message, equalTo("Required conditions for auto deploy not met. Skipping auto-deploy"));
     }
 
     @Test
@@ -101,7 +101,7 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
         setProjectPinnedDeploymentId(deployment.id);
         ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob("fake-agency-expire-in-2099");
         AutoDeployFeedJob autoDeployJob = getAutoDeployJobFromParent(processSingleFeedJob);
-        assertThat(autoDeployJob.status.message, equalTo(""));
+        assertThat(autoDeployJob.status.message, equalTo("Job complete!"));
     }
 
     @Test
@@ -111,7 +111,7 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
         setProjectPinnedDeploymentId(deployment.id);
         ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob("fake-agency-expire-in-2099-with-unused-route");
         AutoDeployFeedJob autoDeployJob = getAutoDeployJobFromParent(processSingleFeedJob);
-        assertThat(autoDeployJob.status.message, equalTo(""));
+        assertThat(autoDeployJob.status.message, equalTo("Required conditions for auto deploy not met. Skipping auto-deploy"));
     }
 
     private void setFeedSourceDeployable(boolean deployable) {
