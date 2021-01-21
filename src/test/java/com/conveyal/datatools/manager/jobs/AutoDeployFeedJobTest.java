@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.DatatoolsTest;
+import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.models.*;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -10,27 +11,27 @@ import org.junit.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.Date;
+import java.util.List;
 
 import static com.conveyal.datatools.TestUtils.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 
-public class AutoDeployFeedVersionTest extends DatatoolsTest {
-    private static final Logger LOG = LoggerFactory.getLogger(AutoDeployFeedVersionTest.class);
+public class AutoDeployFeedJobTest extends DatatoolsTest {
+    private static final Logger LOG = LoggerFactory.getLogger(AutoDeployFeedJobTest.class);
     private static OtpServer server;
     private static Deployment deployment;
     private static Project project;
     private static FeedSource mockFeedSource;
-    //FIXME: Too generic. Is there a way of passing sub job messages (status.fail) to the parent job?
-    private String expectedResult = "While attempting to process a new feed version for Mock Feed Source, an unrecoverable error was encountered. More details: unknown error";
 
     @BeforeClass
     public static void setUp() throws IOException {
         DatatoolsTest.setUp();
         Auth0Connection.setAuthDisabled(true);
-        LOG.info("{} setup", AutoDeployFeedVersionTest.class.getSimpleName());
+        LOG.info("{} setup", AutoDeployFeedJobTest.class.getSimpleName());
         String testName = String.format("Test %s", new Date().toString());
 
         // OTP server instance required by deployment.
@@ -70,10 +71,8 @@ public class AutoDeployFeedVersionTest extends DatatoolsTest {
         setProjectAutoDeploy(true);
         setProjectPinnedDeploymentId(deployment.id);
         ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob("fake-agency-expire-in-2099");
-        assertThat(
-            processSingleFeedJob.getNotificationMessage(),
-            equalTo(expectedResult)
-        );
+        AutoDeployFeedJob autoDeployJob = getAutoDeployJobFromParent(processSingleFeedJob);
+        assertThat(autoDeployJob.status.message, equalTo(""));
     }
 
     @Test
@@ -81,10 +80,8 @@ public class AutoDeployFeedVersionTest extends DatatoolsTest {
         setFeedSourceDeployable(true);
         setProjectAutoDeploy(true);
         ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob("fake-agency-expire-in-2099");
-        assertThat(
-            processSingleFeedJob.getNotificationMessage(),
-            equalTo(expectedResult)
-        );
+        AutoDeployFeedJob autoDeployJob = getAutoDeployJobFromParent(processSingleFeedJob);
+        assertThat(autoDeployJob.status.message, equalTo(""));
     }
 
     @Test
@@ -93,10 +90,8 @@ public class AutoDeployFeedVersionTest extends DatatoolsTest {
         setProjectAutoDeploy(false);
         setProjectPinnedDeploymentId(deployment.id);
         ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob("fake-agency-expire-in-2099");
-        assertThat(
-            processSingleFeedJob.getNotificationMessage(),
-            equalTo(expectedResult)
-        );
+        AutoDeployFeedJob autoDeployJob = getAutoDeployJobFromParent(processSingleFeedJob);
+        assertThat(autoDeployJob.status.message, equalTo(""));
     }
 
     @Test
@@ -105,11 +100,8 @@ public class AutoDeployFeedVersionTest extends DatatoolsTest {
         setProjectAutoDeploy(true);
         setProjectPinnedDeploymentId(deployment.id);
         ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob("fake-agency-expire-in-2099");
-        String expectedResult = "New feed version created for Mock Feed Source (valid from 2017-09-15 - 2099-09-17). During validation, we found 8 issue(s)";
-        assertThat(
-            processSingleFeedJob.getNotificationMessage(),
-            equalTo(expectedResult)
-        );
+        AutoDeployFeedJob autoDeployJob = getAutoDeployJobFromParent(processSingleFeedJob);
+        assertThat(autoDeployJob.status.message, equalTo(""));
     }
 
     @Test
@@ -118,10 +110,8 @@ public class AutoDeployFeedVersionTest extends DatatoolsTest {
         setProjectAutoDeploy(true);
         setProjectPinnedDeploymentId(deployment.id);
         ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob("fake-agency-expire-in-2099-with-unused-route");
-        assertThat(
-            processSingleFeedJob.getNotificationMessage(),
-            equalTo(expectedResult)
-        );
+        AutoDeployFeedJob autoDeployJob = getAutoDeployJobFromParent(processSingleFeedJob);
+        assertThat(autoDeployJob.status.message, equalTo(""));
     }
 
     private void setFeedSourceDeployable(boolean deployable) {
@@ -143,10 +133,19 @@ public class AutoDeployFeedVersionTest extends DatatoolsTest {
      * Create and run a {@Link ProcessSingleFeedJob}.
      */
     private ProcessSingleFeedJob triggerProcessSingleFeedJob(String zipFolderName) throws IOException {
-        ProcessSingleFeedJob processSingleFeedJob
-            = createProcessSingleFeedJob(mockFeedSource,zipFolderFiles(zipFolderName));
+        File zipFile = zipFolderFiles(zipFolderName);
+        ProcessSingleFeedJob processSingleFeedJob = createProcessSingleFeedJob(mockFeedSource, zipFile);
         processSingleFeedJob.run();
         return processSingleFeedJob;
+    }
+
+    private AutoDeployFeedJob getAutoDeployJobFromParent(ProcessSingleFeedJob processSingleFeedJob) {
+        List<MonitorableJob> subJobs = processSingleFeedJob.getSubJobs();
+        MonitorableJob lastJob = subJobs.get(subJobs.size() - 1);
+        if (lastJob instanceof AutoDeployFeedJob) {
+            return (AutoDeployFeedJob) lastJob;
+        }
+        throw new IllegalArgumentException("No auto deploy job found as last job of ProcessSingleFeedJob!");
     }
 
 }

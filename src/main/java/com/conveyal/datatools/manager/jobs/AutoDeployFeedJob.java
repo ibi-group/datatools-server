@@ -72,8 +72,7 @@ public class AutoDeployFeedJob extends MonitorableJob {
             }
             // Finally, queue up the new deploy job.
             if (DeploymentController.queueDeployJob(new DeployJob(deployment, owner, server))) {
-                status.completed = true;
-                LOG.info("New deploy job initiated for {}", server.name);
+                status.completeSuccessfully(String.format("New deploy job initiated for %s", server.name));
             } else {
                 status.fail(String.format("Could not auto-deploy to %s due to conflicting active deployment.", server.name));
             }
