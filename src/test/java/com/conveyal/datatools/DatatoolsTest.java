@@ -10,14 +10,9 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileWriter;
 import java.io.IOException;
-import java.sql.Connection;
-import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
-
-import static com.conveyal.datatools.TestUtils.getBooleanEnvVar;
-import static com.conveyal.datatools.TestUtils.isCi;
 
 /**
  * This abstract class contains is used to start a test instance of datatools-server that other tests can use to perform
@@ -28,7 +23,7 @@ import static com.conveyal.datatools.TestUtils.isCi;
 public abstract class DatatoolsTest {
     private static final Logger LOG = LoggerFactory.getLogger(DatatoolsTest.class);
     private static boolean setUpIsDone = false;
-    private static final Yaml yaml = new Yaml(); // needed for writing config files on Travis for the e2e tests
+    private static final Yaml yaml = new Yaml(); // needed for writing config files on CI for the e2e tests
 
     @BeforeClass
     public static void setUp() throws RuntimeException, IOException {
@@ -39,9 +34,9 @@ public abstract class DatatoolsTest {
 
         setupConfigFiles();
 
-        // If in the e2e environment, use the secret env.yml and server.yml files to start the server. When ran on
-        // Travis CI, these files will automatically be setup.
-        String[] args = getBooleanEnvVar("RUN_E2E")
+        // If in the e2e environment, use the secret env.yml and server.yml files to start the server. When run on
+        // CI, these files will automatically be setup.
+        String[] args = TestUtils.isRunningE2E()
             ? new String[] { "configurations/default/env.yml", "configurations/default/server.yml" }
             : new String[] { "configurations/test/env.yml.tmp", "configurations/test/server.yml.tmp" };
 
@@ -63,12 +58,12 @@ public abstract class DatatoolsTest {
     }
 
     /**
-     * Creates config files for datatools-server if being ran on Travis and the e2e environment variable is activated.
+     * Creates config files for datatools-server if being run on CI and the e2e environment variable is activated.
      * These special config files are needed in order to run e2e tests. Some of the config files contain sensitive
-     * information that cannot be checked into the repo, so that data is obtained from environment variables in Travis.
+     * information that cannot be checked into the repo, so that data is obtained from environment variables in CI.
      */
     private static void setupConfigFiles() throws RuntimeException, IOException {
-        if (isCi() && getBooleanEnvVar("RUN_E2E")) {
+        if (TestUtils.isCi() && TestUtils.isRunningE2E()) {
             LOG.info("Setting up server in CI environment");
 
             // first make sure all the necessary environment varaibles are defined

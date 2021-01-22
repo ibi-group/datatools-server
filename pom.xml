@@ -40,6 +40,7 @@
     </scm>
     <properties>
         <jackson.version>2.10.1</jackson.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <!-- Using the latest version of geotools (e.g, 20) seems to cause issues with the shapefile
         plugin where the_geom for each feature is null. -->
         <geotools.version>17.5</geotools.version>
@@ -102,7 +103,7 @@
             <plugin>
                 <groupId>pl.project13.maven</groupId>
                 <artifactId>git-commit-id-plugin</artifactId>
-                <version>2.2.1</version>
+                <version>3.0.1</version>
                 <executions>
                     <execution>
                         <goals>
@@ -117,6 +118,13 @@
                     -->
                     <generateGitPropertiesFile>true</generateGitPropertiesFile>
                     <injectAllReactorProjects>true</injectAllReactorProjects>
+                    <!-- "git describe always" needed to keep GitHub actions from failing
+                          See: https://github.com/git-commit-id/git-commit-id-maven-plugin/issues/61#issuecomment-68037525
+                     -->
+                    <gitDescribe>
+                        <skip>false</skip>
+                        <always>true</always>
+                    </gitDescribe>
                 </configuration>
             </plugin>
             <plugin>
@@ -273,7 +281,7 @@
         <dependency>
             <groupId>com.google.guava</groupId>
             <artifactId>guava</artifactId>
-            <version>18.0</version>
+            <version>30.0-jre</version>
         </dependency>
 
         <!-- Note: Unless we are explicit with the jackson dependencies listed below, other versions included in other
