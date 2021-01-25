@@ -19,6 +19,8 @@ import java.util.List;
 import static com.conveyal.datatools.TestUtils.*;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 public class AutoDeployFeedJobTest extends DatatoolsTest {
     private static final Logger LOG = LoggerFactory.getLogger(AutoDeployFeedJobTest.class);
@@ -66,32 +68,36 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
     }
 
     @Test
-    public void failIfFeedSourceNotDeployable() throws IOException {
+    public void skipJobIfFeedSourceNotDeployable() throws IOException {
         setFeedSourceDeployable(false);
         setProjectAutoDeploy(true);
         setProjectPinnedDeploymentId(deployment.id);
         ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob("fake-agency-expire-in-2099");
-        AutoDeployFeedJob autoDeployJob = getAutoDeployJobFromParent(processSingleFeedJob);
-        assertThat(autoDeployJob.status.message, equalTo("Required conditions for auto deploy not met. Skipping auto-deploy"));
+        MonitorableJob lastJob = getLastJob(processSingleFeedJob);
+        // Verify that the auto deploy job was not added as a subjob.
+        assertFalse(lastJob instanceof AutoDeployFeedJob);
     }
 
     @Test
-    public void failIfProjectNotPinned() throws IOException {
+    public void failIfDeploymentNotPinned() throws IOException {
         setFeedSourceDeployable(true);
         setProjectAutoDeploy(true);
+        setProjectPinnedDeploymentId(null);
         ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob("fake-agency-expire-in-2099");
-        AutoDeployFeedJob autoDeployJob = getAutoDeployJobFromParent(processSingleFeedJob);
-        assertThat(autoDeployJob.status.message, equalTo("Required conditions for auto deploy not met. Skipping auto-deploy"));
+        MonitorableJob lastJob = getLastJob(processSingleFeedJob);
+        assertTrue(lastJob instanceof AutoDeployFeedJob);
+        assertThat(lastJob.status.message, equalTo("Pinned deployment does not exist. Cancelling auto-deploy."));
     }
 
     @Test
-    public void failIfProjectNotAutoDeploy() throws IOException {
+    public void skipJobIfProjectNotAutoDeploy() throws IOException {
         setFeedSourceDeployable(true);
         setProjectAutoDeploy(false);
         setProjectPinnedDeploymentId(deployment.id);
         ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob("fake-agency-expire-in-2099");
-        AutoDeployFeedJob autoDeployJob = getAutoDeployJobFromParent(processSingleFeedJob);
-        assertThat(autoDeployJob.status.message, equalTo("Required conditions for auto deploy not met. Skipping auto-deploy"));
+        MonitorableJob lastJob = getLastJob(processSingleFeedJob);
+        // Verify that the auto deploy job was not added as a subjob.
+        assertFalse(lastJob instanceof AutoDeployFeedJob);
     }
 
     @Test
@@ -100,8 +106,9 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
         setProjectAutoDeploy(true);
         setProjectPinnedDeploymentId(deployment.id);
         ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob("fake-agency-expire-in-2099");
-        AutoDeployFeedJob autoDeployJob = getAutoDeployJobFromParent(processSingleFeedJob);
-        assertThat(autoDeployJob.status.message, equalTo("Job complete!"));
+        MonitorableJob lastJob = getLastJob(processSingleFeedJob);
+        assertTrue(lastJob instanceof AutoDeployFeedJob);
+        assertThat(lastJob.status.message, equalTo("Job complete!"));
     }
 
     @Test
@@ -110,8 +117,9 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
         setProjectAutoDeploy(true);
         setProjectPinnedDeploymentId(deployment.id);
         ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob("fake-agency-expire-in-2099-with-unused-route");
-        AutoDeployFeedJob autoDeployJob = getAutoDeployJobFromParent(processSingleFeedJob);
-        assertThat(autoDeployJob.status.message, equalTo("Required conditions for auto deploy not met. Skipping auto-deploy"));
+        MonitorableJob lastJob = getLastJob(processSingleFeedJob);
+        assertTrue(lastJob instanceof AutoDeployFeedJob);
+        assertThat(lastJob.status.message, equalTo("Feed version has critical errors or is out of date. Cancelling auto-deploy."));
     }
 
     private void setFeedSourceDeployable(boolean deployable) {
@@ -139,13 +147,9 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
         return processSingleFeedJob;
     }
 
-    private AutoDeployFeedJob getAutoDeployJobFromParent(ProcessSingleFeedJob processSingleFeedJob) {
+    private MonitorableJob getLastJob(ProcessSingleFeedJob processSingleFeedJob) {
         List<MonitorableJob> subJobs = processSingleFeedJob.getSubJobs();
-        MonitorableJob lastJob = subJobs.get(subJobs.size() - 1);
-        if (lastJob instanceof AutoDeployFeedJob) {
-            return (AutoDeployFeedJob) lastJob;
-        }
-        throw new IllegalArgumentException("No auto deploy job found as last job of ProcessSingleFeedJob!");
+        return subJobs.get(subJobs.size() - 1);
     }
 
 }
