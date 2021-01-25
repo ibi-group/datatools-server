@@ -130,7 +130,7 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
     }
 
     /**
-     * Create and run a {@Link ProcessSingleFeedJob}.
+     * Create and run a {@link ProcessSingleFeedJob}.
      */
     private ProcessSingleFeedJob triggerProcessSingleFeedJob(String zipFolderName) throws IOException {
         File zipFile = zipFolderFiles(zipFolderName);

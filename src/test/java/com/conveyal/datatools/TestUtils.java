@@ -97,14 +97,7 @@ public class TestUtils {
      * so that tasks can run synchronously.
      */
     public static FeedVersion createFeedVersion(FeedSource source, File gtfsFile) {
-        FeedVersion version = new FeedVersion(source);
-        InputStream is;
-        try {
-            is = new FileInputStream(gtfsFile);
-            version.newGtfsFile(is);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        FeedVersion version = getFeedVersionFromGTFSFile(source, gtfsFile);
         Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
         ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(version, user, true);
         // Run in same thread to keep things synchronous.
@@ -113,21 +106,26 @@ public class TestUtils {
     }
 
     /**
-     * Utility function to create a {@Link ProcessSingleFeedJob} during tests.
+     * Utility function to create a {@link ProcessSingleFeedJob} during tests.
      */
     public static ProcessSingleFeedJob createProcessSingleFeedJob(FeedSource source, File gtfsFile) {
-        FeedVersion version = new FeedVersion(source);
-        InputStream is;
-        try {
-            is = new FileInputStream(gtfsFile);
-            version.newGtfsFile(is);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        FeedVersion version = getFeedVersionFromGTFSFile(source, gtfsFile);
         Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
         return new ProcessSingleFeedJob(version, user, true);
     }
 
+    /**
+     * Utility function to create a feed version from a GTFS file.
+     */
+    private static FeedVersion getFeedVersionFromGTFSFile(FeedSource source, File gtfsFile) {
+        FeedVersion version = new FeedVersion(source);
+        try (InputStream is = new FileInputStream(gtfsFile)) {
+            version.newGtfsFile(is);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return version;
+    }
 
     /**
      * Zip files in a folder into a temporary zip file

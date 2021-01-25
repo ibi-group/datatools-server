@@ -18,12 +18,12 @@ import java.util.ArrayList;
 /**
  * Auto deploy new feed version to OTP server if {@link Project#autoDeploy} is enabled and other conditions are met
  * (e.g., feed version has no critical errors, active deployment is not in progress, etc.). This job must run after
- * {@Link ValidateFeedJob} as it has a dependency on the outcome of {@Link FeedVersion#hasCriticalErrors}.
+ * {@link ValidateFeedJob} as it has a dependency on the outcome of {@link FeedVersion#hasCriticalErrors}.
  */
 public class AutoDeployFeedJob extends MonitorableJob {
     public static final Logger LOG = LoggerFactory.getLogger(ValidateFeedJob.class);
 
-    private FeedVersion feedVersion;
+    private final FeedVersion feedVersion;
     private final FeedSource feedSource;
 
     AutoDeployFeedJob(FeedVersion version, Auth0UserProfile owner, FeedSource source) {

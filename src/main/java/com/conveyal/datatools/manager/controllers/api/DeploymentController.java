@@ -391,7 +391,7 @@ public class DeploymentController {
             DeployJob conflictingDeployJob = deploymentJobsByServer.get(serverId);
             if (conflictingDeployJob != null && !conflictingDeployJob.status.completed) {
                 // Another deploy job is actively being deployed to the server target.
-                LOG.error("New deploy job will not be queued due to active job in progress.");
+                LOG.error("New deploy job will not be queued due to active deploy job in progress.");
                 return false;
             }
         }
@@ -404,22 +404,13 @@ public class DeploymentController {
             deployJob.getDeployment().routerId
         );
         for (Deployment oldDeployment : deploymentsWithSameTarget) {
-            LOG.info("Setting deployment target to null id={}", oldDeployment.id);
+            LOG.info("Setting deployment target to null for id={}", oldDeployment.id);
             Persistence.deployments.updateField(oldDeployment.id, "deployedTo", null);
         }
         // Finally, add deploy job to the heavy executor.
         DataManager.heavyExecutor.execute(deployJob);
         deploymentJobsByServer.put(serverId, deployJob);
         return true;
-    }
-
-    public static DeployJob checkDeploymentInProgress(String deploymentId) {
-        for (DeployJob job : deploymentJobsByServer.values()) {
-            if (job.getDeploymentId().equals(deploymentId)) {
-                return job;
-            }
-        }
-        return null;
     }
 
     /**

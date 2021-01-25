@@ -31,8 +31,8 @@ public abstract class MonitorableJob implements Runnable, Serializable {
     // Public fields will be serialized over HTTP API and visible to the web client
     public final JobType type;
     public File file;
-    public String parentJobId;
-    public JobType parentJobType;
+    protected String parentJobId;
+    protected JobType parentJobType;
     // Status is not final to allow some jobs to have extra status fields.
     public Status status = new Status();
     // Name is not final in case it needs to be amended during job processing.
@@ -43,7 +43,7 @@ public abstract class MonitorableJob implements Runnable, Serializable {
      * Additional jobs that will be run after the main logic of this job has completed.
      * This job is not considered entirely completed until its sub-jobs have all completed.
      */
-    private List<MonitorableJob> subJobs = new ArrayList<>();
+    final private List<MonitorableJob> subJobs = new ArrayList<>();
 
     public enum JobType {
         AUTO_DEPLOY_FEED_VERSION,
