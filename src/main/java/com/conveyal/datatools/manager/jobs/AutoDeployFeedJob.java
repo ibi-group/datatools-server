@@ -1,7 +1,6 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.controllers.api.DeploymentController;
 import com.conveyal.datatools.manager.models.Deployment;
