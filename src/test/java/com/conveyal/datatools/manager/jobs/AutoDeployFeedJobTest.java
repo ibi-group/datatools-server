@@ -106,7 +106,7 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
     }
 
     @Test
-    public void autoDeployFeedVersion() throws IOException {
+    public void canAutoDeployFeedVersion() throws IOException {
         setFeedSourceDeployable(true);
         setProjectAutoDeploy(true);
         setProjectPinnedDeploymentId(deployment.id);
