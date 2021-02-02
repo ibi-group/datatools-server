@@ -7,18 +7,20 @@ import java.util.List;
  * https://github.com/ibi-group/otp-runner#manifestjson-values
  */
 public class OtpRunnerManifest {
+    public String baseFolder;
+    public List<String> baseFolderDownloads;
     public String buildConfigJSON;
     public boolean buildGraph;
     public String buildLogFile;
     public String graphObjUrl;
-    public String graphsFolder;
+    public List<String> gtfsDownloads;
     public String jarFile;
     public String jarUrl;
     public String nonce;
     public String otpRunnerLogFile;
+    public String otpVersion;
     public boolean prefixLogUploadsWithInstanceId;
     public String routerConfigJSON;
-    public List<String> routerFolderDownloads;
     public String routerName;
     public boolean runServer;
     public String s3UploadPath;

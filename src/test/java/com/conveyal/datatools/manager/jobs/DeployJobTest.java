@@ -81,10 +81,11 @@ public class DeployJobTest extends UnitTest {
     }
 
     /**
-     * Tests that the user data for a graph build + run server instance can be generated properly
+     * Tests that the otp-runner manifest and user data for a graph build + run server instance can be generated
+     * properly
      */
     @Test
-    public void canMakeGraphBuildUserDataScript () {
+    public void canMakeGraphBuildAndServeManifestAndUserData () {
         DeployJob deployJob = new DeployJob(
             deployment,
             Auth0UserProfile.createTestAdminUser(),
@@ -92,20 +93,20 @@ public class DeployJobTest extends UnitTest {
             "test-deploy",
             DeployJob.DeployType.REPLACE
         );
-        assertThat(
-            replaceNonce(
-                deployJob.constructManifestAndUserData(false, true),
-                "canMakeGraphBuildUserDataScript"
-            ),
-            matchesSnapshot()
+        OtpRunnerManifest buildAndServeManifest = deployJob.createAndUploadManifestAndConfigs(
+            false,
+            true
         );
+        buildAndServeManifest.nonce = "canMakeGraphBuildUserDataScript";
+        assertThat(buildAndServeManifest, matchesSnapshot());
+        assertThat(deployJob.constructUserData(false), matchesSnapshot());
     }
 
     /**
-     * Tests that the user data for a run server only instance can be generated properly
+     * Tests that the otp-runner manifest and user data for a run server only instance can be generated properly
      */
     @Test
-    public void canMakeServerOnlyUserDataScript () {
+    public void canMakeServerOnlyManifestAndUserData () {
         DeployJob deployJob = new DeployJob(
             deployment,
             Auth0UserProfile.createTestAdminUser(),
@@ -113,23 +114,13 @@ public class DeployJobTest extends UnitTest {
             "test-deploy",
             DeployJob.DeployType.REPLACE
         );
-        assertThat(
-            replaceNonce(
-                deployJob.constructManifestAndUserData(true, true),
-                "canMakeServerOnlyUserDataScript"
-            ),
-            matchesSnapshot()
+        OtpRunnerManifest serverOnlyManifest = deployJob.createAndUploadManifestAndConfigs(
+            true,
+            true
         );
-    }
-
-    /**
-     * Replaces the nonce in the user data with a deterministic value
-     */
-    private String replaceNonce(String userData, String replacementNonce) {
-        return userData.replaceFirst(
-            "nonce\":\"[\\w-]*",
-            String.format("nonce\":\"%s", replacementNonce)
-        );
+        serverOnlyManifest.nonce = "canMakeServerOnlyUserDataScript";
+        assertThat(serverOnlyManifest, matchesSnapshot());
+        assertThat(deployJob.constructUserData(true), matchesSnapshot());
     }
 
     /**

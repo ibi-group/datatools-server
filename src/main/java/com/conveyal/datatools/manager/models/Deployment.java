@@ -157,8 +157,15 @@ public class Deployment extends Model implements Serializable {
     public boolean skipOsmExtract;
 
     /**
+     * If true, the EC2 deployment with otp-runner will be prepared to run an OTP jar file with the proper commands.
+     * NOTE: the {@link Deployment#otpVersion} is assumed to be properly set to an OTP2 jar file.
+     */
+    public boolean otp2;
+
+    /**
      * The version (according to git describe) of OTP being used on this deployment This should default to
-     * {@link Deployment#DEFAULT_OTP_VERSION}.
+     * {@link Deployment#DEFAULT_OTP_VERSION}. This is used to determine what jar file to download and does not have an
+     * exact match to actual numbered/tagged releases.
      */
     public String otpVersion;
 
@@ -166,7 +173,8 @@ public class Deployment extends Model implements Serializable {
 
     /**
      * The version (according to git describe) of R5 being used on this deployment. This should default to
-     * {@link Deployment#DEFAULT_R5_VERSION}.
+     * {@link Deployment#DEFAULT_R5_VERSION}. This is used to determine what jar file to download and does not have an
+     * exact match to actual numbered/tagged releases.
      */
     public String r5Version;
 
@@ -573,24 +581,6 @@ public class Deployment extends Model implements Serializable {
 
     public boolean delete() {
         return Persistence.deployments.removeById(this.id);
-    }
-
-    /**
-     * Creates a list of all of the download URLs for all of the OSM and GTFS files that would be needed to build an OTP
-     * graph.
-     */
-    public List<String> generateGtfsAndOsmUrls() throws MalformedURLException {
-        Set<String> urls = new HashSet<>();
-        if (feedVersionIds.size() > 0) {
-            URL osmUrl = getUrlForOsmExtract();
-            // add OSM data
-            if (osmUrl != null) urls.add(osmUrl.toString());
-            // add GTFS files
-            for (String feedVersionId : feedVersionIds) {
-                urls.add(S3Utils.getS3FeedUri(feedVersionId));
-            }
-        }
-        return new ArrayList<>(urls);
     }
 
     /**
