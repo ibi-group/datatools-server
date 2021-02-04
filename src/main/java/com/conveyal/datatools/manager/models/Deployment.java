@@ -160,7 +160,7 @@ public class Deployment extends Model implements Serializable {
      * If true, the EC2 deployment with otp-runner will be prepared to run an OTP jar file with the proper commands.
      * NOTE: the {@link Deployment#otpVersion} is assumed to be properly set to an OTP2 jar file.
      */
-    public boolean otp2;
+    public TripPlannerVersion tripPlannerVersion;
 
     /**
      * The version (according to git describe) of OTP being used on this deployment This should default to
@@ -170,16 +170,6 @@ public class Deployment extends Model implements Serializable {
     public String otpVersion;
 
     public boolean buildGraphOnly;
-
-    /**
-     * The version (according to git describe) of R5 being used on this deployment. This should default to
-     * {@link Deployment#DEFAULT_R5_VERSION}. This is used to determine what jar file to download and does not have an
-     * exact match to actual numbered/tagged releases.
-     */
-    public String r5Version;
-
-    /** Whether this deployment should build an r5 server (false=OTP) */
-    public boolean r5;
 
     /** Date when the deployment was last deployed to a server */
     @JsonProperty("lastDeployed")
@@ -611,6 +601,10 @@ public class Deployment extends Model implements Serializable {
         public boolean boundsAreValid () {
             return validationResult != null && validationResult.bounds != null && validationResult.bounds.areValid();
         }
+    }
+
+    public enum TripPlannerVersion {
+        OTP_1, OTP_2
     }
 
     /**

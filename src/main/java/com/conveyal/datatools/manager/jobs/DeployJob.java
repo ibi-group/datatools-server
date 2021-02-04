@@ -71,6 +71,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.codec.binary.Base64;
+import org.bson.codecs.pojo.annotations.BsonIgnore;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -98,10 +99,6 @@ public class DeployJob extends MonitorableJob {
     public static final String OTP_RUNNER_STATUS_FILE = "status.json";
     private static final String OTP_RUNNER_LOG_FILE = "/var/log/otp-runner.log";
     // Note: using a cloudfront URL for these download repo URLs will greatly increase download/deploy speed.
-    private static final String R5_REPO_URL = DataManager.getConfigPropertyAsText(
-        "modules.deployment.r5_download_url",
-        "https://r5-builds.s3.amazonaws.com"
-    );
     private static final String OTP_REPO_URL = DataManager.getConfigPropertyAsText(
         "modules.deployment.otp_download_url",
         "https://opentripplanner-builds.s3.amazonaws.com"
@@ -148,6 +145,11 @@ public class DeployJob extends MonitorableJob {
     private int serverCounter = 0;
     private String dateString = DATE_FORMAT.format(new Date());
     private String jobRelativePath;
+
+    @JsonIgnore @BsonIgnore
+    public boolean isOtp2() {
+        return Deployment.TripPlannerVersion.OTP_2.equals(deployment.tripPlannerVersion);
+    }
 
     @JsonProperty
     public String getDeploymentId () {
@@ -875,7 +877,7 @@ public class DeployJob extends MonitorableJob {
         for (Instance instance : instances) {
             // Note: The public IP addresses will likely be null at this point because they take a few seconds to
             // initialize.
-            String serverName = String.format("%s %s (%s) %d %s", deployment.r5 ? "r5" : "otp", deployment.name, dateString, serverCounter++, graphAlreadyBuilt ? "clone" : "builder");
+            String serverName = String.format("%s %s (%s) %d %s", deployment.tripPlannerVersion, deployment.name, dateString, serverCounter++, graphAlreadyBuilt ? "clone" : "builder");
             LOG.info("Creating tags for new EC2 instance {}", serverName);
             try {
                 getEC2ClientForDeployJob().createTags(new CreateTagsRequest()
@@ -1012,10 +1014,6 @@ public class DeployJob extends MonitorableJob {
      * @param dryRun if true, skip s3 uploads (used only during testing)
      */
     public OtpRunnerManifest createAndUploadManifestAndConfigs(boolean graphAlreadyBuilt, boolean dryRun) {
-        if (deployment.r5) {
-            status.fail("Deployments with r5 are not supported at this time");
-            return null;
-        }
         String jarName = getJarName();
         String s3JarUrl = getS3JarUrl(jarName);
         if (!s3JarUrlIsValid(s3JarUrl)) {
@@ -1034,7 +1032,9 @@ public class DeployJob extends MonitorableJob {
         // This must be added here because logging starts immediately before defaults are set while validating the
         // manifest
         manifest.otpRunnerLogFile = OTP_RUNNER_LOG_FILE;
-        manifest.otpVersion = deployment.otp2 ? "2.x" : "1.x";
+        manifest.otpVersion = isOtp2()
+            ? "2.x"
+            : "1.x";
         manifest.prefixLogUploadsWithInstanceId = true;
         manifest.serverStartupTimeoutSeconds = 3300;
         manifest.s3UploadPath = getS3FolderURI().toString();
@@ -1140,12 +1140,14 @@ public class DeployJob extends MonitorableJob {
         lines.add("export PATH=\"$PATH:/home/ubuntu/.yarn/bin\"");
         lines.add(String.format("export PATH=\"$PATH:/home/ubuntu/.nvm/versions/node/%s/bin\"", NODE_VERSION));
         // Remove previous files that might have been created during an Image creation
-        lines.add(String.format("rm %s/%s || echo '' > /dev/null", EC2_WEB_DIR, OTP_RUNNER_STATUS_FILE));
-        lines.add(String.format("rm %s || echo '' > /dev/null", otpRunnerManifestFileOnInstance));
-        lines.add(String.format("rm %s || echo '' > /dev/null", getJarFileOnInstance()));
-        lines.add(String.format("rm %s || echo '' > /dev/null", OTP_RUNNER_LOG_FILE));
-        lines.add("rm /var/log/otp-build.log || echo '' > /dev/null");
-        lines.add("rm /var/log/otp-server.log || echo '' > /dev/null");
+        Arrays.asList(
+            String.join("/", EC2_WEB_DIR, OTP_RUNNER_STATUS_FILE),
+            otpRunnerManifestFileOnInstance,
+            getJarFileOnInstance(),
+            OTP_RUNNER_LOG_FILE,
+            "/var/log/otp-build.log",
+            "/var/log/otp-server.log"
+        ).forEach(file -> lines.add(String.format("rm %s || echo '' > /dev/null", file)));
 
         // download otp-runner manifest
         lines.add(String.format("aws s3 cp %s %s", otpRunnerManifestS3FilePath, otpRunnerManifestFileOnInstance));
@@ -1198,12 +1200,10 @@ public class DeployJob extends MonitorableJob {
      * Return the appropriate jar name to use for the deployment.
      */
     private String getJarName() {
-        String jarName = deployment.r5 ? deployment.r5Version : deployment.otpVersion;
+        String jarName = deployment.otpVersion;
         if (jarName == null) {
-            if (deployment.r5) deployment.r5Version = DEFAULT_R5_VERSION;
-            else deployment.otpVersion = DEFAULT_OTP_VERSION;
             // If there is no version specified, use the default (and persist value).
-            jarName = deployment.r5 ? deployment.r5Version : deployment.otpVersion;
+            jarName = deployment.otpVersion = DEFAULT_OTP_VERSION;
             Persistence.deployments.replace(deployment.id, deployment);
         }
         return jarName;
@@ -1214,8 +1214,7 @@ public class DeployJob extends MonitorableJob {
      */
     private String getS3JarUrl(String jarName) {
         String s3JarKey = jarName + ".jar";
-        String repoUrl = deployment.r5 ? R5_REPO_URL : OTP_REPO_URL;
-        return String.join("/", repoUrl, s3JarKey);
+        return String.join("/", OTP_REPO_URL, s3JarKey);
     }
 
     /**
@@ -1238,12 +1237,13 @@ public class DeployJob extends MonitorableJob {
         return true;
     }
 
-    private String getBuildLogFilename() {
-        return String.format("%s-build.log", getTripPlannerString());
-    }
-
     private String getTripPlannerString() {
-        return deployment.r5 ? "r5" : "otp";
+        switch (deployment.tripPlannerVersion) {
+            case OTP_1:
+            case OTP_2:
+            default:
+                return "otp";
+        }
     }
 
     @JsonIgnore
@@ -1258,7 +1258,7 @@ public class DeployJob extends MonitorableJob {
 
     @JsonIgnore
     public String getS3GraphURI() {
-        return joinToS3FolderURI(deployment.otp2 ? "graph.obj" : "Graph.obj");
+        return joinToS3FolderURI(isOtp2() ? "graph.obj" : "Graph.obj");
     }
 
     /** Join list of paths to S3 URI for job folder to create a fully qualified URI (e.g., s3://bucket/path/to/file). */
