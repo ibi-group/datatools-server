@@ -160,7 +160,7 @@ public class Deployment extends Model implements Serializable {
      * If true, the EC2 deployment with otp-runner will be prepared to run an OTP jar file with the proper commands.
      * NOTE: the {@link Deployment#otpVersion} is assumed to be properly set to an OTP2 jar file.
      */
-    public TripPlannerVersion tripPlannerVersion;
+    public TripPlannerVersion tripPlannerVersion = TripPlannerVersion.OTP_1;
 
     /**
      * The version (according to git describe) of OTP being used on this deployment This should default to
