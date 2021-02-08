@@ -157,13 +157,15 @@ public class Deployment extends Model implements Serializable {
     public boolean skipOsmExtract;
 
     /**
-     * If true, the EC2 deployment with otp-runner will be prepared to run an OTP jar file with the proper commands.
-     * NOTE: the {@link Deployment#otpVersion} is assumed to be properly set to an OTP2 jar file.
+     * The trip planner to use in an EC2 deployment. otp-runner will be prepared to run a jar file with the proper
+     * commands.
+     * NOTE: the {@link Deployment#otpVersion} is assumed to be properly set to an appropriate jar file, so it is up to
+     * the user to make sure that both the correct jar file and trip planner type combinations are selected.
      */
     public TripPlannerVersion tripPlannerVersion = TripPlannerVersion.OTP_1;
 
     /**
-     * The version (according to git describe) of OTP being used on this deployment This should default to
+     * The version (according to git describe) of OTP being used on this deployment. This should default to
      * {@link Deployment#DEFAULT_OTP_VERSION}. This is used to determine what jar file to download and does not have an
      * exact match to actual numbered/tagged releases.
      */

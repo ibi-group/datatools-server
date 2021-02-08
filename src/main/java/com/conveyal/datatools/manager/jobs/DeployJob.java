@@ -1166,7 +1166,7 @@ public class DeployJob extends MonitorableJob {
      * with different instance types for graph building vs server running.
      */
     private String getOtpRunnerManifestS3Filename(boolean graphAlreadyBuilt) {
-        return graphAlreadyBuilt ? "otp-runner-server-manifest.json" : "otp-runner-graph-build-manifest.json";
+        return graphAlreadyBuilt ? "otp-runner-server-only-manifest.json" : "otp-runner-graph-build-manifest.json";
     }
 
     /**
