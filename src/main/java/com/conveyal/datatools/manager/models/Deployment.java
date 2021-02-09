@@ -67,7 +67,6 @@ public class Deployment extends Model implements Serializable {
     public String name;
 
     public static final String DEFAULT_OTP_VERSION = "otp-v1.4.0";
-    public static final String DEFAULT_R5_VERSION = "v2.4.1-9-g3be6daa";
 
     /** What server is this currently deployed to? */
     public String deployedTo;

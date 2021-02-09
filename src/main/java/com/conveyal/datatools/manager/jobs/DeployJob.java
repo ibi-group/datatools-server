@@ -77,7 +77,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import static com.conveyal.datatools.manager.models.Deployment.DEFAULT_OTP_VERSION;
-import static com.conveyal.datatools.manager.models.Deployment.DEFAULT_R5_VERSION;
 
 /**
  * Deploy the given deployment to the OTP servers specified by targets.
@@ -776,8 +775,6 @@ public class DeployJob extends MonitorableJob {
      * Start the specified number of EC2 instances based on the {@link OtpServer#ec2Info}.
      * @param count number of EC2 instances to start
      * @return a list of the instances is returned once the public IP addresses have been assigned
-     *
-     * TODO: Booting up R5 servers has not been fully tested.
      */
     private List<Instance> startEC2Instances(int count, boolean graphAlreadyBuilt) {
         // Create user data to instruct the ec2 instance to do stuff at startup.
