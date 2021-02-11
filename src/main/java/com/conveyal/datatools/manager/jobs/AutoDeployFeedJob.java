@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.jobs;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.controllers.api.DeploymentController;
+import com.conveyal.datatools.manager.controllers.api.StatusController;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -16,8 +17,9 @@ import java.util.ArrayList;
 
 /**
  * Auto deploy new feed version to OTP server if {@link Project#autoDeploy} is enabled and other conditions are met
- * (e.g., feed version has no critical errors, active deployment is not in progress, etc.). This job must run after
- * {@link ValidateFeedJob} as it has a dependency on the outcome of {@link FeedVersion#hasCriticalErrors}.
+ * (e.g., feed version has no critical errors, active deployment is not in progress, there are no other feed fetches in
+ * progress, etc.). This job must run after {@link ValidateFeedJob} as it has a dependency on the outcome of
+ * {@link FeedVersion#hasCriticalErrors}.
  */
 public class AutoDeployFeedJob extends MonitorableJob {
     public static final Logger LOG = LoggerFactory.getLogger(ValidateFeedJob.class);
@@ -70,11 +72,17 @@ public class AutoDeployFeedJob extends MonitorableJob {
             status.fail(String.format("Deployment %s has never been deployed. Skipping auto-deploy.", deployment.id));
             return;
         }
-        // Finally, queue up the new deploy job.
-        if (DeploymentController.queueDeployJob(new DeployJob(deployment, owner, server))) {
-            status.completeSuccessfully(String.format("New deploy job initiated for %s", server.name));
+        if (deployment.hasFeedFetchesInProgress(feedSource.id)) {
+            // First, check to see if there are other fetch/process feed jobs in progress, if there are some still
+            // processing (excepting the current feed source), complete job successfully.
+            status.completeSuccessfully("Auto-deploy skipped because of feed fetches in progress.");
         } else {
-            status.fail(String.format("Could not auto-deploy to %s due to conflicting active deployment.", server.name));
+            // If there are no other fetches in progress, queue up the deploy job.
+            if (DeploymentController.queueDeployJob(new DeployJob(deployment, owner, server))) {
+                status.completeSuccessfully(String.format("New deploy job initiated for %s", server.name));
+            } else {
+                status.fail(String.format("Could not auto-deploy to %s due to conflicting active deployment.", server.name));
+            }
         }
     }
 }
