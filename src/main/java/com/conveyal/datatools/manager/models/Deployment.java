@@ -192,6 +192,8 @@ public class Deployment extends Model implements Serializable {
     public String customBuildConfig;
     public String customRouterConfig;
 
+    public List<CustomFile> customFiles = new ArrayList<>();
+
     /**
      * If this deployment is for a single feed source, the feed source this deployment is for.
      */

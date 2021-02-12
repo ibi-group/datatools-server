@@ -1,9 +1,12 @@
 {
   "baseFolder" : "/var/otp/graphs",
-  "baseFolderDownloads" : [ "s3://datatools-dev/test-deploy/build-config.json", "s3://datatools-dev/test-deploy/router-config.json" ],
+  "baseFolderDownloads" : [ {
+    "uri" : "s3://datatools-dev/test-deploy/build-config.json"
+  }, {
+    "uri" : "s3://datatools-dev/test-deploy/router-config.json"
+  } ],
   "buildGraph" : true,
-  "graphObjUrl" : "s3://datatools-dev/test-deploy/Graph.obj",
-  "gtfsDownloads" : [ ],
+  "graphObjUri" : "s3://datatools-dev/test-deploy/Graph.obj",
   "jarFile" : "/opt/otp/otp-latest-trimet-dev",
   "jarUrl" : "https://opentripplanner-builds.s3.amazonaws.com/otp-latest-trimet-dev.jar",
   "nonce" : "canMakeGraphBuildUserDataScript",

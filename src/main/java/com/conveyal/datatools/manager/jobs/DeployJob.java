@@ -58,6 +58,8 @@ import com.conveyal.datatools.common.utils.aws.EC2ValidationResult;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.jobs.OtpRunnerManifest.OtpRunnerBaseFolderDownload;
+import com.conveyal.datatools.manager.models.CustomFile;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.EC2Info;
 import com.conveyal.datatools.manager.models.EC2InstanceSummary;
@@ -145,6 +147,9 @@ public class DeployJob extends MonitorableJob {
     private String dateString = DATE_FORMAT.format(new Date());
     private String jobRelativePath;
 
+    /** If true, don't upload stuff to S3. (Used only during testing) */
+    private final boolean dryRun;
+
     @JsonIgnore @BsonIgnore
     public boolean isOtp2() {
         return Deployment.TripPlannerVersion.OTP_2.equals(deployment.tripPlannerVersion);
@@ -191,13 +196,36 @@ public class DeployJob extends MonitorableJob {
         this(deployment, owner, otpServer, null, DeployType.REPLACE);
     }
 
-    public DeployJob(Deployment deployment, Auth0UserProfile owner, OtpServer otpServer, String bundlePath, DeployType deployType) {
-        this("Deploying " + deployment.name, deployment, owner, otpServer, bundlePath, deployType);
+    public DeployJob(
+        Deployment deployment,
+        Auth0UserProfile owner,
+        OtpServer otpServer,
+        String bundlePath,
+        DeployType deployType
+    ) {
+        this(
+            "Deploying " + deployment.name,
+            deployment,
+            owner,
+            otpServer,
+            bundlePath,
+            deployType,
+            false
+        );
     }
 
-    public DeployJob(String jobName, Deployment deployment, Auth0UserProfile owner, OtpServer otpServer, String bundlePath, DeployType deployType) {
+    public DeployJob(
+        String jobName,
+        Deployment deployment,
+        Auth0UserProfile owner,
+        OtpServer otpServer,
+        String bundlePath,
+        DeployType deployType,
+        boolean dryRun
+    ) {
         // TODO add new job type or get rid of enum in favor of just using class names
         super(owner, jobName, JobType.DEPLOY_TO_OTP);
+        this.dryRun = dryRun;
         this.deployment = deployment;
         this.otpServer = otpServer;
         this.s3Bucket = otpServer.s3Bucket != null ? otpServer.s3Bucket : S3Utils.DEFAULT_BUCKET;
@@ -498,7 +526,7 @@ public class DeployJob extends MonitorableJob {
     }
 
     private String getS3BundleURI() {
-        return joinToS3FolderURI("bundle.zip");
+        return joinToS3FolderUri("bundle.zip");
     }
 
     private String  getLatestS3BundleKey() {
@@ -778,7 +806,7 @@ public class DeployJob extends MonitorableJob {
      */
     private List<Instance> startEC2Instances(int count, boolean graphAlreadyBuilt) {
         // Create user data to instruct the ec2 instance to do stuff at startup.
-        createAndUploadManifestAndConfigs(graphAlreadyBuilt, false);
+        createAndUploadManifestAndConfigs(graphAlreadyBuilt);
         String userData = constructUserData(graphAlreadyBuilt);
         // Failure was encountered while constructing user data.
         if (userData == null) {
@@ -1008,9 +1036,8 @@ public class DeployJob extends MonitorableJob {
      * needed.
      *
      * @param graphAlreadyBuilt whether or not the graph has already been built
-     * @param dryRun if true, skip s3 uploads (used only during testing)
      */
-    public OtpRunnerManifest createAndUploadManifestAndConfigs(boolean graphAlreadyBuilt, boolean dryRun) {
+    public OtpRunnerManifest createAndUploadManifestAndConfigs(boolean graphAlreadyBuilt) {
         String jarName = getJarName();
         String s3JarUrl = getS3JarUrl(jarName);
         if (!s3JarUrlIsValid(s3JarUrl)) {
@@ -1021,8 +1048,7 @@ public class DeployJob extends MonitorableJob {
         // add common settings
         manifest.baseFolder = String.format("/var/%s/graphs", getTripPlannerString());
         manifest.baseFolderDownloads = new ArrayList<>();
-        manifest.graphObjUrl = getS3GraphURI();
-        manifest.gtfsDownloads = new ArrayList<>();
+        manifest.graphObjUri = getS3GraphUri();
         manifest.jarFile = getJarFileOnInstance();
         manifest.jarUrl = s3JarUrl;
         manifest.nonce = this.nonce;
@@ -1047,56 +1073,80 @@ public class DeployJob extends MonitorableJob {
                     // add OSM data
                     URL osmDownloadUrl = deployment.getUrlForOsmExtract();
                     if (osmDownloadUrl != null) {
-                        manifest.baseFolderDownloads.add(osmDownloadUrl.toString());
+                        addUriAsBaseFolderDownload(manifest, osmDownloadUrl.toString());
                     }
 
                     // add GTFS data
                     for (String feedVersionId : deployment.feedVersionIds) {
-                        manifest.gtfsDownloads.add(S3Utils.getS3FeedUri(feedVersionId));
+                        CustomFile gtfsFile = new CustomFile();
+                        // OTP 2.x must have the string `gtfs` somewhere inside the filename, so prepend the filename
+                        // with the string `gtfs-`.
+                        gtfsFile.filename = String.format("gtfs-%s", feedVersionId);
+                        gtfsFile.uri = S3Utils.getS3FeedUri(feedVersionId);
+                        addCustomFileAsBaseFolderDownload(manifest, gtfsFile);
                     }
                 }
             } catch (MalformedURLException e) {
                 status.fail("Failed to create base folder download URLs!", e);
                 return null;
             }
-            manifest.baseFolderDownloads.add(getBuildConfigS3Path());
-            if (!uploadStringToS3File(BUILD_CONFIG_FILENAME, deployment.generateBuildConfigAsString(), dryRun)) {
+            if (
+                !addStringContentsAsBaseFolderDownload(
+                    manifest,
+                    BUILD_CONFIG_FILENAME,
+                    deployment.generateBuildConfigAsString()
+                )
+            ) {
                 return null;
             }
             manifest.uploadGraph = true;
             manifest.uploadGraphBuildLogs = true;
             manifest.uploadGraphBuildReport = true;
-            if (deployment.buildGraphOnly || otpServer.ec2Info.hasSeparateGraphBuildConfig()) {
+            boolean buildGraphOnly = deployment.buildGraphOnly || otpServer.ec2Info.hasSeparateGraphBuildConfig();
+            if (buildGraphOnly) {
                 // This instance should be ran to only build the graph
                 manifest.runServer = false;
             } else {
                 // This instance will both run a graph and start the OTP server
-                manifest.baseFolderDownloads.add(getRouterConfigS3Path());
-                if (!uploadStringToS3File(ROUTER_CONFIG_FILENAME, deployment.generateRouterConfigAsString(), dryRun)) {
+                if (
+                    !addStringContentsAsBaseFolderDownload(
+                        manifest,
+                        ROUTER_CONFIG_FILENAME,
+                        deployment.generateRouterConfigAsString()
+                    )
+                ) {
                     return null;
                 }
                 routerConfigUploaded = true;
                 manifest.runServer = true;
                 manifest.uploadServerStartupLogs = true;
             }
+
+            // add any extra files that should be downloaded based on whether this manifest is for graph building only
+            for (CustomFile customFile : deployment.customFiles) {
+                if (customFile.useDuringBuild || (!buildGraphOnly && customFile.useDuringServe)) {
+                    addCustomFileAsBaseFolderDownload(manifest, customFile);
+                }
+            }
         } else {
             // This instance will only start the OTP server with a prebuilt graph
             manifest.buildGraph = false;
-            manifest.baseFolderDownloads = Arrays.asList(getRouterConfigS3Path());
+            addUriAsBaseFolderDownload(manifest, getRouterConfigS3Uri());
             if (!routerConfigUploaded) {
-                if (
-                    !uploadStringToS3File(
-                        ROUTER_CONFIG_FILENAME,
-                        deployment.generateRouterConfigAsString(),
-                        dryRun
-                    )
-                ) {
+                if (!uploadStringToS3File(ROUTER_CONFIG_FILENAME, deployment.generateRouterConfigAsString())) {
                     return null;
                 }
                 routerConfigUploaded = true;
             }
             manifest.runServer = true;
             manifest.uploadServerStartupLogs = true;
+
+            // add any extra files that should be downloaded while running the server
+            for (CustomFile customFile : deployment.customFiles) {
+                if (customFile.useDuringServe) {
+                    addCustomFileAsBaseFolderDownload(manifest, customFile);
+                }
+            }
         }
 
         // upload otp-runner manifest to s3
@@ -1106,8 +1156,7 @@ public class DeployJob extends MonitorableJob {
             if (
                 !uploadStringToS3File(
                     getOtpRunnerManifestS3Filename(graphAlreadyBuilt),
-                    mapper.writeValueAsString(manifest),
-                    dryRun
+                    mapper.writeValueAsString(manifest)
                 )
             ) {
                 return null;
@@ -1120,11 +1169,61 @@ public class DeployJob extends MonitorableJob {
     }
 
     /**
+     * Adds a custom file as a base folder download. If the custom file has non-null contents, then those contents will
+     * be uploaded to AWS S3 and that corresponding AWS S3 URI will be added to the list of base folder downloads. If
+     * the custom file has a non-null uri, then it is assumed that the AWS S3 Object already exists. This returns true
+     * if uploading to AWS S3 went ok or there was a URI for the custom file.
+     */
+    private boolean addCustomFileAsBaseFolderDownload(OtpRunnerManifest manifest, CustomFile customFile) {
+        OtpRunnerBaseFolderDownload downloadTask = new OtpRunnerBaseFolderDownload();
+        downloadTask.name = customFile.filename;
+
+        // check if there is a string as the contents. If this is the case, an upload to s3 will be needed.
+        if (customFile.contents != null) {
+            // includes contents, upload them to s3
+            return addStringContentsAsBaseFolderDownload(
+                manifest,
+                customFile.filename,
+                customFile.contents
+            );
+        } else if (customFile.uri != null) {
+            // has a URL, add that and return true
+            downloadTask.uri = customFile.uri;
+            manifest.baseFolderDownloads.add(downloadTask);
+            return true;
+        } else {
+            status.fail(String.format("Failed to upload custom file %s", customFile));
+            return false;
+        }
+    }
+
+    /**
+     * Adds a new base folder download task with just the url. Renaming the file to something else is not important
+     * or not needed for OTP to properly recognize the file.
+     */
+    private void addUriAsBaseFolderDownload(OtpRunnerManifest manifest, String uri) {
+        OtpRunnerBaseFolderDownload downloadTask = new OtpRunnerBaseFolderDownload();
+        downloadTask.uri = uri;
+        manifest.baseFolderDownloads.add(downloadTask);
+    }
+
+    /**
+     * Uploads the given contents to AWS S3 and adds the resulting S3 URL to the otp-runner manifest's
+     * baseFolderDownloads field. Returns true if the upload to S3 was successful.
+     */
+    private boolean addStringContentsAsBaseFolderDownload(OtpRunnerManifest manifest, String filename, String contents) {
+        OtpRunnerBaseFolderDownload downloadTask = new OtpRunnerBaseFolderDownload();
+        downloadTask.uri = joinToS3FolderUri(filename);
+        manifest.baseFolderDownloads.add(downloadTask);
+        return uploadStringToS3File(filename, contents);
+    }
+
+    /**
      * Construct the user data script (as string) that should be provided to the AMI and executed upon EC2 instance
      * startup.
      */
     public String constructUserData(boolean graphAlreadyBuilt) {
-        String otpRunnerManifestS3FilePath = joinToS3FolderURI(getOtpRunnerManifestS3Filename(graphAlreadyBuilt));
+        String otpRunnerManifestS3FilePath = joinToS3FolderUri(getOtpRunnerManifestS3Filename(graphAlreadyBuilt));
         String otpRunnerManifestFileOnInstance = String.format(
             "/var/%s/otp-runner-manifest.json",
             getTripPlannerString()
@@ -1171,10 +1270,11 @@ public class DeployJob extends MonitorableJob {
      *
      * @param filename The filename to create in the jobRelativePath S3 directory
      * @param contents The contents to put into the filename
-     * @param dryRun if true, immediately returns true and doesn't actually upload to S3 (used only during testing)
      * @return
      */
-    private boolean uploadStringToS3File(String filename, String contents, boolean dryRun) {
+    private boolean uploadStringToS3File(String filename, String contents) {
+        // if doing this during a dryRun (used only during testing), immediately return true and don't actually upload
+        // to S3
         if (dryRun) return true;
         status.message = String.format("uploading %s to S3", filename);
         try {
@@ -1254,24 +1354,24 @@ public class DeployJob extends MonitorableJob {
     }
 
     @JsonIgnore
-    public String getS3GraphURI() {
-        return joinToS3FolderURI(isOtp2() ? "graph.obj" : "Graph.obj");
+    public String getS3GraphUri() {
+        return joinToS3FolderUri(isOtp2() ? "graph.obj" : "Graph.obj");
     }
 
-    /** Join list of paths to S3 URI for job folder to create a fully qualified URI (e.g., s3://bucket/path/to/file). */
-    private String joinToS3FolderURI(CharSequence... paths) {
+    /** Join list of paths to S3 URI for job folder to create a fully qualified Url (e.g., s3://bucket/path/to/file). */
+    private String joinToS3FolderUri(CharSequence... paths) {
         List<CharSequence> pathList = new ArrayList<>();
         pathList.add(getS3FolderURI().toString());
         pathList.addAll(Arrays.asList(paths));
         return String.join("/", pathList);
     }
 
-    private String getBuildConfigS3Path() {
-        return joinToS3FolderURI(BUILD_CONFIG_FILENAME);
+    private String getBuildConfigS3Uri() {
+        return joinToS3FolderUri(BUILD_CONFIG_FILENAME);
     }
 
-    private String getRouterConfigS3Path() {
-        return joinToS3FolderURI(ROUTER_CONFIG_FILENAME);
+    private String getRouterConfigS3Uri() {
+        return joinToS3FolderUri(ROUTER_CONFIG_FILENAME);
     }
 
     /**

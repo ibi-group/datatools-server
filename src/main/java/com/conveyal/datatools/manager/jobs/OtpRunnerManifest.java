@@ -8,12 +8,11 @@ import java.util.List;
  */
 public class OtpRunnerManifest {
     public String baseFolder;
-    public List<String> baseFolderDownloads;
+    public List<OtpRunnerBaseFolderDownload> baseFolderDownloads;
     public String buildConfigJSON;
     public boolean buildGraph;
     public String buildLogFile;
-    public String graphObjUrl;
-    public List<String> gtfsDownloads;
+    public String graphObjUri;
     public String jarFile;
     public String jarUrl;
     public String nonce;
@@ -32,4 +31,9 @@ public class OtpRunnerManifest {
     public boolean uploadGraph;
     public boolean uploadOtpRunnerLogs;
     public boolean uploadServerStartupLogs;
+
+    public static class OtpRunnerBaseFolderDownload {
+        public String name;
+        public String uri;
+    }
 }

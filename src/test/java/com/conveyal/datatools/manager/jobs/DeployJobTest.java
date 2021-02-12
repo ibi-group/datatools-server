@@ -87,16 +87,15 @@ public class DeployJobTest extends UnitTest {
     @Test
     public void canMakeGraphBuildAndServeManifestAndUserData () {
         DeployJob deployJob = new DeployJob(
+            "Test deploy OTP 1 with build and server",
             deployment,
             Auth0UserProfile.createTestAdminUser(),
             server,
             "test-deploy",
-            DeployJob.DeployType.REPLACE
-        );
-        OtpRunnerManifest buildAndServeManifest = deployJob.createAndUploadManifestAndConfigs(
-            false,
+            DeployJob.DeployType.REPLACE,
             true
         );
+        OtpRunnerManifest buildAndServeManifest = deployJob.createAndUploadManifestAndConfigs(false);
         buildAndServeManifest.nonce = "canMakeGraphBuildUserDataScript";
         assertThat(buildAndServeManifest, matchesSnapshot());
         assertThat(deployJob.constructUserData(false), matchesSnapshot());
@@ -122,16 +121,15 @@ public class DeployJobTest extends UnitTest {
         otp2Deployment.tripPlannerVersion = Deployment.TripPlannerVersion.OTP_2;
         Persistence.deployments.create(otp2Deployment);
         DeployJob deployJob = new DeployJob(
+            "Test deploy OTP 2 with build and server",
             otp2Deployment,
             Auth0UserProfile.createTestAdminUser(),
             server,
             "test-deploy",
-            DeployJob.DeployType.REPLACE
-        );
-        OtpRunnerManifest buildAndServeManifest = deployJob.createAndUploadManifestAndConfigs(
-            false,
+            DeployJob.DeployType.REPLACE,
             true
         );
+        OtpRunnerManifest buildAndServeManifest = deployJob.createAndUploadManifestAndConfigs(false);
         buildAndServeManifest.nonce = "canMakeOtp2GraphBuildUserDataScript";
         assertThat(buildAndServeManifest, matchesSnapshot());
         assertThat(deployJob.constructUserData(false), matchesSnapshot());
@@ -143,16 +141,15 @@ public class DeployJobTest extends UnitTest {
     @Test
     public void canMakeServerOnlyManifestAndUserData () {
         DeployJob deployJob = new DeployJob(
+            "Test deploy OTP 1 with server only",
             deployment,
             Auth0UserProfile.createTestAdminUser(),
             server,
             "test-deploy",
-            DeployJob.DeployType.REPLACE
-        );
-        OtpRunnerManifest serverOnlyManifest = deployJob.createAndUploadManifestAndConfigs(
-            true,
+            DeployJob.DeployType.REPLACE,
             true
         );
+        OtpRunnerManifest serverOnlyManifest = deployJob.createAndUploadManifestAndConfigs(true);
         serverOnlyManifest.nonce = "canMakeServerOnlyUserDataScript";
         assertThat(serverOnlyManifest, matchesSnapshot());
         assertThat(deployJob.constructUserData(true), matchesSnapshot());
