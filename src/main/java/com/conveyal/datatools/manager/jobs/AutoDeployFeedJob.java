@@ -76,6 +76,9 @@ public class AutoDeployFeedJob extends MonitorableJob {
             // First, check to see if there are other fetch/process feed jobs in progress, if there are some still
             // processing (excepting the current feed source), complete job successfully.
             status.completeSuccessfully("Auto-deploy skipped because of feed fetches in progress.");
+            // Set error to true so the 'completeSuccessfully' message is not overwritten by MonitorableJob
+            // to 'Job complete!'.
+            status.error = true;
         } else {
             // If there are no other fetches in progress, queue up the deploy job.
             if (DeploymentController.queueDeployJob(new DeployJob(deployment, owner, server))) {

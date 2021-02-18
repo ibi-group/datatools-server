@@ -117,7 +117,7 @@ public class TestUtils {
     /**
      * Utility function to create a feed version from a GTFS file.
      */
-    private static FeedVersion getFeedVersionFromGTFSFile(FeedSource source, File gtfsFile) {
+    public static FeedVersion getFeedVersionFromGTFSFile(FeedSource source, File gtfsFile) {
         FeedVersion version = new FeedVersion(source);
         try (InputStream is = new FileInputStream(gtfsFile)) {
             version.newGtfsFile(is);
