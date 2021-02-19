@@ -302,10 +302,10 @@ public abstract class MonitorableJob implements Runnable, Serializable {
         /**
          * Set job status to completed with error and message information.
          */
-        private void complete(boolean isError, String message) {
+        private void complete(boolean isError, String messageFromJob) {
             this.error = isError;
-            // Skip message update if null.
-            if (message != null) this.message = message;
+            // Skip message update if the job message is null or the message has already been defined.
+            if (messageFromJob != null && message == null) message = messageFromJob;
             this.percentComplete = 100;
             this.completed = true;
             this.duration = System.currentTimeMillis() - this.startTime;

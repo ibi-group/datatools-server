@@ -80,9 +80,9 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
         Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
         server.delete();
         deployment.delete();
-        project.delete();
         mockFeedSource1.delete();
-        mockFeedSource2.delete();
+        Persistence.projects.removeById(project.id);
+        Persistence.feedSources.removeById(mockFeedSource2.id);
         if (feedVersion != null) {
             Persistence.feedVersions.removeById(feedVersion.id);
         }
@@ -129,7 +129,7 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
         ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob(mockFeedSource1, "fake-agency-expire-in-2099");
         MonitorableJob lastJob = getLastJob(processSingleFeedJob);
         assertTrue(lastJob instanceof AutoDeployFeedJob);
-        assertThat(lastJob.status.message, equalTo("Job complete!"));
+        assertThat(lastJob.status.message, equalTo(String.format("New deploy job initiated for %s", server.name)));
     }
 
     @Test
@@ -138,7 +138,8 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
         setProjectAutoDeploy(true);
         setProjectPinnedDeploymentId(deployment.id);
 
-        // Mock fake fetch to satisfy second condition of Deployment.hasFeedFetchesInProgress.
+        // Create fake processing job for mock feed 1 (don't actually start it, to keep it in the userJobsMap
+        // indefinitely).
         File zipFile = zipFolderFiles("fake-agency-expire-in-2099");
         feedVersion = getFeedVersionFromGTFSFile(mockFeedSource2, zipFile);
         Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
@@ -146,7 +147,8 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
         userJobs.add(new ProcessSingleFeedJob(feedVersion, user, true));
         DataManager.userJobsMap.put(user.getUser_id(), userJobs);
 
-        // Add the feed version id to the deployment to satisfy first condition of Deployment.hasFeedFetchesInProgress.
+        // Add mock feed 1 to the deployment so that it is detected in the Deployment#hasFeedFetchesInProgress check
+        // (called during mock feed 2's processing).
         Persistence.feedVersions.create(feedVersion);
         Collection<String> feedVersionIds = new ArrayList<>();
         feedVersionIds.add(feedVersion.id);
