@@ -41,6 +41,7 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
     private static FeedSource mockFeedSource1;
     private static FeedSource mockFeedSource2;
     private static FeedVersion feedVersion;
+    private final String FEED_VERSION_ZIP_FOLDER_NAME = "fake-agency-expire-in-2099";
 
     @BeforeClass
     public static void setUp() throws IOException {
@@ -93,7 +94,7 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
         setFeedSourceDeployable(false);
         setProjectAutoDeploy(true);
         setProjectPinnedDeploymentId(deployment.id);
-        ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob(mockFeedSource1, "fake-agency-expire-in-2099");
+        ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob(mockFeedSource1, FEED_VERSION_ZIP_FOLDER_NAME);
         MonitorableJob lastJob = getLastJob(processSingleFeedJob);
         // Verify that the auto deploy job was not added as a subjob.
         assertFalse(lastJob instanceof AutoDeployFeedJob);
@@ -104,7 +105,7 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
         setFeedSourceDeployable(true);
         setProjectAutoDeploy(true);
         setProjectPinnedDeploymentId(null);
-        ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob(mockFeedSource1, "fake-agency-expire-in-2099");
+        ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob(mockFeedSource1, FEED_VERSION_ZIP_FOLDER_NAME);
         MonitorableJob lastJob = getLastJob(processSingleFeedJob);
         assertTrue(lastJob instanceof AutoDeployFeedJob);
         assertThat(lastJob.status.message, equalTo("Pinned deployment does not exist. Cancelling auto-deploy."));
@@ -115,7 +116,7 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
         setFeedSourceDeployable(true);
         setProjectAutoDeploy(false);
         setProjectPinnedDeploymentId(deployment.id);
-        ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob(mockFeedSource1, "fake-agency-expire-in-2099");
+        ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob(mockFeedSource1, FEED_VERSION_ZIP_FOLDER_NAME);
         MonitorableJob lastJob = getLastJob(processSingleFeedJob);
         // Verify that the auto deploy job was not added as a subjob.
         assertFalse(lastJob instanceof AutoDeployFeedJob);
@@ -126,7 +127,7 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
         setFeedSourceDeployable(true);
         setProjectAutoDeploy(true);
         setProjectPinnedDeploymentId(deployment.id);
-        ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob(mockFeedSource1, "fake-agency-expire-in-2099");
+        ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob(mockFeedSource1, FEED_VERSION_ZIP_FOLDER_NAME);
         MonitorableJob lastJob = getLastJob(processSingleFeedJob);
         assertTrue(lastJob instanceof AutoDeployFeedJob);
         assertThat(lastJob.status.message, equalTo(String.format("New deploy job initiated for %s", server.name)));
@@ -140,7 +141,7 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
 
         // Create fake processing job for mock feed 1 (don't actually start it, to keep it in the userJobsMap
         // indefinitely).
-        File zipFile = zipFolderFiles("fake-agency-expire-in-2099");
+        File zipFile = zipFolderFiles(FEED_VERSION_ZIP_FOLDER_NAME);
         feedVersion = getFeedVersionFromGTFSFile(mockFeedSource2, zipFile);
         Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
         Set<MonitorableJob> userJobs = Sets.newConcurrentHashSet();
@@ -157,7 +158,7 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
 
         // Process single feed job.
         ProcessSingleFeedJob processSingleFeedJob =
-            triggerProcessSingleFeedJob(mockFeedSource1, "fake-agency-expire-in-2099");
+            triggerProcessSingleFeedJob(mockFeedSource1, FEED_VERSION_ZIP_FOLDER_NAME);
         MonitorableJob lastJob = getLastJob(processSingleFeedJob);
         assertTrue(lastJob instanceof AutoDeployFeedJob);
         assertThat(lastJob.status.message, equalTo("Auto-deploy skipped because of feed fetches in progress."));
@@ -168,7 +169,9 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
         setFeedSourceDeployable(true);
         setProjectAutoDeploy(true);
         setProjectPinnedDeploymentId(deployment.id);
-        ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob(mockFeedSource1, "fake-agency-expire-in-2099-with-unused-route");
+        ProcessSingleFeedJob processSingleFeedJob =
+            triggerProcessSingleFeedJob(mockFeedSource1,
+                "fake-agency-with-only-calendar-expire-in-2099-with-unused-route");
         MonitorableJob lastJob = getLastJob(processSingleFeedJob);
         assertTrue(lastJob instanceof AutoDeployFeedJob);
         assertThat(lastJob.status.message, equalTo("Feed version has critical errors or is out of date. Cancelling auto-deploy."));
