@@ -69,9 +69,9 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
         mockFeedSource5 = createFeedSource("Mock Feed Source 5", project.id);
 
         serverFetchInProgress = createOtpServer();
-        DeployJob.DeploySummary deploySummaryFetchInProgress = createDeploymentSummary(server.id);
+        DeployJob.DeploySummary deploySummaryFetchInProgress = createDeploymentSummary(serverFetchInProgress.id);
         projectFetchInProgress = createProject();
-        deploymentFetchInProgress = createDeployment(deploySummaryFetchInProgress, project.id);
+        deploymentFetchInProgress = createDeployment(deploySummaryFetchInProgress, projectFetchInProgress.id);
         mockFeedSourceFetchInProgressFakeJob =
             createFeedSource("Mock Feed Source For Fetch In Progress Fake Job", projectFetchInProgress.id);
         mockFeedSourceFetchInProgress =
