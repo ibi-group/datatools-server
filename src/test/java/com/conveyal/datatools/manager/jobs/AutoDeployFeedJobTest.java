@@ -40,6 +40,11 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
     private static Project project;
     private static FeedSource mockFeedSource1;
     private static FeedSource mockFeedSource2;
+    private static FeedSource mockFeedSource3;
+    private static FeedSource mockFeedSource4;
+    private static FeedSource mockFeedSource5;
+    private static FeedSource mockFeedSource6;
+    private static FeedSource mockFeedSourceForFakeJob;
     private static FeedVersion feedVersion;
     private final String FEED_VERSION_ZIP_FOLDER_NAME = "fake-agency-expire-in-2099";
 
@@ -70,10 +75,13 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
         deployment.projectId = project.id;
         Persistence.deployments.create(deployment);
 
-        mockFeedSource1 = new FeedSource("Mock Feed Source 1", project.id, FeedRetrievalMethod.MANUALLY_UPLOADED);
-        Persistence.feedSources.create(mockFeedSource1);
-        mockFeedSource2 = new FeedSource("Mock Feed Source 2", project.id, FeedRetrievalMethod.MANUALLY_UPLOADED);
-        Persistence.feedSources.create(mockFeedSource2);
+        mockFeedSource1 = createFeedSource("Mock Feed Source 1");
+        mockFeedSource2 = createFeedSource("Mock Feed Source 2");
+        mockFeedSource3 = createFeedSource("Mock Feed Source 3");
+        mockFeedSource4 = createFeedSource("Mock Feed Source 4");
+        mockFeedSource5 = createFeedSource("Mock Feed Source 5");
+        mockFeedSource6 = createFeedSource("Mock Feed Source 6");
+        mockFeedSourceForFakeJob = createFeedSource("Mock Feed Source For Fake Job");
     }
 
     @AfterClass
@@ -82,8 +90,14 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
         server.delete();
         deployment.delete();
         mockFeedSource1.delete();
+        mockFeedSource2.delete();
+        mockFeedSource3.delete();
+        mockFeedSource4.delete();
+        mockFeedSource5.delete();
+        mockFeedSource6.delete();
         Persistence.projects.removeById(project.id);
-        Persistence.feedSources.removeById(mockFeedSource2.id);
+        // Part of a job that is not started so the feed source has to be deleted straight from DB.
+        Persistence.feedSources.removeById(mockFeedSourceForFakeJob.id);
         if (feedVersion != null) {
             Persistence.feedVersions.removeById(feedVersion.id);
         }
@@ -91,7 +105,7 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
 
     @Test
     public void skipJobIfFeedSourceNotDeployable() throws IOException {
-        setFeedSourceDeployable(false);
+        setFeedSourceDeployable(mockFeedSource1, false);
         setProjectAutoDeploy(true);
         setProjectPinnedDeploymentId(deployment.id);
         ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob(mockFeedSource1, FEED_VERSION_ZIP_FOLDER_NAME);
@@ -102,10 +116,10 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
 
     @Test
     public void failIfDeploymentNotPinned() throws IOException {
-        setFeedSourceDeployable(true);
+        setFeedSourceDeployable(mockFeedSource2, true);
         setProjectAutoDeploy(true);
         setProjectPinnedDeploymentId(null);
-        ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob(mockFeedSource1, FEED_VERSION_ZIP_FOLDER_NAME);
+        ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob(mockFeedSource2, FEED_VERSION_ZIP_FOLDER_NAME);
         MonitorableJob lastJob = getLastJob(processSingleFeedJob);
         assertTrue(lastJob instanceof AutoDeployFeedJob);
         assertThat(lastJob.status.message, equalTo("Pinned deployment does not exist. Cancelling auto-deploy."));
@@ -113,10 +127,10 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
 
     @Test
     public void skipJobIfProjectNotAutoDeploy() throws IOException {
-        setFeedSourceDeployable(true);
+        setFeedSourceDeployable(mockFeedSource3, true);
         setProjectAutoDeploy(false);
         setProjectPinnedDeploymentId(deployment.id);
-        ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob(mockFeedSource1, FEED_VERSION_ZIP_FOLDER_NAME);
+        ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob(mockFeedSource3, FEED_VERSION_ZIP_FOLDER_NAME);
         MonitorableJob lastJob = getLastJob(processSingleFeedJob);
         // Verify that the auto deploy job was not added as a subjob.
         assertFalse(lastJob instanceof AutoDeployFeedJob);
@@ -124,10 +138,10 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
 
     @Test
     public void canAutoDeployFeedVersion() throws IOException {
-        setFeedSourceDeployable(true);
+        setFeedSourceDeployable(mockFeedSource4, true);
         setProjectAutoDeploy(true);
         setProjectPinnedDeploymentId(deployment.id);
-        ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob(mockFeedSource1, FEED_VERSION_ZIP_FOLDER_NAME);
+        ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob(mockFeedSource4, FEED_VERSION_ZIP_FOLDER_NAME);
         MonitorableJob lastJob = getLastJob(processSingleFeedJob);
         assertTrue(lastJob instanceof AutoDeployFeedJob);
         assertThat(lastJob.status.message, equalTo(String.format("New deploy job initiated for %s", server.name)));
@@ -135,14 +149,14 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
 
     @Test
     public void failAutoDeployIfFetchStillInProgress() throws IOException {
-        setFeedSourceDeployable(true);
+        setFeedSourceDeployable(mockFeedSource5, true);
         setProjectAutoDeploy(true);
         setProjectPinnedDeploymentId(deployment.id);
 
-        // Create fake processing job for mock feed 1 (don't actually start it, to keep it in the userJobsMap
+        // Create fake processing job for mock feed (don't actually start it, to keep it in the userJobsMap
         // indefinitely).
         File zipFile = zipFolderFiles(FEED_VERSION_ZIP_FOLDER_NAME);
-        feedVersion = getFeedVersionFromGTFSFile(mockFeedSource2, zipFile);
+        feedVersion = getFeedVersionFromGTFSFile(mockFeedSourceForFakeJob, zipFile);
         Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
         Set<MonitorableJob> userJobs = Sets.newConcurrentHashSet();
         userJobs.add(new ProcessSingleFeedJob(feedVersion, user, true));
@@ -158,7 +172,7 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
 
         // Process single feed job.
         ProcessSingleFeedJob processSingleFeedJob =
-            triggerProcessSingleFeedJob(mockFeedSource1, FEED_VERSION_ZIP_FOLDER_NAME);
+            triggerProcessSingleFeedJob(mockFeedSource5, FEED_VERSION_ZIP_FOLDER_NAME);
         MonitorableJob lastJob = getLastJob(processSingleFeedJob);
         assertTrue(lastJob instanceof AutoDeployFeedJob);
         assertThat(lastJob.status.message, equalTo("Auto-deploy skipped because of feed fetches in progress."));
@@ -166,20 +180,20 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
 
     @Test
     public void failIfFeedVersionHasHighSeverityErrorTypes() throws IOException {
-        setFeedSourceDeployable(true);
+        setFeedSourceDeployable(mockFeedSource6,true);
         setProjectAutoDeploy(true);
         setProjectPinnedDeploymentId(deployment.id);
         ProcessSingleFeedJob processSingleFeedJob =
-            triggerProcessSingleFeedJob(mockFeedSource1,
+            triggerProcessSingleFeedJob(mockFeedSource6,
                 "fake-agency-with-only-calendar-expire-in-2099-with-unused-route");
         MonitorableJob lastJob = getLastJob(processSingleFeedJob);
         assertTrue(lastJob instanceof AutoDeployFeedJob);
         assertThat(lastJob.status.message, equalTo("Feed version has critical errors or is out of date. Cancelling auto-deploy."));
     }
 
-    private void setFeedSourceDeployable(boolean deployable) {
-        mockFeedSource1.deployable = deployable;
-        Persistence.feedSources.replace(mockFeedSource1.id, mockFeedSource1);
+    private void setFeedSourceDeployable(FeedSource feedSource, boolean deployable) {
+        feedSource.deployable = deployable;
+        Persistence.feedSources.replace(feedSource.id, feedSource);
     }
 
     private void setProjectAutoDeploy(boolean autoDeploy) {
@@ -205,5 +219,11 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
     private MonitorableJob getLastJob(ProcessSingleFeedJob processSingleFeedJob) {
         List<MonitorableJob> subJobs = processSingleFeedJob.getSubJobs();
         return subJobs.get(subJobs.size() - 1);
+    }
+
+    private static FeedSource createFeedSource(String name) {
+        FeedSource mockFeedSource = new FeedSource(name, project.id, FeedRetrievalMethod.MANUALLY_UPLOADED);
+        Persistence.feedSources.create(mockFeedSource);
+        return mockFeedSource;
     }
 }
