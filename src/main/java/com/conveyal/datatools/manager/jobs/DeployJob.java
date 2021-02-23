@@ -1180,6 +1180,11 @@ public class DeployJob extends MonitorableJob {
 
         // check if there is a string as the contents. If this is the case, an upload to s3 will be needed.
         if (customFile.contents != null) {
+            // fail the job when a filename is missing if there are contents
+            if (org.apache.commons.lang3.StringUtils.isEmpty(customFile.filename)) {
+                status.fail("Failed to process a custom file with a missing filename!");
+                return false;
+            }
             // includes contents, upload them to s3
             return addStringContentsAsBaseFolderDownload(
                 manifest,
