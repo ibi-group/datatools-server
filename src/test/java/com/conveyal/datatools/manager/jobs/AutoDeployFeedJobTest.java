@@ -43,9 +43,13 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
     private static FeedSource mockFeedSource3;
     private static FeedSource mockFeedSource4;
     private static FeedSource mockFeedSource5;
-    private static FeedSource mockFeedSource6;
-    private static FeedSource mockFeedSourceForFakeJob;
-    private static FeedVersion feedVersion;
+
+    private static OtpServer serverFetchInProgress;
+    private static Deployment deploymentFetchInProgress;
+    private static Project projectFetchInProgress;
+    private static FeedSource mockFeedSourceFetchInProgressFakeJob;
+    private static FeedSource mockFeedSourceFetchInProgress;
+    private static FeedVersion feedVersionFetchInProgress;
     private final String FEED_VERSION_ZIP_FOLDER_NAME = "fake-agency-expire-in-2099";
 
     @BeforeClass
@@ -53,35 +57,25 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
         DatatoolsTest.setUp();
         Auth0Connection.setAuthDisabled(true);
         LOG.info("{} setup", AutoDeployFeedJobTest.class.getSimpleName());
-        String testName = String.format("Test %s", new Date().toString());
 
-        // OTP server instance required by deployment.
-        server = new OtpServer();
-        server.name = testName;
-        Persistence.servers.create(server);
+        server = createOtpServer();
+        DeployJob.DeploySummary deploySummary = createDeploymentSummary(server.id);
+        project = createProject();
+        deployment = createDeployment(deploySummary, project.id);
+        mockFeedSource1 = createFeedSource("Mock Feed Source 1", project.id);
+        mockFeedSource2 = createFeedSource("Mock Feed Source 2", project.id);
+        mockFeedSource3 = createFeedSource("Mock Feed Source 3", project.id);
+        mockFeedSource4 = createFeedSource("Mock Feed Source 4", project.id);
+        mockFeedSource5 = createFeedSource("Mock Feed Source 5", project.id);
 
-        // deployment.latest() is required to return the latest server id
-        DeployJob.DeploySummary deploySummary = new DeployJob.DeploySummary();
-        deploySummary.serverId  = server.id;
-
-        // a project is required so the pinned deployment id can be defined
-        project = new Project();
-        project.name = testName;
-        Persistence.projects.create(project);
-
-        deployment = new Deployment();
-        deployment.name = "Test deployment";
-        deployment.deployJobSummaries.add(deploySummary);
-        deployment.projectId = project.id;
-        Persistence.deployments.create(deployment);
-
-        mockFeedSource1 = createFeedSource("Mock Feed Source 1");
-        mockFeedSource2 = createFeedSource("Mock Feed Source 2");
-        mockFeedSource3 = createFeedSource("Mock Feed Source 3");
-        mockFeedSource4 = createFeedSource("Mock Feed Source 4");
-        mockFeedSource5 = createFeedSource("Mock Feed Source 5");
-        mockFeedSource6 = createFeedSource("Mock Feed Source 6");
-        mockFeedSourceForFakeJob = createFeedSource("Mock Feed Source For Fake Job");
+        serverFetchInProgress = createOtpServer();
+        DeployJob.DeploySummary deploySummaryFetchInProgress = createDeploymentSummary(server.id);
+        projectFetchInProgress = createProject();
+        deploymentFetchInProgress = createDeployment(deploySummaryFetchInProgress, project.id);
+        mockFeedSourceFetchInProgressFakeJob =
+            createFeedSource("Mock Feed Source For Fetch In Progress Fake Job", projectFetchInProgress.id);
+        mockFeedSourceFetchInProgress =
+            createFeedSource("Mock Feed Source For Fetch In Progress", projectFetchInProgress.id);
     }
 
     @AfterClass
@@ -94,20 +88,24 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
         mockFeedSource3.delete();
         mockFeedSource4.delete();
         mockFeedSource5.delete();
-        mockFeedSource6.delete();
         Persistence.projects.removeById(project.id);
+
+        mockFeedSourceFetchInProgress.delete();
+        serverFetchInProgress.delete();
+        deploymentFetchInProgress.delete();
+        Persistence.projects.removeById(projectFetchInProgress.id);
         // Part of a job that is not started so the feed source has to be deleted straight from DB.
-        Persistence.feedSources.removeById(mockFeedSourceForFakeJob.id);
-        if (feedVersion != null) {
-            Persistence.feedVersions.removeById(feedVersion.id);
+        Persistence.feedSources.removeById(mockFeedSourceFetchInProgressFakeJob.id);
+        if (feedVersionFetchInProgress != null) {
+            Persistence.feedVersions.removeById(feedVersionFetchInProgress.id);
         }
     }
 
     @Test
     public void skipJobIfFeedSourceNotDeployable() throws IOException {
         setFeedSourceDeployable(mockFeedSource1, false);
-        setProjectAutoDeploy(true);
-        setProjectPinnedDeploymentId(deployment.id);
+        setProjectAutoDeploy(project,true);
+        setProjectPinnedDeploymentId(project, deployment.id);
         ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob(mockFeedSource1, FEED_VERSION_ZIP_FOLDER_NAME);
         MonitorableJob lastJob = getLastJob(processSingleFeedJob);
         // Verify that the auto deploy job was not added as a subjob.
@@ -117,8 +115,8 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
     @Test
     public void failIfDeploymentNotPinned() throws IOException {
         setFeedSourceDeployable(mockFeedSource2, true);
-        setProjectAutoDeploy(true);
-        setProjectPinnedDeploymentId(null);
+        setProjectAutoDeploy(project,true);
+        setProjectPinnedDeploymentId(project, null);
         ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob(mockFeedSource2, FEED_VERSION_ZIP_FOLDER_NAME);
         MonitorableJob lastJob = getLastJob(processSingleFeedJob);
         assertTrue(lastJob instanceof AutoDeployFeedJob);
@@ -128,8 +126,8 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
     @Test
     public void skipJobIfProjectNotAutoDeploy() throws IOException {
         setFeedSourceDeployable(mockFeedSource3, true);
-        setProjectAutoDeploy(false);
-        setProjectPinnedDeploymentId(deployment.id);
+        setProjectAutoDeploy(project, false);
+        setProjectPinnedDeploymentId(project, deployment.id);
         ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob(mockFeedSource3, FEED_VERSION_ZIP_FOLDER_NAME);
         MonitorableJob lastJob = getLastJob(processSingleFeedJob);
         // Verify that the auto deploy job was not added as a subjob.
@@ -139,8 +137,8 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
     @Test
     public void canAutoDeployFeedVersion() throws IOException {
         setFeedSourceDeployable(mockFeedSource4, true);
-        setProjectAutoDeploy(true);
-        setProjectPinnedDeploymentId(deployment.id);
+        setProjectAutoDeploy(project, true);
+        setProjectPinnedDeploymentId(project, deployment.id);
         ProcessSingleFeedJob processSingleFeedJob = triggerProcessSingleFeedJob(mockFeedSource4, FEED_VERSION_ZIP_FOLDER_NAME);
         MonitorableJob lastJob = getLastJob(processSingleFeedJob);
         assertTrue(lastJob instanceof AutoDeployFeedJob);
@@ -148,47 +146,47 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
     }
 
     @Test
-    public void failAutoDeployIfFetchStillInProgress() throws IOException {
-        setFeedSourceDeployable(mockFeedSource5, true);
-        setProjectAutoDeploy(true);
-        setProjectPinnedDeploymentId(deployment.id);
-
-        // Create fake processing job for mock feed (don't actually start it, to keep it in the userJobsMap
-        // indefinitely).
-        File zipFile = zipFolderFiles(FEED_VERSION_ZIP_FOLDER_NAME);
-        feedVersion = getFeedVersionFromGTFSFile(mockFeedSourceForFakeJob, zipFile);
-        Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
-        Set<MonitorableJob> userJobs = Sets.newConcurrentHashSet();
-        userJobs.add(new ProcessSingleFeedJob(feedVersion, user, true));
-        DataManager.userJobsMap.put(user.getUser_id(), userJobs);
-
-        // Add mock feed 1 to the deployment so that it is detected in the Deployment#hasFeedFetchesInProgress check
-        // (called during mock feed 2's processing).
-        Persistence.feedVersions.create(feedVersion);
-        Collection<String> feedVersionIds = new ArrayList<>();
-        feedVersionIds.add(feedVersion.id);
-        deployment.feedVersionIds = feedVersionIds;
-        Persistence.deployments.replace(deployment.id, deployment);
-
-        // Process single feed job.
-        ProcessSingleFeedJob processSingleFeedJob =
-            triggerProcessSingleFeedJob(mockFeedSource5, FEED_VERSION_ZIP_FOLDER_NAME);
-        MonitorableJob lastJob = getLastJob(processSingleFeedJob);
-        assertTrue(lastJob instanceof AutoDeployFeedJob);
-        assertThat(lastJob.status.message, equalTo("Auto-deploy skipped because of feed fetches in progress."));
-    }
-
-    @Test
     public void failIfFeedVersionHasHighSeverityErrorTypes() throws IOException {
-        setFeedSourceDeployable(mockFeedSource6,true);
-        setProjectAutoDeploy(true);
-        setProjectPinnedDeploymentId(deployment.id);
+        setFeedSourceDeployable(mockFeedSource5,true);
+        setProjectAutoDeploy(project, true);
+        setProjectPinnedDeploymentId(project, deployment.id);
         ProcessSingleFeedJob processSingleFeedJob =
-            triggerProcessSingleFeedJob(mockFeedSource6,
+            triggerProcessSingleFeedJob(mockFeedSource5,
                 "fake-agency-with-only-calendar-expire-in-2099-with-unused-route");
         MonitorableJob lastJob = getLastJob(processSingleFeedJob);
         assertTrue(lastJob instanceof AutoDeployFeedJob);
         assertThat(lastJob.status.message, equalTo("Feed version has critical errors or is out of date. Cancelling auto-deploy."));
+    }
+
+    @Test
+    public void failAutoDeployIfFetchStillInProgress() throws IOException {
+        setFeedSourceDeployable(mockFeedSourceFetchInProgress, true);
+        setProjectAutoDeploy(projectFetchInProgress, true);
+        setProjectPinnedDeploymentId(projectFetchInProgress, deploymentFetchInProgress.id);
+
+        // Create fake processing job for mock feed (don't actually start it, to keep it in the userJobsMap
+        // indefinitely).
+        File zipFile = zipFolderFiles(FEED_VERSION_ZIP_FOLDER_NAME);
+        feedVersionFetchInProgress = getFeedVersionFromGTFSFile(mockFeedSourceFetchInProgressFakeJob, zipFile);
+        Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
+        Set<MonitorableJob> userJobs = Sets.newConcurrentHashSet();
+        userJobs.add(new ProcessSingleFeedJob(feedVersionFetchInProgress, user, true));
+        DataManager.userJobsMap.put(user.getUser_id(), userJobs);
+
+        // Add mock feed 1 to the deployment so that it is detected in the Deployment#hasFeedFetchesInProgress check
+        // (called during mock feed 2's processing).
+        Persistence.feedVersions.create(feedVersionFetchInProgress);
+        Collection<String> feedVersionIds = new ArrayList<>();
+        feedVersionIds.add(feedVersionFetchInProgress.id);
+        deploymentFetchInProgress.feedVersionIds = feedVersionIds;
+        Persistence.deployments.replace(deploymentFetchInProgress.id, deploymentFetchInProgress);
+
+        // Process single feed job.
+        ProcessSingleFeedJob processSingleFeedJob =
+            triggerProcessSingleFeedJob(mockFeedSourceFetchInProgress, FEED_VERSION_ZIP_FOLDER_NAME);
+        MonitorableJob lastJob = getLastJob(processSingleFeedJob);
+        assertTrue(lastJob instanceof AutoDeployFeedJob);
+        assertThat(lastJob.status.message, equalTo("Auto-deploy skipped because of feed fetches in progress."));
     }
 
     private void setFeedSourceDeployable(FeedSource feedSource, boolean deployable) {
@@ -196,12 +194,12 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
         Persistence.feedSources.replace(feedSource.id, feedSource);
     }
 
-    private void setProjectAutoDeploy(boolean autoDeploy) {
+    private void setProjectAutoDeploy(Project project, boolean autoDeploy) {
         project.autoDeploy = autoDeploy;
         Persistence.projects.replace(project.id, project);
     }
 
-    private void setProjectPinnedDeploymentId(String deploymentId) {
+    private void setProjectPinnedDeploymentId(Project project, String deploymentId) {
         project.pinnedDeploymentId = deploymentId;
         Persistence.projects.replace(project.id, project);
     }
@@ -221,9 +219,38 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
         return subJobs.get(subJobs.size() - 1);
     }
 
-    private static FeedSource createFeedSource(String name) {
-        FeedSource mockFeedSource = new FeedSource(name, project.id, FeedRetrievalMethod.MANUALLY_UPLOADED);
+    private static FeedSource createFeedSource(String name, String projectId) {
+        FeedSource mockFeedSource = new FeedSource(name, projectId, FeedRetrievalMethod.MANUALLY_UPLOADED);
         Persistence.feedSources.create(mockFeedSource);
         return mockFeedSource;
+    }
+
+    private static OtpServer createOtpServer() {
+        OtpServer server = new OtpServer();
+        server.name = String.format("Test Server %s", new Date().toString());
+        Persistence.servers.create(server);
+        return server;
+    }
+
+    private static DeployJob.DeploySummary createDeploymentSummary(String serverId) {
+        DeployJob.DeploySummary deploySummary = new DeployJob.DeploySummary();
+        deploySummary.serverId  = serverId;
+        return deploySummary;
+    }
+
+    private static Project createProject() {
+        Project project = new Project();
+        project.name = String.format("Test Project %s", new Date().toString());
+        Persistence.projects.create(project);
+        return project;
+    }
+
+    private static Deployment createDeployment(DeployJob.DeploySummary deploySummary, String projectId) {
+        Deployment deployment = new Deployment();
+        deployment.name = String.format("Test Deployment %s", new Date().toString());
+        deployment.deployJobSummaries.add(deploySummary);
+        deployment.projectId = projectId;
+        Persistence.deployments.create(deployment);
+        return deployment;
     }
 }
