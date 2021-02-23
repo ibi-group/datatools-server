@@ -1039,8 +1039,8 @@ public class DeployJob extends MonitorableJob {
      */
     public OtpRunnerManifest createAndUploadManifestAndConfigs(boolean graphAlreadyBuilt) {
         String jarName = getJarName();
-        String s3JarUrl = getS3JarUrl(jarName);
-        if (!s3JarUrlIsValid(s3JarUrl)) {
+        String s3JarUri = getS3JarUri(jarName);
+        if (!s3JarUriIsValid(s3JarUri)) {
             return null;
         }
         // create otp-runner config file
@@ -1050,7 +1050,7 @@ public class DeployJob extends MonitorableJob {
         manifest.baseFolderDownloads = new ArrayList<>();
         manifest.graphObjUri = getS3GraphUri();
         manifest.jarFile = getJarFileOnInstance();
-        manifest.jarUrl = s3JarUrl;
+        manifest.jarUri = s3JarUri;
         manifest.nonce = this.nonce;
         // This must be added here because logging starts immediately before defaults are set while validating the
         // manifest
@@ -1309,7 +1309,7 @@ public class DeployJob extends MonitorableJob {
     /**
      * Construct URL for trip planner jar
      */
-    private String getS3JarUrl(String jarName) {
+    private String getS3JarUri(String jarName) {
         String s3JarKey = jarName + ".jar";
         return String.join("/", OTP_REPO_URL, s3JarKey);
     }
@@ -1317,30 +1317,29 @@ public class DeployJob extends MonitorableJob {
     /**
      * Checks if an AWS S3 url is valid by making a HTTP HEAD request and returning true if the request succeeded.
      */
-    private boolean s3JarUrlIsValid(String s3JarUrl) {
+    private boolean s3JarUriIsValid(String s3JarUri) {
         try {
-            final URL url = new URL(s3JarUrl);
+            final URL url = new URL(s3JarUri);
             HttpURLConnection httpURLConnection = (HttpURLConnection) url.openConnection();
             httpURLConnection.setRequestMethod("HEAD");
             int responseCode = httpURLConnection.getResponseCode();
             if (responseCode != HttpStatus.OK_200) {
-                status.fail(String.format("Requested trip planner jar does not exist at %s", s3JarUrl));
+                status.fail(String.format("Requested trip planner jar does not exist at %s", s3JarUri));
                 return false;
             }
         } catch (IOException e) {
-            status.fail(String.format("Error checking for trip planner jar: %s", s3JarUrl));
+            status.fail(String.format("Error checking for trip planner jar: %s", s3JarUri));
             return false;
         }
         return true;
     }
 
+    /**
+     * For now, OTP is the only supported trip planner that datatools can deploy to. If others are supported in the
+     * future, this method should be modified to return the appropriate trip planner string.
+     */
     private String getTripPlannerString() {
-        switch (deployment.tripPlannerVersion) {
-            case OTP_1:
-            case OTP_2:
-            default:
-                return "otp";
-        }
+        return "otp";
     }
 
     @JsonIgnore

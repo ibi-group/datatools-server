@@ -14,7 +14,7 @@ public class OtpRunnerManifest {
     public String buildLogFile;
     public String graphObjUri;
     public String jarFile;
-    public String jarUrl;
+    public String jarUri;
     public String nonce;
     public String otpRunnerLogFile;
     public String otpVersion;

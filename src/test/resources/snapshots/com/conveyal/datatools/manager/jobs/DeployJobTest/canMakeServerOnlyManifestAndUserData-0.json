@@ -6,7 +6,7 @@
   "buildGraph" : false,
   "graphObjUri" : "s3://datatools-dev/test-deploy/Graph.obj",
   "jarFile" : "/opt/otp/otp-latest-trimet-dev",
-  "jarUrl" : "https://opentripplanner-builds.s3.amazonaws.com/otp-latest-trimet-dev.jar",
+  "jarUri" : "https://opentripplanner-builds.s3.amazonaws.com/otp-latest-trimet-dev.jar",
   "nonce" : "canMakeServerOnlyUserDataScript",
   "otpRunnerLogFile" : "/var/log/otp-runner.log",
   "otpVersion" : "1.x",
