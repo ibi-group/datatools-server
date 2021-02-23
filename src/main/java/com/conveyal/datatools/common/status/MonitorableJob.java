@@ -288,7 +288,8 @@ public abstract class MonitorableJob implements Runnable, Serializable {
          * Shorthand method to update status object on successful job completion.
          */
         public void completeSuccessfully(String message) {
-            this.complete(false, message);
+            // Do not overwrite the message (and other fields), if the job has already been completed.
+            if (!this.completed) this.complete(false, message);
         }
 
         /**
@@ -296,7 +297,7 @@ public abstract class MonitorableJob implements Runnable, Serializable {
          */
         private void complete(boolean isError, String message) {
             this.error = isError;
-            // Skip message update if null.
+            // Skip message update if the job message is null or the message has already been defined.
             if (message != null) this.message = message;
             this.percentComplete = 100;
             this.completed = true;
