@@ -1362,7 +1362,7 @@ public class DeployJob extends MonitorableJob {
         return joinToS3FolderUri(isOtp2() ? "graph.obj" : "Graph.obj");
     }
 
-    /** Join list of paths to S3 URI for job folder to create a fully qualified Url (e.g., s3://bucket/path/to/file). */
+    /** Join list of paths to S3 URI for job folder to create a fully qualified URI (e.g., s3://bucket/path/to/file). */
     private String joinToS3FolderUri(CharSequence... paths) {
         List<CharSequence> pathList = new ArrayList<>();
         pathList.add(getS3FolderURI().toString());
