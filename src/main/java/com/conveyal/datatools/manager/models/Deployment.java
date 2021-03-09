@@ -67,7 +67,6 @@ public class Deployment extends Model implements Serializable {
     public String name;
 
     public static final String DEFAULT_OTP_VERSION = "otp-v1.4.0";
-    public static final String DEFAULT_R5_VERSION = "v2.4.1-9-g3be6daa";
 
     /** What server is this currently deployed to? */
     public String deployedTo;
@@ -157,21 +156,21 @@ public class Deployment extends Model implements Serializable {
     public boolean skipOsmExtract;
 
     /**
-     * The version (according to git describe) of OTP being used on this deployment This should default to
-     * {@link Deployment#DEFAULT_OTP_VERSION}.
+     * The trip planner to use in an EC2 deployment. otp-runner will be prepared to run a jar file with the proper
+     * commands.
+     * NOTE: the {@link Deployment#otpVersion} is assumed to be properly set to an appropriate jar file, so it is up to
+     * the user to make sure that both the correct jar file and trip planner type combinations are selected.
+     */
+    public TripPlannerVersion tripPlannerVersion = TripPlannerVersion.OTP_1;
+
+    /**
+     * The version (according to git describe) of OTP being used on this deployment. This should default to
+     * {@link Deployment#DEFAULT_OTP_VERSION}. This is used to determine what jar file to download and does not have an
+     * exact match to actual numbered/tagged releases.
      */
     public String otpVersion;
 
     public boolean buildGraphOnly;
-
-    /**
-     * The version (according to git describe) of R5 being used on this deployment. This should default to
-     * {@link Deployment#DEFAULT_R5_VERSION}.
-     */
-    public String r5Version;
-
-    /** Whether this deployment should build an r5 server (false=OTP) */
-    public boolean r5;
 
     /** Date when the deployment was last deployed to a server */
     @JsonProperty("lastDeployed")
@@ -192,6 +191,8 @@ public class Deployment extends Model implements Serializable {
 
     public String customBuildConfig;
     public String customRouterConfig;
+
+    public List<CustomFile> customFiles = new ArrayList<>();
 
     /**
      * If this deployment is for a single feed source, the feed source this deployment is for.
@@ -576,24 +577,6 @@ public class Deployment extends Model implements Serializable {
     }
 
     /**
-     * Creates a list of all of the download URLs for all of the OSM and GTFS files that would be needed to build an OTP
-     * graph.
-     */
-    public List<String> generateGtfsAndOsmUrls() throws MalformedURLException {
-        Set<String> urls = new HashSet<>();
-        if (feedVersionIds.size() > 0) {
-            URL osmUrl = getUrlForOsmExtract();
-            // add OSM data
-            if (osmUrl != null) urls.add(osmUrl.toString());
-            // add GTFS files
-            for (String feedVersionId : feedVersionIds) {
-                urls.add(S3Utils.getS3FeedUri(feedVersionId));
-            }
-        }
-        return new ArrayList<>(urls);
-    }
-
-    /**
      * A summary of a FeedVersion, leaving out all of the individual validation errors.
      */
     public static class SummarizedFeedVersion {
@@ -621,6 +604,10 @@ public class Deployment extends Model implements Serializable {
         public boolean boundsAreValid () {
             return validationResult != null && validationResult.bounds != null && validationResult.bounds.areValid();
         }
+    }
+
+    public enum TripPlannerVersion {
+        OTP_1, OTP_2
     }
 
     /**
