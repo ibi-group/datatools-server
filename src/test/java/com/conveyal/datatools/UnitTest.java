@@ -15,6 +15,6 @@ public abstract class UnitTest {
     public static void beforeAll () {
         // make sure the RUN_E2E environment variable is set to true.  Otherwise, this test suite should be skipped and
         // the overall build should not depend on inheriting test suites passing in order to save time.
-        assumeFalse(getBooleanEnvVar("RUN_E2E"));
+        assumeFalse(TestUtils.isRunningE2E());
     }
 }

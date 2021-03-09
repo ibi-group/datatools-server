@@ -5,6 +5,7 @@ import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.DeleteObjectsRequest;
 import com.amazonaws.services.s3.model.ObjectMetadata;
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
@@ -33,6 +34,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
@@ -94,6 +96,19 @@ public class FeedSource extends Model implements Cloneable {
      * How do we receive this feed?
      */
     public FeedRetrievalMethod retrievalMethod;
+
+    /**
+     * How frequently should we fetch this feed (at the feed's {@link #url} if {@link #retrievalMethod} is
+     * {@link FeedRetrievalMethod#FETCHED_AUTOMATICALLY}). Daily defaults to using time defined in
+     * {@link Project#autoFetchHour}:{@link Project#autoFetchMinute}.
+     */
+    public FetchFrequency fetchFrequency;
+    /**
+     * The fetch interval taken into account with {@link #fetchFrequency} defines the interval at which a feed will be
+     * automatically checked for updates. E.g., 1 DAYS will trigger a fetch every day, 5 MINUTES will trigger a fetch
+     * every five minutes.
+     */
+    public int fetchInterval;
 
     /**
      * When was this feed last fetched?
@@ -549,6 +564,8 @@ public class FeedSource extends Model implements Cloneable {
             retrieveFeedVersions().forEach(FeedVersion::delete);
             // Remove all snapshot records for this feed source
             retrieveSnapshots().forEach(Snapshot::delete);
+            // Remove any scheduled job for feed source.
+            Scheduler.removeAllFeedSourceJobs(this.id, true);
             // Delete active editor buffer if exists.
             if (this.editorNamespace != null) {
                 GTFS.delete(this.editorNamespace, DataManager.GTFS_DATA_SOURCE);

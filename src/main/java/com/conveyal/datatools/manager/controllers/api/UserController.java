@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.auth.Auth0Users;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -43,7 +44,7 @@ import java.util.List;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.auth.Auth0Users.API_PATH;
-import static com.conveyal.datatools.manager.auth.Auth0Connection.authDisabled;
+import static com.conveyal.datatools.manager.auth.Auth0Users.DEFAULT_ITEMS_PER_PAGE;
 import static com.conveyal.datatools.manager.auth.Auth0Users.USERS_API_PATH;
 import static com.conveyal.datatools.manager.auth.Auth0Users.getAuth0Users;
 import static com.conveyal.datatools.manager.auth.Auth0Users.getUserById;
@@ -61,7 +62,7 @@ public class UserController {
     private static final String AUTH0_CLIENT_ID = DataManager.getConfigPropertyAsText("AUTH0_CLIENT_ID");
     public static final int TEST_AUTH0_PORT = 8089;
     public static final String TEST_AUTH0_DOMAIN = String.format("localhost:%d", TEST_AUTH0_PORT);
-    private static Logger LOG = LoggerFactory.getLogger(UserController.class);
+    private static final Logger LOG = LoggerFactory.getLogger(UserController.class);
     private static final String UTF_8 = "UTF-8";
     public static final String DEFAULT_BASE_USERS_URL = "https://" + AUTH0_DOMAIN  + USERS_API_PATH;
     /** Users URL uses Auth0 domain by default, but can be overridden with {@link #setBaseUsersUrl(String)} for testing. */
@@ -92,8 +93,9 @@ public class UserController {
     private static String getAllUsers(Request req, Response res) {
         res.type("application/json");
         int page = Integer.parseInt(req.queryParams("page"));
+        int perPage = Integer.parseInt(req.queryParamOrDefault("perPage", Integer.toString(DEFAULT_ITEMS_PER_PAGE)));
         String queryString = filterUserSearchQuery(req);
-        String users = getAuth0Users(queryString, page);
+        String users = getAuth0Users(queryString, page, perPage);
         return users;
     }
 
@@ -292,7 +294,7 @@ public class UserController {
         Auth0UserProfile.DatatoolsInfo datatools = userProfile.getApp_metadata().getDatatoolsInfo();
         // NOTE: this condition will also occur if DISABLE_AUTH is set to true
         if (datatools == null) {
-            if (authDisabled()) return Collections.emptyList();
+            if (Auth0Connection.isAuthDisabled()) return Collections.emptyList();
             logMessageAndHalt(req, 403, "User does not have permission to access to this application");
         }
 

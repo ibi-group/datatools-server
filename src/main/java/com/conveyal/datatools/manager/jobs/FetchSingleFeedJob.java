@@ -1,17 +1,21 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class FetchSingleFeedJob extends MonitorableJob {
-
-    private FeedSource feedSource;
+    public static final Logger LOG = LoggerFactory.getLogger(FetchSingleFeedJob.class);
+    public final String feedSourceId;
     private FeedVersion result;
-    private boolean continueThread;
+    private final boolean continueThread;
 
     /**
      * Fetch a single feed source by URL
@@ -20,7 +24,7 @@ public class FetchSingleFeedJob extends MonitorableJob {
      */
     public FetchSingleFeedJob (FeedSource feedSource, Auth0UserProfile owner, boolean continueThread) {
         super(owner, "Fetching feed for " + feedSource.name, JobType.FETCH_SINGLE_FEED);
-        this.feedSource = feedSource;
+        this.feedSourceId = feedSource.id;
         this.result = null;
         this.continueThread = continueThread;
         status.message = "Fetching...";
@@ -39,14 +43,14 @@ public class FetchSingleFeedJob extends MonitorableJob {
         return result != null ? result.id : null;
     }
 
-    @JsonProperty
-    public String getFeedSourceId () {
-        // Feed version result is null unless (and until) fetch is successful.
-        return result != null ? result.parentFeedSource().id : null;
-    }
-
     @Override
     public void jobLogic () {
+        FeedSource feedSource = Persistence.feedSources.getById(feedSourceId);
+        if (feedSource == null) {
+            LOG.error("Fetch feed job failed because feed source {} does not exist in database. Clearing all jobs for feed source.", feedSourceId);
+            Scheduler.removeAllFeedSourceJobs(feedSourceId, true);
+            return;
+        }
         // TODO: fetch automatically vs. manually vs. in-house
         result = feedSource.fetch(status);
 
