@@ -8,8 +8,8 @@ import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.error.NewGTFSErrorType;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -25,9 +25,9 @@ import static com.conveyal.datatools.TestUtils.createFeedVersion;
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static com.conveyal.datatools.TestUtils.zipFolderFiles;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.MANUALLY_UPLOADED;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 /**
  * Tests for the various {@link MergeFeedsJob} merge types.
@@ -49,7 +49,7 @@ public class MergeFeedsJobTest extends UnitTest {
     /**
      * Prepare and start a testing-specific web server
      */
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
@@ -114,39 +114,39 @@ public class MergeFeedsJobTest extends UnitTest {
 
         // Ensure the feed has the row counts we expect.
         assertEquals(
-            "trips count for merged feed should equal sum of trips for versions merged.",
             bartVersion1.feedLoadResult.trips.rowCount + calTrainVersion.feedLoadResult.trips.rowCount + napaVersion.feedLoadResult.trips.rowCount,
-            mergedVersion.feedLoadResult.trips.rowCount
+            mergedVersion.feedLoadResult.trips.rowCount,
+            "trips count for merged feed should equal sum of trips for versions merged."
         );
         assertEquals(
-            "routes count for merged feed should equal sum of routes for versions merged.",
             bartVersion1.feedLoadResult.routes.rowCount + calTrainVersion.feedLoadResult.routes.rowCount + napaVersion.feedLoadResult.routes.rowCount,
-            mergedVersion.feedLoadResult.routes.rowCount
+            mergedVersion.feedLoadResult.routes.rowCount,
+            "routes count for merged feed should equal sum of routes for versions merged."
             );
         assertEquals(
-            "stops count for merged feed should equal sum of stops for versions merged.",
             mergedVersion.feedLoadResult.stops.rowCount,
-            bartVersion1.feedLoadResult.stops.rowCount + calTrainVersion.feedLoadResult.stops.rowCount + napaVersion.feedLoadResult.stops.rowCount
+            bartVersion1.feedLoadResult.stops.rowCount + calTrainVersion.feedLoadResult.stops.rowCount + napaVersion.feedLoadResult.stops.rowCount,
+            "stops count for merged feed should equal sum of stops for versions merged."
         );
         assertEquals(
-            "agency count for merged feed should equal sum of agency for versions merged.",
             mergedVersion.feedLoadResult.agency.rowCount,
-            bartVersion1.feedLoadResult.agency.rowCount + calTrainVersion.feedLoadResult.agency.rowCount + napaVersion.feedLoadResult.agency.rowCount
+            bartVersion1.feedLoadResult.agency.rowCount + calTrainVersion.feedLoadResult.agency.rowCount + napaVersion.feedLoadResult.agency.rowCount,
+            "agency count for merged feed should equal sum of agency for versions merged."
         );
         assertEquals(
-            "stopTimes count for merged feed should equal sum of stopTimes for versions merged.",
             mergedVersion.feedLoadResult.stopTimes.rowCount,
-            bartVersion1.feedLoadResult.stopTimes.rowCount + calTrainVersion.feedLoadResult.stopTimes.rowCount + napaVersion.feedLoadResult.stopTimes.rowCount
+            bartVersion1.feedLoadResult.stopTimes.rowCount + calTrainVersion.feedLoadResult.stopTimes.rowCount + napaVersion.feedLoadResult.stopTimes.rowCount,
+            "stopTimes count for merged feed should equal sum of stopTimes for versions merged."
         );
         assertEquals(
-            "calendar count for merged feed should equal sum of calendar for versions merged.",
             mergedVersion.feedLoadResult.calendar.rowCount,
-            bartVersion1.feedLoadResult.calendar.rowCount + calTrainVersion.feedLoadResult.calendar.rowCount + napaVersion.feedLoadResult.calendar.rowCount
+            bartVersion1.feedLoadResult.calendar.rowCount + calTrainVersion.feedLoadResult.calendar.rowCount + napaVersion.feedLoadResult.calendar.rowCount,
+            "calendar count for merged feed should equal sum of calendar for versions merged."
         );
         assertEquals(
-            "calendarDates count for merged feed should equal sum of calendarDates for versions merged.",
             mergedVersion.feedLoadResult.calendarDates.rowCount,
-            bartVersion1.feedLoadResult.calendarDates.rowCount + calTrainVersion.feedLoadResult.calendarDates.rowCount + napaVersion.feedLoadResult.calendarDates.rowCount
+            bartVersion1.feedLoadResult.calendarDates.rowCount + calTrainVersion.feedLoadResult.calendarDates.rowCount + napaVersion.feedLoadResult.calendarDates.rowCount,
+            "calendarDates count for merged feed should equal sum of calendarDates for versions merged."
         );
         // Ensure there are no referential integrity errors, duplicate ID, or wrong number of
         // fields errors.
@@ -261,8 +261,8 @@ public class MergeFeedsJobTest extends UnitTest {
         mergeFeedsJob.run();
         // Result should fail.
         assertTrue(
-            "Merge feeds job should fail due to duplicate trip IDs.",
-            mergeFeedsJob.mergeFeedsResult.failed
+            mergeFeedsJob.mergeFeedsResult.failed,
+            "Merge feeds job should fail due to duplicate trip IDs."
         );
     }
 
@@ -284,40 +284,40 @@ public class MergeFeedsJobTest extends UnitTest {
         assertFeedMergeSucceeded(mergeFeedsJob);
         // Check GTFS+ line numbers.
         assertEquals(
-            "Merged directions count should equal expected value.",
             2, // Magic number represents expected number of lines after merge.
-            mergeFeedsJob.mergeFeedsResult.linesPerTable.get("directions").intValue()
+            mergeFeedsJob.mergeFeedsResult.linesPerTable.get("directions").intValue(),
+            "Merged directions count should equal expected value."
         );
         assertEquals(
-            "Merged feed stop_attributes count should equal expected value.",
             2, // Magic number represents the number of stop_attributes in the merged BART feed.
-            mergeFeedsJob.mergeFeedsResult.linesPerTable.get("stop_attributes").intValue()
+            mergeFeedsJob.mergeFeedsResult.linesPerTable.get("stop_attributes").intValue(),
+            "Merged feed stop_attributes count should equal expected value."
         );
         // Check GTFS file line numbers.
         assertEquals(
-            "Merged feed trip count should equal expected value.",
             4552, // Magic number represents the number of trips in the merged BART feed.
-            mergeFeedsJob.mergedVersion.feedLoadResult.trips.rowCount
+            mergeFeedsJob.mergedVersion.feedLoadResult.trips.rowCount,
+            "Merged feed trip count should equal expected value."
         );
         assertEquals(
-            "Merged feed route count should equal expected value.",
             9, // Magic number represents the number of routes in the merged BART feed.
-            mergeFeedsJob.mergedVersion.feedLoadResult.routes.rowCount
+            mergeFeedsJob.mergedVersion.feedLoadResult.routes.rowCount,
+            "Merged feed route count should equal expected value."
         );
         assertEquals(
-            "Merged feed shapes count should equal expected value.",
             // During merge, if identical shape_id is found in both feeds, active feed shape_id should be feed-scoped.
             bartVersion1.feedLoadResult.shapes.rowCount + bartVersion2.feedLoadResult.shapes.rowCount,
-            mergeFeedsJob.mergedVersion.feedLoadResult.shapes.rowCount
+            mergeFeedsJob.mergedVersion.feedLoadResult.shapes.rowCount,
+            "Merged feed shapes count should equal expected value."
         );
         // Expect that two calendar dates are excluded from the past feed (because they occur after the first date of
         // the future feed) .
         int expectedCalendarDatesCount = bartVersion1.feedLoadResult.calendarDates.rowCount + bartVersion2.feedLoadResult.calendarDates.rowCount - 2;
         assertEquals(
-            "Merged feed calendar_dates count should equal expected value.",
             // During merge, if identical shape_id is found in both feeds, active feed shape_id should be feed-scoped.
             expectedCalendarDatesCount,
-            mergeFeedsJob.mergedVersion.feedLoadResult.calendarDates.rowCount
+            mergeFeedsJob.mergedVersion.feedLoadResult.calendarDates.rowCount,
+            "Merged feed calendar_dates count should equal expected value."
         );
         // Ensure there are no referential integrity errors or duplicate ID errors.
         assertThatFeedHasNoErrorsOfType(

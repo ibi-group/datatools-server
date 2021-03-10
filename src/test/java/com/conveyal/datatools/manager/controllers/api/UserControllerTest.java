@@ -7,12 +7,11 @@ import com.conveyal.datatools.manager.auth.Auth0Users;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import com.github.tomakehurst.wiremock.junit.WireMockRule;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Rule;
-import org.junit.Test;
+import com.github.tomakehurst.wiremock.WireMockServer;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.net.URLEncoder;
@@ -29,7 +28,6 @@ import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.matchingJsonPath;
 import static com.github.tomakehurst.wiremock.client.WireMock.patch;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
-import static com.github.tomakehurst.wiremock.client.WireMock.stubFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.options;
@@ -42,34 +40,32 @@ import static org.hamcrest.MatcherAssert.assertThat;
  * certain responses needed to verify functionality.
  */
 public class UserControllerTest extends UnitTest {
-    private String emailForExistingAccount = "test-existing-user@test.com";
-    private ObjectMapper mapper = new ObjectMapper();
+    private final String emailForExistingAccount = "test-existing-user@test.com";
+    private final ObjectMapper mapper = new ObjectMapper();
     private final String USER_SEARCH_API_PATH = USERS_API_PATH + "?sort=email%3A1&per_page=10&page=0&include_totals=false&search_engine=v3&q=email%3A";
-    /**
-     * This sets up a mock server that accepts requests and sends predefined responses to mock an Auth0 server.
-     */
-    @Rule
-    public WireMockRule wireMockRule = new WireMockRule(
-        options()
-            .port(TEST_AUTH0_PORT)
-            .usingFilesUnderDirectory("src/test/resources/com/conveyal/datatools/auth0-mock-responses/")
-    );
+    private static WireMockServer wireMockServer;
 
     /**
      * Prepare and start a testing-specific web server
      */
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         // start server if it isn't already running
         DatatoolsTest.setUp();
         // Set users URL to test domain used by wiremock.
         UserController.setBaseUsersUrl("http://" + TEST_AUTH0_DOMAIN + USERS_API_PATH);
+        wireMockServer = new WireMockServer(
+            options()
+                .port(TEST_AUTH0_PORT)
+                .usingFilesUnderDirectory("src/test/resources/com/conveyal/datatools/auth0-mock-responses/")
+        );
+        wireMockServer.start();
     }
 
     /**
      * To be run before each test to ensure that stubs needed for any request are created.
      */
-    @Before
+    @BeforeEach
     public void init() {
         // Create wiremock stub for get API access token. Note: this can be overridden for tests needing an invalid
         // access token.
@@ -79,9 +75,10 @@ public class UserControllerTest extends UnitTest {
     /**
      * Reset some Auth0 stuff to non-testing values.
      */
-    @AfterClass
+    @AfterAll
     public static void tearDown() {
         UserController.setBaseUsersUrl(UserController.DEFAULT_BASE_USERS_URL);
+        wireMockServer.stop();
     }
 
     /**
@@ -90,7 +87,7 @@ public class UserControllerTest extends UnitTest {
     @Test
     public void canListFirstTenUsers() throws IOException {
         // create wiremock stub for get users endpoint
-        stubFor(
+        wireMockServer.stubFor(
             get(urlPathEqualTo(USERS_API_PATH))
                 .withQueryParam("page", equalTo("1"))
                 .willReturn(
@@ -125,7 +122,7 @@ public class UserControllerTest extends UnitTest {
 
         // create wiremock stub for user search that matches existing user
         String url = USER_SEARCH_API_PATH + URLEncoder.encode(newUserEmail, "UTF-8") + "*";
-        stubFor(
+        wireMockServer.stubFor(
             get(urlEqualTo(url))
                 .willReturn(
                     aResponse()
@@ -134,7 +131,7 @@ public class UserControllerTest extends UnitTest {
         );
 
         // create wiremock stub for update users endpoint
-        stubFor(
+        wireMockServer.stubFor(
             patch(urlPathEqualTo(USERS_API_PATH + "/auth0%7Ctest-existing-user"))
                 .withRequestBody(
                     matchingJsonPath(
@@ -177,7 +174,7 @@ public class UserControllerTest extends UnitTest {
 
         // create wiremock stub for user search that matches existing user
         String url = USER_SEARCH_API_PATH + URLEncoder.encode(newUserEmail, "UTF-8") + "*";
-        stubFor(
+        wireMockServer.stubFor(
             get(urlEqualTo(url))
                 .willReturn(
                     aResponse()
@@ -186,7 +183,7 @@ public class UserControllerTest extends UnitTest {
         );
 
         // create wiremock stub for update users endpoint
-        stubFor(
+        wireMockServer.stubFor(
             patch(urlPathEqualTo(USERS_API_PATH + "/auth0%7Ctest-existing-user"))
                 .willReturn(
                     aResponse()
@@ -223,7 +220,7 @@ public class UserControllerTest extends UnitTest {
 
         // create wiremock stub for user search that matches existing user
         String url = USER_SEARCH_API_PATH + URLEncoder.encode(newUserEmail, "UTF-8") + "*";
-        stubFor(
+        wireMockServer.stubFor(
             get(urlEqualTo(url))
                 .willReturn(
                     aResponse()
@@ -232,7 +229,7 @@ public class UserControllerTest extends UnitTest {
         );
 
         // create wiremock stub for update users endpoint
-        stubFor(
+        wireMockServer.stubFor(
             patch(urlPathEqualTo(USERS_API_PATH + "/auth0%7Ctest-existing-user"))
                 .willReturn(
                     aResponse()
@@ -268,7 +265,7 @@ public class UserControllerTest extends UnitTest {
 
         // create wiremock stub for empty user search
         String url = USER_SEARCH_API_PATH + URLEncoder.encode(newUserEmail, "UTF-8") + "*";
-        stubFor(
+        wireMockServer.stubFor(
             get(urlEqualTo(url))
                 .willReturn(
                     aResponse()
@@ -277,7 +274,7 @@ public class UserControllerTest extends UnitTest {
         );
 
         // create wiremock stub for create users endpoint
-        stubFor(
+        wireMockServer.stubFor(
             post(urlPathEqualTo(USERS_API_PATH))
                 .withRequestBody(matchingJsonPath("$.email", equalTo(newUserEmail)))
                 .willReturn(
@@ -312,7 +309,7 @@ public class UserControllerTest extends UnitTest {
     public void canReturnMeaningfulAuth0Error() throws IOException {
 
         String url = USER_SEARCH_API_PATH + URLEncoder.encode(emailForExistingAccount, "UTF-8") + "*";
-        stubFor(
+        wireMockServer.stubFor(
             get(urlEqualTo(url))
                 .willReturn(
                     aResponse()
@@ -322,7 +319,7 @@ public class UserControllerTest extends UnitTest {
 
         // create wiremock stub for create users endpoint that responds with a message saying a user with the email
         // already exists
-        stubFor(
+        wireMockServer.stubFor(
             post(urlPathEqualTo(USERS_API_PATH))
                 .withRequestBody(matchingJsonPath("$.email", equalTo(emailForExistingAccount)))
                 .willReturn(
@@ -354,7 +351,7 @@ public class UserControllerTest extends UnitTest {
     @Test
     public void canUpdateUser() throws IOException {
         // create wiremock stub for update users endpoint
-        stubFor(
+        wireMockServer.stubFor(
             patch(urlPathEqualTo(USERS_API_PATH + "/auth0%7Ctest-existing-user"))
                 .withRequestBody(
                     matchingJsonPath(
@@ -369,7 +366,7 @@ public class UserControllerTest extends UnitTest {
         );
 
         // Create wiremock stub for get user by id endpoint.
-        stubFor(
+        wireMockServer.stubFor(
             get(urlPathEqualTo(USERS_API_PATH + "/auth0%7Ctest-existing-user"))
                 .willReturn(
                     aResponse()
@@ -401,7 +398,7 @@ public class UserControllerTest extends UnitTest {
     @Test
     public void canDeleteUser() throws IOException {
         // create wiremock stub for the delete users endpoint
-        stubFor(
+        wireMockServer.stubFor(
             delete(urlPathEqualTo(USERS_API_PATH + "/auth0%7Ctest-existing-user"))
                 .willReturn(aResponse())
         );
@@ -433,7 +430,7 @@ public class UserControllerTest extends UnitTest {
         stubForApiToken("getAccessTokenWithInvalidScope.json");
 
         // create wiremock stub for update users endpoint
-        stubFor(
+        wireMockServer.stubFor(
             patch(urlPathEqualTo(USERS_API_PATH + "/auth0%7Ctest-existing-user"))
                 .withRequestBody(
                     matchingJsonPath(
@@ -467,7 +464,7 @@ public class UserControllerTest extends UnitTest {
     }
 
     private static void stubForApiToken(String bodyFile) {
-        stubFor(
+        wireMockServer.stubFor(
             post(urlPathEqualTo("/oauth/token"))
                 .willReturn(
                     aResponse()

@@ -12,22 +12,23 @@ import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HttpUtils;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import org.apache.http.HttpResponse;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.net.URL;
 
 import static org.eclipse.jetty.http.HttpStatus.OK_200;
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
 
 public class FeedSourceControllerTest extends DatatoolsTest {
     private static Project project = null;
     private static FeedSource feedSourceWithUrl = null;
     private static FeedSource feedSourceWithNoUrl = null;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws IOException {
         DatatoolsTest.setUp();
         Auth0Connection.setAuthDisabled(true);
@@ -39,7 +40,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         feedSourceWithNoUrl = createFeedSource("FeedSourceTwo", null);
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() {
         Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
         if (project != null) {

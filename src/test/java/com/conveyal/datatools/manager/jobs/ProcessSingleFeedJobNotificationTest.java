@@ -8,9 +8,9 @@ import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.validator.ValidationResult;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -29,7 +29,7 @@ public class ProcessSingleFeedJobNotificationTest extends DatatoolsTest {
     private static FeedSource mockFeedSource;
     private static Project project;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws IOException {
         DatatoolsTest.setUp();
         LOG.info("{} setup", ProcessSingleFeedJobNotificationTest.class.getSimpleName());
@@ -47,7 +47,7 @@ public class ProcessSingleFeedJobNotificationTest extends DatatoolsTest {
         validationResult.lastCalendarDate = LocalDate.now();
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() {
         mockFeedSource.delete();
         project.delete();

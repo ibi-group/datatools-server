@@ -3,8 +3,8 @@ package com.conveyal.datatools.manager.models;
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.persistence.Persistence;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.util.Date;
 
@@ -15,7 +15,7 @@ import static org.hamcrest.Matchers.not;
 public class FeedVersionTest extends UnitTest {
 
     /** Initialize application for tests to run. */
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         // start server if it isn't already running
         DatatoolsTest.setUp();

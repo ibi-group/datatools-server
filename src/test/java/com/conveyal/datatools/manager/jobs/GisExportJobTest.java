@@ -2,7 +2,6 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
-import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -19,8 +18,8 @@ import org.geotools.data.FeatureSource;
 import org.geotools.feature.FeatureCollection;
 import org.geotools.feature.FeatureIterator;
 import org.geotools.referencing.CRS;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.opengis.feature.Feature;
 import org.opengis.feature.Property;
 import org.opengis.referencing.FactoryException;
@@ -32,8 +31,6 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.sql.PreparedStatement;
-import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.Date;
@@ -64,7 +61,7 @@ public class GisExportJobTest extends UnitTest {
     private static final double CALTRAIN_NORTH = 37.8499;
     private static final double CALTRAIN_SOUTH = 37.002;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws IOException {
         DatatoolsTest.setUp();
         LOG.info("{} setup", GisExportJobTest.class.getSimpleName());
