@@ -54,6 +54,7 @@ public class UserControllerTest extends UnitTest {
         DatatoolsTest.setUp();
         // Set users URL to test domain used by wiremock.
         UserController.setBaseUsersUrl("http://" + TEST_AUTH0_DOMAIN + USERS_API_PATH);
+        // This sets up a mock server that accepts requests and sends predefined responses to mock an Auth0 server.
         wireMockServer = new WireMockServer(
             options()
                 .port(TEST_AUTH0_PORT)
