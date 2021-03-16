@@ -1108,14 +1108,18 @@ public class DeployJob extends MonitorableJob {
                 manifest.runServer = false;
             } else {
                 // This instance will both run a graph and start the OTP server
+                String routerConfig = deployment.generateRouterConfigAsString();
                 if (
                     !addStringContentsAsBaseFolderDownload(
                         manifest,
                         ROUTER_CONFIG_FILENAME,
-                        deployment.generateRouterConfigAsString()
+                        routerConfig
                     )
                 ) {
                     return null;
+                }
+                if (routerConfig.contains("updaters")) {
+                    this.addNextJob(new CheckOtpUpdatersJob(deployment, otpServer, routerConfig));
                 }
                 routerConfigUploaded = true;
                 manifest.runServer = true;

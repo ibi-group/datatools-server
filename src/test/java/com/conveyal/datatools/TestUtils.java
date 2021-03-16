@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.io.IOUtils;
 import org.apache.http.HttpResponse;
+import org.eclipse.jetty.http.HttpMethod;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -226,7 +227,7 @@ public class TestUtils {
     /**
      * Send request to provided URL.
      */
-    public static HttpResponse makeRequest(String path, String body, HttpUtils.REQUEST_METHOD requestMethod) {
+    public static HttpResponse makeRequest(String path, String body, HttpMethod requestMethod) {
         return HttpUtils.httpRequestRawResponse(
             URI.create(BASE_URL + path),
             1000,

@@ -11,6 +11,7 @@ import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
+import org.eclipse.jetty.http.HttpMethod;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -20,7 +21,6 @@ import java.net.URI;
 
 public class HttpUtils {
     private static final Logger LOG = LoggerFactory.getLogger(HttpUtils.class);
-    public enum REQUEST_METHOD {GET, POST, DELETE, PUT}
 
     /**
      * Makes an http get/post request and returns the response. The request is based on the provided params.
@@ -29,7 +29,7 @@ public class HttpUtils {
     public static HttpResponse httpRequestRawResponse(
         URI uri,
         int connectionTimeout,
-        REQUEST_METHOD method,
+        HttpMethod method,
         String bodyContent) {
 
         RequestConfig timeoutConfig = RequestConfig.custom()

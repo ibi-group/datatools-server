@@ -12,6 +12,7 @@ import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HttpUtils;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import org.apache.http.HttpResponse;
+import org.eclipse.jetty.http.HttpMethod;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -64,7 +65,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         // create a feed source.
         HttpResponse createFeedSourceResponse = TestUtils.makeRequest("/api/manager/secure/feedsource",
             JsonUtil.toJson(feedSourceWithUrl),
-            HttpUtils.REQUEST_METHOD.POST
+            HttpMethod.POST
         );
         assertEquals(OK_200, createFeedSourceResponse.getStatusLine().getStatusCode());
         assertEquals(1, jobCountForFeed(feedSourceWithUrl.id));
@@ -74,7 +75,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         HttpResponse updateFeedSourceResponse
             = TestUtils.makeRequest(String.format("/api/manager/secure/feedsource/%s", feedSourceWithUrl.id),
             JsonUtil.toJson(feedSourceWithUrl),
-            HttpUtils.REQUEST_METHOD.PUT
+            HttpMethod.PUT
         );
         assertEquals(OK_200, updateFeedSourceResponse.getStatusLine().getStatusCode());
         assertEquals(0, jobCountForFeed(feedSourceWithUrl.id));
@@ -84,7 +85,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         updateFeedSourceResponse
             = TestUtils.makeRequest(String.format("/api/manager/secure/feedsource/%s", feedSourceWithUrl.id),
             JsonUtil.toJson(feedSourceWithUrl),
-            HttpUtils.REQUEST_METHOD.PUT
+            HttpMethod.PUT
         );
         assertEquals(OK_200, updateFeedSourceResponse.getStatusLine().getStatusCode());
         assertEquals(1, jobCountForFeed(feedSourceWithUrl.id));
@@ -97,7 +98,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
     public void createFeedSourceWithNoUrlTest() {
         HttpResponse createFeedSourceResponse = TestUtils.makeRequest("/api/manager/secure/feedsource",
             JsonUtil.toJson(feedSourceWithNoUrl),
-            HttpUtils.REQUEST_METHOD.POST
+            HttpMethod.POST
         );
         assertEquals(OK_200, createFeedSourceResponse.getStatusLine().getStatusCode());
         assertEquals(0, jobCountForFeed(feedSourceWithNoUrl.id));
