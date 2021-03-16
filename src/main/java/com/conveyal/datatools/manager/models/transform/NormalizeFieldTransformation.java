@@ -24,13 +24,17 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.ZipFile;
 
+import static com.conveyal.datatools.manager.DataManager.getConfigProperty;
+import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
 import static com.conveyal.gtfs.loader.Field.getFieldIndex;
 
 public class NormalizeFieldTransformation extends ZipTransformation {
-    private final List<String> defaultExceptions = Arrays.asList("MLK", "BART");
+    private final List<String> defaultExceptions = getConfigPropertyAsText("DEFAULT_CAPITALIZATION_EXCEPTIONS");
     public String fieldName;
     public NormalizeOperation normalizeOperation;
     public List<String> exceptions = defaultExceptions;
+    public List<String> replacementPairs = Arrays.asList("@,at", "+,and");
+    public List<String> removalBounds = Arrays.asList("()", "[]");
     public static NormalizeFieldTransformation create(String table, String fieldName, List<String> exceptions) {
         NormalizeFieldTransformation transformation = new NormalizeFieldTransformation();
         transformation.fieldName = fieldName;
@@ -70,6 +74,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             while (csvReader.readRecord()) {
                 String value = csvReader.get(transformFieldIndex);
                 value = convertToTitleCase(value);
+                // TODO: Run replacement pairs transformation
             }
             // Set transform type according to whether target file exists.
             TransformType type = Files.exists(targetTxtFilePath)
