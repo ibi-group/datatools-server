@@ -377,7 +377,7 @@ public class FeedVersion extends Model implements Serializable {
 
     /**
      * Does this feed have any validation or load errors?
-     * @return whether feed version has any validationi or load errors
+     * @return whether feed version has any validation or load errors
      */
     private boolean hasValidationAndLoadErrors() {
         if (validationResult == null)

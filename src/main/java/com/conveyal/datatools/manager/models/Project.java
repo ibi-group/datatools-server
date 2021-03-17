@@ -1,13 +1,13 @@
 package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.manager.persistence.Persistence;
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
+import java.util.Date;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -38,6 +38,9 @@ public class Project extends Model {
     public OtpRouterConfig routerConfig;
 
     public String organizationId;
+
+    /** Last successful auto deploy. **/
+    public Date lastAutoDeploy;
 
     /**
      * A list of servers that are available to deploy project feeds/OSM to. This includes servers assigned to this
