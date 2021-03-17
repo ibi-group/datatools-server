@@ -81,55 +81,78 @@ public class DeployJobTest extends UnitTest {
     }
 
     /**
-     * Tests that the user data for a graph build + run server instance can be generated properly
+     * Tests that the otp-runner manifest and user data for a graph build + run server instance can be generated
+     * properly
      */
     @Test
-    public void canMakeGraphBuildUserDataScript () {
+    public void canMakeGraphBuildAndServeManifestAndUserData () {
         DeployJob deployJob = new DeployJob(
+            "Test deploy OTP 1 with build and server",
             deployment,
             Auth0UserProfile.createTestAdminUser(),
             server,
             "test-deploy",
-            DeployJob.DeployType.REPLACE
+            DeployJob.DeployType.REPLACE,
+            true
         );
-        assertThat(
-            replaceNonce(
-                deployJob.constructManifestAndUserData(false, true),
-                "canMakeGraphBuildUserDataScript"
-            ),
-            matchesSnapshot()
-        );
+        OtpRunnerManifest buildAndServeManifest = deployJob.createAndUploadManifestAndConfigs(false);
+        buildAndServeManifest.nonce = "canMakeGraphBuildUserDataScript";
+        assertThat(buildAndServeManifest, matchesSnapshot());
+        assertThat(deployJob.constructUserData(false), matchesSnapshot());
     }
 
     /**
-     * Tests that the user data for a run server only instance can be generated properly
+     * Tests that the otp-runner manifest and user data for a graph build + run server instance can be generated
+     * properly
      */
     @Test
-    public void canMakeServerOnlyUserDataScript () {
+    public void canMakeOtp2GraphBuildAndServeManifestAndUserData () {
+        Deployment otp2Deployment = new Deployment();
+        // the feedVersionIds variable does not get set during tests resulting in a null pointer exception. Set the
+        // feedVersionIds to an empty list to avoid this. It is enough to run the tests of the user data generation with
+        // an empty list of feed versions, so it is fine that it is empty.
+        otp2Deployment.feedVersionIds = new ArrayList<>();
+        otp2Deployment.projectId = project.id;
+        otp2Deployment.name = "Test OTP 2 Deployment";
+        otp2Deployment.otpVersion = "otp-latest-trimet-dev";
+        // add in custom build and router config with problematic characters to make sure they are properly escaped
+        otp2Deployment.customRouterConfig = "{ \"hi\": \"th\ne'r\te\" }";
+        otp2Deployment.customBuildConfig = "{ \"hello\": \"th\ne'r\te\" }";
+        otp2Deployment.tripPlannerVersion = Deployment.TripPlannerVersion.OTP_2;
+        Persistence.deployments.create(otp2Deployment);
         DeployJob deployJob = new DeployJob(
+            "Test deploy OTP 2 with build and server",
+            otp2Deployment,
+            Auth0UserProfile.createTestAdminUser(),
+            server,
+            "test-deploy",
+            DeployJob.DeployType.REPLACE,
+            true
+        );
+        OtpRunnerManifest buildAndServeManifest = deployJob.createAndUploadManifestAndConfigs(false);
+        buildAndServeManifest.nonce = "canMakeOtp2GraphBuildUserDataScript";
+        assertThat(buildAndServeManifest, matchesSnapshot());
+        assertThat(deployJob.constructUserData(false), matchesSnapshot());
+    }
+
+    /**
+     * Tests that the otp-runner manifest and user data for a run server only instance can be generated properly
+     */
+    @Test
+    public void canMakeServerOnlyManifestAndUserData () {
+        DeployJob deployJob = new DeployJob(
+            "Test deploy OTP 1 with server only",
             deployment,
             Auth0UserProfile.createTestAdminUser(),
             server,
             "test-deploy",
-            DeployJob.DeployType.REPLACE
+            DeployJob.DeployType.REPLACE,
+            true
         );
-        assertThat(
-            replaceNonce(
-                deployJob.constructManifestAndUserData(true, true),
-                "canMakeServerOnlyUserDataScript"
-            ),
-            matchesSnapshot()
-        );
-    }
-
-    /**
-     * Replaces the nonce in the user data with a deterministic value
-     */
-    private String replaceNonce(String userData, String replacementNonce) {
-        return userData.replaceFirst(
-            "nonce\":\"[\\w-]*",
-            String.format("nonce\":\"%s", replacementNonce)
-        );
+        OtpRunnerManifest serverOnlyManifest = deployJob.createAndUploadManifestAndConfigs(true);
+        serverOnlyManifest.nonce = "canMakeServerOnlyUserDataScript";
+        assertThat(serverOnlyManifest, matchesSnapshot());
+        assertThat(deployJob.constructUserData(true), matchesSnapshot());
     }
 
     /**

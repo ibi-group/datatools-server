@@ -1,0 +1,23 @@
+{
+  "baseFolder" : "/var/otp/graphs",
+  "baseFolderDownloads" : [ {
+    "uri" : "s3://datatools-dev/test-deploy/router-config.json"
+  } ],
+  "buildGraph" : false,
+  "graphObjUri" : "s3://datatools-dev/test-deploy/Graph.obj",
+  "jarFile" : "/opt/otp/otp-latest-trimet-dev",
+  "jarUri" : "https://opentripplanner-builds.s3.amazonaws.com/otp-latest-trimet-dev.jar",
+  "nonce" : "canMakeServerOnlyUserDataScript",
+  "otpRunnerLogFile" : "/var/log/otp-runner.log",
+  "otpVersion" : "1.x",
+  "prefixLogUploadsWithInstanceId" : true,
+  "runServer" : true,
+  "s3UploadPath" : "s3://datatools-dev/test-deploy",
+  "serverStartupTimeoutSeconds" : 3300,
+  "statusFileLocation" : "/usr/share/nginx/client/status.json",
+  "uploadGraph" : false,
+  "uploadGraphBuildLogs" : false,
+  "uploadGraphBuildReport" : false,
+  "uploadOtpRunnerLogs" : true,
+  "uploadServerStartupLogs" : true
+}
