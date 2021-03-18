@@ -28,12 +28,17 @@ public class NormalizeFieldTransformationTest {
     // FIXME[JUnit5]: Convert to parametrized test
     public void testPerformReplacements() {
         String[][] cases = new String[][] {
+            // Replace "@"
             new String[] {"12TH@WEST", "12TH at WEST"},
             new String[] {"12TH  @   WEST", "12TH at WEST"},
+            // Replace "+"
             new String[] {"12TH+WEST", "12TH and WEST"},
             new String[] {"12TH  +   WEST", "12TH and WEST"},
+            // Replace "&"
             new String[] {"12TH&WEST", "12TH and WEST"},
-            new String[] {"12TH  &   WEST", "12TH and WEST"}
+            new String[] {"12TH  &   WEST", "12TH and WEST"},
+            // Replace contents in parentheses and surrounding whitespace.
+            new String[] {"14th St & Broadway (12th St BART) ", "14th St and Broadway"}
         };
 
         for (String[] c : cases) {

@@ -29,11 +29,14 @@ public class NormalizeFieldTransformation extends ZipTransformation {
     public String fieldName;
     public NormalizeOperation normalizeOperation;
     //public List<String> exceptions = defaultExceptions;
-    public List<String> removalBounds = Arrays.asList("()", "[]");
 
     public static final List<ReplacementPair> REPLACEMENT_PAIRS = Arrays.asList(
+        // "+", "&" => "and"
         new ReplacementPair("[\\+&]", "and", true),
-        new ReplacementPair("@", "at", true)
+        // "@" => "at"
+        new ReplacementPair("@", "at", true),
+        // Contents in parentheses (and surrounding whitespace) is removed.
+        new ReplacementPair("\\s*\\(.+\\)\\s*", "")
     );
 
     public static NormalizeFieldTransformation create(String table, String fieldName, List<String> exceptions) {
@@ -136,8 +139,9 @@ public class NormalizeFieldTransformation extends ZipTransformation {
 
             if (normalizeSpace) {
                 // If normalizeSpace is set, reduce spaces before and after the regex to one space,
-                // or insert one space before and after if there is none.
-                // TODO: If the replacement is blank, make the entire replacement string to one space.
+                // or insert one space before and one space after if there is none.
+                // Note: if the replacement must be blank, then normalizeSpace should be set to false
+                // and whitespace management should be handled in the regex instead.
                 this.pattern = Pattern.compile(String.format("\\s*%s\\s*", regex));
                 this.replacement = String.format(" %s ", replacement);
             } else {
