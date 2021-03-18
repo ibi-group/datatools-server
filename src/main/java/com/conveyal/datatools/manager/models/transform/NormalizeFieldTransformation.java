@@ -17,6 +17,7 @@ import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import java.util.zip.ZipFile;
 
@@ -28,8 +29,13 @@ public class NormalizeFieldTransformation extends ZipTransformation {
     public String fieldName;
     public NormalizeOperation normalizeOperation;
     //public List<String> exceptions = defaultExceptions;
-    public List<String> replacementPairs = Arrays.asList("@,at", "+,and");
     public List<String> removalBounds = Arrays.asList("()", "[]");
+
+    public static final List<ReplacementPair> REPLACEMENT_PAIRS = Arrays.asList(
+        new ReplacementPair("[\\+&]", "and", true),
+        new ReplacementPair("@", "at", true)
+    );
+
     public static NormalizeFieldTransformation create(String table, String fieldName, List<String> exceptions) {
         NormalizeFieldTransformation transformation = new NormalizeFieldTransformation();
         transformation.fieldName = fieldName;
@@ -90,15 +96,59 @@ public class NormalizeFieldTransformation extends ZipTransformation {
      * (without spaces) names that we need to capitalize.
      */
     public static String convertToTitleCase(String inputString) {
+        // Return at least a blank string.
         if (StringUtils.isBlank(inputString)) {
             return "";
         }
 
-        final char[] separators = new char[] {' ', '/', '-', '+', '&', '@'};
-        return WordUtils.capitalizeFully(inputString, separators);
+        final char[] SEPARATORS = new char[] {' ', '/', '-', '+', '&', '@'};
+        return WordUtils.capitalizeFully(inputString, SEPARATORS);
     }
+
+    /**
+     * Replaces preset strings with replacements defined in REPLACEMENT_PAIRS,
+     * and returns the result.
+     */
+    public static String performReplacements(String inputString) {
+        String result = inputString;
+        for (ReplacementPair pair : REPLACEMENT_PAIRS) {
+            result = pair.replace(result);
+        }
+        return result;
+    }
+
 
     public enum NormalizeOperation {
         SENTENCE_CASE, TITLE_CASE
+    }
+
+    private static class ReplacementPair {
+        public String regex;
+        public String replacement;
+        public Pattern pattern;
+
+        public ReplacementPair(String regex, String replacement) {
+            this(regex, replacement, false);
+        }
+
+        public ReplacementPair(String regex, String replacement, boolean normalizeSpace) {
+            this.regex = regex;
+
+            if (normalizeSpace) {
+                // If normalizeSpace is set, reduce spaces before and after the regex to one space,
+                // or insert one space before and after if there is none.
+                // TODO: If the replacement is blank, make the entire replacement string to one space.
+                this.pattern = Pattern.compile(String.format("\\s*%s\\s*", regex));
+                this.replacement = String.format(" %s ", replacement);
+            } else {
+                this.pattern = Pattern.compile(regex);
+                this.replacement = replacement;
+            }
+        }
+
+        public String replace(String input) {
+            // TODO: Study appendReplacement
+            return pattern.matcher(input).replaceAll(replacement);
+        }
     }
 }
