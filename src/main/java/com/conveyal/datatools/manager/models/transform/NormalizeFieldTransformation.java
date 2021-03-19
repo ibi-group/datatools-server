@@ -9,11 +9,15 @@ import com.csvreader.CsvReader;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.text.WordUtils;
 
+import java.io.ByteArrayInputStream;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -58,6 +62,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
         NormalizeFieldTransformation transformation = new NormalizeFieldTransformation();
         transformation.fieldName = fieldName;
         transformation.table = table;
+        // TODO: Add per-request exceptions below.
         // Ensure capitalization exceptions are set to uppercase
         //if (exceptions != null) transformation.exceptions = exceptions.stream()
         //    .map(String::toUpperCase)
@@ -91,17 +96,33 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             CsvReader csvReader = gtfsTable.getCsvReader(new ZipFile(zipTarget.gtfsFile), null);
             Field[] fieldsFoundInZip = gtfsTable.getFieldsFromFieldHeaders(csvReader.getHeaders(), null);
             int transformFieldIndex = getFieldIndex(fieldsFoundInZip, fieldName);
+
+            // Output CSV, including headers.
+            StringBuffer processedTableData = new StringBuffer();
+            processedTableData.append(String.join(",", csvReader.getHeaders()));
+            processedTableData.append("\n");
+
             while (csvReader.readRecord()) {
-                String value = csvReader.get(transformFieldIndex);
-                value = convertToTitleCase(value);
-                // TODO: Run replacement pairs transformation
+                String transformedValue = csvReader.get(transformFieldIndex);
+                // Convert to title case
+                // TODO: make this by request.
+                transformedValue = convertToTitleCase(transformedValue);
+
+                // Run replacement pairs transformation
+                // TODO: Make this by request.
+                transformedValue = performReplacements(transformedValue);
+
+                // Re-assemble the CSV line and place in buffer.
+                String[] csvValues = csvReader.getValues();
+                csvValues[transformFieldIndex] = transformedValue;
+                processedTableData.append(String.join(",", csvValues));
+                processedTableData.append("\n");
             }
-            // Set transform type according to whether target file exists.
-            TransformType type = Files.exists(targetTxtFilePath)
-                    ? TransformType.TABLE_REPLACED
-                    : TransformType.TABLE_ADDED;
-            // Copy csv input stream into the zip file, replacing it if it already exists.
-            //Files.copy(inputStream, targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
+
+            TransformType type = TransformType.TABLE_MODIFIED;
+            // Copy csv input stream into the zip file, replacing the existing file.
+            InputStream inputStream =  new ByteArrayInputStream(processedTableData.toString().getBytes(StandardCharsets.UTF_8));
+            Files.copy(inputStream, targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
             target.feedTransformResult.tableTransformResults.add(new TableTransformResult(tableName, type));
         } catch (Exception e) {
             status.fail("Unknown error encountered while transforming zip file", e);
