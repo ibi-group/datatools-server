@@ -5,8 +5,8 @@ import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.DataManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 
@@ -18,7 +18,7 @@ public class AppInfoControllerTest extends UnitTest {
     /**
      * Prepare and start a testing-specific web server
      */
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         // start server if it isn't already running
         DatatoolsTest.setUp();

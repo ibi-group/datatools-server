@@ -3,9 +3,8 @@ package com.conveyal.datatools.manager.persistence;
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.models.FeedVersion;
-import org.junit.Assert;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -14,11 +13,12 @@ import java.io.FileInputStream;
 import java.io.IOException;
 
 import static com.conveyal.datatools.TestUtils.getGtfsResourcePath;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class FeedStoreTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(FeedStoreTest.class);
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         DatatoolsTest.setUp();
         LOG.info("{} setup", FeedStoreTest.class.getSimpleName());
@@ -34,6 +34,6 @@ public class FeedStoreTest extends UnitTest {
         FileInputStream fileInputStream = new FileInputStream(gtfsFile);
         File tempFile = FeedVersion.feedStore.createTempFile(gtfsFileName, fileInputStream);
         LOG.info("Feed store wrote temp file to: {}", tempFile.getAbsolutePath());
-        Assert.assertEquals(tempFile.getName(), gtfsFileName);
+        assertEquals(tempFile.getName(), gtfsFileName);
     }
 }
