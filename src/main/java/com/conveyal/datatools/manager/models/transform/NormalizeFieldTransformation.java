@@ -18,26 +18,41 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
-import java.util.stream.Stream;
+import java.util.stream.Collectors;
 import java.util.zip.ZipFile;
 
 import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
 import static com.conveyal.gtfs.loader.Field.getFieldIndex;
 
 public class NormalizeFieldTransformation extends ZipTransformation {
-    //private final List<String> defaultExceptions = getConfigPropertyAsText("DEFAULT_CAPITALIZATION_EXCEPTIONS");
-    public String fieldName;
-    public NormalizeOperation normalizeOperation;
     //public List<String> exceptions = defaultExceptions;
+    public NormalizeOperation normalizeOperation;
+    public String fieldName;
 
+    private static final List<String> defaultExceptions;
+    public static final List<ReplacementPair> CAPITALIZE_EXCEPTION_PAIRS;
     public static final List<ReplacementPair> REPLACEMENT_PAIRS = Arrays.asList(
         // "+", "&" => "and"
         new ReplacementPair("[\\+&]", "and", true),
         // "@" => "at"
         new ReplacementPair("@", "at", true),
-        // Contents in parentheses (and surrounding whitespace) is removed.
-        new ReplacementPair("\\s*\\(.+\\)\\s*", "")
+        // Contents between () and []  (and surrounding whitespace) is removed.
+        new ReplacementPair("\\s*\\(.+\\)\\s*", ""),
+        new ReplacementPair("\\s*\\[.+\\]\\s*", "")
     );
+
+    static {
+        String defaultExceptionsConfig = getConfigPropertyAsText("DEFAULT_CAPITALIZATION_EXCEPTIONS");
+        if (defaultExceptionsConfig != null) {
+            defaultExceptions = Arrays.asList(defaultExceptionsConfig.split("\\s*,\\s*"));
+            CAPITALIZE_EXCEPTION_PAIRS = defaultExceptions.stream()
+                .map(ReplacementPair::makeCapitalizeExceptionPair)
+                .collect(Collectors.toList());
+        } else {
+            defaultExceptions = new ArrayList<>();
+            CAPITALIZE_EXCEPTION_PAIRS = new ArrayList<>();
+        }
+    }
 
     public static NormalizeFieldTransformation create(String table, String fieldName, List<String> exceptions) {
         NormalizeFieldTransformation transformation = new NormalizeFieldTransformation();
@@ -105,7 +120,14 @@ public class NormalizeFieldTransformation extends ZipTransformation {
         }
 
         final char[] SEPARATORS = new char[] {' ', '/', '-', '+', '&', '@'};
-        return WordUtils.capitalizeFully(inputString, SEPARATORS);
+        String result = WordUtils.capitalizeFully(inputString, SEPARATORS);
+
+        // Exceptions (e.g. acronyms) should remain capitalized.
+        for (ReplacementPair pair : CAPITALIZE_EXCEPTION_PAIRS) {
+            result = pair.replace(result);
+        }
+
+        return result;
     }
 
     /**
@@ -125,6 +147,9 @@ public class NormalizeFieldTransformation extends ZipTransformation {
         SENTENCE_CASE, TITLE_CASE
     }
 
+    /**
+     * This class holds the regex/replacement pair, and the cached compiled regex pattern.
+     */
     private static class ReplacementPair {
         public String regex;
         public String replacement;
@@ -150,9 +175,24 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             }
         }
 
+        /**
+         * Perform the replacement of regex in the provided string, and return the result.
+         */
         public String replace(String input) {
             // TODO: Study appendReplacement
             return pattern.matcher(input).replaceAll(replacement);
+        }
+
+        /**
+         * Generates a replacement pair for the provided capitalization exception word
+         * (used in getTitleCase) by creating a regex with word boundaries (\b)
+         * that surround the capitalized expression to be reverted.
+         */
+        public static ReplacementPair makeCapitalizeExceptionPair(String exceptionWord) {
+            return new ReplacementPair(
+                String.format("\\b%s\\b", WordUtils.capitalizeFully(exceptionWord)),
+                exceptionWord
+            );
         }
     }
 }

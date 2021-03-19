@@ -1,10 +1,21 @@
 package com.conveyal.datatools.manager.models.transform;
 
-import org.junit.Test;
+import com.conveyal.datatools.DatatoolsTest;
+import com.conveyal.datatools.UnitTest;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 
-import static org.junit.Assert.assertEquals;
+import java.io.IOException;
 
-public class NormalizeFieldTransformationTest {
+import static org.junit.jupiter.api.Assertions.assertEquals;
+
+public class NormalizeFieldTransformationTest extends UnitTest {
+    @BeforeAll
+    public static void setUp() throws IOException {
+        // start server if it isn't already running
+        DatatoolsTest.setUp();
+    }
+
     @Test
     // FIXME[JUnit5]: Convert to parametrized test
     public void testConvertToTitleCase() {
@@ -14,7 +25,10 @@ public class NormalizeFieldTransformationTest {
             new String[] {"12TH@WEST", "12th@West"},
             new String[] {"12TH+WEST", "12th+West"},
             new String[] {"12TH&WEST", "12th&West"},
-            new String[] {"904 OCEANA BLVD-GOOD SHEPHERD SCHOOL", "904 Oceana Blvd-Good Shepherd School"}
+            new String[] {"904 OCEANA BLVD-GOOD SHEPHERD SCHOOL", "904 Oceana Blvd-Good Shepherd School"},
+            // Capitalization exceptions (found on MTC Livermore Route 1)
+            new String[] {"EAST DUBLIN BART STATION", "East Dublin BART Station"},
+            new String[] {"DUBLIN & ARNOLD EB", "Dublin & Arnold EB"}
         };
 
         for (String[] c : cases) {
