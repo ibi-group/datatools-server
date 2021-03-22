@@ -255,6 +255,13 @@
             <version>5.7.0</version>
             <scope>test</scope>
         </dependency>
+        <!-- Provides JUnit 5.x parametrized tests -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-params</artifactId>
+            <version>5.5.2</version>
+            <scope>test</scope>
+        </dependency>
 
         <!-- Used for loading/fetching/validating/writing GTFS entities. gtfs-lib also provides access to:
          - commons-io - generic utilities
@@ -435,7 +442,6 @@
             <artifactId>aws-java-sdk-sts</artifactId>
             <version>${awsjavasdk.version}</version>
         </dependency>
-
     </dependencies>
 
 </project>

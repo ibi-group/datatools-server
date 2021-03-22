@@ -110,7 +110,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
 
                 // Run replacement pairs transformation
                 // TODO: Make this by request.
-                transformedValue = performReplacements(transformedValue);
+                transformedValue = performSubstitutions(transformedValue);
 
                 // Re-assemble the CSV line and place in buffer.
                 String[] csvValues = csvReader.getValues();
@@ -155,7 +155,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
      * Replaces preset strings with replacements defined in REPLACEMENT_PAIRS,
      * and returns the result.
      */
-    public static String performReplacements(String inputString) {
+    public static String performSubstitutions(String inputString) {
         String result = inputString;
         for (ReplacementPair pair : REPLACEMENT_PAIRS) {
             result = pair.replace(result);
