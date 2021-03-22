@@ -14,8 +14,8 @@ import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import spark.utils.IOUtils;
@@ -23,7 +23,6 @@ import spark.utils.IOUtils;
 import java.io.IOException;
 import java.util.Date;
 
-import static com.conveyal.datatools.TestUtils.createFeedVersion;
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static com.conveyal.datatools.manager.auth.Auth0Users.USERS_API_PATH;
 import static com.conveyal.datatools.manager.controllers.api.UserController.TEST_AUTH0_DOMAIN;
@@ -41,7 +40,7 @@ public class EditorControllerTest extends UnitTest {
     /**
      * Prepare and start a testing-specific web server
      */
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         long startTime = System.currentTimeMillis();
         // start server if it isn't already running

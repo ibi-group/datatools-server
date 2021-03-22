@@ -4,13 +4,13 @@ import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Project;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 /**
  * Created by landon on 9/6/17.
@@ -20,7 +20,7 @@ public class PersistenceTest extends UnitTest {
     private static FeedSource feedSource;
     private static Project project;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws Exception {
         DatatoolsTest.setUp();
         LOG.info("{} setup", PersistenceTest.class.getSimpleName());
@@ -28,7 +28,7 @@ public class PersistenceTest extends UnitTest {
         Persistence.initialize();
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() {
         if (feedSource != null) Persistence.feedSources.removeById(feedSource.id);
         if (project != null) Persistence.projects.removeById(project.id);
@@ -41,7 +41,10 @@ public class PersistenceTest extends UnitTest {
         Persistence.feedSources.create(feedSource);
         FeedSource feedSourceFromDB = Persistence.feedSources.getById(id);
         assertEquals(feedSource.fetchFrequency, feedSourceFromDB.fetchFrequency);
-        assertEquals("Found FeedSource ID should equal inserted ID.", id, feedSourceFromDB.id);
+        assertEquals(
+            id,
+            feedSourceFromDB.id,
+            "Found FeedSource ID should equal inserted ID.");
     }
 
 //    @Test
@@ -70,7 +73,10 @@ public class PersistenceTest extends UnitTest {
         String id = project.id;
         Persistence.projects.create(project);
         String retrievedId = Persistence.projects.getById(id).id;
-        assertEquals("Found Project ID should equal inserted ID.", id, retrievedId);
+        assertEquals(
+            id,
+            retrievedId,
+            "Found Project ID should equal inserted ID.");
     }
 //
 //    @Test

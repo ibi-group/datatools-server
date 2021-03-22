@@ -5,21 +5,21 @@ import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
+import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.models.Snapshot;
 import com.conveyal.datatools.manager.models.transform.DeleteRecordsTransformation;
 import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
 import com.conveyal.datatools.manager.models.transform.FeedTransformation;
-import com.conveyal.datatools.manager.models.FeedVersion;
-import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.models.transform.ReplaceFileFromStringTransformation;
 import com.conveyal.datatools.manager.models.transform.ReplaceFileFromVersionTransformation;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import org.hamcrest.Matchers;
-import org.junit.After;
-import org.junit.AfterClass;
-import org.junit.Before;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -37,8 +37,9 @@ import static com.conveyal.datatools.TestUtils.createFeedVersion;
 import static com.conveyal.datatools.TestUtils.zipFolderFiles;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.MANUALLY_UPLOADED;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.VERSION_CLONE;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertThat;
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 public class ArbitraryTransformJobTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(ArbitraryTransformJob.class);
@@ -51,7 +52,7 @@ public class ArbitraryTransformJobTest extends UnitTest {
     /**
      * Initialize Data Tools and set up a simple feed source and project.
      */
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
@@ -69,7 +70,7 @@ public class ArbitraryTransformJobTest extends UnitTest {
     /**
      * Clean up test database after tests finish.
      */
-    @AfterClass
+    @AfterAll
     public static void tearDown() {
         // Project delete cascades to feed sources.
         project.delete();
@@ -78,7 +79,7 @@ public class ArbitraryTransformJobTest extends UnitTest {
     /**
      * Run set up before each test. This just resets the feed source transformation properties.
      */
-    @Before
+    @BeforeEach
     public void setUpTest() {
         feedSource = Persistence.feedSources.getById(feedSource.id);
         feedSource.transformRules = new ArrayList<>();
@@ -88,7 +89,7 @@ public class ArbitraryTransformJobTest extends UnitTest {
     /**
      * Run tear down after each test. This just deletes the feed versions that were used in the test.
      */
-    @After
+    @AfterEach
     public void tearDownTest() {
         // Clean up
         if (sourceVersion != null) sourceVersion.delete();
@@ -120,7 +121,7 @@ public class ArbitraryTransformJobTest extends UnitTest {
         // Check that new version has stop_attributes file
         ZipFile zip = new ZipFile(targetVersion.retrieveGtfsFile());
         ZipEntry entry = zip.getEntry(table + ".txt");
-        assertThat(entry, Matchers.notNullValue());
+        assertNotNull(entry);
         // TODO Verify that stop_attributes file matches source file exactly?
     }
 
@@ -152,9 +153,9 @@ public class ArbitraryTransformJobTest extends UnitTest {
         // Grab the modified version and check that the trips count matches expectation.
         FeedVersion newVersion = feedSource.retrieveLatest();
         assertEquals(
-            "trips count for transformed feed should be decreased by the # of records matched by the query",
             sourceVersion.feedLoadResult.trips.rowCount - numberOfTripsForRoutes,
-            newVersion.feedLoadResult.trips.rowCount
+            newVersion.feedLoadResult.trips.rowCount,
+            "trips count for transformed feed should be decreased by the # of records matched by the query"
         );
     }
 
@@ -178,19 +179,19 @@ public class ArbitraryTransformJobTest extends UnitTest {
         targetVersion = feedSource.retrieveLatest();
         LOG.info("Checking canCloneZipFileAndTransform assertions.");
         assertEquals(
-            "Cloned version number should increment by one over original version.",
             sourceVersion.version + 1,
-            targetVersion.version
+            targetVersion.version,
+            "Cloned version number should increment by one over original version."
         );
         assertEquals(
-            "Cloned version retrieval method should be VERSION_CLONE",
             targetVersion.retrievalMethod,
-            VERSION_CLONE
+            VERSION_CLONE,
+            "Cloned version retrieval method should be VERSION_CLONE"
         );
         assertEquals(
-            "feed_info.txt row count should equal input csv data # of rows",
             2, // Magic number should match row count in string produced by generateFeedInfo
-            targetVersion.feedLoadResult.feedInfo.rowCount
+            targetVersion.feedLoadResult.feedInfo.rowCount,
+            "feed_info.txt row count should equal input csv data # of rows"
         );
         // Check for presence of new feedId in database (one record).
         assertThatSqlCountQueryYieldsExpectedCount(
@@ -244,9 +245,9 @@ public class ArbitraryTransformJobTest extends UnitTest {
         );
         LOG.info("Checking assertions.");
         assertEquals(
-            "feed_info.txt row count should equal input csv data # of rows",
             2, // Magic number should match row count in string produced by generateFeedInfo
-            targetVersion.feedLoadResult.feedInfo.rowCount
+            targetVersion.feedLoadResult.feedInfo.rowCount,
+            "feed_info.txt row count should equal input csv data # of rows"
         );
         // Check for presence of new feedId in database (one record).
         assertThatSqlCountQueryYieldsExpectedCount(

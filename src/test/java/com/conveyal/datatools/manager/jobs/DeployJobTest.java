@@ -12,9 +12,9 @@ import com.conveyal.datatools.manager.models.EC2Info;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,8 +26,8 @@ import java.util.List;
 import static com.conveyal.datatools.TestUtils.getBooleanEnvVar;
 import static com.zenika.snapshotmatcher.SnapshotMatcher.matchesSnapshot;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assume.assumeTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
  * This test suite contains various unit and integration tests to make sure the a DeployJob works properly. The unit
@@ -45,7 +45,7 @@ public class DeployJobTest extends UnitTest {
     /**
      * Add project, server, and deployment to prepare for tests.
      */
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
@@ -167,7 +167,7 @@ public class DeployJobTest extends UnitTest {
         DeployJob deployJob = new DeployJob(deployment, Auth0UserProfile.createTestAdminUser(), server, "test-deploy", DeployJob.DeployType.USE_PRELOADED_BUNDLE);
         deployJob.run();
         // FIXME: Deployment will succeed even if one of the clone servers does not start up properly.
-        assertFalse("Deployment did not fail.", deployJob.status.error);
+        assertFalse(deployJob.status.error, "Deployment did not fail.");
     }
 
     /**
@@ -182,7 +182,7 @@ public class DeployJobTest extends UnitTest {
         DeployJob deployJob = new DeployJob(deployment, Auth0UserProfile.createTestAdminUser(), server, "deploy-test", DeployJob.DeployType.USE_PREBUILT_GRAPH);
         deployJob.run();
         // FIXME: Deployment will succeed even if one of the clone servers does not start up properly.
-        assertFalse("Deployment did not fail.", deployJob.status.error);
+        assertFalse(deployJob.status.error, "Deployment did not fail.");
     }
 
     /**
@@ -191,7 +191,7 @@ public class DeployJobTest extends UnitTest {
      * Note: this requires changing server.yml#modules.deployment.ec2.enabled to true and also that the
      * RUN_AWS_DEPLOY_JOB_TESTS environment variable is set to "true"
      */
-    @AfterClass
+    @AfterAll
     public static void cleanUp() throws AmazonServiceException, CheckedAWSException {
         assumeTrue(getBooleanEnvVar("RUN_AWS_DEPLOY_JOB_TESTS"));
         List<Instance> instances = server.retrieveEC2Instances();

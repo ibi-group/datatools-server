@@ -7,8 +7,8 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -28,7 +28,7 @@ public class GtfsPlusValidationTest extends UnitTest {
     /**
      * Create feed version for GTFS+ validation test.
      */
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
