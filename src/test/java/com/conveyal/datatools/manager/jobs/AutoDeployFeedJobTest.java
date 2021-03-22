@@ -14,9 +14,9 @@ import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.google.common.collect.Sets;
-import org.junit.AfterClass;
-import org.junit.BeforeClass;
-import org.junit.Test;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -26,8 +26,8 @@ import java.util.Date;
 import java.util.Set;
 
 import static com.conveyal.datatools.TestUtils.getFeedVersionFromGTFSFile;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 public class AutoDeployFeedJobTest extends DatatoolsTest {
     private static final Logger LOG = LoggerFactory.getLogger(AutoDeployFeedJobTest.class);
@@ -49,7 +49,7 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
     private static FeedSource fetchStillInProgress_mockFeedSource;
     private static FeedVersion fetchStillInProgress_feedVersion;
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws IOException {
         DatatoolsTest.setUp();
         Auth0Connection.setAuthDisabled(true);
@@ -81,7 +81,7 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
         Persistence.feedVersions.create(fetchStillInProgress_feedVersion);
     }
 
-    @AfterClass
+    @AfterAll
     public static void tearDown() {
         Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
         server.delete();
