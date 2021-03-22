@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.models.transform;
 
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
+import com.google.common.collect.Lists;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -22,7 +23,9 @@ public class NormalizeFieldTransformationTest extends UnitTest {
     @ParameterizedTest
     @MethodSource("createCapitalizationCases")
     public void testConvertToTitleCase(String input, String expected) {
-        assertEquals(expected, NormalizeFieldTransformation.convertToTitleCase(input));
+        NormalizeFieldTransformation transform = NormalizeFieldTransformation.create(
+            "table", "field", null);
+        assertEquals(expected, transform.convertToTitleCase(input));
     }
 
     private static Stream<Arguments> createCapitalizationCases() {
@@ -33,9 +36,25 @@ public class NormalizeFieldTransformationTest extends UnitTest {
             Arguments.of("12TH+WEST", "12th+West"),
             Arguments.of("12TH&WEST", "12th&West"),
             Arguments.of("904 OCEANA BLVD-GOOD SHEPHERD SCHOOL", "904 Oceana Blvd-Good Shepherd School"),
-            // Capitalization exceptions (found on MTC Livermore Route 1)
+            // Capitalization exceptions from config (found on MTC Livermore Route 1)
             Arguments.of("EAST DUBLIN BART STATION", "East Dublin BART Station"),
             Arguments.of("DUBLIN & ARNOLD EB", "Dublin & Arnold EB")
+        );
+    }
+
+    @ParameterizedTest
+    @MethodSource("createCapitalizationCasesWithOwnExceptions")
+    public void testConvertToTitleCaseWithOwnExceptions(String input, String expected) {
+        NormalizeFieldTransformation transform = NormalizeFieldTransformation.create(
+            "table", "field", Lists.newArrayList("NE", "SW"));
+        assertEquals(expected, transform.convertToTitleCase(input));
+    }
+
+    private static Stream<Arguments> createCapitalizationCasesWithOwnExceptions() {
+        return Stream.of(
+            // Capitalization exceptions from instance (quadrant street names)
+            Arguments.of("10TH STREET NE", "10th Street NE"),
+            Arguments.of("10TH STREET SW", "10th Street SW")
         );
     }
 

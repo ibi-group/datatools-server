@@ -29,12 +29,7 @@ import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText
 import static com.conveyal.gtfs.loader.Field.getFieldIndex;
 
 public class NormalizeFieldTransformation extends ZipTransformation {
-    //public List<String> exceptions = defaultExceptions;
-    public NormalizeOperation normalizeOperation;
-    public String fieldName;
-
     private static final List<String> defaultExceptions;
-    public static final List<ReplacementPair> CAPITALIZE_EXCEPTION_PAIRS;
     public static final List<ReplacementPair> REPLACEMENT_PAIRS = Arrays.asList(
         // "+", "&" => "and"
         new ReplacementPair("[\\+&]", "and", true),
@@ -45,16 +40,25 @@ public class NormalizeFieldTransformation extends ZipTransformation {
         new ReplacementPair("\\s*\\[.+\\]\\s*", "")
     );
 
+    // TODO: Add JavaDoc.
+    public String fieldName;
+    public boolean capitalize = true;
+    public boolean performSubstitutions = true;
+    /**
+     * Exceptions are initialized with the default configured ones,
+     * and can be overridden from the UI.
+     */
+    public List<String> capitalizeExceptions = defaultExceptions;
+
+    private List<ReplacementPair> capitalizeExceptionsPairs;
+    public NormalizeOperation normalizeOperation;
+
     static {
         String defaultExceptionsConfig = getConfigPropertyAsText("DEFAULT_CAPITALIZATION_EXCEPTIONS");
         if (defaultExceptionsConfig != null) {
             defaultExceptions = Arrays.asList(defaultExceptionsConfig.split("\\s*,\\s*"));
-            CAPITALIZE_EXCEPTION_PAIRS = defaultExceptions.stream()
-                .map(ReplacementPair::makeCapitalizeExceptionPair)
-                .collect(Collectors.toList());
         } else {
             defaultExceptions = new ArrayList<>();
-            CAPITALIZE_EXCEPTION_PAIRS = new ArrayList<>();
         }
     }
 
@@ -62,12 +66,23 @@ public class NormalizeFieldTransformation extends ZipTransformation {
         NormalizeFieldTransformation transformation = new NormalizeFieldTransformation();
         transformation.fieldName = fieldName;
         transformation.table = table;
-        // TODO: Add per-request exceptions below.
-        // Ensure capitalization exceptions are set to uppercase
-        //if (exceptions != null) transformation.exceptions = exceptions.stream()
-        //    .map(String::toUpperCase)
-        //    .collect(Collectors.toList());
+        // Override configured defaults if exceptions is not null.
+        // (To set up no capitalization exceptions, pass an empty list.)
+        if (exceptions != null) {
+            transformation.capitalizeExceptions = exceptions;
+        }
+        transformation.initializeExceptions();
         return transformation;
+    }
+
+    private void initializeExceptions() {
+        List<String> allExceptions = new ArrayList<>(capitalizeExceptions);
+
+        capitalizeExceptionsPairs = allExceptions.stream()
+            // Ensure capitalization exceptions are set to uppercase.
+            .map(String::toUpperCase)
+            .map(ReplacementPair::makeCapitalizeExceptionPair)
+            .collect(Collectors.toList());
     }
 
     @Override
@@ -90,6 +105,9 @@ public class NormalizeFieldTransformation extends ZipTransformation {
         String tableNamePath = "/" + tableName;
         // Run the replace transformation
         Path targetZipPath = Paths.get(zipTarget.gtfsFile.getAbsolutePath());
+
+        initializeExceptions();
+
         try( FileSystem targetZipFs = FileSystems.newFileSystem(targetZipPath, null) ){
             Path targetTxtFilePath = targetZipFs.getPath(tableNamePath);
             Table gtfsTable = Arrays.stream(Table.tablesInOrder).filter(t -> t.name.equals(table)).findFirst().get();
@@ -104,13 +122,16 @@ public class NormalizeFieldTransformation extends ZipTransformation {
 
             while (csvReader.readRecord()) {
                 String transformedValue = csvReader.get(transformFieldIndex);
-                // Convert to title case
-                // TODO: make this by request.
-                transformedValue = convertToTitleCase(transformedValue);
 
-                // Run replacement pairs transformation
-                // TODO: Make this by request.
-                transformedValue = performSubstitutions(transformedValue);
+                // Convert to title case, if requested.
+                if (capitalize) {
+                    transformedValue = convertToTitleCase(transformedValue);
+                }
+
+                // Run replacement pairs transformation, if requested.
+                if (performSubstitutions) {
+                    transformedValue = performSubstitutions(transformedValue);
+                }
 
                 // Re-assemble the CSV line and place in buffer.
                 String[] csvValues = csvReader.getValues();
@@ -134,7 +155,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
      * accommodating for separator characters that may be immediately precede
      * (without spaces) names that we need to capitalize.
      */
-    public static String convertToTitleCase(String inputString) {
+    public String convertToTitleCase(String inputString) {
         // Return at least a blank string.
         if (StringUtils.isBlank(inputString)) {
             return "";
@@ -144,7 +165,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
         String result = WordUtils.capitalizeFully(inputString, SEPARATORS);
 
         // Exceptions (e.g. acronyms) should remain capitalized.
-        for (ReplacementPair pair : CAPITALIZE_EXCEPTION_PAIRS) {
+        for (ReplacementPair pair : capitalizeExceptionsPairs) {
             result = pair.replace(result);
         }
 
