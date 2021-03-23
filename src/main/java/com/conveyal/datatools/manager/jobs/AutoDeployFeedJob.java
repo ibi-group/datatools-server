@@ -80,9 +80,19 @@ public class AutoDeployFeedJob extends MonitorableJob {
                         feedVersion.dateCreated.after(project.lastAutoDeploy)) &&
                         feedVersion.hasCriticalErrors()) {
                         hasFeedVersionWithCriticalErrors = true;
-                        LOG.debug("Project {} contains feed version {} which has critical errors. Skipping auto deployment.",
+                        FeedSource feedSource = Persistence.feedSources.getById(feedVersion.feedSourceId);
+                        String message = String.format(
+                            "Auto deployment skipped for project `%s`! Feed version `%s` in feed source `%s` contains critical errors!",
+                            project.name,
+                            feedVersion.name,
+                            feedSource.name
+                        );
+                        LOG.warn(message);
+                        NotifyUsersForSubscriptionJob.createNotification(
+                            "project-updated",
                             project.id,
-                            feedVersion.id);
+                            message
+                        );
                         break;
                     } else if ((project.lastAutoDeploy == null ||
                         feedVersion.dateCreated.before(project.lastAutoDeploy)) &&
