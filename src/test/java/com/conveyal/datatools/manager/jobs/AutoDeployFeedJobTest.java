@@ -21,6 +21,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.Set;
@@ -33,21 +34,21 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
     private static final Logger LOG = LoggerFactory.getLogger(AutoDeployFeedJobTest.class);
     private static Auth0UserProfile user;
     private static OtpServer server;
-    private static Deployment deployment;
-    private static Project project;
-    private static FeedSource mockFeedSource;
-    private static FeedVersion feedVersion;
-    private static FeedVersion feedVersionExpireIn2099;
-    private static FeedVersion feedVersionExpireIn2099UnusedRoute;
 
-    // These parameters are used solely by the failAutoDeployIfFetchStillInProgress which fails CI (on GitHub) if unique
-    // parameters are not used.
-    private static OtpServer fetchStillInProgress_server;
-    private static Deployment fetchStillInProgress_deployment;
-    private static Project fetchStillInProgress_project;
-    private static FeedSource fetchStillInProgress_mockFeedSourceFakeJob;
-    private static FeedSource fetchStillInProgress_mockFeedSource;
-    private static FeedVersion fetchStillInProgress_feedVersion;
+    private static Deployment deploymentA;
+    private static Project projectA;
+    private static FeedSource mockFeedSourceA;
+
+    private static Deployment deploymentB;
+    private static Project projectB;
+    private static FeedSource mockFeedSourceB;
+
+    private static Deployment deploymentC;
+    private static Project projectC;
+    private static FeedSource mockFeedSourceC;
+    private static FeedVersion feedVersionC;
+    private static FeedSource mockFeedSourceD;
+    private static Project projectD;
 
     @BeforeAll
     public static void setUp() throws IOException {
@@ -56,122 +57,100 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
         LOG.info("{} setup", AutoDeployFeedJobTest.class.getSimpleName());
         user = Auth0UserProfile.createTestAdminUser();
 
+        // used by multiple tests.
         server = createOtpServer();
         DeployJob.DeploySummary deploySummary = createDeploymentSummary(server.id);
-        project = createProject();
-        deployment = createDeployment(deploySummary, project.id);
-        mockFeedSource = createFeedSource("Mock Feed Source", project.id);
 
-        feedVersion = createFeedVersion(mockFeedSource);
-        feedVersionExpireIn2099 = TestUtils.createFeedVersion(mockFeedSource,
+        projectA = createProject();
+        deploymentA = createDeployment(deploySummary, projectA.id);
+        mockFeedSourceA = createFeedSource("Mock feed source A", projectA.id);
+        TestUtils.createFeedVersion(mockFeedSourceA,
             TestUtils.zipFolderFiles("fake-agency-expire-in-2099"));
-        feedVersionExpireIn2099UnusedRoute = TestUtils.createFeedVersion(mockFeedSource,
-            TestUtils.zipFolderFiles("fake-agency-with-only-calendar-expire-in-2099-with-unused-route"));
 
-        fetchStillInProgress_server = createOtpServer();
-        DeployJob.DeploySummary deploySummaryFetchInProgress = createDeploymentSummary(fetchStillInProgress_server.id);
-        fetchStillInProgress_project = createProject();
-        fetchStillInProgress_deployment = createDeployment(deploySummaryFetchInProgress, fetchStillInProgress_project.id);
-        fetchStillInProgress_mockFeedSourceFakeJob =
-            createFeedSource("Mock Feed Source For Fetch In Progress Fake Job", fetchStillInProgress_project.id);
-        fetchStillInProgress_mockFeedSource =
-            createFeedSource("Mock Feed Source For Fetch In Progress", fetchStillInProgress_project.id);
-        fetchStillInProgress_feedVersion = getFeedVersionFromGTFSFile(fetchStillInProgress_mockFeedSourceFakeJob,
+        projectB = createProject();
+        deploymentB = createDeployment(deploySummary, projectB.id);
+        mockFeedSourceB = createFeedSource("Mock feed source B", projectB.id);
+        TestUtils.createFeedVersion(mockFeedSourceB,
+            TestUtils.zipFolderFiles("fake-agency-with-only-calendar-expire-in-2099-with-failed-referential-integrity"));
+
+        projectC = createProject();
+        deploymentC = createDeployment(deploySummary, projectC.id);
+        mockFeedSourceC = createFeedSource("Mock feed source C", projectC.id);
+        feedVersionC = getFeedVersionFromGTFSFile(mockFeedSourceC,
             TestUtils.zipFolderFiles("fake-agency-expire-in-2099"));
-        Persistence.feedVersions.create(fetchStillInProgress_feedVersion);
+        Persistence.feedVersions.create(feedVersionC);
+
+        projectD = createProject();
+        mockFeedSourceD = createFeedSource("Mock feed source D", projectD.id);
+        TestUtils.createFeedVersion(mockFeedSourceD,
+            TestUtils.zipFolderFiles("fake-agency-expire-in-2099"));
     }
 
     @AfterAll
     public static void tearDown() {
         Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
         server.delete();
-        deployment.delete();
-        mockFeedSource.delete();
-        feedVersionExpireIn2099.delete();
-        feedVersionExpireIn2099UnusedRoute.delete();
 
-        fetchStillInProgress_mockFeedSource.delete();
-        fetchStillInProgress_server.delete();
-        fetchStillInProgress_deployment.delete();
-        fetchStillInProgress_mockFeedSourceFakeJob.delete();
-        fetchStillInProgress_feedVersion.delete();
+        projectA.delete();
+        mockFeedSourceA.delete();
+        deploymentA.delete();
 
-        Persistence.projects.removeById(fetchStillInProgress_project.id);
-        Persistence.projects.removeById(project.id);
-        Persistence.feedVersions.removeById(feedVersion.id);
-        Persistence.feedVersions.removeById(fetchStillInProgress_feedVersion.id);
+        projectB.delete();
+        mockFeedSourceB.delete();
+        deploymentB.delete();
+
+        projectC.delete();
+        mockFeedSourceC.delete();
+        deploymentC.delete();
+
+        projectD.delete();
+        mockFeedSourceD.delete();
+        Persistence.feedVersions.removeById(feedVersionC.id);
     }
 
-    // TODO: AutoDeployFeedJob now processes multiple projects. It is not possible to set the job status in
-    //  relation to a single project success or failure. This means asserting on a change of state to the class project
-    //  e.g. lastAutoDeploy (as below). But this doesn't seem right and doesn't have the required granularity.
-    //  A few options come to mind:
-    //  1) New String autoDeployStatus param in the Project class which is updated by AutoDeployFeedJob. May have downstream benefits?
-    //  2) Append (potentially many) messages to the job status and use assertThat(x, containString("y")). Messy.
-    //  3) New MonitorableJob.Status or similar class in the Project class.
     @Test
-    public void canAutoDeployFeedVersionForProject() {
-        setProjectPinnedDeploymentId(project, deployment.id);
-        deployment.feedVersionIds = Collections.singletonList(feedVersionExpireIn2099.id);
-        Persistence.deployments.replace(deployment.id, deployment);
-        AutoDeployFeedJob autoDeployFeedJob = new AutoDeployFeedJob(project, user);
+    public void canAutoDeployFeedVersionForProject() throws IOException {
+        projectA.pinnedDeploymentId = deploymentA.id;
+        projectA.feedSources = new ArrayList<>();
+        projectA.feedSources.add(mockFeedSourceA);
+        Persistence.projects.replace(projectA.id, projectA);
+        AutoDeployJob autoDeployFeedJob = new AutoDeployJob(projectA, user);
         autoDeployFeedJob.run();
-        assertNotNull(project.lastAutoDeploy);
+        assertNotNull(projectA.lastAutoDeploy);
     }
 
     @Test
-    public void failAutoDeployFeedVersionWithHighSeverityErrorTypes() {
-        setProjectLastAutoDeployToNull(project);
-        setProjectPinnedDeploymentId(project, deployment.id);
-        deployment.feedVersionIds = Collections.singletonList(feedVersionExpireIn2099UnusedRoute.id);
-        Persistence.deployments.replace(deployment.id, deployment);
-        AutoDeployFeedJob autoDeployFeedJob = new AutoDeployFeedJob(project, user);
+    public void failAutoDeployFeedVersionWithHighSeverityErrorTypes() throws IOException {
+        projectB.pinnedDeploymentId = deploymentB.id;
+        projectB.feedSources = new ArrayList<>();
+        projectB.feedSources.add(mockFeedSourceB);
+        Persistence.projects.replace(projectB.id, projectB);
+        AutoDeployJob autoDeployFeedJob = new AutoDeployJob(projectB, user);
         autoDeployFeedJob.run();
-        assertNull(project.lastAutoDeploy);
-
+        assertNull(projectB.lastAutoDeploy);
     }
 
     @Test
-    public void failAutoDeployIfFetchStillInProgress() {
-        setProjectPinnedDeploymentId(fetchStillInProgress_project, fetchStillInProgress_deployment.id);
+    public void failAutoDeployIfFetchStillInProgress() throws IOException {
 
         // Create fake processing job for mock feed (don't actually start it, to keep it in the userJobsMap
         // indefinitely).
         Set<MonitorableJob> userJobs = Sets.newConcurrentHashSet();
-        userJobs.add(new ProcessSingleFeedJob(fetchStillInProgress_feedVersion, user, true));
+        userJobs.add(new ProcessSingleFeedJob(feedVersionC, user, true));
         DataManager.userJobsMap.put(user.getUser_id(), userJobs);
 
         // Add mock feed 1 to the deployment so that it is detected in the Deployment#hasFeedFetchesInProgress check
         // (called during auto deploy).
-        fetchStillInProgress_deployment.feedVersionIds = Collections.singletonList(feedVersion.id);
-        Persistence.deployments.replace(fetchStillInProgress_deployment.id, fetchStillInProgress_deployment);
+        deploymentC.feedVersionIds = Collections.singletonList(feedVersionC.id);
+        Persistence.deployments.replace(deploymentC.id, deploymentC);
 
-        AutoDeployFeedJob autoDeployFeedJob = new AutoDeployFeedJob(fetchStillInProgress_project, user);
+        projectD.pinnedDeploymentId = deploymentC.id;
+        projectD.feedSources = new ArrayList<>();
+        projectD.feedSources.add(mockFeedSourceD);
+        Persistence.projects.replace(projectD.id, projectD);
+        AutoDeployJob autoDeployFeedJob = new AutoDeployJob(projectD, user);
         autoDeployFeedJob.run();
-        assertNull(fetchStillInProgress_project.lastAutoDeploy);
-    }
-
-    private void setProjectLastAutoDeployToNull(Project project) {
-        project.lastAutoDeploy = null;
-        Persistence.projects.replace(project.id, project);
-    }
-
-    private void setProjectPinnedDeploymentId(Project project, String deploymentId) {
-        project.pinnedDeploymentId = deploymentId;
-        Persistence.projects.replace(project.id, project);
-    }
-
-    private static FeedSource createFeedSource(String name, String projectId) {
-        FeedSource mockFeedSource = new FeedSource(name, projectId, FeedRetrievalMethod.MANUALLY_UPLOADED);
-        mockFeedSource.deployable = true;
-        Persistence.feedSources.create(mockFeedSource);
-        return mockFeedSource;
-    }
-
-    private static FeedVersion createFeedVersion(FeedSource feedSource) {
-        FeedVersion feedVersion = new FeedVersion(feedSource);
-        Persistence.feedVersions.create(feedVersion);
-        return feedVersion;
+        assertNull(projectD.lastAutoDeploy);
     }
 
     private static OtpServer createOtpServer() {
@@ -202,5 +181,14 @@ public class AutoDeployFeedJobTest extends DatatoolsTest {
         deployment.projectId = projectId;
         Persistence.deployments.create(deployment);
         return deployment;
+    }
+
+    private static FeedSource createFeedSource(String name, String projectId) {
+        FeedSource mockFeedSource = new FeedSource(name, projectId, FeedRetrievalMethod.MANUALLY_UPLOADED);
+        // Set mock feed source deployable to false so auto deploy is not triggered from ProcessSingleFeedJob when the
+        // feed version is created.
+        mockFeedSource.deployable = false;
+        Persistence.feedSources.create(mockFeedSource);
+        return mockFeedSource;
     }
 }

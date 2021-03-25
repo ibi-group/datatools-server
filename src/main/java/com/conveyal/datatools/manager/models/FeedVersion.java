@@ -34,7 +34,9 @@ import java.sql.SQLException;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -399,12 +401,20 @@ public class FeedVersion extends Model implements Serializable {
     }
 
     /**
-     * Has this feed version produced any high severity error types when being validated?
+     * Has this feed version produced any high severity error types when being validated? Some very rural services have
+     * high priority errors for valid stops that aren't near population centers. These acceptable high priority errors
+     * are ignored.
      * @return whether high severity error types have been flagged.
      */
     private boolean hasHighSeverityErrorTypes() {
+        Set<String> acceptableHighSeverityErrorTypes
+            = new HashSet<>(Arrays.asList(
+                NewGTFSErrorType.ROUTE_UNUSED.name(),
+                NewGTFSErrorType.STOP_GEOGRAPHIC_OUTLIER.name(),
+                NewGTFSErrorType.STOP_LOW_POPULATION_DENSITY.name()));
         Set<String> highSeverityErrorTypes = Stream.of(NewGTFSErrorType.values())
-                .filter(type -> type.priority == Priority.HIGH)
+                .filter(type -> type.priority == Priority.HIGH &&
+                    !acceptableHighSeverityErrorTypes.contains(type.name()))
                 .map(NewGTFSErrorType::toString)
                 .collect(Collectors.toSet());
         try (Connection connection = GTFS_DATA_SOURCE.getConnection()) {

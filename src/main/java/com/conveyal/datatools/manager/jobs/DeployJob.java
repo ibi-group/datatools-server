@@ -338,6 +338,11 @@ public class DeployJob extends MonitorableJob {
             // Set baseUrl after success.
             status.baseUrl = otpServer.publicUrl;
         }
+
+        // A new FetchSingleFeedJob could be started after the AutoDeployJob has made sure no fetching jobs exist and
+        // the DeployJob has started. Therefore this new feed version wouldn't result in a new DeployJob getting kicked
+        // off since there was already one running. To catch this new feed version another auto deploy job is started.
+        addNextJob(new AutoDeployJob(deployment.parentProject(), owner));
         status.completed = true;
     }
 

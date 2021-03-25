@@ -172,10 +172,10 @@ public class ProcessSingleFeedJob extends MonitorableJob {
             }
         }
         // FIXME: Should we overwrite the input GTFS dataset if transforming in place?
-        // If deployment module is enabled, feed source is deployable, and project is set to auto-deploy, add auto
-        // deploy job. Note: other checks occur within job to ensure appropriate conditions are met.
+        // If deployment module is enabled and feed source is deployable, add auto deploy job. Note: other checks occur
+        // within job to ensure appropriate conditions are met.
         if (DataManager.isModuleEnabled("deployment") && feedSource.deployable){
-            addNextJob(new AutoDeployFeedJob(feedSource.retrieveProject(), owner));
+            addNextJob(new AutoDeployJob(feedSource.retrieveProject(), owner));
         }
     }
 

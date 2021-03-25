@@ -1052,4 +1052,8 @@ public class MergeFeedsJob extends MonitorableJob {
             this.zipFile = new ZipFile(version.retrieveGtfsFile());
         }
     }
+
+    public String getFeedSourceId() {
+        return feedSource.id;
+    }
 }

@@ -3,11 +3,12 @@ package com.conveyal.datatools.manager.models;
 import com.amazonaws.services.ec2.model.Filter;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.EC2Utils;
-import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.controllers.api.StatusController;
+import com.conveyal.datatools.manager.jobs.CreateFeedVersionFromSnapshotJob;
 import com.conveyal.datatools.manager.jobs.DeployJob;
 import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
+import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.StringUtils;
@@ -21,6 +22,10 @@ import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.io.ByteStreams;
+import com.mongodb.client.FindIterable;
+import org.bson.codecs.pojo.annotations.BsonIgnore;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
@@ -41,18 +46,12 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
-
-import com.mongodb.client.FindIterable;
-import org.bson.codecs.pojo.annotations.BsonIgnore;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
@@ -90,7 +89,7 @@ public class Deployment extends Model implements Serializable {
     }
 
     @JsonView(JsonViews.DataDump.class)
-    public Collection<String> feedVersionIds;
+    public Collection<String> feedVersionIds = new ArrayList<>();
 
     /** All of the feed versions used in this deployment */
     public List<FeedVersion> retrieveFullFeedVersions() {
@@ -421,6 +420,15 @@ public class Deployment extends Model implements Serializable {
             if (job instanceof ProcessSingleFeedJob) {
                 ProcessSingleFeedJob processSingleFeedJob = (ProcessSingleFeedJob) job;
                 if (feedSourceIds.contains(processSingleFeedJob.getFeedSourceId())) return true;
+            }
+            if (job instanceof CreateFeedVersionFromSnapshotJob) {
+                CreateFeedVersionFromSnapshotJob createFeedVersionFromSnapshotJob
+                    = (CreateFeedVersionFromSnapshotJob) job;
+                if (feedSourceIds.contains(createFeedVersionFromSnapshotJob.getFeedSourceId())) return true;
+            }
+            if (job instanceof MergeFeedsJob) {
+                MergeFeedsJob mergeFeedsJob = (MergeFeedsJob) job;
+                if (feedSourceIds.contains(mergeFeedsJob.getFeedSourceId())) return true;
             }
             return false;
         });
