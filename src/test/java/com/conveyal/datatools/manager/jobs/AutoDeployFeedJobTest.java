@@ -30,8 +30,8 @@ import static com.conveyal.datatools.TestUtils.getFeedVersionFromGTFSFile;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-public class AutoDeployFeedJobTest extends DatatoolsTest {
-    private static final Logger LOG = LoggerFactory.getLogger(AutoDeployFeedJobTest.class);
+public class AutoDeployJobTest extends DatatoolsTest {
+    private static final Logger LOG = LoggerFactory.getLogger(AutoDeployJobTest.class);
     private static Auth0UserProfile user;
     private static OtpServer server;
 
