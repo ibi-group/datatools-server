@@ -21,7 +21,6 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Date;
 import java.util.Set;
@@ -54,7 +53,7 @@ public class AutoDeployJobTest extends DatatoolsTest {
     public static void setUp() throws IOException {
         DatatoolsTest.setUp();
         Auth0Connection.setAuthDisabled(true);
-        LOG.info("{} setup", AutoDeployFeedJobTest.class.getSimpleName());
+        LOG.info("{} setup", AutoDeployJobTest.class.getSimpleName());
         user = Auth0UserProfile.createTestAdminUser();
 
         // used by multiple tests.
@@ -109,24 +108,29 @@ public class AutoDeployJobTest extends DatatoolsTest {
     }
 
     @Test
-    public void canAutoDeployFeedVersionForProject() throws IOException {
+    public void canAutoDeployFeedVersionForProject() {
         projectA.pinnedDeploymentId = deploymentA.id;
-        projectA.feedSources = new ArrayList<>();
-        projectA.feedSources.add(mockFeedSourceA);
         Persistence.projects.replace(projectA.id, projectA);
+        for (FeedVersion feedVersion : mockFeedSourceA.retrieveFeedVersions())
+            deploymentA.feedVersionIds.add(feedVersion.id);
+        Persistence.deployments.replace(deploymentA.id, deploymentA);
         AutoDeployJob autoDeployFeedJob = new AutoDeployJob(projectA, user);
         autoDeployFeedJob.run();
+        // This will not be null because all pre-deployment tests will be passed and project successfully deployed.
         assertNotNull(projectA.lastAutoDeploy);
     }
 
     @Test
     public void failAutoDeployFeedVersionWithHighSeverityErrorTypes() throws IOException {
         projectB.pinnedDeploymentId = deploymentB.id;
-        projectB.feedSources = new ArrayList<>();
-        projectB.feedSources.add(mockFeedSourceB);
         Persistence.projects.replace(projectB.id, projectB);
+        for (FeedVersion feedVersion : mockFeedSourceB.retrieveFeedVersions())
+            deploymentB.feedVersionIds.add(feedVersion.id);
+        Persistence.deployments.replace(deploymentB.id, deploymentB);
         AutoDeployJob autoDeployFeedJob = new AutoDeployJob(projectB, user);
         autoDeployFeedJob.run();
+        // This will be null because the feed version contains a referential integrity error which is detected by
+        // FeedVersion#hasHighSeverityErrorTypes.
         assertNull(projectB.lastAutoDeploy);
     }
 
@@ -145,11 +149,11 @@ public class AutoDeployJobTest extends DatatoolsTest {
         Persistence.deployments.replace(deploymentC.id, deploymentC);
 
         projectD.pinnedDeploymentId = deploymentC.id;
-        projectD.feedSources = new ArrayList<>();
-        projectD.feedSources.add(mockFeedSourceD);
         Persistence.projects.replace(projectD.id, projectD);
         AutoDeployJob autoDeployFeedJob = new AutoDeployJob(projectD, user);
         autoDeployFeedJob.run();
+        // This will be null because the fake processing job will be detected by Deployment#hasFeedFetchesInProgress
+        // preventing the pre-deployment checks from passing and the project from being deployed.
         assertNull(projectD.lastAutoDeploy);
     }
 
