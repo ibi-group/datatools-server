@@ -23,8 +23,7 @@ public class NormalizeFieldTransformationTest extends UnitTest {
     @ParameterizedTest
     @MethodSource("createCapitalizationCases")
     public void testConvertToTitleCase(String input, String expected) {
-        NormalizeFieldTransformation transform = NormalizeFieldTransformation.create(
-            "table", "field", null);
+        NormalizeFieldTransformation transform = NormalizeFieldTransformation.create("table", "field");
         assertEquals(expected, transform.convertToTitleCase(input));
     }
 
@@ -46,7 +45,7 @@ public class NormalizeFieldTransformationTest extends UnitTest {
     @MethodSource("createCapitalizationCasesWithOwnExceptions")
     public void testConvertToTitleCaseWithOwnExceptions(String input, String expected) {
         NormalizeFieldTransformation transform = NormalizeFieldTransformation.create(
-            "table", "field", Lists.newArrayList("NE", "SW"));
+            "table", "field", Lists.newArrayList("NE", "SW"), null);
         assertEquals(expected, transform.convertToTitleCase(input));
     }
 
@@ -61,7 +60,8 @@ public class NormalizeFieldTransformationTest extends UnitTest {
     @ParameterizedTest
     @MethodSource("createSubstitutionCases")
     public void testPerformSubstitutions(String input, String expected) {
-        assertEquals(expected, NormalizeFieldTransformation.performSubstitutions(input));
+        NormalizeFieldTransformation transform = NormalizeFieldTransformation.create("table", "field");
+        assertEquals(expected, transform.performSubstitutions(input));
     }
 
     private static Stream<Arguments> createSubstitutionCases() {

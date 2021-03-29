@@ -30,28 +30,34 @@ import static com.conveyal.gtfs.loader.Field.getFieldIndex;
 
 public class NormalizeFieldTransformation extends ZipTransformation {
     private static final List<String> defaultExceptions;
-    public static final List<ReplacementPair> REPLACEMENT_PAIRS = Arrays.asList(
+    public static final List<Substitution> defaultSubstitutions = Arrays.asList(
         // "+", "&" => "and"
-        new ReplacementPair("[\\+&]", "and", true),
+        new Substitution("[\\+&]", "and", true),
         // "@" => "at"
-        new ReplacementPair("@", "at", true),
-        // Contents between () and []  (and surrounding whitespace) is removed.
-        new ReplacementPair("\\s*\\(.+\\)\\s*", ""),
-        new ReplacementPair("\\s*\\[.+\\]\\s*", "")
+        new Substitution("@", "at", true),
+        // Contents between () and [], and surrounding whitespace, is removed.
+        new Substitution("\\s*\\(.+\\)\\s*", ""),
+        new Substitution("\\s*\\[.+\\]\\s*", "")
     );
 
     // TODO: Add JavaDoc.
     public String fieldName;
     public boolean capitalize = true;
     public boolean performSubstitutions = true;
+
     /**
      * Exceptions are initialized with the default configured ones,
      * and can be overridden from the UI.
      */
     public List<String> capitalizeExceptions = defaultExceptions;
 
-    private List<ReplacementPair> capitalizeExceptionsPairs;
-    public NormalizeOperation normalizeOperation;
+    /**
+     * A list of substitution objects that is initialized with the defaults above
+     * and that can be overridden from the UI.
+     */
+    public List<Substitution> substitutions = new ArrayList<>(defaultSubstitutions);
+
+    private List<Substitution> capitalizeSubstitutions;
 
     static {
         String defaultExceptionsConfig = getConfigPropertyAsText("DEFAULT_CAPITALIZATION_EXCEPTIONS");
@@ -62,26 +68,57 @@ public class NormalizeFieldTransformation extends ZipTransformation {
         }
     }
 
-    public static NormalizeFieldTransformation create(String table, String fieldName, List<String> exceptions) {
+    /**
+     * Used in tests to create an instance of this transform.
+     * @param table The table with the field to modify.
+     * @param fieldName The field in the specified table to modify.
+     * @param exceptions A list of capitalization exceptions:
+     *                   - if null, the default configured exceptions will be used.
+     *                   - if empty, no capitalization exceptions will be considered.
+     * @param substitutions A list of substitutions:
+     *                      - if null, the default configured substitutions will be performed.
+     *                      - if empty, no substitutions will be performed.
+     * @return An instance of the transformation with the desired settings.
+     */
+    public static NormalizeFieldTransformation create(
+        String table, String fieldName, List<String> exceptions, List<Substitution> substitutions)
+    {
         NormalizeFieldTransformation transformation = new NormalizeFieldTransformation();
         transformation.fieldName = fieldName;
         transformation.table = table;
-        // Override configured defaults if exceptions is not null.
-        // (To set up no capitalization exceptions, pass an empty list.)
+        // Override configured defaults if corresponding args are not null.
+        // (To set up no capitalization exceptions or no substitutions, pass an empty list.)
         if (exceptions != null) {
             transformation.capitalizeExceptions = exceptions;
         }
+        if (substitutions != null) {
+            transformation.substitutions = substitutions;
+        }
         transformation.initializeExceptions();
+        transformation.initializeSubstitutions();
         return transformation;
+    }
+    public static NormalizeFieldTransformation create(String table, String fieldName) {
+        return create(table, fieldName, null, null);
     }
 
     private void initializeExceptions() {
         List<String> allExceptions = new ArrayList<>(capitalizeExceptions);
 
-        capitalizeExceptionsPairs = allExceptions.stream()
+        capitalizeSubstitutions = allExceptions.stream()
             // Ensure capitalization exceptions are set to uppercase.
             .map(String::toUpperCase)
-            .map(ReplacementPair::makeCapitalizeExceptionPair)
+            .map(Substitution::makeCapitalizeExceptionPair)
+            .collect(Collectors.toList());
+    }
+
+    private void initializeSubstitutions() {
+        List<String> allExceptions = new ArrayList<>(capitalizeExceptions);
+
+        capitalizeSubstitutions = allExceptions.stream()
+            // Ensure capitalization exceptions are set to uppercase.
+            .map(String::toUpperCase)
+            .map(Substitution::makeCapitalizeExceptionPair)
             .collect(Collectors.toList());
     }
 
@@ -165,7 +202,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
         String result = WordUtils.capitalizeFully(inputString, SEPARATORS);
 
         // Exceptions (e.g. acronyms) should remain capitalized.
-        for (ReplacementPair pair : capitalizeExceptionsPairs) {
+        for (Substitution pair : capitalizeSubstitutions) {
             result = pair.replace(result);
         }
 
@@ -173,12 +210,11 @@ public class NormalizeFieldTransformation extends ZipTransformation {
     }
 
     /**
-     * Replaces preset strings with replacements defined in REPLACEMENT_PAIRS,
-     * and returns the result.
+     * Performs substitutions defined for this transform, and returns the result.
      */
-    public static String performSubstitutions(String inputString) {
+    public String performSubstitutions(String inputString) {
         String result = inputString;
-        for (ReplacementPair pair : REPLACEMENT_PAIRS) {
+        for (Substitution pair : defaultSubstitutions) {
             result = pair.replace(result);
         }
         return result;
@@ -192,28 +228,49 @@ public class NormalizeFieldTransformation extends ZipTransformation {
     /**
      * This class holds the regex/replacement pair, and the cached compiled regex pattern.
      */
-    private static class ReplacementPair {
+    public static class Substitution {
+        /** The regex string to match. */
         public String regex;
+        /** The string that should replace regex (see effectiveReplacement below). */
         public String replacement;
-        public Pattern pattern;
+        /** true if whitespace surrounding regex should be create or normalized to one space. */
+        public boolean normalizeSpace;
 
-        public ReplacementPair(String regex, String replacement) {
+        private Pattern pattern;
+        /**
+         * Replacement string that is actually used for the substitution,
+         * and set according to the value of normalizeSpace.
+         */
+        private String effectiveReplacement;
+
+        /** Constructor needed for persistence */
+        public Substitution() {}
+
+        public Substitution(String regex, String replacement) {
             this(regex, replacement, false);
         }
 
-        public ReplacementPair(String regex, String replacement, boolean normalizeSpace) {
+        public Substitution(String regex, String replacement, boolean normalizeSpace) {
             this.regex = regex;
+            this.normalizeSpace = normalizeSpace;
+            this.replacement = replacement;
+        }
 
+        /**
+         * Pre-compiles the regex pattern and determines the actual replacement string
+         * according to normalizeSpace.
+         */
+        private void initialize() {
             if (normalizeSpace) {
                 // If normalizeSpace is set, reduce spaces before and after the regex to one space,
                 // or insert one space before and one space after if there is none.
                 // Note: if the replacement must be blank, then normalizeSpace should be set to false
                 // and whitespace management should be handled in the regex instead.
                 this.pattern = Pattern.compile(String.format("\\s*%s\\s*", regex));
-                this.replacement = String.format(" %s ", replacement);
+                this.effectiveReplacement = String.format(" %s ", replacement);
             } else {
                 this.pattern = Pattern.compile(regex);
-                this.replacement = replacement;
+                this.effectiveReplacement = replacement;
             }
         }
 
@@ -221,8 +278,12 @@ public class NormalizeFieldTransformation extends ZipTransformation {
          * Perform the replacement of regex in the provided string, and return the result.
          */
         public String replace(String input) {
+            if (pattern == null) {
+                initialize();
+            }
+
             // TODO: Study appendReplacement
-            return pattern.matcher(input).replaceAll(replacement);
+            return pattern.matcher(input).replaceAll(effectiveReplacement);
         }
 
         /**
@@ -230,10 +291,10 @@ public class NormalizeFieldTransformation extends ZipTransformation {
          * (used in getTitleCase) by creating a regex with word boundaries (\b)
          * that surround the capitalized expression to be reverted.
          */
-        public static ReplacementPair makeCapitalizeExceptionPair(String exceptionWord) {
-            return new ReplacementPair(
-                String.format("\\b%s\\b", WordUtils.capitalizeFully(exceptionWord)),
-                exceptionWord
+        public static Substitution makeCapitalizeExceptionPair(String word) {
+            return new Substitution(
+                String.format("\\b%s\\b", WordUtils.capitalizeFully(word)),
+                word
             );
         }
     }
