@@ -4,6 +4,7 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.controllers.api.DeploymentController;
 import com.conveyal.datatools.manager.models.Deployment;
+import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
@@ -12,6 +13,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
 import java.util.HashSet;
@@ -58,8 +60,7 @@ public class AutoDeployJob extends MonitorableJob {
     public void jobLogic() {
         for (Project project : projects) {
             Deployment deployment = Persistence.deployments.getById(project.pinnedDeploymentId);
-
-            // Define if project, deployment and feed versions are candidates for auto deploy.
+            // Define if project and deployment are candidates for auto deploy.
             if (!project.autoDeploy ||
                 project.pinnedDeploymentId == null ||
                 deployment == null ||
@@ -67,19 +68,25 @@ public class AutoDeployJob extends MonitorableJob {
                 LOG.info("Project {} skipped for auto deployment as required criteria not met.", project.name);
                 continue;
             }
-
             try {
-                LOG.info("Auto deploy task running for project {}", project.name);
                 synchronized (lockedProjects) {
                     if (!lockedProjects.contains(project.id)) {
                         lockedProjects.add(project.id);
+                    } else {
+                        continue;
                     }
                 }
-
-                if(!canAutoDeployProject(project, deployment)) {
+                LOG.info("Auto deploy task running for project {}", project.name);
+                if (!canAutoDeployProject(project, deployment)) {
                     continue;
                 }
 
+                List<String> feedVersionIdsForDeployment = getFeedVersionsForDeployment(project, deployment);
+                if (feedVersionIdsForDeployment.isEmpty()) {
+                    LOG.info("Project {} skipped for auto deployment as no newer feed versions are available!",
+                        project.name);
+                    continue;
+                }
                 if (deployment.latest() == null) {
                     String message = String.format("Deployment `%s` has never been deployed. Skipping auto-deploy for project `%s`.",
                         deployment.name,
@@ -96,7 +103,11 @@ public class AutoDeployJob extends MonitorableJob {
                 String latestServerId = deployment.latest().serverId;
                 OtpServer server = Persistence.servers.getById(latestServerId);
                 if (server != null) {
-                    // If there are no other fetches in progress, queue up the deploy job.
+                    // Advance all feed versions in the deployment.
+                    deployment.feedVersionIds = new ArrayList<>();
+                    deployment.feedVersionIds.addAll(feedVersionIdsForDeployment);
+                    Persistence.deployments.replace(deployment.id, deployment);
+                    // Queue up the deploy job.
                     if (DeploymentController.queueDeployJob(new DeployJob(deployment, owner, server))) {
                         LOG.debug("Last auto deploy date updated for project {}.", project.name);
                         project.lastAutoDeploy = new Date();
@@ -120,34 +131,77 @@ public class AutoDeployJob extends MonitorableJob {
     }
 
     /**
+     * Retrieve feed versions from all feed sources which have no critical errors and were created after the last
+     * auto deploy.
+     */
+    private List<String> getFeedVersionsForDeployment(Project project, Deployment deployment) {
+        List<String> feedVersionIds = new ArrayList<>();
+        Collection<FeedSource> feedSources = getDeploymentFeedSources(deployment);
+        for (FeedSource feedSource : feedSources) {
+            for (FeedVersion feedVersion : feedSource.retrieveFeedVersions()) {
+                if ((project.lastAutoDeploy == null ||
+                    feedVersion.dateCreated.after(project.lastAutoDeploy)) &&
+                    !feedVersion.hasCriticalErrors()) {
+                    // Feed version has no critical errors, advance the feed version in the deployment.
+                    feedVersionIds.add(feedVersion.id);
+                }
+            }
+        }
+        return feedVersionIds;
+    }
+
+    /**
+     * Get all feed sources associated with a deployments current feed versions.
+     */
+    private List<FeedSource> getDeploymentFeedSources(Deployment deployment) {
+        List<FeedSource> feedSources = new ArrayList<>();
+        for (Deployment.SummarizedFeedVersion feedVersion : deployment.retrieveFeedVersions()) {
+            feedSources.add(feedVersion.feedSource);
+        }
+        return feedSources;
+    }
+
+    /**
      * Check each feed version associated with a deployment. If a single feed version has critical errors or the
      * deployment still has feed fetches in progress, skip auto deployment for project.
      */
     private boolean canAutoDeployProject(Project project, Deployment deployment) {
-        for (FeedVersion feedVersion : deployment.retrieveFullFeedVersions()) {
-            if ((project.lastAutoDeploy == null ||
-                feedVersion.dateCreated.after(project.lastAutoDeploy)) &&
-                feedVersion.hasCriticalErrors()) {
-                String message = String.format(
-                    "Auto deployment skipped for project `%s`! Feed version `%s` in feed source `%s` contains critical errors!",
-                    project.name,
-                    feedVersion.name,
-                    feedVersion.parentFeedSource().name
-                );
-                LOG.warn(message);
-                NotifyUsersForSubscriptionJob.createNotification(
-                    "project-updated",
-                    project.id,
-                    message
-                );
-                return false;
-            } else if ((project.lastAutoDeploy == null ||
-                feedVersion.dateCreated.before(project.lastAutoDeploy)) &&
-                deployment.hasFeedFetchesInProgress()) {
-                LOG.debug("Project {} contains feed version {} which has active fetches in progress. Skipping auto deployment.",
-                    project.name,
-                    feedVersion.name);
-                return false;
+        Collection<FeedSource> feedSources = getDeploymentFeedSources(deployment);
+        if (feedSources.isEmpty()) {
+            String message = String.format(
+                "Auto deployment skipped for project %s. Deployment %s has no associated feed sources!",
+                project.name,
+                deployment.name
+            );
+            LOG.warn(message);
+            return false;
+        }
+        for (FeedSource feedSource : feedSources) {
+            for (FeedVersion feedVersion : feedSource.retrieveFeedVersions()) {
+                if ((project.lastAutoDeploy == null ||
+                    feedVersion.dateCreated.after(project.lastAutoDeploy)) &&
+                    feedVersion.hasCriticalErrors()) {
+                    String message = String.format(
+                        "Auto deployment skipped for project %s! Feed version %s in feed source %s contains critical errors!",
+                        project.name,
+                        feedVersion.name,
+                        feedVersion.parentFeedSource().name
+                    );
+                    LOG.warn(message);
+                    NotifyUsersForSubscriptionJob.createNotification(
+                        "project-updated",
+                        project.id,
+                        message
+                    );
+                    return false;
+                } else if ((project.lastAutoDeploy == null ||
+                    feedVersion.dateCreated.before(project.lastAutoDeploy)) &&
+                    deployment.hasFeedFetchesInProgress()) {
+                    LOG.debug("Project {} contains feed version {} which has active fetches in progress. Skipping auto deployment.",
+                        project.name,
+                        feedVersion.name);
+                    return false;
+                }
             }
         }
         return true;
