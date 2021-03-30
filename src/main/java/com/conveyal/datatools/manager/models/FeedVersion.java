@@ -378,9 +378,8 @@ public class FeedVersion extends Model implements Serializable {
     }
 
     /**
-     * Has this feed expired?
-     * @return true if the feed version is outside of expiration or the validation result - last calendar date is null,
-     * else return false.
+     * Does this feed have any validation or load errors?
+     * @return whether feed version has any validation or load errors
      */
     private boolean hasValidationAndLoadErrors() {
         if (validationResult == null)
@@ -394,7 +393,7 @@ public class FeedVersion extends Model implements Serializable {
 
     /**
      * Has this feed expired?
-     * @return whether feed version is outside of expiration
+     * @return If the validation result last calendar date is null or has expired return true, else return false.
      */
     private boolean hasFeedVersionExpired() {
         return validationResult.lastCalendarDate == null ||
