@@ -74,6 +74,7 @@ public class AutoDeployJob extends MonitorableJob {
                     if (!lockedProjects.contains(project.id)) {
                         lockedProjects.add(project.id);
                     } else {
+                        LOG.warn("Unable to acquire lock for project {}", project.name);
                         continue;
                     }
                 }
