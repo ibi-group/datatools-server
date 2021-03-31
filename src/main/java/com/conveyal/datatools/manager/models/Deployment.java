@@ -4,12 +4,7 @@ import com.amazonaws.services.ec2.model.Filter;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.EC2Utils;
 import com.conveyal.datatools.manager.DataManager;
-import com.conveyal.datatools.manager.controllers.api.StatusController;
-import com.conveyal.datatools.manager.jobs.CreateFeedVersionFromSnapshotJob;
 import com.conveyal.datatools.manager.jobs.DeployJob;
-import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
-import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
-import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.StringUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
@@ -48,8 +43,6 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -228,7 +221,7 @@ public class Deployment extends Model implements Serializable {
         return ret;
     }
 
-    /** Create a single-agency (testing) deployment for the given feed source */
+    /** Create a single-agency deployment for the given feed source */
     public Deployment(FeedSource feedSource) {
         super();
 
@@ -397,41 +390,6 @@ public class Deployment extends Model implements Serializable {
     public String generateBuildConfigAsString() {
         if (customBuildConfig != null) return customBuildConfig;
         return writeToString(this.parentProject().buildConfig);
-    }
-
-    /**
-     * Check if there are active jobs to fetch or process a new version for all feed sources. This is helpful in the
-     * context of auto-deploying to OTP to determine if a given feed is the last to process a newly fetched version
-     * (we only want the deployment to occur if all fetches have completed).
-     * TODO: what if some of the feed fetches loaded new GTFS data that had critical errors? Should we not
-     *  auto-deploy?
-     */
-    public boolean hasFeedFetchesInProgress() {
-        // Collect this deployment's feed source IDs (from feed versions) to check the active jobs against.
-        Set<String> feedSourceIds = retrieveFullFeedVersions().stream()
-            .map(version -> version.feedSourceId)
-            .collect(Collectors.toSet());
-        // If there are any active fetch/process feed jobs for one of the feed source IDs, return true.
-        return StatusController.filterActiveJobs(StatusController.getAllJobs()).stream().anyMatch(job -> {
-            if (job instanceof FetchSingleFeedJob) {
-                FetchSingleFeedJob fetchJob = (FetchSingleFeedJob) job;
-                if (feedSourceIds.contains(fetchJob.feedSourceId)) return true;
-            }
-            if (job instanceof ProcessSingleFeedJob) {
-                ProcessSingleFeedJob processSingleFeedJob = (ProcessSingleFeedJob) job;
-                if (feedSourceIds.contains(processSingleFeedJob.getFeedSourceId())) return true;
-            }
-            if (job instanceof CreateFeedVersionFromSnapshotJob) {
-                CreateFeedVersionFromSnapshotJob createFeedVersionFromSnapshotJob
-                    = (CreateFeedVersionFromSnapshotJob) job;
-                if (feedSourceIds.contains(createFeedVersionFromSnapshotJob.getFeedSourceId())) return true;
-            }
-            if (job instanceof MergeFeedsJob) {
-                MergeFeedsJob mergeFeedsJob = (MergeFeedsJob) job;
-                if (feedSourceIds.contains(mergeFeedsJob.getFeedSourceId())) return true;
-            }
-            return false;
-        });
     }
 
     /** Convenience method to write serializable object (primarily for router/build config objects) to byte array. */

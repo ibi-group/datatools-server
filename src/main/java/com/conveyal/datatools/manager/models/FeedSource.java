@@ -9,6 +9,11 @@ import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.controllers.api.StatusController;
+import com.conveyal.datatools.manager.jobs.CreateFeedVersionFromSnapshotJob;
+import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
+import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
+import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
 import com.conveyal.datatools.manager.models.transform.FeedTransformation;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -34,7 +39,6 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
@@ -592,6 +596,28 @@ public class FeedSource extends Model implements Cloneable {
 
     public FeedSource clone () throws CloneNotSupportedException {
         return (FeedSource) super.clone();
+    }
+
+    /**
+     * Check if there are active jobs to fetch or process a new version for this feed sources. This is helpful in the
+     * context of auto-deploying to OTP to determine if there are any jobs occuring that could result in a new feed
+     * version being created (we want to throttle auto-deployments if multiple jobs to create new feed versions are
+     * occurring at the same time).
+     */
+    public boolean hasJobsInProgress() {
+        return StatusController.filterActiveJobs(StatusController.getAllJobs()).stream().anyMatch(job -> {
+            String jobFeedSourceId = null;
+            if (job instanceof FetchSingleFeedJob) {
+                jobFeedSourceId = ((FetchSingleFeedJob) job).feedSourceId;
+            } else if (job instanceof ProcessSingleFeedJob) {
+                jobFeedSourceId = ((ProcessSingleFeedJob) job).getFeedSourceId();
+            } else if (job instanceof CreateFeedVersionFromSnapshotJob) {
+                jobFeedSourceId = ((CreateFeedVersionFromSnapshotJob) job).getFeedSourceId();
+            } else if (job instanceof MergeFeedsJob) {
+                jobFeedSourceId = ((MergeFeedsJob) job).getFeedSourceId();
+            }
+            return this.id.equals(jobFeedSourceId);
+        });
     }
 
     public <T extends FeedTransformation> boolean hasTransformationsOfType(FeedVersion target, Class<T> clazz) {
