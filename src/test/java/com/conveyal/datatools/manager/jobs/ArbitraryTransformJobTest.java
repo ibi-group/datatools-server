@@ -11,9 +11,11 @@ import com.conveyal.datatools.manager.models.Snapshot;
 import com.conveyal.datatools.manager.models.transform.DeleteRecordsTransformation;
 import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
 import com.conveyal.datatools.manager.models.transform.FeedTransformation;
+import com.conveyal.datatools.manager.models.transform.NormalizeFieldTransformation;
 import com.conveyal.datatools.manager.models.transform.ReplaceFileFromStringTransformation;
 import com.conveyal.datatools.manager.models.transform.ReplaceFileFromVersionTransformation;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import org.apache.commons.lang3.ArrayUtils;
 import org.hamcrest.Matchers;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -23,7 +25,10 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.BufferedReader;
 import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
@@ -38,8 +43,7 @@ import static com.conveyal.datatools.TestUtils.zipFolderFiles;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.MANUALLY_UPLOADED;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.VERSION_CLONE;
 import static org.hamcrest.MatcherAssert.assertThat;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.*;
 
 public class ArbitraryTransformJobTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(ArbitraryTransformJob.class);
@@ -123,6 +127,55 @@ public class ArbitraryTransformJobTest extends UnitTest {
         ZipEntry entry = zip.getEntry(table + ".txt");
         assertNotNull(entry);
         // TODO Verify that stop_attributes file matches source file exactly?
+    }
+
+    /**
+     * Test that a {@link NormalizeFieldTransformation} will successfully complete.
+     */
+    // TODO: Refactor, this code is similar structure to test above.
+    @Test
+    public void canNormalizeField() throws IOException, InterruptedException {
+        final String table = "routes";
+        final String fieldName = "route_long_name";
+        // Create source version (folder contains stop_attributes file).
+        sourceVersion = createFeedVersion(
+            feedSource,
+            zipFolderFiles("fake-agency-with-only-calendar")
+        );
+
+        // Perform transformation before feed is loaded into database.
+        // Example: we replace "Route" with the "Rte" abbreviation in routes.txt.
+        FeedTransformation transformation = NormalizeFieldTransformation.create(table, fieldName, null, "Route => Rte");
+        FeedTransformRules transformRules = new FeedTransformRules(transformation);
+        feedSource.transformRules.add(transformRules);
+        Persistence.feedSources.replace(feedSource.id, feedSource);
+        // Create target version.
+        targetVersion = createFeedVersion(
+            feedSource,
+            zipFolderFiles("fake-agency-with-only-calendar")
+        );
+
+        // Check that new version has routes table modified.
+        ZipFile zip = new ZipFile(targetVersion.retrieveGtfsFile());
+        ZipEntry entry = zip.getEntry(table + ".txt");
+        assertNotNull(entry);
+
+        // Scan a few rows in routes.txt
+        InputStream stream = zip.getInputStream(entry);
+        InputStreamReader streamReader = new InputStreamReader(stream);
+        BufferedReader reader = new BufferedReader(streamReader);
+        try {
+            String[] columns = reader.readLine().split(",");
+            int fieldIndex = ArrayUtils.indexOf(columns, fieldName);
+
+            String row1 = reader.readLine();
+            String[] row1Fields = row1.split(",");
+            assertTrue(row1Fields[fieldIndex].startsWith("Rte "), row1);
+        } finally {
+            reader.close();
+            streamReader.close();
+            stream.close();
+        }
     }
 
     @Test

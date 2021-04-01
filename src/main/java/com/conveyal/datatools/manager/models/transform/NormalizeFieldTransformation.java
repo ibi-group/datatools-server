@@ -8,6 +8,8 @@ import com.conveyal.gtfs.loader.Table;
 import com.csvreader.CsvReader;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.text.WordUtils;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
@@ -29,6 +31,8 @@ import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText
 import static com.conveyal.gtfs.loader.Field.getFieldIndex;
 
 public class NormalizeFieldTransformation extends ZipTransformation {
+    private static final Logger LOG = LoggerFactory.getLogger(NormalizeFieldTransformation.class);
+
     private static final String defaultExceptions = getConfigPropertyAsText("DEFAULT_CAPITALIZATION_EXCEPTIONS");
     private static final String defaultSubstitutions = getConfigPropertyAsText("DEFAULT_SUBSTITUTIONS");
 
@@ -186,7 +190,11 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             // Copy csv input stream into the zip file, replacing the existing file.
             InputStream inputStream =  new ByteArrayInputStream(processedTableData.toString().getBytes(StandardCharsets.UTF_8));
             Files.copy(inputStream, targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
+            // TODO: Add stats on number of records changed.
+
             target.feedTransformResult.tableTransformResults.add(new TableTransformResult(tableName, type));
+
+            LOG.info("Field normalization transformation successful!");
         } catch (Exception e) {
             status.fail("Unknown error encountered while transforming zip file", e);
         }
