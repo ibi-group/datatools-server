@@ -32,6 +32,8 @@ public class NormalizeFieldTransformation extends ZipTransformation {
     private static final String defaultExceptions = getConfigPropertyAsText("DEFAULT_CAPITALIZATION_EXCEPTIONS");
     private static final String defaultSubstitutions = getConfigPropertyAsText("DEFAULT_SUBSTITUTIONS");
 
+    // Common separator characters found on the English keyboard.
+    private static final char[] SEPARATORS = " \t\n`~!@#$%^&*()-_=+[{]}\\|;:'\",<.>/?".toCharArray();
     private static final char NORMALIZE_SPACE_PREFIX = '+';
     private static final String SUBSTITUTION_SEPARATOR = "=>";
 
@@ -168,7 +170,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
                     transformedValue = convertToTitleCase(transformedValue);
                 }
 
-                // Run replacement pairs transformation, if requested.
+                // Perform substitutions, if requested.
                 if (performSubstitutions) {
                     transformedValue = performSubstitutions(transformedValue);
                 }
@@ -201,12 +203,11 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             return "";
         }
 
-        final char[] SEPARATORS = new char[] {' ', '/', '-', '+', '&', '@'};
         String result = WordUtils.capitalizeFully(inputString, SEPARATORS);
 
         // Exceptions (e.g. acronyms) should remain capitalized.
-        for (Substitution pair : getCapitalizeSubstitutions()) {
-            result = pair.replace(result);
+        for (Substitution substitution : getCapitalizeSubstitutions()) {
+            result = substitution.replace(result);
         }
 
         return result;
@@ -217,8 +218,8 @@ public class NormalizeFieldTransformation extends ZipTransformation {
      */
     public String performSubstitutions(String inputString) {
         String result = inputString;
-        for (Substitution pair : getStringSubstitutions()) {
-            result = pair.replace(result);
+        for (Substitution substitution : getStringSubstitutions()) {
+            result = substitution.replace(result);
         }
         return result;
     }
@@ -312,9 +313,13 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             boolean normalizeSpace = false;
             String replacement = "";
 
-            if (parts.length >= 2 && parts[1].charAt(0) == NORMALIZE_SPACE_PREFIX) {
-                normalizeSpace = true;
-                replacement = parts[1].substring(1).trim();
+            if (parts.length >= 2) {
+                if (parts.length >= 2 && parts[1].charAt(0) == NORMALIZE_SPACE_PREFIX) {
+                    normalizeSpace = true;
+                    replacement = parts[1].substring(1).trim();
+                } else {
+                    replacement = parts[1].trim();
+                }
             }
             return new Substitution(parts[0].trim(), replacement, normalizeSpace);
         }

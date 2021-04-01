@@ -78,4 +78,20 @@ public class NormalizeFieldTransformationTest extends UnitTest {
             Arguments.of("14th St & Broadway (12th St BART) ", "14th St and Broadway")
         );
     }
+
+    @ParameterizedTest
+    @MethodSource("createSubstitutionCasesWithOwnExceptions")
+    public void testPerformSubstitutionsWithOwnExceptions(String input, String expected) {
+        NormalizeFieldTransformation transform = NormalizeFieldTransformation.create(
+            "table", "field", null, "Station => Stn, # =>+ AND");
+        assertEquals(expected, transform.performSubstitutions(input));
+    }
+
+    private static Stream<Arguments> createSubstitutionCasesWithOwnExceptions() {
+        return Stream.of(
+            // Capitalization exceptions from instance (quadrant street names)
+            Arguments.of("Embarcadero Station", "Embarcadero Stn"),
+            Arguments.of("10th#North", "10th AND North")
+        );
+    }
 }
