@@ -116,8 +116,6 @@ public class NormalizeFieldTransformation extends ZipTransformation {
         capitalizeSubstitutions = StringUtils.isBlank(capitalizeExceptions)
             ? new ArrayList<>()
             : Arrays.stream(capitalizeExceptions.split("\\s*,\\s*"))
-                // Ensure capitalization exceptions are set to uppercase.
-                .map(String::toUpperCase)
                 .map(Substitution::makeCapitalizeSubstitution)
                 .collect(Collectors.toList());
     }
@@ -322,7 +320,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             String replacement = "";
 
             if (parts.length >= 2) {
-                if (parts.length >= 2 && parts[1].charAt(0) == NORMALIZE_SPACE_PREFIX) {
+                if (parts[1].charAt(0) == NORMALIZE_SPACE_PREFIX) {
                     normalizeSpace = true;
                     replacement = parts[1].substring(1).trim();
                 } else {

@@ -44,7 +44,7 @@ public class NormalizeFieldTransformationTest extends UnitTest {
     @MethodSource("createCapitalizationCasesWithOwnExceptions")
     public void testConvertToTitleCaseWithOwnExceptions(String input, String expected) {
         NormalizeFieldTransformation transform = NormalizeFieldTransformation.create(
-            "table", "field", "NE, SW", null);
+            "table", "field", "NE, SW, de", null);
         assertEquals(expected, transform.convertToTitleCase(input));
     }
 
@@ -52,7 +52,8 @@ public class NormalizeFieldTransformationTest extends UnitTest {
         return Stream.of(
             // Capitalization exceptions from instance (quadrant street names)
             Arguments.of("10TH STREET NE", "10th Street NE"),
-            Arguments.of("10TH STREET SW", "10th Street SW")
+            Arguments.of("10TH STREET SW", "10th Street SW"),
+            Arguments.of("PONCE DE LEON", "Ponce de Leon")
         );
     }
 
