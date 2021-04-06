@@ -13,7 +13,6 @@ import org.apache.commons.lang3.ArrayUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.BufferedReader;
@@ -64,7 +63,7 @@ public class NormalizeFieldTransformJobTest extends UnitTest {
     /**
      * Run set up before each test. This just resets the feed source transformation properties.
      */
-    @BeforeEach
+    //@BeforeEach
     public void setUpTest() {
         feedSource = Persistence.feedSources.getById(feedSource.id);
         feedSource.transformRules = new ArrayList<>();
@@ -93,6 +92,7 @@ public class NormalizeFieldTransformJobTest extends UnitTest {
         // In this test, we replace "Route" with the "Rte" abbreviation in routes.txt.
         FeedTransformation transformation = NormalizeFieldTransformation.create(table, fieldName, null, "Route => Rte");
         FeedTransformRules transformRules = new FeedTransformRules(transformation);
+        feedSource.transformRules = new ArrayList<>();
         feedSource.transformRules.add(transformRules);
         Persistence.feedSources.replace(feedSource.id, feedSource);
         // Create target version.
