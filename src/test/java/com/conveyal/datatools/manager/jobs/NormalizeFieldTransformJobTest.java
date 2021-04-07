@@ -14,11 +14,15 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.time.Instant;
 import java.util.Date;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -27,6 +31,8 @@ import static com.conveyal.datatools.TestUtils.*;
 import static org.junit.jupiter.api.Assertions.*;
 
 public class NormalizeFieldTransformJobTest extends DatatoolsTest {
+    private static final Logger LOG = LoggerFactory.getLogger(NormalizeFieldTransformJobTest.class);
+
     private static final String TABLE_NAME = "routes";
     private static final String FIELD_NAME = "route_long_name";
     private static Project project;
@@ -76,11 +82,21 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
         if (targetVersion != null) targetVersion.delete();
     }
 
+    @Test
+    public void canNormalizeField1() throws IOException {
+        canNormalizeField();
+    }
+
+    @Test
+    public void canNormalizeField2() throws IOException {
+        canNormalizeField();
+    }
+
     /**
      * Test that a {@link NormalizeFieldTransformation} will successfully complete.
      */
     // TODO: Refactor, this code is similar structure to test with replace file.
-    @Test
+    //@Test
     public void canNormalizeField() throws IOException {
         // Create target version.
         targetVersion = createFeedVersion(
@@ -108,6 +124,7 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
             reader.close();
             streamReader.close();
             stream.close();
+            zip.close();
         }
     }
 
