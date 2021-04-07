@@ -13,7 +13,6 @@ import org.apache.commons.lang3.ArrayUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.io.BufferedReader;
@@ -30,10 +29,10 @@ import static org.junit.jupiter.api.Assertions.*;
 public class NormalizeFieldTransformJobTest extends DatatoolsTest {
     private static final String TABLE_NAME = "routes";
     private static final String FIELD_NAME = "route_long_name";
-    private Project project;
-    private FeedSource feedSource;
+    private static Project project;
+    private static FeedSource feedSource;
     private FeedVersion targetVersion;
-    private static FeedTransformRules transformRules;
+
 
     /**
      * Initialize Data Tools and set up a simple feed source and project.
@@ -43,26 +42,14 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
         // start server if it isn't already running
         DatatoolsTest.setUp();
 
+        // Create a project.
+        project = createProject();
+
         // Create transform.
         // In this test class, as an illustration, we replace "Route" with the "Rte" abbreviation in routes.txt.
         FeedTransformation transformation = NormalizeFieldTransformation.create(TABLE_NAME, FIELD_NAME, null, "Route => Rte");
-        transformRules = new FeedTransformRules(transformation);
-    }
+        FeedTransformRules transformRules = new FeedTransformRules(transformation);
 
-    /**
-     * Clean up test database after tests finish.
-     */
-    @AfterAll
-    public static void tearDown() {
-    }
-
-    /**
-     * Run set up before each test. This just resets the feed source transformation properties.
-     */
-    @BeforeEach
-    public void setUpTest() {
-        // Create a project.
-        project = createProject();
         // Create feed source with above transform.
         feedSource = new FeedSource("Normalize Field Test Feed", project.id, FeedRetrievalMethod.MANUALLY_UPLOADED);
         feedSource.deployable = false;
@@ -71,17 +58,22 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
     }
 
     /**
-     * Run tear down after each test. This just deletes the feed versions that were used in the test.
+     * Clean up test database after tests finish.
      */
-    @AfterEach
-    public void tearDownTest() throws InterruptedException {
-        // Clean up
-        if (targetVersion != null) targetVersion.delete();
+    @AfterAll
+    public static void tearDown() {
         // Project delete cascades to feed sources.
         project.delete();
         feedSource.delete();
+    }
 
-        Thread.sleep(2500);
+    /**
+     * Run tear down after each test. This just deletes the feed versions that were used in the test.
+     */
+    @AfterEach
+    public void tearDownTest() {
+        // Clean up
+        if (targetVersion != null) targetVersion.delete();
     }
 
     /**
@@ -89,7 +81,7 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
      */
     // TODO: Refactor, this code is similar structure to test with replace file.
     @Test
-    public void canNormalizeField() throws IOException, InterruptedException {
+    public void canNormalizeField() throws IOException {
         // Create target version.
         targetVersion = createFeedVersion(
             feedSource,
@@ -116,43 +108,6 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
             reader.close();
             streamReader.close();
             stream.close();
-            zip.close();
-        }
-    }
-
-    /**
-     * Test that a {@link NormalizeFieldTransformation} will successfully complete.
-     */
-    // TODO: Refactor, this code is similar structure to test with replace file.
-    @Test
-    public void canNormalizeField2() throws IOException, InterruptedException {
-        // Create target version.
-        targetVersion = createFeedVersion(
-            feedSource,
-            zipFolderFiles("fake-agency-with-only-calendar")
-        );
-
-        // Check that new version has routes table modified.
-        ZipFile zip = new ZipFile(targetVersion.retrieveGtfsFile());
-        ZipEntry entry = zip.getEntry(TABLE_NAME + ".txt");
-        assertNotNull(entry);
-
-        // Scan the first data row in routes.txt and check that the substitution was done.
-        InputStream stream = zip.getInputStream(entry);
-        InputStreamReader streamReader = new InputStreamReader(stream);
-        BufferedReader reader = new BufferedReader(streamReader);
-        try {
-            String[] columns = reader.readLine().split(",");
-            int fieldIndex = ArrayUtils.indexOf(columns, FIELD_NAME);
-
-            String row1 = reader.readLine();
-            String[] row1Fields = row1.split(",");
-            assertTrue(row1Fields[fieldIndex].startsWith("Rte "), row1);
-        } finally {
-            reader.close();
-            streamReader.close();
-            stream.close();
-            zip.close();
         }
     }
 

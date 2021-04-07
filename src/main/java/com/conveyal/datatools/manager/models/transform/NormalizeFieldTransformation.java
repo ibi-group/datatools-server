@@ -160,7 +160,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             int transformFieldIndex = getFieldIndex(fieldsFoundInZip, fieldName);
 
             // Output CSV, including headers.
-            StringBuilder processedTableData = new StringBuilder();
+            StringBuffer processedTableData = new StringBuffer();
             processedTableData.append(String.join(",", csvReader.getHeaders()));
             processedTableData.append("\n");
 
@@ -186,10 +186,8 @@ public class NormalizeFieldTransformation extends ZipTransformation {
 
             TransformType type = TransformType.TABLE_MODIFIED;
             // Copy csv input stream into the zip file, replacing the existing file.
-            try (InputStream inputStream =  new ByteArrayInputStream(processedTableData.toString().getBytes(StandardCharsets.UTF_8))) {
-                Files.copy(inputStream, targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
-            }
-
+            InputStream inputStream =  new ByteArrayInputStream(processedTableData.toString().getBytes(StandardCharsets.UTF_8));
+            Files.copy(inputStream, targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
             // TODO: Add stats on number of records changed.
 
             target.feedTransformResult.tableTransformResults.add(new TableTransformResult(tableName, type));
