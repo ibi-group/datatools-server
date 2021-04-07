@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.DatatoolsTest;
+import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
@@ -18,19 +19,20 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
-import java.util.ArrayList;
+import java.util.Date;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 import static com.conveyal.datatools.TestUtils.*;
-import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.MANUALLY_UPLOADED;
 import static org.junit.jupiter.api.Assertions.*;
 
-// TODO: Refactor, the structure of this class is very similar to ArbitraryTransformJobTest
 public class NormalizeFieldTransformJobTest extends DatatoolsTest {
+    private static final String TABLE_NAME = "routes";
+    private static final String FIELD_NAME = "route_long_name";
     private static Project project;
     private static FeedSource feedSource;
     private FeedVersion targetVersion;
+
 
     /**
      * Initialize Data Tools and set up a simple feed source and project.
@@ -40,14 +42,18 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
         // start server if it isn't already running
         DatatoolsTest.setUp();
 
-        // Create a project, feed sources, and feed versions to merge.
-        project = new Project();
-        project.name = appendDate("Test");
-        Persistence.projects.create(project);
+        // Create a project.
+        project = createProject();
 
-        // Feed source.
-        feedSource = new FeedSource(appendDate("Normalize Field Test Feed"), project.id, MANUALLY_UPLOADED);
-        feedSource.transformRules = new ArrayList<>();
+        // Create transform.
+        // In this test class, as an illustration, we replace "Route" with the "Rte" abbreviation in routes.txt.
+        FeedTransformation transformation = NormalizeFieldTransformation.create(TABLE_NAME, FIELD_NAME, null, "Route => Rte");
+        FeedTransformRules transformRules = new FeedTransformRules(transformation);
+
+        // Create feed source with above transform.
+        feedSource = new FeedSource("Normalize Field Test Feed", project.id, FeedRetrievalMethod.MANUALLY_UPLOADED);
+        feedSource.deployable = false;
+        feedSource.transformRules.add(transformRules);
         Persistence.feedSources.create(feedSource);
     }
 
@@ -58,16 +64,7 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
     public static void tearDown() {
         // Project delete cascades to feed sources.
         project.delete();
-    }
-
-    /**
-     * Run set up before each test. This just resets the feed source transformation properties.
-     */
-    //@BeforeEach
-    public void setUpTest() {
-        feedSource = Persistence.feedSources.getById(feedSource.id);
-        feedSource.transformRules = new ArrayList<>();
-        Persistence.feedSources.replace(feedSource.id, feedSource);
+        feedSource.delete();
     }
 
     /**
@@ -85,16 +82,6 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
     // TODO: Refactor, this code is similar structure to test with replace file.
     @Test
     public void canNormalizeField() throws IOException {
-        final String table = "routes";
-        final String fieldName = "route_long_name";
-
-        // Perform transformation before feed is loaded into database.
-        // In this test, we replace "Route" with the "Rte" abbreviation in routes.txt.
-        FeedTransformation transformation = NormalizeFieldTransformation.create(table, fieldName, null, "Route => Rte");
-        FeedTransformRules transformRules = new FeedTransformRules(transformation);
-        feedSource.transformRules = new ArrayList<>();
-        feedSource.transformRules.add(transformRules);
-        Persistence.feedSources.replace(feedSource.id, feedSource);
         // Create target version.
         targetVersion = createFeedVersion(
             feedSource,
@@ -103,7 +90,7 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
 
         // Check that new version has routes table modified.
         ZipFile zip = new ZipFile(targetVersion.retrieveGtfsFile());
-        ZipEntry entry = zip.getEntry(table + ".txt");
+        ZipEntry entry = zip.getEntry(TABLE_NAME + ".txt");
         assertNotNull(entry);
 
         // Scan the first data row in routes.txt and check that the substitution was done.
@@ -112,7 +99,7 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
         BufferedReader reader = new BufferedReader(streamReader);
         try {
             String[] columns = reader.readLine().split(",");
-            int fieldIndex = ArrayUtils.indexOf(columns, fieldName);
+            int fieldIndex = ArrayUtils.indexOf(columns, FIELD_NAME);
 
             String row1 = reader.readLine();
             String[] row1Fields = row1.split(",");
@@ -122,5 +109,21 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
             streamReader.close();
             stream.close();
         }
+    }
+
+    // FIXME: Refactor (same code as AutoDeployJobTest)
+    private static FeedSource createFeedSource(String name, String projectId) {
+        FeedSource mockFeedSource = new FeedSource(name, projectId, FeedRetrievalMethod.MANUALLY_UPLOADED);
+        mockFeedSource.deployable = false;
+        Persistence.feedSources.create(mockFeedSource);
+        return mockFeedSource;
+    }
+
+    // FIXME: Refactor (almost same code as AutoDeployJobTest)
+    private static Project createProject() {
+        Project project = new Project();
+        project.name = String.format("Test Project %s", new Date().toString());
+        Persistence.projects.create(project);
+        return project;
     }
 }
