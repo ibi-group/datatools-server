@@ -1,7 +1,6 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.DatatoolsTest;
-import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
@@ -28,7 +27,7 @@ import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.MANUALLY
 import static org.junit.jupiter.api.Assertions.*;
 
 // TODO: Refactor, the structure of this class is very similar to ArbitraryTransformJobTest
-public class NormalizeFieldTransformJobTest extends UnitTest {
+public class NormalizeFieldTransformJobTest extends DatatoolsTest {
     private static Project project;
     private static FeedSource feedSource;
     private FeedVersion targetVersion;
@@ -48,6 +47,7 @@ public class NormalizeFieldTransformJobTest extends UnitTest {
 
         // Feed source.
         feedSource = new FeedSource(appendDate("Normalize Field Test Feed"), project.id, MANUALLY_UPLOADED);
+        feedSource.transformRules = new ArrayList<>();
         Persistence.feedSources.create(feedSource);
     }
 
