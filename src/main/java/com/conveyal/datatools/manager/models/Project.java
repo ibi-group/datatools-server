@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.models;
 
+import com.conveyal.datatools.manager.jobs.AutoDeployType;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -8,7 +9,9 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
 import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.mongodb.client.model.Filters.eq;
@@ -65,9 +68,10 @@ public class Project extends Model {
     public Bounds bounds;
 
     /**
-     * Whether the {@link #pinnedDeploymentId} should be re-deployed after a new feed version is successfully processed.
+     * Defines when the {@link #pinnedDeploymentId} should be auto-deployed.
      */
-    public boolean autoDeploy;
+    public Set<AutoDeployType> autoDeployTypes = new HashSet<>();
+
     // Identifies a specific "pinned" deployment for the project. This is used in datatools-ui in 2 places:
     // 1. In the list of project deployments, a "pinned" deployment is shown first and highlighted.
     // 2. In the project feed source table, if a "pinned" deployment exists, the status of the versions that were in

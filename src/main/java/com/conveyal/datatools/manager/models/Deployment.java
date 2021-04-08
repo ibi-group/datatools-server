@@ -221,7 +221,7 @@ public class Deployment extends Model implements Serializable {
         return ret;
     }
 
-    /** Create a single-agency deployment for the given feed source */
+    /** Create a single-agency (testing) deployment for the given feed source */
     public Deployment(FeedSource feedSource) {
         super();
 

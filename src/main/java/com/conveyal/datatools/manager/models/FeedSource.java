@@ -599,8 +599,8 @@ public class FeedSource extends Model implements Cloneable {
     }
 
     /**
-     * Check if there are active jobs to fetch or process a new version for this feed sources. This is helpful in the
-     * context of auto-deploying to OTP to determine if there are any jobs occuring that could result in a new feed
+     * Check if there are active jobs to fetch or process a new version for this feed source. This is helpful in the
+     * context of auto-deploying to OTP to determine if there are any jobs occurring that could result in a new feed
      * version being created (we want to throttle auto-deployments if multiple jobs to create new feed versions are
      * occurring at the same time).
      */

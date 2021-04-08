@@ -171,10 +171,15 @@ public class ProcessSingleFeedJob extends MonitorableJob {
                 status.fail("Could not clone version.", e);
             }
         }
+
         // FIXME: Should we overwrite the input GTFS dataset if transforming in place?
-        // If deployment module is enabled and feed source is deployable, add auto deploy job. Note: other checks occur
-        // within job to ensure appropriate conditions are met.
-        if (DataManager.isModuleEnabled("deployment") && feedSource.deployable){
+
+        // If deployment module is enabled, the feed source is deployable and the project can be auto deployed at this
+        // stage, create an auto deploy job. Note: other checks occur within job to ensure appropriate conditions are met.
+        if (DataManager.isModuleEnabled("deployment") &&
+            feedSource.deployable &&
+            feedSource.retrieveProject().autoDeployTypes.contains(AutoDeployType.ON_PROCESS_FEED)
+        ) {
             addNextJob(new AutoDeployJob(feedSource.retrieveProject(), owner));
         }
     }

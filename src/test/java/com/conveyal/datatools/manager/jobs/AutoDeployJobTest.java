@@ -111,8 +111,9 @@ public class AutoDeployJobTest extends DatatoolsTest {
     public void canAutoDeployFeedVersionForProject() {
         projectA.pinnedDeploymentId = deploymentA.id;
         Persistence.projects.replace(projectA.id, projectA);
-        for (FeedVersion feedVersion : mockFeedSourceA.retrieveFeedVersions())
+        for (FeedVersion feedVersion : mockFeedSourceA.retrieveFeedVersions()) {
             deploymentA.feedVersionIds.add(feedVersion.id);
+        }
         Persistence.deployments.replace(deploymentA.id, deploymentA);
         AutoDeployJob autoDeployFeedJob = new AutoDeployJob(projectA, user);
         autoDeployFeedJob.run();
@@ -121,11 +122,12 @@ public class AutoDeployJobTest extends DatatoolsTest {
     }
 
     @Test
-    public void failAutoDeployFeedVersionWithHighSeverityErrorTypes() throws IOException {
+    public void failAutoDeployFeedVersionWithHighSeverityErrorTypes() {
         projectB.pinnedDeploymentId = deploymentB.id;
         Persistence.projects.replace(projectB.id, projectB);
-        for (FeedVersion feedVersion : mockFeedSourceB.retrieveFeedVersions())
+        for (FeedVersion feedVersion : mockFeedSourceB.retrieveFeedVersions()) {
             deploymentB.feedVersionIds.add(feedVersion.id);
+        }
         Persistence.deployments.replace(deploymentB.id, deploymentB);
         AutoDeployJob autoDeployFeedJob = new AutoDeployJob(projectB, user);
         autoDeployFeedJob.run();
@@ -135,7 +137,7 @@ public class AutoDeployJobTest extends DatatoolsTest {
     }
 
     @Test
-    public void failAutoDeployIfFetchStillInProgress() throws IOException {
+    public void failAutoDeployIfFetchStillInProgress() {
 
         // Create fake processing job for mock feed (don't actually start it, to keep it in the userJobsMap
         // indefinitely).
@@ -173,7 +175,7 @@ public class AutoDeployJobTest extends DatatoolsTest {
     private static Project createProject() {
         Project project = new Project();
         project.name = String.format("Test Project %s", new Date().toString());
-        project.autoDeploy = true;
+        project.autoDeployTypes.add(AutoDeployType.ON_PROCESS_FEED);
         Persistence.projects.create(project);
         return project;
     }
