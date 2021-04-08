@@ -14,6 +14,7 @@ import org.supercsv.io.CsvListWriter;
 import org.supercsv.prefs.CsvPreference;
 
 import java.io.ByteArrayInputStream;
+import java.io.File;
 import java.io.InputStream;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
@@ -153,16 +154,12 @@ public class NormalizeFieldTransformation extends ZipTransformation {
         String tableName = table + ".txt";
         String tableNamePath = "/" + tableName;
         // Run the replace transformation
-        Path targetZipPath = Paths.get(zipTarget.gtfsFile.getAbsolutePath());
-
         try(
-            FileSystem targetZipFs = FileSystems.newFileSystem(targetZipPath, null);
             // Hold output before writing to ZIP
             StringWriter stringWriter = new StringWriter();
             // CSV writer used to write to zip file.
-            CsvListWriter writer = new CsvListWriter(stringWriter, CsvPreference.STANDARD_PREFERENCE);
+            CsvListWriter writer = new CsvListWriter(stringWriter, CsvPreference.STANDARD_PREFERENCE)
         ) {
-            Path targetTxtFilePath = targetZipFs.getPath(tableNamePath);
             Table gtfsTable = Arrays.stream(Table.tablesInOrder).filter(t -> t.name.equals(table)).findFirst().get();
             CsvReader csvReader = gtfsTable.getCsvReader(new ZipFile(zipTarget.gtfsFile), null);
             final String[] headers = csvReader.getHeaders();
@@ -198,26 +195,29 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             } // End of iteration over each row.
 
             writer.flush();
-            //out.closeEntry();
-
-            // FIXME: Delay write to force a date change in the ZIP file?
-            // Should we create a new ZIP file instead and rename it afterwards?
-            try {
-                Thread.sleep(1000);
-            } catch (InterruptedException e) {
-                e.printStackTrace();
-            }
 
 
             TransformType type = TransformType.TABLE_MODIFIED;
+            Path targetZipPath = Paths.get(zipTarget.gtfsFile.getAbsolutePath());
             // Copy csv input stream into the zip file, replacing the existing file.
-            try (InputStream inputStream =  new ByteArrayInputStream(stringWriter.toString().getBytes(StandardCharsets.UTF_8))) {
+            try (
+                // Modify target zip file that we just read.
+                FileSystem targetZipFs = FileSystems.newFileSystem(targetZipPath, null);
+                // Stream for file copy operation.
+                InputStream inputStream =  new ByteArrayInputStream(stringWriter.toString().getBytes(StandardCharsets.UTF_8))
+            ) {
+                Path targetTxtFilePath = targetZipFs.getPath(tableNamePath);
                 Files.copy(inputStream, targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
                 target.feedTransformResult.tableTransformResults.add(new TableTransformResult(tableName, type));
             }
             // TODO: Add stats on number of records changed.
 
             LOG.info("Field normalization transformation successful!");
+
+            // HACK: Change the modified date by 1 second to force a system IO update event
+            // This is needed in the CI environment when multiple builds occur successively/concurrently.
+            File zipFile = new File(zipTarget.gtfsFile.getAbsolutePath());
+            zipFile.setLastModified(zipFile.lastModified() + 1000);
         } catch (Exception e) {
             status.fail("Unknown error encountered while transforming zip file", e);
         }
