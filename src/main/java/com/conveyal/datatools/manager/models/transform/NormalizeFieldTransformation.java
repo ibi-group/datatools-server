@@ -10,9 +10,12 @@ import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.text.WordUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.supercsv.io.CsvListWriter;
+import org.supercsv.prefs.CsvPreference;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystem;
 import java.nio.file.FileSystems;
@@ -152,17 +155,23 @@ public class NormalizeFieldTransformation extends ZipTransformation {
         // Run the replace transformation
         Path targetZipPath = Paths.get(zipTarget.gtfsFile.getAbsolutePath());
 
-        try( FileSystem targetZipFs = FileSystems.newFileSystem(targetZipPath, null) ){
+        try(
+            FileSystem targetZipFs = FileSystems.newFileSystem(targetZipPath, null);
+            // Hold output before writing to ZIP
+            StringWriter stringWriter = new StringWriter();
+            // CSV writer used to write to zip file.
+            CsvListWriter writer = new CsvListWriter(stringWriter, CsvPreference.STANDARD_PREFERENCE);
+        ) {
             Path targetTxtFilePath = targetZipFs.getPath(tableNamePath);
             Table gtfsTable = Arrays.stream(Table.tablesInOrder).filter(t -> t.name.equals(table)).findFirst().get();
             CsvReader csvReader = gtfsTable.getCsvReader(new ZipFile(zipTarget.gtfsFile), null);
-            Field[] fieldsFoundInZip = gtfsTable.getFieldsFromFieldHeaders(csvReader.getHeaders(), null);
+            final String[] headers = csvReader.getHeaders();
+            Field[] fieldsFoundInZip = gtfsTable.getFieldsFromFieldHeaders(headers, null);
             int transformFieldIndex = getFieldIndex(fieldsFoundInZip, fieldName);
 
-            // Output CSV, including headers.
-            StringBuilder processedTableData = new StringBuilder();
-            processedTableData.append(String.join(",", csvReader.getHeaders()));
-            processedTableData.append("\n");
+
+            // Write headers and processed CSV rows.
+            writer.write(headers);
 
             while (csvReader.readRecord()) {
                 String transformedValue = csvReader.get(transformFieldIndex);
@@ -180,13 +189,21 @@ public class NormalizeFieldTransformation extends ZipTransformation {
                 // Re-assemble the CSV line and place in buffer.
                 String[] csvValues = csvReader.getValues();
                 csvValues[transformFieldIndex] = transformedValue;
-                processedTableData.append(String.join(",", csvValues));
-                processedTableData.append("\n");
-            }
 
-            //
+                // Write line to table (plus new line char).
+                writer.write(csvValues);
+
+                // TODO: Count number of items changed.
+                //mergedLineNumber++;
+            } // End of iteration over each row.
+
+            writer.flush();
+            //out.closeEntry();
+
+            // FIXME: Delay write to force a date change in the ZIP file?
+            // Should we create a new ZIP file instead and rename it afterwards?
             try {
-                Thread.sleep(2500);
+                Thread.sleep(1000);
             } catch (InterruptedException e) {
                 e.printStackTrace();
             }
@@ -194,7 +211,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
 
             TransformType type = TransformType.TABLE_MODIFIED;
             // Copy csv input stream into the zip file, replacing the existing file.
-            try (InputStream inputStream =  new ByteArrayInputStream(processedTableData.toString().getBytes(StandardCharsets.UTF_8))) {
+            try (InputStream inputStream =  new ByteArrayInputStream(stringWriter.toString().getBytes(StandardCharsets.UTF_8))) {
                 Files.copy(inputStream, targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
                 target.feedTransformResult.tableTransformResults.add(new TableTransformResult(tableName, type));
             }
@@ -237,7 +254,6 @@ public class NormalizeFieldTransformation extends ZipTransformation {
         }
         return result;
     }
-
 
     public enum NormalizeOperation {
         SENTENCE_CASE, TITLE_CASE
