@@ -172,7 +172,6 @@ public class ProcessSingleFeedJob extends FeedVersionJob {
             }
         }
 
-        // FIXME: Should we overwrite the input GTFS dataset if transforming in place?
 
         // If deployment module is enabled, the feed source is deployable and the project can be auto deployed at this
         // stage, create an auto deploy job. Note: other checks occur within job to ensure appropriate conditions are met.
