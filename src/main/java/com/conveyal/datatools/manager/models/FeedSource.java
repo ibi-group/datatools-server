@@ -606,18 +606,11 @@ public class FeedSource extends Model implements Cloneable {
      * occurring at the same time).
      */
     public boolean hasJobsInProgress() {
-        return StatusController.filterActiveJobs(StatusController.getAllJobs()).stream().anyMatch(job -> {
-            String jobFeedSourceId = null;
-            if (
-                job instanceof FetchSingleFeedJob ||
-                job instanceof ProcessSingleFeedJob ||
-                job instanceof CreateFeedVersionFromSnapshotJob ||
-                job instanceof MergeFeedsJob
-            ) {
-                jobFeedSourceId = ((FeedSourceJob) job).getFeedSourceId();
-            }
-            return this.id.equals(jobFeedSourceId);
-        });
+        return StatusController
+            .filterActiveJobs(StatusController.getAllJobs())
+            .stream()
+            .filter(job -> job instanceof FeedSourceJob)
+            .anyMatch(job -> this.id.equals(((FeedSourceJob) job).getFeedSourceId()));
     }
 
     public <T extends FeedTransformation> boolean hasTransformationsOfType(FeedVersion target, Class<T> clazz) {
