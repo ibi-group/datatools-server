@@ -4,6 +4,7 @@ import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.DeleteObjectsRequest;
 import com.amazonaws.services.s3.model.ObjectMetadata;
+import com.conveyal.datatools.common.status.FeedSourceJob;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
@@ -607,14 +608,13 @@ public class FeedSource extends Model implements Cloneable {
     public boolean hasJobsInProgress() {
         return StatusController.filterActiveJobs(StatusController.getAllJobs()).stream().anyMatch(job -> {
             String jobFeedSourceId = null;
-            if (job instanceof FetchSingleFeedJob) {
-                jobFeedSourceId = ((FetchSingleFeedJob) job).feedSourceId;
-            } else if (job instanceof ProcessSingleFeedJob) {
-                jobFeedSourceId = ((ProcessSingleFeedJob) job).getFeedSourceId();
-            } else if (job instanceof CreateFeedVersionFromSnapshotJob) {
-                jobFeedSourceId = ((CreateFeedVersionFromSnapshotJob) job).getFeedSourceId();
-            } else if (job instanceof MergeFeedsJob) {
-                jobFeedSourceId = ((MergeFeedsJob) job).getFeedSourceId();
+            if (
+                job instanceof FetchSingleFeedJob ||
+                job instanceof ProcessSingleFeedJob ||
+                job instanceof CreateFeedVersionFromSnapshotJob ||
+                job instanceof MergeFeedsJob
+            ) {
+                jobFeedSourceId = ((FeedSourceJob) job).getFeedSourceId();
             }
             return this.id.equals(jobFeedSourceId);
         });

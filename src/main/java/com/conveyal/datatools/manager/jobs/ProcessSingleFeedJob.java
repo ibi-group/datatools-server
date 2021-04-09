@@ -1,6 +1,6 @@
 package com.conveyal.datatools.manager.jobs;
 
-import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.status.FeedVersionJob;
 import com.conveyal.datatools.editor.jobs.CreateSnapshotJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
@@ -32,7 +32,7 @@ import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.VERSION_
  *
  * @author mattwigway
  */
-public class ProcessSingleFeedJob extends MonitorableJob {
+public class ProcessSingleFeedJob extends FeedVersionJob {
     private final FeedVersion feedVersion;
     private final boolean isNewVersion;
     private static final Logger LOG = LoggerFactory.getLogger(ProcessSingleFeedJob.class);

@@ -1,6 +1,6 @@
 package com.conveyal.datatools.manager.jobs;
 
-import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.status.FeedSourceJob;
 import com.conveyal.datatools.editor.jobs.ExportSnapshotToGTFSJob;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -17,7 +17,7 @@ import org.slf4j.LoggerFactory;
  * standard processing to construct a new feed version. There may be a more clever way to handle this, but storage is
  * cheap enough.
  */
-public class CreateFeedVersionFromSnapshotJob extends MonitorableJob {
+public class CreateFeedVersionFromSnapshotJob extends FeedSourceJob {
     public static final Logger LOG = LoggerFactory.getLogger(CreateFeedVersionFromSnapshotJob.class);
 
     private final FeedVersion feedVersion;
