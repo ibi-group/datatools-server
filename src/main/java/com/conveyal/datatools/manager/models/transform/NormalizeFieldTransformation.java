@@ -2,7 +2,6 @@ package com.conveyal.datatools.manager.models.transform;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.models.TableTransformResult;
-import com.conveyal.datatools.manager.models.TransformType;
 import com.conveyal.gtfs.loader.Field;
 import com.conveyal.gtfs.loader.Table;
 import com.csvreader.CsvReader;
@@ -166,12 +165,14 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             Field[] fieldsFoundInZip = gtfsTable.getFieldsFromFieldHeaders(headers, null);
             int transformFieldIndex = getFieldIndex(fieldsFoundInZip, fieldName);
 
+            int modifiedFieldCount = 0;
 
             // Write headers and processed CSV rows.
             writer.write(headers);
 
             while (csvReader.readRecord()) {
-                String transformedValue = csvReader.get(transformFieldIndex);
+                String originalValue = csvReader.get(transformFieldIndex);
+                String transformedValue = originalValue;
 
                 // Convert to title case, if requested.
                 if (capitalize) {
@@ -190,14 +191,14 @@ public class NormalizeFieldTransformation extends ZipTransformation {
                 // Write line to table (plus new line char).
                 writer.write(csvValues);
 
-                // TODO: Count number of items changed.
-                //mergedLineNumber++;
+                // Count number of lines changed.
+                if (!originalValue.equals(transformedValue)) {
+                    modifiedFieldCount++;
+                }
             } // End of iteration over each row.
 
             writer.flush();
 
-
-            TransformType type = TransformType.TABLE_MODIFIED;
             Path targetZipPath = Paths.get(zipTarget.gtfsFile.getAbsolutePath());
             // Copy csv input stream into the zip file, replacing the existing file.
             try (
@@ -208,9 +209,10 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             ) {
                 Path targetTxtFilePath = targetZipFs.getPath(tableNamePath);
                 Files.copy(inputStream, targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
-                target.feedTransformResult.tableTransformResults.add(new TableTransformResult(tableName, type));
+                target.feedTransformResult.tableTransformResults.add(
+                    new TableTransformResult(tableName, 0, modifiedFieldCount, 0)
+                );
             }
-            // TODO: Add stats on number of records changed.
 
             LOG.info("Field normalization transformation successful!");
 
