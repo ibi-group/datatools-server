@@ -159,8 +159,15 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             // CSV writer used to write to zip file.
             CsvListWriter writer = new CsvListWriter(stringWriter, CsvPreference.STANDARD_PREFERENCE)
         ) {
+            File tempZipFile = File.createTempFile("field-normalization", "zip");
+            Path originalZipPath = Paths.get(zipTarget.gtfsFile.getAbsolutePath());
+            Path tempZipPath = Paths.get(tempZipFile.getAbsolutePath());
+
+            // Create a temporary working zip file that will replace the original.
+            Files.copy(originalZipPath, tempZipPath, StandardCopyOption.REPLACE_EXISTING);
+
             Table gtfsTable = Arrays.stream(Table.tablesInOrder).filter(t -> t.name.equals(table)).findFirst().get();
-            CsvReader csvReader = gtfsTable.getCsvReader(new ZipFile(zipTarget.gtfsFile), null);
+            CsvReader csvReader = gtfsTable.getCsvReader(new ZipFile(tempZipFile.getAbsolutePath()), null);
             final String[] headers = csvReader.getHeaders();
             Field[] fieldsFoundInZip = gtfsTable.getFieldsFromFieldHeaders(headers, null);
             int transformFieldIndex = getFieldIndex(fieldsFoundInZip, fieldName);
@@ -199,11 +206,10 @@ public class NormalizeFieldTransformation extends ZipTransformation {
 
             writer.flush();
 
-            Path targetZipPath = Paths.get(zipTarget.gtfsFile.getAbsolutePath());
             // Copy csv input stream into the zip file, replacing the existing file.
             try (
                 // Modify target zip file that we just read.
-                FileSystem targetZipFs = FileSystems.newFileSystem(targetZipPath, null);
+                FileSystem targetZipFs = FileSystems.newFileSystem(tempZipPath, null);
                 // Stream for file copy operation.
                 InputStream inputStream =  new ByteArrayInputStream(stringWriter.toString().getBytes(StandardCharsets.UTF_8))
             ) {
@@ -214,12 +220,10 @@ public class NormalizeFieldTransformation extends ZipTransformation {
                 );
             }
 
+            // Replace original zip file with temporary working zip file/
+            // (This should also trigger a system IO update event, so subsequent IO calls pick up the correct file.
+            Files.move(tempZipPath, originalZipPath, StandardCopyOption.REPLACE_EXISTING);
             LOG.info("Field normalization transformation successful!");
-
-            // HACK: Change the modified date by 1 second to force a system IO update event
-            // This is needed in the CI environment when multiple builds occur successively/concurrently.
-            File zipFile = new File(zipTarget.gtfsFile.getAbsolutePath());
-            zipFile.setLastModified(zipFile.lastModified() + 1000);
         } catch (Exception e) {
             status.fail("Unknown error encountered while transforming zip file", e);
         }
