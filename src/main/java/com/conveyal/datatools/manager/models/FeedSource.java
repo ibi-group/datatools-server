@@ -618,12 +618,6 @@ public class FeedSource extends Model implements Cloneable {
             }
             return this.id.equals(jobFeedSourceId);
         });
-//
-//        return StatusController
-//            .filterActiveJobs(StatusController.getAllJobs())
-//            .stream()
-//            .filter(job -> job instanceof FeedSourceJob)
-//            .anyMatch(job -> this.id.equals(((FeedSourceJob) job).getFeedSourceId()));
     }
 
     public <T extends FeedTransformation> boolean hasTransformationsOfType(FeedVersion target, Class<T> clazz) {
