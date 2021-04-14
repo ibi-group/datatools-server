@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.models.transform;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.manager.gtfsplus.tables.GtfsPlusTable;
 import com.conveyal.gtfs.loader.Table;
 
 import java.nio.file.FileSystem;
@@ -27,14 +28,18 @@ public abstract class ZipTransformation extends FeedTransformation {
         }
 
         // Validate parameters before running transform.
+        // Check that the table name is valid per GTFS or GTFS-plus.
         if (table == null) {
             status.fail("Must specify transformation table name.");
             return;
         }
-        if (Arrays.stream(Table.tablesInOrder).noneMatch(t -> t.name.equals(table))) {
+        if (Arrays.stream(Table.tablesInOrder).noneMatch(t -> t.name.equals(table)) &&
+            Arrays.stream(GtfsPlusTable.tables).noneMatch(t -> t.name.equals(table))
+        ) {
             status.fail("The transformation table name is not valid.");
             return;
         }
+        // Let subclasses check parameters.
         validateParameters(status);
         if (status.error) {
             return;
