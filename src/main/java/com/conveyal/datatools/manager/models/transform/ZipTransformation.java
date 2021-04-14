@@ -1,9 +1,11 @@
 package com.conveyal.datatools.manager.models.transform;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.gtfs.loader.Table;
 
 import java.nio.file.FileSystem;
 import java.nio.file.Path;
+import java.util.Arrays;
 
 /**
  * This is an abstract class that represents a transformation that should apply to a GTFS in zip form. In other
@@ -21,6 +23,20 @@ public abstract class ZipTransformation extends FeedTransformation {
     public void doTransform(FeedTransformTarget target, MonitorableJob.Status status) {
         if (!(target instanceof FeedTransformZipTarget)) {
             status.fail("Target must be FeedTransformZipTarget.");
+            return;
+        }
+
+        // Validate parameters before running transform.
+        if (table == null) {
+            status.fail("Must specify transformation table name.");
+            return;
+        }
+        if (Arrays.stream(Table.tablesInOrder).noneMatch(t -> t.name.equals(table))) {
+            status.fail("The transformation table name is not valid.");
+            return;
+        }
+        validateParameters(status);
+        if (status.error) {
             return;
         }
 
