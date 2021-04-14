@@ -152,7 +152,6 @@ public class NormalizeFieldTransformation extends ZipTransformation {
 
         // Run the transformation
         String tableName = table + ".txt";
-        String tableNamePath = "/" + tableName;
         try(
             // Hold output before writing to ZIP
             StringWriter stringWriter = new StringWriter();
@@ -172,7 +171,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             Field[] fieldsFoundInZip = gtfsTable.getFieldsFromFieldHeaders(headers, null);
             int transformFieldIndex = getFieldIndex(fieldsFoundInZip, fieldName);
 
-            int modifiedFieldCount = 0;
+            int modifiedRowCount = 0;
 
             // Write headers and processed CSV rows.
             writer.write(headers);
@@ -197,9 +196,9 @@ public class NormalizeFieldTransformation extends ZipTransformation {
                 // Write line to table (plus new line char).
                 writer.write(csvValues);
 
-                // Count number of lines changed.
+                // Count number of CSV rows changed.
                 if (!originalValue.equals(transformedValue)) {
-                    modifiedFieldCount++;
+                    modifiedRowCount++;
                 }
             } // End of iteration over each row.
 
@@ -212,17 +211,17 @@ public class NormalizeFieldTransformation extends ZipTransformation {
                 // Stream for file copy operation.
                 InputStream inputStream =  new ByteArrayInputStream(stringWriter.toString().getBytes(StandardCharsets.UTF_8))
             ) {
-                Path targetTxtFilePath = targetZipFs.getPath(tableNamePath);
+                Path targetTxtFilePath = getTablePathInZip(tableName, targetZipFs);
                 Files.copy(inputStream, targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
                 zipTarget.feedTransformResult.tableTransformResults.add(
-                    new TableTransformResult(tableName, 0, modifiedFieldCount, 0)
+                    new TableTransformResult(tableName, 0, modifiedRowCount, 0)
                 );
             }
 
             // Replace original zip file with temporary working zip file/
             // (This should also trigger a system IO update event, so subsequent IO calls pick up the correct file.
             Files.move(tempZipPath, originalZipPath, StandardCopyOption.REPLACE_EXISTING);
-            LOG.info("Field normalization transformation successful!");
+            LOG.info("Field normalization transformation successful ({} row(s) changed).", modifiedRowCount);
         } catch (Exception e) {
             status.fail("Unknown error encountered while transforming zip file", e);
         }

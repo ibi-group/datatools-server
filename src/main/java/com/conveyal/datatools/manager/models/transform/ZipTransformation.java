@@ -2,6 +2,9 @@ package com.conveyal.datatools.manager.models.transform;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
 
+import java.nio.file.FileSystem;
+import java.nio.file.Path;
+
 /**
  * This is an abstract class that represents a transformation that should apply to a GTFS in zip form. In other
  * words, subclasses will provide a transform override method that acts directly on the zip file. Sample fields
@@ -23,5 +26,12 @@ public abstract class ZipTransformation extends FeedTransformation {
 
         // Cast transform target to zip flavor and pass it to subclasses to transform.
         transform((FeedTransformZipTarget)target, status);
+    }
+
+    /**
+     * Obtains a {@link Path} object for the specified GTFS table file in a ZIP archive.
+     */
+    protected Path getTablePathInZip(String tableName, FileSystem targetZipFs) {
+        return targetZipFs.getPath("/" + tableName);
     }
 }
