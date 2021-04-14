@@ -138,24 +138,21 @@ public class NormalizeFieldTransformation extends ZipTransformation {
     }
 
     @Override
-    public void transform(FeedTransformTarget target, MonitorableJob.Status status) {
-        if (!(target instanceof FeedTransformZipTarget)) {
-            status.fail("Target must be FeedTransformZipTarget.");
-            return;
-        }
-        // Cast transform target to zip flavor.
-        FeedTransformZipTarget zipTarget = (FeedTransformZipTarget)target;
-        if (fieldName == null) {
-            status.fail("Field name must not be null");
-            return;
-        }
+    public void transform(FeedTransformZipTarget zipTarget, MonitorableJob.Status status) {
+        // Validate required fields before starting
+        // TODO: Extract this logic out.
         if (table == null) {
             status.fail("Must specify transformation table name.");
             return;
         }
+        if (fieldName == null) {
+            status.fail("Field name must not be null");
+            return;
+        }
+
+        // Run the transformation
         String tableName = table + ".txt";
         String tableNamePath = "/" + tableName;
-        // Run the replace transformation
         try(
             // Hold output before writing to ZIP
             StringWriter stringWriter = new StringWriter();
@@ -179,7 +176,6 @@ public class NormalizeFieldTransformation extends ZipTransformation {
 
             // Write headers and processed CSV rows.
             writer.write(headers);
-
             while (csvReader.readRecord()) {
                 String originalValue = csvReader.get(transformFieldIndex);
                 String transformedValue = originalValue;
@@ -218,7 +214,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             ) {
                 Path targetTxtFilePath = targetZipFs.getPath(tableNamePath);
                 Files.copy(inputStream, targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
-                target.feedTransformResult.tableTransformResults.add(
+                zipTarget.feedTransformResult.tableTransformResults.add(
                     new TableTransformResult(tableName, 0, modifiedFieldCount, 0)
                 );
             }

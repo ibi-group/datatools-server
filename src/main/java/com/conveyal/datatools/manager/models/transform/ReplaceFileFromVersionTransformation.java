@@ -33,20 +33,16 @@ public class ReplaceFileFromVersionTransformation extends ZipTransformation {
     }
 
     @Override
-    public void transform(FeedTransformTarget target, MonitorableJob.Status status) {
-        if (!(target instanceof FeedTransformZipTarget)) {
-            status.fail("Target must be FeedTransformZipTarget.");
+    public void transform(FeedTransformZipTarget zipTarget, MonitorableJob.Status status) {
+        // Validate required fields before starting
+        // TODO: Extract this logic out.
+        if (table == null) {
+            status.fail("Must specify transformation table name.");
             return;
         }
-        // Cast transform target to zip flavor.
-        FeedTransformZipTarget zipTarget = (FeedTransformZipTarget)target;
         FeedVersion sourceVersion = Persistence.feedVersions.getById(sourceVersionId);
         if (sourceVersion == null) {
             status.fail("Source version ID must reference valid version.");
-            return;
-        }
-        if (table == null) {
-            status.fail("Must specify transformation table name.");
             return;
         }
         String tableName = table + ".txt";
@@ -67,7 +63,7 @@ public class ReplaceFileFromVersionTransformation extends ZipTransformation {
                     : TransformType.TABLE_ADDED;
                 // Copy a file into the zip file, replacing it if it already exists.
                 Files.copy(sourceTxtFilePath, targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
-                target.feedTransformResult.tableTransformResults.add(new TableTransformResult(tableName, type));
+                zipTarget.feedTransformResult.tableTransformResults.add(new TableTransformResult(tableName, type));
             }
             LOG.info("File replacement zip transformation successful!");
         } catch (NoSuchFileException e) {

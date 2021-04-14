@@ -43,13 +43,7 @@ public class DeleteRecordsTransformation extends DbTransformation {
     }
 
     @Override
-    public void transform(FeedTransformTarget target, MonitorableJob.Status status) {
-        if (!(target instanceof FeedTransformDbTarget)) {
-            status.fail("Target must be FeedTransformDbTarget.");
-            return;
-        }
-        // Cast transform target to DB flavor.
-        FeedTransformDbTarget dbTarget = (FeedTransformDbTarget)target;
+    public void transform(FeedTransformDbTarget dbTarget, MonitorableJob.Status status) {
         // Fetch the referenced snapshot to transform.
         Snapshot snapshot = Persistence.snapshots.getById(dbTarget.snapshotId);
         if (snapshot == null) {
@@ -57,6 +51,7 @@ public class DeleteRecordsTransformation extends DbTransformation {
             return;
         }
 
+        // Validate required fields before starting
         // TODO: Move validation code into its own method?
         final List<Table> tables =
             Arrays.stream(Table.tablesInOrder)
@@ -111,7 +106,7 @@ public class DeleteRecordsTransformation extends DbTransformation {
             int deleted = preparedStatement.executeUpdate();
             LOG.info("{} deleted {} records", this.getClass().getSimpleName(), deleted);
             connection.commit();
-            target.feedTransformResult.tableTransformResults.add(new TableTransformResult(table, deleted, 0, 0));
+            dbTarget.feedTransformResult.tableTransformResults.add(new TableTransformResult(table, deleted, 0, 0));
         } catch (SQLException e) {
             throw new RuntimeException(e);
         }

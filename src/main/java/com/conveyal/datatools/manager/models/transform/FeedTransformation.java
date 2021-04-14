@@ -8,7 +8,6 @@ import org.bson.codecs.pojo.annotations.BsonDiscriminator;
 
 import java.io.Serializable;
 
-
 /**
  * This abstract class is the base for arbitrary feed transformations.
  *
@@ -28,9 +27,9 @@ import java.io.Serializable;
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME)
 @JsonSubTypes({
     @JsonSubTypes.Type(value = DeleteRecordsTransformation.class, name = "DeleteRecordsTransformation"),
+    @JsonSubTypes.Type(value = NormalizeFieldTransformation.class, name = "NormalizeFieldTransformation"),
     @JsonSubTypes.Type(value = ReplaceFileFromVersionTransformation.class, name = "ReplaceFileFromVersionTransformation"),
-    @JsonSubTypes.Type(value = ReplaceFileFromStringTransformation.class, name = "ReplaceFileFromStringTransformation"),
-    @JsonSubTypes.Type(value = NormalizeFieldTransformation.class, name = "NormalizeFieldTransformation")
+    @JsonSubTypes.Type(value = ReplaceFileFromStringTransformation.class, name = "ReplaceFileFromStringTransformation")
 })
 public abstract class FeedTransformation implements Serializable {
     private static final long serialVersionUID = 1L;
@@ -47,5 +46,5 @@ public abstract class FeedTransformation implements Serializable {
     //  it could return something object that contains a bool + message.
     // boolean isValid();
 
-    public abstract void transform(FeedTransformTarget target, MonitorableJob.Status status);
+    public abstract void doTransform(FeedTransformTarget target, MonitorableJob.Status status);
 }

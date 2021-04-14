@@ -27,20 +27,16 @@ public class ReplaceFileFromStringTransformation extends ZipTransformation {
     }
 
     @Override
-    public void transform(FeedTransformTarget target, MonitorableJob.Status status) {
-        if (!(target instanceof FeedTransformZipTarget)) {
-            status.fail("Target must be FeedTransformZipTarget.");
+    public void transform(FeedTransformZipTarget zipTarget, MonitorableJob.Status status) {
+        // Validate required fields before starting
+        // TODO: Extract this logic out.
+        if (table == null) {
+            status.fail("Must specify transformation table name.");
             return;
         }
-        // Cast transform target to zip flavor.
-        FeedTransformZipTarget zipTarget = (FeedTransformZipTarget)target;
         if (csvData == null) {
             // TODO: If this is a null value, delete the table (not yet supported).
             status.fail("CSV data must not be null (delete table not yet supported)");
-            return;
-        }
-        if (table == null) {
-            status.fail("Must specify transformation table name.");
             return;
         }
         String tableName = table + ".txt";
@@ -57,7 +53,7 @@ public class ReplaceFileFromStringTransformation extends ZipTransformation {
                 : TransformType.TABLE_ADDED;
             // Copy csv input stream into the zip file, replacing it if it already exists.
             Files.copy(inputStream, targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
-            target.feedTransformResult.tableTransformResults.add(new TableTransformResult(tableName, type));
+            zipTarget.feedTransformResult.tableTransformResults.add(new TableTransformResult(tableName, type));
         } catch (Exception e) {
             status.fail("Unknown error encountered while transforming zip file", e);
         }
