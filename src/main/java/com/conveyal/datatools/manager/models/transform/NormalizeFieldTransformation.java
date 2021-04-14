@@ -36,30 +36,33 @@ import static com.conveyal.gtfs.loader.Field.getFieldIndex;
 public class NormalizeFieldTransformation extends ZipTransformation {
     private static final Logger LOG = LoggerFactory.getLogger(NormalizeFieldTransformation.class);
 
-    private static final String defaultExceptions = getConfigPropertyAsText("DEFAULT_CAPITALIZATION_EXCEPTIONS");
-    private static final String defaultSubstitutions = getConfigPropertyAsText("DEFAULT_SUBSTITUTIONS");
-
-    // Common separator characters found on the English keyboard.
+    private static final String DEFAULT_EXCEPTIONS = getConfigPropertyAsText("DEFAULT_CAPITALIZATION_EXCEPTIONS");
+    private static final String DEFAULT_SUBSTITUTIONS = getConfigPropertyAsText("DEFAULT_SUBSTITUTIONS");
+    // Common separator characters found on the US-English keyboard.
     private static final char[] SEPARATORS = " \t\n`~!@#$%^&*()-_=+[{]}\\|;:'\",<.>/?".toCharArray();
     private static final char NORMALIZE_SPACE_PREFIX = '+';
     private static final String SUBSTITUTION_SEPARATOR = "=>";
 
-    // TODO: Add JavaDoc.
+    /** The field name in the GTFS table being transformed. */
     public String fieldName;
+
+    /** Whether to perform capitalizations. */
     public boolean capitalize = true;
+
+    /** Whether to perform text substitutions. */
     public boolean performSubstitutions = true;
 
     /**
-     * Exceptions are initialized with the default configured ones,
+     * Capitalization exceptions are initialized with the default configured ones,
      * and can be overridden from the UI.
      */
-    public String capitalizeExceptions = defaultExceptions;
+    public String capitalizeExceptions = DEFAULT_EXCEPTIONS;
 
     /**
      * Substitutions are initialized with the default configured ones,
      * and can be overridden from the UI.
      */
-    public String substitutions = defaultSubstitutions;
+    public String substitutions = DEFAULT_SUBSTITUTIONS;
 
     // These fields are reset when the setter is called
     // and initialized when executing the transform method.
