@@ -33,18 +33,15 @@ public class ReplaceFileFromVersionTransformation extends ZipTransformation {
     }
 
     @Override
-    public void transform(FeedTransformZipTarget zipTarget, MonitorableJob.Status status) {
-        // Validate required fields before starting
-        // TODO: Extract this logic out.
-        if (table == null) {
-            status.fail("Must specify transformation table name.");
-            return;
-        }
-        FeedVersion sourceVersion = Persistence.feedVersions.getById(sourceVersionId);
-        if (sourceVersion == null) {
+    public void validateParameters(MonitorableJob.Status status) {
+        if (getSourceVersion() == null) {
             status.fail("Source version ID must reference valid version.");
-            return;
         }
+    }
+
+    @Override
+    public void transform(FeedTransformZipTarget zipTarget, MonitorableJob.Status status) {
+        FeedVersion sourceVersion = getSourceVersion();
         String tableName = table + ".txt";
         // Run the replace transformation
         Path sourceZipPath = Paths.get(sourceVersion.retrieveGtfsFile().getAbsolutePath());
@@ -69,5 +66,9 @@ public class ReplaceFileFromVersionTransformation extends ZipTransformation {
         } catch (Exception e) {
             status.fail("Unknown error encountered while transforming zip file", e);
         }
+    }
+
+    private FeedVersion getSourceVersion() {
+        return Persistence.feedVersions.getById(sourceVersionId);
     }
 }

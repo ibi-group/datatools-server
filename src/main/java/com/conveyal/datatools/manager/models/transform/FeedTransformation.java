@@ -47,4 +47,11 @@ public abstract class FeedTransformation implements Serializable {
     // boolean isValid();
 
     public abstract void doTransform(FeedTransformTarget target, MonitorableJob.Status status);
+
+    /**
+     * Overridable method that handles validation logic prior to performing the transformation.
+     * Calling status.fail prevents thr transform logic from running.
+     * The default implementation does nothing.
+     */
+    public void validateParameters(MonitorableJob.Status status) { }
 }
