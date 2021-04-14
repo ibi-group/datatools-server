@@ -138,14 +138,19 @@ public class NormalizeFieldTransformation extends ZipTransformation {
     }
 
     @Override
-    public void validateParameters(MonitorableJob.Status status) {
+    public void transform(FeedTransformZipTarget zipTarget, MonitorableJob.Status status) {
+        // Validate required fields before starting
+        // TODO: Extract this logic out.
+        if (table == null) {
+            status.fail("Must specify transformation table name.");
+            return;
+        }
         if (fieldName == null) {
             status.fail("Field name must not be null");
+            return;
         }
-    }
 
-    @Override
-    public void transform(FeedTransformZipTarget zipTarget, MonitorableJob.Status status) {
+        // Run the transformation
         String tableName = table + ".txt";
         try(
             // Hold output before writing to ZIP

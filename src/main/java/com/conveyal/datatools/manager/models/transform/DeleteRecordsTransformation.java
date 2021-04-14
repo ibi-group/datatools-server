@@ -1,9 +1,13 @@
 package com.conveyal.datatools.manager.models.transform;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.gtfsplus.tables.GtfsPlusTable;
 import com.conveyal.datatools.manager.models.Snapshot;
 import com.conveyal.datatools.manager.models.TableTransformResult;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.gtfs.loader.JdbcGtfsLoader;
+import com.conveyal.gtfs.loader.Table;
 import com.conveyal.gtfs.util.InvalidNamespaceException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -11,8 +15,10 @@ import org.slf4j.LoggerFactory;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.manager.DataManager.GTFS_DATA_SOURCE;
 import static com.conveyal.gtfs.util.Util.ensureValidNamespace;
@@ -45,6 +51,37 @@ public class DeleteRecordsTransformation extends DbTransformation {
             return;
         }
 
+        // Validate required fields before starting
+        // TODO: Move validation code into its own method?
+        final List<Table> tables =
+            Arrays.stream(Table.tablesInOrder)
+                .filter(Table::isSpecTable)
+                .collect(Collectors.toList());
+        if (DataManager.isModuleEnabled("gtfsplus")) {
+            // Add GTFS+ tables only if MTC extension is enabled.
+            tables.addAll(Arrays.asList(GtfsPlusTable.tables));
+        }
+        // Check that table name is valid (to prevent SQL injection).
+        Table matchingTable = null;
+        for (Table specTable : tables) {
+            if (specTable.name.equals(table)) {
+                matchingTable = specTable;
+                break;
+            }
+        }
+        if (matchingTable == null) {
+            status.fail("Table must be valid GTFS spec table name (without .txt).");
+            return;
+        }
+        if (matchField == null) {
+            status.fail("Must provide valid match field");
+            return;
+        }
+        String cleanField = JdbcGtfsLoader.sanitize(matchField, null);
+        if (!matchField.equals(cleanField)) {
+            status.fail("Input match field contained disallowed special characters (only alphanumeric and underscores are permitted).");
+            return;
+        }
         try {
             ensureValidNamespace(snapshot.namespace);
         } catch (InvalidNamespaceException e) {

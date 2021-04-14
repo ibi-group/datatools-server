@@ -27,18 +27,18 @@ public class ReplaceFileFromStringTransformation extends ZipTransformation {
     }
 
     @Override
-    public void validateParameters(MonitorableJob.Status status) {
-        if (csvData == null) {
-            status.fail("CSV data must not be null (delete table not yet supported)");
-        }
-    }
-
-    @Override
     public void transform(FeedTransformZipTarget zipTarget, MonitorableJob.Status status) {
-        // if (csvData == null) {
-        //     TODO: If this is a null value, delete the table (not yet supported).
-        // }
-
+        // Validate required fields before starting
+        // TODO: Extract this logic out.
+        if (table == null) {
+            status.fail("Must specify transformation table name.");
+            return;
+        }
+        if (csvData == null) {
+            // TODO: If this is a null value, delete the table (not yet supported).
+            status.fail("CSV data must not be null (delete table not yet supported)");
+            return;
+        }
         String tableName = table + ".txt";
         // Run the replace transformation
         Path targetZipPath = Paths.get(zipTarget.gtfsFile.getAbsolutePath());
