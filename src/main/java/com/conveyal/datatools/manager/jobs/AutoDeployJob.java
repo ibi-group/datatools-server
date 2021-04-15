@@ -109,13 +109,35 @@ public class AutoDeployJob extends MonitorableJob {
             List<FeedVersion> latestVersionsWithCriticalErrors = new LinkedList<>();
             boolean shouldWaitForNewFeedVersions = false;
 
+            // Production ready feed versions.
+            List<Deployment.SummarizedFeedVersion> pinnedFeedVersions = deployment.retrievePinnedFeedVersions();
+
             // Iterate through each feed version for deployment.
             for (
                 Deployment.SummarizedFeedVersion currentDeploymentFeedVersion : deployment.retrieveFeedVersions()
             ) {
-                // Retrieve and update to the latest feed version associated with the feed source of the current
+                // Retrieve the latest feed version associated with the feed source of the current
                 // feed version set for the deployment.
                 FeedVersion latestFeedVersion = currentDeploymentFeedVersion.feedSource.retrieveLatest();
+                // Make sure the latest feed version is not going to supersede a pinned feed version.
+                if (pinnedFeedVersions
+                    .stream()
+                    .anyMatch(feedVersion -> feedVersion.feedSource.id.equals(latestFeedVersion.feedSourceId))
+                ) {
+                    String message = String.format("Feed version %s from feed source %s could not be advanced because a previous feed version has been pinned for project %s.",
+                        latestFeedVersion.id,
+                        latestFeedVersion.parentFeedSource().name,
+                        project.name);
+                    LOG.warn(message);
+                    NotifyUsersForSubscriptionJob.createNotification(
+                        "deployment-updated",
+                        project.id,
+                        message
+                    );
+                    continue;
+                }
+
+                // Update to the latest feed version.
                 updatedFeedVersionIds.add(latestFeedVersion.id);
 
                 // Throttle this auto-deployment if needed. For projects that haven't yet been auto-deployed, don't
@@ -143,7 +165,8 @@ public class AutoDeployJob extends MonitorableJob {
                 }
             }
 
-            // Always update the deployment's feed version IDs with the latest feed versions.
+            // Always update the deployment's feed version IDs with the latest feed versions which have not been pinned
+            // to a particular version.
             deployment.feedVersionIds = updatedFeedVersionIds;
             Persistence.deployments.replace(deployment.id, deployment);
 

@@ -84,6 +84,9 @@ public class Deployment extends Model implements Serializable {
     @JsonView(JsonViews.DataDump.class)
     public Collection<String> feedVersionIds = new ArrayList<>();
 
+    /** Feed versions that are production ready and should not be replaced by newer versions. */
+    public Collection<String> pinnedfeedVersionIds = new ArrayList<>();
+
     /** All of the feed versions used in this deployment */
     public List<FeedVersion> retrieveFullFeedVersions() {
         ArrayList<FeedVersion> ret = new ArrayList<>(feedVersionIds.size());
@@ -99,9 +102,19 @@ public class Deployment extends Model implements Serializable {
         return ret;
     }
 
+    /** Retrieve all of the pinned feed versions used in this deployment. */
+    public List<SummarizedFeedVersion> retrievePinnedFeedVersions() {
+        return retrieveSummarizedFeedVersions(pinnedfeedVersionIds);
+    }
+
     /** All of the feed versions used in this deployment, summarized so that the Internet won't break */
     @JsonProperty("feedVersions")
     public List<SummarizedFeedVersion> retrieveFeedVersions() {
+        return retrieveSummarizedFeedVersions(feedVersionIds);
+    }
+
+    /** Retrieve all of the summarized feed versions used in this deployment. */
+    private List<SummarizedFeedVersion> retrieveSummarizedFeedVersions(Collection<String> feedVersionIds) {
         // return empty array if feedVersionIds is null
         if (feedVersionIds == null) return new ArrayList<>();
 
