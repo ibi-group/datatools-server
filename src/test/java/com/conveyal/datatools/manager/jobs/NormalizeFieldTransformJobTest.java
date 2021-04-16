@@ -24,8 +24,11 @@ import java.util.Date;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
-import static com.conveyal.datatools.TestUtils.*;
-import static org.junit.jupiter.api.Assertions.*;
+import static com.conveyal.datatools.TestUtils.createFeedVersion;
+import static com.conveyal.datatools.TestUtils.zipFolderFiles;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
+
 
 public class NormalizeFieldTransformJobTest extends DatatoolsTest {
     private static final String TABLE_NAME = "routes";
