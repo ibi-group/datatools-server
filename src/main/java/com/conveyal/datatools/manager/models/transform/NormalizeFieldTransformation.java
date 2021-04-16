@@ -213,7 +213,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
                 );
             }
 
-            // Replace original zip file with temporary working zip file/
+            // Replace original zip file with temporary working zip file.
             // (This should also trigger a system IO update event, so subsequent IO calls pick up the correct file.
             Files.move(tempZipPath, originalZipPath, StandardCopyOption.REPLACE_EXISTING);
             LOG.info("Field normalization transformation successful ({} row(s) changed).", modifiedRowCount);
