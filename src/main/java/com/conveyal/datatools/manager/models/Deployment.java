@@ -85,7 +85,7 @@ public class Deployment extends Model implements Serializable {
     public Collection<String> feedVersionIds = new ArrayList<>();
 
     /** Feed versions that are production ready and should not be replaced by newer versions. */
-    public Collection<String> pinnedfeedVersionIds = new ArrayList<>();
+    public List<String> pinnedfeedVersionIds = new ArrayList<>();
 
     /** All of the feed versions used in this deployment */
     public List<FeedVersion> retrieveFullFeedVersions() {
