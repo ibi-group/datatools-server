@@ -13,7 +13,6 @@ import org.supercsv.io.CsvListWriter;
 import org.supercsv.prefs.CsvPreference;
 
 import java.io.ByteArrayInputStream;
-import java.io.File;
 import java.io.InputStream;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
@@ -153,15 +152,14 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             // CSV writer used to write to zip file.
             CsvListWriter writer = new CsvListWriter(stringWriter, CsvPreference.STANDARD_PREFERENCE)
         ) {
-            File tempZipFile = File.createTempFile("field-normalization", "zip");
+            Path tempZipPath = Files.createTempFile("field-normalization", ".zip");
             Path originalZipPath = Paths.get(zipTarget.gtfsFile.getAbsolutePath());
-            Path tempZipPath = Paths.get(tempZipFile.getAbsolutePath());
 
-            // Create a temporary working zip file that will replace the original.
+            // Create a temporary working zip file from original.
             Files.copy(originalZipPath, tempZipPath, StandardCopyOption.REPLACE_EXISTING);
 
             Table gtfsTable = Arrays.stream(Table.tablesInOrder).filter(t -> t.name.equals(table)).findFirst().get();
-            CsvReader csvReader = gtfsTable.getCsvReader(new ZipFile(tempZipFile.getAbsolutePath()), null);
+            CsvReader csvReader = gtfsTable.getCsvReader(new ZipFile(tempZipPath.toAbsolutePath().toString()), null);
             final String[] headers = csvReader.getHeaders();
             Field[] fieldsFoundInZip = gtfsTable.getFieldsFromFieldHeaders(headers, null);
             int transformFieldIndex = getFieldIndex(fieldsFoundInZip, fieldName);
@@ -196,7 +194,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
                     modifiedRowCount++;
                 }
             } // End of iteration over each row.
-
+            csvReader.close();
             writer.flush();
 
             // Copy csv input stream into the zip file, replacing the existing file.
