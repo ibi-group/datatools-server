@@ -32,6 +32,13 @@ import java.util.zip.ZipFile;
 import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
 import static com.conveyal.gtfs.loader.Field.getFieldIndex;
 
+/**
+ * This transformation normalizes string values for a given field in a GTFS table by:
+ * - converting uppercase values to title case (each word capitalized),
+ * - substituting certain strings with others.
+ * Exceptions to capitalization and substitutions are configurable application-wide in env.yml
+ * or for each transform individually using datatools-ui.
+ */
 public class NormalizeFieldTransformation extends ZipTransformation {
     private static final Logger LOG = LoggerFactory.getLogger(NormalizeFieldTransformation.class);
 
@@ -45,7 +52,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
     /** The field name in the GTFS table being transformed. */
     public String fieldName;
 
-    /** Whether to perform capitalizations. */
+    /** Whether to perform capitalization. */
     public boolean capitalize = true;
 
     /** Whether to perform text substitutions. */
@@ -110,6 +117,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
         }
         return transformation;
     }
+
     public static NormalizeFieldTransformation create(String table, String fieldName) {
         return create(table, fieldName, null, null);
     }
