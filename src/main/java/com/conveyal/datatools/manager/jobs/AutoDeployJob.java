@@ -129,11 +129,6 @@ public class AutoDeployJob extends MonitorableJob {
                         latestFeedVersion.parentFeedSource().name,
                         project.name);
                     LOG.warn(message);
-                    NotifyUsersForSubscriptionJob.createNotification(
-                        "deployment-updated",
-                        project.id,
-                        message
-                    );
                     continue;
                 }
 
