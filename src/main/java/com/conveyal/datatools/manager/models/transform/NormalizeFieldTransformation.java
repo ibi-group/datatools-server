@@ -154,6 +154,8 @@ public class NormalizeFieldTransformation extends ZipTransformation {
     @Override
     public void transform(FeedTransformZipTarget zipTarget, MonitorableJob.Status status) {
         String tableName = table + ".txt";
+        Long transformStartMillis = System.currentTimeMillis();
+
         try(
             // Hold output before writing to ZIP
             StringWriter stringWriter = new StringWriter();
@@ -173,6 +175,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             int transformFieldIndex = getFieldIndex(fieldsFoundInZip, fieldName);
 
             int modifiedRowCount = 0;
+            Long startMillis = System.currentTimeMillis();
 
             // Write headers and processed CSV rows.
             writer.write(headers);
@@ -204,6 +207,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             } // End of iteration over each row.
             csvReader.close();
             writer.flush();
+            Long stopMillis = System.currentTimeMillis();
 
             // Copy csv input stream into the zip file, replacing the existing file.
             try (
@@ -222,7 +226,13 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             // Replace original zip file with temporary working zip file.
             // (This should also trigger a system IO update event, so subsequent IO calls pick up the correct file.
             Files.move(tempZipPath, originalZipPath, StandardCopyOption.REPLACE_EXISTING);
-            LOG.info("Field normalization transformation successful ({} row(s) changed).", modifiedRowCount);
+            Long transformEndMillis = System.currentTimeMillis();
+            LOG.info(
+                "Field normalization transformation successful: {} row(s) changed in {} ms ({} ms including file ops).",
+                modifiedRowCount,
+                stopMillis - startMillis,
+                transformEndMillis - transformStartMillis
+            );
         } catch (Exception e) {
             status.fail("Unknown error encountered while transforming zip file", e);
         }
@@ -320,8 +330,6 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             if (pattern == null) {
                 initialize();
             }
-
-            // TODO: Study appendReplacement
             return pattern.matcher(input).replaceAll(effectiveReplacement);
         }
 
