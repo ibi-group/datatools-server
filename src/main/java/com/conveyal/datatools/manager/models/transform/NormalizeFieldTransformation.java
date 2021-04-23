@@ -1,7 +1,9 @@
 package com.conveyal.datatools.manager.models.transform;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.TableTransformResult;
+import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.conveyal.gtfs.loader.Field;
 import com.conveyal.gtfs.loader.Table;
 import com.csvreader.CsvReader;
@@ -14,6 +16,7 @@ import org.supercsv.prefs.CsvPreference;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
+import java.io.Serializable;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystem;
@@ -43,11 +46,12 @@ public class NormalizeFieldTransformation extends ZipTransformation {
     private static final Logger LOG = LoggerFactory.getLogger(NormalizeFieldTransformation.class);
 
     private static final String DEFAULT_EXCEPTIONS = getConfigPropertyAsText("DEFAULT_CAPITALIZATION_EXCEPTIONS");
-    private static final String DEFAULT_SUBSTITUTIONS = getConfigPropertyAsText("DEFAULT_SUBSTITUTIONS");
+    private static final List<Substitution> DEFAULT_SUBSTITUTIONS = JsonUtil.getPOJOFromJSONAsList(
+        DataManager.getConfigProperty("DEFAULT_SUBSTITUTIONS"),
+        Substitution.class
+    );
     // Common separator characters found on the US-English keyboard.
     private static final char[] SEPARATORS = " \t\n`~!@#$%^&*()-_=+[{]}\\|;:'\",<.>/?".toCharArray();
-    private static final char NORMALIZE_SPACE_PREFIX = '+';
-    private static final String SUBSTITUTION_SEPARATOR = "=>";
 
     /** The field name in the GTFS table being transformed. */
     public String fieldName;
@@ -68,25 +72,17 @@ public class NormalizeFieldTransformation extends ZipTransformation {
      * Substitutions are initialized with the default configured ones,
      * and can be overridden from the UI.
      */
-    public String substitutions = DEFAULT_SUBSTITUTIONS;
+    public List<Substitution> substitutions = DEFAULT_SUBSTITUTIONS;
 
-    // These fields are reset when the setter is called
+    // This field is reset when the setter is called
     // and initialized when executing the transform method.
     private List<Substitution> capitalizeSubstitutions;
-    private List<Substitution> stringSubstitutions;
 
     private List<Substitution> getCapitalizeSubstitutions() {
         if (capitalizeSubstitutions == null) {
             initializeCapitalizeSubstitutions();
         }
         return capitalizeSubstitutions;
-    }
-
-    private List<Substitution> getStringSubstitutions() {
-        if (stringSubstitutions == null) {
-            initializeStringSubstitutions();
-        }
-        return stringSubstitutions;
     }
 
     /**
@@ -102,7 +98,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
      * @return An instance of the transformation with the desired settings.
      */
     public static NormalizeFieldTransformation create(
-        String table, String fieldName, String exceptions, String substitutions)
+        String table, String fieldName, String exceptions, List<Substitution> substitutions)
     {
         NormalizeFieldTransformation transformation = new NormalizeFieldTransformation();
         transformation.fieldName = fieldName;
@@ -131,17 +127,6 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             : Arrays.stream(capitalizeExceptions.split("\\s*,\\s*"))
                 .map(Substitution::makeCapitalizeSubstitution)
                 .collect(Collectors.toList());
-    }
-
-    /**
-     * Initializes stringSubstitutions so that it is a non-null list.
-     */
-    private void initializeStringSubstitutions() {
-        stringSubstitutions = StringUtils.isBlank(substitutions)
-            ? new ArrayList<>()
-            : Arrays.stream(substitutions.split("\\s*,\\s*"))
-            .map(Substitution::makeStringSubstitution)
-            .collect(Collectors.toList());
     }
 
     @Override
@@ -263,11 +248,14 @@ public class NormalizeFieldTransformation extends ZipTransformation {
      * Performs substitutions defined for this transform, and returns the result.
      */
     public String performSubstitutions(String inputString) {
-        String result = inputString;
-        for (Substitution substitution : getStringSubstitutions()) {
-            result = substitution.replace(result);
+        if (substitutions != null && substitutions.size() != 0) {
+            String result = inputString;
+            for (Substitution substitution : substitutions) {
+                result = substitution.replace(result);
+            }
+            return result;
         }
-        return result;
+        return inputString;
     }
 
     public enum NormalizeOperation {
@@ -277,15 +265,17 @@ public class NormalizeFieldTransformation extends ZipTransformation {
     /**
      * This class holds the regex/replacement pair, and the cached compiled regex pattern.
      */
-    public static class Substitution {
-        /** The regex string to match. */
-        public String regex;
+    public static class Substitution implements Serializable {
+        private static final long serialVersionUID = 1L;
+
+        /** The regex pattern string to match. */
+        public String pattern;
         /** The string that should replace regex (see effectiveReplacement below). */
         public String replacement;
         /** true if whitespace surrounding regex should be create or normalized to one space. */
         public boolean normalizeSpace;
 
-        private Pattern pattern;
+        private Pattern patternObject;
         /**
          * Replacement string that is actually used for the substitution,
          * and set according to the value of normalizeSpace.
@@ -295,12 +285,12 @@ public class NormalizeFieldTransformation extends ZipTransformation {
         /** Empty constructor needed for persistence */
         public Substitution() {}
 
-        public Substitution(String regex, String replacement) {
-            this(regex, replacement, false);
+        public Substitution(String pattern, String replacement) {
+            this(pattern, replacement, false);
         }
 
-        public Substitution(String regex, String replacement, boolean normalizeSpace) {
-            this.regex = regex;
+        public Substitution(String pattern, String replacement, boolean normalizeSpace) {
+            this.pattern = pattern;
             this.normalizeSpace = normalizeSpace;
             this.replacement = replacement;
         }
@@ -315,10 +305,10 @@ public class NormalizeFieldTransformation extends ZipTransformation {
                 // or insert one space before and one space after if there is none.
                 // Note: if the replacement must be blank, then normalizeSpace should be set to false
                 // and whitespace management should be handled in the regex instead.
-                this.pattern = Pattern.compile(String.format("\\s*%s\\s*", regex));
+                this.patternObject = Pattern.compile(String.format("\\s*%s\\s*", pattern));
                 this.effectiveReplacement = String.format(" %s ", replacement);
             } else {
-                this.pattern = Pattern.compile(regex);
+                this.patternObject = Pattern.compile(pattern);
                 this.effectiveReplacement = replacement;
             }
         }
@@ -327,10 +317,10 @@ public class NormalizeFieldTransformation extends ZipTransformation {
          * Perform the replacement of regex in the provided string, and return the result.
          */
         public String replace(String input) {
-            if (pattern == null) {
+            if (patternObject == null) {
                 initialize();
             }
-            return pattern.matcher(input).replaceAll(effectiveReplacement);
+            return patternObject.matcher(input).replaceAll(effectiveReplacement);
         }
 
         /**
@@ -343,28 +333,6 @@ public class NormalizeFieldTransformation extends ZipTransformation {
                 String.format("\\b%s\\b", WordUtils.capitalizeFully(word)),
                 word
             );
-        }
-
-        /**
-         * Generates a substitution for the provided pair in format "old => new"
-         * (or "old =>+ new" if space normalization is needed).
-         */
-        public static Substitution makeStringSubstitution(String substitutionParts) {
-            String[] parts = substitutionParts.split(SUBSTITUTION_SEPARATOR);
-            // Normalize space if the second portion starts with NORMALIZE_SPACE_PREFIX
-            // (remove that prefix from the replaced text).
-            boolean normalizeSpace = false;
-            String replacement = "";
-
-            if (parts.length >= 2) {
-                if (parts[1].charAt(0) == NORMALIZE_SPACE_PREFIX) {
-                    normalizeSpace = true;
-                    replacement = parts[1].substring(1).trim();
-                } else {
-                    replacement = parts[1].trim();
-                }
-            }
-            return new Substitution(parts[0].trim(), replacement, normalizeSpace);
         }
     }
 }

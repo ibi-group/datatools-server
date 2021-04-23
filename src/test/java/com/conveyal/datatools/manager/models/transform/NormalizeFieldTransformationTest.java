@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.models.transform;
 
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
+import com.google.common.collect.Lists;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -84,7 +85,14 @@ public class NormalizeFieldTransformationTest extends UnitTest {
     @MethodSource("createSubstitutionCasesWithOwnExceptions")
     public void testPerformSubstitutionsWithOwnExceptions(String input, String expected) {
         NormalizeFieldTransformation transform = NormalizeFieldTransformation.create(
-            "table", "field", null, "Station => Stn, # =>+ AND");
+            "table",
+            "field",
+            null,
+            Lists.newArrayList(
+                new NormalizeFieldTransformation.Substitution("Station", "Stn"),
+                new NormalizeFieldTransformation.Substitution("#", "AND", true)
+            )
+        );
         assertEquals(expected, transform.performSubstitutions(input));
     }
 

@@ -4,6 +4,8 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectReader;
+import com.fasterxml.jackson.databind.type.CollectionType;
 import spark.Request;
 
 import java.io.IOException;
@@ -49,6 +51,20 @@ public class JsonUtil {
             logMessageAndHalt(req, 400, "Failed to parse JSON String", e);
             return null;
         }
+    }
+
+    /**
+     * Utility method to parse generic objects from {@link JsonNode} and return as list
+     */
+    public static <T> List<T> getPOJOFromJSONAsList(JsonNode json, Class<T> clazz) {
+        CollectionType type = objectMapper.getTypeFactory().constructCollectionType(List.class, clazz);
+        ObjectReader reader = objectMapper.readerFor(type);
+        try {
+            return reader.readValue(json);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return null;
     }
 
     /**

@@ -10,6 +10,7 @@ import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
 import com.conveyal.datatools.manager.models.transform.FeedTransformation;
 import com.conveyal.datatools.manager.models.transform.NormalizeFieldTransformation;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.google.common.collect.Lists;
 import org.apache.commons.lang3.ArrayUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -52,7 +53,10 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
         // Create transform.
         // In this test class, as an illustration, we replace "Route" with the "Rte" abbreviation in routes.txt.
         FeedTransformation transformation = NormalizeFieldTransformation.create(
-            TABLE_NAME, FIELD_NAME, null, "Route => Rte");
+            TABLE_NAME, FIELD_NAME, null, Lists.newArrayList(
+                new NormalizeFieldTransformation.Substitution("Route", "Rte")
+            )
+        );
         FeedTransformRules transformRules = new FeedTransformRules(transformation);
 
         // Create feed source with above transform.
