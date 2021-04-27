@@ -1,5 +1,7 @@
 package com.conveyal.datatools.manager.jobs;
 
+import org.eclipse.jetty.http.HttpFields;
+
 import java.io.Serializable;
 import java.util.Date;
 import java.util.HashMap;
@@ -37,6 +39,7 @@ public class MergeFeedsResult implements Serializable {
     public boolean failed;
     /** Set of reasons explaining why merge operation failed */
     public Set<String> failureReasons = new HashSet<>();
+    public Set<String> tripIdsToCheck = new HashSet<>();
 
     public MergeFeedsResult (MergeFeedsType type) {
         this.type = type;

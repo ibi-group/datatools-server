@@ -13,11 +13,15 @@ import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.error.NewGTFSError;
 import com.conveyal.gtfs.error.NewGTFSErrorType;
+import com.conveyal.gtfs.loader.Feed;
 import com.conveyal.gtfs.loader.Field;
 import com.conveyal.gtfs.loader.ReferenceTracker;
 import com.conveyal.gtfs.loader.Table;
+import com.conveyal.gtfs.model.StopTime;
 import com.csvreader.CsvReader;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Sets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.supercsv.io.CsvListWriter;
@@ -32,24 +36,23 @@ import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collection;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
-import java.util.zip.ZipFile;
 import java.util.zip.ZipOutputStream;
 
 import static com.conveyal.datatools.manager.jobs.MergeFeedsType.SERVICE_PERIOD;
 import static com.conveyal.datatools.manager.jobs.MergeFeedsType.REGIONAL;
+import static com.conveyal.datatools.manager.jobs.MergeStrategy.CHECK_STOP_TIMES;
+import static com.conveyal.datatools.manager.jobs.MergeStrategy.EXTEND_FUTURE;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.REGIONAL_MERGE;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.SERVICE_PERIOD_MERGE;
+import static com.conveyal.datatools.manager.utils.MergeFeedUtils.*;
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.conveyal.gtfs.loader.DateField.GTFS_DATE_FORMATTER;
 import static com.conveyal.gtfs.loader.Field.getFieldIndex;
@@ -127,6 +130,9 @@ public class MergeFeedsJob extends MonitorableJob {
 
     private static final Logger LOG = LoggerFactory.getLogger(MergeFeedsJob.class);
     public static final ObjectMapper mapper = new ObjectMapper();
+    private static Set<String> intersectingTripIds = new HashSet<>();
+    private static Set<String> tripsOnlyInCurrentFeed = new HashSet<>();
+    private static Set<String> tripsOnlyInFutureFeed = new HashSet<>();
     private final Set<FeedVersion> feedVersions;
     private final FeedSource feedSource;
     private final ReferenceTracker referenceTracker = new ReferenceTracker();
@@ -140,7 +146,11 @@ public class MergeFeedsJob extends MonitorableJob {
      * dataset. Otherwise, this will be null throughout the life of the job.
      */
     final FeedVersion mergedVersion;
-    public boolean failOnDuplicateTripId = true;
+    public MergeStrategy mergeStrategy = MergeStrategy.DEFAULT;
+    private Set<String> tripIdsToModifyForCurrentFeed = new HashSet<>();
+    private Set<String> tripIdsToSkipForCurrentFeed = new HashSet<>();
+    private Set<String> serviceIdsToExtend = new HashSet<>();
+    private Set<String> serviceIdsToCloneAndRename = new HashSet<>();
 
     public MergeFeedsJob(Auth0UserProfile owner, Set<FeedVersion> feedVersions, String file, MergeFeedsType mergeType) {
         this(owner, feedVersions, file, mergeType, true);
@@ -233,6 +243,58 @@ public class MergeFeedsJob extends MonitorableJob {
             tablesToMerge.addAll(Arrays.asList(GtfsPlusTable.tables));
         }
         int numberOfTables = tablesToMerge.size();
+        // Before initiating the merge process, run some pre-processing to check for id conflicts for certain tables
+        if (mergeType.equals(SERVICE_PERIOD)) {
+            mergeStrategy = getMergeStrategy(feedsToMerge);
+            if (mergeStrategy == CHECK_STOP_TIMES) {
+                Feed futureFeed = new Feed(DataManager.GTFS_DATA_SOURCE, feedsToMerge.get(0).version.namespace);
+                Feed pastFeed = new Feed(DataManager.GTFS_DATA_SOURCE, feedsToMerge.get(1).version.namespace);
+                for (String tripId : intersectingTripIds) {
+                    // Fetch all ordered stop_times for each common trip_id, hash them, and compare the two sets for the
+                    // future and current feed. If the stop_times are an exact match, include one instance of the trip
+                    // (ignoring the other identical one). If they do not match, modify the current trip_id and include.
+                    List<StopTime> futureStopTimes = Lists.newArrayList(futureFeed.stopTimes.getOrdered(tripId));
+                    List<StopTime> pastStopTimes = Lists.newArrayList(pastFeed.stopTimes.getOrdered(tripId));
+                    String futureServiceId = futureFeed.trips.get(tripId).service_id;
+                    String pastServiceId = pastFeed.trips.get(tripId).service_id;
+                    // FIXME: what if service_ids do not match! Perhaps the right approach would be to just return
+                    //  FAIL_DUE_TO_MATCHING_TRIP_IDS in that case. It might be too complicated otherwise.
+                    if (!stopTimesMatch(futureStopTimes, pastStopTimes)) {
+                        // If stop_times or services do not match, the trip will be cloned. Also, track the service_id
+                        // (it will need to be cloned and renamed for both current/past feeds).
+                        tripIdsToModifyForCurrentFeed.add(tripId);
+                        serviceIdsToCloneAndRename.add(futureServiceId);
+                    } else {
+                        // If the trip's stop_times are an exact match, we can safely include just the
+                        // future trip and exclude the current/past one. Also, track the service_id (it will need to be
+                        // extended to the full time range).
+                        tripIdsToSkipForCurrentFeed.add(tripId);
+                        serviceIdsToExtend.add(futureServiceId);
+                    }
+                }
+                for (String tripId : tripsOnlyInCurrentFeed) {
+                    String serviceId = pastFeed.trips.get(tripId).service_id;
+                    // If a trip in the current feed contains a service_id that has been modified above, it needs to be
+                    // cloned/renamed so as to avoid having it operate on an extended service.
+                    if (serviceIdsToExtend.contains(serviceId)) {
+                        serviceIdsToCloneAndRename.add(serviceId);
+                    }
+                }
+                for (String tripId : tripsOnlyInFutureFeed) {
+                    String serviceId = futureFeed.trips.get(tripId).service_id;
+                    // If a trip in the future feed contains a service_id that has been modified above, it needs to be
+                    // cloned/renamed so as to avoid having it operate on an extended service.
+                    if (serviceIdsToExtend.contains(serviceId)) {
+                        serviceIdsToCloneAndRename.add(serviceId);
+                    }
+                }
+            }
+        }
+        // Skip merging process altogether if the failing condition is met.
+        if (MergeStrategy.FAIL_DUE_TO_MATCHING_TRIP_IDS.equals(mergeStrategy)) {
+            status.fail("Feed merge failed because the trip_ids are identical in the future and current feeds. A new service requires unique trip_ids for merging.");
+            return;
+        }
         // Loop over GTFS tables and merge each feed one table at a time.
         for (int i = 0; i < numberOfTables; i++) {
             Table table = tablesToMerge.get(i);
@@ -280,25 +342,16 @@ public class MergeFeedsJob extends MonitorableJob {
         }
     }
 
-    /**
-     * Collect zipFiles for each feed version before merging tables.
-     * Note: feed versions are sorted by first calendar date so that future dataset is iterated over first. This is
-     * required for the MTC merge strategy which prefers entities from the future dataset over past entities.
-     */
-    private List<FeedToMerge> collectAndSortFeeds(Set<FeedVersion> feedVersions) {
-        return feedVersions.stream().map(version -> {
-            try {
-                return new FeedToMerge(version);
-            } catch (Exception e) {
-                LOG.error("Could not create zip file for version: {}", version.version);
-                return null;
+    private boolean stopTimesMatch(List<StopTime> futureStopTimes, List<StopTime> pastStopTimes) {
+        if (futureStopTimes.size() != pastStopTimes.size()) {
+            return false;
+        }
+        for (int i = 0; i < pastStopTimes.size(); i++) {
+            if (pastStopTimes.get(i).hashCode() != futureStopTimes.get(i).hashCode()) {
+                return false;
             }
-        }).filter(Objects::nonNull).filter(entry -> entry.version.validationResult != null
-            && entry.version.validationResult.firstCalendarDate != null)
-            // MTC-specific sort mentioned in above comment.
-            // TODO: If another merge strategy requires a different sort order, a merge type check should be added.
-            .sorted(Comparator.comparing(entry -> entry.version.validationResult.firstCalendarDate,
-                Comparator.reverseOrder())).collect(Collectors.toList());
+        }
+        return true;
     }
 
     /**
@@ -376,16 +429,22 @@ public class MergeFeedsJob extends MonitorableJob {
             // Get shared fields between all feeds being merged. This is used to filter the spec fields so that only
             // fields found in the collection of feeds are included in the merged table.
             Set<Field> sharedFields = getSharedFields(feedsToMerge, table);
-            // Initialize future feed's first date to the first calendar date from the validation result.
+            // Initialize future and past/current feed's first date to the first calendar date from validation result.
             // This is equivalent to either the earliest date of service defined for a calendar_date record or the
             // earliest start_date value for a calendars.txt record. For MTC, however, they require that GTFS
             // providers use calendars.txt entries and prefer that this value (which is used to determine cutoff
             // dates for the active feed when merging with the future) be strictly assigned the earliest
             // calendar#start_date (unless that table for some reason does not exist).
             LocalDate futureFeedFirstDate = feedsToMerge.get(0).version.validationResult.firstCalendarDate;
+            LocalDate pastFeedFirstDate = feedsToMerge.get(1).version.validationResult.firstCalendarDate;
             LocalDate futureFirstCalendarStartDate = LocalDate.MAX;
             // Iterate over each zip file. For service period merge, the first feed is the future GTFS.
             for (int feedIndex = 0; feedIndex < feedsToMerge.size(); feedIndex++) {
+                if (EXTEND_FUTURE.equals(mergeStrategy) && feedIndex > 0) {
+                    // No need to iterate over second (current) file if strategy is to simply extend the future GTFS
+                    // service to start earlier.
+                    continue;
+                }
                 boolean keyFieldMissing = false;
                 // Use for a new agency ID for use if the feed does not contain one. Initialize to
                 // null. If the value becomes non-null, the agency_id is missing and needs to be
@@ -465,7 +524,7 @@ public class MergeFeedsJob extends MonitorableJob {
                                 futureFirstCalendarStartDate.isBefore(LocalDate.MAX) &&
                                 futureFeedFirstDate.isBefore(futureFirstCalendarStartDate)
                             ) {
-                                // If the future feed's first date is before the feed's first calendar start date,
+                                // If the future feed's first date is before the its first calendar start date,
                                 // override the future feed first date with the calendar start date for use when checking
                                 // MTC calendar_dates and calendar records for modification/exclusion.
                                 futureFeedFirstDate = futureFirstCalendarStartDate;
@@ -651,13 +710,25 @@ public class MergeFeedsJob extends MonitorableJob {
                                     int startDateIndex =
                                         getFieldIndex(fieldsFoundInZip, "start_date");
                                     LocalDate startDate = LocalDate
-                                        .parse(csvReader.get(startDateIndex),
-                                            GTFS_DATE_FORMATTER);
+                                        .parse(csvReader.get(startDateIndex), GTFS_DATE_FORMATTER);
                                     if (feedIndex == 0) {
                                         // For the future feed, check if the calendar's start date is earlier than the
                                         // previous earliest value and update if so.
                                         if (futureFirstCalendarStartDate.isAfter(startDate)) {
                                             futureFirstCalendarStartDate = startDate;
+                                        }
+                                        // FIXME: Move this below so that a cloned service doesn't get prematurely
+                                        //  modified? (do we want the cloned record to have the original values?)
+                                        if (index == startDateIndex) {
+                                            if (EXTEND_FUTURE == mergeStrategy ||
+                                                (CHECK_STOP_TIMES == mergeStrategy &&
+                                                    // TODO: Need to ensure serviceIds are being extended.
+                                                    serviceIdsToExtend.contains(keyValue))
+                                            ) {
+                                                // Update start_date to extend service through the past/current feed's
+                                                // start date if the merge strategy dictates.
+                                                val = valueToWrite = pastFeedFirstDate.format(GTFS_DATE_FORMATTER);
+                                            }
                                         }
                                     } else {
                                         // If a service_id from the active calendar has both the
@@ -679,8 +750,7 @@ public class MergeFeedsJob extends MonitorableJob {
                                         // end_date in the future, the end_date shall be set to one
                                         // day prior to the earliest start_date in future dataset
                                         // before appending the calendar record to the merged file.
-                                        int endDateIndex =
-                                            getFieldIndex(fieldsFoundInZip, "end_date");
+                                        int endDateIndex = getFieldIndex(fieldsFoundInZip, "end_date");
                                         if (index == endDateIndex) {
                                             LocalDate endDate = LocalDate
                                                 .parse(csvReader.get(endDateIndex), GTFS_DATE_FORMATTER);
@@ -750,18 +820,31 @@ public class MergeFeedsJob extends MonitorableJob {
                                     if (hasDuplicateError(idErrors)) skipRecord = true;
                                     break;
                                 case "trips":
-                                    // trip_ids between active and future datasets must not match. If any trip_id is found
-                                    // to be matching, the merge should fail with appropriate notification to user with the
-                                    // cause of the failure. Merge result should include all conflicting trip_ids.
+                                    // trip_ids between active and future datasets must not match. The MergeStrategy
+                                    // determines behavior when matching trip_ids (or service_ids) are found between
+                                    if (feedIndex > 0) {
+                                        // Handling past/current feed.
+                                        if (tripIdsToSkipForCurrentFeed.contains(keyValue)) {
+                                            skipRecord = true;
+                                        } else if (tripIdsToModifyForCurrentFeed.contains(keyValue)) {
+                                            valueToWrite = String.join(":", idScope, val);
+                                            // Update key value for subsequent ID conflict checks for this row.
+                                            keyValue = valueToWrite;
+                                            mergeFeedsResult.remappedIds.put(
+                                                getTableScopedValue(table, idScope, val),
+                                                valueToWrite
+                                            );
+                                        }
+                                    }
                                     for (NewGTFSError error : idErrors) {
                                         if (error.errorType.equals(NewGTFSErrorType.DUPLICATE_ID)) {
-                                            mergeFeedsResult.failureReasons
-                                                .add("Trip ID conflict caused merge failure.");
-                                            mergeFeedsResult.idConflicts.add(error.badValue);
-                                            mergeFeedsResult.errorCount++;
-                                            if (failOnDuplicateTripId)
-                                                mergeFeedsResult.failed = true;
-                                            skipRecord = true;
+                                            valueToWrite = String.join(":", idScope, val);
+                                            // Update key value for subsequent ID conflict checks for this row.
+                                            keyValue = valueToWrite;
+                                            mergeFeedsResult.remappedIds.put(
+                                                getTableScopedValue(table, idScope, val),
+                                                valueToWrite
+                                            );
                                         }
                                     }
                                     break;
@@ -965,10 +1048,26 @@ public class MergeFeedsJob extends MonitorableJob {
                             .toArray(String[]::new);
                         writer.write(headers);
                     }
-                    // Write line to table (plus new line char).
+                    // Write line to table.
                     writer.write(rowValues);
                     lineNumber++;
                     mergedLineNumber++;
+                    if ((table.name.equals("calendar")) && serviceIdsToCloneAndRename.contains(rowValues[keyFieldIndex])) {
+                        // FIXME: Do we need to worry about calendar_dates?
+                        String[] clonedValues = rowValues.clone();
+                        String newServiceId = clonedValues[keyFieldIndex] = String.join(":", idScope, rowValues[keyFieldIndex]);;
+                        // Modify start/end date.
+                        int startDateIndex = Table.CALENDAR.getFieldIndex("start_date");
+                        int endDateIndex = Table.CALENDAR.getFieldIndex("end_date");
+                        clonedValues[startDateIndex] =
+                            feed.version.validationResult.firstCalendarDate.format(GTFS_DATE_FORMATTER);
+                        clonedValues[endDateIndex] =
+                            feed.version.validationResult.lastCalendarDate.format(GTFS_DATE_FORMATTER);
+                        referenceTracker.checkReferencesAndUniqueness(keyValue, lineNumber, table.fields[0], newServiceId, table, keyField, orderField);
+                        writer.write(clonedValues);
+                        lineNumber++;
+                        mergedLineNumber++;
+                    }
                 } // End of iteration over each row.
             }
             writer.flush();
@@ -985,71 +1084,45 @@ public class MergeFeedsJob extends MonitorableJob {
         return mergedLineNumber;
     }
 
-    private static String stopCodeFailureMessage(int stopsMissingStopCodeCount, int stopsCount, int specialStopsCount) {
-        return String.format(
-            "If stop_code is provided for some stops (for those with location_type = " +
-                "empty or 0), all stops must have stop_code values. The merge process " +
-                "found %d of %d total stops that were incorrectly missing stop_code values. " +
-                "Note: \"special\" stops with location_type > 0 need not specify this value " +
-                "(%d special stops found in feed).",
-            stopsMissingStopCodeCount,
-            stopsCount,
-            specialStopsCount
-        );
-    }
-
-    /** Get the set of shared fields for all feeds being merged for a specific table. */
-    private Set<Field> getSharedFields(List<FeedToMerge> feedsToMerge, Table table) throws IOException {
-        Set<Field> sharedFields = new HashSet<>();
-        // First, iterate over each feed to collect the shared fields that need to be output in the merged table.
-        for (FeedToMerge feed : feedsToMerge) {
-            CsvReader csvReader = table.getCsvReader(feed.zipFile, null);
-            // If csv reader is null, the table was not found in the zip file.
-            if (csvReader == null) {
-                continue;
+    private static MergeStrategy getMergeStrategy(List<FeedToMerge> feedsToMerge) throws IOException {
+        // Iterate over both feeds (future feed is first).
+        for (int i = 0; i < feedsToMerge.size(); i++) {
+            FeedToMerge feed = feedsToMerge.get(i);
+            Set<Table> tablesToCheck = Sets.newHashSet(Table.TRIPS, Table.CALENDAR, Table.CALENDAR_DATES);
+            for (Table table : tablesToCheck) {
+                feed.idsForTable.get(table).addAll(getIdsForTable(feed.zipFile, table));
             }
-            // Get fields found from headers and add them to the shared fields set.
-            Field[] fieldsFoundInZip = table.getFieldsFromFieldHeaders(csvReader.getHeaders(), null);
-            sharedFields.addAll(Arrays.asList(fieldsFoundInZip));
         }
-        return sharedFields;
-    }
-
-    /**
-     * Checks whether a collection of fields contains a field with the provided name.
-     */
-    private boolean containsField(Collection<Field> fields, String fieldName) {
-        for (Field field : fields) if (field.name.equals(fieldName)) return true;
-        return false;
-    }
-
-    /** Checks that any of a set of errors is of the type {@link NewGTFSErrorType#DUPLICATE_ID}. */
-    private boolean hasDuplicateError(Set<NewGTFSError> errors) {
-        for (NewGTFSError error : errors) {
-            if (error.errorType.equals(NewGTFSErrorType.DUPLICATE_ID)) return true;
+        // We are on the last (second) feed to merge. Check for conflicts with future feed.
+        FeedToMerge futureFeed = feedsToMerge.get(0);
+        FeedToMerge currentFeed = feedsToMerge.get(1);
+        Set<String> pastTripIds = currentFeed.idsForTable.get(Table.TRIPS);
+        Set<String> futureTripIds = futureFeed.idsForTable.get(Table.TRIPS);
+        Set<String> pastServiceIds = new HashSet<>();
+        pastServiceIds.addAll(currentFeed.idsForTable.get(Table.CALENDAR));
+        pastServiceIds.addAll(currentFeed.idsForTable.get(Table.CALENDAR_DATES));
+        Set<String> futureServiceIds = new HashSet<>();
+        futureServiceIds.addAll(futureFeed.idsForTable.get(Table.CALENDAR));
+        futureServiceIds.addAll(futureFeed.idsForTable.get(Table.CALENDAR_DATES));
+        boolean serviceIdsMatch = pastServiceIds.equals(futureServiceIds);
+        intersectingTripIds = Sets.intersection(pastTripIds, futureTripIds);
+        tripsOnlyInCurrentFeed = Sets.difference(pastTripIds, futureTripIds);
+        tripsOnlyInFutureFeed = Sets.difference(futureTripIds, pastTripIds);
+        boolean tripIdsMatch = pastTripIds.equals(futureTripIds);
+        if (serviceIdsMatch && tripIdsMatch) {
+            // Effectively this exact match condition means that the future feed will be used as is
+            // (including stops, routes, etc.), the only modification being service date ranges.
+            // This is Condition 2 in the docs.
+            return EXTEND_FUTURE;
         }
-        return false;
-    }
-
-    /** Get table-scoped value used for key when remapping references for a particular feed. */
-    private static String getTableScopedValue(Table table, String prefix, String id) {
-        return String.join(":",
-            table.name,
-            prefix,
-            id);
-    }
-
-    /**
-     * Helper class that collects the feed version and its zip file. Note: this class helps with sorting versions to
-     * merge in a list collection.
-     */
-    private class FeedToMerge {
-        public FeedVersion version;
-        public ZipFile zipFile;
-
-        FeedToMerge(FeedVersion version) throws IOException {
-            this.version = version;
-            this.zipFile = new ZipFile(version.retrieveGtfsFile());
+        if (serviceIdsMatch) {
+            // If just the service_ids are an exact match, do the trip/stoptimes checking thing for matching trip_ids
+            return CHECK_STOP_TIMES;
         }
+        if (tripIdsMatch) {
+            // Do not permit merge to continue.
+            return MergeStrategy.FAIL_DUE_TO_MATCHING_TRIP_IDS;
+        }
+        return MergeStrategy.DEFAULT;
     }
 }
