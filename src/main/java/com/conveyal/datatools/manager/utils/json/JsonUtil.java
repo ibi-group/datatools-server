@@ -57,12 +57,14 @@ public class JsonUtil {
      * Utility method to parse generic objects from {@link JsonNode} and return as list
      */
     public static <T> List<T> getPOJOFromJSONAsList(JsonNode json, Class<T> clazz) {
-        CollectionType type = objectMapper.getTypeFactory().constructCollectionType(List.class, clazz);
-        ObjectReader reader = objectMapper.readerFor(type);
-        try {
-            return reader.readValue(json);
-        } catch (IOException e) {
-            e.printStackTrace();
+        if (json != null) {
+            CollectionType type = objectMapper.getTypeFactory().constructCollectionType(List.class, clazz);
+            ObjectReader reader = objectMapper.readerFor(type);
+            try {
+                return reader.readValue(json);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
         }
         return null;
     }
