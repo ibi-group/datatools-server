@@ -4,6 +4,7 @@ import com.conveyal.datatools.common.status.FeedVersionJob;
 import com.conveyal.datatools.editor.jobs.CreateSnapshotJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Snapshot;
@@ -21,6 +22,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.List;
+import java.util.Set;
 
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.VERSION_CLONE;
 
@@ -170,16 +172,24 @@ public class ProcessSingleFeedJob extends FeedVersionJob {
             } catch (IOException e) {
                 status.fail("Could not clone version.", e);
             }
-        }
-
-        // If deployment module is enabled, the feed source is deployable and the project can be auto deployed at this
-        // stage, create an auto deploy job. Note: other checks occur within job to ensure appropriate conditions are met.
-        if (DataManager.isModuleEnabled("deployment") &&
-            feedSource.deployable &&
-            feedSource.retrieveProject().autoDeployTypes.contains(AutoDeployType.ON_PROCESS_FEED) &&
-            !feedSource.retrieveProject().autoDeployTypes.contains(AutoDeployType.ON_FEED_FETCH)
-        ) {
-            addNextJob(new AutoDeployJob(feedSource.retrieveProject(), owner));
+        } else {
+            // If deployment module is enabled, the feed source is deployable and the project can be auto deployed at
+            // this stage, create an auto deploy job. Note: other checks occur within job to ensure appropriate
+            // conditions are met.
+            Set<AutoDeployType> projectAutoDeployTypes = feedSource.retrieveProject().autoDeployTypes;
+            if (
+                DataManager.isModuleEnabled("deployment") &&
+                    feedSource.deployable &&
+                    (
+                        projectAutoDeployTypes.contains(AutoDeployType.ON_PROCESS_FEED) ||
+                            (
+                                feedVersion.retrievalMethod == FeedRetrievalMethod.FETCHED_AUTOMATICALLY &&
+                                    projectAutoDeployTypes.contains(AutoDeployType.ON_FEED_FETCH)
+                            )
+                    )
+            ) {
+                addNextJob(new AutoDeployJob(feedSource.retrieveProject(), owner));
+            }
         }
     }
 
