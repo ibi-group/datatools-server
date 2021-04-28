@@ -9,6 +9,8 @@ import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
 import com.conveyal.datatools.manager.models.transform.FeedTransformation;
 import com.conveyal.datatools.manager.models.transform.NormalizeFieldTransformation;
+import com.conveyal.datatools.manager.models.transform.NormalizeFieldTransformationTest;
+import com.conveyal.datatools.manager.models.transform.Substitution;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.google.common.collect.Lists;
 import org.apache.commons.lang3.ArrayUtils;
@@ -52,9 +54,9 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
 
         // Create transform.
         // In this test class, as an illustration, we replace "Route" with the "Rte" abbreviation in routes.txt.
-        FeedTransformation transformation = NormalizeFieldTransformation.create(
+        FeedTransformation transformation = NormalizeFieldTransformationTest.createTransformation(
             TABLE_NAME, FIELD_NAME, null, Lists.newArrayList(
-                new NormalizeFieldTransformation.Substitution("Route", "Rte")
+                new Substitution("Route", "Rte")
             )
         );
         FeedTransformRules transformRules = new FeedTransformRules(transformation);
@@ -73,7 +75,6 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
     public static void tearDown() {
         // Project delete cascades to feed sources.
         project.delete();
-        feedSource.delete();
     }
 
     /**
@@ -105,7 +106,7 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
      * Test that a {@link NormalizeFieldTransformation} will successfully complete.
      */
     public void canNormalizeField() throws IOException {
-        // Create target version.
+        // Create target version that the transform will operate on.
         targetVersion = createFeedVersion(
             feedSource,
             zipFolderFiles("fake-agency-with-only-calendar")
@@ -116,7 +117,8 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
             ZipEntry entry = zip.getEntry(TABLE_NAME + ".txt");
             assertNotNull(entry);
 
-            // Scan the first data row in routes.txt and check that the substitution was done.
+            // Scan the first data row in routes.txt and check that the substitution
+            // that was defined in setUp was done.
             try (
                 InputStream stream = zip.getInputStream(entry);
                 InputStreamReader streamReader = new InputStreamReader(stream);

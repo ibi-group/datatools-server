@@ -16,7 +16,6 @@ import org.supercsv.prefs.CsvPreference;
 
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
-import java.io.Serializable;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.FileSystem;
@@ -28,7 +27,6 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.zip.ZipFile;
 
@@ -37,12 +35,19 @@ import static com.conveyal.gtfs.loader.Field.getFieldIndex;
 
 /**
  * This transformation normalizes string values for a given field in a GTFS table by:
- * - converting uppercase values to title case (each word capitalized),
+ * - change the case of field values,
  * - substituting certain strings with others.
  * Exceptions to capitalization and substitutions are configurable application-wide in env.yml
  * or for each transform individually using datatools-ui.
  */
 public class NormalizeFieldTransformation extends ZipTransformation {
+    /**
+     * Different capitalization styles to apply.
+     */
+    public enum CapitalizationStyle {
+        TITLE_CASE
+    }
+
     private static final Logger LOG = LoggerFactory.getLogger(NormalizeFieldTransformation.class);
 
     private static final String DEFAULT_EXCEPTIONS = getConfigPropertyAsText("DEFAULT_CAPITALIZATION_EXCEPTIONS");
@@ -59,14 +64,18 @@ public class NormalizeFieldTransformation extends ZipTransformation {
     /** Whether to perform capitalization. */
     public boolean capitalize = true;
 
+    /** Capitalization style, e.g. title case or sentence case. */
+    public CapitalizationStyle capitalizationStyle = CapitalizationStyle.TITLE_CASE;
+
     /** Whether to perform text substitutions. */
     public boolean performSubstitutions = true;
 
     /**
-     * Capitalization exceptions are initialized with the default configured ones,
-     * and can be overridden from the UI.
+     * Capitalization exceptions is for text that should remain as specified
+     * in the default capitalization exceptions or in the UI.
+     * (e.g., acronyms remain in uppercase, particles such as 'de' remain in lowercase.)
      */
-    public String capitalizeExceptions = DEFAULT_EXCEPTIONS;
+    public String capitalizationExceptions = DEFAULT_EXCEPTIONS;
 
     /**
      * Substitutions are initialized with the default configured ones,
@@ -76,13 +85,13 @@ public class NormalizeFieldTransformation extends ZipTransformation {
 
     // This field is reset when the setter is called
     // and initialized when executing the transform method.
-    private List<Substitution> capitalizeSubstitutions;
+    private List<Substitution> capitalizationSubstitutions;
 
     private List<Substitution> getCapitalizeSubstitutions() {
-        if (capitalizeSubstitutions == null) {
+        if (capitalizationSubstitutions == null) {
             initializeCapitalizeSubstitutions();
         }
-        return capitalizeSubstitutions;
+        return capitalizationSubstitutions;
     }
 
     /**
@@ -97,7 +106,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
      *                      - if empty, no substitutions will be performed.
      * @return An instance of the transformation with the desired settings.
      */
-    public static NormalizeFieldTransformation create(
+    static NormalizeFieldTransformation create(
         String table, String fieldName, String exceptions, List<Substitution> substitutions)
     {
         NormalizeFieldTransformation transformation = new NormalizeFieldTransformation();
@@ -106,7 +115,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
         // Override configured defaults if corresponding args are not null.
         // (To set up no capitalization exceptions or no substitutions, pass an empty string.)
         if (exceptions != null) {
-            transformation.capitalizeExceptions = exceptions;
+            transformation.capitalizationExceptions = exceptions;
         }
         if (substitutions != null) {
             transformation.substitutions = substitutions;
@@ -114,18 +123,21 @@ public class NormalizeFieldTransformation extends ZipTransformation {
         return transformation;
     }
 
-    public static NormalizeFieldTransformation create(String table, String fieldName) {
-        return create(table, fieldName, null, null);
+    /**
+     * Shorthand version of above constructor, also only used for tests.
+     */
+    static NormalizeFieldTransformation create() {
+        return create("table", "field", null, null);
     }
 
     /**
      * Initializes capitalizeSubstitutions so that it is a non-null list.
      */
     private void initializeCapitalizeSubstitutions() {
-        capitalizeSubstitutions = StringUtils.isBlank(capitalizeExceptions)
+        capitalizationSubstitutions = StringUtils.isBlank(capitalizationExceptions)
             ? new ArrayList<>()
-            : Arrays.stream(capitalizeExceptions.split("\\s*,\\s*"))
-                .map(Substitution::makeCapitalizeSubstitution)
+            : Arrays.stream(capitalizationExceptions.split("\\s*,\\s*"))
+                .map(this::makeCapitalizationSubstitution)
                 .collect(Collectors.toList());
     }
 
@@ -170,7 +182,10 @@ public class NormalizeFieldTransformation extends ZipTransformation {
 
                 // Convert to title case, if requested.
                 if (capitalize) {
-                    transformedValue = convertToTitleCase(transformedValue);
+                    if (capitalizationStyle == CapitalizationStyle.TITLE_CASE) {
+                        transformedValue = convertToTitleCase(transformedValue);
+                    }
+                    // TODO: Implement other capitalization styles.
                 }
 
                 // Perform substitutions, if requested.
@@ -224,9 +239,9 @@ public class NormalizeFieldTransformation extends ZipTransformation {
     }
 
     /**
-     * Converts the provided string to Title Case,
-     * accommodating for separator characters that may be immediately precede
-     * (without spaces) names that we need to capitalize.
+     * Converts the provided string to Title Case, accommodating for capitalization exceptions
+     * and separator characters that may be immediately precede
+     * (without spaces) text that we need to capitalize.
      */
     public String convertToTitleCase(String inputString) {
         // Return at least a blank string.
@@ -236,9 +251,9 @@ public class NormalizeFieldTransformation extends ZipTransformation {
 
         String result = WordUtils.capitalizeFully(inputString, SEPARATORS);
 
-        // Exceptions (e.g. acronyms) should remain capitalized.
+        // Exceptions should remain as specified (e.g. acronyms).
         for (Substitution substitution : getCapitalizeSubstitutions()) {
-            result = substitution.replace(result);
+            result = substitution.replaceAll(result);
         }
 
         return result;
@@ -251,88 +266,23 @@ public class NormalizeFieldTransformation extends ZipTransformation {
         if (substitutions != null && substitutions.size() != 0) {
             String result = inputString;
             for (Substitution substitution : substitutions) {
-                result = substitution.replace(result);
+                result = substitution.replaceAll(result);
             }
             return result;
         }
         return inputString;
     }
 
-    public enum NormalizeOperation {
-        SENTENCE_CASE, TITLE_CASE
-    }
-
     /**
-     * This class holds the regex/replacement pair, and the cached compiled regex pattern.
+     * Generates a substitution for the provided capitalization exception word
+     * (used in e.g. {@link #convertToTitleCase) by creating a
+     * regex with word boundaries (\b) that surround the capitalized expression to be reverted.
      */
-    public static class Substitution implements Serializable {
-        private static final long serialVersionUID = 1L;
-
-        /** The regex pattern string to match. */
-        public String pattern;
-        /** The string that should replace regex (see effectiveReplacement below). */
-        public String replacement;
-        /** true if whitespace surrounding regex should be create or normalized to one space. */
-        public boolean normalizeSpace;
-
-        private Pattern patternObject;
-        /**
-         * Replacement string that is actually used for the substitution,
-         * and set according to the value of normalizeSpace.
-         */
-        private String effectiveReplacement;
-
-        /** Empty constructor needed for persistence */
-        public Substitution() {}
-
-        public Substitution(String pattern, String replacement) {
-            this(pattern, replacement, false);
-        }
-
-        public Substitution(String pattern, String replacement, boolean normalizeSpace) {
-            this.pattern = pattern;
-            this.normalizeSpace = normalizeSpace;
-            this.replacement = replacement;
-        }
-
-        /**
-         * Pre-compiles the regex pattern and determines the actual replacement string
-         * according to normalizeSpace.
-         */
-        private void initialize() {
-            if (normalizeSpace) {
-                // If normalizeSpace is set, reduce spaces before and after the regex to one space,
-                // or insert one space before and one space after if there is none.
-                // Note: if the replacement must be blank, then normalizeSpace should be set to false
-                // and whitespace management should be handled in the regex instead.
-                this.patternObject = Pattern.compile(String.format("\\s*%s\\s*", pattern));
-                this.effectiveReplacement = String.format(" %s ", replacement);
-            } else {
-                this.patternObject = Pattern.compile(pattern);
-                this.effectiveReplacement = replacement;
-            }
-        }
-
-        /**
-         * Perform the replacement of regex in the provided string, and return the result.
-         */
-        public String replace(String input) {
-            if (patternObject == null) {
-                initialize();
-            }
-            return patternObject.matcher(input).replaceAll(effectiveReplacement);
-        }
-
-        /**
-         * Generates a substitution for the provided capitalization exception word
-         * (used in e.g. getTitleCase) by creating a regex with word boundaries (\b)
-         * that surround the capitalized expression to be reverted.
-         */
-        public static Substitution makeCapitalizeSubstitution(String word) {
-            return new Substitution(
-                String.format("\\b%s\\b", WordUtils.capitalizeFully(word)),
-                word
-            );
-        }
+    public Substitution makeCapitalizationSubstitution(String word) {
+        return new Substitution(
+            // TODO: support other .
+            String.format("\\b%s\\b", WordUtils.capitalizeFully(word)),
+            word
+        );
     }
 }

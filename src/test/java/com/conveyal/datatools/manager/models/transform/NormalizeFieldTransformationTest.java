@@ -9,6 +9,7 @@ import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.IOException;
+import java.util.List;
 import java.util.stream.Stream;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -23,7 +24,7 @@ public class NormalizeFieldTransformationTest extends UnitTest {
     @ParameterizedTest
     @MethodSource("createCapitalizationCases")
     public void testConvertToTitleCase(String input, String expected) {
-        NormalizeFieldTransformation transform = NormalizeFieldTransformation.create("table", "field");
+        NormalizeFieldTransformation transform = NormalizeFieldTransformation.create();
         assertEquals(expected, transform.convertToTitleCase(input));
     }
 
@@ -42,18 +43,19 @@ public class NormalizeFieldTransformationTest extends UnitTest {
     }
 
     @ParameterizedTest
-    @MethodSource("createCapitalizationCasesWithOwnExceptions")
-    public void testConvertToTitleCaseWithOwnExceptions(String input, String expected) {
+    @MethodSource("createCapitalizationCasesWithCustomExceptions")
+    public void testConvertToTitleCaseWithCustomExceptions(String input, String expected) {
         NormalizeFieldTransformation transform = NormalizeFieldTransformation.create(
             "table", "field", "NE, SW, de", null);
         assertEquals(expected, transform.convertToTitleCase(input));
     }
 
-    private static Stream<Arguments> createCapitalizationCasesWithOwnExceptions() {
+    private static Stream<Arguments> createCapitalizationCasesWithCustomExceptions() {
         return Stream.of(
             // Capitalization exceptions from instance (quadrant street names)
             Arguments.of("10TH STREET NE", "10th Street NE"),
             Arguments.of("10TH STREET SW", "10th Street SW"),
+            // In the example below, particle 'de' should remain in lower case.
             Arguments.of("PONCE DE LEON", "Ponce de Leon")
         );
     }
@@ -61,7 +63,7 @@ public class NormalizeFieldTransformationTest extends UnitTest {
     @ParameterizedTest
     @MethodSource("createSubstitutionCases")
     public void testPerformSubstitutions(String input, String expected) {
-        NormalizeFieldTransformation transform = NormalizeFieldTransformation.create("table", "field");
+        NormalizeFieldTransformation transform = NormalizeFieldTransformation.create();
         assertEquals(expected, transform.performSubstitutions(input));
     }
 
@@ -89,8 +91,8 @@ public class NormalizeFieldTransformationTest extends UnitTest {
             "field",
             null,
             Lists.newArrayList(
-                new NormalizeFieldTransformation.Substitution("Station", "Stn"),
-                new NormalizeFieldTransformation.Substitution("#", "AND", true)
+                new Substitution("Station", "Stn"),
+                new Substitution("#", "AND", true)
             )
         );
         assertEquals(expected, transform.performSubstitutions(input));
@@ -102,5 +104,14 @@ public class NormalizeFieldTransformationTest extends UnitTest {
             Arguments.of("Embarcadero Station", "Embarcadero Stn"),
             Arguments.of("10th#North", "10th AND North")
         );
+    }
+
+    /**
+     * Proxy to create a transformation
+     */
+    public static NormalizeFieldTransformation createTransformation(
+        String table, String fieldName, String exceptions, List<Substitution> substitutions)
+    {
+        return NormalizeFieldTransformation.create(table, fieldName, exceptions, substitutions);
     }
 }
