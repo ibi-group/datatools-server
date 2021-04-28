@@ -1,7 +1,6 @@
 package com.conveyal.datatools.manager.models.transform;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.TableTransformResult;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.conveyal.gtfs.loader.Field;
@@ -30,7 +29,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 import java.util.zip.ZipFile;
 
-import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
+import static com.conveyal.datatools.manager.DataManager.getConfigProperty;
 import static com.conveyal.gtfs.loader.Field.getFieldIndex;
 
 /**
@@ -49,10 +48,15 @@ public class NormalizeFieldTransformation extends ZipTransformation {
     }
 
     private static final Logger LOG = LoggerFactory.getLogger(NormalizeFieldTransformation.class);
+    public static final String CAPITALIZATION_EXCEPTIONS_CONFIG_PATH = "modules.manager.normalizeFieldTransformation.defaultCapitalizationExceptions";
+    public static final String SUBSTITUTION_CONFIG_PATH = "modules.manager.normalizeFieldTransformation.defaultSubstitutions";
 
-    private static final String DEFAULT_EXCEPTIONS = getConfigPropertyAsText("DEFAULT_CAPITALIZATION_EXCEPTIONS");
+    private static final List<String> DEFAULT_CAPITALIZATION_EXCEPTIONS = JsonUtil.getPOJOFromJSONAsList(
+        getConfigProperty(CAPITALIZATION_EXCEPTIONS_CONFIG_PATH),
+        String.class
+    );
     private static final List<Substitution> DEFAULT_SUBSTITUTIONS = JsonUtil.getPOJOFromJSONAsList(
-        DataManager.getConfigProperty("DEFAULT_SUBSTITUTIONS"),
+        getConfigProperty(SUBSTITUTION_CONFIG_PATH),
         Substitution.class
     );
     // Common separator characters found on the US-English keyboard.
@@ -75,7 +79,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
      * in the default capitalization exceptions or in the UI.
      * (e.g., acronyms remain in uppercase, particles such as 'de' remain in lowercase.)
      */
-    public String capitalizationExceptions = DEFAULT_EXCEPTIONS;
+    public List<String> capitalizationExceptions = DEFAULT_CAPITALIZATION_EXCEPTIONS;
 
     /**
      * Substitutions are initialized with the default configured ones,
@@ -107,7 +111,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
      * @return An instance of the transformation with the desired settings.
      */
     static NormalizeFieldTransformation create(
-        String table, String fieldName, String exceptions, List<Substitution> substitutions)
+        String table, String fieldName, List<String> exceptions, List<Substitution> substitutions)
     {
         NormalizeFieldTransformation transformation = new NormalizeFieldTransformation();
         transformation.fieldName = fieldName;
@@ -134,10 +138,14 @@ public class NormalizeFieldTransformation extends ZipTransformation {
      * Initializes capitalizeSubstitutions so that it is a non-null list.
      */
     private void initializeCapitalizeSubstitutions() {
-        capitalizationSubstitutions = StringUtils.isBlank(capitalizationExceptions)
+        capitalizationSubstitutions = capitalizationExceptions == null
             ? new ArrayList<>()
-            : Arrays.stream(capitalizationExceptions.split("\\s*,\\s*"))
-                .map(this::makeCapitalizationSubstitution)
+            : capitalizationExceptions.stream()
+                .map(word -> new Substitution(
+                    // TODO: support other capitalization styles.
+                    String.format("\\b%s\\b", WordUtils.capitalizeFully(word)),
+                    word
+                ))
                 .collect(Collectors.toList());
     }
 
@@ -271,18 +279,5 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             return result;
         }
         return inputString;
-    }
-
-    /**
-     * Generates a substitution for the provided capitalization exception word
-     * (used in e.g. {@link #convertToTitleCase) by creating a
-     * regex with word boundaries (\b) that surround the capitalized expression to be reverted.
-     */
-    public Substitution makeCapitalizationSubstitution(String word) {
-        return new Substitution(
-            // TODO: support other .
-            String.format("\\b%s\\b", WordUtils.capitalizeFully(word)),
-            word
-        );
     }
 }

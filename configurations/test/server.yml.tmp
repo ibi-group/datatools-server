@@ -35,6 +35,36 @@ modules:
     load_on_fetch: false
     # use_extension: mtc
     # update_frequency: 30 # in seconds
+  manager:
+    normalizeFieldTransformation:
+      # Enter capitalization exceptions (e.g. acronyms), in the desired case, and separated by commas.
+      defaultCapitalizationExceptions:
+        - ACE
+        - BART
+        - SMART
+        - EB
+        - WB
+        - SB
+        - NB
+      # Enter substitutions (e.g. substitute '@' with 'at'), one dashed entry for each substitution, with:
+      # - pattern: the regex string pattern that will be replaced,
+      # - replacement: the replacement string for that pattern,
+      # - normalizeSpace: if true, the resulting field value will include one space before and after the replacement string.
+      # Substitutions are executed in order they appear in the list.
+      defaultSubstitutions:
+        - pattern: "@"
+          replacement: at
+          normalizeSpace: true
+        # Replace '+' (\+ in regex, yml-escaped to \\+) and '&' with 'and' with normalized space.
+        - pattern: "[\\+&]"
+          replacement: and
+          normalizeSpace: true
+        # Remove content in parentheses and adjacent space outside the parentheses.
+        - pattern: "\\s*\\(.+\\)\\s*"
+          replacement: ""
+        # Remove content in square brackets and adjacent space outside the brackets.
+        - pattern: "\\s*\\[.+\\]\\s*"
+          replacement: ""
 extensions:
   # Enable MTC extension so MTC-specific feed merge tests
   mtc:
@@ -49,3 +79,8 @@ extensions:
   transitfeeds:
     enabled: true
     api: http://api.transitfeeds.com/v1/getFeeds
+
+# Spaces added for testing. (Spaces are permitted but not part of capitalization exceptions.)
+
+DEFAULT_CAPITALIZATION_EXCEPTIONS: ACE,  BART  ,  SMART,   EB,WB,SB,NB
+DEFAULT_SUBSTITUTIONS:

@@ -46,7 +46,7 @@ public class NormalizeFieldTransformationTest extends UnitTest {
     @MethodSource("createCapitalizationCasesWithCustomExceptions")
     public void testConvertToTitleCaseWithCustomExceptions(String input, String expected) {
         NormalizeFieldTransformation transform = NormalizeFieldTransformation.create(
-            "table", "field", "NE, SW, de", null);
+            "table", "field",  Lists.newArrayList("NE", "SW", "de"), null);
         assertEquals(expected, transform.convertToTitleCase(input));
     }
 
@@ -108,9 +108,10 @@ public class NormalizeFieldTransformationTest extends UnitTest {
 
     /**
      * Proxy to create a transformation
+     * (called by {@link com.conveyal.datatools.manager.jobs.NormalizeFieldTransformJobTest}).
      */
     public static NormalizeFieldTransformation createTransformation(
-        String table, String fieldName, String exceptions, List<Substitution> substitutions)
+        String table, String fieldName, List<String> exceptions, List<Substitution> substitutions)
     {
         return NormalizeFieldTransformation.create(table, fieldName, exceptions, substitutions);
     }
