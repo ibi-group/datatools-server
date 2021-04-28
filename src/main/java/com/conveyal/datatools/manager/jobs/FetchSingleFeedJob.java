@@ -77,6 +77,16 @@ public class FetchSingleFeedJob extends FeedVersionJob {
             } else {
                 DataManager.heavyExecutor.execute(processSingleFeedJob);
             }
+
+            // If deployment module is enabled, the feed source is deployable and the project can be auto deployed at this
+            // stage, create an auto deploy job. Note: other checks occur within job to ensure appropriate conditions are met.
+            if (DataManager.isModuleEnabled("deployment") &&
+                feedSource.deployable &&
+                feedSource.retrieveProject().autoDeployTypes.contains(AutoDeployType.ON_FEED_FETCH)
+            ) {
+                addNextJob(new AutoDeployJob(feedSource.retrieveProject(), owner));
+            }
+
         }
     }
 

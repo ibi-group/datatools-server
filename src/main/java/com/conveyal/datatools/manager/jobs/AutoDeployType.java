@@ -5,6 +5,5 @@ package com.conveyal.datatools.manager.jobs;
  */
 public enum AutoDeployType {
     ON_FEED_FETCH,
-    DAILY,
     ON_PROCESS_FEED,
 }

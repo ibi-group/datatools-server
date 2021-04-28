@@ -124,11 +124,6 @@ public class AutoDeployJob extends MonitorableJob {
                     .stream()
                     .anyMatch(feedVersion -> feedVersion.feedSource.id.equals(latestFeedVersion.feedSourceId))
                 ) {
-                    String message = String.format("Feed version %s from feed source %s could not be advanced because a previous feed version has been pinned for project %s.",
-                        latestFeedVersion.id,
-                        latestFeedVersion.parentFeedSource().name,
-                        project.name);
-                    LOG.warn(message);
                     continue;
                 }
 
@@ -159,11 +154,6 @@ public class AutoDeployJob extends MonitorableJob {
                     latestVersionsWithCriticalErrors.add(latestFeedVersion);
                 }
             }
-
-            // Always update the deployment's feed version IDs with the latest feed versions which have not been pinned
-            // to a particular version.
-            deployment.feedVersionIds = updatedFeedVersionIds;
-            Persistence.deployments.replace(deployment.id, deployment);
 
             // Skip auto-deployment for this project if Data Tools should wait for a job that should create a new
             // feed version to complete.
@@ -196,6 +186,16 @@ public class AutoDeployJob extends MonitorableJob {
                 );
                 return;
             }
+
+            // Add all pinned feed versions to the list of feed versions to be deployed so that they aren't lost as part
+            // of this update.
+            for (Deployment.SummarizedFeedVersion pinnedFeedVersion : pinnedFeedVersions) {
+                updatedFeedVersionIds.add(pinnedFeedVersion.id);
+            }
+
+            // Update the deployment's feed version IDs with the latest (and pinned) feed versions.
+            deployment.feedVersionIds = updatedFeedVersionIds;
+            Persistence.deployments.replace(deployment.id, deployment);
 
             // Queue up the deploy job.
             if (DeploymentController.queueDeployJob(new DeployJob(deployment, owner, server))) {
