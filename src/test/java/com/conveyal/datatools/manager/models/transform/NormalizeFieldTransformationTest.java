@@ -24,7 +24,7 @@ public class NormalizeFieldTransformationTest extends UnitTest {
     @ParameterizedTest
     @MethodSource("createCapitalizationCases")
     public void testConvertToTitleCase(String input, String expected) {
-        NormalizeFieldTransformation transform = NormalizeFieldTransformation.create();
+        NormalizeFieldTransformation transform = createTransformation();
         assertEquals(expected, transform.convertToTitleCase(input));
     }
 
@@ -45,7 +45,7 @@ public class NormalizeFieldTransformationTest extends UnitTest {
     @ParameterizedTest
     @MethodSource("createCapitalizationCasesWithCustomExceptions")
     public void testConvertToTitleCaseWithCustomExceptions(String input, String expected) {
-        NormalizeFieldTransformation transform = NormalizeFieldTransformation.create(
+        NormalizeFieldTransformation transform = createTransformation(
             "table", "field",  Lists.newArrayList("NE", "SW", "de"), null);
         assertEquals(expected, transform.convertToTitleCase(input));
     }
@@ -63,7 +63,7 @@ public class NormalizeFieldTransformationTest extends UnitTest {
     @ParameterizedTest
     @MethodSource("createSubstitutionCases")
     public void testPerformSubstitutions(String input, String expected) {
-        NormalizeFieldTransformation transform = NormalizeFieldTransformation.create();
+        NormalizeFieldTransformation transform = createTransformation();
         assertEquals(expected, transform.performSubstitutions(input));
     }
 
@@ -86,7 +86,7 @@ public class NormalizeFieldTransformationTest extends UnitTest {
     @ParameterizedTest
     @MethodSource("createSubstitutionCasesWithOwnExceptions")
     public void testPerformSubstitutionsWithOwnExceptions(String input, String expected) {
-        NormalizeFieldTransformation transform = NormalizeFieldTransformation.create(
+        NormalizeFieldTransformation transform = createTransformation(
             "table",
             "field",
             null,
@@ -114,5 +114,13 @@ public class NormalizeFieldTransformationTest extends UnitTest {
         String table, String fieldName, List<String> exceptions, List<Substitution> substitutions)
     {
         return NormalizeFieldTransformation.create(table, fieldName, exceptions, substitutions);
+    }
+
+    /**
+     * Proxy to create a transformation
+     * (called by {@link com.conveyal.datatools.manager.jobs.NormalizeFieldTransformJobTest}).
+     */
+    public static NormalizeFieldTransformation createTransformation() {
+        return NormalizeFieldTransformation.create("table", "field", null, null);
     }
 }

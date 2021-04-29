@@ -44,6 +44,8 @@ modules:
       # - pattern: the regex string pattern that will be replaced,
       # - replacement: the replacement string for that pattern,
       # - normalizeSpace: if true, the resulting field value will include one space before and after the replacement string.
+      #       Note: if the replacement must be blank, then normalizeSpace should be set to false
+      #       and whitespace management should be handled in pattern instead.
       # Substitutions are executed in order they appear in the list.
       defaultSubstitutions:
         - pattern: "@"
