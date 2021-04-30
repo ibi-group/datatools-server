@@ -9,6 +9,8 @@ import java.util.regex.Pattern;
 public class Substitution implements Serializable {
     private static final long serialVersionUID = 1L;
 
+    /** Free-form text that describes the substitution. */
+    public String description;
     /** The regex pattern string to match. */
     public String pattern;
     /** The string that should replace regex (see effectiveReplacement below). */

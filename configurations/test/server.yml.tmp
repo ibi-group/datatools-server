@@ -54,18 +54,19 @@ modules:
       #       and whitespace management should be handled in pattern instead.
       # Substitutions are executed in order they appear in the list.
       defaultSubstitutions:
-        - pattern: "@"
+        - description: "Replace '@' with 'at', and normalize space."
+          pattern: "@"
           replacement: at
           normalizeSpace: true
-        # Replace '+' (\+ in regex, yml-escaped to \\+) and '&' with 'and' with normalized space.
-        - pattern: "[\\+&]"
+        - description: "Replace '+' (\\+ in regex) and '&' with 'and, and normalize space."
+          pattern: "[\\+&]"
           replacement: and
           normalizeSpace: true
-        # Remove content in parentheses and adjacent space outside the parentheses.
-        - pattern: "\\s*\\(.+\\)\\s*"
+        - description: "Remove content in parentheses and adjacent space outside the parentheses."
+          pattern: "\\s*\\(.+\\)\\s*"
           replacement: ""
-        # Remove content in square brackets and adjacent space outside the brackets.
-        - pattern: "\\s*\\[.+\\]\\s*"
+        - description: "Remove content in square brackets and adjacent space outside the brackets."
+          pattern: "\\s*\\[.+\\]\\s*"
           replacement: ""
 extensions:
   # Enable MTC extension so MTC-specific feed merge tests
