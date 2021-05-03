@@ -63,7 +63,9 @@ import com.conveyal.datatools.manager.models.CustomFile;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.EC2Info;
 import com.conveyal.datatools.manager.models.EC2InstanceSummary;
+import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.OtpServer;
+import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.StringUtils;
 import com.conveyal.datatools.manager.utils.TimeTracker;
@@ -574,10 +576,39 @@ public class DeployJob extends MonitorableJob {
         // Send notification to those subscribed to updates for the deployment.
         NotifyUsersForSubscriptionJob.createNotification("deployment-updated", deployment.id, message);
         if (!status.error) {
-            // A new FetchSingleFeedJob could be started after the AutoDeployJob has made sure no fetching jobs exist and
-            // the DeployJob has started. Therefore this new feed version wouldn't result in a new DeployJob getting kicked
-            // off since there was already one running. To catch this new feed version another auto deploy job is started.
-            DataManager.heavyExecutor.execute(new AutoDeployJob(deployment.parentProject(), owner));
+            // A new FetchSingleFeedJob could be started after the AutoDeployJob has made sure no fetching jobs exist
+            // and the DeployJob has started. Therefore this new feed version wouldn't result in a new DeployJob getting
+            // kicked off since there was already one running.
+
+            // Check if there is a need to start a new auto-deploy job.
+            Project project = deployment.parentProject();
+            Set<String> pinnedFeedVersionIds = new HashSet<>(deployment.pinnedfeedVersionIds);
+            if (
+                // make sure deployment is enabled for data tools. Not sure how we'd get this far if it weren't...
+                DataManager.isModuleEnabled("deployment") &&
+                    // make sure auto-deployment is enabled for the project
+                    project.autoDeployTypes.size() > 0 &&
+                    // check if there are any non-pinned feed versions newer than existing ones
+                    deployment.feedVersionIds.stream()
+                        .anyMatch(feedVersionId -> {
+                            // don't check pinned feed versions for a more recent feed version from the feed source
+                            if (pinnedFeedVersionIds.contains(feedVersionId)) {
+                                return false;
+                            }
+
+                            // get the latest feed version (it could be null)
+                            FeedVersion latest = Persistence.feedVersions.getById(feedVersionId)
+                                    .parentFeedSource()
+                                    .retrieveLatest();
+                            // return true if the latest feed version was created after the last time an auto-deploy job
+                            // completed for the project. This means there is at least one new feed version that hasn't
+                            // yet been auto deployed that must have been created while this deploy job ran.
+                            return latest != null && latest.dateCreated.after(project.lastAutoDeploy);
+                        })
+            ) {
+                // newer feed versions exist! Start a new auto-deploy job.
+                DataManager.heavyExecutor.execute(new AutoDeployJob(deployment.parentProject(), owner));
+            }
         }
     }
 
