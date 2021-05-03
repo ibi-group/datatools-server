@@ -47,6 +47,10 @@ public class MergeFeedUtils {
         return ids;
     }
 
+    /**
+     * Construct stop_code failure message for {@link com.conveyal.datatools.manager.jobs.MergeFeedsJob} in the case of
+     * incomplete stop_code values for all records.
+     */
     public static String stopCodeFailureMessage(int stopsMissingStopCodeCount, int stopsCount, int specialStopsCount) {
         return String.format(
             "If stop_code is provided for some stops (for those with location_type = " +
@@ -63,26 +67,36 @@ public class MergeFeedUtils {
     /**
      * Collect zipFiles for each feed version before merging tables.
      * Note: feed versions are sorted by first calendar date so that future dataset is iterated over first. This is
-     * required for the MTC merge strategy which prefers entities from the future dataset over past entities.
+     * required for the MTC merge strategy which prefers entities from the future dataset over active feed entities.
      */
     public static List<FeedToMerge> collectAndSortFeeds(Set<FeedVersion> feedVersions) {
-        return feedVersions.stream().map(version -> {
-            try {
-                return new FeedToMerge(version);
-            } catch (Exception e) {
-                LOG.error("Could not create zip file for version: {}", version.version);
-                return null;
-            }
-        }).filter(Objects::nonNull).filter(entry -> entry.version.validationResult != null
-            && entry.version.validationResult.firstCalendarDate != null)
+        return feedVersions.stream()
+            .map(version -> {
+                try {
+                    return new FeedToMerge(version);
+                } catch (Exception e) {
+                    LOG.error("Could not create zip file for version: {}", version.version);
+                    return null;
+                }
+            })
+            // Filter out any feeds that do not have zip files (see above try/catch) and feeds that were never fully
+            // validated (which suggests that they would break things during validation).
+            .filter(Objects::nonNull)
+            .filter(
+                entry -> entry.version.validationResult != null
+                    && entry.version.validationResult.firstCalendarDate != null
+            )
             // MTC-specific sort mentioned in above comment.
             // TODO: If another merge strategy requires a different sort order, a merge type check should be added.
-            .sorted(Comparator.comparing(entry -> entry.version.validationResult.firstCalendarDate,
-                Comparator.reverseOrder())).collect(Collectors.toList());
+            .sorted(
+                Comparator.comparing(
+                    entry -> entry.version.validationResult.firstCalendarDate,
+                    Comparator.reverseOrder())
+            ).collect(Collectors.toList());
     }
 
-    /** Get the set of shared fields for all feeds being merged for a specific table. */
-    public static Set<Field> getSharedFields(List<FeedToMerge> feedsToMerge, Table table) throws IOException {
+    /** Get all fields found in the feeds being merged for a specific table. */
+    public static Set<Field> getAllFields(List<FeedToMerge> feedsToMerge, Table table) throws IOException {
         Set<Field> sharedFields = new HashSet<>();
         // First, iterate over each feed to collect the shared fields that need to be output in the merged table.
         for (FeedToMerge feed : feedsToMerge) {
@@ -120,25 +134,5 @@ public class MergeFeedUtils {
             table.name,
             prefix,
             id);
-    }
-
-    public static boolean preferFutureTable(Table table, MergeStrategy mergeStrategy) {
-        Set<String> tablesToNotPreferFuture = Sets.newHashSet(
-            Table.CALENDAR.name,
-            Table.CALENDAR_DATES.name
-        );
-        if (tablesToNotPreferFuture.contains(table.name)) return false;
-        // Always prefer the "future" file for the feed_info table, which means
-        // we can skip any iterations following the first one. If merging the agency
-        // table, we should only skip the following feeds if performing an MTC merge
-        // because that logic assumes the two feeds share the same agency (or
-        // agencies). NOTE: feed_info file is skipped by default (outside of this
-        // method) for a regional merge), which is why this block is exclusively
-        // for an MTC merge. Also, this statement may print multiple log
-        // statements, but it is deliberately nested in the csv while block in
-        // order to detect agency_id mismatches and fail the merge if found.
-        if (table.name.equals("feed_info")) return true;
-        // If merge strategy is to extend the future calendar files to the past, all other files should prefer future.
-        return MergeStrategy.EXTEND_FUTURE.equals(mergeStrategy);
     }
 }

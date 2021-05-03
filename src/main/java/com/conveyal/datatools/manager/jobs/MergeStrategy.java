@@ -32,10 +32,10 @@ public enum MergeStrategy {
      *   Note: The merge process shall validate records in stop_times.txt file for same trip signature (same set of
      *   stops with same sequence). Trips with matching stop_times will be included as is (but not duplicated of course).
      *   Trips that do not match on stop_times will be handled with the below approaches.
-     *   Note: Same service IDs shall be used (but extended to account for the full range of dates from past to future).
-     * - *trip_id in past feed*: A new service shall be created starting from the merge date and expiring at the end
+     *   Note: Same service IDs shall be used (but extended to account for the full range of dates from active to future).
+     * - *trip_id in active feed*: A new service shall be created starting from the merge date and expiring at the end
      *   of active service period.
-     *   Note: a new service_id will be generated for these current/past trips in the merged feed (rather than using the
+     *   Note: a new service_id will be generated for these active trips in the merged feed (rather than using the
      *   service_id with extended range).
      * - *trip_id in future feed*: A new service shall be created for these trips with service period defined in future
      *   feed
