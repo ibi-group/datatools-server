@@ -208,6 +208,7 @@ public class AutoDeployJob extends MonitorableJob {
                 !updatedFeedVersionIds.stream()
                     .anyMatch(feedVersionId -> !previousFeedVersionIds.contains(feedVersionId))
             ) {
+                LOG.info("No updated feed versions to deploy for project {}.", project.name);
                 status.completeSuccessfully("No updated feed versions to deploy.");
                 return;
             }

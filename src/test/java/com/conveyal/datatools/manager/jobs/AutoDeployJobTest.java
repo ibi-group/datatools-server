@@ -37,6 +37,7 @@ public class AutoDeployJobTest extends DatatoolsTest {
     private static Deployment deploymentA;
     private static Project projectA;
     private static FeedSource mockFeedSourceA;
+    private static FeedVersion mockFeedVersionA;
 
     private static Deployment deploymentB;
     private static Project projectB;
@@ -63,6 +64,10 @@ public class AutoDeployJobTest extends DatatoolsTest {
         projectA = createProject();
         deploymentA = createDeployment(deploySummary, projectA.id);
         mockFeedSourceA = createFeedSource("Mock feed source A", projectA.id);
+        mockFeedVersionA = TestUtils.createFeedVersion(mockFeedSourceA,
+            TestUtils.zipFolderFiles("fake-agency-expire-in-2099"));
+
+        // create a "newer" feed version so that there is a newer feed version to deploy
         TestUtils.createFeedVersion(mockFeedSourceA,
             TestUtils.zipFolderFiles("fake-agency-expire-in-2099"));
 
@@ -111,9 +116,7 @@ public class AutoDeployJobTest extends DatatoolsTest {
     public void canAutoDeployFeedVersionForProject() {
         projectA.pinnedDeploymentId = deploymentA.id;
         Persistence.projects.replace(projectA.id, projectA);
-        for (FeedVersion feedVersion : mockFeedSourceA.retrieveFeedVersions()) {
-            deploymentA.feedVersionIds.add(feedVersion.id);
-        }
+        deploymentA.feedVersionIds.add(mockFeedVersionA.id);
         Persistence.deployments.replace(deploymentA.id, deploymentA);
         AutoDeployJob autoDeployFeedJob = new AutoDeployJob(projectA, user);
         autoDeployFeedJob.run();
