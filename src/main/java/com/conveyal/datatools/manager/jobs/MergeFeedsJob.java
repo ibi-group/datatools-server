@@ -440,7 +440,9 @@ public class MergeFeedsJob extends MonitorableJob {
             LocalDate futureFirstCalendarStartDate = LocalDate.MAX;
             // Iterate over each zip file. For service period merge, the first feed is the future GTFS.
             for (int feedIndex = 0; feedIndex < feedsToMerge.size(); feedIndex++) {
-                if (EXTEND_FUTURE.equals(mergeStrategy) && feedIndex > 0) {
+                boolean handlingPastFeed = feedIndex > 0;
+                boolean handlingFutureFeed = feedIndex == 0;
+                if (EXTEND_FUTURE.equals(mergeStrategy) && handlingPastFeed) {
                     // No need to iterate over second (current) file if strategy is to simply extend the future GTFS
                     // service to start earlier.
                     continue;
@@ -482,7 +484,7 @@ public class MergeFeedsJob extends MonitorableJob {
                 // Iterate over rows in table, writing them to the out file.
                 while (csvReader.readRecord()) {
                     String keyValue = csvReader.get(keyFieldIndex);
-                    if (feedIndex > 0 && mergeType.equals(SERVICE_PERIOD)) {
+                    if (handlingPastFeed && mergeType.equals(SERVICE_PERIOD)) {
                         // Always prefer the "future" file for the feed_info table, which means
                         // we can skip any iterations following the first one. If merging the agency
                         // table, we should only skip the following feeds if performing an MTC merge
@@ -591,10 +593,10 @@ public class MergeFeedsJob extends MonitorableJob {
                                     // When all stops missing stop_code for the first feed, there's nothing to do (i.e.,
                                     // no failure condition has been triggered yet). Just indicate this in the flag and
                                     // proceed with the merge.
-                                    if (feedIndex == 0) stopCodeMissingFromFirstFeed = true;
+                                    if (handlingFutureFeed) stopCodeMissingFromFirstFeed = true;
                                     // However... if the second feed was missing stop_codes and the first feed was not,
                                     // fail the merge job.
-                                    if (feedIndex == 1 && !stopCodeMissingFromFirstFeed) {
+                                    if (handlingPastFeed && !stopCodeMissingFromFirstFeed) {
                                         mergeFeedsResult.failed = true;
                                         mergeFeedsResult.errorCount++;
                                         mergeFeedsResult.failureReasons.add(
@@ -673,7 +675,7 @@ public class MergeFeedsJob extends MonitorableJob {
                             Set<NewGTFSError> idErrors;
                             // If analyzing the second feed (non-future feed), the service_id always gets feed scoped.
                             // See https://github.com/ibi-group/datatools-server/issues/244
-                            if (feedIndex == 1 && field.name.equals("service_id")) {
+                            if (handlingPastFeed && field.name.equals("service_id")) {
                                 valueToWrite = String.join(":", idScope, val);
                                 mergeFeedsResult.remappedIds.put(
                                     getTableScopedValue(table, idScope, val),
@@ -711,7 +713,7 @@ public class MergeFeedsJob extends MonitorableJob {
                                         getFieldIndex(fieldsFoundInZip, "start_date");
                                     LocalDate startDate = LocalDate
                                         .parse(csvReader.get(startDateIndex), GTFS_DATE_FORMATTER);
-                                    if (feedIndex == 0) {
+                                    if (handlingFutureFeed) {
                                         // For the future feed, check if the calendar's start date is earlier than the
                                         // previous earliest value and update if so.
                                         if (futureFirstCalendarStartDate.isAfter(startDate)) {
@@ -771,7 +773,7 @@ public class MergeFeedsJob extends MonitorableJob {
                                     // not before the first date of the future feed.
                                     int dateIndex = getFieldIndex(fieldsFoundInZip, "date");
                                     LocalDate date = LocalDate.parse(csvReader.get(dateIndex), GTFS_DATE_FORMATTER);
-                                    if (feedIndex > 0) {
+                                    if (handlingPastFeed) {
                                         if (!date.isBefore(futureFeedFirstDate)) {
                                             LOG.warn(
                                                 "Skipping calendar_dates entry {} because it operates in the time span of future feed (i.e., after or on {}).",
@@ -795,7 +797,7 @@ public class MergeFeedsJob extends MonitorableJob {
                                     // sequences 1,2,3,10 and active contains 1,2,7,9,10; the merged set will contain
                                     // 1,2,3,7,9,10).
                                     if (field.name.equals("shape_id")) {
-                                        if (feedIndex == 0) {
+                                        if (handlingFutureFeed) {
                                             // Track shape_id if working on future feed.
                                             shapeIdsInFutureFeed.add(val);
                                         } else if (shapeIdsInFutureFeed.contains(val)) {
@@ -822,7 +824,7 @@ public class MergeFeedsJob extends MonitorableJob {
                                 case "trips":
                                     // trip_ids between active and future datasets must not match. The MergeStrategy
                                     // determines behavior when matching trip_ids (or service_ids) are found between
-                                    if (feedIndex > 0) {
+                                    if (handlingPastFeed) {
                                         // Handling past/current feed.
                                         if (tripIdsToSkipForCurrentFeed.contains(keyValue)) {
                                             skipRecord = true;
