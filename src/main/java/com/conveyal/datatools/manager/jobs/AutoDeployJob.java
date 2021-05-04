@@ -18,6 +18,7 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Auto deploy the latest feed versions associated with a deployment to an OTP server if these conditions are met:
@@ -107,23 +108,27 @@ public class AutoDeployJob extends MonitorableJob {
             // Analyze and update feed versions in deployment.
             Collection<String> updatedFeedVersionIds = new LinkedList<>();
             List<FeedVersion> latestVersionsWithCriticalErrors = new LinkedList<>();
+            List<Deployment.SummarizedFeedVersion> previousFeedVersions = deployment.retrieveFeedVersions();
             boolean shouldWaitForNewFeedVersions = false;
 
             // Production ready feed versions.
             List<Deployment.SummarizedFeedVersion> pinnedFeedVersions = deployment.retrievePinnedFeedVersions();
+            Set<String> pinnedFeedSourceIds = new HashSet<>(
+                pinnedFeedVersions
+                    .stream()
+                    .map(pinnedFeedVersion -> pinnedFeedVersion.feedSource.id)
+                    .collect(Collectors.toList())
+            );
 
             // Iterate through each feed version for deployment.
             for (
-                Deployment.SummarizedFeedVersion currentDeploymentFeedVersion : deployment.retrieveFeedVersions()
+                Deployment.SummarizedFeedVersion currentDeploymentFeedVersion : previousFeedVersions
             ) {
                 // Retrieve the latest feed version associated with the feed source of the current
                 // feed version set for the deployment.
                 FeedVersion latestFeedVersion = currentDeploymentFeedVersion.feedSource.retrieveLatest();
                 // Make sure the latest feed version is not going to supersede a pinned feed version.
-                if (pinnedFeedVersions
-                    .stream()
-                    .anyMatch(feedVersion -> feedVersion.feedSource.id.equals(latestFeedVersion.feedSourceId))
-                ) {
+                if (pinnedFeedSourceIds.contains(latestFeedVersion.feedSourceId)) {
                     continue;
                 }
 
@@ -191,6 +196,21 @@ public class AutoDeployJob extends MonitorableJob {
             // of this update.
             for (Deployment.SummarizedFeedVersion pinnedFeedVersion : pinnedFeedVersions) {
                 updatedFeedVersionIds.add(pinnedFeedVersion.id);
+            }
+
+            // Check if the updated feed versions have any difference between the previous ones. If not, and if not
+            // doing a regularly scheduled update with street data, then don't bother starting a deploy job.
+            // TODO: add logic for street data update
+            Set<String> previousFeedVersionIds = new HashSet<>(
+                previousFeedVersions.stream().map(feedVersion -> feedVersion.id).collect(Collectors.toList())
+            );
+            if (
+                !updatedFeedVersionIds.stream()
+                    .anyMatch(feedVersionId -> !previousFeedVersionIds.contains(feedVersionId))
+            ) {
+                LOG.info("No updated feed versions to deploy for project {}.", project.name);
+                status.completeSuccessfully("No updated feed versions to deploy.");
+                return;
             }
 
             // Update the deployment's feed version IDs with the latest (and pinned) feed versions.
