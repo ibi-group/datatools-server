@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.models.transform;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.models.TableTransformResult;
+import com.conveyal.datatools.manager.utils.GtfsUtils;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.conveyal.gtfs.loader.Field;
 import com.conveyal.gtfs.loader.Table;
@@ -164,7 +165,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             // Create a temporary working zip file from original.
             Files.copy(originalZipPath, tempZipPath, StandardCopyOption.REPLACE_EXISTING);
 
-            Table gtfsTable = Arrays.stream(Table.tablesInOrder).filter(t -> t.name.equals(table)).findFirst().get();
+            Table gtfsTable = GtfsUtils.getGtfsTable(table);
             CsvReader csvReader = gtfsTable.getCsvReader(new ZipFile(tempZipPath.toAbsolutePath().toString()), null);
             final String[] headers = csvReader.getHeaders();
             Field[] fieldsFoundInZip = gtfsTable.getFieldsFromFieldHeaders(headers, null);

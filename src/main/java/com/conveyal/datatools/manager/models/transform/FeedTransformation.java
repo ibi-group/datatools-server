@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.models.transform;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.manager.utils.GtfsUtils;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
@@ -49,9 +50,24 @@ public abstract class FeedTransformation implements Serializable {
     public abstract void doTransform(FeedTransformTarget target, MonitorableJob.Status status);
 
     /**
-     * Overridable method that handles validation logic prior to performing the transformation.
-     * Calling status.fail prevents the transform logic from running.
-     * The default implementation does nothing.
+     * At the moment, used by DbTransformation to validate field names.
      */
-    public void validateParameters(MonitorableJob.Status status) { }
+    protected abstract void validateFieldNames(MonitorableJob.Status status);
+
+    /**
+     * Handles validation logic prior to performing the transformation.
+     * Calling status.fail prevents the transform logic from running.
+     */
+    public abstract void validateParameters(MonitorableJob.Status status);
+
+    /**
+     * Checks that the table name for the transform is valid.
+     */
+    protected void validateTableName(MonitorableJob.Status status) {
+        // Validate fields before running transform.
+        if (GtfsUtils.getGtfsTable(table) == null) {
+            status.fail("Table must be valid GTFS spec table name (without .txt).");
+            return;
+        }
+    }
 }

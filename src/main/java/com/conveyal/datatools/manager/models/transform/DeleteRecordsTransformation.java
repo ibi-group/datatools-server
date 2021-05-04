@@ -74,4 +74,9 @@ public class DeleteRecordsTransformation extends DbTransformation {
             throw new RuntimeException(e);
         }
     }
+
+    @Override
+    public void validateParameters(MonitorableJob.Status status) {
+        // Does nothing.
+    }
 }
