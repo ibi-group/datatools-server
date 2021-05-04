@@ -1,7 +1,6 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.DatatoolsTest;
-import com.conveyal.datatools.TestUtils;
 import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -86,25 +85,11 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
         if (targetVersion != null) targetVersion.delete();
     }
 
-    @Test
-    public void canNormalizeField1() throws IOException {
-        canNormalizeField();
-    }
-
-    /**
-     * HACK: Second test used locally that checks that the correct ZIP file is picked up after being written.
-     * (This sort-of replicates the CI system running two builds in succession.)
-     */
-    @Test
-    public void canNormalizeField2() throws IOException {
-        if (!TestUtils.isCi()) {
-            canNormalizeField();
-        }
-    }
-
     /**
      * Test that a {@link NormalizeFieldTransformation} will successfully complete.
+     * FIXME: On certain Windows machines, this test fails.
      */
+    @Test
     public void canNormalizeField() throws IOException {
         // Create target version that the transform will operate on.
         targetVersion = createFeedVersion(
