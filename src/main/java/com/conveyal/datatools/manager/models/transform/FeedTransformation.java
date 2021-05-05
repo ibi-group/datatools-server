@@ -32,7 +32,7 @@ import java.io.Serializable;
     @JsonSubTypes.Type(value = ReplaceFileFromVersionTransformation.class, name = "ReplaceFileFromVersionTransformation"),
     @JsonSubTypes.Type(value = ReplaceFileFromStringTransformation.class, name = "ReplaceFileFromStringTransformation")
 })
-public abstract class FeedTransformation implements Serializable {
+public abstract class FeedTransformation<Target extends FeedTransformTarget> implements Serializable {
     private static final long serialVersionUID = 1L;
     public String table;
     public boolean active = true;
@@ -47,7 +47,38 @@ public abstract class FeedTransformation implements Serializable {
     //  it could return something object that contains a bool + message.
     // boolean isValid();
 
-    public abstract void doTransform(FeedTransformTarget target, MonitorableJob.Status status);
+    public void doTransform(FeedTransformTarget target, MonitorableJob.Status status) {
+        try {
+            // Attempt to cast transform target to correct flavor
+            // (fails the job if types mismatch.)
+            Target typedTarget = (Target)target;
+
+            // Validate parameters before running transform.
+            validateTableName(status);
+            validateFieldNames(status);
+            // Let subclasses check parameters.
+            validateParameters(status);
+            if (status.error) {
+                return;
+            }
+
+            // Pass the typed transform target to subclasses to transform.
+            transform(typedTarget, status);
+        } catch (ClassCastException classCastException) {
+            status.fail(
+                String.format("Transformation must be of type '%s'.", getTransformationTypeName())
+            );
+        }
+    }
+
+    protected abstract String getTransformationTypeName();
+
+    /**
+     * Contains the logic for this database-bound transformation.
+     * @param target The database-bound or ZIP-file-bound target the transformation will operate on.
+     * @param status Used to report success or failure status and details.
+     */
+    public abstract void transform(Target target, MonitorableJob.Status status);
 
     /**
      * At the moment, used by DbTransformation to validate field names.

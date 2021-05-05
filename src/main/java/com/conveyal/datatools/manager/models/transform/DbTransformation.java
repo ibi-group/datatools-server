@@ -10,7 +10,7 @@ import java.util.List;
  * words, subclasses will provide a transform override method that acts on a database namespace. Sample fields
  * matchField and matchValues can be used to construct a WHERE clause for applying updates to a filtered set of records.
  */
-public abstract class DbTransformation extends TypedFeedTransformation<FeedTransformDbTarget> {
+public abstract class DbTransformation extends FeedTransformation<FeedTransformDbTarget> {
     public String matchField;
     public List<String> matchValues;
 
