@@ -11,7 +11,7 @@ import java.nio.file.Path;
  * csvData and sourceVersionId can be used to reference replacement string or file that should be passed to the target
  * zip file of the transformation.
  */
-public abstract class ZipTransformation extends TypedFeedTransformation<FeedTransformZipTarget> {
+public abstract class ZipTransformation extends FeedTransformation<FeedTransformZipTarget> {
     public String csvData;
     public String sourceVersionId;
 
