@@ -1,7 +1,6 @@
 package com.conveyal.datatools.manager.controllers;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.jobs.ValidateFeedJob;
@@ -15,6 +14,7 @@ import com.conveyal.datatools.manager.models.Note;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.models.Snapshot;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.JobUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.conveyal.gtfs.validator.ValidationResult;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -365,7 +365,7 @@ public class DumpController {
             } else {
                 job = new ValidateFeedJob(version, systemUser, false);
             }
-            DataManager.heavyExecutor.execute(job);
+            JobUtils.heavyExecutor.execute(job);
         }
         // ValidateAllFeedsJob validateAllFeedsJob = new ValidateAllFeedsJob("system", force, load);
         return true;

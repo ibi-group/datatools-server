@@ -6,7 +6,6 @@ import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.common.utils.aws.EC2Utils;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
-import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.DeployJob;
 import com.conveyal.datatools.manager.models.Deployment;
@@ -17,6 +16,7 @@ import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.JobUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.mongodb.client.FindIterable;
 import org.bson.Document;
@@ -108,7 +108,7 @@ public class DeploymentController {
         }
         if (summaryToDownload == null) {
             // See if there is an ongoing job for the provided jobId.
-            MonitorableJob job = StatusController.getJobByJobId(jobId);
+            MonitorableJob job = JobUtils.getJobByJobId(jobId);
             if (job instanceof DeployJob) {
                 uriString = ((DeployJob) job).getS3FolderURI().toString();
             } else {
@@ -378,21 +378,23 @@ public class DeploymentController {
     }
 
     /**
-     * Queue a new {@link DeployJob} if there are no conflicting jobs assigned to the specified server.
-     * @param deployJob new deploy job to queue
-     * @return whether the deploy job was successfully queued or not
+     * Creates and queues a new {@link DeployJob} if there are no conflicting jobs assigned to the specified server.
+     *
+     * @param deployment The deployment to associate the new DeployJob with
+     * @param owner The owner to associate the new DeployJob with
+     * @param server The server to associate the new DeployJob with
+     * @return returns the DeployJob if the job was successfully queued, otherwise this returns null
      */
-    public static boolean queueDeployJob(DeployJob deployJob) {
-        String serverId = deployJob.getServerId();
+    public static DeployJob queueDeployJob(Deployment deployment, Auth0UserProfile owner, OtpServer server) {
         // Check that we can deploy to the specified target. (Any deploy job for the target that is presently active will
         // cause a halt.)
-        if (deploymentJobsByServer.containsKey(serverId)) {
+        if (deploymentJobsByServer.containsKey(server.id)) {
             // There is a deploy job for the server. Check if it is active.
-            DeployJob conflictingDeployJob = deploymentJobsByServer.get(serverId);
+            DeployJob conflictingDeployJob = deploymentJobsByServer.get(server.id);
             if (conflictingDeployJob != null && !conflictingDeployJob.status.completed) {
                 // Another deploy job is actively being deployed to the server target.
                 LOG.error("New deploy job will not be queued due to active deploy job in progress.");
-                return false;
+                return null;
             }
         }
 
@@ -400,17 +402,18 @@ public class DeploymentController {
         // this new one will overwrite it. NOTE: deployedTo for the current deployment will only be updated after the
         // successful completion of the deploy job.
         FindIterable<Deployment> deploymentsWithSameTarget = Deployment.retrieveDeploymentForServerAndRouterId(
-            serverId,
-            deployJob.getDeployment().routerId
+            server.id,
+            deployment.routerId
         );
         for (Deployment oldDeployment : deploymentsWithSameTarget) {
             LOG.info("Setting deployment target to null for id={}", oldDeployment.id);
             Persistence.deployments.updateField(oldDeployment.id, "deployedTo", null);
         }
         // Finally, add deploy job to the heavy executor.
-        DataManager.heavyExecutor.execute(deployJob);
-        deploymentJobsByServer.put(serverId, deployJob);
-        return true;
+        DeployJob deployJob = new DeployJob(deployment, owner, server);
+        JobUtils.heavyExecutor.execute(deployJob);
+        deploymentJobsByServer.put(server.id, deployJob);
+        return deployJob;
     }
 
     /**
@@ -460,8 +463,8 @@ public class DeploymentController {
         }
 
         // Execute the deployment job and keep track of it in the jobs for server map.
-        DeployJob job = new DeployJob(deployment, userProfile, otpServer);
-        if (!queueDeployJob(job)) {
+        DeployJob job = queueDeployJob(deployment, userProfile, otpServer);
+        if (job == null) {
             // Job for the target is still active! Send a 202 to the requester to indicate that it is not possible
             // to deploy to this target right now because someone else is deploying.
             String message = String.format(

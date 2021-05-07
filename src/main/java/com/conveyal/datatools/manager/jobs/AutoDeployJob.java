@@ -58,11 +58,18 @@ public class AutoDeployJob extends MonitorableJob {
     public void jobLogic() {
         Deployment deployment = Persistence.deployments.getById(project.pinnedDeploymentId);
         // Define if project and deployment are candidates for auto deploy.
-        if (project.pinnedDeploymentId == null ||
-            deployment == null ||
-            deployment.feedVersionIds.isEmpty() ||
-            lockedProjects.contains(project.id)) {
-            LOG.info("Project {} skipped for auto deployment as required criteria not met.", project.name);
+        if (
+            project.pinnedDeploymentId == null ||
+                deployment == null ||
+                deployment.feedVersionIds.isEmpty() ||
+                lockedProjects.contains(project.id)
+        ) {
+            String message = String.format(
+                "Project %s skipped for auto deployment as required criteria not met.",
+                project.name
+            );
+            LOG.info(message);
+            status.fail(message);
             return;
         }
 
@@ -78,6 +85,7 @@ public class AutoDeployJob extends MonitorableJob {
                 project.id,
                 message
             );
+            status.fail(message);
             return;
         }
 
@@ -88,6 +96,7 @@ public class AutoDeployJob extends MonitorableJob {
                     LOG.info("Auto deploy lock added for project id: {}", project.id);
                 } else {
                     LOG.warn("Unable to acquire lock for project {}", project.name);
+                    status.fail(String.format("Project %s is locked for auto-deployments.", project.name));
                     return;
                 }
             }
@@ -97,11 +106,13 @@ public class AutoDeployJob extends MonitorableJob {
             String latestServerId = deployment.latest().serverId;
             OtpServer server = Persistence.servers.getById(latestServerId);
             if (server == null) {
-                LOG.warn(
-                    "Server with id {} no longer exists. Skipping deployment for project {}.",
+                String message = String.format(
+                    "Server with id %s no longer exists. Skipping deployment for project %s.",
                     latestServerId,
                     project.name
                 );
+                LOG.warn(message);
+                status.fail(message);
                 return;
             }
 
@@ -163,13 +174,14 @@ public class AutoDeployJob extends MonitorableJob {
             // Skip auto-deployment for this project if Data Tools should wait for a job that should create a new
             // feed version to complete.
             if (shouldWaitForNewFeedVersions) {
+                status.completeSuccessfully("Auto-Deployment will wait for new feed versions to be created from jobs in-progress");
                 return;
             }
 
             // Skip auto-deployment for this project if any of the feed versions contained critical errors.
             if (latestVersionsWithCriticalErrors.size() > 0) {
                 StringBuilder errorMessageBuilder = new StringBuilder(
-                    String.format("Auto deployment skipped for project %s! %s feed(s) contain critical errors:",
+                    String.format("Auto deployment for project %s! %s feed(s) contain critical errors:",
                         project.name,
                         latestVersionsWithCriticalErrors.size())
                 );
@@ -184,12 +196,15 @@ public class AutoDeployJob extends MonitorableJob {
                 }
                 String message = errorMessageBuilder.toString();
                 LOG.warn(message);
-                NotifyUsersForSubscriptionJob.createNotification(
-                    "deployment-updated",
-                    project.id,
-                    message
-                );
-                return;
+                if (!project.autoDeployWithCriticalErrors) {
+                    NotifyUsersForSubscriptionJob.createNotification(
+                        "deployment-updated",
+                        project.id,
+                        message
+                    );
+                    status.fail(message);
+                    return;
+                }
             }
 
             // Add all pinned feed versions to the list of feed versions to be deployed so that they aren't lost as part
@@ -213,21 +228,23 @@ public class AutoDeployJob extends MonitorableJob {
                 return;
             }
 
-            // Update the deployment's feed version IDs with the latest (and pinned) feed versions.
-            deployment.feedVersionIds = updatedFeedVersionIds;
-            Persistence.deployments.replace(deployment.id, deployment);
-
             // Queue up the deploy job.
-            if (DeploymentController.queueDeployJob(new DeployJob(deployment, owner, server))) {
+            if (DeploymentController.queueDeployJob(deployment, owner, server) != null) {
                 LOG.info("Last auto deploy date updated for project {}.", project.name);
+                // Update the deployment's feed version IDs with the latest (and pinned) feed versions.
+                deployment.feedVersionIds = updatedFeedVersionIds;
                 project.lastAutoDeploy = new Date();
                 Persistence.projects.replace(project.id, project);
+                status.completeSuccessfully("Auto deploy started new deploy job.");
             } else {
-                LOG.warn("Could not auto-deploy to {} due to conflicting active deployment for project {}.",
+                String message = String.format(
+                    "Auto-deployment to %s should occur after active deployment for project %s completes.",
                     server.name,
-                    project.name);
+                    project.name
+                );
+                LOG.info(message);
+                status.completeSuccessfully(message);
             }
-            status.completeSuccessfully("Auto deploy complete.");
         } catch (Exception e) {
             status.fail(
                 String.format("Could not auto-deploy project %s!", project.name),

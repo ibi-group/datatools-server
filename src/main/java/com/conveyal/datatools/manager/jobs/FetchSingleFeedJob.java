@@ -2,11 +2,11 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.FeedVersionJob;
 import com.conveyal.datatools.common.utils.Scheduler;
-import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.JobUtils;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -75,7 +75,7 @@ public class FetchSingleFeedJob extends FeedVersionJob {
             if (continueThread) {
                 addNextJob(processSingleFeedJob);
             } else {
-                DataManager.heavyExecutor.execute(processSingleFeedJob);
+                JobUtils.heavyExecutor.execute(processSingleFeedJob);
             }
         }
     }

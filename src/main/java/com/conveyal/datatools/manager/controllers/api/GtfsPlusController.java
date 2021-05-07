@@ -8,6 +8,7 @@ import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.JobUtils;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.eclipse.jetty.http.HttpStatus;
@@ -239,7 +240,7 @@ public class GtfsPlusController {
 
         // Must be handled by executor because it takes a long time.
         ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(newFeedVersion, profile, true);
-        DataManager.heavyExecutor.execute(processSingleFeedJob);
+        JobUtils.heavyExecutor.execute(processSingleFeedJob);
 
         return formatJobMessage(processSingleFeedJob.jobId, "Feed version is processing.");
     }

@@ -1,13 +1,12 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.common.utils.Scheduler;
-import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.JobUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -57,7 +56,7 @@ public class FetchProjectFeedsJob extends MonitorableJob {
             // Run this in a heavy executor with continueThread = true, so that fetch/process jobs for each
             // feed source execute in order (i.e., fetch feed source A, then process; next, fetch feed source b, then
             // process).
-            DataManager.heavyExecutor.execute(fetchSingleFeedJob);
+            JobUtils.heavyExecutor.execute(fetchSingleFeedJob);
         }
     }
 

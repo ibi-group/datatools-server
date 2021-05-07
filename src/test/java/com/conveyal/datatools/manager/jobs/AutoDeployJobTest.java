@@ -3,7 +3,6 @@ package com.conveyal.datatools.manager.jobs;
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.TestUtils;
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
@@ -13,6 +12,7 @@ import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.JobUtils;
 import com.google.common.collect.Sets;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -146,7 +146,7 @@ public class AutoDeployJobTest extends DatatoolsTest {
         // indefinitely).
         Set<MonitorableJob> userJobs = Sets.newConcurrentHashSet();
         userJobs.add(new ProcessSingleFeedJob(feedVersionC, user, true));
-        DataManager.userJobsMap.put(user.getUser_id(), userJobs);
+        JobUtils.userJobsMap.put(user.getUser_id(), userJobs);
 
         // Add mock feed 1 to the deployment so that it is detected in the Deployment#hasFeedFetchesInProgress check
         // (called during auto deploy).

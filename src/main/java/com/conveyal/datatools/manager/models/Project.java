@@ -72,6 +72,11 @@ public class Project extends Model {
      */
     public Set<AutoDeployType> autoDeployTypes = new HashSet<>();
 
+    /**
+     * Whether to auto-deploy feeds that have critical errors.
+     */
+    public boolean autoDeployWithCriticalErrors = false;
+
     // Identifies a specific "pinned" deployment for the project. This is used in datatools-ui in 2 places:
     // 1. In the list of project deployments, a "pinned" deployment is shown first and highlighted.
     // 2. In the project feed source table, if a "pinned" deployment exists, the status of the versions that were in
