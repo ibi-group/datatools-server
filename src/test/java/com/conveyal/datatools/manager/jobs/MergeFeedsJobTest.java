@@ -450,7 +450,7 @@ public class MergeFeedsJobTest extends UnitTest {
         );
         // Check GTFS file line numbers.
         assertEquals(
-            5149, // Magic number represents the number of trips in the merged BART feed.
+            4629, // Magic number represents the number of trips in the merged BART feed.
             mergeFeedsJob.mergedVersion.feedLoadResult.trips.rowCount,
             "Merged feed trip count should equal expected value."
         );
