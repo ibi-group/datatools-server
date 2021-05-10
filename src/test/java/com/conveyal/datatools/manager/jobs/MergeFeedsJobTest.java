@@ -366,12 +366,13 @@ public class MergeFeedsJobTest extends UnitTest {
         String mergedNamespace = mergeFeedsJob.mergedVersion.namespace;
 
         // - calendar table
-        // expect a total of 4 records in calendar table:
+        // expect a total of 5 records in calendar table:
         // - 2 original (common_id start date extended)
         // - 2 cloned for active feed
+        // - 1 cloned and modified for future feed
         assertThatSqlCountQueryYieldsExpectedCount(
             String.format("SELECT count(*) FROM %s.calendar", mergedNamespace),
-            4
+            5
         );
 //        // expect that both records in calendar table have the correct start_date
 //        assertThatSqlCountQueryYieldsExpectedCount(
@@ -411,15 +412,16 @@ public class MergeFeedsJobTest extends UnitTest {
         String mergedNamespace = mergeFeedsJob.mergedVersion.namespace;
 
         // - calendar table
-        // expect a total of 2 records in calendar table
+        // expect a total of 4 records in calendar table (all records from original files are included).
         assertThatSqlCountQueryYieldsExpectedCount(
             String.format("SELECT count(*) FROM %s.calendar", mergedNamespace),
-            2
+            4
         );
-        // expect that both records in calendar table have the correct start_date
+        // - trips table
+        // expect a total of 4 records in trips table (all records from original files are included).
         assertThatSqlCountQueryYieldsExpectedCount(
-            String.format("SELECT count(*) FROM %s.calendar where start_date = '20170918'", mergedNamespace),
-            2
+            String.format("SELECT count(*) FROM %s.trips", mergedNamespace),
+            4
         );
     }
 

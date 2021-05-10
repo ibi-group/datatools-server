@@ -130,9 +130,6 @@ public class MergeFeedsJob extends MonitorableJob {
 
     private static final Logger LOG = LoggerFactory.getLogger(MergeFeedsJob.class);
     public static final ObjectMapper mapper = new ObjectMapper();
-    private static Set<String> intersectingTripIds = new HashSet<>();
-    private static Set<String> tripsOnlyInActiveFeed = new HashSet<>();
-    private static Set<String> tripsOnlyInFutureFeed = new HashSet<>();
     private final Set<FeedVersion> feedVersions;
     private final FeedSource feedSource;
     private final ReferenceTracker referenceTracker = new ReferenceTracker();
@@ -147,6 +144,9 @@ public class MergeFeedsJob extends MonitorableJob {
      */
     final FeedVersion mergedVersion;
     public MergeStrategy mergeStrategy = MergeStrategy.DEFAULT;
+    private Set<String> intersectingTripIds = new HashSet<>();
+    private Set<String> tripsOnlyInActiveFeed = new HashSet<>();
+    private Set<String> tripsOnlyInFutureFeed = new HashSet<>();
     private Set<String> tripIdsToModifyForActiveFeed = new HashSet<>();
     private Set<String> tripIdsToSkipForActiveFeed = new HashSet<>();
     private Set<String> serviceIdsToExtend = new HashSet<>();
@@ -362,7 +362,7 @@ public class MergeFeedsJob extends MonitorableJob {
             return false;
         }
         for (int i = 0; i < activeStopTimes.size(); i++) {
-            if (activeStopTimes.get(i).hashCode() == futureStopTimes.get(i).hashCode()) {
+            if (!activeStopTimes.get(i).equals(futureStopTimes.get(i))) {
                 return false;
             }
         }
@@ -677,7 +677,7 @@ public class MergeFeedsJob extends MonitorableJob {
                         // York State).
                         if (mergeType.equals(SERVICE_PERIOD)) {
                             Set<NewGTFSError> idErrors;
-                            // If analyzing the second feed (non-future feed), the service_id always gets feed scoped.
+                            // If analyzing the second feed (active feed), the service_id always gets feed scoped.
                             // See https://github.com/ibi-group/datatools-server/issues/244
                             if (handlingActiveFeed && field.name.equals("service_id")) {
                                 valueToWrite = String.join(":", idScope, val);
@@ -1099,7 +1099,7 @@ public class MergeFeedsJob extends MonitorableJob {
      * Get the merge strategy to use for MTC service period merges by checking the active and future feeds for various
      * combinations of matching trip and service IDs.
      */
-    private static MergeStrategy getMergeStrategy(List<FeedToMerge> feedsToMerge) throws IOException {
+    private MergeStrategy getMergeStrategy(List<FeedToMerge> feedsToMerge) throws IOException {
         // Iterate over both feeds to collect all trip and service IDs.
         for (int i = 0; i < feedsToMerge.size(); i++) {
             FeedToMerge feed = feedsToMerge.get(i);
