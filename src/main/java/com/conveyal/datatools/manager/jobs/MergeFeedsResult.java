@@ -15,7 +15,6 @@ public class MergeFeedsResult implements Serializable {
 
     /** Number of feeds merged */
     public int feedCount;
-    public int errorCount;
     /** Type of merge operation performed */
     public MergeFeedsType type;
     /** Contains a set of strings for which there were error-causing duplicate values */
@@ -35,6 +34,7 @@ public class MergeFeedsResult implements Serializable {
     public int recordsSkipCount;
     public Date startTime;
     public boolean failed;
+    public int errorCount;
     /** Set of reasons explaining why merge operation failed */
     public Set<String> failureReasons = new HashSet<>();
     public Set<String> tripIdsToCheck = new HashSet<>();

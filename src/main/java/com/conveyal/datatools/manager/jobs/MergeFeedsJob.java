@@ -294,7 +294,7 @@ public class MergeFeedsJob extends MonitorableJob {
         }
         // Skip merging process altogether if the failing condition is met.
         if (MergeStrategy.FAIL_DUE_TO_MATCHING_TRIP_IDS.equals(mergeStrategy)) {
-            status.fail("Feed merge failed because the trip_ids are identical in the future and active feeds. A new service requires unique trip_ids for merging.");
+            failMergeJob("Feed merge failed because the trip_ids are identical in the future and active feeds. A new service requires unique trip_ids for merging.");
             return;
         }
         // Loop over GTFS tables and merge each feed one table at a time.
@@ -326,10 +326,7 @@ public class MergeFeedsJob extends MonitorableJob {
         }
         // Close output stream for zip file.
         out.close();
-        if (mergeFeedsResult.failed) {
-            // Fail job if the merge result indicates something went wrong.
-            status.fail("Merging feed versions failed.");
-        } else {
+        if (!mergeFeedsResult.failed) {
             // Store feed locally and (if applicable) upload regional feed to S3.
             storeMergedFeed();
             status.completeSuccessfully("Merged feed created successfully.");
@@ -345,6 +342,19 @@ public class MergeFeedsJob extends MonitorableJob {
     }
 
     /**
+     * Handle updating {@link MergeFeedsResult} and the overall job status when a failure condition is triggered while
+     * merging feeds.
+     */
+    private void failMergeJob(String failureMessage) {
+        LOG.error(failureMessage);
+        mergeFeedsResult.failed = true;
+        mergeFeedsResult.errorCount++;
+        mergeFeedsResult.failureReasons.add(failureMessage);
+        // Use generic message for overall job status.
+        status.fail("Merging feed versions failed.");
+    }
+
+    /**
      * Checks whether the future and active stop_times for a particular trip_id are an exact match.
      */
     private boolean stopTimesMatch(List<StopTime> futureStopTimes, List<StopTime> activeStopTimes) {
@@ -352,7 +362,7 @@ public class MergeFeedsJob extends MonitorableJob {
             return false;
         }
         for (int i = 0; i < activeStopTimes.size(); i++) {
-            if (activeStopTimes.get(i).equals(futureStopTimes.get(i))) {
+            if (activeStopTimes.get(i).hashCode() == futureStopTimes.get(i).hashCode()) {
                 return false;
             }
         }
@@ -512,15 +522,12 @@ public class MergeFeedsJob extends MonitorableJob {
                                     .filter(transitId -> transitId.startsWith("agency_id"))
                                     .findAny()
                                     .orElse(null);
-                                String message = String.format(
+                                failMergeJob(String.format(
                                     "MTC merge detected mismatching agency_id values between two "
                                         + "feeds (%s and %s). Failing merge operation.",
                                     agencyId,
                                     otherAgencyId
-                                );
-                                LOG.error(message);
-                                mergeFeedsResult.failed = true;
-                                mergeFeedsResult.failureReasons.add(message);
+                                ));
                                 return -1;
                             }
                             LOG.warn("Skipping {} file for feed {}/{} (future file preferred)",
@@ -602,17 +609,13 @@ public class MergeFeedsJob extends MonitorableJob {
                                     // However... if the second feed was missing stop_codes and the first feed was not,
                                     // fail the merge job.
                                     if (handlingActiveFeed && !stopCodeMissingFromFirstFeed) {
-                                        mergeFeedsResult.failed = true;
-                                        mergeFeedsResult.errorCount++;
-                                        mergeFeedsResult.failureReasons.add(
+                                        failMergeJob(
                                             stopCodeFailureMessage(stopsMissingStopCodeCount, stopsCount, specialStopsCount)
                                         );
                                     }
                                 } else if (stopsMissingStopCodeCount > 0) {
                                     // If some, but not all, stops are missing stop_code, the merge feeds job must fail.
-                                    mergeFeedsResult.failed = true;
-                                    mergeFeedsResult.errorCount++;
-                                    mergeFeedsResult.failureReasons.add(
+                                    failMergeJob(
                                         stopCodeFailureMessage(stopsMissingStopCodeCount, stopsCount, specialStopsCount)
                                     );
                                 }
@@ -646,17 +649,14 @@ public class MergeFeedsJob extends MonitorableJob {
                         // updating this feed's end_date or accounting for cases where IDs conflict).
                         String valueToWrite = val;
                         // Handle filling in agency_id if missing when merging regional feeds.
-                        if (newAgencyId != null && field.name.equals("agency_id") && mergeType
-                            .equals(REGIONAL)) {
+                        if (newAgencyId != null && field.name.equals("agency_id") && mergeType.equals(REGIONAL)) {
                             if (val.equals("") && table.name.equals("agency") && lineNumber > 0) {
                                 // If there is no agency_id value for a second (or greater) agency
                                 // record, fail the merge feed job.
-                                String message = String.format(
+                                failMergeJob(String.format(
                                     "Feed %s has multiple agency records but no agency_id values.",
-                                    feed.version.id);
-                                mergeFeedsResult.failed = true;
-                                mergeFeedsResult.failureReasons.add(message);
-                                LOG.error(message);
+                                    feed.version.id
+                                ));
                                 return -1;
                             }
                             LOG.info("Updating {}#agency_id to (auto-generated) {} for ID {}",
@@ -664,8 +664,7 @@ public class MergeFeedsJob extends MonitorableJob {
                             val = newAgencyId;
                         }
                         // Determine if field is a GTFS identifier.
-                        boolean isKeyField =
-                            field.isForeignReference() || keyField.equals(field.name);
+                        boolean isKeyField = field.isForeignReference() || keyField.equals(field.name);
                         if (this.mergeType.equals(REGIONAL) && isKeyField && !val.isEmpty()) {
                             // For regional merge, if field is a GTFS identifier (e.g., route_id,
                             // stop_id, etc.), add scoped prefix.
@@ -1138,6 +1137,7 @@ public class MergeFeedsJob extends MonitorableJob {
             // Do not permit merge to continue.
             return MergeStrategy.FAIL_DUE_TO_MATCHING_TRIP_IDS;
         }
+        // If neither the trips or services are exact matches, use the default merge strategy.
         return MergeStrategy.DEFAULT;
     }
 }
