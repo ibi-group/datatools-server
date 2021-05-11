@@ -25,7 +25,6 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
 import java.util.stream.Collectors;
 import java.util.zip.ZipFile;
@@ -35,7 +34,7 @@ import static com.conveyal.gtfs.loader.Field.getFieldIndex;
 
 /**
  * This transformation normalizes string values for a given field in a GTFS table by:
- * - change the case of field values,
+ * - changing the case of field values,
  * - substituting certain strings with others.
  * Exceptions to capitalization and substitutions are configurable application-wide in env.yml
  * or for each transform individually using datatools-ui.
