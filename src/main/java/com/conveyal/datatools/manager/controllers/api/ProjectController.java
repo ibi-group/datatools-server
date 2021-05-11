@@ -16,6 +16,7 @@ import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.JobUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import org.bson.Document;
 import org.eclipse.jetty.http.HttpStatus;
@@ -256,7 +257,7 @@ public class ProjectController {
             }
         }
         MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(userProfile, feedVersions, project.id, REGIONAL);
-        DataManager.heavyExecutor.execute(mergeFeedsJob);
+        JobUtils.heavyExecutor.execute(mergeFeedsJob);
         // Return job ID to requester for monitoring job status.
         return formatJobMessage(mergeFeedsJob.jobId, "Merge operation is processing.");
     }
@@ -298,7 +299,7 @@ public class ProjectController {
         }
         // Run as lightweight job.
         PublishProjectFeedsJob publishProjectFeedsJob = new PublishProjectFeedsJob(p, userProfile);
-        DataManager.lightExecutor.execute(publishProjectFeedsJob);
+        JobUtils.lightExecutor.execute(publishProjectFeedsJob);
         return formatJobMessage(publishProjectFeedsJob.jobId, "Publishing public feeds");
     }
 

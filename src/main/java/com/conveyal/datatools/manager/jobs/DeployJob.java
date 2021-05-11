@@ -67,6 +67,7 @@ import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.JobUtils;
 import com.conveyal.datatools.manager.utils.StringUtils;
 import com.conveyal.datatools.manager.utils.TimeTracker;
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -559,26 +560,26 @@ public class DeployJob extends MonitorableJob {
         String message;
         // FIXME: For some reason status duration is not getting set properly in MonitorableJob.
         status.duration = System.currentTimeMillis() - status.startTime;
+        // persist value on most recently fetched deployment as there could have been changes to the deployment
+        // before this point
+        Deployment latestDeployment = Persistence.deployments.getById(deployment.id);
         if (!status.error) {
             // Update status with successful completion state only if no error was encountered.
             status.completeSuccessfully("Deployment complete!");
             // Store the target server in the deployedTo field and set last deployed time.
             LOG.info("Updating deployment target and deploy time.");
-            deployment.deployedTo = otpServer.id;
+            latestDeployment.deployedTo = otpServer.id;
             long durationMinutes = TimeUnit.MILLISECONDS.toMinutes(status.duration);
             message = String.format("%s successfully deployed %s to %s in %s minutes.", owner.getEmail(), deployment.name, otpServer.publicUrl, durationMinutes);
         } else {
             message = String.format("WARNING: Deployment %s failed to deploy to %s. Error: %s", deployment.name, otpServer.publicUrl, status.message);
         }
         // Unconditionally add deploy summary. If the job fails, we should still record the summary.
-        deployment.deployJobSummaries.add(0, new DeploySummary(this));
-        Persistence.deployments.replace(deployment.id, deployment);
+        latestDeployment.deployJobSummaries.add(0, new DeploySummary(this));
+        Persistence.deployments.replace(deployment.id, latestDeployment);
         // Send notification to those subscribed to updates for the deployment.
         NotifyUsersForSubscriptionJob.createNotification("deployment-updated", deployment.id, message);
-        if (shouldStartAnotherAutoDeployment()) {
-            // newer feed versions exist! Start a new auto-deploy job.
-            DataManager.heavyExecutor.execute(new AutoDeployJob(deployment.parentProject(), owner));
-        }
+        startAnotherAutoDeploymentIfNeeded();
     }
 
     /**
@@ -586,12 +587,12 @@ public class DeployJob extends MonitorableJob {
      * AutoDeployJob has made sure no fetching jobs exist and the DeployJob has started. Therefore this new feed version
      * wouldn't result in a new DeployJob getting kicked off since there was already one running.
      */
-    private boolean shouldStartAnotherAutoDeployment() {
+    private void startAnotherAutoDeploymentIfNeeded() {
         Project project = deployment.parentProject();
         Set<String> pinnedFeedVersionIds = new HashSet<>(deployment.pinnedfeedVersionIds);
 
         // don't auto-deploy if an error occurred with this deployment
-        return !status.error &&
+        boolean shouldStartAnotherAutoDeployment = !status.error &&
             // make sure deployment is enabled for data tools. Not sure how we'd get this far if it weren't...
             DataManager.isModuleEnabled("deployment") &&
             // make sure auto-deployment is enabled for the project
@@ -613,6 +614,13 @@ public class DeployJob extends MonitorableJob {
                     // yet been auto deployed that must have been created while this deploy job ran.
                     return latest != null && latest.dateCreated.after(project.lastAutoDeploy);
                 });
+
+        if (shouldStartAnotherAutoDeployment) {
+            // newer feed versions exist! Start a new auto-deploy job.
+            JobUtils.heavyExecutor.execute(new AutoDeployJob(deployment.parentProject(), owner));
+        } else {
+            LOG.info("No need to start another auto-deployment");
+        }
     }
 
     /**
@@ -1355,8 +1363,12 @@ public class DeployJob extends MonitorableJob {
         String jarName = deployment.otpVersion;
         if (jarName == null) {
             // If there is no version specified, use the default (and persist value).
-            jarName = deployment.otpVersion = DEFAULT_OTP_VERSION;
-            Persistence.deployments.replace(deployment.id, deployment);
+            jarName = DEFAULT_OTP_VERSION;
+            // persist value on most recently fetched deployment as there could have been changes to the deployment
+            // before this point
+            Deployment latestDeployment = Persistence.deployments.getById(deployment.id);
+            latestDeployment.otpVersion = jarName;
+            Persistence.deployments.replace(deployment.id, latestDeployment);
         }
         return jarName;
     }

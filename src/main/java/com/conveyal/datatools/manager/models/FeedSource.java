@@ -10,7 +10,6 @@ import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
-import com.conveyal.datatools.manager.controllers.api.StatusController;
 import com.conveyal.datatools.manager.jobs.CreateFeedVersionFromSnapshotJob;
 import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
 import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
@@ -18,6 +17,7 @@ import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
 import com.conveyal.datatools.manager.models.transform.FeedTransformation;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.JobUtils;
 import com.conveyal.gtfs.GTFS;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -606,7 +606,7 @@ public class FeedSource extends Model implements Cloneable {
      * occurring at the same time).
      */
     public boolean hasJobsInProgress() {
-        return StatusController.filterActiveJobs(StatusController.getAllJobs()).stream().anyMatch(job -> {
+        return JobUtils.filterActiveJobs(JobUtils.getAllJobs()).stream().anyMatch(job -> {
             String jobFeedSourceId = null;
             if (
                 job instanceof FetchSingleFeedJob ||
