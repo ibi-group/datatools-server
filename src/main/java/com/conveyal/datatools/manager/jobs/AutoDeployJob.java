@@ -234,6 +234,7 @@ public class AutoDeployJob extends MonitorableJob {
                 // Update the deployment's feed version IDs with the latest (and pinned) feed versions.
                 deployment.feedVersionIds = updatedFeedVersionIds;
                 project.lastAutoDeploy = new Date();
+                Persistence.deployments.replace(deployment.id, deployment);
                 Persistence.projects.replace(project.id, project);
                 status.completeSuccessfully("Auto deploy started new deploy job.");
             } else {
