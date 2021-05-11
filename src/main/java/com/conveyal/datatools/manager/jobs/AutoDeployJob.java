@@ -2,12 +2,12 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
-import com.conveyal.datatools.manager.controllers.api.DeploymentController;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.JobUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -181,7 +181,7 @@ public class AutoDeployJob extends MonitorableJob {
             // Skip auto-deployment for this project if any of the feed versions contained critical errors.
             if (latestVersionsWithCriticalErrors.size() > 0) {
                 StringBuilder errorMessageBuilder = new StringBuilder(
-                    String.format("Auto deployment for project %s! %s feed(s) contain critical errors:",
+                    String.format("Auto deployment for project %s has %s feed(s) with critical errors:",
                         project.name,
                         latestVersionsWithCriticalErrors.size())
                 );
@@ -229,7 +229,7 @@ public class AutoDeployJob extends MonitorableJob {
             }
 
             // Queue up the deploy job.
-            if (DeploymentController.queueDeployJob(deployment, owner, server) != null) {
+            if (JobUtils.queueDeployJob(deployment, owner, server) != null) {
                 LOG.info("Last auto deploy date updated for project {}.", project.name);
                 // Update the deployment's feed version IDs with the latest (and pinned) feed versions.
                 deployment.feedVersionIds = updatedFeedVersionIds;

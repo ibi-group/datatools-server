@@ -2,11 +2,17 @@ package com.conveyal.datatools.manager.utils;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.jobs.DeployJob;
+import com.conveyal.datatools.manager.models.Deployment;
+import com.conveyal.datatools.manager.models.OtpServer;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.google.common.collect.Sets;
+import com.mongodb.client.FindIterable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
@@ -17,17 +23,19 @@ import java.util.stream.Collectors;
 public class JobUtils {
     private static final Logger LOG = LoggerFactory.getLogger(JobUtils.class);
 
+    // Heavy executor should contain long-lived CPU-intensive tasks (e.g., feed loading/validation)
+    public static Executor heavyExecutor = Executors.newFixedThreadPool(4);
+
+    // light executor is for tasks for things that should finish quickly (e.g., email notifications)
+    public static Executor lightExecutor = Executors.newSingleThreadExecutor();
+
     /**
      * Stores jobs underway by user ID. NOTE: any set created and stored here must be created with
      * {@link Sets#newConcurrentHashSet()} or similar thread-safe Set.
      */
     public static Map<String, Set<MonitorableJob>> userJobsMap = new ConcurrentHashMap<>();
 
-    // Heavy executor should contain long-lived CPU-intensive tasks (e.g., feed loading/validation)
-    public static Executor heavyExecutor = Executors.newFixedThreadPool(4);
-
-    // light executor is for tasks for things that should finish quickly (e.g., email notifications)
-    public static Executor lightExecutor = Executors.newSingleThreadExecutor();
+    private static final Map<String, DeployJob> deploymentJobsByServer = new HashMap<>();
 
     public static Set<MonitorableJob> getAllJobs() {
         return userJobsMap.values().stream()
@@ -103,5 +111,44 @@ public class JobUtils {
         Set<MonitorableJob> jobsStillActive = Sets.newConcurrentHashSet();
         jobs.stream().filter(job -> job.active).forEach(jobsStillActive::add);
         return jobsStillActive;
+    }
+
+    /**
+     * Creates and queues a new {@link DeployJob} if there are no conflicting jobs assigned to the specified server.
+     *
+     * @param deployment The deployment to associate the new DeployJob with
+     * @param owner The owner to associate the new DeployJob with
+     * @param server The server to associate the new DeployJob with
+     * @return returns the DeployJob if the job was successfully queued, otherwise this returns null
+     */
+    public static DeployJob queueDeployJob(Deployment deployment, Auth0UserProfile owner, OtpServer server) {
+        // Check that we can deploy to the specified target. (Any deploy job for the target that is presently active will
+        // cause a halt.)
+        if (deploymentJobsByServer.containsKey(server.id)) {
+            // There is a deploy job for the server. Check if it is active.
+            DeployJob conflictingDeployJob = deploymentJobsByServer.get(server.id);
+            if (conflictingDeployJob != null && !conflictingDeployJob.status.completed) {
+                // Another deploy job is actively being deployed to the server target.
+                LOG.error("New deploy job will not be queued due to active deploy job in progress.");
+                return null;
+            }
+        }
+
+        // For any previous deployments sent to the server/router combination, set deployedTo to null because
+        // this new one will overwrite it. NOTE: deployedTo for the current deployment will only be updated after the
+        // successful completion of the deploy job.
+        FindIterable<Deployment> deploymentsWithSameTarget = Deployment.retrieveDeploymentForServerAndRouterId(
+            server.id,
+            deployment.routerId
+        );
+        for (Deployment oldDeployment : deploymentsWithSameTarget) {
+            LOG.info("Setting deployment target to null for id={}", oldDeployment.id);
+            Persistence.deployments.updateField(oldDeployment.id, "deployedTo", null);
+        }
+        // Finally, add deploy job to the heavy executor.
+        DeployJob deployJob = new DeployJob(deployment, owner, server);
+        heavyExecutor.execute(deployJob);
+        deploymentJobsByServer.put(server.id, deployJob);
+        return deployJob;
     }
 }
