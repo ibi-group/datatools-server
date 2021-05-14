@@ -82,8 +82,3 @@ extensions:
   transitfeeds:
     enabled: true
     api: http://api.transitfeeds.com/v1/getFeeds
-
-# Spaces added for testing. (Spaces are permitted but not part of capitalization exceptions.)
-
-DEFAULT_CAPITALIZATION_EXCEPTIONS: ACE,  BART  ,  SMART,   EB,WB,SB,NB
-DEFAULT_SUBSTITUTIONS:
