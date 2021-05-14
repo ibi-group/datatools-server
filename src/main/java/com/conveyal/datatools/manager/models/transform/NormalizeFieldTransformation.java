@@ -71,9 +71,6 @@ public class NormalizeFieldTransformation extends ZipTransformation {
     /** Capitalization style, e.g. title case or sentence case. */
     public CapitalizationStyle capitalizationStyle = CapitalizationStyle.TITLE_CASE;
 
-    /** Whether to perform text substitutions. */
-    public boolean performSubstitutions = true;
-
     /**
      * Capitalization exceptions is for text that should remain as specified
      * in the default capitalization exceptions or in the UI.
@@ -83,7 +80,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
 
     /**
      * Substitutions are initialized with the default configured ones,
-     * and can be overridden from the UI.
+     * and can be overridden from the UI. This list can be empty.
      */
     public List<Substitution> substitutions = DEFAULT_SUBSTITUTIONS;
 
@@ -186,10 +183,8 @@ public class NormalizeFieldTransformation extends ZipTransformation {
                     // TODO: Implement other capitalization styles.
                 }
 
-                // Perform substitutions, if requested.
-                if (performSubstitutions) {
-                    transformedValue = performSubstitutions(transformedValue);
-                }
+                // Perform substitutions if any.
+                transformedValue = performSubstitutions(transformedValue);
 
                 // Re-assemble the CSV line and place in buffer.
                 String[] csvValues = csvReader.getValues();
