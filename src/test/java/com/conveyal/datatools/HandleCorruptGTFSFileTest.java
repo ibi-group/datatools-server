@@ -17,15 +17,11 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
  */
 public class HandleCorruptGTFSFileTest {
     private static FeedSource mockFeedSource;
-    private static FeedVersion corruptFeedVersion;
 
     @BeforeAll
     public static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
-        mockFeedSource = new FeedSource("Corrupt");
-        Persistence.feedSources.create(mockFeedSource);
-        corruptFeedVersion = createFeedVersionFromGtfsZip(mockFeedSource, "corrupt-gtfs-file.zip");
     }
 
     @AfterAll
@@ -35,6 +31,9 @@ public class HandleCorruptGTFSFileTest {
 
     @Test
     public void canHandleCorruptGTFSFile() {
+        mockFeedSource = new FeedSource("Corrupt");
+        Persistence.feedSources.create(mockFeedSource);
+        FeedVersion corruptFeedVersion = createFeedVersionFromGtfsZip(mockFeedSource, "corrupt-gtfs-file.zip");
         assertEquals(corruptFeedVersion.feedLoadResult.fatalException, "java.util.zip.ZipException: error in opening zip file");
     }
 }
