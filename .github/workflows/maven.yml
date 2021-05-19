@@ -67,8 +67,6 @@ jobs:
         run: mvn --no-transfer-progress package
       - name: Restart MongoDB with fresh database (for e2e tests)
         run: ./scripts/restart-mongo-with-fresh-db.sh
-      - name: Copy unit test coverage results into another folder # so the e2e tests don't overwrite them
-        run: cp -R target target-unit-test-results
       - name: Run e2e tests
         if: env.SHOULD_RUN_E2E == 'true'
         run: mvn test
@@ -95,45 +93,15 @@ jobs:
           SPARKPOST_EMAIL: ${{ secrets.SPARKPOST_EMAIL }}
           SPARKPOST_KEY: ${{ secrets.SPARKPOST_KEY }}
           TRANSITFEEDS_KEY: ${{ secrets.TRANSITFEEDS_KEY }}
-      - name: Copy e2e coverage results into another folder # so the deployment results don't overwrite them
-        run: if [ "$SHOULD_RUN_E2E" = "true" ]; then cp -R target target-e2e-test-results; fi
-          # these first codecov runs will upload a report associated with the commit set through CI environment variables
-          # use codecov script flags to upload the coverage report for the unit tests
-      - name: Upload codecov for unit tests
-        run: bash <(curl -s https://codecov.io/bash) -s target-unit-test-results -F unit_tests
-      - name: Upload the coverage report for the e2e tests
-        run: |
-          if [ "$SHOULD_RUN_E2E" = "true" ]; then
-          bash <(curl -s https://codecov.io/bash) -s target-e2e-test-results -F end_to_end_tests;
-          fi
 
       # Run maven-semantic-release to potentially create a new release of datatools-server. The flag --skip-maven-deploy is
       # used to avoid deploying to maven central. So essentially, this just creates a release with a changelog on github.
-      #
-      # If maven-semantic-release finishes successfully and the current branch is master, upload coverage reports for the
-      # commits that maven-semantic-release generated. Since the above codecov run is associated with the commit that
-      # initiated the CI build, the report will not be associated with the commits that maven-semantic-release performed
-      # (if it ended up creating a release and the two commits that were a part of that workflow). Therefore, if on master
-      # codecov needs to be ran two more times to create codecov reports for the commits made by maven-semantic-release.
-      # See https://github.com/conveyal/gtfs-lib/issues/193. In order to create reports for both the unit and e2e tsts,
-      # the codecov scripts must be ran twice.
-      #
-      # The git commands get the commit hash of the HEAD commit and the commit just before HEAD.
       - name: Run maven-semantic-release
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
           semantic-release --prepare @conveyal/maven-semantic-release --publish @semantic-release/github,@conveyal/maven-semantic-release --verify-conditions @semantic-release/github,@conveyal/maven-semantic-release --verify-release @conveyal/maven-semantic-release --use-conveyal-workflow --dev-branch=dev --skip-maven-deploy
-          if [[ "$GITHUB_REF_SLUG" = "master" ]]; then
-            bash <(curl -s https://codecov.io/bash) -C "$(git rev-parse HEAD)" -s target-unit-test-results -F unit_tests
-            bash <(curl -s https://codecov.io/bash) -C "$(git rev-parse HEAD^)" -s target-unit-test-results -F unit_tests
-            if [ "$SHOULD_RUN_E2E" = "true" ]; then
-              bash <(curl -s https://codecov.io/bash) -C "$(git rev-parse HEAD)" -s target-e2e-test-results -F end_to_end_tests;
-              bash <(curl -s https://codecov.io/bash) -C "$(git rev-parse HEAD^)" -s target-e2e-test-results -F end_to_end_tests;
-            fi
-          fi
-
-
+      # The git commands get the commit hash of the HEAD commit and the commit just before HEAD.
       - name: Prepare deploy artifacts
         run: |
           # get branch name of current branch for use in jar name
@@ -154,11 +122,5 @@ jobs:
           FIRST_JAR="${ALL_JARS[0]}"
           cp "$FIRST_JAR" "deploy/dt-latest-$BRANCH_CLEAN.jar"
       - name: Deploy to S3
-        uses: jakejarvis/s3-sync-action@master
-        with:
-          args: --acl public-read
-        env:
-          AWS_S3_BUCKET: datatools-builds
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          SOURCE_DIR: 'deploy'
+        run: |
+          aws s3 cp ./deploy s3://datatools-builds --recursive --acl public-read
