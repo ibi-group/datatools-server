@@ -11,6 +11,7 @@ import java.io.IOException;
 
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 /**
  * Run test to handle a corrupt GTFS file gracefully.
@@ -34,6 +35,9 @@ public class HandleCorruptGTFSFileTest {
         mockFeedSource = new FeedSource("Corrupt");
         Persistence.feedSources.create(mockFeedSource);
         FeedVersion corruptFeedVersion = createFeedVersionFromGtfsZip(mockFeedSource, "corrupt-gtfs-file.zip");
-        assertEquals(corruptFeedVersion.feedLoadResult.fatalException, "java.util.zip.ZipException: error in opening zip file");
+        assertEquals("java.util.zip.ZipException: error in opening zip file", corruptFeedVersion.feedLoadResult.fatalException);
+        assertNull(corruptFeedVersion.validationResult);
+        assertNull(corruptFeedVersion.feedTransformResult);
+        assertNull(corruptFeedVersion.namespace);
     }
 }
