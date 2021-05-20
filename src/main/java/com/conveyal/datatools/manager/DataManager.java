@@ -34,6 +34,7 @@ import com.conveyal.gtfs.GraphQLController;
 import com.conveyal.gtfs.loader.Table;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.google.common.collect.Sets;
 import com.google.common.io.Resources;
@@ -448,6 +449,24 @@ public class DataManager {
      */
     public static boolean isExtensionEnabled(String extensionName) {
         return hasConfigProperty("extensions." + extensionName) && "true".equals(getExtensionPropertyAsText(extensionName, "enabled"));
+    }
+
+    public static void overrideConfigProperty(String name, String value) {
+        String parts[] = name.split("\\.");
+        ObjectNode node = (ObjectNode) serverConfig;
+
+        for(int i = 0; i < parts.length; i++) {
+            if(node == null) {
+                LOG.warn("Config property {} not found", name);
+                return ;
+            }
+            if( i < parts.length-1 ) {
+                node = (ObjectNode) node.get(parts[i]);
+            }
+            else {
+                node.put( parts[i], value );
+            }
+        }
     }
 
     /**

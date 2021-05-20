@@ -185,7 +185,7 @@ public class Deployment extends Model implements Serializable {
     }
 
     /**
-     * The routerId of this deployment
+     * The routerId of this deployment. If null, this value defaults to "default".
      */
     public String routerId;
 
@@ -226,7 +226,7 @@ public class Deployment extends Model implements Serializable {
     }
 
     /** Create a single-agency (testing) deployment for the given feed source */
-    public Deployment(FeedSource feedSource) {
+    public Deployment(FeedSource feedSource, boolean useDefaultRouter) {
         super();
 
         this.feedSourceId = feedSource.id;
@@ -240,8 +240,9 @@ public class Deployment extends Model implements Serializable {
         // always use the latest, no matter how broken it is, so we can at least see how broken it is
         this.feedVersionIds.add(feedSource.latestVersionId());
 
-        this.routerId = StringUtils.getCleanName(feedSource.name) + "_" + feedSourceId;
-
+        if (!useDefaultRouter) {
+            this.routerId = StringUtils.getCleanName(feedSource.name) + "_" + feedSourceId;
+        }
         this.deployedTo = null;
     }
 

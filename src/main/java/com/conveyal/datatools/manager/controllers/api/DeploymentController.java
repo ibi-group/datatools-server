@@ -250,8 +250,9 @@ public class DeploymentController {
 
         if (feedSource.latestVersionId() == null)
             logMessageAndHalt(req, 400, "Cannot create a deployment from a feed source with no versions.");
-
-        Deployment deployment = new Deployment(feedSource);
+        
+        boolean useDefaultRouter = !DataManager.isExtensionEnabled("nysdot");
+        Deployment deployment = new Deployment(feedSource, useDefaultRouter);
         deployment.storeUser(userProfile);
         Persistence.deployments.create(deployment);
         return deployment;
