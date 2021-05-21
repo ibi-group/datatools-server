@@ -11,15 +11,10 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-import java.io.File;
 import java.io.IOException;
-import java.util.List;
 
 import static com.conveyal.datatools.TestUtils.createFeedVersionAndAssignGtfsFile;
-import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
-import static com.conveyal.datatools.TestUtils.getGtfsResourcePath;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -43,13 +38,16 @@ public class HandleCorruptGTFSFileTest {
     @Test
     public void canHandleCorruptGTFSFile() {
         mockFeedSource = new FeedSource("Corrupt");
+        int schemaCountBeforeFeedIsLoaded = TestUtils.countSchemaInDb();
         Persistence.feedSources.create(mockFeedSource);
         FeedVersion feedVersion = createFeedVersionAndAssignGtfsFile(mockFeedSource, "corrupt-gtfs-file.zip");
         ProcessSingleFeedJob job = TestUtils.createProcessSingleFeedJob(feedVersion);
         job.run();
+        // Verify that no schema namespace was created (check uniqueIdentifier as well as pre-/post-load schema count).
         assertNull(feedVersion.feedLoadResult.uniqueIdentifier);
-        List<MonitorableJob> subJobs = job.subJobs;
-        for (MonitorableJob subJob : subJobs) {
+        assertEquals(schemaCountBeforeFeedIsLoaded, TestUtils.countSchemaInDb());
+        // Ensure that LoadFeedJob was properly failed and that ValidateFeedJob was never started.
+        for (MonitorableJob subJob : job.subJobs) {
             assertTrue(subJob.status.error);
             if (subJob instanceof LoadFeedJob) {
                 assertEquals(
