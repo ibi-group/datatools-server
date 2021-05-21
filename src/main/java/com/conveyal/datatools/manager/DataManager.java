@@ -451,20 +451,23 @@ public class DataManager {
         return hasConfigProperty("extensions." + extensionName) && "true".equals(getExtensionPropertyAsText(extensionName, "enabled"));
     }
 
+    /**
+     * In a test environment allows for overriding a specific config value on the server config object.
+     */
     public static void overrideConfigProperty(String name, String value) {
         String parts[] = name.split("\\.");
         ObjectNode node = (ObjectNode) serverConfig;
 
-        for(int i = 0; i < parts.length; i++) {
-            if(node == null) {
+        //Loop through the dot separated field names to obtain final node and override that node's value.
+        for (int i = 0; i < parts.length; i++) {
+            if (node == null) {
                 LOG.warn("Config property {} not found", name);
                 return ;
             }
-            if( i < parts.length-1 ) {
+            if (i < parts.length - 1) {
                 node = (ObjectNode) node.get(parts[i]);
-            }
-            else {
-                node.put( parts[i], value );
+            } else {
+                node.put(parts[i], value);
             }
         }
     }
