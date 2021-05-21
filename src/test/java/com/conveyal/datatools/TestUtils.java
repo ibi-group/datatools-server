@@ -113,6 +113,30 @@ public class TestUtils {
     }
 
     /**
+     * Utility function to create a feed version and assign a GTFS file to it.
+     */
+    public static FeedVersion createFeedVersionAndAssignGtfsFile(FeedSource source, String  gtfsFileName) {
+        File gtfsFile = new File(getGtfsResourcePath(gtfsFileName));
+        FeedVersion version = new FeedVersion(source);
+        InputStream is;
+        try {
+            is = new FileInputStream(gtfsFile);
+            version.newGtfsFile(is);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return version;
+    }
+
+    /**
+     * Utility function to create a {@link ProcessSingleFeedJob} for a {@Link FeedVersion} during tests.
+     */
+    public static ProcessSingleFeedJob createProcessSingleFeedJob(FeedVersion version) {
+        Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
+        return new ProcessSingleFeedJob(version, user, true);
+    }
+
+    /**
      * Zip files in a folder into a temporary zip file
      * @return
      */

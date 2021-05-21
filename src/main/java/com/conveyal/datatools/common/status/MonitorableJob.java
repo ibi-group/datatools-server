@@ -41,7 +41,7 @@ public abstract class MonitorableJob implements Runnable, Serializable {
      * Additional jobs that will be run after the main logic of this job has completed.
      * This job is not considered entirely completed until its sub-jobs have all completed.
      */
-    protected List<MonitorableJob> subJobs = new ArrayList<>();
+    public List<MonitorableJob> subJobs = new ArrayList<>();
 
     public enum JobType {
         UNKNOWN_TYPE,
