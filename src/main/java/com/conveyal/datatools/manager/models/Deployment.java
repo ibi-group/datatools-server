@@ -589,6 +589,9 @@ public class Deployment extends Model implements Serializable {
         public String nextVersionId;
         public int version;
 
+        /** No-arg constructor for de-/serialization. */
+        public SummarizedFeedVersion() { }
+
         public SummarizedFeedVersion (FeedVersion version) {
             this.validationResult = new FeedValidationResultSummary(version);
             this.feedSource = version.parentFeedSource();

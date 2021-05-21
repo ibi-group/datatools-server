@@ -2,24 +2,22 @@ package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.TestUtils;
-import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
-import com.conveyal.datatools.manager.models.*;
+import com.conveyal.datatools.manager.models.Deployment;
+import com.conveyal.datatools.manager.models.FeedSource;
+import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HttpUtils;
-import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.conveyal.datatools.manager.utils.StringUtils;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.http.HttpResponse;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
-import java.net.URL;
 
 import static com.conveyal.datatools.TestUtils.createFeedVersion;
 import static com.conveyal.datatools.TestUtils.zipFolderFiles;
