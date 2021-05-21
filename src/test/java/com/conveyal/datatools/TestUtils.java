@@ -258,4 +258,23 @@ public class TestUtils {
         );
     }
 
+    /**
+     * Counts the number of schemas in the GTFS database. This is helpful for determining whether or not a schema for a
+     * new version was created.
+     */
+    public static int countSchemaInDb() {
+        int count = 0;
+        String countSchemaSql = "SELECT count(schema_name) FROM information_schema.schemata";
+        LOG.info(countSchemaSql);
+        try (Connection connection = GTFS_DATA_SOURCE.getConnection()) {
+            ResultSet resultSet = connection.prepareStatement(countSchemaSql).executeQuery();
+            while (resultSet.next()) {
+                count = resultSet.getInt(1);
+            }
+        } catch (SQLException e) {
+            LOG.error("Could not count schema for database", e);
+        }
+        return count;
+    }
+
 }
