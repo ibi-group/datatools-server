@@ -2,8 +2,10 @@ package com.conveyal.datatools.common.status;
 
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.bson.codecs.pojo.annotations.BsonIgnore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,6 +43,8 @@ public abstract class MonitorableJob implements Runnable, Serializable {
      * Additional jobs that will be run after the main logic of this job has completed.
      * This job is not considered entirely completed until its sub-jobs have all completed.
      */
+    @JsonIgnore
+    @BsonIgnore
     public List<MonitorableJob> subJobs = new ArrayList<>();
 
     public enum JobType {
