@@ -10,7 +10,9 @@ import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HttpUtils;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.conveyal.datatools.manager.utils.StringUtils;
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.http.HttpResponse;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -72,7 +74,8 @@ public class DeploymentControllerTest extends DatatoolsTest {
     @Test
     public void canCreateFeedSourceSpecificDeploymentForNysdot() throws IOException {
         //FIXME: Should change value back to default
-        DataManager.overrideConfigProperty( "extension.nysdot.enabled", "true" );
+        String prevNysdotEnabled = DataManager.getConfigPropertyAsText("extension.nysdot.enabled");
+        DataManager.overrideConfigProperty("extension.nysdot.enabled", "true" );
         HttpResponse createDeploymentResponse = TestUtils.makeRequest( "/api/manager/secure/deployments/fromfeedsource/" + feedSource.id, 
             null,
             HttpUtils.REQUEST_METHOD.POST
@@ -80,6 +83,8 @@ public class DeploymentControllerTest extends DatatoolsTest {
         Deployment deployment = objectMapper.readValue(createDeploymentResponse.getEntity().getContent(), Deployment.class);
 
         assertEquals(OK_200, createDeploymentResponse.getStatusLine().getStatusCode());
-        assertEquals( StringUtils.getCleanName(feedSource.name) + "_" + feedSource.id, deployment.routerId ); 
+        assertEquals( StringUtils.getCleanName(feedSource.name) + "_" + feedSource.id, deployment.routerId );
+
+        DataManager.overrideConfigProperty("extension.nysdot.enabled", prevNysdotEnabled);
     }
 }

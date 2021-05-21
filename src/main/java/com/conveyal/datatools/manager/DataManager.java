@@ -29,6 +29,7 @@ import com.conveyal.datatools.manager.extensions.transitland.TransitLandFeedReso
 import com.conveyal.datatools.manager.jobs.FeedUpdater;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.GraphQLController;
 import com.conveyal.gtfs.loader.Table;
@@ -460,16 +461,16 @@ public class DataManager {
 
         //Loop through the dot separated field names to obtain final node and override that node's value.
         for (int i = 0; i < parts.length; i++) {
-            if (node == null) {
-                LOG.warn("Config property {} not found", name);
-                return ;
-            }
             if (i < parts.length - 1) {
+                if (!node.has(parts[i])) {
+                    node.set(parts[i], JsonUtil.objectMapper.createObjectNode());
+                }
                 node = (ObjectNode) node.get(parts[i]);
             } else {
                 node.put(parts[i], value);
             }
         }
+
     }
 
     /**
