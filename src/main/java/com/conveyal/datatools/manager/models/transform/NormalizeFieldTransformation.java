@@ -248,14 +248,12 @@ public class NormalizeFieldTransformation extends ZipTransformation {
     /**
      * Performs substitutions defined for this transform, and returns the result.
      */
-    public String performSubstitutions(String inputString) {
-        if (substitutions != null && substitutions.size() != 0) {
-            String result = inputString;
-            for (Substitution substitution : substitutions) {
-                result = substitution.replaceAll(result);
-            }
-            return result;
+   public String performSubstitutions(String inputString) {
+        if (substitutions == null) return inputString;
+        String result = inputString;
+        for (Substitution substitution : substitutions) {
+            result = substitution.replaceAll(result);
         }
-        return inputString;
+        return result;
     }
 }
