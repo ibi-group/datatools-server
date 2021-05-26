@@ -35,6 +35,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
+import static com.mongodb.client.model.Filters.and;
+import static com.mongodb.client.model.Filters.eq;
 import static spark.Spark.delete;
 import static spark.Spark.get;
 import static spark.Spark.options;
@@ -270,14 +272,29 @@ public class DeploymentController {
             List<Document> versions = (List<Document>) updateDocument.get("feedVersions");
             ArrayList<FeedVersion> versionsToInsert = new ArrayList<>(versions.size());
             for (Document version : versions) {
-                if (!version.containsKey("id")) {
-                    logMessageAndHalt(req, 400, "Version not supplied");
-                }
                 FeedVersion feedVersion = null;
-                try {
-                    feedVersion = Persistence.feedVersions.getById(version.getString("id"));
-                } catch (Exception e) {
-                    logMessageAndHalt(req, 404, "Version not found");
+                if (version.containsKey("feedSourceId") && version.containsKey("version")) {
+                    String feedSourceId = version.getString("feedSourceId");
+                    int versionNumber = version.getInteger("version");
+                    try {
+                        feedVersion = Persistence.feedVersions.getOneFiltered(
+                            and(
+                                eq("feedSourceId", feedSourceId),
+                                eq("version", versionNumber)
+                            )
+                        );
+                    } catch (Exception e) {
+                        logMessageAndHalt(req, 404, "Version not found for " + feedSourceId + ":" + versionNumber);
+                    }
+                } else if (version.containsKey("id")) {
+                    String id = version.getString("id");
+                    try {
+                        feedVersion = Persistence.feedVersions.getById(id);
+                    } catch (Exception e) {
+                        logMessageAndHalt(req, 404, "Version not found for id: " + id);
+                    }
+                } else {
+                    logMessageAndHalt(req, 400, "Version not supplied with either id OR feedSourceId + version");
                 }
                 if (feedVersion == null) {
                     logMessageAndHalt(req, 404, "Version not found");

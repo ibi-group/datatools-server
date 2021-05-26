@@ -373,6 +373,14 @@ public class FeedSource extends Model implements Cloneable {
     }
 
     /**
+     * Number of {@link FeedVersion}s that exist for the feed source.
+     */
+    @JsonProperty("versions")
+    public long versions() {
+        return Persistence.feedVersions.count(eq("feedSourceId", this.id));
+    }
+
+    /**
      * We can't pass the entire latest feed version back, because it contains references back to this feedsource,
      * so Jackson doesn't work. So instead we specifically expose the validation results and the latest update.
      * @return

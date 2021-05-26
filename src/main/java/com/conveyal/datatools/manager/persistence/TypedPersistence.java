@@ -68,6 +68,13 @@ public class TypedPersistence<T extends Model> {
 //        findOneAndUpdateOptions.upsert(true);
     }
 
+    /**
+     * Count the documents matching the provided filter.
+     */
+    public long count (Bson filter) {
+        return mongoCollection.countDocuments(filter);
+    }
+
     public T create (String updateJson) {
         T item = null;
         try {
