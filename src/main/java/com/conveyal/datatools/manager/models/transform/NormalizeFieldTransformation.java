@@ -248,7 +248,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
     /**
      * Performs substitutions defined for this transform, and returns the result.
      */
-   public String performSubstitutions(String inputString) {
+    public String performSubstitutions(String inputString) {
         if (substitutions == null) return inputString;
         String result = inputString;
         for (Substitution substitution : substitutions) {
