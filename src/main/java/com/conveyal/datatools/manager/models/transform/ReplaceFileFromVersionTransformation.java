@@ -33,41 +33,32 @@ public class ReplaceFileFromVersionTransformation extends ZipTransformation {
     }
 
     @Override
-    public void transform(FeedTransformTarget target, MonitorableJob.Status status) {
-        if (!(target instanceof FeedTransformZipTarget)) {
-            status.fail("Target must be FeedTransformZipTarget.");
-            return;
-        }
-        // Cast transform target to zip flavor.
-        FeedTransformZipTarget zipTarget = (FeedTransformZipTarget)target;
-        FeedVersion sourceVersion = Persistence.feedVersions.getById(sourceVersionId);
-        if (sourceVersion == null) {
+    public void validateParameters(MonitorableJob.Status status) {
+        if (getSourceVersion() == null) {
             status.fail("Source version ID must reference valid version.");
-            return;
         }
-        if (table == null) {
-            status.fail("Must specify transformation table name.");
-            return;
-        }
-        String tableName = table + ".txt";
-        String tableNamePath = "/" + tableName;
+    }
 
+    @Override
+    public void transform(FeedTransformZipTarget zipTarget, MonitorableJob.Status status) {
+        FeedVersion sourceVersion = getSourceVersion();
+        String tableName = table + ".txt";
         // Run the replace transformation
         Path sourceZipPath = Paths.get(sourceVersion.retrieveGtfsFile().getAbsolutePath());
         try (FileSystem sourceZipFs = FileSystems.newFileSystem(sourceZipPath, null)) {
             // If the source txt file does not exist, NoSuchFileException will be thrown and caught below.
-            Path sourceTxtFilePath = sourceZipFs.getPath(tableNamePath);
+            Path sourceTxtFilePath = getTablePathInZip(tableName, sourceZipFs);
             Path targetZipPath = Paths.get(zipTarget.gtfsFile.getAbsolutePath());
-            LOG.info("Replacing file {} in zip file {} with source {}", tableNamePath, targetZipPath.getFileName(), sourceVersion.id);
+            LOG.info("Replacing file {} in zip file {} with source {}", tableName, targetZipPath.getFileName(), sourceVersion.id);
             try (FileSystem targetZipFs = FileSystems.newFileSystem(targetZipPath, null)) {
-                Path targetTxtFilePath = targetZipFs.getPath(tableNamePath);
+                Path targetTxtFilePath = getTablePathInZip(tableName, targetZipFs);
                 // Set transform type according to whether target file exists.
                 TransformType type = Files.exists(targetTxtFilePath)
                     ? TransformType.TABLE_REPLACED
                     : TransformType.TABLE_ADDED;
                 // Copy a file into the zip file, replacing it if it already exists.
                 Files.copy(sourceTxtFilePath, targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
-                target.feedTransformResult.tableTransformResults.add(new TableTransformResult(tableName, type));
+                zipTarget.feedTransformResult.tableTransformResults.add(new TableTransformResult(tableName, type));
             }
             LOG.info("File replacement zip transformation successful!");
         } catch (NoSuchFileException e) {
@@ -75,5 +66,9 @@ public class ReplaceFileFromVersionTransformation extends ZipTransformation {
         } catch (Exception e) {
             status.fail("Unknown error encountered while transforming zip file", e);
         }
+    }
+
+    private FeedVersion getSourceVersion() {
+        return Persistence.feedVersions.getById(sourceVersionId);
     }
 }
