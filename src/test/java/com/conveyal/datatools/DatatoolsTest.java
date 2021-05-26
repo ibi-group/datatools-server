@@ -1,7 +1,7 @@
 package com.conveyal.datatools;
 
 import com.conveyal.datatools.manager.DataManager;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.BeforeAll;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.yaml.snakeyaml.Yaml;
@@ -25,7 +25,7 @@ public abstract class DatatoolsTest {
     private static boolean setUpIsDone = false;
     private static final Yaml yaml = new Yaml(); // needed for writing config files on CI for the e2e tests
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws RuntimeException, IOException {
         if (setUpIsDone) {
             return;

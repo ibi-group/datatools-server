@@ -39,7 +39,7 @@
         <url>https://github.com/ibi-group/datatools-server.git</url>
     </scm>
     <properties>
-        <jackson.version>2.10.1</jackson.version>
+        <jackson.version>2.12.1</jackson.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <!-- Using the latest version of geotools (e.g, 20) seems to cause issues with the shapefile
         plugin where the_geom for each feature is null. -->
@@ -159,6 +159,11 @@
                     </execution>
                 </executions>
             </plugin>
+            <!-- maven-surefire-plugin is needed to run unit tests. -->
+            <plugin>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <version>2.22.2</version>
+            </plugin>
         </plugins>
     </build>
     <repositories>
@@ -245,9 +250,9 @@
 
         <!-- Used for testing (note: this should match the version in gtfs-lib). -->
         <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-            <version>4.13.1</version>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter-engine</artifactId>
+            <version>5.7.0</version>
             <scope>test</scope>
         </dependency>
         <!-- gtfs-realtime-bindings for gtfs-rt parsing -->
