@@ -45,7 +45,9 @@ public class JobUtils {
 
     /** Shorthand method for getting a single job by job ID. */
     public static MonitorableJob getJobByJobId(String jobId) {
-        for (MonitorableJob job : getAllJobs()) if (job.jobId.equals(jobId)) return job;
+        for (MonitorableJob job : getAllJobs()) {
+            if (job.jobId.equals(jobId)) return job;
+        }
         return null;
     }
 
