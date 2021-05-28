@@ -22,7 +22,7 @@ public class JsonUtilTest {
     */
     @ParameterizedTest
     @MethodSource("createPOJOFromJSONCases")
-    public void testGetPOJOFromJSONAsListIsNotEmpty(JsonNode jsonNode) {
+    public void testGetPOJOFromJSONAsListIsNotNull(JsonNode jsonNode) {
         assertNotNull(JsonUtil.getPOJOFromJSONAsList(
             jsonNode,
             Substitution.class
