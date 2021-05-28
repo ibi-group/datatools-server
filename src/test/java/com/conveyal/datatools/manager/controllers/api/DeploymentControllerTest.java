@@ -71,9 +71,9 @@ public class DeploymentControllerTest extends DatatoolsTest {
 
     @Test
     public void canCreateFeedSourceSpecificDeploymentForNysdot() throws IOException {
-        //FIXME: Should change value back to default
-        String prevNysdotEnabled = DataManager.getConfigPropertyAsText("extension.nysdot.enabled");
-        DataManager.overrideConfigProperty("extension.nysdot.enabled", "true" );
+        String nysdotEnabledField = "extensions.nysdot.enabled";
+        String prevNysdotEnabled = DataManager.getConfigPropertyAsText(nysdotEnabledField);
+        DataManager.overrideConfigProperty(nysdotEnabledField, "true" );
         HttpResponse createDeploymentResponse = TestUtils.makeRequest( "/api/manager/secure/deployments/fromfeedsource/" + feedSource.id, 
             null,
             HttpUtils.REQUEST_METHOD.POST
@@ -83,6 +83,6 @@ public class DeploymentControllerTest extends DatatoolsTest {
         assertEquals(OK_200, createDeploymentResponse.getStatusLine().getStatusCode());
         assertEquals( StringUtils.getCleanName(feedSource.name) + "_" + feedSource.id, deployment.routerId );
 
-        DataManager.overrideConfigProperty("extension.nysdot.enabled", prevNysdotEnabled);
+        DataManager.overrideConfigProperty(nysdotEnabledField, prevNysdotEnabled);
     }
 }
