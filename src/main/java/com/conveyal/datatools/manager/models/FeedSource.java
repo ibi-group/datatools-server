@@ -26,6 +26,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.model.Sorts;
+import org.bson.codecs.pojo.annotations.BsonIgnore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -375,8 +376,8 @@ public class FeedSource extends Model implements Cloneable {
     /**
      * Number of {@link FeedVersion}s that exist for the feed source.
      */
-    @JsonProperty("versions")
-    public long versions() {
+    @BsonIgnore
+    public long getVersionCount() {
         return Persistence.feedVersions.count(eq("feedSourceId", this.id));
     }
 
