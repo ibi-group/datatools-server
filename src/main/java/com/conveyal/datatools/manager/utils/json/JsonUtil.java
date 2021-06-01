@@ -9,6 +9,7 @@ import com.fasterxml.jackson.databind.type.CollectionType;
 import spark.Request;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.getObjectNode;
@@ -55,6 +56,7 @@ public class JsonUtil {
 
     /**
      * Utility method to parse generic objects from {@link JsonNode} and return as list
+     * (or at least an empty list).
      */
     public static <T> List<T> getPOJOFromJSONAsList(JsonNode json, Class<T> clazz) {
         if (json != null) {
@@ -66,7 +68,7 @@ public class JsonUtil {
                 e.printStackTrace();
             }
         }
-        return null;
+        return new ArrayList<>();
     }
 
     /**
