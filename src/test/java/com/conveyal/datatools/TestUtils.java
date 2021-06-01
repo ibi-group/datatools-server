@@ -98,9 +98,8 @@ public class TestUtils {
      */
     public static FeedVersion createFeedVersion(FeedSource source, File gtfsFile) {
         FeedVersion version = new FeedVersion(source);
-        InputStream is;
-        try {
-            is = new FileInputStream(gtfsFile);
+
+        try (InputStream is = new FileInputStream(gtfsFile)) {
             version.newGtfsFile(is);
         } catch (IOException e) {
             e.printStackTrace();
@@ -118,9 +117,8 @@ public class TestUtils {
     public static FeedVersion createFeedVersionAndAssignGtfsFile(FeedSource source, String  gtfsFileName) {
         File gtfsFile = new File(getGtfsResourcePath(gtfsFileName));
         FeedVersion version = new FeedVersion(source);
-        InputStream is;
-        try {
-            is = new FileInputStream(gtfsFile);
+
+        try (InputStream is = new FileInputStream(gtfsFile)) {
             version.newGtfsFile(is);
         } catch (IOException e) {
             e.printStackTrace();
