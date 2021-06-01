@@ -17,6 +17,7 @@ public class MergeFeedsResult implements Serializable {
     public int feedCount;
     /** Type of merge operation performed */
     public MergeFeedsType type;
+    public MergeStrategy mergeStrategy = MergeStrategy.DEFAULT;
     /** Contains a set of strings for which there were error-causing duplicate values */
     public Set<String> idConflicts = new HashSet<>();
     /** Contains the set of IDs for records that were excluded in the merged feed */

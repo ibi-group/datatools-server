@@ -294,7 +294,7 @@ public class MergeFeedsJobTest extends UnitTest {
         // Check that correct strategy was used.
         assertEquals(
             MergeStrategy.FAIL_DUE_TO_MATCHING_TRIP_IDS,
-            mergeFeedsJob.mergeStrategy
+            mergeFeedsJob.mergeFeedsResult.mergeStrategy
         );
         // Result should fail.
         assertTrue(
@@ -322,7 +322,7 @@ public class MergeFeedsJobTest extends UnitTest {
         );
         assertEquals(
             MergeStrategy.EXTEND_FUTURE,
-            mergeFeedsJob.mergeStrategy
+            mergeFeedsJob.mergeFeedsResult.mergeStrategy
         );
         // assert service_ids start_dates have been extended to the start_date of the base feed.
         String mergedNamespace = mergeFeedsJob.mergedVersion.namespace;
@@ -355,7 +355,7 @@ public class MergeFeedsJobTest extends UnitTest {
         // Check that correct strategy was used.
         assertEquals(
             MergeStrategy.CHECK_STOP_TIMES,
-            mergeFeedsJob.mergeStrategy
+            mergeFeedsJob.mergeFeedsResult.mergeStrategy
         );
         // Result should succeed.
         assertFalse(
@@ -401,7 +401,7 @@ public class MergeFeedsJobTest extends UnitTest {
         // Check that correct strategy was used.
         assertEquals(
             MergeStrategy.DEFAULT,
-            mergeFeedsJob.mergeStrategy
+            mergeFeedsJob.mergeFeedsResult.mergeStrategy
         );
         // Result should succeed.
         assertFalse(

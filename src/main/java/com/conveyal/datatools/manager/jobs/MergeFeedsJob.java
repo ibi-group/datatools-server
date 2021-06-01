@@ -143,7 +143,6 @@ public class MergeFeedsJob extends MonitorableJob {
      * dataset. Otherwise, this will be null throughout the life of the job.
      */
     final FeedVersion mergedVersion;
-    public MergeStrategy mergeStrategy = MergeStrategy.DEFAULT;
     private Set<String> intersectingTripIds = new HashSet<>();
     private Set<String> tripsOnlyInActiveFeed = new HashSet<>();
     private Set<String> tripsOnlyInFutureFeed = new HashSet<>();
@@ -245,8 +244,8 @@ public class MergeFeedsJob extends MonitorableJob {
         int numberOfTables = tablesToMerge.size();
         // Before initiating the merge process, run some pre-processing to check for id conflicts for certain tables
         if (mergeType.equals(SERVICE_PERIOD)) {
-            mergeStrategy = getMergeStrategy(feedsToMerge);
-            if (mergeStrategy == CHECK_STOP_TIMES) {
+            mergeFeedsResult.mergeStrategy = getMergeStrategy(feedsToMerge);
+            if (mergeFeedsResult.mergeStrategy == CHECK_STOP_TIMES) {
                 Feed futureFeed = new Feed(DataManager.GTFS_DATA_SOURCE, feedsToMerge.get(0).version.namespace);
                 Feed activeFeed = new Feed(DataManager.GTFS_DATA_SOURCE, feedsToMerge.get(1).version.namespace);
                 for (String tripId : intersectingTripIds) {
@@ -293,7 +292,7 @@ public class MergeFeedsJob extends MonitorableJob {
             }
         }
         // Skip merging process altogether if the failing condition is met.
-        if (MergeStrategy.FAIL_DUE_TO_MATCHING_TRIP_IDS.equals(mergeStrategy)) {
+        if (MergeStrategy.FAIL_DUE_TO_MATCHING_TRIP_IDS.equals(mergeFeedsResult.mergeStrategy)) {
             failMergeJob("Feed merge failed because the trip_ids are identical in the future and active feeds. A new service requires unique trip_ids for merging.");
             return;
         }
@@ -457,7 +456,7 @@ public class MergeFeedsJob extends MonitorableJob {
             for (int feedIndex = 0; feedIndex < feedsToMerge.size(); feedIndex++) {
                 boolean handlingActiveFeed = feedIndex > 0;
                 boolean handlingFutureFeed = feedIndex == 0;
-                if (EXTEND_FUTURE.equals(mergeStrategy) && handlingActiveFeed) {
+                if (EXTEND_FUTURE.equals(mergeFeedsResult.mergeStrategy) && handlingActiveFeed) {
                     // No need to iterate over second (active) file if strategy is to simply extend the future GTFS
                     // service to start earlier.
                     continue;
@@ -726,9 +725,9 @@ public class MergeFeedsJob extends MonitorableJob {
                                         // FIXME: Move this below so that a cloned service doesn't get prematurely
                                         //  modified? (do we want the cloned record to have the original values?)
                                         if (index == startDateIndex) {
-                                            if (EXTEND_FUTURE == mergeStrategy ||
+                                            if (EXTEND_FUTURE == mergeFeedsResult.mergeStrategy ||
                                                 (
-                                                    CHECK_STOP_TIMES == mergeStrategy &&
+                                                    CHECK_STOP_TIMES == mergeFeedsResult.mergeStrategy &&
                                                     // TODO: Need to ensure serviceIds are being extended.
                                                     serviceIdsToExtend.contains(keyValue)
                                                 )
