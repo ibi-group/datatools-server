@@ -265,6 +265,10 @@ public class FeedVersion extends Model implements Serializable {
             assignGtfsFileAttributes(gtfsFile);
             String gtfsFilePath = gtfsFile.getPath();
             this.feedLoadResult = GTFS.load(gtfsFilePath, DataManager.GTFS_DATA_SOURCE);
+            if (this.feedLoadResult.fatalException != null) {
+                status.fail("Could not load feed due to " + feedLoadResult.fatalException);
+                return;
+            }
             // FIXME? duplication of namespace (also stored as feedLoadResult.uniqueIdentifier)
             this.namespace = feedLoadResult.uniqueIdentifier;
             LOG.info("Loaded GTFS into SQL {}", feedLoadResult.uniqueIdentifier);

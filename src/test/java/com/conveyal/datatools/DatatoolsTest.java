@@ -48,6 +48,18 @@ public abstract class DatatoolsTest {
             }
         }
 
+        // If NOT in the e2e environment, ensure that /tmp/gtfsplus folder exists
+        // (otherwise some unit tests will be skipped).
+        if (!TestUtils.isRunningE2E()) {
+            File f = new File("/tmp/gtfsplus");
+            if (f.exists() && !f.isDirectory()) {
+                f.delete();
+            }
+            if (!f.exists()) {
+                f.mkdirs();
+            }
+        }
+
         LOG.info("Starting server");
         try {
             DataManager.main(args);

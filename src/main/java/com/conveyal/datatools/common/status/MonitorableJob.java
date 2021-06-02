@@ -2,8 +2,10 @@ package com.conveyal.datatools.common.status;
 
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.apache.commons.lang3.exception.ExceptionUtils;
+import org.bson.codecs.pojo.annotations.BsonIgnore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -41,7 +43,9 @@ public abstract class MonitorableJob implements Runnable, Serializable {
      * Additional jobs that will be run after the main logic of this job has completed.
      * This job is not considered entirely completed until its sub-jobs have all completed.
      */
-    protected List<MonitorableJob> subJobs = new ArrayList<>();
+    @JsonIgnore
+    @BsonIgnore
+    public List<MonitorableJob> subJobs = new ArrayList<>();
 
     public enum JobType {
         UNKNOWN_TYPE,
@@ -288,7 +292,8 @@ public abstract class MonitorableJob implements Runnable, Serializable {
          * Shorthand method to update status object on successful job completion.
          */
         public void completeSuccessfully(String message) {
-            this.complete(false, message);
+            // Do not overwrite the message (and other fields), if the job has already been completed.
+            if (!this.completed) this.complete(false, message);
         }
 
         /**
@@ -296,7 +301,7 @@ public abstract class MonitorableJob implements Runnable, Serializable {
          */
         private void complete(boolean isError, String message) {
             this.error = isError;
-            // Skip message update if null.
+            // Skip message update if the job message is null or the message has already been defined.
             if (message != null) this.message = message;
             this.percentComplete = 100;
             this.completed = true;

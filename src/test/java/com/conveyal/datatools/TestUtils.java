@@ -99,9 +99,8 @@ public class TestUtils {
      */
     public static FeedVersion createFeedVersion(FeedSource source, File gtfsFile) {
         FeedVersion version = new FeedVersion(source);
-        InputStream is;
-        try {
-            is = new FileInputStream(gtfsFile);
+
+        try (InputStream is = new FileInputStream(gtfsFile)) {
             version.newGtfsFile(is);
         } catch (IOException e) {
             e.printStackTrace();
@@ -111,6 +110,29 @@ public class TestUtils {
         // Run in same thread to keep things synchronous.
         processSingleFeedJob.run();
         return version;
+    }
+
+    /**
+     * Utility function to create a feed version and assign a GTFS file to it.
+     */
+    public static FeedVersion createFeedVersionAndAssignGtfsFile(FeedSource source, String  gtfsFileName) {
+        File gtfsFile = new File(getGtfsResourcePath(gtfsFileName));
+        FeedVersion version = new FeedVersion(source);
+
+        try (InputStream is = new FileInputStream(gtfsFile)) {
+            version.newGtfsFile(is);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return version;
+    }
+
+    /**
+     * Utility function to create a {@link ProcessSingleFeedJob} for a {@Link FeedVersion} during tests.
+     */
+    public static ProcessSingleFeedJob createProcessSingleFeedJob(FeedVersion version) {
+        Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
+        return new ProcessSingleFeedJob(version, user, true);
     }
 
     /**
@@ -233,6 +255,25 @@ public class TestUtils {
             requestMethod,
             body
         );
+    }
+
+    /**
+     * Counts the number of schemas in the GTFS database. This is helpful for determining whether or not a schema for a
+     * new version was created.
+     */
+    public static int countSchemaInDb() {
+        int count = 0;
+        String countSchemaSql = "SELECT count(schema_name) FROM information_schema.schemata";
+        LOG.info(countSchemaSql);
+        try (Connection connection = GTFS_DATA_SOURCE.getConnection()) {
+            ResultSet resultSet = connection.prepareStatement(countSchemaSql).executeQuery();
+            while (resultSet.next()) {
+                count = resultSet.getInt(1);
+            }
+        } catch (SQLException e) {
+            LOG.error("Could not count schema for database", e);
+        }
+        return count;
     }
 
 }
