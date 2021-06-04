@@ -70,7 +70,7 @@ public class Stop extends Model implements Cloneable, Serializable {
         this.parentStation = stop.parent_station;
         this.pickupType = StopTimePickupDropOffType.SCHEDULED;
         this.dropOffType = StopTimePickupDropOffType.SCHEDULED;
-        this.wheelchairBoarding = stop.wheelchair_boarding != null ? AttributeAvailabilityType.fromGtfs(Integer.valueOf(stop.wheelchair_boarding)) : null;
+        this.wheelchairBoarding = AttributeAvailabilityType.fromGtfs(stop.wheelchair_boarding);
         
         this.location  =  geometryFactory.createPoint(new Coordinate(stop.stop_lon,stop.stop_lat));
 
@@ -119,7 +119,7 @@ public class Stop extends Model implements Cloneable, Serializable {
         ret.stop_lon = location.getX();
         // TODO: gtfs-lib value needs to be int
         if (wheelchairBoarding != null) {
-            ret.wheelchair_boarding = String.valueOf(wheelchairBoarding.toGtfs());
+            ret.wheelchair_boarding = wheelchairBoarding.toGtfs();
         }
 
         if (stopName != null && !stopName.isEmpty())
