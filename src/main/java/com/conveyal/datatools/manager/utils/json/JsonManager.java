@@ -6,7 +6,6 @@ import java.time.LocalDate;
 import java.util.Collection;
 import java.util.Map;
 
-import com.conveyal.datatools.editor.models.transit.GtfsRouteType;
 import com.conveyal.datatools.editor.utils.JacksonSerializers;
 import com.fasterxml.jackson.core.JsonParseException;
 import com.fasterxml.jackson.core.JsonParser;
@@ -45,9 +44,6 @@ public class JsonManager<T> {
 
         deser.addDeserializer(LocalDate.class, new JacksonSerializers.LocalDateDeserializer());
         deser.addSerializer(LocalDate.class, new JacksonSerializers.LocalDateSerializer());
-
-        deser.addDeserializer(GtfsRouteType.class, new JacksonSerializers.GtfsRouteTypeDeserializer());
-        deser.addSerializer(GtfsRouteType.class, new JacksonSerializers.GtfsRouteTypeSerializer());
 
         deser.addDeserializer(Rectangle2D.class, new Rectangle2DDeserializer());
         om.registerModule(deser);
