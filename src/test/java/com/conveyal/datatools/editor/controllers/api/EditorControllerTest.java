@@ -40,7 +40,6 @@ public class EditorControllerTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(EditorControllerTest.class);
     private static Project project;
     private static FeedSource feedSource;
-    private static FeedSource freshFeedSource;
     private static FeedVersion feedVersion;
     private static final ObjectMapper mapper = new ObjectMapper();
 
@@ -85,6 +84,9 @@ public class EditorControllerTest extends UnitTest {
         );
     }
 
+    /**
+     * Confirm that the provided table endpoint can be patched.
+     */
     @ParameterizedTest
     @MethodSource("createPatchTableTests")
     public void canPatchTableTests(
@@ -92,20 +94,9 @@ public class EditorControllerTest extends UnitTest {
         String entity,
         int expectedCount,
         String graphQLQueryFile,
-        String table) throws IOException {
-        canPatchTable(field, entity, expectedCount, graphQLQueryFile, table);
-    }
-
-    /**
-     * Confirm that the provided table endpoint can be patched.
-     */
-    private void canPatchTable(
-        String field,
-        String entity,
-        int expectedCount,
-        String graphQLQueryFile,
         String table
     ) throws IOException {
+
         LOG.info("Making patch {} request", table);
         String value = "NEW";
         ObjectNode jsonBody = mapper.createObjectNode();
@@ -114,7 +105,7 @@ public class EditorControllerTest extends UnitTest {
         // Assert that the correct table within the BART feed was modified.
         assertThat(count, equalTo(expectedCount));
         // Get fresh feed source so that editor namespace was updated after snapshot.
-        freshFeedSource = Persistence.feedSources.getById(feedVersion.feedSourceId);
+        FeedSource freshFeedSource = Persistence.feedSources.getById(feedVersion.feedSourceId);
         JsonNode graphQL = graphqlQuery(freshFeedSource.editorNamespace, graphQLQueryFile);
         for (JsonNode node : graphQL.get("data").get("feed").get(table)) {
             assertThat(node.get(field).asText(), equalTo(value));
@@ -140,7 +131,7 @@ public class EditorControllerTest extends UnitTest {
         assertThat(count, equalTo(34));
         // Check GraphQL to verify that stop_desc has indeed been updated.
         // Get fresh feed source so that editor namespace was updated after snapshot.
-        freshFeedSource = Persistence.feedSources.getById(feedVersion.feedSourceId);
+        FeedSource freshFeedSource = Persistence.feedSources.getById(feedVersion.feedSourceId);
         JsonNode graphQL = graphqlQuery(freshFeedSource.editorNamespace, "graphql/stops.txt");
         // Every stop meeting the stop_lon condition should now have the desc defined in the patch JSON body above.
         for (JsonNode stop : graphQL.get("data").get("feed").get("stops")) {
