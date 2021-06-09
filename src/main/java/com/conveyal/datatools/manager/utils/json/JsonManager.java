@@ -138,18 +138,15 @@ public class JsonManager<T> {
 
         @Override
         public LocalDate deserialize(JsonParser jp, DeserializationContext arg1) throws IOException {
-            LocalDate date;
             String dateText = jp.getText();
             try {
-                date = LocalDate.parse(dateText, DateTimeFormatter.BASIC_ISO_DATE);
-                return date;
+                return LocalDate.parse(dateText, DateTimeFormatter.BASIC_ISO_DATE);
             } catch (Exception jsonException) {
                 // This is here to catch any loads of database dumps that happen to have the old java.util.Date
                 // field type in validationResult.  God help us.
                 LOG.warn("Error parsing date value: `{}`, trying legacy java.util.Date date format", dateText);
                 try {
-                    date = Instant.ofEpochMilli(jp.getValueAsLong()).atZone(ZoneOffset.UTC).toLocalDate();
-                    return date;
+                    return Instant.ofEpochMilli(jp.getValueAsLong()).atZone(ZoneOffset.UTC).toLocalDate();
                 } catch (Exception e) {
                     LOG.warn("Error parsing date value: `{}`", dateText);
                     e.printStackTrace();
