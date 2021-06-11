@@ -728,7 +728,6 @@ public class MergeFeedsJob extends MonitorableJob {
                                             if (EXTEND_FUTURE == mergeFeedsResult.mergeStrategy ||
                                                 (
                                                     CHECK_STOP_TIMES == mergeFeedsResult.mergeStrategy &&
-                                                    // TODO: Need to ensure serviceIds are being extended.
                                                     serviceIdsToExtend.contains(keyValue)
                                                 )
                                             ) {
