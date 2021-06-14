@@ -29,6 +29,7 @@ public class FeedToMerge {
         this.zipFile = new ZipFile(version.retrieveGtfsFile());
     }
 
+    /** Collects all trip/service IDs (tables noted in {@link #tablesToCheck}) for comparing feeds during merge. */
     public void collectTripAndServiceIds() throws IOException {
         for (Table table : tablesToCheck) {
             idsForTable.get(table).addAll(getIdsForTable(zipFile, table));
