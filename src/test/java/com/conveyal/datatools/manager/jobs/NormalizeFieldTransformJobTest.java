@@ -6,6 +6,7 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
+import com.conveyal.datatools.manager.models.transform.FeedTransformZipTarget;
 import com.conveyal.datatools.manager.models.transform.FeedTransformation;
 import com.conveyal.datatools.manager.models.transform.NormalizeFieldTransformation;
 import com.conveyal.datatools.manager.models.transform.NormalizeFieldTransformationTest;
@@ -50,21 +51,6 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
 
         // Create a project.
         project = createProject();
-
-        // Create transform.
-        // In this test class, as an illustration, we replace "Route" with the "Rte" abbreviation in routes.txt.
-        FeedTransformation transformation = NormalizeFieldTransformationTest.createTransformation(
-            TABLE_NAME, FIELD_NAME, null, Lists.newArrayList(
-                new Substitution("Route", "Rte")
-            )
-        );
-        FeedTransformRules transformRules = new FeedTransformRules(transformation);
-
-        // Create feed source with above transform.
-        feedSource = new FeedSource("Normalize Field Test Feed", project.id, FeedRetrievalMethod.MANUALLY_UPLOADED);
-        feedSource.deployable = false;
-        feedSource.transformRules.add(transformRules);
-        Persistence.feedSources.create(feedSource);
     }
 
     /**
@@ -91,6 +77,15 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
      */
     @Test
     public void canNormalizeField() throws IOException {
+        // Create transform.
+        // In this test, as an illustration, replace "Route" with the "Rte" abbreviation in routes.txt.
+        FeedTransformation<FeedTransformZipTarget> transformation = NormalizeFieldTransformationTest.createTransformation(
+            TABLE_NAME, FIELD_NAME, null, Lists.newArrayList(
+                new Substitution("Route", "Rte")
+            )
+        );
+        initializeFeedSource(transformation);
+
         // Create target version that the transform will operate on.
         targetVersion = createFeedVersion(
             feedSource,
@@ -117,6 +112,45 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
                 assertTrue(row1Fields[fieldIndex].startsWith("Rte "), row1);
             }
         }
+    }
+
+    /**
+     * Test that a {@link NormalizeFieldTransformation} will fail if invalid substitution patterns are provided.
+     */
+    @Test
+    public void canHandleInvalidSubstitutionPatterns() throws IOException {
+        // Create transform.
+        // In this test, we provide an invalid pattern '\Cir\b' (instead of '\bCir\b'),
+        // when trying to replace e.g. 'Piedmont Cir' with 'Piedmont Circle'.
+        FeedTransformation<FeedTransformZipTarget> transformation = NormalizeFieldTransformationTest.createTransformation(
+            TABLE_NAME, FIELD_NAME, null, Lists.newArrayList(
+                new Substitution("\\Cir\\b", "Circle")
+            )
+        );
+        initializeFeedSource(transformation);
+
+        // Create target version that the transform will operate on.
+        targetVersion = createFeedVersion(
+            feedSource,
+            zipFolderFiles("fake-agency-with-only-calendar")
+        );
+
+        // Errors in the substitution definitions should result in an error.
+        // (There is no visibility to the underlying ZIP transform job.)
+        assertTrue(targetVersion.hasCriticalErrors());
+    }
+
+    /**
+     * Create and persist a feed source using the given transformation.
+     */
+    private static void initializeFeedSource(FeedTransformation<FeedTransformZipTarget> transformation) {
+        FeedTransformRules transformRules = new FeedTransformRules(transformation);
+
+        // Create feed source with above transform.
+        feedSource = new FeedSource("Normalize Field Test Feed", project.id, FeedRetrievalMethod.MANUALLY_UPLOADED);
+        feedSource.deployable = false;
+        feedSource.transformRules.add(transformRules);
+        Persistence.feedSources.create(feedSource);
     }
 
     // FIXME: Refactor (almost same code as AutoDeployJobTest in PR #361,

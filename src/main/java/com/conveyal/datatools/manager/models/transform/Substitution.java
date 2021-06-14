@@ -1,7 +1,10 @@
 package com.conveyal.datatools.manager.models.transform;
 
+import org.bson.codecs.pojo.annotations.BsonIgnore;
+
 import java.io.Serializable;
 import java.util.regex.Pattern;
+import java.util.regex.PatternSyntaxException;
 
 /**
  * This class holds the regex/replacement pair, and the cached compiled regex pattern.
@@ -17,6 +20,26 @@ public class Substitution implements Serializable {
     public String replacement;
     /** true if whitespace surrounding regex should be create or normalized to one space. */
     public boolean normalizeSpace;
+
+    /**
+     * Whether this substitution object is invalid.
+     * This property is read-only from the UI (empty setter below) and is not persisted to Mongo.
+     * @return rue if the pattern for this substitution is invalid.
+     */
+    @BsonIgnore
+    public boolean isInvalid() {
+        try {
+            initialize();
+            return false;
+        } catch (PatternSyntaxException pse) {
+            return true;
+        }
+    }
+
+    @BsonIgnore
+    public void setInvalid(boolean value) {
+        // Does nothing (read-only field).
+    }
 
     private Pattern patternObject;
     /**
