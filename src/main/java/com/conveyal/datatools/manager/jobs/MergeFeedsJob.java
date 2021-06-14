@@ -143,9 +143,6 @@ public class MergeFeedsJob extends MonitorableJob {
      * dataset. Otherwise, this will be null throughout the life of the job.
      */
     final FeedVersion mergedVersion;
-    private Set<String> intersectingTripIds = new HashSet<>();
-    private Set<String> tripsOnlyInActiveFeed = new HashSet<>();
-    private Set<String> tripsOnlyInFutureFeed = new HashSet<>();
     private Set<String> tripIdsToModifyForActiveFeed = new HashSet<>();
     private Set<String> tripIdsToSkipForActiveFeed = new HashSet<>();
     private Set<String> serviceIdsToExtend = new HashSet<>();
@@ -255,52 +252,7 @@ public class MergeFeedsJob extends MonitorableJob {
         int numberOfTables = tablesToMerge.size();
         // Before initiating the merge process, run some pre-processing to check for id conflicts for certain tables
         if (mergeType.equals(SERVICE_PERIOD)) {
-            mergeFeedsResult.mergeStrategy = getMergeStrategy(feedsToMerge);
-            if (mergeFeedsResult.mergeStrategy == CHECK_STOP_TIMES) {
-                Feed futureFeed = new Feed(DataManager.GTFS_DATA_SOURCE, getFutureFeed().version.namespace);
-                Feed activeFeed = new Feed(DataManager.GTFS_DATA_SOURCE, getActiveFeed().version.namespace);
-                for (String tripId : intersectingTripIds) {
-                    // Fetch all ordered stop_times for each common trip_id and compare the two sets for the
-                    // future and active feed. If the stop_times are an exact match, include one instance of the trip
-                    // (ignoring the other identical one). If they do not match, modify the active trip_id and include.
-                    List<StopTime> futureStopTimes = Lists.newArrayList(futureFeed.stopTimes.getOrdered(tripId));
-                    List<StopTime> activeStopTimes = Lists.newArrayList(activeFeed.stopTimes.getOrdered(tripId));
-                    String futureServiceId = futureFeed.trips.get(tripId).service_id;
-                    String activeServiceId = activeFeed.trips.get(tripId).service_id;
-                    // FIXME: what if service_ids do not match! Perhaps the right approach would be to just return
-                    //  FAIL_DUE_TO_MATCHING_TRIP_IDS in that case. It might be too complicated otherwise.
-                    if (!stopTimesMatch(futureStopTimes, activeStopTimes)) {
-                        // If stop_times or services do not match, the trip will be cloned. Also, track the service_id
-                        // (it will need to be cloned and renamed for both active feeds).
-                        tripIdsToModifyForActiveFeed.add(tripId);
-                        serviceIdsToCloneAndRename.add(futureServiceId);
-                    } else {
-                        // If the trip's stop_times are an exact match, we can safely include just the
-                        // future trip and exclude the active one. Also, track the service_id (it will need to be
-                        // extended to the full time range).
-                        tripIdsToSkipForActiveFeed.add(tripId);
-                        serviceIdsToExtend.add(futureServiceId);
-                    }
-                }
-                for (String tripId : tripsOnlyInActiveFeed) {
-                    String serviceId = activeFeed.trips.get(tripId).service_id;
-                    if (serviceIdsToExtend.contains(serviceId)) {
-                        // If a trip only in the active feed references a service_id that is set to be extended, that
-                        // service_id needs to be cloned and renamed to differentiate it from the same service_id in
-                        // the future feed. (The trip in question will be linked to the cloned service_id.)
-                        serviceIdsToCloneAndRename.add(serviceId);
-                    }
-                }
-                for (String tripId : tripsOnlyInFutureFeed) {
-                    String serviceId = futureFeed.trips.get(tripId).service_id;
-                    if (serviceIdsToExtend.contains(serviceId)) {
-                        // If a trip only in the future feed references a service_id that is set to be extended, that
-                        // service_id needs to be cloned and renamed to differentiate it from the same service_id in
-                        // the future feed. (The trip in question will be linked to the cloned service_id.)
-                        serviceIdsToCloneAndRename.add(serviceId);
-                    }
-                }
-            }
+            mergeFeedsResult.mergeStrategy = getMergeStrategy();
         }
         // Skip merging process altogether if the failing condition is met.
         if (MergeStrategy.FAIL_DUE_TO_MATCHING_TRIP_IDS.equals(mergeFeedsResult.mergeStrategy)) {
@@ -1110,29 +1062,16 @@ public class MergeFeedsJob extends MonitorableJob {
      * Get the merge strategy to use for MTC service period merges by checking the active and future feeds for various
      * combinations of matching trip and service IDs.
      */
-    private MergeStrategy getMergeStrategy(List<FeedToMerge> feedsToMerge) throws IOException {
-        // Iterate over both feeds to collect all trip and service IDs.
-        for (int i = 0; i < feedsToMerge.size(); i++) {
-            FeedToMerge feed = feedsToMerge.get(i);
-            Set<Table> tablesToCheck = Sets.newHashSet(Table.TRIPS, Table.CALENDAR, Table.CALENDAR_DATES);
-            for (Table table : tablesToCheck) {
-                feed.idsForTable.get(table).addAll(getIdsForTable(feed.zipFile, table));
-            }
-        }
-        FeedToMerge futureFeed = getFutureFeed();
-        FeedToMerge activeFeed = getActiveFeed();
-        Set<String> activeTripIds = activeFeed.idsForTable.get(Table.TRIPS);
-        Set<String> futureTripIds = futureFeed.idsForTable.get(Table.TRIPS);
-        Set<String> activeServiceIds = new HashSet<>();
-        activeServiceIds.addAll(activeFeed.idsForTable.get(Table.CALENDAR));
-        activeServiceIds.addAll(activeFeed.idsForTable.get(Table.CALENDAR_DATES));
-        Set<String> futureServiceIds = new HashSet<>();
-        futureServiceIds.addAll(futureFeed.idsForTable.get(Table.CALENDAR));
-        futureServiceIds.addAll(futureFeed.idsForTable.get(Table.CALENDAR_DATES));
-        boolean serviceIdsMatch = activeServiceIds.equals(futureServiceIds);
-        intersectingTripIds = Sets.intersection(activeTripIds, futureTripIds);
-        tripsOnlyInActiveFeed = Sets.difference(activeTripIds, futureTripIds);
-        tripsOnlyInFutureFeed = Sets.difference(futureTripIds, activeTripIds);
+    private MergeStrategy getMergeStrategy() throws IOException {
+        boolean shouldFailJob = false;
+        FeedToMerge futureFeedToMerge = getFutureFeed();
+        FeedToMerge activeFeedToMerge = getActiveFeed();
+        futureFeedToMerge.collectTripAndServiceIds();
+        activeFeedToMerge.collectTripAndServiceIds();
+        Set<String> activeTripIds = activeFeedToMerge.idsForTable.get(Table.TRIPS);
+        Set<String> futureTripIds = futureFeedToMerge.idsForTable.get(Table.TRIPS);
+        // Determine whether service and trip IDs are exact matches.
+        boolean serviceIdsMatch = activeFeedToMerge.serviceIds.equals(futureFeedToMerge.serviceIds);
         boolean tripIdsMatch = activeTripIds.equals(futureTripIds);
         if (serviceIdsMatch && tripIdsMatch) {
             // Effectively this exact match condition means that the future feed will be used as is
@@ -1140,15 +1079,86 @@ public class MergeFeedsJob extends MonitorableJob {
             // This is Condition 2 in the docs.
             return EXTEND_FUTURE;
         }
-        if (serviceIdsMatch) {
-            // If just the service_ids are an exact match, do the trip/stoptimes checking thing for matching trip_ids
-            return CHECK_STOP_TIMES;
-        }
         if (tripIdsMatch) {
-            // Do not permit merge to continue.
+            // If only trip IDs match, do not permit merge to continue.
             return MergeStrategy.FAIL_DUE_TO_MATCHING_TRIP_IDS;
+        }
+        if (serviceIdsMatch) {
+            // If just the service_ids are an exact match, check the that the stoptimes having matching signatures
+            // between the two feeds (i.e., each stop time in the ordered list is identical between the two feeds).
+            Feed futureFeed = new Feed(DataManager.GTFS_DATA_SOURCE, futureFeedToMerge.version.namespace);
+            Feed activeFeed = new Feed(DataManager.GTFS_DATA_SOURCE, activeFeedToMerge.version.namespace);
+            for (String tripId : Sets.intersection(activeTripIds, futureTripIds)) {
+                if (compareStopTimes(tripId, futureFeed, activeFeed)) {
+                    shouldFailJob = true;
+                }
+            }
+            Set<String> tripsOnlyInActiveFeed = Sets.difference(activeTripIds, futureTripIds);
+            for (String tripId : tripsOnlyInActiveFeed) {
+                String serviceId = activeFeed.trips.get(tripId).service_id;
+                if (serviceIdsToExtend.contains(serviceId)) {
+                    // If a trip only in the active feed references a service_id that is set to be extended, that
+                    // service_id needs to be cloned and renamed to differentiate it from the same service_id in
+                    // the future feed. (The trip in question will be linked to the cloned service_id.)
+                    serviceIdsToCloneAndRename.add(serviceId);
+                }
+            }
+            Set<String> tripsOnlyInFutureFeed = Sets.difference(futureTripIds, activeTripIds);
+            for (String tripId : tripsOnlyInFutureFeed) {
+                String serviceId = futureFeed.trips.get(tripId).service_id;
+                if (serviceIdsToExtend.contains(serviceId)) {
+                    // If a trip only in the future feed references a service_id that is set to be extended, that
+                    // service_id needs to be cloned and renamed to differentiate it from the same service_id in
+                    // the future feed. (The trip in question will be linked to the cloned service_id.)
+                    serviceIdsToCloneAndRename.add(serviceId);
+                }
+            }
+            // If a failure was encountered above, use failure strategy. Otherwise, use check stop times to proceed with
+            // feed merge.
+            return shouldFailJob ? MergeStrategy.FAIL_DUE_TO_MATCHING_TRIP_IDS : CHECK_STOP_TIMES;
         }
         // If neither the trips or services are exact matches, use the default merge strategy.
         return MergeStrategy.DEFAULT;
+    }
+
+    /**
+     * Compare stop times for the given tripId between the future and active feeds. The comparison will inform whether
+     * trip and/or service IDs should be modified in the output merged feed.
+     * @return true if an error was encountered during the check. false if no error was encountered.
+     */
+    private boolean compareStopTimes(String tripId, Feed futureFeed, Feed activeFeed) {
+        // Fetch all ordered stop_times for each shared trip_id and compare the two sets for the
+        // future and active feed. If the stop_times are an exact match, include one instance of the trip
+        // (ignoring the other identical one). If they do not match, modify the active trip_id and include.
+        List<StopTime> futureStopTimes = Lists.newArrayList(futureFeed.stopTimes.getOrdered(tripId));
+        List<StopTime> activeStopTimes = Lists.newArrayList(activeFeed.stopTimes.getOrdered(tripId));
+        String futureServiceId = futureFeed.trips.get(tripId).service_id;
+        String activeServiceId = activeFeed.trips.get(tripId).service_id;
+        if (!futureServiceId.equals(activeServiceId)) {
+            // We cannot account for the case where service_ids do not match! It would be a bit too complicated
+            // to handle this unique case, so instead just include in the failure reasons and use failure
+            // strategy.
+            failMergeJob(
+                String.format("Shared trip_id (%s) had mismatched service id between two feeds (active: %s, future: %s)",
+                    tripId,
+                    activeServiceId,
+                    futureServiceId
+                )
+            );
+            return true;
+        }
+        if (!stopTimesMatch(futureStopTimes, activeStopTimes)) {
+            // If stop_times or services do not match, the trip will be cloned. Also, track the service_id
+            // (it will need to be cloned and renamed for both active feeds).
+            tripIdsToModifyForActiveFeed.add(tripId);
+            serviceIdsToCloneAndRename.add(futureServiceId);
+        } else {
+            // If the trip's stop_times are an exact match, we can safely include just the
+            // future trip and exclude the active one. Also, track the service_id (it will need to be
+            // extended to the full time range).
+            tripIdsToSkipForActiveFeed.add(tripId);
+            serviceIdsToExtend.add(futureServiceId);
+        }
+        return false;
     }
 }
