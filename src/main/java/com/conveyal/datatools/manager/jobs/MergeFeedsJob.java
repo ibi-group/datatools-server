@@ -150,9 +150,20 @@ public class MergeFeedsJob extends MonitorableJob {
     private Set<String> tripIdsToSkipForActiveFeed = new HashSet<>();
     private Set<String> serviceIdsToExtend = new HashSet<>();
     private Set<String> serviceIdsToCloneAndRename = new HashSet<>();
+    private List<FeedToMerge> feedsToMerge;
 
     public MergeFeedsJob(Auth0UserProfile owner, Set<FeedVersion> feedVersions, String file, MergeFeedsType mergeType) {
         this(owner, feedVersions, file, mergeType, true);
+    }
+
+    /** Shorthand method to get the future feed during a service period merge */
+    private FeedToMerge getFutureFeed() {
+        return feedsToMerge.get(0);
+    }
+
+    /** Shorthand method to get the active feed during a service period merge */
+    private FeedToMerge getActiveFeed() {
+        return feedsToMerge.get(1);
     }
 
     /**
@@ -229,7 +240,7 @@ public class MergeFeedsJob extends MonitorableJob {
         // Create the zipfile.
         ZipOutputStream out = new ZipOutputStream(new FileOutputStream(mergedTempFile));
         LOG.info("Created merge file: " + mergedTempFile.getAbsolutePath());
-        List<FeedToMerge> feedsToMerge = collectAndSortFeeds(feedVersions);
+        feedsToMerge = collectAndSortFeeds(feedVersions);
 
         // Determine which tables to merge (only merge GTFS+ tables for MTC extension).
         final List<Table> tablesToMerge =
@@ -246,8 +257,8 @@ public class MergeFeedsJob extends MonitorableJob {
         if (mergeType.equals(SERVICE_PERIOD)) {
             mergeFeedsResult.mergeStrategy = getMergeStrategy(feedsToMerge);
             if (mergeFeedsResult.mergeStrategy == CHECK_STOP_TIMES) {
-                Feed futureFeed = new Feed(DataManager.GTFS_DATA_SOURCE, feedsToMerge.get(0).version.namespace);
-                Feed activeFeed = new Feed(DataManager.GTFS_DATA_SOURCE, feedsToMerge.get(1).version.namespace);
+                Feed futureFeed = new Feed(DataManager.GTFS_DATA_SOURCE, getFutureFeed().version.namespace);
+                Feed activeFeed = new Feed(DataManager.GTFS_DATA_SOURCE, getActiveFeed().version.namespace);
                 for (String tripId : intersectingTripIds) {
                     // Fetch all ordered stop_times for each common trip_id and compare the two sets for the
                     // future and active feed. If the stop_times are an exact match, include one instance of the trip
@@ -449,8 +460,8 @@ public class MergeFeedsJob extends MonitorableJob {
             // providers use calendars.txt entries and prefer that this value (which is used to determine cutoff
             // dates for the active feed when merging with the future) be strictly assigned the earliest
             // calendar#start_date (unless that table for some reason does not exist).
-            LocalDate futureFeedFirstDate = feedsToMerge.get(0).version.validationResult.firstCalendarDate;
-            LocalDate activeFeedFirstDate = feedsToMerge.get(1).version.validationResult.firstCalendarDate;
+            LocalDate futureFeedFirstDate = getFutureFeed().version.validationResult.firstCalendarDate;
+            LocalDate activeFeedFirstDate = getActiveFeed().version.validationResult.firstCalendarDate;
             LocalDate futureFirstCalendarStartDate = LocalDate.MAX;
             // Iterate over each zip file. For service period merge, the first feed is the future GTFS.
             for (int feedIndex = 0; feedIndex < feedsToMerge.size(); feedIndex++) {
@@ -1106,8 +1117,8 @@ public class MergeFeedsJob extends MonitorableJob {
                 feed.idsForTable.get(table).addAll(getIdsForTable(feed.zipFile, table));
             }
         }
-        FeedToMerge futureFeed = feedsToMerge.get(0);
-        FeedToMerge activeFeed = feedsToMerge.get(1);
+        FeedToMerge futureFeed = getFutureFeed();
+        FeedToMerge activeFeed = getActiveFeed();
         Set<String> activeTripIds = activeFeed.idsForTable.get(Table.TRIPS);
         Set<String> futureTripIds = futureFeed.idsForTable.get(Table.TRIPS);
         Set<String> activeServiceIds = new HashSet<>();
