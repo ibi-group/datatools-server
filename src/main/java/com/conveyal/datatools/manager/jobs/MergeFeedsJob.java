@@ -837,10 +837,12 @@ public class MergeFeedsJob extends MonitorableJob {
                                     if (hasDuplicateError(idErrors)) skipRecord = true;
                                     break;
                                 case "trips":
-                                    // trip_ids between active and future datasets must not match. The MergeStrategy
-                                    // determines behavior when matching trip_ids (or service_ids) are found between
+                                    // trip_ids between active and future datasets must not match. The tripIdsToSkip and
+                                    // tripIdsToModify sets below are determined based on the MergeStrategy used for MTC
+                                    // service period merges.
                                     if (handlingActiveFeed) {
-                                        // Handling active feed.
+                                        // Handling active feed. Skip or modify trip id if found in one of the
+                                        // respective sets.
                                         if (tripIdsToSkipForActiveFeed.contains(keyValue)) {
                                             skipRecord = true;
                                         } else if (tripIdsToModifyForActiveFeed.contains(keyValue)) {
