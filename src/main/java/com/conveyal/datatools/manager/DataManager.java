@@ -470,7 +470,6 @@ public class DataManager {
                 node.put(parts[i], value);
             }
         }
-
     }
 
     /**

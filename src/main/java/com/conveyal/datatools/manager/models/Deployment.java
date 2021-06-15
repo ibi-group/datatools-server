@@ -185,7 +185,7 @@ public class Deployment extends Model implements Serializable {
     }
 
     /**
-     * The routerId of this deployment. If null, this value defaults to "default".
+     * The routerId of this deployment. If null, the deployment will use the 'default' router.
      */
     public String routerId;
 
@@ -225,7 +225,10 @@ public class Deployment extends Model implements Serializable {
         return ret;
     }
 
-    /** Create a single-agency (testing) deployment for the given feed source */
+    /**
+     * Create a single-agency (testing) deployment for the given feed source
+     * @param useDefaultRouter should the deployment use the default router (non feed source specific)?
+     */
     public Deployment(FeedSource feedSource, boolean useDefaultRouter) {
         super();
 

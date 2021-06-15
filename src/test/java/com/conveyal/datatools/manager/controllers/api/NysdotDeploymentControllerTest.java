@@ -24,13 +24,13 @@ import static com.conveyal.datatools.TestUtils.zipFolderFiles;
 import static org.eclipse.jetty.http.HttpStatus.OK_200;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 
-
-
-public class DeploymentControllerTest extends DatatoolsTest {
+public class NysdotDeploymentControllerTest {
     private static Project project = null;
     private static FeedSource feedSource = null;
     private static FeedVersion feedVersion = null;
     private static ObjectMapper objectMapper = new ObjectMapper();
+    private static String nysdotEnabledField = "extensions.nysdot.enabled";
+    private static String prevNysdotEnabled = DataManager.getConfigPropertyAsText(nysdotEnabledField);
 
     @BeforeAll
     public static void setUp() throws IOException {
@@ -43,9 +43,10 @@ public class DeploymentControllerTest extends DatatoolsTest {
         feedSource.projectId = project.id;
         Persistence.feedSources.create(feedSource);
         feedVersion = createFeedVersion(
-            feedSource,
-            zipFolderFiles("fake-agency-with-calendar-and-calendar-dates")
+                feedSource,
+                zipFolderFiles("fake-agency-with-calendar-and-calendar-dates")
         );
+        DataManager.overrideConfigProperty(nysdotEnabledField, "true");
     }
 
     @AfterAll
@@ -54,35 +55,18 @@ public class DeploymentControllerTest extends DatatoolsTest {
         if (project != null) {
             project.delete();
         }
-    }
-
-    @Test
-    public void canCreateFeedSourceSpecificDeploymentWithDefaultRouter() throws IOException {
-        // Create a feed source specific deployment.
-        HttpResponse createDeploymentResponse = TestUtils.makeRequest( "/api/manager/secure/deployments/fromfeedsource/" + feedSource.id, 
-            null,
-            HttpUtils.REQUEST_METHOD.POST
-        );
-        Deployment deployment = objectMapper.readValue(createDeploymentResponse.getEntity().getContent(), Deployment.class);
-        
-        assertEquals(OK_200, createDeploymentResponse.getStatusLine().getStatusCode());
-        assertEquals(null, deployment.routerId ); 
+        DataManager.overrideConfigProperty(nysdotEnabledField, prevNysdotEnabled);
     }
 
     @Test
     public void canCreateFeedSourceSpecificDeploymentForNysdot() throws IOException {
-        String nysdotEnabledField = "extensions.nysdot.enabled";
-        String prevNysdotEnabled = DataManager.getConfigPropertyAsText(nysdotEnabledField);
-        DataManager.overrideConfigProperty(nysdotEnabledField, "true" );
-        HttpResponse createDeploymentResponse = TestUtils.makeRequest( "/api/manager/secure/deployments/fromfeedsource/" + feedSource.id, 
-            null,
-            HttpUtils.REQUEST_METHOD.POST
+        HttpResponse createDeploymentResponse = TestUtils.makeRequest( "/api/manager/secure/deployments/fromfeedsource/" + feedSource.id,
+                null,
+                HttpUtils.REQUEST_METHOD.POST
         );
         Deployment deployment = objectMapper.readValue(createDeploymentResponse.getEntity().getContent(), Deployment.class);
 
         assertEquals(OK_200, createDeploymentResponse.getStatusLine().getStatusCode());
-        assertEquals( StringUtils.getCleanName(feedSource.name) + "_" + feedSource.id, deployment.routerId );
-
-        DataManager.overrideConfigProperty(nysdotEnabledField, prevNysdotEnabled);
+        assertEquals(StringUtils.getCleanName(feedSource.name) + "_" + feedSource.id, deployment.routerId);
     }
 }
