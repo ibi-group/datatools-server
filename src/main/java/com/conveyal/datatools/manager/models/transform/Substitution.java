@@ -27,12 +27,12 @@ public class Substitution implements Serializable {
      * @return rue if the pattern for this substitution is invalid.
      */
     @BsonIgnore
-    public boolean isInvalid() {
+    public boolean isValid() {
         try {
             initialize();
-            return false;
-        } catch (PatternSyntaxException pse) {
             return true;
+        } catch (PatternSyntaxException pse) {
+            return false;
         }
     }
 

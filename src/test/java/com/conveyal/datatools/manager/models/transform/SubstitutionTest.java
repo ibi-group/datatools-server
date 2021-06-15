@@ -9,12 +9,12 @@ public class SubstitutionTest {
     @Test
     public void shouldNotFlagValidPattern() {
         Substitution substitution = new Substitution("\\bCir\\b", "Circle");
-        assertFalse(substitution.isInvalid());
+        assertTrue(substitution.isValid());
     }
 
     @Test
     public void shouldFlagInvalidPattern() {
         Substitution substitution = new Substitution("\\Cir\\b", "Circle");
-        assertTrue(substitution.isInvalid());
+        assertFalse(substitution.isValid());
     }
 }

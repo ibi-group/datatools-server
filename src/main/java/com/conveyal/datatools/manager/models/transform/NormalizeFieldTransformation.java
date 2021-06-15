@@ -150,7 +150,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
         // Substitutions must have valid patterns (gather invalid patterns).
         List<String> invalidSubstitutionPatterns = new ArrayList<>();
         for (Substitution substitution : substitutions) {
-            if (substitution.isInvalid()) {
+            if (!substitution.isValid()) {
                 invalidSubstitutionPatterns.add(substitution.pattern);
             }
         }
