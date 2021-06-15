@@ -48,7 +48,9 @@ public abstract class MonitorableJob implements Runnable, Serializable {
      * Additional jobs that will be run after the main logic of this job has completed.
      * This job is not considered entirely completed until its sub-jobs have all completed.
      */
-    final private List<MonitorableJob> subJobs = new ArrayList<>();
+    @JsonIgnore
+    @BsonIgnore
+    public List<MonitorableJob> subJobs = new ArrayList<>();
 
     public enum JobType {
         AUTO_DEPLOY_FEED_VERSION,
