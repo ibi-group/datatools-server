@@ -126,15 +126,6 @@ public class FeedSourceController {
         }
     }
 
-    private static boolean stringIsPresent(String value, String fieldName, Request req) {
-        if (StringUtils.isEmpty(value)) {
-            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, String.format("Feed source %s must not be empty", fieldName));
-            return false;
-        }
-
-        return true;
-    }
-
     /**
      * Check that updated or new feedSource object is valid. This method should be called before a feedSource is
      * persisted to the database.
@@ -142,7 +133,7 @@ public class FeedSourceController {
      */
     private static void validate(Request req, FeedSource feedSource) {
         List<String> validationIssues = new ArrayList<>();
-        if (!stringIsPresent(feedSource.name, "name", req)) {
+        if (StringUtils.isEmpty(feedSource.name)) {
             validationIssues.add("Name field must not be empty.");
         }
         if (feedSource.retrieveProject() == null) {
@@ -176,7 +167,7 @@ public class FeedSourceController {
         if (invalidPatterns.size() > 0) {
             validationIssues.add("Some substitution patterns are invalid: " + String.join(", ", invalidPatterns));
         }
-        if (validationIssues.size() == 0) {
+        if (validationIssues.size() > 0) {
             logMessageAndHalt(
                 req,
                 HttpStatus.BAD_REQUEST_400,
