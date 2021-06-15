@@ -3,7 +3,6 @@ package com.conveyal.datatools.manager.models;
 import com.amazonaws.services.ec2.model.Filter;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.EC2Utils;
-import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.jobs.DeployJob;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -18,6 +17,10 @@ import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.io.ByteStreams;
+import com.mongodb.client.FindIterable;
+import org.bson.codecs.pojo.annotations.BsonIgnore;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
@@ -38,17 +41,10 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
-import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
-
-import com.mongodb.client.FindIterable;
-import org.bson.codecs.pojo.annotations.BsonIgnore;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
@@ -86,7 +82,10 @@ public class Deployment extends Model implements Serializable {
     }
 
     @JsonView(JsonViews.DataDump.class)
-    public Collection<String> feedVersionIds;
+    public Collection<String> feedVersionIds = new ArrayList<>();
+
+    /** Feed versions that are production ready and should not be replaced by newer versions. */
+    public List<String> pinnedfeedVersionIds = new ArrayList<>();
 
     /** All of the feed versions used in this deployment */
     public List<FeedVersion> retrieveFullFeedVersions() {
@@ -103,9 +102,19 @@ public class Deployment extends Model implements Serializable {
         return ret;
     }
 
+    /** Retrieve all of the pinned feed versions used in this deployment. */
+    public List<SummarizedFeedVersion> retrievePinnedFeedVersions() {
+        return retrieveSummarizedFeedVersions(pinnedfeedVersionIds);
+    }
+
     /** All of the feed versions used in this deployment, summarized so that the Internet won't break */
     @JsonProperty("feedVersions")
     public List<SummarizedFeedVersion> retrieveFeedVersions() {
+        return retrieveSummarizedFeedVersions(feedVersionIds);
+    }
+
+    /** Retrieve all of the summarized feed versions used in this deployment. */
+    private List<SummarizedFeedVersion> retrieveSummarizedFeedVersions(Collection<String> feedVersionIds) {
         // return empty array if feedVersionIds is null
         if (feedVersionIds == null) return new ArrayList<>();
 

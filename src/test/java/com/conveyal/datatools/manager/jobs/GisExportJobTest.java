@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.jobs;
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
@@ -70,10 +71,10 @@ public class GisExportJobTest extends UnitTest {
         project = new Project();
         project.name = String.format("Test %s", new Date().toString());
         Persistence.projects.create(project);
-        FeedSource caltrain = new FeedSource("Caltrain");
+        FeedSource caltrain = new FeedSource("Caltrain", project.id, FeedRetrievalMethod.MANUALLY_UPLOADED);
         Persistence.feedSources.create(caltrain);
         calTrainVersion = createFeedVersionFromGtfsZip(caltrain, "caltrain_gtfs.zip");
-        FeedSource hawaii = new FeedSource("Hawaii");
+        FeedSource hawaii = new FeedSource("Hawaii", project.id, FeedRetrievalMethod.MANUALLY_UPLOADED);
         Persistence.feedSources.create(hawaii);
         hawaiiVersion = createFeedVersionFromGtfsZip(hawaii, "hawaii_fake_no_shapes.zip");
     }
