@@ -6,6 +6,7 @@ import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.jobs.ValidateFeedJob;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -23,6 +24,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
  */
 public class HandleCorruptGTFSFileTest {
     private static FeedSource mockFeedSource;
+    private static Project mockProject;
 
     @BeforeAll
     public static void setUp() throws IOException {
@@ -32,12 +34,15 @@ public class HandleCorruptGTFSFileTest {
 
     @AfterAll
     public static void tearDown() {
-        mockFeedSource.delete();
+        mockProject.delete();
     }
 
     @Test
     public void canHandleCorruptGTFSFile() {
+        mockProject = new Project();
+        Persistence.projects.create(mockProject);
         mockFeedSource = new FeedSource("Corrupt");
+        mockFeedSource.projectId = mockProject.id;
         int schemaCountBeforeFeedIsLoaded = TestUtils.countSchemaInDb();
         Persistence.feedSources.create(mockFeedSource);
         FeedVersion feedVersion = createFeedVersionAndAssignGtfsFile(mockFeedSource, "corrupt-gtfs-file.zip");
