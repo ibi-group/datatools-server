@@ -37,6 +37,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
+import static com.conveyal.datatools.manager.DataManager.isExtensionEnabled;
 import static spark.Spark.delete;
 import static spark.Spark.get;
 import static spark.Spark.options;
@@ -251,7 +252,7 @@ public class DeploymentController {
         if (feedSource.latestVersionId() == null)
             logMessageAndHalt(req, 400, "Cannot create a deployment from a feed source with no versions.");
         
-        boolean useDefaultRouter = !DataManager.isExtensionEnabled("nysdot");
+        boolean useDefaultRouter = !isExtensionEnabled("nysdot");
         Deployment deployment = new Deployment(feedSource, useDefaultRouter);
         deployment.storeUser(userProfile);
         Persistence.deployments.create(deployment);
