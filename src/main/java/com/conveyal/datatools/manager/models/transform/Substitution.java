@@ -37,7 +37,7 @@ public class Substitution implements Serializable {
     }
 
     @BsonIgnore
-    public void setInvalid(boolean value) {
+    public void setValid(boolean value) {
         // Does nothing (read-only field).
     }
 
