@@ -13,6 +13,7 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.JobUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -273,7 +274,7 @@ public class FeedSourceController {
         // Run in light executor, but if a new feed is found, do not continue thread (a new one will be started in
         // heavyExecutor in the body of the fetch job.
         FetchSingleFeedJob fetchSingleFeedJob = new FetchSingleFeedJob(s, userProfile, false);
-        DataManager.lightExecutor.execute(fetchSingleFeedJob);
+        JobUtils.lightExecutor.execute(fetchSingleFeedJob);
 
         // Return the jobId so that the requester can track the job's progress.
         return formatJobMessage(fetchSingleFeedJob.jobId, "Fetching latest feed source.");

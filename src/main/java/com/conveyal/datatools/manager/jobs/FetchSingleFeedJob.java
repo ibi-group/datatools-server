@@ -1,19 +1,19 @@
 package com.conveyal.datatools.manager.jobs;
 
-import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.status.FeedVersionJob;
 import com.conveyal.datatools.common.utils.Scheduler;
-import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.JobUtils;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-public class FetchSingleFeedJob extends MonitorableJob {
+public class FetchSingleFeedJob extends FeedVersionJob {
     public static final Logger LOG = LoggerFactory.getLogger(FetchSingleFeedJob.class);
-    public final String feedSourceId;
+    private FeedSource feedSource;
     private FeedVersion result;
     private final boolean continueThread;
 
@@ -24,12 +24,17 @@ public class FetchSingleFeedJob extends MonitorableJob {
      */
     public FetchSingleFeedJob (FeedSource feedSource, Auth0UserProfile owner, boolean continueThread) {
         super(owner, "Fetching feed for " + feedSource.name, JobType.FETCH_SINGLE_FEED);
-        this.feedSourceId = feedSource.id;
+        this.feedSource = feedSource;
         this.result = null;
         this.continueThread = continueThread;
         status.message = "Fetching...";
         status.percentComplete = 0.0;
         status.uploading = true;
+    }
+
+    @JsonProperty
+    public String getFeedSourceId() {
+        return feedSource != null ? feedSource.id : null;
     }
 
     /**
@@ -45,6 +50,7 @@ public class FetchSingleFeedJob extends MonitorableJob {
 
     @Override
     public void jobLogic () {
+        String feedSourceId = getFeedSourceId();
         FeedSource feedSource = Persistence.feedSources.getById(feedSourceId);
         if (feedSource == null) {
             LOG.error("Fetch feed job failed because feed source {} does not exist in database. Clearing all jobs for feed source.", feedSourceId);
@@ -69,7 +75,7 @@ public class FetchSingleFeedJob extends MonitorableJob {
             if (continueThread) {
                 addNextJob(processSingleFeedJob);
             } else {
-                DataManager.heavyExecutor.execute(processSingleFeedJob);
+                JobUtils.heavyExecutor.execute(processSingleFeedJob);
             }
         }
     }

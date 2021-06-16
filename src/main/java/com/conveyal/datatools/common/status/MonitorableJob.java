@@ -1,7 +1,7 @@
 package com.conveyal.datatools.common.status;
 
-import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.utils.JobUtils;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.apache.commons.lang3.exception.ExceptionUtils;
@@ -18,8 +18,6 @@ import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
-import static com.conveyal.datatools.manager.controllers.api.StatusController.getJobsForUser;
-
 /**
  * Created by landon on 6/13/16.
  */
@@ -31,8 +29,15 @@ public abstract class MonitorableJob implements Runnable, Serializable {
     // Public fields will be serialized over HTTP API and visible to the web client
     public final JobType type;
     public File file;
-    public String parentJobId;
-    public JobType parentJobType;
+
+    /**
+     * Whether the job is currently running. This is needed since some jobs can be recurring jobs that won't run until
+     * their scheduled time and when they finish they could run again.
+     */
+    public boolean active = false;
+
+    protected String parentJobId;
+    protected JobType parentJobType;
     // Status is not final to allow some jobs to have extra status fields.
     public Status status = new Status();
     // Name is not final in case it needs to be amended during job processing.
@@ -48,6 +53,7 @@ public abstract class MonitorableJob implements Runnable, Serializable {
     public List<MonitorableJob> subJobs = new ArrayList<>();
 
     public enum JobType {
+        AUTO_DEPLOY_FEED_VERSION,
         UNKNOWN_TYPE,
         ARBITRARY_FEED_TRANSFORM,
         BUILD_TRANSPORT_NETWORK,
@@ -102,9 +108,9 @@ public abstract class MonitorableJob implements Runnable, Serializable {
     private void registerJob() {
         // Get all active jobs and add the latest active job. Note: Removal of job from user's set of jobs is handled
         // in the StatusController when a user requests their active jobs and the job has finished/errored.
-        Set<MonitorableJob> userJobs = getJobsForUser(this.owner);
+        Set<MonitorableJob> userJobs = JobUtils.getJobsForUser(this.owner);
         userJobs.add(this);
-        DataManager.userJobsMap.put(retrieveUserId(), userJobs);
+        JobUtils.userJobsMap.put(retrieveUserId(), userJobs);
     }
 
     @JsonProperty("owner")
@@ -115,6 +121,11 @@ public abstract class MonitorableJob implements Runnable, Serializable {
     @JsonProperty("email")
     public String retrieveEmail() {
         return this.owner.getEmail();
+    }
+
+    @JsonIgnore @BsonIgnore
+    public List<MonitorableJob> getSubJobs() {
+        return subJobs;
     }
 
     public File retrieveFile () {
@@ -140,6 +151,7 @@ public abstract class MonitorableJob implements Runnable, Serializable {
      * override jobLogic and jobFinished method(s).
      */
     public void run () {
+        active = true;
         boolean parentJobErrored = false;
         boolean subTaskErrored = false;
         String cancelMessage = "";
@@ -195,8 +207,10 @@ public abstract class MonitorableJob implements Runnable, Serializable {
             // could be displayed by the client.
         } catch (Exception e) {
             status.fail("Job failed due to unhandled exception!", e);
+        } finally {
+            LOG.info("{} (jobId={}) {} in {} ms", type, jobId, status.error ? "errored" : "completed", status.duration);
+            active = false;
         }
-        LOG.info("{} (jobId={}) {} in {} ms", type, jobId, status.error ? "errored" : "completed", status.duration);
     }
 
     /**

@@ -86,20 +86,8 @@ public class DataManager {
     // TODO: define type for ExternalFeedResource Strings
     public static final Map<String, ExternalFeedResource> feedResources = new HashMap<>();
 
-    /**
-     * Stores jobs underway by user ID. NOTE: any set created and stored here must be created with
-     * {@link Sets#newConcurrentHashSet()} or similar thread-safe Set.
-     */
-    public static Map<String, Set<MonitorableJob>> userJobsMap = new ConcurrentHashMap<>();
-
     // ObjectMapper that loads in YAML config files
     private static final ObjectMapper yamlMapper = new ObjectMapper(new YAMLFactory());
-
-
-    // Heavy executor should contain long-lived CPU-intensive tasks (e.g., feed loading/validation)
-    public static Executor heavyExecutor = Executors.newFixedThreadPool(4);
-    // light executor is for tasks for things that should finish quickly (e.g., email notifications)
-    public static Executor lightExecutor = Executors.newSingleThreadExecutor();
 
     public static String repoUrl;
     public static String commit = "";
