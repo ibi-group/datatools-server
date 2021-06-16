@@ -12,7 +12,6 @@ import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Project;
-import com.conveyal.datatools.manager.models.transform.FeedTransformation;
 import com.conveyal.datatools.manager.models.transform.NormalizeFieldTransformation;
 import com.conveyal.datatools.manager.models.transform.Substitution;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -40,6 +39,8 @@ import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.getPOJOFromRequestBody;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.models.ExternalFeedSourceProperty.constructId;
+import static com.conveyal.datatools.manager.models.transform.NormalizeFieldTransformation.getInvalidSubstitutionMessage;
+import static com.conveyal.datatools.manager.models.transform.NormalizeFieldTransformation.getInvalidSubstitutionPatterns;
 import static spark.Spark.delete;
 import static spark.Spark.get;
 import static spark.Spark.post;
@@ -139,7 +140,7 @@ public class FeedSourceController {
         if (feedSource.retrieveProject() == null) {
             validationIssues.add("Valid project ID must be provided.");
         }
-        // Collect all retrieval methods found in tranform rules into a list.
+        // Collect all retrieval methods found in transform rules into a list.
         List<FeedRetrievalMethod> retrievalMethods = feedSource.transformRules.stream()
             .map(rule -> rule.retrievalMethods)
             .flatMap(Collection::stream)
@@ -158,16 +159,11 @@ public class FeedSourceController {
             .map(t -> ((NormalizeFieldTransformation) t).substitutions)
             .flatMap(Collection::stream)
             .collect(Collectors.toList());
-        List<String> invalidPatterns = new ArrayList<>();
-        for (Substitution substitution: substitutions) {
-            if (!substitution.isValid()) {
-                invalidPatterns.add(substitution.pattern);
-            }
+        List<String> invalidPatterns = getInvalidSubstitutionPatterns(substitutions);
+        if (!invalidPatterns.isEmpty()) {
+            validationIssues.add(getInvalidSubstitutionMessage(invalidPatterns));
         }
-        if (invalidPatterns.size() > 0) {
-            validationIssues.add("Some substitution patterns are invalid: " + String.join(", ", invalidPatterns));
-        }
-        if (validationIssues.size() > 0) {
+        if (!validationIssues.isEmpty()) {
             logMessageAndHalt(
                 req,
                 HttpStatus.BAD_REQUEST_400,

@@ -148,15 +148,33 @@ public class NormalizeFieldTransformation extends ZipTransformation {
         }
 
         // Substitutions must have valid patterns (gather invalid patterns).
-        List<String> invalidSubstitutionPatterns = new ArrayList<>();
+        List<String> invalidPatterns = getInvalidSubstitutionPatterns(substitutions);
+        if (!invalidPatterns.isEmpty()) {
+            status.fail(getInvalidSubstitutionMessage(invalidPatterns));
+        }
+    }
+
+    /**
+     * @return A formatted error message regarding invalid substitution search patterns.
+     */
+    public static String getInvalidSubstitutionMessage(List<String> invalidPatterns) {
+        return String.format(
+            "Some substitution patterns are invalid: %s",
+            String.join(", ", invalidPatterns)
+        );
+    }
+
+    /**
+     * @return a list of invalid substitution search patterns.
+     */
+    public static List<String> getInvalidSubstitutionPatterns(List<Substitution> substitutions) {
+        List<String> invalidPatterns = new ArrayList<>();
         for (Substitution substitution : substitutions) {
             if (!substitution.isValid()) {
-                invalidSubstitutionPatterns.add(substitution.pattern);
+                invalidPatterns.add(substitution.pattern);
             }
         }
-        if (invalidSubstitutionPatterns.size() != 0) {
-            status.fail("Some substitution patterns are invalid: " + String.join(", ", invalidSubstitutionPatterns));
-        }
+        return invalidPatterns;
     }
 
     @Override
