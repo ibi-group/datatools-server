@@ -1,18 +1,29 @@
 package com.conveyal.datatools.manager.utils;
 
+import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.jobs.FeedToMerge;
+import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
+import com.conveyal.datatools.manager.jobs.MergeFeedsType;
+import com.conveyal.datatools.manager.jobs.MergeLineContext;
 import com.conveyal.datatools.manager.jobs.MergeStrategy;
+import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
+import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.error.NewGTFSError;
 import com.conveyal.gtfs.error.NewGTFSErrorType;
 import com.conveyal.gtfs.loader.Field;
 import com.conveyal.gtfs.loader.Table;
+import com.conveyal.gtfs.model.StopTime;
 import com.csvreader.CsvReader;
 import com.google.common.collect.Sets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.time.LocalDate;
+import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
@@ -21,8 +32,16 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
+import static com.conveyal.datatools.manager.jobs.MergeFeedsType.REGIONAL;
+import static com.conveyal.datatools.manager.jobs.MergeFeedsType.SERVICE_PERIOD;
+import static com.conveyal.datatools.manager.jobs.MergeStrategy.CHECK_STOP_TIMES;
+import static com.conveyal.datatools.manager.jobs.MergeStrategy.EXTEND_FUTURE;
+import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.REGIONAL_MERGE;
+import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.SERVICE_PERIOD_MERGE;
+import static com.conveyal.gtfs.loader.DateField.GTFS_DATE_FORMATTER;
 import static com.conveyal.gtfs.loader.Field.getFieldIndex;
 
 public class MergeFeedUtils {
@@ -134,5 +153,86 @@ public class MergeFeedUtils {
             table.name,
             prefix,
             id);
+    }
+
+    /**
+     * Checks whether the future and active stop_times for a particular trip_id are an exact match.
+     */
+    public static boolean stopTimesMatch(List<StopTime> futureStopTimes, List<StopTime> activeStopTimes) {
+        if (futureStopTimes.size() != activeStopTimes.size()) {
+            return false;
+        }
+        for (int i = 0; i < activeStopTimes.size(); i++) {
+            if (!activeStopTimes.get(i).equals(futureStopTimes.get(i))) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Get parent feed source depending on merge type. Assign regional feed source or simply the first parent feed
+     * source found in the feed version list (these should all belong to the same feed source if the merge is not
+     * regional).
+     */
+    public static FeedSource getParentFeedSourceForMerge(MergeFeedsJob job, boolean storeNewVersion) {
+        FeedSource regionalFeedSource = null;
+        Project project = Persistence.projects.getById(job.projectId);
+        // If storing a regional merge as a new version, find the feed source designated by the project.
+        if (job.mergeType.equals(REGIONAL) && storeNewVersion) {
+            regionalFeedSource = Persistence.feedSources.getById(project.regionalFeedSourceId);
+            // Create new feed source if this is the first regional merge.
+            if (regionalFeedSource == null) {
+                regionalFeedSource = new FeedSource("REGIONAL MERGE", project.id, REGIONAL_MERGE);
+                // Store new feed source.
+                Persistence.feedSources.create(regionalFeedSource);
+                // Update regional feed source ID on project.
+                project.regionalFeedSourceId = regionalFeedSource.id;
+                Persistence.projects.replace(project.id, project);
+            }
+        }
+        return job.mergeType.equals(REGIONAL)
+            ? regionalFeedSource
+            : job.getFeedVersions().iterator().next().parentFeedSource();
+    }
+
+    public static FeedVersion getMergedVersion(MergeFeedsJob job, boolean storeNewVersion) {
+        FeedSource feedSource = getParentFeedSourceForMerge(job, storeNewVersion);
+        FeedRetrievalMethod retrievalMethod = job.mergeType.equals(REGIONAL)
+            ? REGIONAL_MERGE
+            : SERVICE_PERIOD_MERGE;
+        return storeNewVersion ? new FeedVersion(feedSource, retrievalMethod) : null;
+    }
+
+    public static String getMergeKeyField(Table table, MergeFeedsType mergeType) {
+        String keyField = table.getKeyFieldName();
+        if (mergeType.equals(SERVICE_PERIOD) && DataManager.isExtensionEnabled("mtc")) {
+            // MTC requires that the stop and route records be merged based on different key fields.
+            switch (table.name) {
+                case "stops":
+                    keyField = "stop_code";
+                    break;
+                case "routes":
+                    keyField = "route_short_name";
+                    break;
+                default:
+                    // Otherwise, use the standard key field (see keyField declaration.
+                    break;
+            }
+        }
+        return keyField;
+    }
+
+    public static LocalDate getFutureFeedFirstDate(LocalDate calendarStartDate, LocalDate firstDate) {
+        if (
+            calendarStartDate.isBefore(LocalDate.MAX) &&
+                firstDate.isBefore(calendarStartDate)
+        ) {
+            // If the feed's first date is before its first calendar start date,
+            // override the feed first date with the calendar start date for use when checking
+            // MTC calendar_dates and calendar records for modification/exclusion.
+            return calendarStartDate;
+        }
+        return firstDate;
     }
 }
