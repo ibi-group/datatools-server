@@ -1,11 +1,10 @@
 package com.conveyal.datatools.manager.jobs;
 
-import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.status.FeedVersionJob;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.Persistence;
-import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.validator.ValidationResult;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
@@ -15,7 +14,7 @@ import org.slf4j.LoggerFactory;
  * This job handles the validation of a given feed version. If the version is not new, it will simply replace the
  * existing version with the version object that has updated validation info.
  */
-public class ValidateFeedJob extends MonitorableJob {
+public class ValidateFeedJob extends FeedVersionJob {
     public static final Logger LOG = LoggerFactory.getLogger(ValidateFeedJob.class);
 
     private FeedVersion feedVersion;

@@ -63,8 +63,11 @@ import com.conveyal.datatools.manager.models.CustomFile;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.EC2Info;
 import com.conveyal.datatools.manager.models.EC2InstanceSummary;
+import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.OtpServer;
+import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.JobUtils;
 import com.conveyal.datatools.manager.utils.StringUtils;
 import com.conveyal.datatools.manager.utils.TimeTracker;
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -192,6 +195,15 @@ public class DeployJob extends MonitorableJob {
         return otpServer;
     }
 
+    /**
+     * Primary constructor for kicking off a deployment of transit/OSM/config data to OpenTripPlanner.
+     *
+     * FIXME: It appears that DeployType#Replace is the only type used in the non-test code. Should the others be
+     *  removed?
+     * @param deployment the deployment (set of feed versions and configurations) to deploy
+     * @param owner the requesting user
+     * @param otpServer the server/ELB target for the deployment
+     */
     public DeployJob(Deployment deployment, Auth0UserProfile owner, OtpServer otpServer) {
         this(deployment, owner, otpServer, null, DeployType.REPLACE);
     }
@@ -223,6 +235,7 @@ public class DeployJob extends MonitorableJob {
         DeployType deployType,
         boolean dryRun
     ) {
+
         // TODO add new job type or get rid of enum in favor of just using class names
         super(owner, jobName, JobType.DEPLOY_TO_OTP);
         this.dryRun = dryRun;
@@ -547,22 +560,67 @@ public class DeployJob extends MonitorableJob {
         String message;
         // FIXME: For some reason status duration is not getting set properly in MonitorableJob.
         status.duration = System.currentTimeMillis() - status.startTime;
+        // persist value on most recently fetched deployment as there could have been changes to the deployment
+        // before this point
+        Deployment latestDeployment = Persistence.deployments.getById(deployment.id);
         if (!status.error) {
             // Update status with successful completion state only if no error was encountered.
             status.completeSuccessfully("Deployment complete!");
             // Store the target server in the deployedTo field and set last deployed time.
             LOG.info("Updating deployment target and deploy time.");
-            deployment.deployedTo = otpServer.id;
+            latestDeployment.deployedTo = otpServer.id;
             long durationMinutes = TimeUnit.MILLISECONDS.toMinutes(status.duration);
             message = String.format("%s successfully deployed %s to %s in %s minutes.", owner.getEmail(), deployment.name, otpServer.publicUrl, durationMinutes);
         } else {
             message = String.format("WARNING: Deployment %s failed to deploy to %s. Error: %s", deployment.name, otpServer.publicUrl, status.message);
         }
         // Unconditionally add deploy summary. If the job fails, we should still record the summary.
-        deployment.deployJobSummaries.add(0, new DeploySummary(this));
-        Persistence.deployments.replace(deployment.id, deployment);
+        latestDeployment.deployJobSummaries.add(0, new DeploySummary(this));
+        Persistence.deployments.replace(deployment.id, latestDeployment);
         // Send notification to those subscribed to updates for the deployment.
         NotifyUsersForSubscriptionJob.createNotification("deployment-updated", deployment.id, message);
+        startAnotherAutoDeploymentIfNeeded();
+    }
+
+    /**
+     * Checks if there is a need to start a new auto-deploy job. A new FetchSingleFeedJob could be started after the
+     * AutoDeployJob has made sure no fetching jobs exist and the DeployJob has started. Therefore this new feed version
+     * wouldn't result in a new DeployJob getting kicked off since there was already one running.
+     */
+    private void startAnotherAutoDeploymentIfNeeded() {
+        Project project = deployment.parentProject();
+        Set<String> pinnedFeedVersionIds = new HashSet<>(deployment.pinnedfeedVersionIds);
+
+        // don't auto-deploy if an error occurred with this deployment
+        boolean shouldStartAnotherAutoDeployment = !status.error &&
+            // make sure deployment is enabled for data tools. Not sure how we'd get this far if it weren't...
+            DataManager.isModuleEnabled("deployment") &&
+            // make sure auto-deployment is enabled for the project
+            project.autoDeployTypes.size() > 0 &&
+            // check if there are any non-pinned feed versions newer than existing ones
+            deployment.feedVersionIds.stream()
+                .anyMatch(feedVersionId -> {
+                    // don't check pinned feed versions for a more recent feed version from the feed source
+                    if (pinnedFeedVersionIds.contains(feedVersionId)) {
+                        return false;
+                    }
+
+                    // get the latest feed version (it could be null)
+                    FeedVersion latest = Persistence.feedVersions.getById(feedVersionId)
+                        .parentFeedSource()
+                        .retrieveLatest();
+                    // return true if the latest feed version was created after the last time an auto-deploy job
+                    // completed for the project. This means there is at least one new feed version that hasn't
+                    // yet been auto deployed that must have been created while this deploy job ran.
+                    return latest != null && latest.dateCreated.after(project.lastAutoDeploy);
+                });
+
+        if (shouldStartAnotherAutoDeployment) {
+            // newer feed versions exist! Start a new auto-deploy job.
+            JobUtils.heavyExecutor.execute(new AutoDeployJob(deployment.parentProject(), owner));
+        } else {
+            LOG.info("No need to start another auto-deployment");
+        }
     }
 
     /**
@@ -1305,8 +1363,12 @@ public class DeployJob extends MonitorableJob {
         String jarName = deployment.otpVersion;
         if (jarName == null) {
             // If there is no version specified, use the default (and persist value).
-            jarName = deployment.otpVersion = DEFAULT_OTP_VERSION;
-            Persistence.deployments.replace(deployment.id, deployment);
+            jarName = DEFAULT_OTP_VERSION;
+            // persist value on most recently fetched deployment as there could have been changes to the deployment
+            // before this point
+            Deployment latestDeployment = Persistence.deployments.getById(deployment.id);
+            latestDeployment.otpVersion = jarName;
+            Persistence.deployments.replace(deployment.id, latestDeployment);
         }
         return jarName;
     }

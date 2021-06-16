@@ -34,6 +34,28 @@ modules:
     load_on_fetch: false
     # use_extension: mtc
     # update_frequency: 30 # in seconds
+  manager:
+    normalizeFieldTransformation:
+      # Enter capitalization exceptions (e.g. acronyms), in the desired case, and separated by commas.
+      defaultCapitalizationExceptions:
+        - ACE
+        - BART
+      # Enter substitutions (e.g. substitute '@' with 'at'), one dashed entry for each substitution, with:
+      # - pattern: the regex string pattern that will be replaced,
+      # - replacement: the replacement string for that pattern,
+      # - normalizeSpace: if true, the resulting field value will include one space before and after the replacement string.
+      #       Note: if the replacement must be blank, then normalizeSpace should be set to false
+      #       and whitespace management should be handled in pattern instead.
+      # Substitutions are executed in order they appear in the list.
+      defaultSubstitutions:
+        - description: "Replace '@' with 'at', and normalize space."
+          pattern: "@"
+          replacement: at
+          normalizeSpace: true
+        - description: "Replace '+' (\\+ in regex) and '&' with 'and', and normalize space."
+          pattern: "[\\+&]"
+          replacement: and
+          normalizeSpace: true
 extensions:
   transitland:
     enabled: true
