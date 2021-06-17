@@ -410,8 +410,11 @@ public class MergeFeedsJob extends MonitorableJob {
             // between the two feeds (i.e., each stop time in the ordered list is identical between the two feeds).
             Feed futureFeed = new Feed(DataManager.GTFS_DATA_SOURCE, futureFeedToMerge.version.namespace);
             Feed activeFeed = new Feed(DataManager.GTFS_DATA_SOURCE, activeFeedToMerge.version.namespace);
-            for (String tripId : Sets.intersection(activeTripIds, futureTripIds)) {
-                shouldFailJob |= compareStopTimes(tripId, futureFeed, activeFeed);
+            Set<String> sharedTripIds = Sets.intersection(activeTripIds, futureTripIds);
+            for (String tripId : sharedTripIds) {
+                if (compareStopTimes(tripId, futureFeed, activeFeed)) {
+                    shouldFailJob = true;
+                }
             }
             // If a trip only in the active feed references a service_id that is set to be extended, that
             // service_id needs to be cloned and renamed to differentiate it from the same service_id in

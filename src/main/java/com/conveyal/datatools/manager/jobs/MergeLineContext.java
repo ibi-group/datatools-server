@@ -407,10 +407,8 @@ public class MergeLineContext {
             valueToWrite = String.join(":", idScope, val);
             mergeFeedsResult.remappedIds.put(key, valueToWrite);
         }
-        int startDateIndex =
-            getFieldIndex(fieldsFoundInZip, "start_date");
-        LocalDate startDate = LocalDate
-            .parse(csvReader.get(startDateIndex), GTFS_DATE_FORMATTER);
+        int startDateIndex = getFieldIndex(fieldsFoundInZip, "start_date");
+        LocalDate startDate = LocalDate.parse(csvReader.get(startDateIndex), GTFS_DATE_FORMATTER);
         if (handlingFutureFeed) {
             // For the future feed, check if the calendar's start date is earlier than the
             // previous earliest value and update if so.
@@ -421,7 +419,9 @@ public class MergeLineContext {
             //  modified? (do we want the cloned record to have the original values?)
             if (shouldUpdateFutureFeedStartDate(startDateIndex)) {
                 // Update start_date to extend service through the active feed's
-                // start date if the merge strategy dictates.
+                // start date if the merge strategy dictates. The justification for this logic is that the active feed's
+                // service_id will be modified to a different unique value and the trips shared between the future/active
+                // service are exactly matching.
                 val = valueToWrite = activeFeedFirstDate.format(GTFS_DATE_FORMATTER);
             }
         } else {
@@ -464,10 +464,12 @@ public class MergeLineContext {
 
     private boolean shouldUpdateFutureFeedStartDate(int startDateIndex) {
         return index == startDateIndex &&
-            EXTEND_FUTURE == mergeFeedsResult.mergeStrategy ||
             (
-                CHECK_STOP_TIMES == mergeFeedsResult.mergeStrategy &&
-                    job.serviceIdsToExtend.contains(keyValue)
+                EXTEND_FUTURE == mergeFeedsResult.mergeStrategy ||
+                (
+                    CHECK_STOP_TIMES == mergeFeedsResult.mergeStrategy &&
+                        job.serviceIdsToExtend.contains(keyValue)
+                )
             );
     }
 
@@ -635,7 +637,7 @@ public class MergeLineContext {
     }
 
     private boolean shouldCheckStopCodes() {
-        return job.mergeType.equals(SERVICE_PERIOD) && table.name.equals(STOPS) && lineNumber == 0;
+        return job.mergeType.equals(SERVICE_PERIOD) && table.name.equals(STOPS);
     }
 
     /** Determine if stop is "special" via its locationType. I.e., a station, entrance, (location_type > 0). */
@@ -870,7 +872,7 @@ public class MergeLineContext {
             mergeFeedsResult.recordsSkipCount++;
             return;
         }
-        // Store row and stop values. If the return value is false, the record has been skipped and we
+        // Store row and stop values. If the return value is true, the record has been skipped and we
         // should skip writing the row to the merged table.
         if (storeRowAndStopValues()) {
             return;

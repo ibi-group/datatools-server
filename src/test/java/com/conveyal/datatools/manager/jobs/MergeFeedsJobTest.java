@@ -368,22 +368,25 @@ public class MergeFeedsJobTest extends UnitTest {
         // - calendar table
         // expect a total of 5 records in calendar table:
         // - 2 original (common_id start date extended)
-        // - 2 cloned for active feed
-        // - 1 cloned and modified for future feed
+        // - 2 cloned for active feed (from MergeFeedsJob#serviceIdsToCloneAndRename)
+        // - 1 cloned and modified for future feed (from MergeFeedsJob#serviceIdsToExtend)
         assertThatSqlCountQueryYieldsExpectedCount(
             String.format("SELECT count(*) FROM %s.calendar", mergedNamespace),
             5
         );
-//        // expect that both records in calendar table have the correct start_date
-//        assertThatSqlCountQueryYieldsExpectedCount(
-//            String.format("SELECT count(*) FROM %s.calendar where start_date = '20170918' and end_date = '20170925'", mergedNamespace),
-//            1
-//        );
-//        // expect 3 trips (one trip is omitted from the active feed because it is an exact match of a future trip
-//        assertThatSqlCountQueryYieldsExpectedCount(
-//            String.format("SELECT count(*) FROM %s.trips", mergedNamespace),
-//            3
-//        );
+        // expect that 2 calendars (1 common_id extended from future and 1 Fake_Transit1:common_id from active) have
+        // start_date pinned to start date of active feed.
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.calendar where start_date = '20170918'", mergedNamespace),
+            2
+        );
+        // Out of 6 total trips from the input datasets, expect 5 trips in merged output.
+        // 1 trip from active feed skipped because it matches the trip_id from the future feed exactly.
+        // 1 trip from active feed is cloned/modified because it differs from its future counterpart.
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.trips", mergedNamespace),
+            5
+        );
     }
 
     /**
