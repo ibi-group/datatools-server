@@ -222,17 +222,4 @@ public class MergeFeedUtils {
         }
         return keyField;
     }
-
-    public static LocalDate getFutureFeedFirstDate(LocalDate calendarStartDate, LocalDate firstDate) {
-        if (
-            calendarStartDate.isBefore(LocalDate.MAX) &&
-                firstDate.isBefore(calendarStartDate)
-        ) {
-            // If the feed's first date is before its first calendar start date,
-            // override the feed first date with the calendar start date for use when checking
-            // MTC calendar_dates and calendar records for modification/exclusion.
-            return calendarStartDate;
-        }
-        return firstDate;
-    }
 }

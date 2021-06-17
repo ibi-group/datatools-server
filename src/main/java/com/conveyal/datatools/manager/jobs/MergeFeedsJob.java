@@ -7,6 +7,7 @@ import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.gtfsplus.tables.GtfsPlusTable;
 import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.utils.ErrorUtils;
 import com.conveyal.gtfs.loader.Feed;
 import com.conveyal.gtfs.loader.Table;
 import com.conveyal.gtfs.model.StopTime;
@@ -22,6 +23,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.nio.file.Files;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -183,11 +185,15 @@ public class MergeFeedsJob extends MonitorableJob {
     public void jobFinished() {
         // Delete temp file to ensure it does not cause storage bloat. Note: merged file has already been stored
         // permanently.
-        if (!mergedTempFile.delete()) {
-            // FIXME: send to bugsnag?
+        try {
+            Files.delete(mergedTempFile.toPath());
+        } catch (IOException e) {
             LOG.error(
                 "Merged feed file {} not deleted. This may contribute to storage space shortages.",
-                mergedTempFile.getAbsolutePath());
+                mergedTempFile.getAbsolutePath(),
+                e
+            );
+            ErrorUtils.reportToBugsnag(e, owner);
         }
     }
 
@@ -195,64 +201,45 @@ public class MergeFeedsJob extends MonitorableJob {
      * Primary job logic handles collecting and sorting versions, creating a merged table for all versions, and writing
      * the resulting zip file to storage.
      */
-    @Override public void jobLogic() throws IOException, CheckedAWSException {
+    @Override
+    public void jobLogic() throws IOException, CheckedAWSException {
         // Create temp zip file to add merged feed content to.
         mergedTempFile = File.createTempFile(filename, null);
         mergedTempFile.deleteOnExit();
-        // Create the zipfile.
-        ZipOutputStream out = new ZipOutputStream(new FileOutputStream(mergedTempFile));
-        LOG.info("Created merge file: " + mergedTempFile.getAbsolutePath());
-        feedsToMerge = collectAndSortFeeds(feedVersions);
+        // Create the zipfile with try with resources so that it is always closed.
+        try (ZipOutputStream out = new ZipOutputStream(new FileOutputStream(mergedTempFile))) {
+            LOG.info("Created merge file: {}", mergedTempFile.getAbsolutePath());
+            feedsToMerge = collectAndSortFeeds(feedVersions);
 
-        // Determine which tables to merge (only merge GTFS+ tables for MTC extension).
-        final List<Table> tablesToMerge =
-            Arrays.stream(Table.tablesInOrder)
-                .filter(Table::isSpecTable)
-                .collect(Collectors.toList());
-        if (DataManager.isExtensionEnabled("mtc")) {
-            // Merge GTFS+ tables only if MTC extension is enabled. We should do this for both
-            // regional and MTC merge strategies.
-            tablesToMerge.addAll(Arrays.asList(GtfsPlusTable.tables));
-        }
-        int numberOfTables = tablesToMerge.size();
-        // Before initiating the merge process, run some pre-processing to check for id conflicts for certain tables
-        if (mergeType.equals(SERVICE_PERIOD)) {
-            mergeFeedsResult.mergeStrategy = getMergeStrategy();
-        }
-        // Skip merging process altogether if the failing condition is met.
-        if (MergeStrategy.FAIL_DUE_TO_MATCHING_TRIP_IDS.equals(mergeFeedsResult.mergeStrategy)) {
-            failMergeJob("Feed merge failed because the trip_ids are identical in the future and active feeds. A new service requires unique trip_ids for merging.");
-            return;
-        }
-        // Loop over GTFS tables and merge each feed one table at a time.
-        for (int i = 0; i < numberOfTables; i++) {
-            Table table = tablesToMerge.get(i);
-            if (mergeType.equals(REGIONAL) && table.name.equals(Table.FEED_INFO.name)) {
-                // It does not make sense to include the feed_info table when performing a
-                // regional feed merge because this file is intended to contain data specific to
-                // a single agency feed.
-                // TODO: Perhaps future work can generate a special feed_info file for the merged
-                //  file.
-                LOG.warn("Skipping feed_info table for regional merge.");
-                continue;
+            // Determine which tables to merge (only merge GTFS+ tables for MTC extension).
+            final List<Table> tablesToMerge = getTablesToMerge();
+            int numberOfTables = tablesToMerge.size();
+            // Before initiating the merge process, get the merge strategy to use, which runs some pre-processing to
+            // check for id conflicts for certain tables (e.g., trips and calendars).
+            if (mergeType.equals(SERVICE_PERIOD)) {
+                mergeFeedsResult.mergeStrategy = getMergeStrategy();
             }
-            if (table.name.equals(Table.PATTERNS.name) || table.name.equals(Table.PATTERN_STOP.name)) {
-                LOG.warn("Skipping editor-only table {}.", table.name);
-                continue;
+            // Skip merging process altogether if the failing condition is met.
+            if (MergeStrategy.FAIL_DUE_TO_MATCHING_TRIP_IDS.equals(mergeFeedsResult.mergeStrategy)) {
+                failMergeJob("Feed merge failed because the trip_ids are identical in the future and active feeds. A new service requires unique trip_ids for merging.");
+                return;
             }
-            double percentComplete = Math.round((double) i / numberOfTables * 10000d) / 100d;
-            status.update("Merging " + table.name, percentComplete);
-            // Perform the merge.
-            LOG.info("Writing {} to merged feed", table.name);
-            int mergedLineNumber = constructMergedTable(table, feedsToMerge, out);
-            if (mergedLineNumber == 0) {
-                LOG.warn("Skipping {} table. No entries found in zip files.", table.name);
-            } else if (mergedLineNumber == -1) {
-                LOG.error("Merge {} table failed!", table.name);
+            // Loop over GTFS tables and merge each feed one table at a time.
+            for (int i = 0; i < numberOfTables; i++) {
+                Table table = tablesToMerge.get(i);
+                if (shouldSkipTable(table.name)) continue;
+                double percentComplete = Math.round((double) i / numberOfTables * 10000d) / 100d;
+                status.update("Merging " + table.name, percentComplete);
+                // Perform the merge.
+                LOG.info("Writing {} to merged feed", table.name);
+                int mergedLineNumber = constructMergedTable(table, feedsToMerge, out);
+                if (mergedLineNumber == 0) {
+                    LOG.warn("Skipping {} table. No entries found in zip files.", table.name);
+                } else if (mergedLineNumber == -1) {
+                    LOG.error("Merge {} table failed!", table.name);
+                }
             }
         }
-        // Close output stream for zip file.
-        out.close();
         if (!mergeFeedsResult.failed) {
             // Store feed locally and (if applicable) upload regional feed to S3.
             storeMergedFeed();
@@ -266,6 +253,38 @@ public class MergeFeedsJob extends MonitorableJob {
             // subJobs are run.
             addNextJob(new ProcessSingleFeedJob(mergedVersion, owner, true));
         }
+    }
+
+    private List<Table> getTablesToMerge() {
+        List<Table> tablesToMerge = Arrays.stream(Table.tablesInOrder)
+            .filter(Table::isSpecTable)
+            .collect(Collectors.toList());
+        if (DataManager.isExtensionEnabled("mtc")) {
+            // Merge GTFS+ tables only if MTC extension is enabled. We should do this for both
+            // regional and MTC merge strategies.
+            tablesToMerge.addAll(Arrays.asList(GtfsPlusTable.tables));
+        }
+        return tablesToMerge;
+    }
+
+    /**
+     * Check if the table should be skipped in the merged output.
+     */
+    private boolean shouldSkipTable(String tableName) {
+        if (mergeType.equals(REGIONAL) && tableName.equals(Table.FEED_INFO.name)) {
+            // It does not make sense to include the feed_info table when performing a
+            // regional feed merge because this file is intended to contain data specific to
+            // a single agency feed.
+            // TODO: Perhaps future work can generate a special feed_info file for the merged
+            //  file.
+            LOG.warn("Skipping feed_info table for regional merge.");
+            return true;
+        }
+        if (tableName.equals(Table.PATTERNS.name) || tableName.equals(Table.PATTERN_STOP.name)) {
+            LOG.warn("Skipping editor-only table {}.", tableName);
+            return true;
+        }
+        return false;
     }
 
     /**
@@ -314,8 +333,7 @@ public class MergeFeedsJob extends MonitorableJob {
                 LOG.info("Storing merged project feed at {}", S3Utils.getDefaultBucketUriForKey(s3Key));
             } else {
                 try {
-                    FeedVersion.feedStore
-                        .newFeed(filename, new FileInputStream(mergedTempFile), null);
+                    FeedVersion.feedStore.newFeed(filename, new FileInputStream(mergedTempFile), null);
                 } catch (IOException e) {
                     LOG.error("Could not store feed for project " + filename, e);
                     throw e;
@@ -342,49 +360,23 @@ public class MergeFeedsJob extends MonitorableJob {
                 mergeFeedsResult.feedCount++;
                 if (ctx.skipFile) continue;
                 LOG.info("Adding {} table for {}{}", table.name, ctx.feedSource.name, ctx.version.version);
-                if (!iterateOverRows(ctx)) {
+                // Iterate over the rows of the table and write them to the merged output table. If an error was
+                // encountered, return -1 to fail the merge job immediately.
+                if (!ctx.iterateOverRows()) {
                     return -1;
                 }
             }
             ctx.flushAndClose();
         } catch (Exception e) {
-            LOG.error("Error merging feed sources: {}",
-                feedVersions.stream().map(version -> version.parentFeedSource().name)
-                    .collect(Collectors.toList()));
-            e.printStackTrace();
+            List<String> versionNames = feedVersions.stream()
+                .map(version -> version.parentFeedSource().name)
+                .collect(Collectors.toList());
+            LOG.error("Error merging feed sources: {}", versionNames, e);
             throw e;
         }
         // Track the number of lines in the merged table and return final number.
         mergeFeedsResult.linesPerTable.put(table.name, ctx.mergedLineNumber);
         return ctx.mergedLineNumber;
-    }
-
-    private boolean iterateOverRows(MergeLineContext ctx) throws IOException {
-        // Iterate over rows in table, writing them to the out file.
-        while (ctx.csvReader.readRecord()) {
-            ctx.startNewRow();
-            if (ctx.checkMismatchedAgency()) {
-                // If there is a mismatched agency, return immediately.
-                return false;
-            }
-            ctx.updateFutureFeedFirstDate();
-            // If checkMismatchedAgency flagged skipFile, loop back to the while loop. (Note: this is
-            // intentional because we want to check all of the agency ids in the file).
-            if (ctx.skipFile) continue;
-            // Check certain initial conditions on the first line of the file.
-            ctx.checkFirstLineConditions();
-            ctx.initializeRowValues();
-            if (ctx.csvReader.getValues().length == 1) {
-                LOG.warn("Found blank line. Skipping...");
-                continue;
-            }
-            // Construct row values. If a failure condition was encountered, return -1.
-            if (!ctx.constructRowValues()) {
-                return false;
-            }
-            ctx.finishRowAndWriteToZip(serviceIdsToCloneAndRename);
-        }
-        return true;
     }
 
     /**
@@ -410,7 +402,7 @@ public class MergeFeedsJob extends MonitorableJob {
             return serviceIdsMatch ? EXTEND_FUTURE : MergeStrategy.FAIL_DUE_TO_MATCHING_TRIP_IDS;
         }
         if (serviceIdsMatch) {
-            // If just the service_ids are an exact match, check the that the stoptimes having matching signatures
+            // If just the service_ids are an exact match, check the that the stop_times having matching signatures
             // between the two feeds (i.e., each stop time in the ordered list is identical between the two feeds).
             Feed futureFeed = new Feed(DataManager.GTFS_DATA_SOURCE, futureFeedToMerge.version.namespace);
             Feed activeFeed = new Feed(DataManager.GTFS_DATA_SOURCE, activeFeedToMerge.version.namespace);
