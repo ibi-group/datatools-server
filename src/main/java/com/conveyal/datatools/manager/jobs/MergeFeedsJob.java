@@ -121,10 +121,14 @@ public class MergeFeedsJob extends MonitorableJob {
      * dataset. Otherwise, this will be null throughout the life of the job.
      */
     final FeedVersion mergedVersion;
-    protected Set<String> tripIdsToModifyForActiveFeed = new HashSet<>();
-    protected Set<String> tripIdsToSkipForActiveFeed = new HashSet<>();
-    protected Set<String> serviceIdsToExtend = new HashSet<>();
-    protected Set<String> serviceIdsToCloneAndRename = new HashSet<>();
+    @JsonIgnore @BsonIgnore
+    public Set<String> tripIdsToModifyForActiveFeed = new HashSet<>();
+    @JsonIgnore @BsonIgnore
+    public Set<String> tripIdsToSkipForActiveFeed = new HashSet<>();
+    @JsonIgnore @BsonIgnore
+    public Set<String> serviceIdsToExtend = new HashSet<>();
+    @JsonIgnore @BsonIgnore
+    public Set<String> serviceIdsToCloneAndRename = new HashSet<>();
     private List<FeedToMerge> feedsToMerge;
 
     public MergeFeedsJob(Auth0UserProfile owner, Set<FeedVersion> feedVersions, String file, MergeFeedsType mergeType) {

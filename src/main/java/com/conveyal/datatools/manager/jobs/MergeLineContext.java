@@ -248,7 +248,7 @@ public class MergeLineContext {
         return mergeFeedsResult.skippedIds.contains(key) || serviceIdShouldBeSkipped;
     }
 
-    public boolean checkMergeConflicts() throws IOException {
+    public boolean checkFieldForMergeConflicts() throws IOException {
         Set<NewGTFSError> idErrors = getIdErrors();
         // Store values for key fields that have been encountered and update any key values that need modification due
         // to conflicts.
@@ -853,7 +853,7 @@ public class MergeLineContext {
             // reference tracker will get far too large if we attempt to use it to
             // track references for a large number of feeds (e.g., every feed in New
             // York State).
-            if (job.mergeType.equals(SERVICE_PERIOD) && checkMergeConflicts()) continue;
+            if (job.mergeType.equals(SERVICE_PERIOD) && checkFieldForMergeConflicts()) continue;
             // If the current field is a foreign reference, check if the reference has been removed in the
             // merged result. If this is the case (or other conditions are met), we will need to skip this
             // record. Likewise, if the reference has been modified, ensure that the value written to the
