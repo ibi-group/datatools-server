@@ -54,6 +54,11 @@ public class FeedSourceSpecificDeploymentControllerTest {
         }
     }
 
+
+    /**
+     * Create a feed source specific deployment with default router (i.e. routerId set to null)
+     * @see NysdotDeploymentControllerTest#canCreateFeedSourceSpecificDeploymentForNysdot()
+     */
     @Test
     public void canCreateFeedSourceSpecificDeploymentWithDefaultRouter() throws IOException {
         // Create a feed source specific deployment.

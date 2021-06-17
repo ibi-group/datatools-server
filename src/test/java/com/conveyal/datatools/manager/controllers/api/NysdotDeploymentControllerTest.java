@@ -58,6 +58,10 @@ public class NysdotDeploymentControllerTest {
         DataManager.overrideConfigProperty(nysdotEnabledField, prevNysdotEnabled);
     }
 
+    /**
+     * Create a feed source specific deployment for NYSDOT (i.e. nysdot enabled, router for each feed source)
+     * @see FeedSourceSpecificDeploymentControllerTest#canCreateFeedSourceSpecificDeploymentWithDefaultRouter()
+     */
     @Test
     public void canCreateFeedSourceSpecificDeploymentForNysdot() throws IOException {
         HttpResponse createDeploymentResponse = TestUtils.makeRequest( "/api/manager/secure/deployments/fromfeedsource/" + feedSource.id,
