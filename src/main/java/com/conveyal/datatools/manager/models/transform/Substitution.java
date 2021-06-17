@@ -23,7 +23,7 @@ public class Substitution implements Serializable {
 
     /**
      * Whether this substitution object is invalid.
-     * This property is read-only from the UI (empty setter below) and is not persisted to Mongo.
+     * The `valid` property is read-only from the UI (see the empty setter below) and is not persisted to Mongo.
      * @return rue if the pattern for this substitution is invalid.
      */
     @BsonIgnore
@@ -36,10 +36,13 @@ public class Substitution implements Serializable {
         }
     }
 
+    /**
+     * This empty setter is needed to send the `valid` field to the UI
+     * and to accept, without doing anything, substitution data from the UI that contain the `valid` field.
+     * The `valid` property is read-only from the UI and is not persisted to Mongo.
+     */
     @BsonIgnore
-    public void setValid(boolean value) {
-        // Does nothing (read-only field).
-    }
+    public void setValid(boolean value) { }
 
     private Pattern patternObject;
     /**
