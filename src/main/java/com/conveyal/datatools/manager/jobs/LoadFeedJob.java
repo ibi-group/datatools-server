@@ -1,6 +1,6 @@
 package com.conveyal.datatools.manager.jobs;
 
-import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.status.FeedVersionJob;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -12,7 +12,7 @@ import org.slf4j.LoggerFactory;
  * the load step will skip uploading the feed to S3 to avoid overwriting the existing files there (this shouldn't be
  * harmful, but it is a waste of time/bandwidth and will overwrite the timestamp on the file which could cause confusion).
  */
-public class LoadFeedJob extends MonitorableJob {
+public class LoadFeedJob extends FeedVersionJob {
     public static final Logger LOG = LoggerFactory.getLogger(LoadFeedJob.class);
 
     private FeedVersion feedVersion;
@@ -33,6 +33,11 @@ public class LoadFeedJob extends MonitorableJob {
     @JsonProperty
     public String getFeedVersionId () {
         return feedVersion.id;
+    }
+
+    @JsonProperty
+    public String getFeedSourceId () {
+        return feedVersion.feedSourceId;
     }
 
     @Override

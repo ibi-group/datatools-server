@@ -5,6 +5,7 @@ import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.JobUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -40,7 +41,7 @@ public class NotifyUsersForSubscriptionJob implements Runnable {
             return;
         }
         NotifyUsersForSubscriptionJob notifyJob = new NotifyUsersForSubscriptionJob(subscriptionType, target, message);
-        DataManager.lightExecutor.execute(notifyJob);
+        JobUtils.lightExecutor.execute(notifyJob);
         LOG.info("Notification job scheduled in light executor");
     }
 

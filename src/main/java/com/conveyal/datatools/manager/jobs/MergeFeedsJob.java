@@ -1,6 +1,6 @@
 package com.conveyal.datatools.manager.jobs;
 
-import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.status.FeedSourceJob;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
@@ -106,7 +106,7 @@ import static com.conveyal.datatools.manager.utils.MergeFeedUtils.*;
  *      example, directions for routes that are not in the future routes.txt file should be appended
  *      to the future directions.txt file in the merged feed.
  */
-public class MergeFeedsJob extends MonitorableJob {
+public class MergeFeedsJob extends FeedSourceJob {
 
     private static final Logger LOG = LoggerFactory.getLogger(MergeFeedsJob.class);
     public static final ObjectMapper mapper = new ObjectMapper();
@@ -479,5 +479,9 @@ public class MergeFeedsJob extends MonitorableJob {
             serviceIdsToExtend.add(futureServiceId);
         }
         return false;
+    }
+
+    public String getFeedSourceId() {
+        return feedSource.id;
     }
 }

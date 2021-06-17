@@ -1,9 +1,10 @@
 package com.conveyal.datatools.manager.jobs;
 
-import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.status.FeedVersionJob;
 import com.conveyal.datatools.editor.jobs.CreateSnapshotJob;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Snapshot;
@@ -21,6 +22,7 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.util.List;
+import java.util.Set;
 
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.VERSION_CLONE;
 
@@ -32,7 +34,7 @@ import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.VERSION_
  *
  * @author mattwigway
  */
-public class ProcessSingleFeedJob extends MonitorableJob {
+public class ProcessSingleFeedJob extends FeedVersionJob {
     private final FeedVersion feedVersion;
     private final boolean isNewVersion;
     private static final Logger LOG = LoggerFactory.getLogger(ProcessSingleFeedJob.class);
@@ -170,16 +172,24 @@ public class ProcessSingleFeedJob extends MonitorableJob {
             } catch (IOException e) {
                 status.fail("Could not clone version.", e);
             }
-        }
-
-        // FIXME: Should we overwrite the input GTFS dataset if transforming in place?
-
-        // TODO: Any other activities that need to be run (e.g., module-specific activities).
-        if (DataManager.isModuleEnabled("deployment")) {
-//            Project project = feedSource.retrieveProject();
-//            if (project.autoDeployId)
-            // TODO: Get deployment, update feed version for feed source, and kick off deployment to server that
-            //  deployment is currently pointed at.
+        } else {
+            // If deployment module is enabled, the feed source is deployable and the project can be auto deployed at
+            // this stage, create an auto deploy job. Note: other checks occur within job to ensure appropriate
+            // conditions are met.
+            Set<AutoDeployType> projectAutoDeployTypes = feedSource.retrieveProject().autoDeployTypes;
+            if (
+                DataManager.isModuleEnabled("deployment") &&
+                    feedSource.deployable &&
+                    (
+                        projectAutoDeployTypes.contains(AutoDeployType.ON_PROCESS_FEED) ||
+                            (
+                                feedVersion.retrievalMethod == FeedRetrievalMethod.FETCHED_AUTOMATICALLY &&
+                                    projectAutoDeployTypes.contains(AutoDeployType.ON_FEED_FETCH)
+                            )
+                    )
+            ) {
+                addNextJob(new AutoDeployJob(feedSource.retrieveProject(), owner));
+            }
         }
     }
 
