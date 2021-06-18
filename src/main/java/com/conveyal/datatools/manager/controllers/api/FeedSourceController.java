@@ -12,6 +12,8 @@ import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.models.transform.NormalizeFieldTransformation;
+import com.conveyal.datatools.manager.models.transform.Substitution;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.JobUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
@@ -38,6 +40,8 @@ import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.getPOJOFromRequestBody;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.models.ExternalFeedSourceProperty.constructId;
+import static com.conveyal.datatools.manager.models.transform.NormalizeFieldTransformation.getInvalidSubstitutionMessage;
+import static com.conveyal.datatools.manager.models.transform.NormalizeFieldTransformation.getInvalidSubstitutionPatterns;
 import static spark.Spark.delete;
 import static spark.Spark.get;
 import static spark.Spark.post;
@@ -124,29 +128,20 @@ public class FeedSourceController {
         }
     }
 
-    private static boolean stringIsPresent(String value, String fieldName, Request req) {
-        if (StringUtils.isEmpty(value)) {
-            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, String.format("Feed source %s must not be empty", fieldName));
-            return false;
-        }
-
-        return true;
-    }
-
     /**
      * Check that updated or new feedSource object is valid. This method should be called before a feedSource is
      * persisted to the database.
      * TODO: Determine if other checks ought to be applied here.
      */
-    private static boolean validate(Request req, FeedSource feedSource) {
-        if (!stringIsPresent(feedSource.name, "name", req)) {
-            return false;
+    private static void validate(Request req, FeedSource feedSource) {
+        List<String> validationIssues = new ArrayList<>();
+        if (StringUtils.isEmpty(feedSource.name)) {
+            validationIssues.add("Name field must not be empty.");
         }
         if (feedSource.retrieveProject() == null) {
-            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Valid project ID must be provided.");
-            return false;
+            validationIssues.add("Valid project ID must be provided.");
         }
-        // Collect all retrieval methods found in tranform rules into a list.
+        // Collect all retrieval methods found in transform rules into a list.
         List<FeedRetrievalMethod> retrievalMethods = feedSource.transformRules.stream()
             .map(rule -> rule.retrievalMethods)
             .flatMap(Collection::stream)
@@ -155,14 +150,27 @@ public class FeedSourceController {
         if (retrievalMethods.size() > retrievalMethodSet.size()) {
             // Explicitly check that the list of retrieval methods is not larger than the set (i.e., that there are no
             // duplicates).
+            validationIssues.add("Retrieval methods cannot be defined more than once in transformation rules.");
+        }
+        // Validate transformations (currently this just checks that regex patterns are valid).
+        List<Substitution> substitutions = feedSource.transformRules.stream()
+            .map(rule -> rule.transformations)
+            .flatMap(Collection::stream)
+            .filter(t -> t instanceof NormalizeFieldTransformation)
+            .map(t -> ((NormalizeFieldTransformation) t).substitutions)
+            .flatMap(Collection::stream)
+            .collect(Collectors.toList());
+        List<String> invalidPatterns = getInvalidSubstitutionPatterns(substitutions);
+        if (!invalidPatterns.isEmpty()) {
+            validationIssues.add(getInvalidSubstitutionMessage(invalidPatterns));
+        }
+        if (!validationIssues.isEmpty()) {
             logMessageAndHalt(
                 req,
                 HttpStatus.BAD_REQUEST_400,
-                "Retrieval methods cannot be defined more than once in transformation rules."
+                "Request was invalid for the following reasons: " + String.join(", ", validationIssues)
             );
-            return false;
         }
-        return true;
     }
 
     /**
