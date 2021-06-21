@@ -141,9 +141,40 @@ public class NormalizeFieldTransformation extends ZipTransformation {
 
     @Override
     public void validateParameters(MonitorableJob.Status status) {
+        // fieldName must not be null
         if (fieldName == null) {
             status.fail("Field name must not be null");
+            return;
         }
+
+        // Substitutions must have valid patterns (gather invalid patterns).
+        List<String> invalidPatterns = getInvalidSubstitutionPatterns(substitutions);
+        if (!invalidPatterns.isEmpty()) {
+            status.fail(getInvalidSubstitutionMessage(invalidPatterns));
+        }
+    }
+
+    /**
+     * @return A formatted error message regarding invalid substitution search patterns.
+     */
+    public static String getInvalidSubstitutionMessage(List<String> invalidPatterns) {
+        return String.format(
+            "Some substitution patterns are invalid: %s",
+            String.join(", ", invalidPatterns)
+        );
+    }
+
+    /**
+     * @return a list of invalid substitution search patterns.
+     */
+    public static List<String> getInvalidSubstitutionPatterns(List<Substitution> substitutions) {
+        List<String> invalidPatterns = new ArrayList<>();
+        for (Substitution substitution : substitutions) {
+            if (!substitution.isValid()) {
+                invalidPatterns.add(substitution.pattern);
+            }
+        }
+        return invalidPatterns;
     }
 
     @Override
