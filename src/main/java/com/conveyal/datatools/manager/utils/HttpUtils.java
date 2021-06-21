@@ -50,7 +50,7 @@ public class HttpUtils {
             case POST:
                 try {
                     HttpPost postRequest = new HttpPost(uri);
-                    postRequest.setEntity(new StringEntity(bodyContent));
+                    if (bodyContent != null) postRequest.setEntity(new StringEntity(bodyContent));
                     postRequest.setConfig(timeoutConfig);
                     httpUriRequest = postRequest;
                 } catch (UnsupportedEncodingException e) {

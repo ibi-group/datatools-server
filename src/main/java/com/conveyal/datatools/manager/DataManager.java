@@ -29,11 +29,13 @@ import com.conveyal.datatools.manager.extensions.transitland.TransitLandFeedReso
 import com.conveyal.datatools.manager.jobs.FeedUpdater;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.GraphQLController;
 import com.conveyal.gtfs.loader.Table;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
 import com.google.common.collect.Sets;
 import com.google.common.io.Resources;
@@ -436,6 +438,26 @@ public class DataManager {
      */
     public static boolean isExtensionEnabled(String extensionName) {
         return hasConfigProperty("extensions." + extensionName) && "true".equals(getExtensionPropertyAsText(extensionName, "enabled"));
+    }
+
+    /**
+     * In a test environment allows for overriding a specific config value on the server config object.
+     */
+    public static void overrideConfigProperty(String name, String value) {
+        String parts[] = name.split("\\.");
+        ObjectNode node = (ObjectNode) serverConfig;
+
+        //Loop through the dot separated field names to obtain final node and override that node's value.
+        for (int i = 0; i < parts.length; i++) {
+            if (i < parts.length - 1) {
+                if (!node.has(parts[i])) {
+                    node.set(parts[i], JsonUtil.objectMapper.createObjectNode());
+                }
+                node = (ObjectNode) node.get(parts[i]);
+            } else {
+                node.put(parts[i], value);
+            }
+        }
     }
 
     /**
