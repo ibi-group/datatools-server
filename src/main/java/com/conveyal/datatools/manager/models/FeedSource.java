@@ -615,7 +615,7 @@ public class FeedSource extends Model implements Cloneable {
      * occurring at the same time).
      */
     public boolean hasJobsInProgress() {
-        return JobUtils.filterActiveJobs(JobUtils.getAllJobs()).stream().anyMatch(job -> {
+        return JobUtils.filterStagedAndActiveJobs(JobUtils.getAllJobs()).stream().anyMatch(job -> {
             String jobFeedSourceId = null;
             if (
                 job instanceof FetchSingleFeedJob ||
