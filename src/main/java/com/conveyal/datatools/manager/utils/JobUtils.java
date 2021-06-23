@@ -124,11 +124,11 @@ public class JobUtils {
      */
     public static Set<MonitorableJob> filterStagedJobs(Set<MonitorableJob> jobs) {
         // Note: this must be a thread-safe set in case it is placed into the DataManager#userJobsMap.
-        Set<MonitorableJob> jobsStillActive = Sets.newConcurrentHashSet();
+        Set<MonitorableJob> stagedJobs = Sets.newConcurrentHashSet();
         jobs.stream()
             .filter(job -> !job.status.completed && !job.status.error)
-            .forEach(jobsStillActive::add);
-        return jobsStillActive;
+            .forEach(stagedJobs::add);
+        return stagedJobs;
     }
 
     /**
