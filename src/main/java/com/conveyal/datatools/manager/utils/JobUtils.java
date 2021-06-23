@@ -108,7 +108,7 @@ public class JobUtils {
     }
 
     /**
-     * Filter all jobs based on the active state. A job is only active once running. Note: this exludes "staged" jobs,
+     * Filter all jobs based on the active state. A job is only active once running. Note: this excludes "staged" jobs,
      * i.e., those which have not yet started.
      */
     public static Set<MonitorableJob> getAllActiveJobs() {
