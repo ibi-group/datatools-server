@@ -98,20 +98,36 @@ public class JobUtils {
             return Sets.newConcurrentHashSet();
         }
         if (clearCompleted) {
-            // Any active jobs will still have their status updated, so they need to be retrieved again with any status
+            // Any staged jobs will still have their status updated, so they need to be retrieved again with any status
             // updates. All completed or errored jobs are in their final state and will not be updated any longer, so we
             // remove them once the client has seen them.
-            Set<MonitorableJob> jobsStillActive = filterActiveJobs(allJobsForUser);
+            Set<MonitorableJob> jobsStillActive = filterStagedJobs(allJobsForUser);
 
             userJobsMap.put(userId, jobsStillActive);
         }
         return allJobsForUser;
     }
 
+    /**
+     * Filter jobs based on the active state. A job is only active once running.
+     */
     public static Set<MonitorableJob> filterActiveJobs(Set<MonitorableJob> jobs) {
         // Note: this must be a thread-safe set in case it is placed into the DataManager#userJobsMap.
         Set<MonitorableJob> jobsStillActive = Sets.newConcurrentHashSet();
         jobs.stream().filter(job -> job.active).forEach(jobsStillActive::add);
+        return jobsStillActive;
+    }
+
+    /**
+     * Filter jobs based on status. Once a job has been created the status values are available for review. A staged job
+     * may or may not be active.
+     */
+    public static Set<MonitorableJob> filterStagedJobs(Set<MonitorableJob> jobs) {
+        // Note: this must be a thread-safe set in case it is placed into the DataManager#userJobsMap.
+        Set<MonitorableJob> jobsStillActive = Sets.newConcurrentHashSet();
+        jobs.stream()
+            .filter(job -> !job.status.completed && !job.status.error)
+            .forEach(jobsStillActive::add);
         return jobsStillActive;
     }
 
