@@ -257,9 +257,9 @@
         </dependency>
         <!-- gtfs-realtime-bindings for gtfs-rt parsing -->
         <dependency>
-            <groupId>io.mobilitydata.transit</groupId>
+            <groupId>com.google.transit</groupId>
             <artifactId>gtfs-realtime-bindings</artifactId>
-            <version>0.0.7</version>
+            <version>0.0.4</version>
         </dependency>
         <!-- Provides JUnit 5.x parametrized tests -->
         <dependency>

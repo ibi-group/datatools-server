@@ -78,10 +78,9 @@ public class HttpUtils {
                 LOG.error("Request method type unknown: {}", method);
                 return null;
         }
-
-        try (CloseableHttpClient httpClient = HttpClients.createDefault();
-             CloseableHttpResponse response = httpClient.execute(httpUriRequest)) {
-            return response;
+        try {
+            CloseableHttpClient httpClient = HttpClients.createDefault();
+            return httpClient.execute(httpUriRequest);
         } catch (IOException e) {
             LOG.error("An exception occurred while making a request to {}", uri, e);
             return null;

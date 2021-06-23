@@ -20,7 +20,7 @@ public class OtpRouterConfig implements Serializable {
     public Double carDropoffTime;
 
     public Collection<Updater> updaters;
-
+    @JsonIgnoreProperties(ignoreUnknown = true)
     public static class Updater implements Serializable {
         private static final long serialVersionUID = 1L;
         public String type;
@@ -31,7 +31,17 @@ public class OtpRouterConfig implements Serializable {
 
         public String url;
 
-        public String defaultAgencyId;
+        public String feedId;
+
+        @Override
+        public String toString() {
+            return "Updater{" +
+                    "type='" + type + '\'' +
+                    ", sourceType='" + sourceType + '\'' +
+                    ", feedId='" + feedId + '\'' +
+                    ", url='" + url + '\'' +
+                    '}';
+        }
     }
     
     public String requestLogFile;
