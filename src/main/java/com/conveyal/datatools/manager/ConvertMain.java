@@ -98,9 +98,9 @@ public class ConvertMain {
         migrateEditorFeeds();
         LOG.info("Done queueing!!!!!!!!");
         int totalJobs = JobUtils.getAllJobs().size();
-        while (!JobUtils.filterActiveJobs(JobUtils.getAllJobs()).isEmpty()) {
+        while (!JobUtils.getAllActiveJobs().isEmpty()) {
             // While there are still active jobs, continue waiting.
-            Set<MonitorableJob> activeJobs = JobUtils.filterActiveJobs(JobUtils.getAllJobs());
+            Set<MonitorableJob> activeJobs = JobUtils.getAllActiveJobs();
             LOG.info(String.format("%d/%d jobs still active. Checking for completion again in 5 seconds...", activeJobs.size(), totalJobs));
 //            LOG.info(String.join(", ", activeJobs.stream().map(job -> job.name).collect(Collectors.toList())));
             int jobsInExecutor = ((ThreadPoolExecutor) JobUtils.heavyExecutor).getActiveCount();
