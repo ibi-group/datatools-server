@@ -306,8 +306,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
         try (CloseableHttpResponse response = httpClient.execute(httpGet)) {
             otpRunnerStatus = JsonUtil.objectMapper.readValue(response.getEntity().getContent(), OtpRunnerStatus.class);
         } catch (IOException e) {
-            LOG.error("Could not get otp-runner status from {}", url);
-            e.printStackTrace();
+            LOG.error("Could not get otp-runner status from {}. It might not be available yet.", url);
             return false;
         }
 
