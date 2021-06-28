@@ -14,6 +14,7 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.OtpServer;
+import com.conveyal.datatools.manager.utils.ErrorUtils;
 import com.conveyal.datatools.manager.utils.TimeTracker;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -28,6 +29,8 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 import static com.conveyal.datatools.manager.jobs.DeployJob.OTP_RUNNER_STATUS_FILE;
@@ -320,6 +323,14 @@ public class MonitorServerStatusJob extends MonitorableJob {
 
         // if the otp-runner status file contains an error message, fail the job
         if (otpRunnerStatus.error) {
+            // report to bugsnag if configured
+            Map<String, String> debuggingMessages = new HashMap<>();
+            debuggingMessages.put("otp-runner message", otpRunnerStatus.message);
+            ErrorUtils.reportToBugsnag(
+                new RuntimeException("otp-runner reported an error"),
+                debuggingMessages,
+                this.owner
+            );
             failJob(otpRunnerStatus.message);
             return false;
         }
