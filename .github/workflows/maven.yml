@@ -107,7 +107,7 @@ jobs:
         if: github.event_name == 'push'
         run: |
           # get branch name of current branch for use in jar name
-          export BRANCH=$GITHUB_HEAD_REF_SLUG
+          export BRANCH=$GITHUB_REF_SLUG
           # Replace forward slashes with underscores in branch name.
           export BRANCH_CLEAN=${BRANCH//\//_}
           # Create directory that will contain artifacts to deploy to s3.
