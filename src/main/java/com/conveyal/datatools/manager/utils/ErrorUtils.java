@@ -9,6 +9,13 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 
+/**
+ * A util class for reporting errors to the project defined by the Bugsnag project notifier API key.
+ *
+ * A Bugsnag project identifier key is unique to a Bugsnag project and allows errors to be saved against it. This key
+ * can be obtained by logging into Bugsnag (https://app.bugsnag.com), clicking on Projects (left side menu) and
+ * selecting the required project. Once selected, the notifier API key is presented.
+ */
 public class ErrorUtils {
     private static final Logger LOG = LoggerFactory.getLogger(ErrorUtils.class);
 
@@ -61,7 +68,9 @@ public class ErrorUtils {
         bugsnag.notify(report);
     }
 
-    // intialize bugsnag
+    /**
+     * Initialize Bugsnag reporting if a Bugsnag key exists in the configuration.
+     */
     public static void initialize() {
         String bugsnagKey = DataManager.getConfigPropertyAsText("BUGSNAG_KEY");
         if (bugsnagKey != null) {
