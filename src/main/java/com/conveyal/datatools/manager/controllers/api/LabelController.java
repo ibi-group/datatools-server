@@ -64,12 +64,19 @@ public class LabelController {
     private static Label createLabel(Request req, Response res) throws IOException {
         Auth0UserProfile userProfile = req.attribute("user");
         Label newLabel = getPOJOFromRequestBody(req, Label.class);
+        try {
+            newLabel.projectId = req.queryParams("projectId");
+        } catch (Exception e) {
+            logMessageAndHalt(req, 500, "ProjectId not supplied in request.");
+            return null;
+        }
         validate(req, newLabel);
 
         try {
             Persistence.labels.create(newLabel);
             // Notify project subscribers of new label creation.
-            Project parentProject = Persistence.projects.getById(newLabel.projectId);
+            Project parentProject = newLabel.retrieveProject();
+
             NotifyUsersForSubscriptionJob.createNotification(
                     "project-updated",
                     newLabel.projectId,
@@ -109,6 +116,11 @@ public class LabelController {
         String labelId = req.params("id");
         Label formerLabel = requestLabelById(req, Actions.MANAGE);
         Label updatedLabel = getPOJOFromRequestBody(req, Label.class);
+
+        // Some things shouldn't be updated
+        updatedLabel.projectId = formerLabel.projectId;
+        updatedLabel.id = formerLabel.id;
+
         validate(req, updatedLabel);
 
         Persistence.labels.replace(labelId, updatedLabel);
@@ -131,6 +143,13 @@ public class LabelController {
      */
     private static Label deleteLabel(Request req, Response res) {
         Label label = requestLabelById(req, Actions.MANAGE);
+
+        // More specific error message if label doesn't exist
+        if (label == null) {
+            logMessageAndHalt(req, 403, "Label does not exist.");
+            return null;
+        }
+
         try {
             label.delete();
             return label;

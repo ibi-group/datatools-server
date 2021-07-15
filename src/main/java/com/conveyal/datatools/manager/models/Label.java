@@ -14,7 +14,7 @@ import org.slf4j.LoggerFactory;
 import static com.mongodb.client.model.Filters.eq;
 
 public class Label extends Model implements Cloneable{
-    public static final Logger LOG = LoggerFactory.getLogger(FeedSource.class);
+    public static final Logger LOG = LoggerFactory.getLogger(Label.class);
 
     /**
      * The collection of which this Label is a part
@@ -22,7 +22,7 @@ public class Label extends Model implements Cloneable{
     public String projectId;
 
     /**
-     * Get the Project of which this feed is a part
+     * Get the Project of which this label is a part
      */
     public Project retrieveProject() {
         return projectId != null ? Persistence.projects.getById(projectId) : null;
@@ -49,12 +49,14 @@ public class Label extends Model implements Cloneable{
     /**
      * Create a new label
      */
-    public Label (String name, String description, String color, boolean adminOnly) {
+    public Label (String name, String description, String color, boolean adminOnly, String projectId) {
         super();
         this.name = name;
         this.description = description != null ? description : "";
         this.color = color != null ? color : "#fff";
         this.adminOnly = adminOnly;
+
+        this.projectId = projectId;
     }
 
     /**
@@ -62,7 +64,7 @@ public class Label extends Model implements Cloneable{
      * Should not be used in general code.
      */
     public Label () {
-        this(null, null, null, false);
+        this(null, null, null, false, null);
     }
 
     /**
@@ -70,7 +72,7 @@ public class Label extends Model implements Cloneable{
      */
     public void delete() {
         try {
-            Persistence.feedSources.removeById(this.id);
+            Persistence.labels.removeById(this.id);
         } catch (Exception e) {
             LOG.error("Could not delete label", e);
         }
