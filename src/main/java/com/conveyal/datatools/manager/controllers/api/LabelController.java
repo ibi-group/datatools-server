@@ -172,6 +172,18 @@ public class LabelController {
         }
         return checkLabelPermissions(req, Persistence.labels.getById(id));
     }
+    public static Label requestLabelById(Request req, String id) {
+        if (id == null) {
+            logMessageAndHalt(req, 400, "Please specify id param");
+        }
+        try {
+            // This can sometimes lead to a second check on permissions
+            return checkLabelPermissions(req, Persistence.labels.getById(id));
+        } catch(Exception e) {
+            logMessageAndHalt(req, 400, "Label with ID " + id + " not found");
+        }
+        return null;
+    }
 
     public static Label checkLabelPermissions(Request req, Label label) {
         Auth0UserProfile userProfile = req.attribute("user");

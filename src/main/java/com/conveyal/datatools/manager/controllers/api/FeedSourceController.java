@@ -7,11 +7,7 @@ import com.conveyal.datatools.manager.auth.Actions;
 import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
 import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
-import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
-import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
-import com.conveyal.datatools.manager.models.FeedSource;
-import com.conveyal.datatools.manager.models.JsonViews;
-import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.models.*;
 import com.conveyal.datatools.manager.models.transform.NormalizeFieldTransformation;
 import com.conveyal.datatools.manager.models.transform.Substitution;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -299,7 +295,10 @@ public class FeedSourceController {
         if (id == null) {
             logMessageAndHalt(req, 400, "Please specify id param");
         }
-        return checkFeedSourcePermissions(req, Persistence.feedSources.getById(id), action);
+
+        FeedSource feedSource = checkFeedSourcePermissions(req, Persistence.feedSources.getById(id), action);
+        feedSource.labels = labelsUserCanView(req, feedSource);
+        return feedSource;
     }
 
     public static FeedSource checkFeedSourcePermissions(Request req, FeedSource feedSource, Actions action) {
@@ -334,6 +333,28 @@ public class FeedSourceController {
         }
         // If we make it here, user has permission and the requested feed source is valid.
         return feedSource;
+    }
+
+    /* Check if user is admin and if they are not then stream over the labels
+       and filter.
+     */
+    private static List<String> labelsUserCanView(Request req, FeedSource feedSource) {
+        Auth0UserProfile userProfile = req.attribute("user");
+        String orgId = feedSource.organizationId();
+        boolean isAdmin = userProfile.canAdministerProject(feedSource.projectId, orgId);
+
+        if(isAdmin) {
+            // Return all labels, since all can be read
+            return feedSource.labels;
+        }
+
+        // Since we are not admin, show only labels everyone can see
+        return feedSource.labels.stream()
+                // Need to resolve label IDs to labels, then back
+                .map(labelId -> LabelController.requestLabelById(req, labelId))
+                .filter(label -> !label.adminOnly)
+                .map(label -> label.id)
+                .collect(Collectors.toList());
     }
 
     // FIXME: use generic API controller and return JSON documents via BSON/Mongo

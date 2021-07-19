@@ -10,7 +10,6 @@ import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
-import com.conveyal.datatools.manager.deserializers.LabelDeserializer;
 import com.conveyal.datatools.manager.jobs.CreateFeedVersionFromSnapshotJob;
 import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
 import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
@@ -18,13 +17,15 @@ import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
 import com.conveyal.datatools.manager.models.transform.FeedTransformation;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.serializers.LabelSerializer;
 import com.conveyal.datatools.manager.utils.JobUtils;
 import com.conveyal.gtfs.GTFS;
 import com.fasterxml.jackson.annotation.*;
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.model.Sorts;
 import org.bson.codecs.pojo.annotations.BsonIgnore;
+import org.bson.codecs.pojo.annotations.BsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -142,10 +143,10 @@ public class FeedSource extends Model implements Cloneable {
      */
     public String snapshotVersion;
 
-    // Using a custom deserializer, the input can be an ID of a label, while the output will be the
-    // entire label object.
-    @JsonDeserialize(using = LabelDeserializer.class)
-    public List<Label> labels = new ArrayList<>();
+    // Using a custom serializer, the input can be an ID of a label, while the output will be the
+    // entire label object. This also allows storing labels as IDs.
+    @JsonSerialize(using = LabelSerializer.class)
+    public List<String> labels = new ArrayList<>();
 
     /**
      * The SQL namespace for the most recently verified published {@link FeedVersion}.
