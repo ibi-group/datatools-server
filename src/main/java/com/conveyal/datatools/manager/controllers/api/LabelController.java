@@ -2,7 +2,6 @@ package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.manager.auth.Actions;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
-import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Label;
 import com.conveyal.datatools.manager.models.Project;
@@ -64,24 +63,10 @@ public class LabelController {
     private static Label createLabel(Request req, Response res) throws IOException {
         Auth0UserProfile userProfile = req.attribute("user");
         Label newLabel = getPOJOFromRequestBody(req, Label.class);
-        try {
-            newLabel.projectId = req.queryParams("projectId");
-        } catch (Exception e) {
-            logMessageAndHalt(req, 500, "ProjectId not supplied in request.");
-            return null;
-        }
         validate(req, newLabel);
 
         try {
             Persistence.labels.create(newLabel);
-            // Notify project subscribers of new label creation.
-            Project parentProject = newLabel.retrieveProject();
-
-            NotifyUsersForSubscriptionJob.createNotification(
-                    "project-updated",
-                    newLabel.projectId,
-                    String.format("New label %s created in project %s.", newLabel.name, parentProject.name)
-            );
             return newLabel;
         } catch (Exception e) {
             logMessageAndHalt(req, 500, "Unknown error encountered creating label", e);
@@ -125,15 +110,6 @@ public class LabelController {
 
         Persistence.labels.replace(labelId, updatedLabel);
 
-        // Notify label- and project-subscribed users after successful save
-        NotifyUsersForSubscriptionJob.createNotification(
-                "label-updated",
-                updatedLabel.id,
-                String.format("Label property updated for %s.", updatedLabel.name));
-        NotifyUsersForSubscriptionJob.createNotification(
-                "project-updated",
-                updatedLabel.projectId,
-                String.format("Project updated (label property changed for %s).", updatedLabel.name));
         return updatedLabel;
     }
     /**
