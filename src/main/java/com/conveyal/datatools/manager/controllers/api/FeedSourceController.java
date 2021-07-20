@@ -138,6 +138,11 @@ public class FeedSourceController {
         if (feedSource.retrieveProject() == null) {
             validationIssues.add("Valid project ID must be provided.");
         }
+        for (String labelId: feedSource.labels) {
+            if (Persistence.labels.getById(labelId) == null) {
+                validationIssues.add("All labels assigned to feed must exist.");
+            }
+        }
         // Collect all retrieval methods found in transform rules into a list.
         List<FeedRetrievalMethod> retrievalMethods = feedSource.transformRules.stream()
             .map(rule -> rule.retrievalMethods)

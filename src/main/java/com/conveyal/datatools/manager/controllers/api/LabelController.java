@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.manager.auth.Actions;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Label;
 import com.conveyal.datatools.manager.models.Project;
@@ -16,6 +17,7 @@ import spark.Response;
 
 import java.io.IOException;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.getPOJOFromRequestBody;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
@@ -127,6 +129,13 @@ public class LabelController {
         }
 
         try {
+            // Iterate over feed sources and remove any references to the label
+            Persistence.feedSources.getAll().forEach(feedSource -> {
+                feedSource.labels = feedSource.labels.stream()
+                        .filter(l -> !l.equals(label.id))
+                        .collect(Collectors.toList());
+            });
+
             label.delete();
             return label;
         } catch (Exception e) {
