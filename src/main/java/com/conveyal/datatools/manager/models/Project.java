@@ -108,6 +108,7 @@ public class Project extends Model {
     /**
      * Get all the labels for this project.
      */
+    @JsonProperty("labels")
     public Collection<Label> retrieveProjectLabels() {
         return Persistence.labels.getAll().stream()
                 .filter(fs -> this.id.equals(fs.projectId))
