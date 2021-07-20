@@ -74,6 +74,7 @@ public class FeedSourceController {
         }
         Collection<FeedSource> projectFeedSources = project.retrieveProjectFeedSources();
         for (FeedSource source: projectFeedSources) {
+            source = checkFeedSourcePermissions(req, source, Actions.VIEW);
             String orgId = source.organizationId();
             // If user can view or manage feed, add to list of feeds to return. NOTE: By default most users with access
             // to a project should be able to view all feed sources. Custom privileges would need to be provided to
@@ -296,9 +297,7 @@ public class FeedSourceController {
             logMessageAndHalt(req, 400, "Please specify id param");
         }
 
-        FeedSource feedSource = checkFeedSourcePermissions(req, Persistence.feedSources.getById(id), action);
-        feedSource.labels = labelsUserCanView(req, feedSource);
-        return feedSource;
+        return checkFeedSourcePermissions(req, Persistence.feedSources.getById(id), action);
     }
 
     public static FeedSource checkFeedSourcePermissions(Request req, FeedSource feedSource, Actions action) {
@@ -310,9 +309,11 @@ public class FeedSourceController {
         }
         String orgId = feedSource.organizationId();
         boolean authorized;
+        boolean isAdmin = userProfile.canAdministerProject(feedSource.id, orgId);
+
         switch (action) {
             case CREATE:
-                authorized = userProfile.canAdministerProject(feedSource.projectId, orgId);
+                authorized = isAdmin;
                 break;
             case MANAGE:
                 authorized = userProfile.canManageFeed(orgId, feedSource.projectId, feedSource.id);
@@ -331,31 +332,21 @@ public class FeedSourceController {
             // Throw halt if user not authorized.
             logMessageAndHalt(req, 403, "User not authorized to perform action on feed source");
         }
+
+        // Remove labels user is not allowed to see if user is not admin
+        if (!isAdmin) {
+            feedSource.labels = feedSource.labels.stream()
+                    // Need to resolve label IDs to labels, then back
+                    .map(labelId -> Persistence.labels.getById(labelId))
+                    .filter(label -> !label.adminOnly)
+                    .map(label -> label.id)
+                    .collect(Collectors.toList());
+        }
+
         // If we make it here, user has permission and the requested feed source is valid.
         return feedSource;
     }
 
-    /* Check if user is admin and if they are not then stream over the labels
-       and filter.
-     */
-    private static List<String> labelsUserCanView(Request req, FeedSource feedSource) {
-        Auth0UserProfile userProfile = req.attribute("user");
-        String orgId = feedSource.organizationId();
-        boolean isAdmin = userProfile.canAdministerProject(feedSource.projectId, orgId);
-
-        if(isAdmin) {
-            // Return all labels, since all can be read
-            return feedSource.labels;
-        }
-
-        // Since we are not admin, show only labels everyone can see
-        return feedSource.labels.stream()
-                // Need to resolve label IDs to labels, then back
-                .map(labelId -> LabelController.requestLabelById(req, labelId))
-                .filter(label -> !label.adminOnly)
-                .map(label -> label.id)
-                .collect(Collectors.toList());
-    }
 
     // FIXME: use generic API controller and return JSON documents via BSON/Mongo
     public static void register (String apiPrefix) {
