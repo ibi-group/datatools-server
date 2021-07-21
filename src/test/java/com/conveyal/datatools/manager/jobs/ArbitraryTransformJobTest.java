@@ -160,51 +160,6 @@ public class ArbitraryTransformJobTest extends UnitTest {
     }
 
     @Test
-    public void canCloneZipFileAndTransform() throws IOException, SQLException {
-        // Generate random UUID for feedId, which gets placed into the csv data.
-        final String feedId = UUID.randomUUID().toString();
-        final String feedInfoContent = generateFeedInfo(feedId);
-        FeedTransformation transformation = ReplaceFileFromStringTransformation.create(feedInfoContent, "feed_info");
-        // Create transform rules for VERSION_CLONE retrieval method.
-        FeedTransformRules transformRules = new FeedTransformRules(transformation, FeedRetrievalMethod.VERSION_CLONE);
-        feedSource.transformRules.add(transformRules);
-        Persistence.feedSources.replace(feedSource.id, feedSource);
-        // Create new version. This will handle processing the initial version, cloning that version, and applying the
-        // transformations to the cloned version. It will conclude once the cloned version is processed.
-        sourceVersion = createFeedVersion(
-            feedSource,
-            zipFolderFiles("fake-agency-with-only-calendar")
-        );
-        // Grab the cloned version and check assertions.
-        targetVersion = feedSource.retrieveLatest();
-        LOG.info("Checking canCloneZipFileAndTransform assertions.");
-        assertEquals(
-            sourceVersion.version + 1,
-            targetVersion.version,
-            "Cloned version number should increment by one over original version."
-        );
-        assertEquals(
-            targetVersion.retrievalMethod,
-            VERSION_CLONE,
-            "Cloned version retrieval method should be VERSION_CLONE"
-        );
-        assertEquals(
-            2, // Magic number should match row count in string produced by generateFeedInfo
-            targetVersion.feedLoadResult.feedInfo.rowCount,
-            "feed_info.txt row count should equal input csv data # of rows"
-        );
-        // Check for presence of new feedId in database (one record).
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.feed_info WHERE feed_id = '%s'",
-                targetVersion.namespace,
-                feedId
-            ),
-            1
-        );
-    }
-
-    @Test
     public void replaceGtfsPlusFileFailsIfSourceIsMissing() throws IOException {
         sourceVersion = createFeedVersion(
             feedSource,
