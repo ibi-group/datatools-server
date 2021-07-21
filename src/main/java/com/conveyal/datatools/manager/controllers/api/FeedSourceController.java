@@ -192,6 +192,10 @@ public class FeedSourceController {
             updatedFeedSource.lastFetched = null;
         }
         Persistence.feedSources.replace(feedSourceId, updatedFeedSource);
+        if (formerFeedSource.equalsExceptLabels(updatedFeedSource)) {
+            // Skip all the updating, since only labels have changed
+            return updatedFeedSource;
+        }
         // After successful save, handle auto fetch job setup.
         Scheduler.handleAutoFeedFetch(updatedFeedSource);
         // Notify feed- and project-subscribed users after successful save

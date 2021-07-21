@@ -326,6 +326,24 @@ public class FeedSource extends Model implements Cloneable {
         return this.name.compareTo(o.name);
     }
 
+    public boolean equalsExceptLabels(FeedSource o) {
+        // Compare every property other than labels
+        return this.name.equals(o.name) &&
+                this.preserveStopTimesSequence == o.preserveStopTimesSequence &&
+                this.transformRules.equals(o.transformRules) &&
+                this.isPublic == o.isPublic &&
+                this.deployable == o.deployable &&
+                this.retrievalMethod.equals(o.retrievalMethod) &&
+                this.fetchFrequency.equals(o.fetchFrequency) &&
+                this.fetchInterval == o.fetchInterval &&
+                this.lastFetched.equals(o.lastFetched) &&
+                this.url.equals(o.url) &&
+                this.s3Url.equals(o.s3Url) &&
+                this.snapshotVersion.equals(o.snapshotVersion) &&
+                this.publishedVersionId.equals(o.publishedVersionId) &&
+                this.editorNamespace.equals(o.editorNamespace);
+    }
+
     public String toString () {
         return "<FeedSource " + this.name + " (" + this.id + ")>";
     }
