@@ -54,7 +54,7 @@ public class LabelController {
         Collection<Label> projectLabels = project.retrieveProjectLabels();
         for (Label label: projectLabels) {
             // Only return labels users has access to.
-            labelsToReturn.add(checkLabelPermissions(req, label));
+            labelsToReturn.add(checkLabelPermissions(req, label, Actions.VIEW));
         }
         return labelsToReturn;
     }
@@ -66,6 +66,7 @@ public class LabelController {
         Auth0UserProfile userProfile = req.attribute("user");
         Label newLabel = getPOJOFromRequestBody(req, Label.class);
         validate(req, newLabel);
+        newLabel = checkLabelPermissions(req, newLabel, Actions.CREATE);
 
         try {
             Persistence.labels.create(newLabel);
@@ -131,9 +132,15 @@ public class LabelController {
         try {
             // Iterate over feed sources and remove any references to the label
             Persistence.feedSources.getAll().forEach(feedSource -> {
-                feedSource.labels = feedSource.labels.stream()
+                List<String> newLabels = feedSource.labels.stream()
                         .filter(l -> !l.equals(label.id))
                         .collect(Collectors.toList());
+                // If there are changes, update the feed source
+                if (!newLabels.equals(feedSource.labels)) {
+                    FeedSource fs = Persistence.feedSources.getById(feedSource.id);
+                    fs.labels = newLabels;
+                    Persistence.feedSources.replace(fs.id, fs);
+                }
             });
 
             label.delete();
@@ -155,10 +162,10 @@ public class LabelController {
         if (id == null) {
             logMessageAndHalt(req, 400, "Please specify id param");
         }
-        return checkLabelPermissions(req, Persistence.labels.getById(id));
+        return checkLabelPermissions(req, Persistence.labels.getById(id), action);
     }
 
-    public static Label checkLabelPermissions(Request req, Label label) {
+    public static Label checkLabelPermissions(Request req, Label label, Actions action) {
         Auth0UserProfile userProfile = req.attribute("user");
         // check for null label
         if (label == null) {
@@ -166,18 +173,32 @@ public class LabelController {
             return null;
         }
 
-        if(!label.adminOnly) {
-            // Don't need to check for authorization -- anyone may do anything to the label
-            return label;
+        boolean authorized;
+        boolean isProjectAdmin = userProfile.canAdministerProject(label.projectId, label.organizationId());
+        switch (action) {
+            case CREATE:
+            case MANAGE:
+            case EDIT:
+                authorized = isProjectAdmin;
+                break;
+            case VIEW:
+                authorized = true;
+                if (label.adminOnly) {
+                    authorized = isProjectAdmin;
+                }
+                break;
+            default:
+                authorized = false;
+                break;
         }
 
-        // The label is privileged, so check if user is admin
-        String orgId = label.organizationId();
-        boolean authorized = userProfile.canAdministerProject(label.projectId, orgId);
-
         if (!authorized) {
+            // Special message if viewing an adminOnly label
+            if (label.adminOnly) {
+                logMessageAndHalt(req, 403, "User is not admin so cannot view admin-only label");
+            }
             // Throw halt if user not authorized.
-            logMessageAndHalt(req, 403, "User not admin so cannot view admin-only label");
+            logMessageAndHalt(req, 403, "User is not admin so cannot update or create labels");
         }
         // If we make it here, user has permission and the requested label is valid
         return label;
