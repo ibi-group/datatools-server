@@ -43,6 +43,7 @@ public class LabelSerializer extends StdSerializer<ArrayList<String>> {
     @Override
     public void serialize(ArrayList<String> strings, JsonGenerator jsonGenerator, SerializerProvider serializerProvider) throws IOException {
         jsonGenerator.writeStartArray();
+        // Each array item is a Label "object"
         for (String labelId: strings) {
             jsonGenerator.writeStartObject();
 

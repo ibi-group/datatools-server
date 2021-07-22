@@ -53,7 +53,7 @@ public class LabelController {
 
         Collection<Label> projectLabels = project.retrieveProjectLabels();
         for (Label label: projectLabels) {
-            // Only return labels users has access to.
+            // Only return labels user has access to.
             labelsToReturn.add(checkLabelPermissions(req, label, Actions.VIEW));
         }
         return labelsToReturn;
@@ -66,6 +66,7 @@ public class LabelController {
         Auth0UserProfile userProfile = req.attribute("user");
         Label newLabel = getPOJOFromRequestBody(req, Label.class);
         validate(req, newLabel);
+        // User may not be allowed to create a new label
         newLabel = checkLabelPermissions(req, newLabel, Actions.CREATE);
 
         try {
@@ -165,6 +166,13 @@ public class LabelController {
         return checkLabelPermissions(req, Persistence.labels.getById(id), action);
     }
 
+    /** Helper method returns label only if user is authorized to do given action with it
+     *
+     * @param req       Spark request used for determining user permissions
+     * @param label     Label to check
+     * @param action    Action to be taken on label, changes who can do what
+     * @return          Label which is ok to return to user
+     */
     public static Label checkLabelPermissions(Request req, Label label, Actions action) {
         Auth0UserProfile userProfile = req.attribute("user");
         // check for null label
@@ -179,6 +187,7 @@ public class LabelController {
             case CREATE:
             case MANAGE:
             case EDIT:
+                // Only project adminds can edit labels
                 authorized = isProjectAdmin;
                 break;
             case VIEW:

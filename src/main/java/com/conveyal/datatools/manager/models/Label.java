@@ -1,12 +1,6 @@
 package com.conveyal.datatools.manager.models;
 
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.model.DeleteObjectsRequest;
-import com.conveyal.datatools.common.utils.Scheduler;
-import com.conveyal.datatools.common.utils.aws.S3Utils;
-import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.persistence.Persistence;
-import com.conveyal.gtfs.GTFS;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

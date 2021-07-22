@@ -74,6 +74,7 @@ public class FeedSourceController {
         }
         Collection<FeedSource> projectFeedSources = project.retrieveProjectFeedSources();
         for (FeedSource source: projectFeedSources) {
+            // Verify user permissions before returning source
             source = checkFeedSourcePermissions(req, source, Actions.VIEW);
             String orgId = source.organizationId();
             // If user can view or manage feed, add to list of feeds to return. NOTE: By default most users with access
@@ -192,8 +193,9 @@ public class FeedSourceController {
             updatedFeedSource.lastFetched = null;
         }
         Persistence.feedSources.replace(feedSourceId, updatedFeedSource);
+
         if (formerFeedSource.equalsExceptLabels(updatedFeedSource)) {
-            // Skip all the updating, since only labels have changed
+            // If only labels have changed, don't send out an email
             return updatedFeedSource;
         }
         // After successful save, handle auto fetch job setup.
