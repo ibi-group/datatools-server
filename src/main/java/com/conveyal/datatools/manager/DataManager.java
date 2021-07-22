@@ -1,7 +1,5 @@
 package com.conveyal.datatools.manager;
 
-import com.bugsnag.Bugsnag;
-import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.CorsFilter;
 import com.conveyal.datatools.common.utils.RequestSummary;
 import com.conveyal.datatools.common.utils.Scheduler;
@@ -28,13 +26,15 @@ import com.conveyal.datatools.manager.extensions.transitfeeds.TransitFeedsFeedRe
 import com.conveyal.datatools.manager.extensions.transitland.TransitLandFeedResource;
 import com.conveyal.datatools.manager.jobs.FeedUpdater;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.ErrorUtils;
+import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.GraphQLController;
 import com.conveyal.gtfs.loader.Table;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory;
-import com.google.common.collect.Sets;
 import com.google.common.io.Resources;
 import org.apache.commons.io.Charsets;
 import org.slf4j.Logger;
@@ -50,10 +50,6 @@ import java.net.URL;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
-import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executor;
-import java.util.concurrent.Executors;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.common.utils.SparkUtils.logRequest;
@@ -120,7 +116,7 @@ public class DataManager {
         loadConfig(args);
         loadProperties();
 
-        getBugsnag();
+        ErrorUtils.initialize();
 
         // Optionally set port for server. Otherwise, Spark defaults to 4567.
         if (hasConfigProperty("application.port")) {
@@ -143,15 +139,6 @@ public class DataManager {
 
         // Initialize scheduled tasks
         Scheduler.initialize();
-    }
-
-    // intialize bugsnag
-    public static Bugsnag getBugsnag() {
-        String bugsnagKey = getConfigPropertyAsText("BUGSNAG_KEY");
-        if (bugsnagKey != null) {
-            return new Bugsnag(bugsnagKey);
-        }
-        return null;
     }
 
     /*
@@ -437,6 +424,26 @@ public class DataManager {
      */
     public static boolean isExtensionEnabled(String extensionName) {
         return hasConfigProperty("extensions." + extensionName) && "true".equals(getExtensionPropertyAsText(extensionName, "enabled"));
+    }
+
+    /**
+     * In a test environment allows for overriding a specific config value on the server config object.
+     */
+    public static void overrideConfigProperty(String name, String value) {
+        String parts[] = name.split("\\.");
+        ObjectNode node = (ObjectNode) serverConfig;
+
+        //Loop through the dot separated field names to obtain final node and override that node's value.
+        for (int i = 0; i < parts.length; i++) {
+            if (i < parts.length - 1) {
+                if (!node.has(parts[i])) {
+                    node.set(parts[i], JsonUtil.objectMapper.createObjectNode());
+                }
+                node = (ObjectNode) node.get(parts[i]);
+            } else {
+                node.put(parts[i], value);
+            }
+        }
     }
 
     /**

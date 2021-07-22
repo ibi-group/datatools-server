@@ -366,7 +366,7 @@
         <!-- Error reporting -->
         <dependency>
             <groupId>com.bugsnag</groupId>
-            <version>3.3.0</version>
+            <version>3.6.2</version>
             <artifactId>bugsnag</artifactId>
         </dependency>
 

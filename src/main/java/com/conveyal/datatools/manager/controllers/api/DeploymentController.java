@@ -35,6 +35,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
+import static com.conveyal.datatools.manager.DataManager.isExtensionEnabled;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 import static spark.Spark.delete;
@@ -249,8 +250,9 @@ public class DeploymentController {
 
         if (feedSource.latestVersionId() == null)
             logMessageAndHalt(req, 400, "Cannot create a deployment from a feed source with no versions.");
-
-        Deployment deployment = new Deployment(feedSource);
+        
+        boolean useDefaultRouter = !isExtensionEnabled("nysdot");
+        Deployment deployment = new Deployment(feedSource, useDefaultRouter);
         deployment.storeUser(userProfile);
         Persistence.deployments.create(deployment);
         return deployment;
