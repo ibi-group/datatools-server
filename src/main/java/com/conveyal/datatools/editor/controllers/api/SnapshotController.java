@@ -25,6 +25,7 @@ import spark.Response;
 
 import java.io.IOException;
 import java.util.Collection;
+import java.util.concurrent.TimeUnit;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
@@ -85,8 +86,8 @@ public class SnapshotController {
             req.queryParamOrDefault("publishNewVersion", Boolean.FALSE.toString())
         );
         // Used for tests when we need things to execute in order.
-        boolean useSingleThread = Boolean.parseBoolean(
-            req.queryParamOrDefault("useSingleThread", Boolean.FALSE.toString())
+        boolean testDelayedStart = Boolean.parseBoolean(
+            req.queryParamOrDefault("testDelayedStart", Boolean.FALSE.toString())
         );
         FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, Actions.EDIT, "feedId");
         // Take fields from request body for creating snapshot (i.e., feedId/feedSourceId, name, comment).
@@ -105,9 +106,9 @@ public class SnapshotController {
         if (publishNewVersion) {
             createSnapshotJob.addNextJob(new CreateFeedVersionFromSnapshotJob(feedSource, snapshot, userProfile));
         }
-        if (useSingleThread) {
-            // Begin single-thread execution if explicitly requested.
-            JobUtils.lightExecutor.execute(createSnapshotJob);
+        if (testDelayedStart) {
+            // Begin delayed executor if explicitly requested.
+            JobUtils.delayedLightExecutor.schedule(createSnapshotJob, 1000, TimeUnit.MILLISECONDS);
         } else {
             // Begin asynchronous execution.
             JobUtils.heavyExecutor.execute(createSnapshotJob);
