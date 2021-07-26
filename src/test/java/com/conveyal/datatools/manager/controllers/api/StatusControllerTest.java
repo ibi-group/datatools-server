@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.util.Date;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 /**
  * Test class that checks endpoints from StatusController.
@@ -83,18 +84,26 @@ class StatusControllerTest extends UnitTest {
         );
 
         // There should be 2 jobs, one for creating the snapshot, one for creating a new feed version from snapshot.
+        // The order in which they appear varies from a test run to the next.
         ArrayNode statusJson = (ArrayNode)mapper.readTree(getJobsResponse.getEntity().getContent());
         assertEquals(2, statusJson.size());
-
-        // The first job should be of the id we extracted above.
         JsonNode firstJob = statusJson.get(0);
-        assertEquals(jobId, firstJob.get("jobId").asText());
-        assertEquals("CREATE_SNAPSHOT", firstJob.get("type").asText());
-
-        // The second job's parent should be the first job.
         JsonNode secondJob = statusJson.get(1);
-        assertEquals(jobId, secondJob.get("parentJobId").asText());
-        assertEquals("CREATE_SNAPSHOT", secondJob.get("parentJobType").asText());
-        assertEquals("CREATE_FEEDVERSION_FROM_SNAPSHOT", secondJob.get("type").asText());
+
+        // One of the jobs should be of the id we extracted above.
+        JsonNode subJob = null;
+        if (jobId.equals(firstJob.get("jobId").asText())) {
+            assertEquals("CREATE_SNAPSHOT", firstJob.get("type").asText());
+            subJob = secondJob;
+        } else if (jobId.equals(secondJob.get("jobId").asText())) {
+            assertEquals("CREATE_SNAPSHOT", secondJob.get("type").asText());
+            subJob = firstJob;
+        }
+
+        // The sub job's parent should be the main job.
+        assertNotNull(subJob);
+        assertEquals(jobId, subJob.get("parentJobId").asText());
+        assertEquals("CREATE_SNAPSHOT", subJob.get("parentJobType").asText());
+        assertEquals("CREATE_FEEDVERSION_FROM_SNAPSHOT", subJob.get("type").asText());
     }
 }
