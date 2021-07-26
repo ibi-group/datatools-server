@@ -56,7 +56,6 @@ class StatusControllerTest extends UnitTest {
         project.delete();
     }
 
-
     /**
      * Ensures the jobs endpoint returns parent job id and type for child jobs.
      */
@@ -72,9 +71,9 @@ class StatusControllerTest extends UnitTest {
 
         // Parse the json and grab the job id.
         ObjectMapper mapper = new ObjectMapper();
-        JsonNode json = mapper.readTree(startJobsResponse.getEntity().getContent());
-        assertEquals("Creating snapshot.", json.get("message").asText());
-        String jobId = json.get("jobId").asText();
+        JsonNode startJobJson = mapper.readTree(startJobsResponse.getEntity().getContent());
+        assertEquals("Creating snapshot.", startJobJson.get("message").asText());
+        String jobId = startJobJson.get("jobId").asText();
 
         // Now call the jobs endpoint
         HttpResponse getJobsResponse = TestUtils.makeRequest(
