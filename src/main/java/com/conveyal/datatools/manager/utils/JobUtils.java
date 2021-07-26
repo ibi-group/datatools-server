@@ -18,7 +18,6 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
 
@@ -30,9 +29,6 @@ public class JobUtils {
 
     // light executor is for tasks for things that should finish quickly (e.g., email notifications)
     public static Executor lightExecutor = Executors.newSingleThreadExecutor();
-
-    // Delayed light executor used for tests that need to capture initial job status before they start and vanish.
-    public static ScheduledExecutorService delayedLightExecutor = Executors.newSingleThreadScheduledExecutor();
 
     /**
      * Stores jobs underway by user ID. NOTE: any set created and stored here must be created with
