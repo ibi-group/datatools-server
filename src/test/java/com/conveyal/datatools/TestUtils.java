@@ -146,7 +146,6 @@ public class TestUtils {
 
     /**
      * Utility function to construct a mock feed version from a feedSourceId
-     * @return
      */
     public static FeedVersion createMockFeedVersion(String feedSourceId) {
         FeedVersion f = new FeedVersion();
