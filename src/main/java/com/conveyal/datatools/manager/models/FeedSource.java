@@ -20,12 +20,15 @@ import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.serializers.LabelSerializer;
 import com.conveyal.datatools.manager.utils.JobUtils;
 import com.conveyal.gtfs.GTFS;
-import com.fasterxml.jackson.annotation.*;
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.annotation.JsonView;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.model.Sorts;
 import org.bson.codecs.pojo.annotations.BsonIgnore;
-import org.bson.codecs.pojo.annotations.BsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 

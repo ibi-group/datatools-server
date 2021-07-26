@@ -100,18 +100,14 @@ public class Project extends Model {
      */
     public Collection<FeedSource> retrieveProjectFeedSources() {
         // TODO: use index, but not important for now because we generally only have one FeedCollection
-        return Persistence.feedSources.getAll().stream()
-                .filter(fs -> this.id.equals(fs.projectId))
-                .collect(Collectors.toList());
+        return Persistence.feedSources.getFiltered(eq("projectId", this.id));
     }
 
     /**
      * Get all the labels for this project.
      */
     public Collection<Label> retrieveProjectLabels() {
-        return Persistence.labels.getAll().stream()
-                .filter(label -> this.id.equals(label.projectId))
-                .collect(Collectors.toList());
+        return Persistence.labels.getFiltered(eq("projectId", this.id));
     }
 
     // Keep an empty collection here which is filled dynamically later

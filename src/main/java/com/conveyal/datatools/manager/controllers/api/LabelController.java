@@ -16,7 +16,9 @@ import spark.Request;
 import spark.Response;
 
 import java.io.IOException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.List;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.getPOJOFromRequestBody;
@@ -43,7 +45,6 @@ public class LabelController {
      * - for the entire application
      */
     private static Collection<Label> getAllLabels(Request req, Response res) {
-        Collection<Label> labelsToReturn = new ArrayList<>();
         Auth0UserProfile user = req.attribute("user");
         String projectId = req.queryParams("projectId");
         Project project = Persistence.projects.getById(projectId);
@@ -51,12 +52,12 @@ public class LabelController {
             logMessageAndHalt(req, 400, "Must provide valid projectId query param to retrieve labels.");
         }
 
-        Collection<Label> projectLabels = project.retrieveProjectLabels();
-        for (Label label: projectLabels) {
-            // Only return labels user has access to.
-            labelsToReturn.add(checkLabelPermissions(req, label, Actions.VIEW));
-        }
-        return labelsToReturn;
+        boolean isProjectAdmin = user.canAdministerProject(project.id, project.organizationId);
+
+        return project.retrieveProjectLabels().stream()
+                // Only return labels user has access to
+                .filter(label -> isProjectAdmin || !label.adminOnly)
+                .collect(Collectors.toList());
     }
 
     /**
@@ -67,7 +68,7 @@ public class LabelController {
         Label newLabel = getPOJOFromRequestBody(req, Label.class);
         validate(req, newLabel);
         // User may not be allowed to create a new label
-        newLabel = checkLabelPermissions(req, newLabel, Actions.CREATE);
+        checkLabelPermissions(req, newLabel, Actions.CREATE);
 
         try {
             Persistence.labels.create(newLabel);
@@ -77,6 +78,7 @@ public class LabelController {
             return null;
         }
     }
+
     /**
      * Check that updated or new label object is valid. This method should be called before a label is
      * persisted to the database.
@@ -163,7 +165,10 @@ public class LabelController {
         if (id == null) {
             logMessageAndHalt(req, 400, "Please specify id param");
         }
-        return checkLabelPermissions(req, Persistence.labels.getById(id), action);
+        Label label = Persistence.labels.getById(id);
+        checkLabelPermissions(req, label, action);
+
+        return label;
     }
 
     /** Helper method returns label only if user is authorized to do given action with it
@@ -173,47 +178,38 @@ public class LabelController {
      * @param action    Action to be taken on label, changes who can do what
      * @return          Label which is ok to return to user
      */
-    public static Label checkLabelPermissions(Request req, Label label, Actions action) {
+    public static void checkLabelPermissions(Request req, Label label, Actions action) {
         Auth0UserProfile userProfile = req.attribute("user");
         // check for null label
         if (label == null) {
             logMessageAndHalt(req, 400, "Label ID does not exist");
-            return null;
+            return;
         }
 
-        boolean authorized;
         boolean isProjectAdmin = userProfile.canAdministerProject(label.projectId, label.organizationId());
         switch (action) {
             case CREATE:
             case MANAGE:
             case EDIT:
-                // Only project adminds can edit labels
-                authorized = isProjectAdmin;
-                break;
+                // Only project admins can edit labels
+                if (!isProjectAdmin) {
+                    logMessageAndHalt(req, 403, "User is not admin so cannot update or create labels");
+                }
             case VIEW:
-                authorized = true;
-                if (label.adminOnly) {
-                    authorized = isProjectAdmin;
+                if (label.adminOnly && !isProjectAdmin) {
+                    logMessageAndHalt(req, 403, "User is not admin so cannot view admin-only label");
                 }
                 break;
             default:
-                authorized = false;
+                // Incorrect query, so fail
+                logMessageAndHalt(req, 400, "Not enough information supplied to determine label access");
                 break;
         }
 
-        if (!authorized) {
-            // Special message if viewing an adminOnly label
-            if (label.adminOnly) {
-                logMessageAndHalt(req, 403, "User is not admin so cannot view admin-only label");
-            }
-            // Throw halt if user not authorized.
-            logMessageAndHalt(req, 403, "User is not admin so cannot update or create labels");
-        }
         // If we make it here, user has permission and the requested label is valid
-        return label;
+        return;
     }
 
-    // FIXME: use generic API controller and return JSON documents via BSON/Mongo
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/label/:id", LabelController::getLabel, json::write);
         get(apiPrefix + "secure/label", LabelController::getAllLabels, json::write);
