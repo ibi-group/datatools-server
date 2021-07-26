@@ -36,8 +36,8 @@ public abstract class MonitorableJob implements Runnable, Serializable {
      */
     public boolean active = false;
 
-    protected String parentJobId;
-    protected JobType parentJobType;
+    public String parentJobId;
+    public JobType parentJobType;
     // Status is not final to allow some jobs to have extra status fields.
     public Status status = new Status();
     // Name is not final in case it needs to be amended during job processing.

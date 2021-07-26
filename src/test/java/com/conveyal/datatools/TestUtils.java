@@ -2,6 +2,7 @@ package com.conveyal.datatools;
 
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
+import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.utils.HttpUtils;
@@ -141,6 +142,17 @@ public class TestUtils {
             e.printStackTrace();
         }
         return version;
+    }
+
+    /**
+     * Utility function to construct a mock feed version from a feedSourceId
+     * @return
+     */
+    public static FeedVersion createMockFeedVersion(String feedSourceId) {
+        FeedVersion f = new FeedVersion();
+        f.feedSourceId = feedSourceId;
+        f.retrievalMethod = FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
+        return f;
     }
 
     /**

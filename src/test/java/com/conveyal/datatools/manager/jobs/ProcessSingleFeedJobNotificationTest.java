@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.DatatoolsTest;
+import com.conveyal.datatools.TestUtils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -95,9 +96,6 @@ public class ProcessSingleFeedJobNotificationTest extends DatatoolsTest {
     }
 
     private FeedVersion createMockFeedVersion() {
-        FeedVersion f = new FeedVersion();
-        f.feedSourceId = mockFeedSource.id;
-        f.retrievalMethod = FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
-        return f;
+        return TestUtils.createMockFeedVersion(mockFeedSource.id);
     }
 }
