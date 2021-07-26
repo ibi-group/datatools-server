@@ -65,23 +65,24 @@ class StatusControllerTest extends UnitTest {
         // Create a simple job chain, e.g. create a snapshot published as a new feed version.
         String feedId = mockFeedSource.id;
         HttpResponse startJobsResponse = TestUtils.makeRequest(
-            String.format("/api/editor/secure/snapshot?feedId=%s&publishNewVersion=true", feedId),
+            String.format("/api/editor/secure/snapshot?feedId=%s&publishNewVersion=true&useSingleThread=true", feedId),
             String.format("{\"feedId\":\"%s\", \"name\":\"Test Snapshot\", \"comment\":null}", feedId),
             HttpUtils.REQUEST_METHOD.POST
         );
 
-        // Parse the json and grab the job id.
-        ObjectMapper mapper = new ObjectMapper();
-        JsonNode startJobJson = mapper.readTree(startJobsResponse.getEntity().getContent());
-        assertEquals("Creating snapshot.", startJobJson.get("message").asText());
-        String jobId = startJobJson.get("jobId").asText();
-
-        // Now call the jobs endpoint
+        // Call the jobs endpoint immediately
         HttpResponse getJobsResponse = TestUtils.makeRequest(
             "/api/manager/secure/status/jobs",
             null,
             HttpUtils.REQUEST_METHOD.GET
         );
+
+        // Parse the first startup JSON and grab the job id.
+        ObjectMapper mapper = new ObjectMapper();
+        JsonNode startJobJson = mapper.readTree(startJobsResponse.getEntity().getContent());
+        assertEquals("Creating snapshot.", startJobJson.get("message").asText());
+        String jobId = startJobJson.get("jobId").asText();
+
 
         // There should be 2 jobs, one for creating the snapshot, one for creating a new feed version from snapshot.
         // The order in which they appear varies from a test run to the next.

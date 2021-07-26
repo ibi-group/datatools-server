@@ -84,6 +84,10 @@ public class SnapshotController {
         boolean publishNewVersion = Boolean.parseBoolean(
             req.queryParamOrDefault("publishNewVersion", Boolean.FALSE.toString())
         );
+        // Used for tests when we need things to execute in order.
+        boolean useSingleThread = Boolean.parseBoolean(
+            req.queryParamOrDefault("useSingleThread", Boolean.FALSE.toString())
+        );
         FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, Actions.EDIT, "feedId");
         // Take fields from request body for creating snapshot (i.e., feedId/feedSourceId, name, comment).
         Snapshot snapshot = json.read(req.body());
@@ -101,8 +105,13 @@ public class SnapshotController {
         if (publishNewVersion) {
             createSnapshotJob.addNextJob(new CreateFeedVersionFromSnapshotJob(feedSource, snapshot, userProfile));
         }
-        // Begin asynchronous execution.
-        JobUtils.heavyExecutor.execute(createSnapshotJob);
+        if (useSingleThread) {
+            // Begin single-thread execution if explicitly requested.
+            JobUtils.lightExecutor.execute(createSnapshotJob);
+        } else {
+            // Begin asynchronous execution.
+            JobUtils.heavyExecutor.execute(createSnapshotJob);
+        }
         return SparkUtils.formatJobMessage(createSnapshotJob.jobId, "Creating snapshot.");
     }
 
