@@ -65,7 +65,7 @@ class StatusControllerTest extends UnitTest {
         // Create a simple job chain, e.g. create a snapshot published as a new feed version.
         String feedId = mockFeedSource.id;
         HttpResponse startJobsResponse = TestUtils.makeRequest(
-            String.format("/api/editor/secure/snapshot?feedId=%s&publishNewVersion=true&useSingleThread=true", feedId),
+            String.format("/api/editor/secure/snapshot?feedId=%s&publishNewVersion=true&dryRun=true", feedId),
             String.format("{\"feedId\":\"%s\", \"name\":\"Test Snapshot\", \"comment\":null}", feedId),
             HttpUtils.REQUEST_METHOD.POST
         );

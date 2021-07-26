@@ -84,9 +84,9 @@ public class SnapshotController {
         boolean publishNewVersion = Boolean.parseBoolean(
             req.queryParamOrDefault("publishNewVersion", Boolean.FALSE.toString())
         );
-        // Used for tests when we need things to execute in order.
-        boolean useSingleThread = Boolean.parseBoolean(
-            req.queryParamOrDefault("useSingleThread", Boolean.FALSE.toString())
+        // Used for tests, this will line up (register) the jobs but they will not be executed.
+        boolean dryRun = Boolean.parseBoolean(
+            req.queryParamOrDefault("dryRun", Boolean.FALSE.toString())
         );
         FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, Actions.EDIT, "feedId");
         // Take fields from request body for creating snapshot (i.e., feedId/feedSourceId, name, comment).
@@ -105,10 +105,7 @@ public class SnapshotController {
         if (publishNewVersion) {
             createSnapshotJob.addNextJob(new CreateFeedVersionFromSnapshotJob(feedSource, snapshot, userProfile));
         }
-        if (useSingleThread) {
-            // Begin single-thread execution if explicitly requested.
-            JobUtils.lightExecutor.execute(createSnapshotJob);
-        } else {
+        if (!dryRun) {
             // Begin asynchronous execution.
             JobUtils.heavyExecutor.execute(createSnapshotJob);
         }
