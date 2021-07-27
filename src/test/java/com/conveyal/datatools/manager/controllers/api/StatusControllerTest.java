@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.controllers.api;
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.TestUtils;
 import com.conveyal.datatools.UnitTest;
+import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
@@ -71,13 +72,11 @@ class StatusControllerTest extends UnitTest {
     @Test
     void canReturnJobStatuses() throws IOException {
         // Create a simple job chain, e.g. create a snapshot published as a new feed version.
-        FeedVersion f = TestUtils.createMockFeedVersion(mockFeedSource.id);
+        FeedVersion version = TestUtils.createMockFeedVersion(mockFeedSource.id);
         // Define a simple job chain.
         // (The data for these jobs is arbitrary, the jobs are not actually executed.)
-        ProcessSingleFeedJob parentJob = new ProcessSingleFeedJob(f, user, true);
-        FetchSingleFeedJob subJob = new FetchSingleFeedJob(mockFeedSource, user, true);
-        parentJob.addNextJob(subJob);
-
+        ProcessSingleFeedJob parentJob = new ProcessSingleFeedJob(version, user, true);
+        JobUtils.heavyExecutor.execute(parentJob);
         // Call the jobs endpoint immediately
         HttpResponse getJobsResponse = TestUtils.makeRequest(
             "/api/manager/secure/status/jobs",
@@ -89,7 +88,7 @@ class StatusControllerTest extends UnitTest {
         ObjectMapper mapper = new ObjectMapper();
 
         ArrayNode statusJson = (ArrayNode)mapper.readTree(getJobsResponse.getEntity().getContent());
-        assertEquals(2, statusJson.size());
+        assertEquals(3, statusJson.size());
         JsonNode firstJob = statusJson.get(0);
         JsonNode secondJob = statusJson.get(1);
 
