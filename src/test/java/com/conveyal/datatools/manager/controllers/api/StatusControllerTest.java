@@ -13,6 +13,7 @@ import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HttpUtils;
+import com.conveyal.datatools.manager.utils.JobUtils;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -84,6 +85,7 @@ class StatusControllerTest extends UnitTest {
         ProcessSingleFeedJob parentJob = new ProcessSingleFeedJob(f, user, true);
         FetchSingleFeedJob subJob = new FetchSingleFeedJob(mockFeedSource, user, true);
         parentJob.addNextJob(subJob);
+        JobUtils.heavyExecutor.execute(parentJob);
 
         // Call the jobs endpoint immediately
 /*
