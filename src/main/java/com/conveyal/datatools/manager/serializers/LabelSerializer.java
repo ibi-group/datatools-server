@@ -1,61 +1,57 @@
 package com.conveyal.datatools.manager.serializers;
 
-import com.conveyal.datatools.manager.controllers.api.LabelController;
 import com.conveyal.datatools.manager.models.Label;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.core.JsonGenerator;
-import com.fasterxml.jackson.core.JsonParser;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.DeserializationContext;
 import com.fasterxml.jackson.databind.JavaType;
-import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.SerializerProvider;
-import com.fasterxml.jackson.databind.deser.std.StdDeserializer;
-import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 
 import java.io.IOException;
-import java.sql.Array;
 import java.util.ArrayList;
 
+/**
+ * This serializer is used to convert a list of Strings representing label IDs into full Label objects
+ * List<String> is serialized into List<Label>.
+ */
 public class LabelSerializer extends StdSerializer<ArrayList<String>> {
 
+    /**
+     * No Arg constructor used for FeedSources without labels
+     */
     protected LabelSerializer() {
         super((Class<ArrayList<String>>) new ArrayList<String>().getClass());
     }
 
+    /**
+     * ArrayList Constructor used for FeedSources with labels
+     */
     protected LabelSerializer(Class<ArrayList<String>> t) {
         super(t);
     }
 
-    protected LabelSerializer(JavaType type) {
-        super(type);
-    }
-
-    protected LabelSerializer(Class<?> t, boolean dummy) {
-        super(t, dummy);
-    }
-
+    /**
+     * Constructor used by Jackson to initialize Serializer
+     */
     protected LabelSerializer(StdSerializer<?> src) {
         super(src);
     }
 
+    /**
+     * Method which converts List of Strings to List of Label objects
+     * @param strings               List of IDs to create Label objects from
+     * @param jsonGenerator         Jackson JsonGenerator
+     * @param serializerProvider    Jackson SerializerProvider
+     * @throws IOException
+     */
     @Override
     public void serialize(ArrayList<String> strings, JsonGenerator jsonGenerator, SerializerProvider serializerProvider) throws IOException {
         jsonGenerator.writeStartArray();
         // Each array item is a Label "object"
         for (String labelId: strings) {
-            jsonGenerator.writeStartObject();
-
             Label label = Persistence.labels.getById(labelId);
-            jsonGenerator.writeStringField("id", label.id);
-            jsonGenerator.writeStringField("projectId", label.projectId);
-            jsonGenerator.writeStringField("name", label.name);
-            jsonGenerator.writeStringField("description", label.description);
-            jsonGenerator.writeStringField("color", label.color);
-            jsonGenerator.writeBooleanField("adminOnly", label.adminOnly);
-
-            jsonGenerator.writeEndObject();
+            // Use the default Label serializer
+            jsonGenerator.writeObject(label);
         }
         jsonGenerator.writeEndArray();
     }

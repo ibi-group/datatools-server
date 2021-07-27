@@ -42,7 +42,6 @@ public class LabelController {
     /**
      * Spark HTTP endpoint that handles getting all labels for a handful of use cases:
      * - for a single project (if projectId query param provided)
-     * - for the entire application
      */
     private static Collection<Label> getAllLabels(Request req, Response res) {
         Auth0UserProfile user = req.attribute("user");

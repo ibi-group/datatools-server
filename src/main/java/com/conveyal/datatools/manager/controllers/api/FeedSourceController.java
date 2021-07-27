@@ -198,8 +198,7 @@ public class FeedSourceController {
         }
         Persistence.feedSources.replace(feedSourceId, updatedFeedSource);
 
-        if (formerFeedSource.equalsExceptLabels(updatedFeedSource)) {
-            // If only labels have changed, don't send out an email
+        if (shouldNotifyUsersOnFeedUpdated(formerFeedSource, updatedFeedSource)) {
             return updatedFeedSource;
         }
         // After successful save, handle auto fetch job setup.
@@ -360,6 +359,18 @@ public class FeedSourceController {
 
         // If we make it here, user has permission and the requested feed source is valid.
         return feedSource;
+    }
+
+    /** Determines whether a change to a feed source is significant enough that it warrants sending a notification
+     *
+     * @param formerFeedSource  A feed source object, without new changes
+     * @param updatedFeedSource A feed source object, with new changes
+     * @return                  A boolean value indicating if the updated feed source is changed enough to warrant sending a notification.
+     */
+    private static boolean shouldNotifyUsersOnFeedUpdated(FeedSource formerFeedSource, FeedSource updatedFeedSource) {
+        return
+                // If only labels have changed, don't send out an email
+                formerFeedSource.equalsExceptLabels(updatedFeedSource);
     }
 
 

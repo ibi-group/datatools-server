@@ -4,6 +4,7 @@ import com.conveyal.datatools.manager.jobs.AutoDeployType;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import org.bson.codecs.pojo.annotations.BsonIgnore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -111,6 +112,7 @@ public class Project extends Model {
     }
 
     // Keep an empty collection here which is filled dynamically later
+    @BsonIgnore
     public Collection<Label> labels;
 
 
