@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.jobs;
 import com.conveyal.datatools.common.status.FeedVersionJob;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.validator.ValidationResult;
@@ -77,7 +78,8 @@ public class ValidateFeedJob extends FeedVersionJob {
 
     @JsonProperty
     public String getFeedSourceId () {
-        return feedVersion.parentFeedSource().id;
+        FeedSource feedSource = feedVersion.parentFeedSource();
+        return feedSource.id;
     }
 
     /**
