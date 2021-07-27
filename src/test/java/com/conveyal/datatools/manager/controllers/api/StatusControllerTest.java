@@ -77,7 +77,6 @@ class StatusControllerTest extends UnitTest {
         ProcessSingleFeedJob parentJob = new ProcessSingleFeedJob(f, user, true);
         FetchSingleFeedJob subJob = new FetchSingleFeedJob(mockFeedSource, user, true);
         parentJob.addNextJob(subJob);
-        JobUtils.heavyExecutor.execute(parentJob);
 
         // Call the jobs endpoint immediately
         HttpResponse getJobsResponse = TestUtils.makeRequest(
@@ -90,7 +89,7 @@ class StatusControllerTest extends UnitTest {
         ObjectMapper mapper = new ObjectMapper();
 
         ArrayNode statusJson = (ArrayNode)mapper.readTree(getJobsResponse.getEntity().getContent());
-        assertEquals(4, statusJson.size());
+        assertEquals(2, statusJson.size());
         JsonNode firstJob = statusJson.get(0);
         JsonNode secondJob = statusJson.get(1);
 
