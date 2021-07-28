@@ -170,12 +170,12 @@ public class LabelController {
         return label;
     }
 
-    /** Helper method returns label only if user is authorized to do given action with it
+    /** Helper method will halt execution and throw an error message if a given
+     * label is not allowed to be accessed by the current user (taken from the req object)
      *
      * @param req       Spark request used for determining user permissions
      * @param label     Label to check
-     * @param action    Action to be taken on label, changes who can do what
-     * @return          Label which is ok to return to user
+     * @param action    Action to be taken on label, which changes who can do what
      */
     public static void checkLabelPermissions(Request req, Label label, Actions action) {
         Auth0UserProfile userProfile = req.attribute("user");
@@ -206,7 +206,6 @@ public class LabelController {
         }
 
         // If we make it here, user has permission and the requested label is valid
-        return;
     }
 
     public static void register (String apiPrefix) {

@@ -141,6 +141,8 @@ public class Project extends Model {
         retrieveProjectFeedSources().forEach(FeedSource::delete);
         // Delete each deployment in the project.
         retrieveDeployments().forEach(Deployment::delete);
+        // Delete each label in the project.
+        retrieveProjectLabels().forEach(Label::delete);
         // Finally, delete the project.
         Persistence.projects.removeById(this.id);
     }
