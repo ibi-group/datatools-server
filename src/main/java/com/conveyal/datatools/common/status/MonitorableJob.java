@@ -36,6 +36,7 @@ public abstract class MonitorableJob implements Runnable, Serializable {
      */
     public boolean active = false;
 
+    // The two fields below are public because they are used by the UI through the /jobs endpoint.
     public String parentJobId;
     public JobType parentJobType;
     // Status is not final to allow some jobs to have extra status fields.
