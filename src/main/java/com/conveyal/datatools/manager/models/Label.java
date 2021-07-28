@@ -1,6 +1,8 @@
 package com.conveyal.datatools.manager.models;
 
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,6 +25,7 @@ public class Label extends Model implements Cloneable{
     }
 
     @JsonProperty("organizationId")
+    @JsonIgnore
     public String organizationId () {
         Project project = retrieveProject();
         return project == null ? null : project.organizationId;
@@ -39,6 +42,10 @@ public class Label extends Model implements Cloneable{
 
     /** Is this label only accessible to admin users? */
     public boolean adminOnly;
+
+    /** Added by Mongo, should be ignored when deserializing */
+    @JsonIgnore
+    public Auth0UserProfile user;
 
     /**
      * Create a new label

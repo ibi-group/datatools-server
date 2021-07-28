@@ -17,7 +17,6 @@ import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
 import com.conveyal.datatools.manager.models.transform.FeedTransformation;
 import com.conveyal.datatools.manager.persistence.Persistence;
-import com.conveyal.datatools.manager.serializers.LabelSerializer;
 import com.conveyal.datatools.manager.utils.JobUtils;
 import com.conveyal.gtfs.GTFS;
 import com.fasterxml.jackson.annotation.JsonIgnore;
@@ -146,9 +145,9 @@ public class FeedSource extends Model implements Cloneable {
      */
     public String snapshotVersion;
 
-    // Using a custom serializer, the input can be an ID of a label, while the output will be the
-    // entire label object. This also allows storing labels as IDs.
-    @JsonSerialize(using = LabelSerializer.class)
+    /**
+     * IDs of Labels assigned to this Feed
+     */
     public List<String> labels = new ArrayList<>();
 
     /**
