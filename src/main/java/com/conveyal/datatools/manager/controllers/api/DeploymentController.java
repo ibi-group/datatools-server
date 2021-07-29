@@ -218,6 +218,11 @@ public class DeploymentController {
             Project project = Persistence.projects.getById(projectId);
             Deployment newDeployment = new Deployment(project);
 
+            // Pre-populate the Pelias webhook URL from the project
+            if (project.lastUsedPeliasWebhookUrl != null) {
+                newDeployment.peliasWebhookUrl = project.lastUsedPeliasWebhookUrl;
+            }
+
             // FIXME: Here we are creating a deployment and updating it with the JSON string (two db operations)
             // We do this because there is not currently apply JSON directly to an object (outside of Mongo codec
             // operations)
@@ -310,6 +315,14 @@ public class DeploymentController {
             // Update deployment feedVersionIds field.
             List<String> versionIds = versionsToInsert.stream().map(v -> v.id).collect(Collectors.toList());
             Persistence.deployments.updateField(deploymentToUpdate.id, "feedVersionIds", versionIds);
+        }
+
+        // If Pelias Webhook URL is updated, set that to the project's as a helpful default
+        if (updateDocument.containsKey("peliasWebhookUrl")) {
+            Persistence.projects.updateField(
+                    deploymentToUpdate.projectId,
+                    "lastUsedPeliasWebhookUrl",
+                    updateDocument.getString("peliasWebhookUrl"));
         }
         Deployment updatedDeployment = Persistence.deployments.update(deploymentToUpdate.id, req.body());
         // TODO: Should updates to the deployment's fields trigger a notification to subscribers? This could get
