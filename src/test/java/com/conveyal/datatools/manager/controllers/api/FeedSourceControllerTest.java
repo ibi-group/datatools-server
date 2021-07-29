@@ -154,8 +154,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
      * Helper method to create label
      */
     private static Label createLabel(String name) {
-        Label label = new Label(name, "A label used during testing", "#123", false, project.id);
-        return label;
+        return new Label(name, "A label used during testing", "#123", false, project.id);
     }
 
     /**

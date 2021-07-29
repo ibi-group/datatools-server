@@ -73,7 +73,7 @@ public class LabelController {
             Persistence.labels.create(newLabel);
             return newLabel;
         } catch (Exception e) {
-            logMessageAndHalt(req, 500, "Unknown error encountered creating label", e);
+            logMessageAndHalt(req, 500, "Unknown error encountered creating label.", e);
             return null;
         }
     }
@@ -87,13 +87,10 @@ public class LabelController {
         // Label is quite forgiving (sets defaults if null) and the boolean value is type checked,
         // so there is little to validate.
         if (StringUtils.isEmpty(label.name)) {
-            validationIssues.add("Name field must not be empty.");
-        }
-        if (!validationIssues.isEmpty()) {
             logMessageAndHalt(
                     req,
                     HttpStatus.BAD_REQUEST_400,
-                    "Request was invalid for the following reasons: " + String.join(", ", validationIssues)
+                    "Request was invalid, the name field must not be empty."
             );
         }
     }
@@ -162,7 +159,7 @@ public class LabelController {
     private static Label requestLabelById(Request req, Actions action) {
         String id = req.params("id");
         if (id == null) {
-            logMessageAndHalt(req, 400, "Please specify id param");
+            logMessageAndHalt(req, 400, "Please specify id param.");
         }
         Label label = Persistence.labels.getById(id);
         checkLabelPermissions(req, label, action);
@@ -181,7 +178,7 @@ public class LabelController {
         Auth0UserProfile userProfile = req.attribute("user");
         // check for null label
         if (label == null) {
-            logMessageAndHalt(req, 400, "Label ID does not exist");
+            logMessageAndHalt(req, 400, "Label ID does not exist.");
             return;
         }
 
@@ -190,18 +187,19 @@ public class LabelController {
             case CREATE:
             case MANAGE:
             case EDIT:
-                // Only project admins can edit labels
+                // Only project admins can edit, manage, or create labels
                 if (!isProjectAdmin) {
-                    logMessageAndHalt(req, 403, "User is not admin so cannot update or create labels");
+                    logMessageAndHalt(req, 403, "User is not admin so cannot update or create labels.");
                 }
+                break;
             case VIEW:
                 if (label.adminOnly && !isProjectAdmin) {
-                    logMessageAndHalt(req, 403, "User is not admin so cannot view admin-only label");
+                    logMessageAndHalt(req, 403, "User is not admin so cannot view admin-only label.");
                 }
                 break;
             default:
                 // Incorrect query, so fail
-                logMessageAndHalt(req, 400, "Not enough information supplied to determine label access");
+                logMessageAndHalt(req, 400, "Not enough information supplied to determine label access.");
                 break;
         }
 

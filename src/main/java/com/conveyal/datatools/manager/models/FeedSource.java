@@ -328,6 +328,11 @@ public class FeedSource extends Model implements Cloneable {
         return this.name.compareTo(o.name);
     }
 
+    /**
+     * Similar to a standard Java .equals() method, except that the labels field is ignored.
+     * @param o Second FeedSource to compare to this one
+     * @return  True or false depending on if the FeedSources are equal, barring labels.
+     */
     public boolean equalsExceptLabels(FeedSource o) {
         // Compare every property other than labels
         return this.name.equals(o.name) &&
