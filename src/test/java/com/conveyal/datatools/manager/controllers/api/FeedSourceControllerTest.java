@@ -12,14 +12,16 @@ import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HttpUtils;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
+import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
+import org.apache.http.util.EntityUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.w3c.dom.Entity;
 
 import java.io.IOException;
 import java.net.URL;
-import java.util.ArrayList;
 
 import static org.eclipse.jetty.http.HttpStatus.OK_200;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -29,6 +31,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
     private static Project project = null;
     private static FeedSource feedSourceWithUrl = null;
     private static FeedSource feedSourceWithNoUrl = null;
+    private static FeedSource feedSourceWithLabels = null;
     private static Label publicLabel = null;
     private static Label adminOnlyLabel = null;
 
@@ -42,10 +45,11 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         Persistence.projects.create(project);
         feedSourceWithUrl = createFeedSource("FeedSourceOne", new URL("http://www.feedsource.com"));
         feedSourceWithNoUrl = createFeedSource("FeedSourceTwo", null);
+        feedSourceWithLabels = createFeedSource("FeedSourceThree", null);
 
         adminOnlyLabel = createLabel("Admin Only Label");
         adminOnlyLabel.adminOnly = true;
-        publicLabel = createLabel("first");
+        publicLabel = createLabel("Public Label");
     }
 
     @AfterAll
@@ -105,22 +109,6 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(1, jobCountForFeed(feedSourceWithUrl.id));
     }
 
-    /**
-     * Create some labels, add them to the feed source make them admin only, and check that they don't appear if not an admin
-     */
-    @Test
-    public void createFeedSourceWithLabels() {
-        // Testing the following (important) components of label is as of yet not supported.
-        // Running the JsonUtil.toJson method uses Jackson's serializer which breaks the input.
-        // The only solution is to generate the JSON in another way...
-
-        // The feedSourceWithNoUrl will be serialized as a full Label
-
-        // Test that they're "rendered" as full label objects
-        // Test that an admin can see 2 of them
-
-        // Test that a non-admin can only one of them
-    }
 
     /**
      * Create a feed source without defining the feed source url. Confirm that the feed source is not scheduled.
@@ -133,6 +121,67 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         );
         assertEquals(OK_200, createFeedSourceResponse.getStatusLine().getStatusCode());
         assertEquals(0, jobCountForFeed(feedSourceWithNoUrl.id));
+    }
+
+
+    /**
+     * Create some labels, add them to the feed source make them admin only, and check that they don't appear if not an admin
+     */
+    @Test
+    public void createFeedSourceWithLabels() throws IOException {
+        // Create labels
+        HttpResponse createFirstLabelResponse = TestUtils.makeRequest("/api/manager/secure/label",
+                JsonUtil.toJson(publicLabel),
+                HttpUtils.REQUEST_METHOD.POST
+        );
+        assertEquals(OK_200, createFirstLabelResponse.getStatusLine().getStatusCode());
+        HttpResponse createSecondLabelResponse = TestUtils.makeRequest("/api/manager/secure/label",
+                JsonUtil.toJson(adminOnlyLabel),
+                HttpUtils.REQUEST_METHOD.POST
+        );
+        assertEquals(OK_200, createSecondLabelResponse.getStatusLine().getStatusCode());
+
+        String firstLabelId = publicLabel.id;
+        String secondLabelid = adminOnlyLabel.id;
+
+        feedSourceWithLabels.labels.add(firstLabelId);
+        feedSourceWithLabels.labels.add(secondLabelid);
+
+        // Create feed source with labels
+        HttpResponse createFeedSourceResponse = TestUtils.makeRequest("/api/manager/secure/feedsource",
+                JsonUtil.toJson(feedSourceWithLabels),
+                HttpUtils.REQUEST_METHOD.POST
+        );
+        assertEquals(OK_200, createFeedSourceResponse.getStatusLine().getStatusCode());
+        assertEquals(2, labelCountForFeed(feedSourceWithLabels.id));
+        assertEquals(2, Persistence.projects.getById(feedSourceWithLabels.retrieveProject().id).retrieveProjectLabels().size());
+
+        // Test that an admin can see 2 of them
+        // Test that a non-admin can only one of them
+        // Test that feed source output is correct
+        // Test that the feed source output only shows 1 label for a non-admin
+        // Test that a non-admin sees only 1 label in the Project output
+        // Test that the Project output contains the full Label objects
+
+        // Test that after deleting a label, it's deleted from the feed source and project
+        HttpResponse deleteSecondLabelResponse = TestUtils.makeRequest("/api/manager/secure/label/" + adminOnlyLabel.id,
+                null,
+                HttpUtils.REQUEST_METHOD.DELETE
+        );
+        assertEquals(OK_200, deleteSecondLabelResponse.getStatusLine().getStatusCode());
+        assertEquals(1, labelCountForFeed(feedSourceWithLabels.id));
+        assertEquals(1, Persistence.projects.getById(feedSourceWithLabels.retrieveProject().id).retrieveProjectLabels().size());
+
+        // Test that labels are removed when deleting project
+        HttpResponse removeProjectResponse = TestUtils.makeRequest("/api/manager/secure/project/" + feedSourceWithLabels.retrieveProject().id,
+                null,
+                HttpUtils.REQUEST_METHOD.DELETE
+        );
+        assertEquals(OK_200, removeProjectResponse.getStatusLine().getStatusCode());
+        assertEquals(0, Persistence.labels.getAll().size());
+
+        // Re-create removed project for future tests to succeed...
+        Persistence.projects.create(project);
     }
 
     /**
@@ -162,5 +211,12 @@ public class FeedSourceControllerTest extends DatatoolsTest {
      */
     private int jobCountForFeed(String feedSourceId) {
         return Scheduler.scheduledJobsForFeedSources.get(feedSourceId).size();
+    }
+
+    /**
+     * Provide the label count for a given feed source.
+     */
+    private int labelCountForFeed(String feedSourceId) {
+        return Persistence.feedSources.getById(feedSourceId).labels.size();
     }
 }
