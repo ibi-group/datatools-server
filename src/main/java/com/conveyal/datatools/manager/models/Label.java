@@ -54,7 +54,7 @@ public class Label extends Model implements Cloneable{
         super();
         this.name = name;
         this.description = description != null ? description : "";
-        this.color = color != null ? color : "#fff";
+        this.color = color != null ? color : "#000000";
         this.adminOnly = adminOnly;
 
         this.projectId = projectId;
