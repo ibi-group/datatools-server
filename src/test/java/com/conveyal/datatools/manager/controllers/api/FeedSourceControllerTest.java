@@ -12,13 +12,11 @@ import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HttpUtils;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
-import org.apache.http.HttpEntity;
 import org.apache.http.HttpResponse;
 import org.apache.http.util.EntityUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
-import org.w3c.dom.Entity;
 
 import java.io.IOException;
 import java.net.URL;
@@ -153,6 +151,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
                 HttpUtils.REQUEST_METHOD.POST
         );
         assertEquals(OK_200, createFeedSourceResponse.getStatusLine().getStatusCode());
+        // Test that they are assigned properly
         assertEquals(2, labelCountForFeed(feedSourceWithLabels.id));
         assertEquals(2, Persistence.projects.getById(feedSourceWithLabels.retrieveProject().id).retrieveProjectLabels().size());
 

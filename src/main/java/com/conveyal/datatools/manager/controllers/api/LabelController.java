@@ -16,7 +16,6 @@ import spark.Request;
 import spark.Response;
 
 import java.io.IOException;
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -83,7 +82,6 @@ public class LabelController {
      * persisted to the database.
      */
     private static void validate(Request req, Label label) {
-        List<String> validationIssues = new ArrayList<>();
         // Label is quite forgiving (sets defaults if null) and the boolean value is type checked,
         // so there is little to validate.
         if (StringUtils.isEmpty(label.name)) {
