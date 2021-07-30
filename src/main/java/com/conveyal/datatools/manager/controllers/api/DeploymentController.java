@@ -484,11 +484,8 @@ public class DeploymentController {
             logMessageAndHalt(req, 400, "Internal reference error. Deployment's project ID is invalid");
         }
 
-        // Check that permissions of user allow them to deploy to target.
-        boolean isProjectAdmin = userProfile.canAdministerProject(deployment.projectId, deployment.organizationId());
-
         // Execute the pelias update job and keep track of it
-        PeliasUpdateJob peliasUpdateJob = new PeliasUpdateJob(userProfile, "what is this");
+        PeliasUpdateJob peliasUpdateJob = new PeliasUpdateJob(userProfile, "Updating Custom Geocoder Database", deployment);
         JobUtils.heavyExecutor.execute(peliasUpdateJob);
         return SparkUtils.formatJobMessage(peliasUpdateJob.jobId, "Pelias update initiating.");
     }
