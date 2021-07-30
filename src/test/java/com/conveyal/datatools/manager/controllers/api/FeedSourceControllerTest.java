@@ -155,13 +155,6 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(2, labelCountForFeed(feedSourceWithLabels.id));
         assertEquals(2, Persistence.projects.getById(feedSourceWithLabels.retrieveProject().id).retrieveProjectLabels().size());
 
-        // Test that an admin can see 2 of them
-        // Test that a non-admin can only one of them
-        // Test that feed source output is correct
-        // Test that the feed source output only shows 1 label for a non-admin
-        // Test that a non-admin sees only 1 label in the Project output
-        // Test that the Project output contains the full Label objects
-
         // Test that after deleting a label, it's deleted from the feed source and project
         HttpResponse deleteSecondLabelResponse = TestUtils.makeRequest("/api/manager/secure/label/" + adminOnlyLabel.id,
                 null,
