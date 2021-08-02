@@ -369,7 +369,7 @@ public class FeedSourceController {
      * @param userProfile   The user object to check permissions with
      * @return              A feed source containing only labels the user is allowed to see
      */
-    private static FeedSource cleanFeedSourceLabels(FeedSource feedSource, Auth0UserProfile userProfile) {
+    protected static FeedSource cleanFeedSourceLabels(FeedSource feedSource, Auth0UserProfile userProfile) {
         // Remove labels user is not allowed to see if user is not admin
         boolean isAdmin = userProfile.canAdministerProject(feedSource.id, feedSource.organizationId());
         if (!isAdmin) {

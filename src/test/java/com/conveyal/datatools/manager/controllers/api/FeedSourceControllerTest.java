@@ -4,6 +4,7 @@ import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.TestUtils;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FetchFrequency;
@@ -19,9 +20,12 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.net.URL;
+import java.util.List;
 
+import static com.mongodb.client.model.Filters.eq;
 import static org.eclipse.jetty.http.HttpStatus.OK_200;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
 
 public class FeedSourceControllerTest extends DatatoolsTest {
@@ -164,6 +168,21 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(2, labelCountForFeed(feedSourceWithLabels.id));
         assertEquals(2, Persistence.projects.getById(feedSourceWithLabels.retrieveProject().id).retrieveProjectLabels().size());
 
+        Auth0Connection.setAuthDisabled(false);
+
+        // Test that feed source shows only correct labels based on user auth
+        Auth0UserProfile adminUser = Auth0UserProfile.createTestAdminUser();
+        Auth0UserProfile viewOnlyUser = Auth0UserProfile.createTestViewOnlyUser(feedSourceWithLabels.projectId);
+        List<String> labelsSeenByAdmin = FeedSourceController.cleanFeedSourceLabels(feedSourceWithLabels, adminUser).labels;
+        List<String> labelsSeenByViewOnlyUser = FeedSourceController.cleanFeedSourceLabels(feedSourceWithLabels, viewOnlyUser).labels;
+
+        assertEquals(2, labelsSeenByAdmin.size());
+        assertEquals(1, labelsSeenByViewOnlyUser.size());
+        // Test that project shows only correct labels based on user auth
+
+        Auth0Connection.setAuthDisabled(true);
+
+
         // Test that after deleting a label, it's deleted from the feed source and project
         HttpResponse deleteSecondLabelResponse = TestUtils.makeRequest("/api/manager/secure/label/" + adminOnlyLabel.id,
                 null,
@@ -174,12 +193,11 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(1, Persistence.projects.getById(feedSourceWithLabels.retrieveProject().id).retrieveProjectLabels().size());
 
         // Test that labels are removed when deleting project
-        HttpResponse removeProjectResponse = TestUtils.makeRequest("/api/manager/secure/project/" + feedSourceWithLabels.retrieveProject().id,
-                null,
-                HttpUtils.REQUEST_METHOD.DELETE
-        );
-        assertEquals(OK_200, removeProjectResponse.getStatusLine().getStatusCode());
-        assertEquals(0, Persistence.labels.getAll().size());
+        assertEquals(1, Persistence.labels.getFiltered(eq("projectId", projectToBeDeleted.id)).size());
+
+        projectToBeDeleted.delete();
+        assertNull(Persistence.projects.getById(projectToBeDeleted.id));
+        assertEquals(0, Persistence.labels.getFiltered(eq("projectId", projectToBeDeleted.id)).size());
     }
 
     /**

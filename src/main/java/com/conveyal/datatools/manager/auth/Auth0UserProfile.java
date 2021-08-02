@@ -40,6 +40,24 @@ public class Auth0UserProfile {
     }
 
     /**
+     * Utility method for creating a test standard (with no special permissions) user.
+     */
+    public static Auth0UserProfile createTestViewOnlyUser(String projectId) {
+        // Construct Auth0 project from project ID
+        Project project = new Project(projectId, new Permission[]{}, new String[]{});
+
+        Auth0UserProfile.DatatoolsInfo standardUserDatatoolsInfo = new Auth0UserProfile.DatatoolsInfo();
+        standardUserDatatoolsInfo.projects = new Project[]{project};
+        standardUserDatatoolsInfo.setClientId(DataManager.getConfigPropertyAsText("AUTH0_CLIENT_ID"));
+        Auth0UserProfile.AppMetadata viewOnlyAppMetaData = new Auth0UserProfile.AppMetadata();
+        viewOnlyAppMetaData.setDatatoolsInfo(standardUserDatatoolsInfo);
+
+        Auth0UserProfile standardUser = new Auth0UserProfile("nonadminmock@example.com", "user_id:view_only_string");
+        standardUser.setApp_metadata(viewOnlyAppMetaData);
+        return standardUser;
+    }
+
+    /**
      * Utility method for creating a system user (for autonomous server jobs).
      */
     public static Auth0UserProfile createSystemUser() {
