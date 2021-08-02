@@ -61,6 +61,9 @@ public class HttpUtils {
         switch (method) {
             case GET:
                 HttpGet getRequest = new HttpGet(uri);
+                for (Header header : headers) {
+                    getRequest.setHeader(header);
+                }
                 getRequest.setConfig(timeoutConfig);
                 httpUriRequest = getRequest;
                 break;

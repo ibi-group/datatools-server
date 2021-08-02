@@ -18,6 +18,7 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
+import java.util.Base64;
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -42,10 +43,19 @@ public class PeliasUpdateJob extends MonitorableJob {
      */
     Timer timer;
 
+    /**
+     * Webhook authorization from username and password
+     */
+    Header webhookAuthorization;
+
     public PeliasUpdateJob(Auth0UserProfile owner, String name, Deployment deployment) {
         super(owner, name, JobType.UPDATE_PELIAS);
         this.deployment = deployment;
         this.timer = new Timer();
+
+        String authorizationString = deployment.peliasUsername + ":" + deployment.peliasPassword;
+        authorizationString = "Basic " + Base64.getEncoder().encodeToString(authorizationString.getBytes());
+        this.webhookAuthorization = new BasicHeader("Authorization", authorizationString);
     }
 
     /**
@@ -66,7 +76,11 @@ public class PeliasUpdateJob extends MonitorableJob {
 
     private void getWebhookStatus() {
         URI url = getWebhookURI(deployment.peliasWebhookUrl + "/status/" + workerId);
-        HttpResponse response = HttpUtils.httpRequestRawResponse(url, 500, HttpUtils.REQUEST_METHOD.GET, null);
+
+        List<Header> headers = new ArrayList<>();
+        headers.add(this.webhookAuthorization);
+
+        HttpResponse response = HttpUtils.httpRequestRawResponse(url, 1000, HttpUtils.REQUEST_METHOD.GET, null, headers);
 
         // Convert raw body to JSON
         String jsonResponse;
@@ -75,6 +89,7 @@ public class PeliasUpdateJob extends MonitorableJob {
         }
         catch (NullPointerException | IOException ex) {
             status.fail("Webhook status did not provide a response!", ex);
+            timer.cancel();
             return;
         }
 
@@ -83,7 +98,8 @@ public class PeliasUpdateJob extends MonitorableJob {
         try {
             statusResponse = JsonUtil.objectMapper.readValue(jsonResponse, PeliasWebhookStatusMessage.class);
         } catch (IOException ex) {
-            status.fail("Status update wasn't in correct format:", ex);
+            status.fail("Server refused to provide a valid status update. Are the credentials correct?", ex);
+            timer.cancel();
             return;
         }
 
@@ -127,6 +143,7 @@ public class PeliasUpdateJob extends MonitorableJob {
         List<Header> headers = new ArrayList<>();
         headers.add(new BasicHeader("Accept", "application/json"));
         headers.add(new BasicHeader("Content-type", "application/json"));
+        headers.add(this.webhookAuthorization);
 
         // Get webhook response
         HttpResponse response = HttpUtils.httpRequestRawResponse(url, 5000, HttpUtils.REQUEST_METHOD.POST, query, headers);
@@ -146,7 +163,7 @@ public class PeliasUpdateJob extends MonitorableJob {
         try {
             webhookResponse = JsonUtil.objectMapper.readTree(jsonResponse);
         } catch (IOException ex) {
-            status.fail("Webhook server returned error:", ex);
+            status.fail("The Webhook server's response was invalid! Are the credentials correct?", ex);
             return null;
         }
 
