@@ -72,10 +72,14 @@ public class FeedSourceController {
         Collection<FeedSource> feedSourcesToReturn = new ArrayList<>();
         Auth0UserProfile user = req.attribute("user");
         String projectId = req.queryParams("projectId");
+
         Project project = Persistence.projects.getById(projectId);
+
         if (project == null) {
             logMessageAndHalt(req, 400, "Must provide valid projectId query param to retrieve feed sources.");
         }
+        boolean isAdmin = user.canAdministerProject(project.id, project.organizationId);
+
         Collection<FeedSource> projectFeedSources = project.retrieveProjectFeedSources();
         for (FeedSource source: projectFeedSources) {
             String orgId = source.organizationId();
@@ -87,7 +91,7 @@ public class FeedSourceController {
                     user.canManageOrViewFeed(orgId, source.projectId, source.id)
             ) {
                 // Remove labels user can't view, then add to list of feeds to return
-                feedSourcesToReturn.add(cleanFeedSourceLabels(source, user));
+                feedSourcesToReturn.add(cleanFeedSourceLabels(source, isAdmin));
             }
         }
         return feedSourcesToReturn;
@@ -321,11 +325,12 @@ public class FeedSourceController {
             return null;
         }
         String orgId = feedSource.organizationId();
+        Boolean isAdmin = userProfile.canAdministerProject(feedSource.id, orgId);
         boolean authorized;
 
         switch (action) {
             case CREATE:
-                authorized = userProfile.canAdministerProject(feedSource.id, orgId);
+                authorized = isAdmin;
                 break;
             case MANAGE:
                 authorized = userProfile.canManageFeed(orgId, feedSource.projectId, feedSource.id);
@@ -348,7 +353,7 @@ public class FeedSourceController {
 
         // If we make it here, user has permission and the requested feed source is valid.
         // This final step removes labels the user can't view
-        return cleanFeedSourceLabels(feedSource, userProfile);
+        return cleanFeedSourceLabels(feedSource, isAdmin);
     }
 
     /** Determines whether a change to a feed source is significant enough that it warrants sending a notification
@@ -366,12 +371,11 @@ public class FeedSourceController {
     /**
      * Removes labels from a feed that a user is not allowed to view. Returns cleaned feed source
      * @param feedSource    The feed source to clean
-     * @param userProfile   The user object to check permissions with
+     * @param isAdmin       Is the user an admin? Changes what is returned.
      * @return              A feed source containing only labels the user is allowed to see
      */
-    protected static FeedSource cleanFeedSourceLabels(FeedSource feedSource, Auth0UserProfile userProfile) {
+    protected static FeedSource cleanFeedSourceLabels(FeedSource feedSource, boolean isAdmin) {
         // Remove labels user is not allowed to see if user is not admin
-        boolean isAdmin = userProfile.canAdministerProject(feedSource.id, feedSource.organizationId());
         if (!isAdmin) {
             feedSource.labels = Persistence.labels.getByIds(feedSource.labels).stream()
                     .filter(label -> !label.adminOnly)

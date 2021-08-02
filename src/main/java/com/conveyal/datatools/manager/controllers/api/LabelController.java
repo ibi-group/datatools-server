@@ -55,10 +55,7 @@ public class LabelController {
 
         boolean isProjectAdmin = user.canAdministerProject(project.id, project.organizationId);
 
-        return project.retrieveProjectLabels().stream()
-                // Only return labels user has access to
-                .filter(label -> isProjectAdmin || !label.adminOnly)
-                .collect(Collectors.toList());
+        return project.retrieveProjectLabels(isProjectAdmin);
     }
 
     /**

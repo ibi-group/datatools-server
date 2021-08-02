@@ -4,7 +4,6 @@ import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.TestUtils;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
-import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FetchFrequency;
@@ -164,24 +163,19 @@ public class FeedSourceControllerTest extends DatatoolsTest {
                 HttpUtils.REQUEST_METHOD.POST
         );
         assertEquals(OK_200, createFeedSourceResponse.getStatusLine().getStatusCode());
+
         // Test that they are assigned properly
         assertEquals(2, labelCountForFeed(feedSourceWithLabels.id));
-        assertEquals(2, Persistence.projects.getById(feedSourceWithLabels.retrieveProject().id).retrieveProjectLabels().size());
-
-        Auth0Connection.setAuthDisabled(false);
+        // Test that project shows only correct labels based on user auth
+        assertEquals(2, Persistence.projects.getById(feedSourceWithLabels.retrieveProject().id).retrieveProjectLabels(true).size());
+        assertEquals(1, Persistence.projects.getById(feedSourceWithLabels.retrieveProject().id).retrieveProjectLabels(false).size());
 
         // Test that feed source shows only correct labels based on user auth
-        Auth0UserProfile adminUser = Auth0UserProfile.createTestAdminUser();
-        Auth0UserProfile viewOnlyUser = Auth0UserProfile.createTestViewOnlyUser(feedSourceWithLabels.projectId);
-        List<String> labelsSeenByAdmin = FeedSourceController.cleanFeedSourceLabels(feedSourceWithLabels, adminUser).labels;
-        List<String> labelsSeenByViewOnlyUser = FeedSourceController.cleanFeedSourceLabels(feedSourceWithLabels, viewOnlyUser).labels;
+        List<String> labelsSeenByAdmin = FeedSourceController.cleanFeedSourceLabels(feedSourceWithLabels, true).labels;
+        List<String> labelsSeenByViewOnlyUser = FeedSourceController.cleanFeedSourceLabels(feedSourceWithLabels, false).labels;
 
         assertEquals(2, labelsSeenByAdmin.size());
         assertEquals(1, labelsSeenByViewOnlyUser.size());
-        // Test that project shows only correct labels based on user auth
-
-        Auth0Connection.setAuthDisabled(true);
-
 
         // Test that after deleting a label, it's deleted from the feed source and project
         HttpResponse deleteSecondLabelResponse = TestUtils.makeRequest("/api/manager/secure/label/" + adminOnlyLabel.id,
@@ -190,7 +184,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         );
         assertEquals(OK_200, deleteSecondLabelResponse.getStatusLine().getStatusCode());
         assertEquals(1, labelCountForFeed(feedSourceWithLabels.id));
-        assertEquals(1, Persistence.projects.getById(feedSourceWithLabels.retrieveProject().id).retrieveProjectLabels().size());
+        assertEquals(1, Persistence.projects.getById(feedSourceWithLabels.retrieveProject().id).retrieveProjectLabels(true).size());
 
         // Test that labels are removed when deleting project
         assertEquals(1, Persistence.labels.getFiltered(eq("projectId", projectToBeDeleted.id)).size());

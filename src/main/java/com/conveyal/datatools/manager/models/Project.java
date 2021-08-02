@@ -13,8 +13,8 @@ import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
+import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 import static com.mongodb.client.model.Filters.or;
 
@@ -105,10 +105,13 @@ public class Project extends Model {
     }
 
     /**
-     * Get all the labels for this project.
+     * Get all the labels for this project, depending on if user is admin
      */
-    public Collection<Label> retrieveProjectLabels() {
-        return Persistence.labels.getFiltered(eq("projectId", this.id));
+    public Collection<Label> retrieveProjectLabels(boolean isAdmin) {
+        if (isAdmin) {
+            return Persistence.labels.getFiltered(eq("projectId", this.id));
+        }
+        return Persistence.labels.getFiltered(and(eq("adminOnly", false ), eq("projectId", this.id)));
     }
 
     // Keep an empty collection here which is filled dynamically later
@@ -142,7 +145,8 @@ public class Project extends Model {
         // Delete each deployment in the project.
         retrieveDeployments().forEach(Deployment::delete);
         // Delete each label in the project.
-        retrieveProjectLabels().forEach(Label::delete);
+        // Pass the user object for deletion, assuming the user is admin
+        retrieveProjectLabels(true).forEach(Label::delete);
         // Finally, delete the project.
         Persistence.projects.removeById(this.id);
     }

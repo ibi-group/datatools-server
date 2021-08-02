@@ -166,7 +166,6 @@ public class ProjectController {
      * FIXME: this is a method with side effects and no clear single purpose, in terms of transformation of input to output.
      */
     private static Project checkProjectPermissions(Request req, Project project, String action) {
-
         Auth0UserProfile userProfile = req.attribute("user");
         // Check if request was made by a user that is not logged in
         boolean publicFilter = req.pathInfo().matches(publicPath);
@@ -197,10 +196,7 @@ public class ProjectController {
         }
 
         // Filter labels
-        project.labels = project.retrieveProjectLabels().stream() // Need to resolve label IDs to labels, then back
-                        // Admin gets all, otherwise only public labels
-                        .filter(label -> isAdmin || !label.adminOnly)
-                        .collect(Collectors.toList());
+        project.labels = project.retrieveProjectLabels(isAdmin);
 
 
         // If the user is not logged in, include only public feed sources
