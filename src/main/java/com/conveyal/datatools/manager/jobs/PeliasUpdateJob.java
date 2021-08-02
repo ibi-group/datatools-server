@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.jobs;
 
+import com.amazonaws.services.s3.AmazonS3URI;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
@@ -41,21 +42,29 @@ public class PeliasUpdateJob extends MonitorableJob {
     /**
      * Timer used to poll the status endpoint
      */
-    Timer timer;
+    private Timer timer;
 
     /**
      * Webhook authorization from username and password
      */
-    Header webhookAuthorization;
+    private Header webhookAuthorization;
 
-    public PeliasUpdateJob(Auth0UserProfile owner, String name, Deployment deployment) {
+    /**
+     * S3 URI to upload logs to
+     */
+    private AmazonS3URI logUploadS3URI;
+
+    public PeliasUpdateJob(Auth0UserProfile owner, String name, Deployment deployment, AmazonS3URI logUploadS3URI) {
         super(owner, name, JobType.UPDATE_PELIAS);
         this.deployment = deployment;
         this.timer = new Timer();
+        this.logUploadS3URI = logUploadS3URI;
 
-        String authorizationString = deployment.peliasUsername + ":" + deployment.peliasPassword;
-        authorizationString = "Basic " + Base64.getEncoder().encodeToString(authorizationString.getBytes());
-        this.webhookAuthorization = new BasicHeader("Authorization", authorizationString);
+        if (deployment.peliasUsername != "" && deployment.peliasPassword != "") {
+            String authorizationString = deployment.peliasUsername + ":" + deployment.peliasPassword;
+            authorizationString = "Basic " + Base64.getEncoder().encodeToString(authorizationString.getBytes());
+            this.webhookAuthorization = new BasicHeader("Authorization", authorizationString);
+        }
     }
 
     /**
@@ -136,8 +145,10 @@ public class PeliasUpdateJob extends MonitorableJob {
 
         PeliasWebhookRequestBody peliasWebhookRequestBody = new PeliasWebhookRequestBody();
         peliasWebhookRequestBody.gtfsFeeds = gtfsFeeds;
+        peliasWebhookRequestBody.logUploadUrl = this.logUploadS3URI.toString();
 
         String query = JsonUtil.toJson(peliasWebhookRequestBody);
+
 
         // Create headers needed for Pelias webhook
         List<Header> headers = new ArrayList<>();
@@ -204,6 +215,7 @@ public class PeliasUpdateJob extends MonitorableJob {
     private class PeliasWebhookRequestBody {
         public List<PeliasWebhookGTFSFeedFormat> gtfsFeeds;
         public List<String> csvFiles;
+        public String logUploadUrl;
     }
 
     /**
@@ -213,14 +225,11 @@ public class PeliasUpdateJob extends MonitorableJob {
         public String uri;
         public String name;
         public String filename;
-        public String logUploadUrl;
 
         public PeliasWebhookGTFSFeedFormat(FeedVersion feedVersion) {
             uri = S3Utils.getS3FeedUri(feedVersion.id);
             name = Persistence.feedSources.getById(feedVersion.feedSourceId).name;
             filename = feedVersion.id;
-            // TODO: Where should the log be uploaded to?
-            logUploadUrl = "";
         }
     }
 
