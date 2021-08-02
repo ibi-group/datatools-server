@@ -6,19 +6,21 @@ import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.HttpUtils;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.apache.http.Header;
 import org.apache.http.HttpResponse;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.entity.StringEntity;
-import org.apache.http.impl.client.CloseableHttpClient;
-import org.apache.http.impl.client.HttpClientBuilder;
+import org.apache.http.message.BasicHeader;
 import org.apache.http.util.EntityUtils;
 
 import java.io.IOException;
-import java.net.MalformedURLException;
-import java.net.URL;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Timer;
+import java.util.TimerTask;
 import java.util.stream.Collectors;
 
 import static com.mongodb.client.model.Filters.in;
@@ -29,9 +31,21 @@ public class PeliasUpdateJob extends MonitorableJob {
      */
     private Deployment deployment;
 
+    /**
+     * The workerId our request has on the webhook server. Used to get status updates
+     */
+    private String workerId;
+
+
+    /**
+     * Timer used to poll the status endpoint
+     */
+    Timer timer;
+
     public PeliasUpdateJob(Auth0UserProfile owner, String name, Deployment deployment) {
         super(owner, name, JobType.UPDATE_PELIAS);
         this.deployment = deployment;
+        this.timer = new Timer();
     }
 
     /**
@@ -39,13 +53,55 @@ public class PeliasUpdateJob extends MonitorableJob {
      */
     @Override
     public void jobLogic() throws Exception {
-        status.update("Here we go!", 5.0);
-        String workerId = this.makeWebhookRequest(this.deployment);
-        // TODO: Check status endpoint every few seconds and update status
+        status.message = "Launching custom geocoder update request";
+        workerId = this.makeWebhookRequest();
+        status.percentComplete = 1.0;
+
+        // Give server 1 second to create worker
         Thread.sleep(1000);
-        status.update(workerId, 55.0);
-        Thread.sleep(8000);
-        status.completeSuccessfully("it's all done :)");
+        // Check status every 2 seconds
+        timer.schedule(new StatusChecker(), 0, 2000);
+
+    }
+
+    private void getWebhookStatus() {
+        URI url = getWebhookURI(deployment.peliasWebhookUrl + "/status/" + workerId);
+        HttpResponse response = HttpUtils.httpRequestRawResponse(url, 500, HttpUtils.REQUEST_METHOD.GET, null);
+
+        // Convert raw body to JSON
+        String jsonResponse;
+        try {
+            jsonResponse = EntityUtils.toString(response.getEntity());
+        }
+        catch (NullPointerException | IOException ex) {
+            status.fail("Webhook status did not provide a response!", ex);
+            return;
+        }
+
+        // Parse JSON
+        PeliasWebhookStatusMessage statusResponse = null;
+        try {
+            statusResponse = JsonUtil.objectMapper.readValue(jsonResponse, PeliasWebhookStatusMessage.class);
+        } catch (IOException ex) {
+            status.fail("Status update wasn't in correct format:", ex);
+            return;
+        }
+
+        if (!statusResponse.error.equals("false")) {
+            status.fail(statusResponse.error);
+            timer.cancel();
+            return;
+        }
+
+        if (statusResponse.completed) {
+            status.completeSuccessfully(statusResponse.message);
+            timer.cancel();
+            return;
+        }
+
+        status.message = statusResponse.message;
+        status.percentComplete = statusResponse.percentComplete;
+        status.completed = false;
     }
 
     /**
@@ -53,14 +109,8 @@ public class PeliasUpdateJob extends MonitorableJob {
      *
      * @return The workerID of the run created on the Pelias server
      */
-    private String makeWebhookRequest(Deployment deployment) throws IOException {
-        URL url;
-        try {
-            url = new URL(deployment.peliasWebhookUrl);
-        } catch (MalformedURLException ex) {
-            status.fail("Webhook URL was not a valid URL", ex);
-            return null;
-        }
+    private String makeWebhookRequest() {
+        URI url = getWebhookURI(deployment.peliasWebhookUrl);
 
         // Convert from feedVersionIds to Pelias Config objects
         List<PeliasWebhookGTFSFeedFormat> gtfsFeeds = Persistence.feedVersions.getFiltered(in("_id", deployment.feedVersionIds))
@@ -73,34 +123,63 @@ public class PeliasUpdateJob extends MonitorableJob {
 
         String query = JsonUtil.toJson(peliasWebhookRequestBody);
 
-        HttpResponse response;
+        // Create headers needed for Pelias webhook
+        List<Header> headers = new ArrayList<>();
+        headers.add(new BasicHeader("Accept", "application/json"));
+        headers.add(new BasicHeader("Content-type", "application/json"));
 
+        // Get webhook response
+        HttpResponse response = HttpUtils.httpRequestRawResponse(url, 5000, HttpUtils.REQUEST_METHOD.POST, query, headers);
+
+        // Convert raw body to JSON
+        String jsonResponse;
         try {
-            CloseableHttpClient client = HttpClientBuilder.create().build();
-            HttpPost request = new HttpPost(deployment.peliasWebhookUrl);
-            StringEntity queryEntity = new StringEntity(query);
-            request.setEntity(queryEntity);
-            request.setHeader("Accept", "application/json");
-            request.setHeader("Content-type", "application/json");
-
-            response = client.execute(request);
-        } catch (IOException ex) {
-            status.fail("Couldn't connect to webhook URL given.", ex);
+            jsonResponse = EntityUtils.toString(response.getEntity());
+        }
+        catch (NullPointerException | IOException ex) {
+            status.fail("Webhook server specified did not provide a response!", ex);
             return null;
         }
 
-        String json = EntityUtils.toString(response.getEntity());
+        // Parse JSON
         JsonNode webhookResponse = null;
         try {
-            webhookResponse = JsonUtil.objectMapper.readTree(json);
+            webhookResponse = JsonUtil.objectMapper.readTree(jsonResponse);
         } catch (IOException ex) {
             status.fail("Webhook server returned error:", ex);
+            return null;
+        }
+
+        if (webhookResponse.get("error") != null) {
+            status.fail("Server returned an error: " + webhookResponse.get("error").asText());
             return null;
         }
 
         return webhookResponse.get("workerId").asText();
     }
 
+    /**
+     * Helper function to convert Deployment webhook URL to URI object
+     * @param webhookUrlString  String containing URL to parse
+     * @return                  URI object with webhook URL
+     */
+    private URI getWebhookURI(String webhookUrlString) {
+        URI url;
+        try {
+            url = new URI(webhookUrlString);
+        } catch (URISyntaxException ex) {
+            status.fail("Webhook URL was not a valid URL", ex);
+            return null;
+        }
+
+        return url;
+    }
+
+    class StatusChecker extends TimerTask {
+        public void run() {
+            getWebhookStatus();
+        }
+    }
 
     /**
      * The request body required by the Pelias webhook
@@ -117,17 +196,24 @@ public class PeliasUpdateJob extends MonitorableJob {
         public String uri;
         public String name;
         public String filename;
+        public String logUploadUrl;
 
         public PeliasWebhookGTFSFeedFormat(FeedVersion feedVersion) {
             uri = S3Utils.getS3FeedUri(feedVersion.id);
             name = Persistence.feedSources.getById(feedVersion.feedSourceId).name;
             filename = feedVersion.id;
+            // TODO: Where should the log be uploaded to?
+            logUploadUrl = "";
         }
     }
 
-    private class PeliasWebhookErrorMessage {
+    /**
+     * The status object returned by the webhook/status endpoint
+     */
+    public static class PeliasWebhookStatusMessage {
         public Boolean completed;
         public String error;
         public String message;
+        public Double percentComplete;
     }
 }

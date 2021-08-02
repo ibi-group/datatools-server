@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.utils;
 
+import org.apache.http.Header;
 import org.apache.http.HttpResponse;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
@@ -17,6 +18,8 @@ import org.slf4j.LoggerFactory;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
+import java.util.ArrayList;
+import java.util.List;
 
 public class HttpUtils {
     private static final Logger LOG = LoggerFactory.getLogger(HttpUtils.class);
@@ -25,12 +28,26 @@ public class HttpUtils {
     /**
      * Makes an http get/post request and returns the response. The request is based on the provided params.
      */
-    //TODO: Replace with java.net.http once migrated to JDK 11. See HttpUtils under otp-middleware.
+    public static HttpResponse httpRequestRawResponse(
+            URI uri,
+            int connectionTimeout,
+            REQUEST_METHOD method,
+            String bodyContent
+    ) {
+        return httpRequestRawResponse(uri, connectionTimeout, method, bodyContent, new ArrayList<>());
+    }
+
+    /**
+     * Makes an http get/post request and returns the response, including custom headers.
+     * The request is based on the provided params, including headers.
+     */
     public static HttpResponse httpRequestRawResponse(
         URI uri,
         int connectionTimeout,
         REQUEST_METHOD method,
-        String bodyContent) {
+        String bodyContent,
+        List<Header> headers
+        ) {
 
         RequestConfig timeoutConfig = RequestConfig.custom()
             .setConnectionRequestTimeout(connectionTimeout)
@@ -51,6 +68,10 @@ public class HttpUtils {
                 try {
                     HttpPost postRequest = new HttpPost(uri);
                     if (bodyContent != null) postRequest.setEntity(new StringEntity(bodyContent));
+                    for (Header header : headers) {
+                        postRequest.setHeader(header);
+                    }
+
                     postRequest.setConfig(timeoutConfig);
                     httpUriRequest = postRequest;
                 } catch (UnsupportedEncodingException e) {
