@@ -13,7 +13,6 @@ import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HttpUtils;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import org.apache.http.HttpResponse;
-import org.apache.http.util.EntityUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -27,6 +26,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class FeedSourceControllerTest extends DatatoolsTest {
     private static Project project = null;
+    private static Project projectToBeDeleted = null;
     private static FeedSource feedSourceWithUrl = null;
     private static FeedSource feedSourceWithNoUrl = null;
     private static FeedSource feedSourceWithLabels = null;
@@ -41,9 +41,15 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         project.name = "ProjectOne";
         project.autoFetchFeeds = true;
         Persistence.projects.create(project);
-        feedSourceWithUrl = createFeedSource("FeedSourceOne", new URL("http://www.feedsource.com"));
-        feedSourceWithNoUrl = createFeedSource("FeedSourceTwo", null);
-        feedSourceWithLabels = createFeedSource("FeedSourceThree", null);
+
+        projectToBeDeleted = new Project();
+        projectToBeDeleted.name = "ProjectTwo";
+        projectToBeDeleted.autoFetchFeeds = false;
+        Persistence.projects.create(projectToBeDeleted);
+
+        feedSourceWithUrl = createFeedSource("FeedSourceOne", new URL("http://www.feedsource.com"), project);
+        feedSourceWithNoUrl = createFeedSource("FeedSourceTwo", null, project);
+        feedSourceWithLabels = createFeedSource("FeedSourceThree", null, projectToBeDeleted);
 
         adminOnlyLabel = createLabel("Admin Only Label");
         adminOnlyLabel.adminOnly = true;
@@ -55,6 +61,9 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
         if (project != null) {
             Persistence.projects.removeById(project.id);
+        }
+        if (projectToBeDeleted != null) {
+            Persistence.projects.removeById(projectToBeDeleted.id);
         }
         if (feedSourceWithUrl != null) {
             Persistence.feedSources.removeById(feedSourceWithUrl.id);
@@ -140,10 +149,10 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(OK_200, createSecondLabelResponse.getStatusLine().getStatusCode());
 
         String firstLabelId = publicLabel.id;
-        String secondLabelid = adminOnlyLabel.id;
+        String secondLabelId = adminOnlyLabel.id;
 
         feedSourceWithLabels.labels.add(firstLabelId);
-        feedSourceWithLabels.labels.add(secondLabelid);
+        feedSourceWithLabels.labels.add(secondLabelId);
 
         // Create feed source with labels
         HttpResponse createFeedSourceResponse = TestUtils.makeRequest("/api/manager/secure/feedsource",
@@ -171,15 +180,12 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         );
         assertEquals(OK_200, removeProjectResponse.getStatusLine().getStatusCode());
         assertEquals(0, Persistence.labels.getAll().size());
-
-        // Re-create removed project for future tests to succeed...
-        Persistence.projects.create(project);
     }
 
     /**
      * Helper method to create feed source.
      */
-    private static FeedSource createFeedSource(String name, URL url) {
+    private static FeedSource createFeedSource(String name, URL url, Project project) {
         FeedSource feedSource = new FeedSource();
         feedSource.fetchFrequency = FetchFrequency.MINUTES;
         feedSource.fetchInterval = 1;
@@ -195,7 +201,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
      * Helper method to create label
      */
     private static Label createLabel(String name) {
-        return new Label(name, "A label used during testing", "#123", false, project.id);
+        return new Label(name, "A label used during testing", "#123", false, projectToBeDeleted.id);
     }
 
     /**

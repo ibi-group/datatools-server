@@ -22,8 +22,11 @@ import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.getPOJOFromRequestBody;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
-import static spark.Spark.*;
+
+import static spark.Spark.delete;
+import static spark.Spark.get;
 import static spark.Spark.post;
+import static spark.Spark.put;
 
 
 public class LabelController {
