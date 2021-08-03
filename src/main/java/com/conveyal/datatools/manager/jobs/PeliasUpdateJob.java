@@ -59,12 +59,6 @@ public class PeliasUpdateJob extends MonitorableJob {
         this.deployment = deployment;
         this.timer = new Timer();
         this.logUploadS3URI = logUploadS3URI;
-
-        if (deployment.peliasUsername != "" && deployment.peliasPassword != "") {
-            String authorizationString = deployment.peliasUsername + ":" + deployment.peliasPassword;
-            authorizationString = "Basic " + Base64.getEncoder().encodeToString(authorizationString.getBytes());
-            this.webhookAuthorization = new BasicHeader("Authorization", authorizationString);
-        }
     }
 
     /**
