@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import org.slf4j.Logger;
@@ -65,14 +66,17 @@ public abstract class Model implements Serializable {
     /**
      * Get the notes for this object
      */
-    // notes are handled through a separate controller and in a separate DB
     @JsonIgnore
-    public List<Note> retrieveNotes() {
-        ArrayList<Note> ret = new ArrayList<>(noteIds != null ? noteIds.size() : 0);
-
+    public List<Note> retrieveNotes(boolean includeAdminNotes) {
+        List<Note> ret = new ArrayList<>();
         if (noteIds != null) {
-            for (String id : noteIds) {
-                ret.add(Persistence.notes.getById(id));
+            List<Note> allNotes = Persistence.notes.getByIds(noteIds);
+            if (includeAdminNotes) {
+                ret = allNotes;
+            } else {
+                ret = allNotes.stream()
+                    .filter(note -> !note.adminOnly)
+                    .collect(Collectors.toList());
             }
         }
 
@@ -117,14 +121,5 @@ public abstract class Model implements Serializable {
             userEmail = "no_auth@conveyal.com";
         }
 
-    }
-
-    public void addNote(Note n) {
-        if (noteIds == null) {
-            noteIds = new ArrayList<>();
-        }
-
-        noteIds.add(n.id);
-        n.objectId = this.id;
     }
 }

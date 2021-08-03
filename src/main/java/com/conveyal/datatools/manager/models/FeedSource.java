@@ -607,6 +607,8 @@ public class FeedSource extends Model implements Cloneable {
             retrieveFeedVersions().forEach(FeedVersion::delete);
             // Remove all snapshot records for this feed source
             retrieveSnapshots().forEach(Snapshot::delete);
+            // Remove any notes for this feed source
+            retrieveNotes(true).forEach(Note::delete);
             // Remove any scheduled job for feed source.
             Scheduler.removeAllFeedSourceJobs(this.id, true);
             // Delete active editor buffer if exists.

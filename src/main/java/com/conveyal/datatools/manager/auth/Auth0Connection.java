@@ -44,6 +44,7 @@ public class Auth0Connection {
      * be overridden (e.g., in tests) with {@link #setAuthDisabled(boolean)}.
      */
     private static boolean authDisabled = getDefaultAuthDisabled();
+    private static Auth0UserProfile testUser = getDefaultTestUser();
 
 
     /**
@@ -55,7 +56,7 @@ public class Auth0Connection {
         if (isAuthDisabled() || inTestingEnvironment()) {
             // If in a development or testing environment, assign a mock profile of an admin user to the request
             // attribute and skip authentication.
-            req.attribute("user", Auth0UserProfile.createTestAdminUser());
+            req.attribute("user", getTestUser());
             return;
         }
         // Check that auth header is present and formatted correctly (Authorization: Bearer [token]).
@@ -91,6 +92,18 @@ public class Auth0Connection {
             LOG.warn("Login failed to verify with our authorization provider.", e);
             logMessageAndHalt(req, 401, "Could not verify user's token");
         }
+    }
+
+    private static Auth0UserProfile getTestUser() {
+        return testUser;
+    }
+
+    public static Auth0UserProfile getDefaultTestUser() {
+        return Auth0UserProfile.createTestAdminUser();
+    }
+
+    public static void setTestUser(Auth0UserProfile updatedUser) {
+        testUser = updatedUser;
     }
 
     /**

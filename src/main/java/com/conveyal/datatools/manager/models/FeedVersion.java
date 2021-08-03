@@ -449,6 +449,8 @@ public class FeedVersion extends Model implements Serializable {
             // reset lastModified if feed is latest version
             LOG.info("Deleting feed version {}", this.id);
             String id = this.id;
+            // Remove any notes for this feed version
+            retrieveNotes(true).forEach(Note::delete);
             FeedSource fs = parentFeedSource();
             FeedVersion latest = fs.retrieveLatest();
             if (latest != null && latest.id.equals(this.id)) {
