@@ -145,7 +145,10 @@ public class PeliasUpdateJob extends MonitorableJob {
 
         PeliasWebhookRequestBody peliasWebhookRequestBody = new PeliasWebhookRequestBody();
         peliasWebhookRequestBody.gtfsFeeds = gtfsFeeds;
+        peliasWebhookRequestBody.csvFiles = deployment.peliasCsvFiles;
         peliasWebhookRequestBody.logUploadUrl = this.logUploadS3URI.toString();
+        peliasWebhookRequestBody.deploymentId = deployment.id;
+
 
         String query = JsonUtil.toJson(peliasWebhookRequestBody);
 
@@ -203,6 +206,9 @@ public class PeliasUpdateJob extends MonitorableJob {
         return url;
     }
 
+    /**
+     * Class used to execute the status update
+     */
     class StatusChecker extends TimerTask {
         public void run() {
             getWebhookStatus();
@@ -216,6 +222,7 @@ public class PeliasUpdateJob extends MonitorableJob {
         public List<PeliasWebhookGTFSFeedFormat> gtfsFeeds;
         public List<String> csvFiles;
         public String logUploadUrl;
+        public String deploymentId;
     }
 
     /**

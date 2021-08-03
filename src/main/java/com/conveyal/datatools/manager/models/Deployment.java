@@ -78,6 +78,7 @@ public class Deployment extends Model implements Serializable {
     public String peliasUsername;
     public String peliasPassword;
     public boolean peliasUpdate;
+    public List<String> peliasCsvFiles;
 
     /**
      * Get parent project for deployment. Note: at one point this was a JSON property of this class, but severe

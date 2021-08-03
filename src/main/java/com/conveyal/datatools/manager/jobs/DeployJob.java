@@ -91,7 +91,7 @@ import static com.conveyal.datatools.manager.models.Deployment.DEFAULT_OTP_VERSI
 public class DeployJob extends MonitorableJob {
 
     private static final Logger LOG = LoggerFactory.getLogger(DeployJob.class);
-    private static final String bundlePrefix = "bundles";
+    public static final String bundlePrefix = "bundles";
     // Indicates whether EC2 instances should be EBS optimized.
     private static final boolean EBS_OPTIMIZED = "true".equals(DataManager.getConfigPropertyAsText("modules.deployment.ec2.ebs_optimized"));
     // Indicates the node.js version installed by nvm to set the PATH variable to point to
