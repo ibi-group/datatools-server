@@ -87,7 +87,7 @@ public class PeliasUpdateJob extends MonitorableJob {
         URI url = getWebhookURI(deployment.peliasWebhookUrl + "/status/" + workerId);
 
         List<Header> headers = new ArrayList<>();
-        headers.add(this.webhookAuthorization);
+        headers.add(webhookAuthorization);
 
         HttpResponse response = HttpUtils.httpRequestRawResponse(url, 1000, HttpUtils.REQUEST_METHOD.GET, null, headers);
 
@@ -146,7 +146,7 @@ public class PeliasUpdateJob extends MonitorableJob {
         PeliasWebhookRequestBody peliasWebhookRequestBody = new PeliasWebhookRequestBody();
         peliasWebhookRequestBody.gtfsFeeds = gtfsFeeds;
         peliasWebhookRequestBody.csvFiles = deployment.peliasCsvFiles;
-        peliasWebhookRequestBody.logUploadUrl = this.logUploadS3URI.toString();
+        peliasWebhookRequestBody.logUploadUrl = logUploadS3URI.toString();
         peliasWebhookRequestBody.deploymentId = deployment.id;
 
 
@@ -157,7 +157,7 @@ public class PeliasUpdateJob extends MonitorableJob {
         List<Header> headers = new ArrayList<>();
         headers.add(new BasicHeader("Accept", "application/json"));
         headers.add(new BasicHeader("Content-type", "application/json"));
-        headers.add(this.webhookAuthorization);
+        headers.add(webhookAuthorization);
 
         // Get webhook response
         HttpResponse response = HttpUtils.httpRequestRawResponse(url, 5000, HttpUtils.REQUEST_METHOD.POST, query, headers);

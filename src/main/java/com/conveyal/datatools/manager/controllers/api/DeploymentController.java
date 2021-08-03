@@ -5,8 +5,8 @@ import com.amazonaws.services.s3.AmazonS3URI;
 import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.SparkUtils;
+import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.EC2Utils;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
@@ -229,11 +229,6 @@ public class DeploymentController {
         if (allowedToCreate) {
             Project project = Persistence.projects.getById(projectId);
             Deployment newDeployment = new Deployment(project);
-
-            // Pre-populate the Pelias webhook URL from the project
-            if (project.lastUsedPeliasWebhookUrl != null) {
-                newDeployment.peliasWebhookUrl = project.lastUsedPeliasWebhookUrl;
-            }
 
             // FIXME: Here we are creating a deployment and updating it with the JSON string (two db operations)
             // We do this because there is not currently apply JSON directly to an object (outside of Mongo codec
@@ -537,6 +532,7 @@ public class DeploymentController {
                     bundlePrefix,
                     deployment.projectId,
                     deployment.id,
+                    // Where filenames are generated. Prepend random UUID to prevent overwriting
                     UUID.randomUUID() + "_" + part.getSubmittedFileName()
             );
             url = S3Utils.getDefaultBucketUrlForKey(keyName);

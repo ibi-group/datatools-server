@@ -85,6 +85,9 @@ public class HttpUtils {
             case PUT:
                 try {
                     HttpPut putRequest = new HttpPut(uri);
+                    for (Header header : headers) {
+                        putRequest.setHeader(header);
+                    }
                     putRequest.setEntity(new StringEntity(bodyContent));
                     putRequest.setConfig(timeoutConfig);
                     httpUriRequest = putRequest;
@@ -95,6 +98,9 @@ public class HttpUtils {
                 break;
             case DELETE:
                 HttpDelete deleteRequest = new HttpDelete(uri);
+                for (Header header : headers) {
+                    deleteRequest.setHeader(header);
+                }
                 deleteRequest.setConfig(timeoutConfig);
                 httpUriRequest = deleteRequest;
                 break;
