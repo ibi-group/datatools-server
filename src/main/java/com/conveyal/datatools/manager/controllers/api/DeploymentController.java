@@ -5,8 +5,8 @@ import com.amazonaws.services.s3.AmazonS3URI;
 import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
+import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.common.utils.aws.EC2Utils;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
@@ -42,6 +42,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
@@ -530,12 +531,14 @@ public class DeploymentController {
             inputStream = part.getInputStream();
             FileOutputStream out = new FileOutputStream(tempFile);
             IOUtils.copy(inputStream, out);
-        } catch (IOException | ServletException e) {
-            e.printStackTrace();
-        }
 
-        try {
-            String keyName = String.join("/", bundlePrefix, deployment.projectId, deployment.id, tempFile.getName());
+            String keyName = String.join(
+                    "/",
+                    bundlePrefix,
+                    deployment.projectId,
+                    deployment.id,
+                    UUID.randomUUID() + "_" + part.getSubmittedFileName()
+            );
             url = S3Utils.getDefaultBucketUrlForKey(keyName);
             S3Utils.getDefaultS3Client().putObject(new PutObjectRequest(
                     S3Utils.DEFAULT_BUCKET, keyName, tempFile)
@@ -543,7 +546,7 @@ public class DeploymentController {
                     // TODO: restrict?
                     .withCannedAcl(CannedAccessControlList.PublicRead));
             return url;
-        } catch (AmazonServiceException | CheckedAWSException e) {
+        } catch (IOException | ServletException | AmazonServiceException | CheckedAWSException e) {
             e.printStackTrace();
             return null;
         } finally {
