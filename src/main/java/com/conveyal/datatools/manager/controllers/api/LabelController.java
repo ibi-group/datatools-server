@@ -23,6 +23,9 @@ import java.util.stream.Collectors;
 import static com.conveyal.datatools.common.utils.SparkUtils.getPOJOFromRequestBody;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 
+import static com.mongodb.client.model.Filters.and;
+import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Filters.in;
 import static spark.Spark.delete;
 import static spark.Spark.get;
 import static spark.Spark.post;
@@ -128,14 +131,17 @@ public class LabelController {
 
         try {
             // Iterate over feed sources and remove any references to the label
-            Persistence.feedSources.getAll().forEach(feedSource -> {
-                List<String> newLabels = feedSource.labels.stream()
+            Persistence.feedSources.getFiltered(and(
+                    eq("projectId", label.projectId),
+                    in("labelIds", label.id)
+            )).forEach(feedSource -> {
+                List<String> newLabels = feedSource.labelIds.stream()
                         .filter(l -> !l.equals(label.id))
                         .collect(Collectors.toList());
                 // If there are changes, update the feed source
-                if (!newLabels.equals(feedSource.labels)) {
+                if (!newLabels.equals(feedSource.labelIds)) {
                     FeedSource fs = Persistence.feedSources.getById(feedSource.id);
-                    fs.labels = newLabels;
+                    fs.labelIds = newLabels;
                     Persistence.feedSources.replace(fs.id, fs);
                 }
             });

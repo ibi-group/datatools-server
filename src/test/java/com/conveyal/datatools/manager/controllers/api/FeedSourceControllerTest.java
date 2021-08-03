@@ -154,8 +154,8 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         String firstLabelId = publicLabel.id;
         String secondLabelId = adminOnlyLabel.id;
 
-        feedSourceWithLabels.labels.add(firstLabelId);
-        feedSourceWithLabels.labels.add(secondLabelId);
+        feedSourceWithLabels.labelIds.add(firstLabelId);
+        feedSourceWithLabels.labelIds.add(secondLabelId);
 
         // Create feed source with labels
         HttpResponse createFeedSourceResponse = TestUtils.makeRequest("/api/manager/secure/feedsource",
@@ -167,12 +167,12 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         // Test that they are assigned properly
         assertEquals(2, labelCountForFeed(feedSourceWithLabels.id));
         // Test that project shows only correct labels based on user auth
-        assertEquals(2, Persistence.projects.getById(feedSourceWithLabels.retrieveProject().id).retrieveProjectLabels(true).size());
-        assertEquals(1, Persistence.projects.getById(feedSourceWithLabels.retrieveProject().id).retrieveProjectLabels(false).size());
+        assertEquals(2, labelCountforProject(feedSourceWithLabels.projectId, true));
+        assertEquals(1, labelCountforProject(feedSourceWithLabels.projectId, false));
 
         // Test that feed source shows only correct labels based on user auth
-        List<String> labelsSeenByAdmin = FeedSourceController.cleanFeedSourceLabels(feedSourceWithLabels, true).labels;
-        List<String> labelsSeenByViewOnlyUser = FeedSourceController.cleanFeedSourceLabels(feedSourceWithLabels, false).labels;
+        List<String> labelsSeenByAdmin = FeedSourceController.cleanFeedSourceLabels(feedSourceWithLabels, true).labelIds;
+        List<String> labelsSeenByViewOnlyUser = FeedSourceController.cleanFeedSourceLabels(feedSourceWithLabels, false).labelIds;
 
         assertEquals(2, labelsSeenByAdmin.size());
         assertEquals(1, labelsSeenByViewOnlyUser.size());
@@ -184,7 +184,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         );
         assertEquals(OK_200, deleteSecondLabelResponse.getStatusLine().getStatusCode());
         assertEquals(1, labelCountForFeed(feedSourceWithLabels.id));
-        assertEquals(1, Persistence.projects.getById(feedSourceWithLabels.retrieveProject().id).retrieveProjectLabels(true).size());
+        assertEquals(1, labelCountforProject(feedSourceWithLabels.projectId, true));
 
         // Test that labels are removed when deleting project
         assertEquals(1, Persistence.labels.getFiltered(eq("projectId", projectToBeDeleted.id)).size());
@@ -227,6 +227,13 @@ public class FeedSourceControllerTest extends DatatoolsTest {
      * Provide the label count for a given feed source.
      */
     private int labelCountForFeed(String feedSourceId) {
-        return Persistence.feedSources.getById(feedSourceId).labels.size();
+        return Persistence.feedSources.getById(feedSourceId).labelIds.size();
+    }
+
+    /**
+     * Provide the label count for a given project
+     */
+    private int labelCountforProject(String projectId, boolean isAdmin) {
+        return Persistence.projects.getById(projectId).retrieveProjectLabels(isAdmin).size();
     }
 }

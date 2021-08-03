@@ -17,17 +17,10 @@ public class Label extends Model implements Cloneable{
      */
     public String projectId;
 
-    /**
-     * Get the Project of which this label is a part
-     */
-    public Project retrieveProject() {
-        return projectId != null ? Persistence.projects.getById(projectId) : null;
-    }
-
     @JsonProperty("organizationId")
     @JsonIgnore
     public String organizationId () {
-        Project project = retrieveProject();
+        Project project =  projectId != null ? Persistence.projects.getById(projectId) : null;
         return project == null ? null : project.organizationId;
     }
 
@@ -61,7 +54,7 @@ public class Label extends Model implements Cloneable{
     }
 
     /**
-     * No-arg constructor to yield an uninitialized feed source, for dump/restore.
+     * No-arg constructor to yield an uninitialized label, for dump/restore.
      * Should not be used in general code.
      */
     public Label () {
@@ -77,10 +70,6 @@ public class Label extends Model implements Cloneable{
         } catch (Exception e) {
             LOG.error("Could not delete label", e);
         }
-    }
-
-    public int compareTo(Label o) {
-        return this.name.compareTo(o.name);
     }
 
     public String toString () {

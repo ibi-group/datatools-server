@@ -148,7 +148,7 @@ public class FeedSource extends Model implements Cloneable {
     /**
      * IDs of Labels assigned to this Feed
      */
-    public List<String> labels = new ArrayList<>();
+    public List<String> labelIds = new ArrayList<>();
 
     /**
      * The SQL namespace for the most recently verified published {@link FeedVersion}.

@@ -42,6 +42,9 @@ import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.models.ExternalFeedSourceProperty.constructId;
 import static com.conveyal.datatools.manager.models.transform.NormalizeFieldTransformation.getInvalidSubstitutionMessage;
 import static com.conveyal.datatools.manager.models.transform.NormalizeFieldTransformation.getInvalidSubstitutionPatterns;
+import static com.mongodb.client.model.Filters.and;
+import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Filters.in;
 import static spark.Spark.delete;
 import static spark.Spark.get;
 import static spark.Spark.post;
@@ -146,7 +149,7 @@ public class FeedSourceController {
         if (feedSource.retrieveProject() == null) {
             validationIssues.add("Valid project ID must be provided.");
         }
-        for (String labelId: feedSource.labels) {
+        for (String labelId: feedSource.labelIds) {
             if (Persistence.labels.getById(labelId) == null) {
                 validationIssues.add("All labels assigned to feed must exist.");
             }
@@ -325,7 +328,7 @@ public class FeedSourceController {
             return null;
         }
         String orgId = feedSource.organizationId();
-        Boolean isAdmin = userProfile.canAdministerProject(feedSource.id, orgId);
+        Boolean isAdmin = userProfile.canAdministerProject(feedSource.projectId, orgId);
         boolean authorized;
 
         switch (action) {
@@ -375,13 +378,25 @@ public class FeedSourceController {
      * @return              A feed source containing only labels the user is allowed to see
      */
     protected static FeedSource cleanFeedSourceLabels(FeedSource feedSource, boolean isAdmin) {
-        // Remove labels user is not allowed to see if user is not admin
-        if (!isAdmin) {
-            feedSource.labels = Persistence.labels.getByIds(feedSource.labels).stream()
-                    .filter(label -> !label.adminOnly)
+        // Admin can see all labels
+        if (isAdmin) {
+            feedSource.labelIds = Persistence.labels.getFiltered(
+                    in("_id", feedSource.labelIds)
+                    ).stream()
                     .map(label -> label.id)
                     .collect(Collectors.toList());
         }
+        // Remove labels user is not allowed to see if user is not admin
+        if (!isAdmin) {
+            feedSource.labelIds = Persistence.labels.getFiltered(
+                    and(
+                            eq("adminOnly", false),
+                            in("_id", feedSource.labelIds)
+                    )).stream()
+                    .map(label -> label.id)
+                    .collect(Collectors.toList());;
+        }
+
         return feedSource;
     }
 
