@@ -58,6 +58,21 @@ public class NoteControllerTest {
     }
 
     @Test
+    public void deletedNoteRemovesReference() throws IOException {
+        final String body = "This feed source is amazing.";
+        Note note = createNote(body, false);
+        HttpResponse createNoteResponse = createNoteRequest(note, feedSource);
+        assertEquals(OK_200, createNoteResponse.getStatusLine().getStatusCode());
+        Note createdNote = JsonUtil.objectMapper.readValue(createNoteResponse.getEntity().getContent(), Note.class);
+        List<Note> notes = getNotes(feedSource, true);
+        assertEquals(1, notes.size());
+        // Delete note and verify that FeedSource#noteIds is updated.
+        createdNote.delete();
+        List<Note> updatedNotes = getNotes(feedSource, true);
+        assertEquals(0, updatedNotes.size());
+    }
+
+    @Test
     public void canCreateNoteForFeedSource() throws IOException {
         final String body = "This feed source is amazing.";
         Note note = createNote(body, false);
