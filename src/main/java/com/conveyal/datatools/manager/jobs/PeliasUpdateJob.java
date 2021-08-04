@@ -19,7 +19,6 @@ import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.util.ArrayList;
-import java.util.Base64;
 import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
@@ -143,9 +142,7 @@ public class PeliasUpdateJob extends MonitorableJob {
         peliasWebhookRequestBody.logUploadUrl = logUploadS3URI.toString();
         peliasWebhookRequestBody.deploymentId = deployment.id;
 
-
         String query = JsonUtil.toJson(peliasWebhookRequestBody);
-
 
         // Create headers needed for Pelias webhook
         List<Header> headers = new ArrayList<>();

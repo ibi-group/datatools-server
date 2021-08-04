@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.controllers.api;
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.s3.AmazonS3URI;
 import com.amazonaws.services.s3.model.CannedAccessControlList;
+import com.amazonaws.services.s3.model.DeleteObjectRequest;
 import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.SparkUtils;
@@ -276,7 +277,7 @@ public class DeploymentController {
      * Update a single deployment. If the deployment's feed versions are updated, checks to ensure that each
      * version exists and is a part of the same parent project are performed before updating.
      */
-    private static Deployment updateDeployment (Request req, Response res) {
+    private static Deployment updateDeployment (Request req, Response res) throws CheckedAWSException {
         Deployment deploymentToUpdate = getDeploymentWithPermissions(req, res);
         Document updateDocument = Document.parse(req.body());
         // FIXME use generic update hook, also feedVersions is getting serialized into MongoDB (which is undesirable)
@@ -330,6 +331,26 @@ public class DeploymentController {
                     deploymentToUpdate.projectId,
                     "lastUsedPeliasWebhookUrl",
                     updateDocument.getString("peliasWebhookUrl"));
+        }
+
+        // If updatedDocument has deleted a CSV file, also delete that CSV file from S3
+        if (updateDocument.containsKey("peliasCsvFiles")) {
+            List<String> csvUrls = (List<String>) updateDocument.get("peliasCsvFiles");
+            // Only delete if the array differs
+            if (!csvUrls.equals(deploymentToUpdate.peliasCsvFiles)) {
+                for (String existingCsvUrl : deploymentToUpdate.peliasCsvFiles) {
+                    // Only delete if the file does not exist in the deployment
+                    if (!csvUrls.contains(existingCsvUrl)) {
+                        try {
+                            AmazonS3URI s3URIToDelete = new AmazonS3URI(existingCsvUrl);
+                            S3Utils.getDefaultS3Client().deleteObject(new DeleteObjectRequest(s3URIToDelete.getBucket(), s3URIToDelete.getKey()));
+                        } catch(Exception e) {
+                            logMessageAndHalt(req, 500, "Failed to delete file from S3.", e);
+                        }
+                    }
+                }
+
+            }
         }
         Deployment updatedDeployment = Persistence.deployments.update(deploymentToUpdate.id, req.body());
         // TODO: Should updates to the deployment's fields trigger a notification to subscribers? This could get
@@ -510,6 +531,7 @@ public class DeploymentController {
         Deployment deployment = getDeploymentWithPermissions(req, res);
 
         String url;
+        Exception failure = null;
 
         // Get file from request
         if (req.raw().getAttribute("org.eclipse.jetty.multipartConfig") == null) {
@@ -544,11 +566,15 @@ public class DeploymentController {
             return url;
         } catch (IOException | ServletException | AmazonServiceException | CheckedAWSException e) {
             e.printStackTrace();
+            failure = e;
             return null;
         } finally {
             boolean deleted = tempFile.delete();
             if (!deleted) {
-                throw new IOException("Failed to delete file temporarily stored on server");
+                logMessageAndHalt(req, 500, "Failed to delete file temporarily stored on server");
+            }
+            if (failure != null) {
+                logMessageAndHalt(req, 500, "Failed to upload file. Please try again");
             }
         }
     }
@@ -578,7 +604,7 @@ public class DeploymentController {
         post(apiPrefix + "secure/deployments", DeploymentController::createDeployment, fullJson::write);
         put(apiPrefix + "secure/deployments/:id", DeploymentController::updateDeployment, fullJson::write);
         post(apiPrefix + "secure/deployments/fromfeedsource/:id", DeploymentController::createDeploymentFromFeedSource, fullJson::write);
-        post(apiPrefix + "secure/deployments/:id/upload", DeploymentController::uploadToS3, slimJson::write);
+        post(apiPrefix + "secure/deployments/:id/upload", DeploymentController::uploadToS3);
 
     }
 }
