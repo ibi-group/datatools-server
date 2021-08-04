@@ -33,7 +33,6 @@ import static spark.Spark.put;
 
 
 public class LabelController {
-    private static final Logger LOG = LoggerFactory.getLogger(LabelController.class);
     private static JsonManager<Label> json = new JsonManager<>(Label.class, JsonViews.UserInterface.class);
 
 
@@ -86,6 +85,20 @@ public class LabelController {
     private static void validate(Request req, Label label) {
         // Label is quite forgiving (sets defaults if null) and the boolean value is type checked,
         // so there is little to validate.
+        if (label.name.length() > 25) {
+            logMessageAndHalt(
+                    req,
+                    HttpStatus.BAD_REQUEST_400,
+                    "Request was invalid, the name may not be longer than 25 characters."
+            );
+        }
+        if (label.description.length() > 50) {
+            logMessageAndHalt(
+                    req,
+                    HttpStatus.BAD_REQUEST_400,
+                    "Request was invalid, the description may not be longer than 50 characters."
+            );
+        }
         if (StringUtils.isEmpty(label.name)) {
             logMessageAndHalt(
                     req,

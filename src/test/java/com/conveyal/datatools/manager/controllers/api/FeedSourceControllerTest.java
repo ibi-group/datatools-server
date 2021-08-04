@@ -22,6 +22,7 @@ import java.net.URL;
 import java.util.List;
 
 import static com.mongodb.client.model.Filters.eq;
+import static org.eclipse.jetty.http.HttpStatus.BAD_REQUEST_400;
 import static org.eclipse.jetty.http.HttpStatus.OK_200;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
@@ -33,6 +34,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
     private static FeedSource feedSourceWithUrl = null;
     private static FeedSource feedSourceWithNoUrl = null;
     private static FeedSource feedSourceWithLabels = null;
+    private static FeedSource feedSourceWithInvalidLabels = null;
     private static Label publicLabel = null;
     private static Label adminOnlyLabel = null;
 
@@ -53,6 +55,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         feedSourceWithUrl = createFeedSource("FeedSourceOne", new URL("http://www.feedsource.com"), project);
         feedSourceWithNoUrl = createFeedSource("FeedSourceTwo", null, project);
         feedSourceWithLabels = createFeedSource("FeedSourceThree", null, projectToBeDeleted);
+        feedSourceWithInvalidLabels = createFeedSource("FeedSourceFour", null, project);
 
         adminOnlyLabel = createLabel("Admin Only Label");
         adminOnlyLabel.adminOnly = true;
@@ -157,12 +160,20 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         feedSourceWithLabels.labelIds.add(firstLabelId);
         feedSourceWithLabels.labelIds.add(secondLabelId);
 
+        // Create feed source with invalid labels
+        feedSourceWithInvalidLabels.labelIds.add("does not exist");
+        HttpResponse createInvalidFeedSourceResponse = TestUtils.makeRequest("/api/manager/secure/feedsource",
+                JsonUtil.toJson(feedSourceWithInvalidLabels),
+                HttpUtils.REQUEST_METHOD.POST
+        );
+        assertEquals(BAD_REQUEST_400, createInvalidFeedSourceResponse.getStatusLine().getStatusCode());
         // Create feed source with labels
         SimpleHttpResponse createFeedSourceResponse = TestUtils.makeRequest("/api/manager/secure/feedsource",
                 JsonUtil.toJson(feedSourceWithLabels),
                 HttpUtils.REQUEST_METHOD.POST
         );
         assertEquals(OK_200, createFeedSourceResponse.status);
+
 
         // Test that they are assigned properly
         assertEquals(2, labelCountForFeed(feedSourceWithLabels.id));

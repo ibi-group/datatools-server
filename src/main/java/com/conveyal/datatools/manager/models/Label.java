@@ -7,8 +7,6 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import static com.mongodb.client.model.Filters.eq;
-
 public class Label extends Model implements Cloneable{
     public static final Logger LOG = LoggerFactory.getLogger(Label.class);
 
