@@ -504,8 +504,6 @@ public class FeedSource extends Model implements Cloneable {
         return Persistence.deployments.getFiltered(eq(Snapshot.FEED_SOURCE_REF, this.id));
     }
 
-//    @JsonView(JsonViews.UserInterface.class)
-//    @JsonProperty("feedVersionCount")
     public int feedVersionCount() {
         return retrieveFeedVersions().size();
     }

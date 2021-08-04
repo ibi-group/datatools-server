@@ -18,6 +18,7 @@ import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Snapshot;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.JobUtils;
+import com.conveyal.datatools.manager.utils.PersistenceUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 
 import com.fasterxml.jackson.databind.JsonNode;
@@ -35,6 +36,7 @@ import java.util.Date;
 import java.util.List;
 import java.util.HashSet;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.copyRequestStreamIntoFile;
 import static com.conveyal.datatools.common.utils.SparkUtils.downloadFile;
@@ -43,6 +45,7 @@ import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.controllers.api.FeedSourceController.checkFeedSourcePermissions;
 import static com.mongodb.client.model.Filters.eq;
 import static com.conveyal.datatools.manager.jobs.MergeFeedsType.REGIONAL;
+import static com.mongodb.client.model.Filters.in;
 import static spark.Spark.delete;
 import static spark.Spark.get;
 import static spark.Spark.post;
@@ -67,7 +70,11 @@ public class FeedVersionController  {
     private static Collection<FeedVersion> getAllFeedVersionsForFeedSource(Request req, Response res) {
         // Check permissions and get the FeedSource whose FeedVersions we want.
         FeedSource feedSource = requestFeedSourceById(req, Actions.VIEW);
-        return feedSource.retrieveFeedVersions();
+        Auth0UserProfile userProfile = req.attribute("user");
+        boolean isAdmin = userProfile.canAdministerProject(feedSource);
+        return feedSource.retrieveFeedVersions().stream()
+            .map(version -> cleanFeedVersionForNonAdmins(version, feedSource, isAdmin))
+            .collect(Collectors.toList());
     }
 
     public static FeedSource requestFeedSourceById(Request req, Actions action, String paramName) {
@@ -133,6 +140,15 @@ public class FeedVersionController  {
         return formatJobMessage(processSingleFeedJob.jobId, "Feed version is processing.");
     }
 
+    protected static FeedVersion cleanFeedVersionForNonAdmins(FeedVersion feedVersion, FeedSource feedSource, boolean isAdmin) {
+        // Admin can view all feed labels, but a non-admin should only see those with adminOnly=false
+        feedVersion.noteIds = Persistence.notes
+            .getFiltered(PersistenceUtils.applyAdminFilter(in("_id", feedVersion.noteIds), isAdmin)).stream()
+            .map(note -> note.id)
+            .collect(Collectors.toList());
+        return feedVersion;
+    }
+
     /**
      * HTTP API handler that converts an editor snapshot into a "published" data manager feed version.
      *
@@ -178,9 +194,12 @@ public class FeedVersionController  {
             logMessageAndHalt(req, 404, "Feed version ID does not exist");
             return null;
         }
+        FeedSource feedSource = version.parentFeedSource();
         // Performs permissions checks on the feed source this feed version belongs to, and halts if permission is denied.
-        checkFeedSourcePermissions(req, version.parentFeedSource(), action);
-        return version;
+        checkFeedSourcePermissions(req, feedSource, action);
+        Auth0UserProfile userProfile = req.attribute("user");
+        boolean isAdmin = userProfile.canAdministerProject(feedSource);
+        return cleanFeedVersionForNonAdmins(version, feedSource, isAdmin);
     }
 
     private static boolean renameFeedVersion (Request req, Response res) {

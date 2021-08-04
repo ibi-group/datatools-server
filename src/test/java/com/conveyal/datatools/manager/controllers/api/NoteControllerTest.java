@@ -12,7 +12,10 @@ import com.conveyal.datatools.manager.models.Note;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HttpUtils;
+import com.conveyal.datatools.manager.utils.SimpleHttpResponse;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.apache.http.HttpResponse;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
@@ -30,6 +33,7 @@ public class NoteControllerTest {
     private static Project project = null;
     private static FeedSource feedSource = null;
     private static FeedVersion feedVersion = null;
+    private static Auth0UserProfile viewOnlyUser;
 
     @BeforeAll
     public static void setUp() throws IOException {
@@ -41,6 +45,7 @@ public class NoteControllerTest {
         feedSource = new FeedSource("Feed with Notes", project.id, FeedRetrievalMethod.MANUALLY_UPLOADED);
         Persistence.feedSources.create(feedSource);
         feedVersion = TestUtils.createFeedVersionFromGtfsZip(feedSource, "bart_old.zip");
+        viewOnlyUser = Auth0UserProfile.createTestViewOnlyUser(project.id);
     }
 
     @AfterAll
@@ -104,13 +109,13 @@ public class NoteControllerTest {
     @Test
     public void willPreventNonAdminFromCreatingAdminOnlyLabel() {
         // Override test user with view-only user.
-        Auth0Connection.setTestUser(Auth0UserProfile.createTestViewOnlyUser(project.id));
+        Auth0Connection.setTestUser(viewOnlyUser);
         // Attempt to create admin only note.
         final String body = "I'm only a standard user, but am trying to make an admin note.";
         Note note = createNote(body, true);
-        HttpResponse createNoteResponse = createNoteRequest(note, feedSource);
+        SimpleHttpResponse createNoteResponse = createNoteRequest(note, feedSource);
         // Verify that no note was created.
-        assertEquals(UNAUTHORIZED_401, createNoteResponse.getStatusLine().getStatusCode());
+        assertEquals(UNAUTHORIZED_401, createNoteResponse.status);
         List<Note> notes = getNotes(feedSource, true);
         assertEquals(0, notes.size());
     }
@@ -139,6 +144,15 @@ public class NoteControllerTest {
         // Verify that both notes are visible to an admin
         List<Note> allNotes = getNotes(feedSource, true);
         assertEquals(2, allNotes.size());
+        // Verify that a non-admin API request to get the feed source shows the correct/filtered note count.
+        Auth0Connection.setTestUser(viewOnlyUser);
+        String url = String.format("/api/manager/secure/feedsource/%s", feedSource.id);
+        SimpleHttpResponse getFeedSourceResponse = TestUtils.makeRequest(url, null, HttpUtils.REQUEST_METHOD.GET);
+        JsonNode feedSourceJson = JsonUtil.getJsonNodeFromResponse(getFeedSourceResponse);
+        assertEquals(1, feedSourceJson.get("noteCount").asInt());
+        // Fetch notes as non-admin and ensure the correct number.
+        List<Note> notes = getNotesRequest(feedSource);
+        assertEquals(1, notes.size());
     }
 
     /**
@@ -161,7 +175,7 @@ public class NoteControllerTest {
         return note;
     }
 
-    private HttpResponse createNoteRequest(Note note, Model model) {
+    private SimpleHttpResponse createNoteRequest(Note note, Model model) {
         String type = model instanceof FeedSource ? "FEED_SOURCE" : "FEED_VERSION";
         return TestUtils.makeRequest(
             "/api/manager/secure/note" + String.format("?type=%s&objectId=%s", type,  model.id),
@@ -170,14 +184,24 @@ public class NoteControllerTest {
         );
     }
 
+    private List<Note> getNotesRequest(Model model) throws IOException {
+        String type = model instanceof FeedSource ? "FEED_SOURCE" : "FEED_VERSION";
+        SimpleHttpResponse getNotesResponse = TestUtils.makeRequest(
+            "/api/manager/secure/note" + String.format("?type=%s&objectId=%s", type, model.id),
+            null,
+            HttpUtils.REQUEST_METHOD.GET
+        );
+        return JsonUtil.getPOJOFromJSONAsList(JsonUtil.getJsonNodeFromResponse(getNotesResponse), Note.class);
+    }
+
     private Note createNoteRequestWithSuccessAssertion(Note note, Model model) throws IOException {
         String type = model instanceof FeedSource ? "FEED_SOURCE" : "FEED_VERSION";
-        HttpResponse noteResponse = TestUtils.makeRequest(
+        SimpleHttpResponse noteResponse = TestUtils.makeRequest(
             "/api/manager/secure/note" + String.format("?type=%s&objectId=%s", type, model.id),
             JsonUtil.toJson(note),
             HttpUtils.REQUEST_METHOD.POST
         );
-        assertEquals(OK_200, noteResponse.getStatusLine().getStatusCode());
-        return JsonUtil.objectMapper.readValue(noteResponse.getEntity().getContent(), Note.class);
+        assertEquals(OK_200, noteResponse.status);
+        return JsonUtil.objectMapper.readValue(noteResponse.body, Note.class);
     }
 }

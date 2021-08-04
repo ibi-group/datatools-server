@@ -61,7 +61,7 @@ public abstract class Model implements Serializable {
      * Notes on this object
      */
     @JsonView(JsonViews.DataDump.class)
-    public List<String> noteIds;
+    public List<String> noteIds = new ArrayList<>();
 
     /**
      * Get the notes for this object

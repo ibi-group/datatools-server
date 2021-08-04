@@ -5,6 +5,7 @@ import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.utils.HttpUtils;
+import com.conveyal.datatools.manager.utils.SimpleHttpResponse;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.io.IOUtils;
@@ -264,7 +265,7 @@ public class TestUtils {
     /**
      * Send request to provided URL.
      */
-    public static HttpResponse makeRequest(String path, String body, HttpUtils.REQUEST_METHOD requestMethod) {
+    public static SimpleHttpResponse makeRequest(String path, String body, HttpUtils.REQUEST_METHOD requestMethod) {
         return HttpUtils.httpRequestRawResponse(
             URI.create(BASE_URL + path),
             1000,

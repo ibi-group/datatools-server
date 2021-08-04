@@ -16,6 +16,7 @@ import com.conveyal.datatools.manager.models.transform.NormalizeFieldTransformat
 import com.conveyal.datatools.manager.models.transform.Substitution;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.JobUtils;
+import com.conveyal.datatools.manager.utils.PersistenceUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -95,7 +96,7 @@ public class FeedSourceController {
                     user.canManageOrViewFeed(orgId, source.projectId, source.id)
             ) {
                 // Remove labels user can't view, then add to list of feeds to return
-                feedSourcesToReturn.add(cleanFeedSourceLabels(source, isAdmin));
+                feedSourcesToReturn.add(cleanFeedSourceForNonAdmins(source, isAdmin));
             }
         }
         return feedSourcesToReturn;
@@ -356,7 +357,7 @@ public class FeedSourceController {
 
         // If we make it here, user has permission and the requested feed source is valid.
         // This final step removes labels the user can't view
-        return cleanFeedSourceLabels(feedSource, isProjectAdmin);
+        return cleanFeedSourceForNonAdmins(feedSource, isProjectAdmin);
     }
 
     /** Determines whether a change to a feed source is significant enough that it warrants sending a notification
@@ -372,17 +373,20 @@ public class FeedSourceController {
     }
 
     /**
-     * Removes labels from a feed that a user is not allowed to view. Returns cleaned feed source
+     * Removes labels and notes from a feed that a user is not allowed to view. Returns cleaned feed source.
      * @param feedSource    The feed source to clean
      * @param isAdmin       Is the user an admin? Changes what is returned.
-     * @return              A feed source containing only labels the user is allowed to see
+     * @return              A feed source containing only labels/notes the user is allowed to see
      */
-    protected static FeedSource cleanFeedSourceLabels(FeedSource feedSource, boolean isAdmin) {
-        Bson labelFilter = in("_id", feedSource.labelIds);
+    protected static FeedSource cleanFeedSourceForNonAdmins(FeedSource feedSource, boolean isAdmin) {
         // Admin can view all feed labels, but a non-admin should only see those with adminOnly=false
-        Bson filter = isAdmin ? labelFilter : and(labelFilter, eq("adminOnly", false));
-        feedSource.labelIds = Persistence.labels.getFiltered(filter).stream()
+        feedSource.labelIds = Persistence.labels
+            .getFiltered(PersistenceUtils.applyAdminFilter(in("_id", feedSource.labelIds), isAdmin)).stream()
             .map(label -> label.id)
+            .collect(Collectors.toList());
+        feedSource.noteIds = Persistence.notes
+            .getFiltered(PersistenceUtils.applyAdminFilter(in("_id", feedSource.noteIds), isAdmin)).stream()
+            .map(note -> note.id)
             .collect(Collectors.toList());
         return feedSource;
     }
