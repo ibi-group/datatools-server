@@ -180,7 +180,7 @@ public class Auth0Connection {
         }
 
         if (!request.requestMethod().equals("GET")) {
-            if (!userProfile.canEditGTFS(feedSource.organizationId(), feedSource.projectId, feedSource.id)) {
+            if (!userProfile.canEditGTFS(feedSource)) {
                 LOG.warn("User {} cannot edit GTFS for {}", userProfile.email, feedId);
                 logMessageAndHalt(request, 403, "User does not have permission to edit GTFS for feedId");
             }
@@ -226,7 +226,7 @@ public class Auth0Connection {
         }
 
         if (!request.requestMethod().equals("GET")) {
-            if (!userProfile.canEditGTFS(feedSource.organizationId(), feedSource.projectId, feedSource.id)) {
+            if (!userProfile.canEditGTFS(feedSource)) {
                 LOG.warn("User {} cannot edit GTFS for {}", userProfile.email, feedId);
                 logMessageAndHalt(request, 403, "User does not have permission to edit GTFS for feedId");
             }

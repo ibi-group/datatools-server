@@ -82,7 +82,7 @@ public class FeedSourceController {
         if (project == null) {
             logMessageAndHalt(req, 400, "Must provide valid projectId query param to retrieve feed sources.");
         }
-        boolean isAdmin = user.canAdministerProject(project.id, project.organizationId);
+        boolean isAdmin = user.canAdministerProject(project);
 
         Collection<FeedSource> projectFeedSources = project.retrieveProjectFeedSources();
         for (FeedSource source: projectFeedSources) {
@@ -328,22 +328,21 @@ public class FeedSourceController {
             logMessageAndHalt(req, 400, "Feed source ID does not exist");
             return null;
         }
-        String orgId = feedSource.organizationId();
-        Boolean isAdmin = userProfile.canAdministerProject(feedSource.projectId, orgId);
+        boolean isProjectAdmin = userProfile.canAdministerProject(feedSource);
         boolean authorized;
 
         switch (action) {
             case CREATE:
-                authorized = isAdmin;
+                authorized = isProjectAdmin;
                 break;
             case MANAGE:
-                authorized = userProfile.canManageFeed(orgId, feedSource.projectId, feedSource.id);
+                authorized = userProfile.canManageFeed(feedSource);
                 break;
             case EDIT:
-                authorized = userProfile.canEditGTFS(orgId, feedSource.projectId, feedSource.id);
+                authorized = userProfile.canEditGTFS(feedSource);
                 break;
             case VIEW:
-                authorized = userProfile.canViewFeed(orgId, feedSource.projectId, feedSource.id);
+                authorized = userProfile.canViewFeed(feedSource);
                 break;
             default:
                 authorized = false;
@@ -357,7 +356,7 @@ public class FeedSourceController {
 
         // If we make it here, user has permission and the requested feed source is valid.
         // This final step removes labels the user can't view
-        return cleanFeedSourceLabels(feedSource, isAdmin);
+        return cleanFeedSourceLabels(feedSource, isProjectAdmin);
     }
 
     /** Determines whether a change to a feed source is significant enough that it warrants sending a notification

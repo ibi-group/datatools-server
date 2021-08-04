@@ -311,7 +311,7 @@ public class UserController {
                     for (String targetId : sub.getTarget()) {
                         FeedSource fs = Persistence.feedSources.getById(targetId);
                         if (fs == null) continue;
-                        boolean isProjectAdmin = userProfile.canAdministerProject(fs.projectId);
+                        boolean isProjectAdmin = userProfile.canAdministerProject(fs);
                         // FeedSource comments
                         for (Note note : fs.retrieveNotes(isProjectAdmin)) {
                             ZonedDateTime datePosted = toZonedDateTime(note.date);

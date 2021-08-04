@@ -42,7 +42,7 @@ public class NoteController {
         // check if the user has permission to get notes for this feed source.
         checkPermissions(req, feedSource);
         // Return notes (only including admin only notes if project admin).
-        return objectWithNote.retrieveNotes(isProjectAdmin(userProfile, feedSource));
+        return objectWithNote.retrieveNotes(userProfile.canAdministerProject(feedSource));
     }
 
     public static Note createNote (Request req, Response res) throws IOException {
@@ -64,7 +64,7 @@ public class NoteController {
         note.date = new Date();
         note.type = getTypeFromRequest(req);
         note.adminOnly = node.get("adminOnly").asBoolean();
-        if (note.adminOnly && !isProjectAdmin(userProfile, feedSource)) {
+        if (note.adminOnly && !userProfile.canAdministerProject(feedSource)) {
             logMessageAndHalt(
                 req,
                 HttpStatus.UNAUTHORIZED_401,
@@ -94,19 +94,12 @@ public class NoteController {
         return note;
     }
 
-    private static boolean isProjectAdmin(Auth0UserProfile userProfile, FeedSource feedSource) {
-        String orgId = feedSource.organizationId();
-        return userProfile.canAdministerProject(feedSource.projectId, orgId);
-    }
-
     /**
      * Check that the requesting user is permitted to view/create a note for this feed source. Throws halt if not.
      */
     private static void checkPermissions(Request req, FeedSource feedSource) {
         Auth0UserProfile userProfile = req.attribute("user");
-        String orgId = feedSource.organizationId();
-        boolean hasNotePermission = isProjectAdmin(userProfile, feedSource) ||
-            userProfile.canViewFeed(orgId, feedSource.projectId, feedSource.id);
+        boolean hasNotePermission = userProfile.canAdministerProject(feedSource) || userProfile.canViewFeed(feedSource);
         if (!hasNotePermission) {
             logMessageAndHalt(req, HttpStatus.UNAUTHORIZED_401, UNAUTHORIZED_MESSAGE);
         }

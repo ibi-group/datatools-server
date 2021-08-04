@@ -56,7 +56,7 @@ public class LabelController {
             logMessageAndHalt(req, 400, "Must provide valid projectId query param to retrieve labels.");
         }
 
-        boolean isProjectAdmin = user.canAdministerProject(project.id, project.organizationId);
+        boolean isProjectAdmin = user.canAdministerProject(project);
 
         return project.retrieveProjectLabels(isProjectAdmin);
     }
@@ -169,7 +169,7 @@ public class LabelController {
             return;
         }
 
-        boolean isProjectAdmin = userProfile.canAdministerProject(label.projectId, label.organizationId());
+        boolean isProjectAdmin = userProfile.canAdministerProject(label);
         switch (action) {
             case CREATE:
             case MANAGE:
