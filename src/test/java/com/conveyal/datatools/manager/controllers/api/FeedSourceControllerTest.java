@@ -162,11 +162,11 @@ public class FeedSourceControllerTest extends DatatoolsTest {
 
         // Create feed source with invalid labels
         feedSourceWithInvalidLabels.labelIds.add("does not exist");
-        HttpResponse createInvalidFeedSourceResponse = TestUtils.makeRequest("/api/manager/secure/feedsource",
+        SimpleHttpResponse createInvalidFeedSourceResponse = TestUtils.makeRequest("/api/manager/secure/feedsource",
                 JsonUtil.toJson(feedSourceWithInvalidLabels),
                 HttpUtils.REQUEST_METHOD.POST
         );
-        assertEquals(BAD_REQUEST_400, createInvalidFeedSourceResponse.getStatusLine().getStatusCode());
+        assertEquals(BAD_REQUEST_400, createInvalidFeedSourceResponse.status);
         // Create feed source with labels
         SimpleHttpResponse createFeedSourceResponse = TestUtils.makeRequest("/api/manager/secure/feedsource",
                 JsonUtil.toJson(feedSourceWithLabels),
