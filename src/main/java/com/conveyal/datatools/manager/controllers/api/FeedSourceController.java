@@ -20,6 +20,7 @@ import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.lang3.StringUtils;
+import org.bson.conversions.Bson;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -378,25 +379,12 @@ public class FeedSourceController {
      * @return              A feed source containing only labels the user is allowed to see
      */
     protected static FeedSource cleanFeedSourceLabels(FeedSource feedSource, boolean isAdmin) {
-        // Admin can see all labels
-        if (isAdmin) {
-            feedSource.labelIds = Persistence.labels.getFiltered(
-                    in("_id", feedSource.labelIds)
-                    ).stream()
-                    .map(label -> label.id)
-                    .collect(Collectors.toList());
-        }
-        // Remove labels user is not allowed to see if user is not admin
-        if (!isAdmin) {
-            feedSource.labelIds = Persistence.labels.getFiltered(
-                    and(
-                            eq("adminOnly", false),
-                            in("_id", feedSource.labelIds)
-                    )).stream()
-                    .map(label -> label.id)
-                    .collect(Collectors.toList());;
-        }
-
+        Bson labelFilter = in("_id", feedSource.labelIds);
+        // Admin can view all feed labels, but a non-admin should only see those with adminOnly=false
+        Bson filter = isAdmin ? labelFilter : and(labelFilter, eq("adminOnly", false));
+        feedSource.labelIds = Persistence.labels.getFiltered(filter).stream()
+            .map(label -> label.id)
+            .collect(Collectors.toList());
         return feedSource;
     }
 

@@ -65,7 +65,6 @@ public class LabelController {
      * HTTP endpoint to create a new label
      */
     private static Label createLabel(Request req, Response res) throws IOException {
-        Auth0UserProfile userProfile = req.attribute("user");
         Label newLabel = getPOJOFromRequestBody(req, Label.class);
         validate(req, newLabel);
         // User may not be allowed to create a new label

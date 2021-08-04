@@ -60,25 +60,24 @@ public class NoteControllerTest {
     @Test
     public void deletedNoteRemovesReference() throws IOException {
         final String body = "This feed source is amazing.";
-        Note note = createNote(body, false);
-        HttpResponse createNoteResponse = createNoteRequest(note, feedSource);
-        assertEquals(OK_200, createNoteResponse.getStatusLine().getStatusCode());
-        Note createdNote = JsonUtil.objectMapper.readValue(createNoteResponse.getEntity().getContent(), Note.class);
-        List<Note> notes = getNotes(feedSource, true);
-        assertEquals(1, notes.size());
+        // Create feed source note
+        Note feedNote = createNoteRequestWithSuccessAssertion(createNote(body, false), feedSource);
+        // Create feed version note
+        createNoteRequestWithSuccessAssertion(createNote(body, false), feedVersion);
+        assertEquals(1, getNotes(feedSource, true).size());
+        assertEquals(1, getNotes(feedVersion, true).size());
         // Delete note and verify that FeedSource#noteIds is updated.
-        createdNote.delete();
-        List<Note> updatedNotes = getNotes(feedSource, true);
-        assertEquals(0, updatedNotes.size());
+        feedNote.delete();
+        assertEquals(0, getNotes(feedSource, true).size());
+        // Ensure feed version note is untouched
+        assertEquals(1, getNotes(feedVersion, true).size());
     }
 
     @Test
     public void canCreateNoteForFeedSource() throws IOException {
         final String body = "This feed source is amazing.";
         Note note = createNote(body, false);
-        HttpResponse createNoteResponse = createNoteRequest(note, feedSource);
-        assertEquals(OK_200, createNoteResponse.getStatusLine().getStatusCode());
-        Note createdNote = JsonUtil.objectMapper.readValue(createNoteResponse.getEntity().getContent(), Note.class);
+        Note createdNote = createNoteRequestWithSuccessAssertion(note, feedSource);
         List<Note> notes = getNotes(feedSource, true);
         assertEquals(1, notes.size());
         for (Note feedNote : notes) {
@@ -92,9 +91,7 @@ public class NoteControllerTest {
     public void canCreateNoteForFeedVersion() throws IOException {
         final String body = "This feed version is amazing.";
         Note note = createNote(body, false);
-        HttpResponse createNoteResponse = createNoteRequest(note, feedVersion);
-        assertEquals(OK_200, createNoteResponse.getStatusLine().getStatusCode());
-        Note createdNote = JsonUtil.objectMapper.readValue(createNoteResponse.getEntity().getContent(), Note.class);
+        Note createdNote = createNoteRequestWithSuccessAssertion(note, feedVersion);
         List<Note> notes = getNotes(feedVersion, true);
         assertEquals(1, notes.size());
         for (Note versionNote : notes) {
@@ -126,15 +123,11 @@ public class NoteControllerTest {
         final String secureBody = "This is a secret note!";
         // Create admin note
         Note adminNote = createNote(secureBody, true);
-        HttpResponse createAdminNoteResponse = createNoteRequest(adminNote, feedSource);
-        assertEquals(OK_200, createAdminNoteResponse.getStatusLine().getStatusCode());
-        Note createdAdminNote = JsonUtil.objectMapper.readValue(createAdminNoteResponse.getEntity().getContent(), Note.class);
+        createNoteRequestWithSuccessAssertion(adminNote, feedSource);
         // Create normal note
         final String body = "This feed source is really great.";
         Note note = createNote(body, false);
-        HttpResponse createNoteResponse = createNoteRequest(note, feedSource);
-        assertEquals(OK_200, createNoteResponse.getStatusLine().getStatusCode());
-        Note createdNote = JsonUtil.objectMapper.readValue(createNoteResponse.getEntity().getContent(), Note.class);
+        Note createdNote = createNoteRequestWithSuccessAssertion(note, feedSource);
         // Verify only one non-admin note is visible
         List<Note> filteredNotes = getNotes(feedSource, false);
         assertEquals(1, filteredNotes.size());
@@ -175,5 +168,16 @@ public class NoteControllerTest {
             JsonUtil.toJson(note),
             HttpUtils.REQUEST_METHOD.POST
         );
+    }
+
+    private Note createNoteRequestWithSuccessAssertion(Note note, Model model) throws IOException {
+        String type = model instanceof FeedSource ? "FEED_SOURCE" : "FEED_VERSION";
+        HttpResponse noteResponse = TestUtils.makeRequest(
+            "/api/manager/secure/note" + String.format("?type=%s&objectId=%s", type, model.id),
+            JsonUtil.toJson(note),
+            HttpUtils.REQUEST_METHOD.POST
+        );
+        assertEquals(OK_200, noteResponse.getStatusLine().getStatusCode());
+        return JsonUtil.objectMapper.readValue(noteResponse.getEntity().getContent(), Note.class);
     }
 }
