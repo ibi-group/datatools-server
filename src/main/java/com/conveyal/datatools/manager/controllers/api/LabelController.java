@@ -130,22 +130,6 @@ public class LabelController {
         }
 
         try {
-            // Iterate over feed sources and remove any references to the label
-            Persistence.feedSources.getFiltered(and(
-                    eq("projectId", label.projectId),
-                    in("labelIds", label.id)
-            )).forEach(feedSource -> {
-                List<String> newLabels = feedSource.labelIds.stream()
-                        .filter(l -> !l.equals(label.id))
-                        .collect(Collectors.toList());
-                // If there are changes, update the feed source
-                if (!newLabels.equals(feedSource.labelIds)) {
-                    FeedSource fs = Persistence.feedSources.getById(feedSource.id);
-                    fs.labelIds = newLabels;
-                    Persistence.feedSources.replace(fs.id, fs);
-                }
-            });
-
             label.delete();
             return label;
         } catch (Exception e) {

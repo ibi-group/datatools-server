@@ -24,10 +24,10 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.model.Sorts;
 import org.bson.codecs.pojo.annotations.BsonIgnore;
+import org.bson.conversions.Bson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -47,6 +47,8 @@ import java.util.stream.Collectors;
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Filters.in;
+import static com.mongodb.client.model.Updates.pull;
 
 /**
  * Created by demory on 3/22/16.
@@ -465,6 +467,14 @@ public class FeedSource extends Model implements Cloneable {
             resourceTable.put(resourceType, propTable);
         }
         return resourceTable;
+    }
+
+    /**
+     * Find all project feed sources that contain the label and remove label from list.
+     */
+    public static void removeLabelFromFeedSources(Label label) {
+        Bson query = and(eq("projectId", label.projectId), in("labelIds", label.id));
+        Persistence.feedSources.updateMany(query, pull("labelIds", label.id));
     }
 
     /**

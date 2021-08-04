@@ -29,7 +29,7 @@ public class Note extends Model implements Serializable {
     /** When was this comment made? */
     public Date date;
 
-    /** Whether the note should be visible to admins only */
+    /** Whether the note should be visible to project admins only */
     public boolean adminOnly;
 
     /**
@@ -40,6 +40,8 @@ public class Note extends Model implements Serializable {
     }
 
     public void delete() {
+        Persistence.feedSources.removeNoteFromCollection(id);
+        Persistence.feedVersions.removeNoteFromCollection(id);
         Persistence.notes.removeById(this.id);
     }
 }

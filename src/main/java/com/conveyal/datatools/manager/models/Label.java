@@ -65,11 +65,8 @@ public class Label extends Model implements Cloneable{
      * Delete this label
      */
     public void delete() {
-        try {
-            Persistence.labels.removeById(this.id);
-        } catch (Exception e) {
-            LOG.error("Could not delete label", e);
-        }
+        FeedSource.removeLabelFromFeedSources(this);
+        Persistence.labels.removeById(this.id);
     }
 
     public String toString () {

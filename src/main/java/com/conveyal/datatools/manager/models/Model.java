@@ -120,6 +120,5 @@ public abstract class Model implements Serializable {
         } else {
             userEmail = "no_auth@conveyal.com";
         }
-
     }
 }
