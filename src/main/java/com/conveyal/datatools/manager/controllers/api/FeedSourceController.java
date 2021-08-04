@@ -150,7 +150,7 @@ public class FeedSourceController {
             validationIssues.add("Valid project ID must be provided.");
         }
         for (String labelId: feedSource.labelIds) {
-            if (Persistence.labels.getById(labelId) == null) {
+            if (Persistence.labels.getByIds(feedSource.labelIds).size() != feedSource.labelIds.size()) {
                 validationIssues.add("All labels assigned to feed must exist.");
             }
         }

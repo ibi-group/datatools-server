@@ -91,14 +91,14 @@ public class LabelController {
             logMessageAndHalt(
                     req,
                     HttpStatus.BAD_REQUEST_400,
-                    "Request was invalid, the name was too long."
+                    "Request was invalid, the name may not be longer than 25 characters."
             );
         }
         if (label.description.length() > 50) {
             logMessageAndHalt(
                     req,
                     HttpStatus.BAD_REQUEST_400,
-                    "Request was invalid, the description was too long."
+                    "Request was invalid, the description may not be longer than 50 characters."
             );
         }
         if (StringUtils.isEmpty(label.name)) {
