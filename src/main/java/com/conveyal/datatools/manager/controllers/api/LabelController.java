@@ -33,7 +33,6 @@ import static spark.Spark.put;
 
 
 public class LabelController {
-    private static final Logger LOG = LoggerFactory.getLogger(LabelController.class);
     private static JsonManager<Label> json = new JsonManager<>(Label.class, JsonViews.UserInterface.class);
 
 
