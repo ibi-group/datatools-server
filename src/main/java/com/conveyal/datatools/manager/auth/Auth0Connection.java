@@ -54,8 +54,8 @@ public class Auth0Connection {
      */
     public static void checkUser(Request req) {
         if (isAuthDisabled() || inTestingEnvironment()) {
-            // If in a development or testing environment, assign a mock profile of an admin user to the request
-            // attribute and skip authentication.
+            // If in a development or testing environment, assign a test user (defaults to an application admin) to the
+            // request attribute and skip authentication.
             req.attribute("user", getTestUser());
             return;
         }
@@ -94,14 +94,27 @@ public class Auth0Connection {
         }
     }
 
+    /**
+     * @return the actively applied test user when running the application in a test environment.
+     */
     private static Auth0UserProfile getTestUser() {
         return testUser;
     }
 
+    /**
+     * @return the default test user (an application admin) when running the application in a test environment.
+     */
     public static Auth0UserProfile getDefaultTestUser() {
         return Auth0UserProfile.createTestAdminUser();
     }
 
+    /**
+     * This method allows test classes to override the default test user when running the application in a test
+     * environment.
+     *
+     * NOTE: Following the conclusion of a test where this method is called, it is generally recommended that you call
+     * this method again (e.g., in an @afterEach method) with {@link #getDefaultTestUser()} to reset things.
+     */
     public static void setTestUser(Auth0UserProfile updatedUser) {
         testUser = updatedUser;
     }

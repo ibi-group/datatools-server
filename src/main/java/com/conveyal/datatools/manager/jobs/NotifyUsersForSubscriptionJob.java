@@ -1,7 +1,6 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.manager.DataManager;
-import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Project;
