@@ -27,6 +27,7 @@ import com.fasterxml.jackson.annotation.JsonView;
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.model.Sorts;
 import org.bson.codecs.pojo.annotations.BsonIgnore;
+import org.bson.conversions.Bson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,6 +47,8 @@ import java.util.stream.Collectors;
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Filters.in;
+import static com.mongodb.client.model.Updates.pull;
 
 /**
  * Created by demory on 3/22/16.
@@ -467,6 +470,14 @@ public class FeedSource extends Model implements Cloneable {
     }
 
     /**
+     * Find all project feed sources that contain the label and remove label from list.
+     */
+    public static void removeLabelFromFeedSources(Label label) {
+        Bson query = and(eq("projectId", label.projectId), in("labelIds", label.id));
+        Persistence.feedSources.updateMany(query, pull("labelIds", label.id));
+    }
+
+    /**
      * Get all of the feed versions for this source
      * @return collection of feed versions
      */
@@ -493,8 +504,6 @@ public class FeedSource extends Model implements Cloneable {
         return Persistence.deployments.getFiltered(eq(Snapshot.FEED_SOURCE_REF, this.id));
     }
 
-//    @JsonView(JsonViews.UserInterface.class)
-//    @JsonProperty("feedVersionCount")
     public int feedVersionCount() {
         return retrieveFeedVersions().size();
     }
@@ -606,6 +615,8 @@ public class FeedSource extends Model implements Cloneable {
             retrieveFeedVersions().forEach(FeedVersion::delete);
             // Remove all snapshot records for this feed source
             retrieveSnapshots().forEach(Snapshot::delete);
+            // Remove any notes for this feed source
+            retrieveNotes(true).forEach(Note::delete);
             // Remove any scheduled job for feed source.
             Scheduler.removeAllFeedSourceJobs(this.id, true);
             // Delete active editor buffer if exists.

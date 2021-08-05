@@ -15,6 +15,7 @@ import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.utils.ErrorUtils;
+import com.conveyal.datatools.manager.utils.SimpleHttpResponse;
 import com.conveyal.datatools.manager.utils.TimeTracker;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -307,7 +308,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
         HttpGet httpGet = new HttpGet(url);
         OtpRunnerStatus otpRunnerStatus;
         try (CloseableHttpResponse response = httpClient.execute(httpGet)) {
-            otpRunnerStatus = JsonUtil.objectMapper.readValue(response.getEntity().getContent(), OtpRunnerStatus.class);
+            otpRunnerStatus = JsonUtil.getPOJOFromResponse(new SimpleHttpResponse(response), OtpRunnerStatus.class);
         } catch (IOException e) {
             LOG.warn("Could not get otp-runner status from {}. It might not be available yet.", url);
             return false;

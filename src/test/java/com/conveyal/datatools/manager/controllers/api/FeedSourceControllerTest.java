@@ -11,8 +11,8 @@ import com.conveyal.datatools.manager.models.Label;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HttpUtils;
+import com.conveyal.datatools.manager.utils.SimpleHttpResponse;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
-import org.apache.http.HttpResponse;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -94,21 +94,21 @@ public class FeedSourceControllerTest extends DatatoolsTest {
     @Test
     public void createFeedSourceWithUrlTest() {
         // create a feed source.
-        HttpResponse createFeedSourceResponse = TestUtils.makeRequest("/api/manager/secure/feedsource",
+        SimpleHttpResponse createFeedSourceResponse = TestUtils.makeRequest("/api/manager/secure/feedsource",
             JsonUtil.toJson(feedSourceWithUrl),
             HttpUtils.REQUEST_METHOD.POST
         );
-        assertEquals(OK_200, createFeedSourceResponse.getStatusLine().getStatusCode());
+        assertEquals(OK_200, createFeedSourceResponse.status);
         assertEquals(1, jobCountForFeed(feedSourceWithUrl.id));
 
         // update feed source to disable feed fetch.
         feedSourceWithUrl.retrievalMethod = FeedRetrievalMethod.MANUALLY_UPLOADED;
-        HttpResponse updateFeedSourceResponse
+        SimpleHttpResponse updateFeedSourceResponse
             = TestUtils.makeRequest(String.format("/api/manager/secure/feedsource/%s", feedSourceWithUrl.id),
             JsonUtil.toJson(feedSourceWithUrl),
             HttpUtils.REQUEST_METHOD.PUT
         );
-        assertEquals(OK_200, updateFeedSourceResponse.getStatusLine().getStatusCode());
+        assertEquals(OK_200, updateFeedSourceResponse.status);
         assertEquals(0, jobCountForFeed(feedSourceWithUrl.id));
 
         // update feed source to enable auth fetch once more.
@@ -118,7 +118,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
             JsonUtil.toJson(feedSourceWithUrl),
             HttpUtils.REQUEST_METHOD.PUT
         );
-        assertEquals(OK_200, updateFeedSourceResponse.getStatusLine().getStatusCode());
+        assertEquals(OK_200, updateFeedSourceResponse.status);
         assertEquals(1, jobCountForFeed(feedSourceWithUrl.id));
     }
 
@@ -128,11 +128,11 @@ public class FeedSourceControllerTest extends DatatoolsTest {
      */
     @Test
     public void createFeedSourceWithNoUrlTest() {
-        HttpResponse createFeedSourceResponse = TestUtils.makeRequest("/api/manager/secure/feedsource",
+        SimpleHttpResponse createFeedSourceResponse = TestUtils.makeRequest("/api/manager/secure/feedsource",
             JsonUtil.toJson(feedSourceWithNoUrl),
             HttpUtils.REQUEST_METHOD.POST
         );
-        assertEquals(OK_200, createFeedSourceResponse.getStatusLine().getStatusCode());
+        assertEquals(OK_200, createFeedSourceResponse.status);
         assertEquals(0, jobCountForFeed(feedSourceWithNoUrl.id));
     }
 
@@ -143,16 +143,16 @@ public class FeedSourceControllerTest extends DatatoolsTest {
     @Test
     public void createFeedSourceWithLabels() throws IOException {
         // Create labels
-        HttpResponse createFirstLabelResponse = TestUtils.makeRequest("/api/manager/secure/label",
+        SimpleHttpResponse createFirstLabelResponse = TestUtils.makeRequest("/api/manager/secure/label",
                 JsonUtil.toJson(publicLabel),
                 HttpUtils.REQUEST_METHOD.POST
         );
-        assertEquals(OK_200, createFirstLabelResponse.getStatusLine().getStatusCode());
-        HttpResponse createSecondLabelResponse = TestUtils.makeRequest("/api/manager/secure/label",
+        assertEquals(OK_200, createFirstLabelResponse.status);
+        SimpleHttpResponse createSecondLabelResponse = TestUtils.makeRequest("/api/manager/secure/label",
                 JsonUtil.toJson(adminOnlyLabel),
                 HttpUtils.REQUEST_METHOD.POST
         );
-        assertEquals(OK_200, createSecondLabelResponse.getStatusLine().getStatusCode());
+        assertEquals(OK_200, createSecondLabelResponse.status);
 
         String firstLabelId = publicLabel.id;
         String secondLabelId = adminOnlyLabel.id;
@@ -162,17 +162,17 @@ public class FeedSourceControllerTest extends DatatoolsTest {
 
         // Create feed source with invalid labels
         feedSourceWithInvalidLabels.labelIds.add("does not exist");
-        HttpResponse createInvalidFeedSourceResponse = TestUtils.makeRequest("/api/manager/secure/feedsource",
+        SimpleHttpResponse createInvalidFeedSourceResponse = TestUtils.makeRequest("/api/manager/secure/feedsource",
                 JsonUtil.toJson(feedSourceWithInvalidLabels),
                 HttpUtils.REQUEST_METHOD.POST
         );
-        assertEquals(BAD_REQUEST_400, createInvalidFeedSourceResponse.getStatusLine().getStatusCode());
+        assertEquals(BAD_REQUEST_400, createInvalidFeedSourceResponse.status);
         // Create feed source with labels
-        HttpResponse createFeedSourceResponse = TestUtils.makeRequest("/api/manager/secure/feedsource",
+        SimpleHttpResponse createFeedSourceResponse = TestUtils.makeRequest("/api/manager/secure/feedsource",
                 JsonUtil.toJson(feedSourceWithLabels),
                 HttpUtils.REQUEST_METHOD.POST
         );
-        assertEquals(OK_200, createFeedSourceResponse.getStatusLine().getStatusCode());
+        assertEquals(OK_200, createFeedSourceResponse.status);
 
 
         // Test that they are assigned properly
@@ -182,18 +182,18 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(1, labelCountforProject(feedSourceWithLabels.projectId, false));
 
         // Test that feed source shows only correct labels based on user auth
-        List<String> labelsSeenByAdmin = FeedSourceController.cleanFeedSourceLabels(feedSourceWithLabels, true).labelIds;
-        List<String> labelsSeenByViewOnlyUser = FeedSourceController.cleanFeedSourceLabels(feedSourceWithLabels, false).labelIds;
+        List<String> labelsSeenByAdmin = FeedSourceController.cleanFeedSourceForNonAdmins(feedSourceWithLabels, true).labelIds;
+        List<String> labelsSeenByViewOnlyUser = FeedSourceController.cleanFeedSourceForNonAdmins(feedSourceWithLabels, false).labelIds;
 
         assertEquals(2, labelsSeenByAdmin.size());
         assertEquals(1, labelsSeenByViewOnlyUser.size());
 
         // Test that after deleting a label, it's deleted from the feed source and project
-        HttpResponse deleteSecondLabelResponse = TestUtils.makeRequest("/api/manager/secure/label/" + adminOnlyLabel.id,
+        SimpleHttpResponse deleteSecondLabelResponse = TestUtils.makeRequest("/api/manager/secure/label/" + adminOnlyLabel.id,
                 null,
                 HttpUtils.REQUEST_METHOD.DELETE
         );
-        assertEquals(OK_200, deleteSecondLabelResponse.getStatusLine().getStatusCode());
+        assertEquals(OK_200, deleteSecondLabelResponse.status);
         assertEquals(1, labelCountForFeed(feedSourceWithLabels.id));
         assertEquals(1, labelCountforProject(feedSourceWithLabels.projectId, true));
 

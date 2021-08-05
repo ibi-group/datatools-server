@@ -55,7 +55,7 @@ public class LabelController {
             logMessageAndHalt(req, 400, "Must provide valid projectId query param to retrieve labels.");
         }
 
-        boolean isProjectAdmin = user.canAdministerProject(project.id, project.organizationId);
+        boolean isProjectAdmin = user.canAdministerProject(project);
 
         return project.retrieveProjectLabels(isProjectAdmin);
     }
@@ -64,7 +64,6 @@ public class LabelController {
      * HTTP endpoint to create a new label
      */
     private static Label createLabel(Request req, Response res) throws IOException {
-        Auth0UserProfile userProfile = req.attribute("user");
         Label newLabel = getPOJOFromRequestBody(req, Label.class);
         validate(req, newLabel);
         // User may not be allowed to create a new label
@@ -143,22 +142,6 @@ public class LabelController {
         }
 
         try {
-            // Iterate over feed sources and remove any references to the label
-            Persistence.feedSources.getFiltered(and(
-                    eq("projectId", label.projectId),
-                    in("labelIds", label.id)
-            )).forEach(feedSource -> {
-                List<String> newLabels = feedSource.labelIds.stream()
-                        .filter(l -> !l.equals(label.id))
-                        .collect(Collectors.toList());
-                // If there are changes, update the feed source
-                if (!newLabels.equals(feedSource.labelIds)) {
-                    FeedSource fs = Persistence.feedSources.getById(feedSource.id);
-                    fs.labelIds = newLabels;
-                    Persistence.feedSources.replace(fs.id, fs);
-                }
-            });
-
             label.delete();
             return label;
         } catch (Exception e) {
@@ -199,7 +182,7 @@ public class LabelController {
             return;
         }
 
-        boolean isProjectAdmin = userProfile.canAdministerProject(label.projectId, label.organizationId());
+        boolean isProjectAdmin = userProfile.canAdministerProject(label);
         switch (action) {
             case CREATE:
             case MANAGE:

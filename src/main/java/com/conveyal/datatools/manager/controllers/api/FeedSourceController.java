@@ -16,10 +16,12 @@ import com.conveyal.datatools.manager.models.transform.NormalizeFieldTransformat
 import com.conveyal.datatools.manager.models.transform.Substitution;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.JobUtils;
+import com.conveyal.datatools.manager.utils.PersistenceUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.lang3.StringUtils;
+import org.bson.conversions.Bson;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -81,7 +83,7 @@ public class FeedSourceController {
         if (project == null) {
             logMessageAndHalt(req, 400, "Must provide valid projectId query param to retrieve feed sources.");
         }
-        boolean isAdmin = user.canAdministerProject(project.id, project.organizationId);
+        boolean isAdmin = user.canAdministerProject(project);
 
         Collection<FeedSource> projectFeedSources = project.retrieveProjectFeedSources();
         for (FeedSource source: projectFeedSources) {
@@ -94,7 +96,7 @@ public class FeedSourceController {
                     user.canManageOrViewFeed(orgId, source.projectId, source.id)
             ) {
                 // Remove labels user can't view, then add to list of feeds to return
-                feedSourcesToReturn.add(cleanFeedSourceLabels(source, isAdmin));
+                feedSourcesToReturn.add(cleanFeedSourceForNonAdmins(source, isAdmin));
             }
         }
         return feedSourcesToReturn;
@@ -325,22 +327,21 @@ public class FeedSourceController {
             logMessageAndHalt(req, 400, "Feed source ID does not exist");
             return null;
         }
-        String orgId = feedSource.organizationId();
-        Boolean isAdmin = userProfile.canAdministerProject(feedSource.projectId, orgId);
+        boolean isProjectAdmin = userProfile.canAdministerProject(feedSource);
         boolean authorized;
 
         switch (action) {
             case CREATE:
-                authorized = isAdmin;
+                authorized = isProjectAdmin;
                 break;
             case MANAGE:
-                authorized = userProfile.canManageFeed(orgId, feedSource.projectId, feedSource.id);
+                authorized = userProfile.canManageFeed(feedSource);
                 break;
             case EDIT:
-                authorized = userProfile.canEditGTFS(orgId, feedSource.projectId, feedSource.id);
+                authorized = userProfile.canEditGTFS(feedSource);
                 break;
             case VIEW:
-                authorized = userProfile.canViewFeed(orgId, feedSource.projectId, feedSource.id);
+                authorized = userProfile.canViewFeed(feedSource);
                 break;
             default:
                 authorized = false;
@@ -354,7 +355,7 @@ public class FeedSourceController {
 
         // If we make it here, user has permission and the requested feed source is valid.
         // This final step removes labels the user can't view
-        return cleanFeedSourceLabels(feedSource, isAdmin);
+        return cleanFeedSourceForNonAdmins(feedSource, isProjectAdmin);
     }
 
     /** Determines whether a change to a feed source is significant enough that it warrants sending a notification
@@ -370,31 +371,21 @@ public class FeedSourceController {
     }
 
     /**
-     * Removes labels from a feed that a user is not allowed to view. Returns cleaned feed source
+     * Removes labels and notes from a feed that a user is not allowed to view. Returns cleaned feed source.
      * @param feedSource    The feed source to clean
      * @param isAdmin       Is the user an admin? Changes what is returned.
-     * @return              A feed source containing only labels the user is allowed to see
+     * @return              A feed source containing only labels/notes the user is allowed to see
      */
-    protected static FeedSource cleanFeedSourceLabels(FeedSource feedSource, boolean isAdmin) {
-        // Admin can see all labels
-        if (isAdmin) {
-            feedSource.labelIds = Persistence.labels.getFiltered(
-                    in("_id", feedSource.labelIds)
-                    ).stream()
-                    .map(label -> label.id)
-                    .collect(Collectors.toList());
-        }
-        // Remove labels user is not allowed to see if user is not admin
-        if (!isAdmin) {
-            feedSource.labelIds = Persistence.labels.getFiltered(
-                    and(
-                            eq("adminOnly", false),
-                            in("_id", feedSource.labelIds)
-                    )).stream()
-                    .map(label -> label.id)
-                    .collect(Collectors.toList());;
-        }
-
+    protected static FeedSource cleanFeedSourceForNonAdmins(FeedSource feedSource, boolean isAdmin) {
+        // Admin can view all feed labels, but a non-admin should only see those with adminOnly=false
+        feedSource.labelIds = Persistence.labels
+            .getFiltered(PersistenceUtils.applyAdminFilter(in("_id", feedSource.labelIds), isAdmin)).stream()
+            .map(label -> label.id)
+            .collect(Collectors.toList());
+        feedSource.noteIds = Persistence.notes
+            .getFiltered(PersistenceUtils.applyAdminFilter(in("_id", feedSource.noteIds), isAdmin)).stream()
+            .map(note -> note.id)
+            .collect(Collectors.toList());
         return feedSource;
     }
 

@@ -1,6 +1,10 @@
 package com.conveyal.datatools.manager.auth;
 
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.models.Deployment;
+import com.conveyal.datatools.manager.models.FeedSource;
+import com.conveyal.datatools.manager.models.Label;
+import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -43,9 +47,10 @@ public class Auth0UserProfile {
      * Utility method for creating a test standard (with no special permissions) user.
      */
     public static Auth0UserProfile createTestViewOnlyUser(String projectId) {
-        // Construct Auth0 project from project ID
-        Project project = new Project(projectId, new Permission[]{}, new String[]{});
-
+        // Create view feed permission
+        Permission viewFeedPermission = new Permission("view-feed", null);
+        // Construct user project from project ID with view permissions for all feeds.
+        Project project = new Project(projectId, new Permission[]{viewFeedPermission}, new String[]{"*"});
         Auth0UserProfile.DatatoolsInfo standardUserDatatoolsInfo = new Auth0UserProfile.DatatoolsInfo();
         standardUserDatatoolsInfo.projects = new Project[]{project};
         standardUserDatatoolsInfo.setClientId(DataManager.getConfigPropertyAsText("AUTH0_CLIENT_ID"));
@@ -121,8 +126,6 @@ public class Auth0UserProfile {
 
         @JsonIgnore
         public void setDatatoolsInfo(DatatoolsInfo datatools) {
-            if (Auth0Connection.isAuthDisabled()) return;
-
             // check if the datatools field hasn't yet been created. Although new users that get created automatically
             // have this set, when running in a test environment, this won't be set, so it should be created.
             if (this.datatools == null) {
@@ -139,8 +142,6 @@ public class Auth0UserProfile {
         }
         @JsonIgnore
         public DatatoolsInfo getDatatoolsInfo() {
-            if (Auth0Connection.isAuthDisabled()) return null;
-
             for(int i = 0; i < this.datatools.size(); i++) {
                 DatatoolsInfo dt = this.datatools.get(i);
                 if (dt.clientId.equals(DataManager.getConfigPropertyAsText("AUTH0_CLIENT_ID"))) {
@@ -304,9 +305,6 @@ public class Auth0UserProfile {
     }
 
     public boolean canAdministerApplication() {
-        // NOTE: user can administer application by default if running without authentication
-        if (Auth0Connection.isAuthDisabled()) return true;
-
         if(app_metadata.getDatatoolsInfo() != null && app_metadata.getDatatoolsInfo().permissions != null) {
             for(Permission permission : app_metadata.getDatatoolsInfo().permissions) {
                 if(permission.type.equals("administer-application")) {
@@ -361,7 +359,7 @@ public class Auth0UserProfile {
         return false;
     }
 
-    public boolean canAdministerProject(String projectID, String organizationId) {
+    private boolean canAdministerProject(String projectID, String organizationId) {
         if(canAdministerApplication()) return true;
         if(canAdministerOrganization(organizationId)) return true;
         for(Project project : app_metadata.getDatatoolsInfo().projects) {
@@ -374,6 +372,26 @@ public class Auth0UserProfile {
             }
         }
         return false;
+    }
+
+    public boolean canAdministerProject(FeedSource feedSource) {
+        return canAdministerProject(feedSource.projectId, feedSource.organizationId());
+    }
+
+    public boolean canAdministerProject(com.conveyal.datatools.manager.models.Project project) {
+        return canAdministerProject(project.id, project.organizationId);
+    }
+
+    public boolean canAdministerProject(Label label) {
+        return canAdministerProject(label.projectId, label.organizationId());
+    }
+
+    public boolean canAdministerProject(Deployment deployment) {
+        return canAdministerProject(deployment.id, deployment.organizationId());
+    }
+
+    public boolean canAdministerProject(OtpServer server) {
+        return canAdministerProject(server.projectId, server.organizationId());
     }
 
     /** Check that user can administer project. Organization ID is drawn from persisted project. */
@@ -393,7 +411,7 @@ public class Auth0UserProfile {
         return false;
     }
 
-    public boolean canViewFeed(String organizationId, String projectID, String feedID) {
+    private boolean canViewFeed(String organizationId, String projectID, String feedID) {
         if (canAdministerApplication() || canAdministerProject(projectID, organizationId)) {
             return true;
         }
@@ -405,12 +423,24 @@ public class Auth0UserProfile {
         return false;
     }
 
+    public boolean canViewFeed(FeedSource feedSource) {
+        if (canAdministerApplication() || canAdministerProject(feedSource.projectId, feedSource.organizationId())) {
+            return true;
+        }
+        for(Project project : app_metadata.getDatatoolsInfo().projects) {
+            if (project.project_id.equals(feedSource.projectId)) {
+                return checkFeedPermission(project, feedSource.id, "view-feed");
+            }
+        }
+        return false;
+    }
+
     /** Check that user has manage feed or view feed permissions. */
     public boolean canManageOrViewFeed(String organizationId, String projectID, String feedID) {
         return canManageFeed(organizationId, projectID, feedID) || canViewFeed(organizationId, projectID, feedID);
     }
 
-    public boolean canManageFeed(String organizationId, String projectID, String feedID) {
+    private boolean canManageFeed(String organizationId, String projectID, String feedID) {
         if (canAdministerApplication() || canAdministerProject(projectID, organizationId)) {
             return true;
         }
@@ -423,7 +453,20 @@ public class Auth0UserProfile {
         return false;
     }
 
-    public boolean canEditGTFS(String organizationId, String projectID, String feedID) {
+    public boolean canManageFeed(FeedSource feedSource) {
+        if (canAdministerApplication() || canAdministerProject(feedSource.projectId, feedSource.organizationId())) {
+            return true;
+        }
+        Project[] projectList = app_metadata.getDatatoolsInfo().projects;
+        for(Project project : projectList) {
+            if (project.project_id.equals(feedSource.projectId)) {
+                return checkFeedPermission(project, feedSource.id, "manage-feed");
+            }
+        }
+        return false;
+    }
+
+    private boolean canEditGTFS(String organizationId, String projectID, String feedID) {
         if (canAdministerApplication() || canAdministerProject(projectID, organizationId)) {
             return true;
         }
@@ -431,6 +474,19 @@ public class Auth0UserProfile {
         for(Project project : projectList) {
             if (project.project_id.equals(projectID)) {
                 return checkFeedPermission(project, feedID, "edit-gtfs");
+            }
+        }
+        return false;
+    }
+
+    public boolean canEditGTFS(FeedSource feedSource) {
+        if (canAdministerApplication() || canAdministerProject(feedSource.projectId, feedSource.organizationId())) {
+            return true;
+        }
+        Project[] projectList = app_metadata.getDatatoolsInfo().projects;
+        for(Project project : projectList) {
+            if (project.project_id.equals(feedSource.projectId)) {
+                return checkFeedPermission(project, feedSource.id, "edit-gtfs");
             }
         }
         return false;

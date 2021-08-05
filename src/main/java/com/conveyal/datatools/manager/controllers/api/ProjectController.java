@@ -177,7 +177,7 @@ public class ProjectController {
         }
 
         boolean authorized;
-        boolean isAdmin = userProfile.canAdministerProject(project.id, project.organizationId);
+        boolean isAdmin = userProfile.canAdministerProject(project);
         switch (action) {
             // TODO: limit create action to app/org admins? see code currently in createProject.
 //            case "create":
@@ -320,7 +320,7 @@ public class ProjectController {
 
         String syncType = req.params("type");
 
-        if (!userProfile.canAdministerProject(proj.id, proj.organizationId)) {
+        if (!userProfile.canAdministerProject(proj)) {
             logMessageAndHalt(req, 403, "Third-party sync not permitted for user.");
         }
 
