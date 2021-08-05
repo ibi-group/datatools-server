@@ -18,6 +18,7 @@ import java.util.Date;
 import java.util.List;
 
 import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Filters.in;
 import static com.mongodb.client.model.Updates.set;
 
 /**
@@ -140,6 +141,15 @@ public class TypedPersistence<T extends Model> {
      */
     public List<T> getAll () {
         return mongoCollection.find().into(new ArrayList<>());
+    }
+
+    /**
+     * Gets all objects with one of the IDs passed
+     * @param ids   List of IDs to return objects with
+     * @return      Objects in the collection with given IDs
+     */
+    public List<T> getByIds (List<String> ids) {
+        return mongoCollection.find(in("_id", ids)).into(new ArrayList<>());
     }
 
     /**

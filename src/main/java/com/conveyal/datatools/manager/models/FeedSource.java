@@ -145,6 +145,11 @@ public class FeedSource extends Model implements Cloneable {
     public String snapshotVersion;
 
     /**
+     * IDs of Labels assigned to this Feed
+     */
+    public List<String> labelIds = new ArrayList<>();
+
+    /**
      * The SQL namespace for the most recently verified published {@link FeedVersion}.
      *
      * FIXME During migration to RDBMS for GTFS data, this field changed to map to the SQL unique ID,
@@ -320,6 +325,29 @@ public class FeedSource extends Model implements Cloneable {
 
     public int compareTo(FeedSource o) {
         return this.name.compareTo(o.name);
+    }
+
+    /**
+     * Similar to a standard Java .equals() method, except that the labels field is ignored.
+     * @param o Second FeedSource to compare to this one
+     * @return  True or false depending on if the FeedSources are equal, barring labels.
+     */
+    public boolean equalsExceptLabels(FeedSource o) {
+        // Compare every property other than labels
+        return this.name.equals(o.name) &&
+                this.preserveStopTimesSequence == o.preserveStopTimesSequence &&
+                this.transformRules.equals(o.transformRules) &&
+                this.isPublic == o.isPublic &&
+                this.deployable == o.deployable &&
+                this.retrievalMethod.equals(o.retrievalMethod) &&
+                this.fetchFrequency.equals(o.fetchFrequency) &&
+                this.fetchInterval == o.fetchInterval &&
+                this.lastFetched.equals(o.lastFetched) &&
+                this.url.equals(o.url) &&
+                this.s3Url.equals(o.s3Url) &&
+                this.snapshotVersion.equals(o.snapshotVersion) &&
+                this.publishedVersionId.equals(o.publishedVersionId) &&
+                this.editorNamespace.equals(o.editorNamespace);
     }
 
     public String toString () {

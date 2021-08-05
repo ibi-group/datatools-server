@@ -42,6 +42,9 @@ import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.models.ExternalFeedSourceProperty.constructId;
 import static com.conveyal.datatools.manager.models.transform.NormalizeFieldTransformation.getInvalidSubstitutionMessage;
 import static com.conveyal.datatools.manager.models.transform.NormalizeFieldTransformation.getInvalidSubstitutionPatterns;
+import static com.mongodb.client.model.Filters.and;
+import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Filters.in;
 import static spark.Spark.delete;
 import static spark.Spark.get;
 import static spark.Spark.post;
@@ -72,10 +75,14 @@ public class FeedSourceController {
         Collection<FeedSource> feedSourcesToReturn = new ArrayList<>();
         Auth0UserProfile user = req.attribute("user");
         String projectId = req.queryParams("projectId");
+
         Project project = Persistence.projects.getById(projectId);
+
         if (project == null) {
             logMessageAndHalt(req, 400, "Must provide valid projectId query param to retrieve feed sources.");
         }
+        boolean isAdmin = user.canAdministerProject(project.id, project.organizationId);
+
         Collection<FeedSource> projectFeedSources = project.retrieveProjectFeedSources();
         for (FeedSource source: projectFeedSources) {
             String orgId = source.organizationId();
@@ -86,7 +93,8 @@ public class FeedSourceController {
                 source.projectId != null && source.projectId.equals(projectId) &&
                     user.canManageOrViewFeed(orgId, source.projectId, source.id)
             ) {
-                feedSourcesToReturn.add(source);
+                // Remove labels user can't view, then add to list of feeds to return
+                feedSourcesToReturn.add(cleanFeedSourceLabels(source, isAdmin));
             }
         }
         return feedSourcesToReturn;
@@ -141,6 +149,9 @@ public class FeedSourceController {
         if (feedSource.retrieveProject() == null) {
             validationIssues.add("Valid project ID must be provided.");
         }
+        if (Persistence.labels.getByIds(feedSource.labelIds).size() != feedSource.labelIds.size()) {
+            validationIssues.add("All labels assigned to feed must exist.");
+        }
         // Collect all retrieval methods found in transform rules into a list.
         List<FeedRetrievalMethod> retrievalMethods = feedSource.transformRules.stream()
             .map(rule -> rule.retrievalMethods)
@@ -190,6 +201,10 @@ public class FeedSourceController {
             updatedFeedSource.lastFetched = null;
         }
         Persistence.feedSources.replace(feedSourceId, updatedFeedSource);
+
+        if (shouldNotifyUsersOnFeedUpdated(formerFeedSource, updatedFeedSource)) {
+            return updatedFeedSource;
+        }
         // After successful save, handle auto fetch job setup.
         Scheduler.handleAutoFeedFetch(updatedFeedSource);
         // Notify feed- and project-subscribed users after successful save
@@ -299,6 +314,7 @@ public class FeedSourceController {
         if (id == null) {
             logMessageAndHalt(req, 400, "Please specify id param");
         }
+
         return checkFeedSourcePermissions(req, Persistence.feedSources.getById(id), action);
     }
 
@@ -310,10 +326,12 @@ public class FeedSourceController {
             return null;
         }
         String orgId = feedSource.organizationId();
+        Boolean isAdmin = userProfile.canAdministerProject(feedSource.projectId, orgId);
         boolean authorized;
+
         switch (action) {
             case CREATE:
-                authorized = userProfile.canAdministerProject(feedSource.projectId, orgId);
+                authorized = isAdmin;
                 break;
             case MANAGE:
                 authorized = userProfile.canManageFeed(orgId, feedSource.projectId, feedSource.id);
@@ -332,7 +350,51 @@ public class FeedSourceController {
             // Throw halt if user not authorized.
             logMessageAndHalt(req, 403, "User not authorized to perform action on feed source");
         }
+
+
         // If we make it here, user has permission and the requested feed source is valid.
+        // This final step removes labels the user can't view
+        return cleanFeedSourceLabels(feedSource, isAdmin);
+    }
+
+    /** Determines whether a change to a feed source is significant enough that it warrants sending a notification
+     *
+     * @param formerFeedSource  A feed source object, without new changes
+     * @param updatedFeedSource A feed source object, with new changes
+     * @return                  A boolean value indicating if the updated feed source is changed enough to warrant sending a notification.
+     */
+    private static boolean shouldNotifyUsersOnFeedUpdated(FeedSource formerFeedSource, FeedSource updatedFeedSource) {
+        return
+                // If only labels have changed, don't send out an email
+                formerFeedSource.equalsExceptLabels(updatedFeedSource);
+    }
+
+    /**
+     * Removes labels from a feed that a user is not allowed to view. Returns cleaned feed source
+     * @param feedSource    The feed source to clean
+     * @param isAdmin       Is the user an admin? Changes what is returned.
+     * @return              A feed source containing only labels the user is allowed to see
+     */
+    protected static FeedSource cleanFeedSourceLabels(FeedSource feedSource, boolean isAdmin) {
+        // Admin can see all labels
+        if (isAdmin) {
+            feedSource.labelIds = Persistence.labels.getFiltered(
+                    in("_id", feedSource.labelIds)
+                    ).stream()
+                    .map(label -> label.id)
+                    .collect(Collectors.toList());
+        }
+        // Remove labels user is not allowed to see if user is not admin
+        if (!isAdmin) {
+            feedSource.labelIds = Persistence.labels.getFiltered(
+                    and(
+                            eq("adminOnly", false),
+                            in("_id", feedSource.labelIds)
+                    )).stream()
+                    .map(label -> label.id)
+                    .collect(Collectors.toList());;
+        }
+
         return feedSource;
     }
 
