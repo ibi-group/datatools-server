@@ -29,7 +29,7 @@ public class PeliasUpdateJob extends MonitorableJob {
     /**
      * The deployment to send to Pelias
      */
-    private Deployment deployment;
+    private final Deployment deployment;
 
     /**
      * The workerId our request has on the webhook server. Used to get status updates
@@ -40,7 +40,7 @@ public class PeliasUpdateJob extends MonitorableJob {
     /**
      * Timer used to poll the status endpoint
      */
-    private Timer timer;
+    private final Timer timer;
 
     /**
      * The number of webhook status requests allowed to fail before considering the server down
@@ -50,7 +50,7 @@ public class PeliasUpdateJob extends MonitorableJob {
     /**
      * S3 URI to upload logs to
      */
-    private AmazonS3URI logUploadS3URI;
+    private final AmazonS3URI logUploadS3URI;
 
     public PeliasUpdateJob(Auth0UserProfile owner, String name, Deployment deployment, AmazonS3URI logUploadS3URI) {
         super(owner, name, JobType.UPDATE_PELIAS);
@@ -94,7 +94,7 @@ public class PeliasUpdateJob extends MonitorableJob {
         }
 
         // Parse JSON
-        PeliasWebhookStatusMessage statusResponse = null;
+        PeliasWebhookStatusMessage statusResponse;
         try {
             statusResponse = JsonUtil.objectMapper.readValue(jsonResponse, PeliasWebhookStatusMessage.class);
         } catch (IOException ex) {
@@ -161,7 +161,7 @@ public class PeliasUpdateJob extends MonitorableJob {
         }
 
         // Parse JSON
-        JsonNode webhookResponse = null;
+        JsonNode webhookResponse;
         try {
             webhookResponse = JsonUtil.objectMapper.readTree(jsonResponse);
         } catch (IOException ex) {
@@ -206,7 +206,7 @@ public class PeliasUpdateJob extends MonitorableJob {
     /**
      * The request body required by the Pelias webhook
      */
-    private class PeliasWebhookRequestBody {
+    private static class PeliasWebhookRequestBody {
         public List<PeliasWebhookGTFSFeedFormat> gtfsFeeds;
         public List<String> csvFiles;
         public String logUploadUrl;
@@ -216,7 +216,7 @@ public class PeliasUpdateJob extends MonitorableJob {
     /**
      * The GTFS feed info format the Pelias webhook requires
      */
-    private class PeliasWebhookGTFSFeedFormat {
+    private static class PeliasWebhookGTFSFeedFormat {
         public String uri;
         public String name;
         public String filename;
