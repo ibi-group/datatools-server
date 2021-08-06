@@ -325,14 +325,6 @@ public class DeploymentController {
             Persistence.deployments.updateField(deploymentToUpdate.id, "feedVersionIds", versionIds);
         }
 
-        // If Pelias Webhook URL is updated, set that to the project's as a helpful default
-        if (updateDocument.containsKey("peliasWebhookUrl")) {
-            Persistence.projects.updateField(
-                    deploymentToUpdate.projectId,
-                    "lastUsedPeliasWebhookUrl",
-                    updateDocument.getString("peliasWebhookUrl"));
-        }
-
         // If updatedDocument has deleted a CSV file, also delete that CSV file from S3
         if (updateDocument.containsKey("peliasCsvFiles")) {
             List<String> csvUrls = (List<String>) updateDocument.get("peliasCsvFiles");

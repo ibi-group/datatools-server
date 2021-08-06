@@ -45,9 +45,6 @@ public class Project extends Model {
     /** Last successful auto deploy. **/
     public Date lastAutoDeploy;
 
-    /** The most recently entered Pelias webhook URL. Used when creating new Deployments */
-    public String lastUsedPeliasWebhookUrl;
-
     /**
      * A list of servers that are available to deploy project feeds/OSM to. This includes servers assigned to this
      * project as well as those that belong to no project.
