@@ -1,7 +1,6 @@
 package com.conveyal.datatools.manager.utils;
 
 import org.apache.http.Header;
-import org.apache.http.HttpResponse;
 import org.apache.http.client.config.RequestConfig;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpDelete;
@@ -26,9 +25,11 @@ public class HttpUtils {
     public enum REQUEST_METHOD {GET, POST, DELETE, PUT}
 
     /**
-     * Makes an http get/post request and returns the response. The request is based on the provided params.
+     * Makes an http get/post/etc. request and returns the response. The request is based on the provided params.
+     * @return a {@link SimpleHttpResponse} that consumes and closes the entity (verifying that the HTTP connection is
+     *   closed)
      */
-    public static HttpResponse httpRequestRawResponse(
+    public static SimpleHttpResponse httpRequestRawResponse(
             URI uri,
             int connectionTimeout,
             REQUEST_METHOD method,
@@ -37,18 +38,13 @@ public class HttpUtils {
         return httpRequestRawResponse(uri, connectionTimeout, method, bodyContent, new ArrayList<>());
     }
 
-    /**
-     * Makes an http get/post request and returns the response, including custom headers.
-     * The request is based on the provided params, including headers.
-     */
-    public static HttpResponse httpRequestRawResponse(
+    public static SimpleHttpResponse httpRequestRawResponse(
         URI uri,
         int connectionTimeout,
         REQUEST_METHOD method,
         String bodyContent,
         List<Header> headers
-        ) {
-
+    ) {
         RequestConfig timeoutConfig = RequestConfig.custom()
             .setConnectionRequestTimeout(connectionTimeout)
             .setConnectTimeout(connectionTimeout)
@@ -111,7 +107,7 @@ public class HttpUtils {
 
         try (CloseableHttpClient httpClient = HttpClients.createDefault();
              CloseableHttpResponse response = httpClient.execute(httpUriRequest)) {
-            return response;
+            return new SimpleHttpResponse(response);
         } catch (IOException e) {
             LOG.error("An exception occurred while making a request to {}", uri, e);
             return null;

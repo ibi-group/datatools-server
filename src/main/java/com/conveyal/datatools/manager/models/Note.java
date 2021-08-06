@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.models;
 
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
@@ -23,18 +24,24 @@ public class Note extends Model implements Serializable {
     /** What type of object it is recorded on */
     public NoteType type;
 
-    /** What is the ID of the object it is recorded on */
-    public String objectId;
-
     public String userEmail;
 
     /** When was this comment made? */
     public Date date;
 
+    /** Whether the note should be visible to project admins only */
+    public boolean adminOnly;
+
     /**
      * The types of object that can have notes recorded on them.
      */
-    public static enum NoteType {
+    public enum NoteType {
         FEED_VERSION, FEED_SOURCE
+    }
+
+    public void delete() {
+        Persistence.feedSources.removeNoteFromCollection(id);
+        Persistence.feedVersions.removeNoteFromCollection(id);
+        Persistence.notes.removeById(this.id);
     }
 }

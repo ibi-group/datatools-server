@@ -75,7 +75,7 @@ public class DeploymentController {
         if (deployment == null) {
             logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Deployment does not exist.");
         }
-        boolean isProjectAdmin = userProfile.canAdministerProject(deployment.projectId, deployment.organizationId());
+        boolean isProjectAdmin = userProfile.canAdministerProject(deployment);
         if (!isProjectAdmin && !userProfile.getUser_id().equals(deployment.user())) {
             // If user is not a project admin and did not create the deployment, access to the deployment is denied.
             logMessageAndHalt(req, HttpStatus.UNAUTHORIZED_401, "User not authorized for deployment.");
@@ -193,22 +193,24 @@ public class DeploymentController {
             // Return deployments for project
             Project project = Persistence.projects.getById(projectId);
             if (project == null) logMessageAndHalt(req, 400, "Must provide valid projectId value.");
-            if (!userProfile.canAdministerProject(projectId, project.organizationId))
+            if (!userProfile.canAdministerProject(project)) {
                 logMessageAndHalt(req, 401, "User not authorized to view project deployments.");
+            }
             return project.retrieveDeployments();
         } else if (feedSourceId != null) {
             // Return test deployments for feed source (note: these only include test deployments specific to the feed
             // source and will not include all deployments that reference this feed source).
             FeedSource feedSource = Persistence.feedSources.getById(feedSourceId);
             if (feedSource == null) logMessageAndHalt(req, 400, "Must provide valid feedSourceId value.");
-            Project project = feedSource.retrieveProject();
-            if (!userProfile.canViewFeed(project.organizationId, project.id, feedSourceId))
+            if (!userProfile.canViewFeed(feedSource)) {
                 logMessageAndHalt(req, 401, "User not authorized to view feed source deployments.");
+            }
             return feedSource.retrieveDeployments();
         } else {
             // If no query parameter is supplied, return all deployments for application.
-            if (!userProfile.canAdministerApplication())
+            if (!userProfile.canAdministerApplication()) {
                 logMessageAndHalt(req, 401, "User not authorized to view application deployments.");
+            }
             return Persistence.deployments.getAll();
         }
     }
@@ -223,12 +225,10 @@ public class DeploymentController {
         Auth0UserProfile userProfile = req.attribute("user");
         Document newDeploymentFields = Document.parse(req.body());
         String projectId = newDeploymentFields.getString("projectId");
-        String organizationId = newDeploymentFields.getString("organizationId");
-
-        boolean allowedToCreate = userProfile.canAdministerProject(projectId, organizationId);
+        Project project = Persistence.projects.getById(projectId);
+        boolean allowedToCreate = userProfile.canAdministerProject(project);
 
         if (allowedToCreate) {
-            Project project = Persistence.projects.getById(projectId);
             Deployment newDeployment = new Deployment(project);
 
             // FIXME: Here we are creating a deployment and updating it with the JSON string (two db operations)
@@ -256,7 +256,7 @@ public class DeploymentController {
         // 3) have access to this feed through project permissions
         // if all fail, the user cannot do this.
         if (
-                !userProfile.canAdministerProject(feedSource.projectId, feedSource.organizationId()) &&
+                !userProfile.canAdministerProject(feedSource) &&
                 !userProfile.getUser_id().equals(feedSource.user())
             )
             logMessageAndHalt(req, 401, "User not authorized to perform this action");
@@ -456,7 +456,7 @@ public class DeploymentController {
         }
 
         // Check that permissions of user allow them to deploy to target.
-        boolean isProjectAdmin = userProfile.canAdministerProject(deployment.projectId, deployment.organizationId());
+        boolean isProjectAdmin = userProfile.canAdministerProject(deployment);
         if (!isProjectAdmin && otpServer.admin) {
             logMessageAndHalt(req, 401, "User not authorized to deploy to admin-only target OTP server.");
         }

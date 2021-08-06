@@ -7,6 +7,7 @@ import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.FindOneAndUpdateOptions;
 import com.mongodb.client.model.ReturnDocument;
 import com.mongodb.client.result.DeleteResult;
+import com.mongodb.client.result.UpdateResult;
 import org.bson.Document;
 import org.bson.conversions.Bson;
 import org.slf4j.Logger;
@@ -17,8 +18,10 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
+import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
-import static com.mongodb.client.model.Updates.set;
+import static com.mongodb.client.model.Filters.in;
+import static com.mongodb.client.model.Updates.pull;
 
 /**
  * This provides some abstraction over the Mongo Java driver for storing a particular kind of POJO.
@@ -143,6 +146,15 @@ public class TypedPersistence<T extends Model> {
     }
 
     /**
+     * Gets all objects with one of the IDs passed
+     * @param ids   List of IDs to return objects with
+     * @return      Objects in the collection with given IDs
+     */
+    public List<T> getByIds (List<String> ids) {
+        return mongoCollection.find(in("_id", ids)).into(new ArrayList<>());
+    }
+
+    /**
      * Get all objects satisfying the supplied Mongo filter.
      * This ties our persistence directly to Mongo for now but is expedient.
      * We should really have a bit more abstraction here.
@@ -189,6 +201,21 @@ public class TypedPersistence<T extends Model> {
             LOG.error("Could not delete {}: {}", collectionName, id);
         }
         return false;
+    }
+
+    /**
+     * Generic method to remove a specific note from the {@link Model#noteIds} list.
+     */
+    public UpdateResult removeNoteFromCollection(String noteId) {
+        // Finds all objects that contain the note ID and "pulls" (removes) the ID from the list.
+        return updateMany(in("noteIds", noteId), pull("noteIds", noteId));
+    }
+
+    /**
+     * Apply update filter to documents that match query.
+     */
+    public UpdateResult updateMany(Bson query, Bson update) {
+        return mongoCollection.updateMany(query, update);
     }
 
     public boolean removeFiltered (Bson filter) {

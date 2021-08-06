@@ -8,12 +8,11 @@ import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HttpUtils;
+import com.conveyal.datatools.manager.utils.SimpleHttpResponse;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.databind.JsonNode;
 import org.apache.http.Header;
-import org.apache.http.HttpResponse;
 import org.apache.http.message.BasicHeader;
-import org.apache.http.util.EntityUtils;
 
 import java.io.IOException;
 import java.net.URI;
@@ -79,14 +78,14 @@ public class PeliasUpdateJob extends MonitorableJob {
     private void getWebhookStatus() {
         URI url = getWebhookURI(deployment.peliasWebhookUrl + "/status/" + workerId);
 
-        HttpResponse response = HttpUtils.httpRequestRawResponse(url, 1000, HttpUtils.REQUEST_METHOD.GET, null);
+        SimpleHttpResponse response = HttpUtils.httpRequestRawResponse(url, 1000, HttpUtils.REQUEST_METHOD.GET, null);
 
         // Convert raw body to JSON
         String jsonResponse;
         try {
-            jsonResponse = EntityUtils.toString(response.getEntity());
+            jsonResponse = response.body;
         }
-        catch (NullPointerException | IOException ex) {
+        catch (NullPointerException ex) {
             if (--webhookStatusFailuresAllowed == 0) {
                 status.fail("Webhook status did not provide a response!", ex);
                 timer.cancel();
@@ -149,14 +148,14 @@ public class PeliasUpdateJob extends MonitorableJob {
         headers.add(new BasicHeader("Content-type", "application/json"));
 
         // Get webhook response
-        HttpResponse response = HttpUtils.httpRequestRawResponse(url, 5000, HttpUtils.REQUEST_METHOD.POST, query, headers);
+        SimpleHttpResponse response = HttpUtils.httpRequestRawResponse(url, 5000, HttpUtils.REQUEST_METHOD.POST, query, headers);
 
         // Convert raw body to JSON
         String jsonResponse;
         try {
-            jsonResponse = EntityUtils.toString(response.getEntity());
+            jsonResponse = response.body;
         }
-        catch (NullPointerException | IOException ex) {
+        catch (NullPointerException ex) {
             status.fail("Webhook server specified did not provide a response!", ex);
             return null;
         }

@@ -1,11 +1,14 @@
 package com.conveyal.datatools.manager.utils.json;
 
+import com.conveyal.datatools.manager.utils.SimpleHttpResponse;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.type.CollectionType;
+import org.apache.http.HttpResponse;
+import org.apache.http.util.EntityUtils;
 import spark.Request;
 
 import java.io.IOException;
@@ -52,6 +55,14 @@ public class JsonUtil {
             logMessageAndHalt(req, 400, "Failed to parse JSON String", e);
             return null;
         }
+    }
+
+    public static <T> T getPOJOFromResponse(SimpleHttpResponse response, Class<T> clazz) throws IOException {
+        return objectMapper.readValue(response.body, clazz);
+    }
+
+    public static JsonNode getJsonNodeFromResponse(SimpleHttpResponse response) throws IOException {
+        return objectMapper.readTree(response.body);
     }
 
     /**

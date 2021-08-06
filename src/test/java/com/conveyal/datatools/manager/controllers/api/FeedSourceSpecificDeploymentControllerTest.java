@@ -2,7 +2,6 @@ package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.TestUtils;
-import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -10,9 +9,9 @@ import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HttpUtils;
-import com.conveyal.datatools.manager.utils.StringUtils;
+import com.conveyal.datatools.manager.utils.SimpleHttpResponse;
+import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import org.apache.http.HttpResponse;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
@@ -62,13 +61,13 @@ public class FeedSourceSpecificDeploymentControllerTest {
     @Test
     public void canCreateFeedSourceSpecificDeploymentWithDefaultRouter() throws IOException {
         // Create a feed source specific deployment.
-        HttpResponse createDeploymentResponse = TestUtils.makeRequest( "/api/manager/secure/deployments/fromfeedsource/" + feedSource.id,
+        SimpleHttpResponse createDeploymentResponse = TestUtils.makeRequest( "/api/manager/secure/deployments/fromfeedsource/" + feedSource.id,
                 null,
                 HttpUtils.REQUEST_METHOD.POST
         );
-        Deployment deployment = objectMapper.readValue(createDeploymentResponse.getEntity().getContent(), Deployment.class);
+        Deployment deployment = JsonUtil.getPOJOFromResponse(createDeploymentResponse, Deployment.class);
 
-        assertEquals(OK_200, createDeploymentResponse.getStatusLine().getStatusCode());
+        assertEquals(OK_200, createDeploymentResponse.status);
         assertEquals(null, deployment.routerId );
     }
 }

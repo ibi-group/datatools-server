@@ -25,6 +25,7 @@ import org.slf4j.LoggerFactory;
 import spark.Request;
 import spark.Response;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
@@ -165,7 +166,6 @@ public class ProjectController {
      * FIXME: this is a method with side effects and no clear single purpose, in terms of transformation of input to output.
      */
     private static Project checkProjectPermissions(Request req, Project project, String action) {
-
         Auth0UserProfile userProfile = req.attribute("user");
         // Check if request was made by a user that is not logged in
         boolean publicFilter = req.pathInfo().matches(publicPath);
@@ -177,13 +177,14 @@ public class ProjectController {
         }
 
         boolean authorized;
+        boolean isAdmin = userProfile.canAdministerProject(project);
         switch (action) {
             // TODO: limit create action to app/org admins? see code currently in createProject.
 //            case "create":
 //                authorized = userProfile.canAdministerOrganization(p.organizationId);
 //                break;
             case "manage":
-                authorized = userProfile.canAdministerProject(project.id, project.organizationId);
+                authorized = isAdmin;
                 break;
             case "view":
                 // request only authorized if not via public path and user can view
@@ -193,6 +194,10 @@ public class ProjectController {
                 authorized = false;
                 break;
         }
+
+        // Filter labels
+        project.labels = project.retrieveProjectLabels(isAdmin);
+
 
         // If the user is not logged in, include only public feed sources
         if (publicFilter){
@@ -315,7 +320,7 @@ public class ProjectController {
 
         String syncType = req.params("type");
 
-        if (!userProfile.canAdministerProject(proj.id, proj.organizationId)) {
+        if (!userProfile.canAdministerProject(proj)) {
             logMessageAndHalt(req, 403, "Third-party sync not permitted for user.");
         }
 

@@ -4,6 +4,7 @@ import com.conveyal.datatools.manager.jobs.AutoDeployType;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import org.bson.codecs.pojo.annotations.BsonIgnore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -12,8 +13,8 @@ import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 
+import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 import static com.mongodb.client.model.Filters.or;
 
@@ -100,10 +101,23 @@ public class Project extends Model {
      */
     public Collection<FeedSource> retrieveProjectFeedSources() {
         // TODO: use index, but not important for now because we generally only have one FeedCollection
-        return Persistence.feedSources.getAll().stream()
-                .filter(fs -> this.id.equals(fs.projectId))
-                .collect(Collectors.toList());
+        return Persistence.feedSources.getFiltered(eq("projectId", this.id));
     }
+
+    /**
+     * Get all the labels for this project, depending on if user is admin
+     */
+    public Collection<Label> retrieveProjectLabels(boolean isAdmin) {
+        if (isAdmin) {
+            return Persistence.labels.getFiltered(eq("projectId", this.id));
+        }
+        return Persistence.labels.getFiltered(and(eq("adminOnly", false ), eq("projectId", this.id)));
+    }
+
+    // Keep an empty collection here which is filled dynamically later
+    @BsonIgnore
+    public Collection<Label> labels;
+
 
     // Note: Previously a numberOfFeeds() dynamic Jackson JsonProperty was in place here. But when the number of projects
     // in the database grows large, the efficient calculation of this field does not scale.
@@ -130,6 +144,9 @@ public class Project extends Model {
         retrieveProjectFeedSources().forEach(FeedSource::delete);
         // Delete each deployment in the project.
         retrieveDeployments().forEach(Deployment::delete);
+        // Delete each label in the project.
+        // Pass the user object for deletion, assuming the user is admin
+        retrieveProjectLabels(true).forEach(Label::delete);
         // Finally, delete the project.
         Persistence.projects.removeById(this.id);
     }
