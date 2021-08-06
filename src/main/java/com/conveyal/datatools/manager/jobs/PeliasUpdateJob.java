@@ -44,9 +44,9 @@ public class PeliasUpdateJob extends MonitorableJob {
     private Timer timer;
 
     /**
-     * Webhook authorization from username and password
+     * The number of webhook status requests allowed to fail before considering the server down
      */
-    private Header webhookAuthorization;
+    private int webhookStatusFailuresAllowed = 3;
 
     /**
      * S3 URI to upload logs to
@@ -79,10 +79,7 @@ public class PeliasUpdateJob extends MonitorableJob {
     private void getWebhookStatus() {
         URI url = getWebhookURI(deployment.peliasWebhookUrl + "/status/" + workerId);
 
-        List<Header> headers = new ArrayList<>();
-        headers.add(webhookAuthorization);
-
-        HttpResponse response = HttpUtils.httpRequestRawResponse(url, 1000, HttpUtils.REQUEST_METHOD.GET, null, headers);
+        HttpResponse response = HttpUtils.httpRequestRawResponse(url, 1000, HttpUtils.REQUEST_METHOD.GET, null);
 
         // Convert raw body to JSON
         String jsonResponse;
@@ -90,8 +87,10 @@ public class PeliasUpdateJob extends MonitorableJob {
             jsonResponse = EntityUtils.toString(response.getEntity());
         }
         catch (NullPointerException | IOException ex) {
-            status.fail("Webhook status did not provide a response!", ex);
-            timer.cancel();
+            if (--webhookStatusFailuresAllowed == 0) {
+                status.fail("Webhook status did not provide a response!", ex);
+                timer.cancel();
+            }
             return;
         }
 
@@ -148,7 +147,6 @@ public class PeliasUpdateJob extends MonitorableJob {
         List<Header> headers = new ArrayList<>();
         headers.add(new BasicHeader("Accept", "application/json"));
         headers.add(new BasicHeader("Content-type", "application/json"));
-        headers.add(webhookAuthorization);
 
         // Get webhook response
         HttpResponse response = HttpUtils.httpRequestRawResponse(url, 5000, HttpUtils.REQUEST_METHOD.POST, query, headers);
