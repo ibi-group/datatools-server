@@ -78,28 +78,20 @@ public class PeliasUpdateJob extends MonitorableJob {
     private void getWebhookStatus() {
         URI url = getWebhookURI(deployment.peliasWebhookUrl + "/status/" + workerId);
 
-        SimpleHttpResponse response = HttpUtils.httpRequestRawResponse(url, 1000, HttpUtils.REQUEST_METHOD.GET, null);
-
         // Convert raw body to JSON
-        String jsonResponse;
+        PeliasWebhookStatusMessage statusResponse;
+
         try {
-            jsonResponse = response.body;
-        }
-        catch (NullPointerException ex) {
+            SimpleHttpResponse response = HttpUtils.httpRequestRawResponse(url, 1000, HttpUtils.REQUEST_METHOD.GET, null);
+            // Convert raw body to PeliasWebhookStatusMessage
+            String jsonResponse = response.body;
+            statusResponse = JsonUtil.objectMapper.readValue(jsonResponse, PeliasWebhookStatusMessage.class);
+        } catch (Exception ex) {
+            // Allow a set number of failed requests before showing the user failure message
             if (--webhookStatusFailuresAllowed == 0) {
-                status.fail("Webhook status did not provide a response!", ex);
+                status.fail("Webhook status did not provide a valid response!", ex);
                 timer.cancel();
             }
-            return;
-        }
-
-        // Parse JSON
-        PeliasWebhookStatusMessage statusResponse;
-        try {
-            statusResponse = JsonUtil.objectMapper.readValue(jsonResponse, PeliasWebhookStatusMessage.class);
-        } catch (IOException ex) {
-            status.fail("Server refused to provide a valid status update. Are the credentials correct?", ex);
-            timer.cancel();
             return;
         }
 
