@@ -157,7 +157,7 @@ public class PeliasUpdateJob extends MonitorableJob {
         try {
             webhookResponse = JsonUtil.objectMapper.readTree(jsonResponse);
         } catch (IOException ex) {
-            status.fail("The Webhook server's response was invalid! Are the credentials correct?", ex);
+            status.fail("The Webhook server's response was invalid! Is the server URL correct?", ex);
             return null;
         }
 
