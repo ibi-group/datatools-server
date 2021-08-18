@@ -268,10 +268,9 @@
          - AWS S3 SDK - putting/getting objects into/out of S3.
          -->
         <dependency>
-<!--            TODO: Restore to release version once gtfs-lib updates have been merged -->
             <groupId>com.github.conveyal</groupId>
             <artifactId>gtfs-lib</artifactId>
-            <version>a45e6f9323</version>
+            <version>7.0.0</version>
             <!-- Exclusions added in order to silence SLF4J warnings about multiple bindings:
                 http://www.slf4j.org/codes.html#multiple_bindings
             -->
