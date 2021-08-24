@@ -1,5 +1,8 @@
 package com.conveyal.datatools.common.utils;
 
+import com.amazonaws.AmazonServiceException;
+import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
+import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.utils.ErrorUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
@@ -7,6 +10,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.io.ByteStreams;
+import org.apache.commons.io.IOUtils;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -14,14 +18,18 @@ import spark.HaltException;
 import spark.Request;
 import spark.Response;
 
+import javax.servlet.MultipartConfigElement;
+import javax.servlet.ServletException;
 import javax.servlet.ServletInputStream;
 import javax.servlet.ServletOutputStream;
 import javax.servlet.ServletRequestWrapper;
 import javax.servlet.http.HttpServletResponse;
+import javax.servlet.http.Part;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.Arrays;
 
 import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
@@ -262,6 +270,50 @@ public class SparkUtils {
         } catch (Exception e) {
             LOG.error("Unable to open input stream from upload");
             logMessageAndHalt(req, 500, "Unable to read uploaded file.", e);
+        }
+    }
+
+    /**
+     * Copies a multi-part file upload to disk, attempts to upload it to S3, then deletes the local file.
+     * @param req           Request object containing file to upload
+     * @param uploadType    A string to include in the uploaded filename. Will also be added to the temporary file
+     *                      which makes debugging easier should the upload fail.
+     * @param key           The S3 key to upload the file to
+     * @return              An HTTP S3 url containing the uploaded file
+     */
+    public static String uploadMultipartRequestBodyToS3(Request req, String uploadType, String key) {
+        // Get file from request
+        if (req.raw().getAttribute("org.eclipse.jetty.multipartConfig") == null) {
+            MultipartConfigElement multipartConfigElement = new MultipartConfigElement(System.getProperty("java.io.tmpdir"));
+            req.raw().setAttribute("org.eclipse.jetty.multipartConfig", multipartConfigElement);
+        }
+        String extension = null;
+        File tempFile = null;
+        String uploadedFileName = null;
+        try {
+            Part part = req.raw().getPart("file");
+            uploadedFileName = part.getSubmittedFileName();
+
+            extension = "." + part.getContentType().split("/", 0)[1];
+            tempFile = File.createTempFile(part.getName() + "_" + uploadType, extension);
+            InputStream inputStream;
+            inputStream = part.getInputStream();
+            FileOutputStream out = new FileOutputStream(tempFile);
+            IOUtils.copy(inputStream, out);
+        } catch (IOException | ServletException e) {
+            e.printStackTrace();
+            logMessageAndHalt(req, 400, "Unable to read uploaded file");
+        }
+        try {
+            return S3Utils.uploadObject(key + "_" + uploadedFileName, tempFile);
+        } catch (AmazonServiceException | CheckedAWSException e) {
+            logMessageAndHalt(req, 500, "Error uploading file to S3", e);
+            return null;
+        } finally {
+            boolean deleted = tempFile.delete();
+            if (!deleted) {
+                LOG.error("Could not delete s3 temporary upload file");
+            }
         }
     }
 

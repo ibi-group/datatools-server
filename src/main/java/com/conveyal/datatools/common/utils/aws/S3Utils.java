@@ -7,7 +7,9 @@ import com.amazonaws.auth.DefaultAWSCredentialsProviderChain;
 import com.amazonaws.auth.profile.ProfileCredentialsProvider;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3ClientBuilder;
+import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.GeneratePresignedUrlRequest;
+import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.OtpServer;
@@ -190,6 +192,22 @@ public class S3Utils {
         } else {
             return SparkUtils.formatJSON("url", url.toString());
         }
+    }
+
+    /**
+     * Uploads a file to S3 using a given key
+     * @param keyName      The s3 key to uplaod the file to
+     * @param fileToUpload The file to upload to S3
+     * @return             A URL where the file is publicly accessible
+     */
+    public static String uploadObject(String keyName, File fileToUpload) throws AmazonServiceException, CheckedAWSException {
+        String url = S3Utils.getDefaultBucketUrlForKey(keyName);
+        // FIXME: This may need to change during feed store refactor
+        getDefaultS3Client().putObject(new PutObjectRequest(
+                S3Utils.DEFAULT_BUCKET, keyName, fileToUpload)
+                // grant public read
+                .withCannedAcl(CannedAccessControlList.PublicRead));
+        return url;
     }
 
     public static AmazonS3 getDefaultS3Client() throws CheckedAWSException {

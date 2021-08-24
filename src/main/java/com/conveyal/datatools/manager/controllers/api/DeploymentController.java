@@ -2,9 +2,7 @@ package com.conveyal.datatools.manager.controllers.api;
 
 import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.s3.AmazonS3URI;
-import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.DeleteObjectRequest;
-import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
@@ -22,7 +20,6 @@ import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.JobUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
-import org.apache.commons.io.IOUtils;
 import org.bson.Document;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
@@ -30,14 +27,9 @@ import org.slf4j.LoggerFactory;
 import spark.Request;
 import spark.Response;
 
-import javax.servlet.MultipartConfigElement;
-import javax.servlet.ServletException;
-import javax.servlet.http.Part;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -500,28 +492,10 @@ public class DeploymentController {
      */
     private static Deployment uploadToS3 (Request req, Response res) {
         // Check parameters supplied in request for validity.
-        Auth0UserProfile userProfile = req.attribute("user");
         Deployment deployment = getDeploymentWithPermissions(req, res);
 
         String url;
-        Exception failure = null;
-
-        // Get file from request
-        if (req.raw().getAttribute("org.eclipse.jetty.multipartConfig") == null) {
-            MultipartConfigElement multipartConfigElement = new MultipartConfigElement(System.getProperty("java.io.tmpdir"));
-            req.raw().setAttribute("org.eclipse.jetty.multipartConfig", multipartConfigElement);
-        }
-
-        String extension = null;
-        File tempFile = null;
         try {
-            Part part = req.raw().getPart("file");
-            extension = "." + part.getContentType().split("/", 0)[1];
-            tempFile = File.createTempFile(part.getName() + "_csv_upload", extension);
-            InputStream inputStream;
-            inputStream = part.getInputStream();
-            FileOutputStream out = new FileOutputStream(tempFile);
-            IOUtils.copy(inputStream, out);
 
             String keyName = String.join(
                     "/",
@@ -529,14 +503,9 @@ public class DeploymentController {
                     deployment.projectId,
                     deployment.id,
                     // Where filenames are generated. Prepend random UUID to prevent overwriting
-                    UUID.randomUUID() + "_" + part.getSubmittedFileName()
+                    UUID.randomUUID() + ""
             );
-            url = S3Utils.getDefaultBucketUrlForKey(keyName);
-            S3Utils.getDefaultS3Client().putObject(new PutObjectRequest(
-                    S3Utils.DEFAULT_BUCKET, keyName, tempFile)
-                    // Allow public read
-                    // TODO: restrict?
-                    .withCannedAcl(CannedAccessControlList.PublicRead));
+            url = SparkUtils.uploadMultipartRequestBodyToS3(req, "csvUpload", keyName);
 
             // Update deployment csvs
             List<String> updatedCsvList = new ArrayList<>(deployment.peliasCsvFiles);
@@ -552,18 +521,9 @@ public class DeploymentController {
             removeDeletedCsvFiles(updatedCsvList, deployment, req);
             return Persistence.deployments.updateField(deployment.id, "peliasCsvFiles", updatedCsvList);
 
-        } catch (IOException | ServletException | AmazonServiceException | CheckedAWSException e) {
+        } catch (AmazonServiceException e) {
             e.printStackTrace();
-            failure = e;
             return null;
-        } finally {
-            boolean deleted = tempFile.delete();
-            if (!deleted) {
-                logMessageAndHalt(req, 500, "Failed to delete file temporarily stored on server");
-            }
-            if (failure != null) {
-                logMessageAndHalt(req, 500, "Failed to upload file. Please try again");
-            }
         }
     }
 
