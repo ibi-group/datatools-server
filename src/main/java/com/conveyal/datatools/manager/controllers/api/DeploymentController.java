@@ -12,7 +12,6 @@ import com.conveyal.datatools.common.utils.aws.EC2Utils;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.DeployJob;
-import com.conveyal.datatools.manager.jobs.PeliasUpdateJob;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.EC2InstanceSummary;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -491,34 +490,7 @@ public class DeploymentController {
                 target);
             logMessageAndHalt(req, HttpStatus.ACCEPTED_202, message);
         }
-
-        // If pelias update is requested, launch pelias update job
-        if (deployment.peliasUpdate) {
-            updatePelias(req, res, job);
-        }
-
         return SparkUtils.formatJobMessage(job.jobId, "Deployment initiating.");
-    }
-
-    /**
-     * Start an updatePelias job which will trigger the webhook, then check for status updates.
-     */
-    private static String updatePelias (Request req, Response res, DeployJob deployJob) {
-        // Check parameters supplied in request for validity.
-        Auth0UserProfile userProfile = req.attribute("user");
-        Deployment deployment = getDeploymentWithPermissions(req, res);
-        Project project = Persistence.projects.getById(deployment.projectId);
-        if (project == null) {
-            logMessageAndHalt(req, 400, "Internal reference error. Deployment's project ID is invalid");
-        }
-
-        // Get log upload URI from deploy job
-        AmazonS3URI logUploadS3URI = deployJob.getS3FolderURI();
-
-        // Execute the pelias update job and keep track of it
-        PeliasUpdateJob peliasUpdateJob = new PeliasUpdateJob(userProfile, "Updating Custom Geocoder Database", deployment, logUploadS3URI);
-        JobUtils.heavyExecutor.execute(peliasUpdateJob);
-        return SparkUtils.formatJobMessage(peliasUpdateJob.jobId, "Pelias update initiating.");
     }
 
     /**

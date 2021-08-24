@@ -340,6 +340,17 @@ public class DeployJob extends MonitorableJob {
             // Set baseUrl after success.
             status.baseUrl = otpServer.publicUrl;
         }
+
+        // Now that the main instance is updated successfully, update Pelias
+        if (deployment.peliasUpdate) {
+            // Get log upload URI from deploy job
+            AmazonS3URI logUploadS3URI = getS3FolderURI();
+
+            // Execute the pelias update job and keep track of it
+            PeliasUpdateJob peliasUpdateJob = new PeliasUpdateJob(owner, "Updating Custom Geocoder Database", deployment, logUploadS3URI);
+            JobUtils.heavyExecutor.execute(peliasUpdateJob);
+        }
+
         status.completed = true;
     }
 
