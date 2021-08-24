@@ -328,21 +328,7 @@ public class DeploymentController {
         // If updatedDocument has deleted a CSV file, also delete that CSV file from S3
         if (updateDocument.containsKey("peliasCsvFiles")) {
             List<String> csvUrls = (List<String>) updateDocument.get("peliasCsvFiles");
-            // Only delete if the array differs
-            if (!csvUrls.equals(deploymentToUpdate.peliasCsvFiles)) {
-                for (String existingCsvUrl : deploymentToUpdate.peliasCsvFiles) {
-                    // Only delete if the file does not exist in the deployment
-                    if (!csvUrls.contains(existingCsvUrl)) {
-                        try {
-                            AmazonS3URI s3URIToDelete = new AmazonS3URI(existingCsvUrl);
-                            S3Utils.getDefaultS3Client().deleteObject(new DeleteObjectRequest(s3URIToDelete.getBucket(), s3URIToDelete.getKey()));
-                        } catch(Exception e) {
-                            logMessageAndHalt(req, 500, "Failed to delete file from S3.", e);
-                        }
-                    }
-                }
-
-            }
+            removeDeletedCsvFiles(csvUrls, deploymentToUpdate, req);
         }
         Deployment updatedDeployment = Persistence.deployments.update(deploymentToUpdate.id, req.body());
         // TODO: Should updates to the deployment's fields trigger a notification to subscribers? This could get
@@ -369,6 +355,29 @@ public class DeploymentController {
 //        DeployJob.DeploySummary latestDeployJob = deployment.latest();
 //
 //    }
+
+    /**
+     * Helper method for update steps which removes all removed csv files from s3.
+     * @param csvUrls               The new list of csv files
+     * @param deploymentToUpdate    An existing deployment, which contains csv files to check changes against
+     * @param req                   A request object used to report failure
+     */
+    private static void removeDeletedCsvFiles(List<String> csvUrls, Deployment deploymentToUpdate, Request req) {
+        // Only delete if the array differs
+        if (!csvUrls.equals(deploymentToUpdate.peliasCsvFiles)) {
+            for (String existingCsvUrl : deploymentToUpdate.peliasCsvFiles) {
+                // Only delete if the file does not exist in the deployment
+                if (!csvUrls.contains(existingCsvUrl)) {
+                    try {
+                        AmazonS3URI s3URIToDelete = new AmazonS3URI(existingCsvUrl);
+                        S3Utils.getDefaultS3Client().deleteObject(new DeleteObjectRequest(s3URIToDelete.getBucket(), s3URIToDelete.getKey()));
+                    } catch(Exception e) {
+                        logMessageAndHalt(req, 500, "Failed to delete file from S3.", e);
+                    }
+                }
+            }
+        }
+    }
 
     /**
      * HTTP endpoint to deregister and terminate a set of instance IDs that are associated with a particular deployment.
@@ -517,7 +526,7 @@ public class DeploymentController {
      * Follows https://github.com/ibi-group/datatools-server/blob/dev/src/main/java/com/conveyal/datatools/editor/controllers/api/EditorController.java#L111
      * @return      S3 URL the file has been uploaded to
      */
-    private static String uploadToS3 (Request req, Response res) throws IOException {
+    private static Deployment uploadToS3 (Request req, Response res) {
         // Check parameters supplied in request for validity.
         Auth0UserProfile userProfile = req.attribute("user");
         Deployment deployment = getDeploymentWithPermissions(req, res);
@@ -530,6 +539,7 @@ public class DeploymentController {
             MultipartConfigElement multipartConfigElement = new MultipartConfigElement(System.getProperty("java.io.tmpdir"));
             req.raw().setAttribute("org.eclipse.jetty.multipartConfig", multipartConfigElement);
         }
+
         String extension = null;
         File tempFile = null;
         try {
@@ -555,7 +565,21 @@ public class DeploymentController {
                     // Allow public read
                     // TODO: restrict?
                     .withCannedAcl(CannedAccessControlList.PublicRead));
-            return url;
+
+            // Update deployment csvs
+            List<String> updatedCsvList = new ArrayList<>(deployment.peliasCsvFiles);
+            updatedCsvList.add(url);
+
+            // If this is set, a file is being replaced
+            String s3FileToRemove = req.raw().getHeader("urlToDelete");
+            if (s3FileToRemove != null) {
+                updatedCsvList.remove(s3FileToRemove);
+            }
+
+            // Persist changes after removing deleted csv files from s3
+            removeDeletedCsvFiles(updatedCsvList, deployment, req);
+            return Persistence.deployments.updateField(deployment.id, "peliasCsvFiles", updatedCsvList);
+
         } catch (IOException | ServletException | AmazonServiceException | CheckedAWSException e) {
             e.printStackTrace();
             failure = e;
@@ -596,7 +620,7 @@ public class DeploymentController {
         post(apiPrefix + "secure/deployments", DeploymentController::createDeployment, fullJson::write);
         put(apiPrefix + "secure/deployments/:id", DeploymentController::updateDeployment, fullJson::write);
         post(apiPrefix + "secure/deployments/fromfeedsource/:id", DeploymentController::createDeploymentFromFeedSource, fullJson::write);
-        post(apiPrefix + "secure/deployments/:id/upload", DeploymentController::uploadToS3);
+        post(apiPrefix + "secure/deployments/:id/upload", DeploymentController::uploadToS3, fullJson::write);
 
     }
 }
