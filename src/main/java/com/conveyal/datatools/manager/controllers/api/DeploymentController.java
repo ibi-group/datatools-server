@@ -277,7 +277,7 @@ public class DeploymentController {
      * Update a single deployment. If the deployment's feed versions are updated, checks to ensure that each
      * version exists and is a part of the same parent project are performed before updating.
      */
-    private static Deployment updateDeployment (Request req, Response res) throws CheckedAWSException {
+    private static Deployment updateDeployment (Request req, Response res) {
         Deployment deploymentToUpdate = getDeploymentWithPermissions(req, res);
         Document updateDocument = Document.parse(req.body());
         // FIXME use generic update hook, also feedVersions is getting serialized into MongoDB (which is undesirable)
@@ -364,7 +364,7 @@ public class DeploymentController {
      */
     private static void removeDeletedCsvFiles(List<String> csvUrls, Deployment deploymentToUpdate, Request req) {
         // Only delete if the array differs
-        if (!csvUrls.equals(deploymentToUpdate.peliasCsvFiles)) {
+        if (deploymentToUpdate.peliasCsvFiles != null && !csvUrls.equals(deploymentToUpdate.peliasCsvFiles)) {
             for (String existingCsvUrl : deploymentToUpdate.peliasCsvFiles) {
                 // Only delete if the file does not exist in the deployment
                 if (!csvUrls.contains(existingCsvUrl)) {
