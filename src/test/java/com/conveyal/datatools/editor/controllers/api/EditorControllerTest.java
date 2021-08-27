@@ -21,6 +21,7 @@ import org.slf4j.LoggerFactory;
 import spark.utils.IOUtils;
 
 import java.io.IOException;
+import java.math.BigInteger;
 import java.util.Date;
 
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
@@ -62,6 +63,69 @@ public class EditorControllerTest extends UnitTest {
         // Run in current thread so tests do not run until this is complete.
         createSnapshotJob.run();
         LOG.info("{} setup completed in {} ms", EditorControllerTest.class.getSimpleName(), System.currentTimeMillis() - startTime);
+    }
+
+    /**
+     * Creates a new route in a new feed source, then creates a snapshot and checks that the route id was
+     * exported correctly.
+     * @throws IOException
+     */
+    @Test
+    public void canSnapshotNewRouteAndSeeId()  throws IOException {
+        // Create new feedsource
+        FeedSource feedSource = new FeedSource("new_test_feedsource");
+        feedSource.projectId = project.id;
+        Persistence.feedSources.create(feedSource);
+
+        Snapshot snapshot = new Snapshot("Snapshot of " + feedSource.name, feedSource.id, feedSource.editorNamespace);
+        CreateSnapshotJob createSnapshotJob =
+                new CreateSnapshotJob(Auth0UserProfile.createTestAdminUser(), snapshot, true, false, false);
+        // Run in current thread so tests do not run until this is complete.
+        createSnapshotJob.run();
+
+
+        // Add a route
+        ObjectNode jsonBody = mapper.createObjectNode();
+        String field = "route_id";
+        String value = "999999";
+
+        jsonBody.put(field, value);
+        jsonBody.put("route_color", "333333");
+        jsonBody.put("route_text_color", "FFFFFF");
+        jsonBody.put("route_type", "3");
+        jsonBody.put("route_short_name", "test_route");
+        jsonBody.put("route_long_name", "teeeeeeeeeeeeeeest_route");
+        jsonBody.put("route_desc", "this route should have an id");
+        jsonBody.put("route_url", (String) null);
+        jsonBody.put("route_branding_url", (String) null);
+        jsonBody.put("publicly_visible", "1");
+        jsonBody.put("wheelchair_accessible", (String) null);
+        jsonBody.put("route_sort_order", (BigInteger) null);
+        jsonBody.put("status", "2");
+        jsonBody.put("agency_id", (String) null);
+        JsonNode responseJson = postTableRequest("route", feedSource.id, null, jsonBody);
+        String returnedRouteId = responseJson.get("route_id").asText();
+        assertThat(returnedRouteId, equalTo(value));
+
+        Snapshot secondSnapshot = new Snapshot("Snapshot of " + feedSource.name, feedSource.id, feedSource.editorNamespace);
+        CreateSnapshotJob createSecondSnapshotJob =
+                new CreateSnapshotJob(Auth0UserProfile.createTestAdminUser(), snapshot, true, false, false);
+        // Run in current thread so tests do not run until this is complete.
+        createSnapshotJob.run();
+
+        // Get list of routes
+        JsonNode graphQL = graphqlQuery(snapshot.namespace, "graphql/routes.txt");
+        JsonNode routes = graphQL.get("data").get("feed").get("routes");
+        assertThat(routes.size(), equalTo(0));
+
+        // Fixme: secondSnapshot's namespace appears to be null
+        JsonNode secondGraphQL = graphqlQuery(secondSnapshot.namespace, "graphql/routes.txt");
+        JsonNode secondRoutes = secondGraphQL.get("data").get("feed").get("routes");
+        // Check that the route_id of the new route is correct
+        for (JsonNode route : secondGraphQL.get("data").get("feed").get("routes")) {
+            assertThat(route.get(field).asText(), equalTo(value));
+        }
+        assertThat(secondRoutes.size(), equalTo(1));
     }
 
     /**
@@ -135,6 +199,23 @@ public class EditorControllerTest extends UnitTest {
             .asString();
         JsonNode json = mapper.readTree(response);
         return json.get("count").asInt();
+    }
+
+    /**
+     * Creates a new entity and return newly created entity
+     */
+    private static JsonNode postTableRequest(String entity, String feedId, String query, JsonNode oatchJSON) throws IOException {
+        String path = String.format("/api/editor/secure/%s?feedId=%s", entity, feedId);
+        if (query != null) path += "&" + query;
+        String response = given()
+                .port(DataManager.PORT)
+                .body(oatchJSON)
+                .post(path)
+                .then()
+                .extract()
+                .response()
+                .asString();
+        return mapper.readTree(response);
     }
 
     /**
