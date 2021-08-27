@@ -109,23 +109,27 @@ public class EditorControllerTest extends UnitTest {
 
         Snapshot secondSnapshot = new Snapshot("Snapshot of " + feedSource.name, feedSource.id, feedSource.editorNamespace);
         CreateSnapshotJob createSecondSnapshotJob =
-                new CreateSnapshotJob(Auth0UserProfile.createTestAdminUser(), snapshot, true, false, false);
+                new CreateSnapshotJob(Auth0UserProfile.createTestAdminUser(), secondSnapshot, true, true, false);
         // Run in current thread so tests do not run until this is complete.
-        createSnapshotJob.run();
+        createSecondSnapshotJob.run();
 
         // Get list of routes
         JsonNode graphQL = graphqlQuery(snapshot.namespace, "graphql/routes.txt");
         JsonNode routes = graphQL.get("data").get("feed").get("routes");
-        assertThat(routes.size(), equalTo(0));
+        assertThat(routes.size(), equalTo(1));
+        for (JsonNode route : graphQL.get("data").get("feed").get("routes")) {
+            assertThat(route.get(field).asText(), equalTo(value));
+        }
 
-        // Fixme: secondSnapshot's namespace appears to be null
+        // FIXME: this should return the new route?
         JsonNode secondGraphQL = graphqlQuery(secondSnapshot.namespace, "graphql/routes.txt");
         JsonNode secondRoutes = secondGraphQL.get("data").get("feed").get("routes");
+
+        assertThat(secondRoutes.size(), equalTo(1));
         // Check that the route_id of the new route is correct
         for (JsonNode route : secondGraphQL.get("data").get("feed").get("routes")) {
             assertThat(route.get(field).asText(), equalTo(value));
         }
-        assertThat(secondRoutes.size(), equalTo(1));
     }
 
     /**
