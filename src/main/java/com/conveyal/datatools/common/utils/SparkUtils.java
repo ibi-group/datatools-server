@@ -305,7 +305,7 @@ public class SparkUtils {
             logMessageAndHalt(req, 400, "Unable to read uploaded file");
         }
         try {
-            return S3Utils.uploadObject(key + "_" + uploadedFileName, tempFile);
+            return S3Utils.uploadObject(uploadType + "/" + key + "_" + uploadedFileName, tempFile);
         } catch (AmazonServiceException | CheckedAWSException e) {
             logMessageAndHalt(req, 500, "Error uploading file to S3", e);
             return null;
