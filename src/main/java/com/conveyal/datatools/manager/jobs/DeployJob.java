@@ -348,7 +348,7 @@ public class DeployJob extends MonitorableJob {
 
             // Execute the pelias update job and keep track of it
             PeliasUpdateJob peliasUpdateJob = new PeliasUpdateJob(owner, "Updating Custom Geocoder Database", deployment, logUploadS3URI);
-            JobUtils.heavyExecutor.execute(peliasUpdateJob);
+            this.addNextJob(peliasUpdateJob);
         }
 
         status.completed = true;

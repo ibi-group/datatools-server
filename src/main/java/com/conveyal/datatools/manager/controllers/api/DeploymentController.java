@@ -503,7 +503,7 @@ public class DeploymentController {
                     deployment.projectId,
                     deployment.id,
                     // Where filenames are generated. Prepend random UUID to prevent overwriting
-                    UUID.randomUUID() + ""
+                    UUID.randomUUID().toString()
             );
             url = SparkUtils.uploadMultipartRequestBodyToS3(req, "csvUpload", keyName);
 
@@ -523,6 +523,7 @@ public class DeploymentController {
 
         } catch (AmazonServiceException e) {
             e.printStackTrace();
+            logMessageAndHalt(req, 500, "Failed to upload file to S3. Check server logs.");
             return null;
         }
     }
