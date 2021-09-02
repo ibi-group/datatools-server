@@ -31,7 +31,6 @@ import org.slf4j.LoggerFactory;
 /**
  * Helper methods for writing REST API routines
  * @author mattwigway
- *
  */
 public class JsonManager<T> {
     private static final Logger LOG = LoggerFactory.getLogger(JsonManager.class);
