@@ -6,7 +6,6 @@ import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.SparkUtils;
 import com.conveyal.datatools.common.utils.aws.EC2Utils;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
-import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.DeployJob;
 import com.conveyal.datatools.manager.models.Deployment;
@@ -17,6 +16,7 @@ import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.JobUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import org.bson.Document;
 import org.eclipse.jetty.http.HttpStatus;
@@ -31,12 +31,13 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
+import static com.conveyal.datatools.manager.DataManager.isExtensionEnabled;
+import static com.mongodb.client.model.Filters.and;
+import static com.mongodb.client.model.Filters.eq;
 import static spark.Spark.delete;
 import static spark.Spark.get;
 import static spark.Spark.options;
@@ -49,7 +50,6 @@ import static spark.Spark.put;
  */
 public class DeploymentController {
     private static final Logger LOG = LoggerFactory.getLogger(DeploymentController.class);
-    private static Map<String, DeployJob> deploymentJobsByServer = new HashMap<>();
 
     /**
      * Gets the deployment specified by the request's id parameter and ensure that user has access to the
@@ -62,7 +62,7 @@ public class DeploymentController {
         if (deployment == null) {
             logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Deployment does not exist.");
         }
-        boolean isProjectAdmin = userProfile.canAdministerProject(deployment.projectId, deployment.organizationId());
+        boolean isProjectAdmin = userProfile.canAdministerProject(deployment);
         if (!isProjectAdmin && !userProfile.getUser_id().equals(deployment.user())) {
             // If user is not a project admin and did not create the deployment, access to the deployment is denied.
             logMessageAndHalt(req, HttpStatus.UNAUTHORIZED_401, "User not authorized for deployment.");
@@ -107,7 +107,7 @@ public class DeploymentController {
         }
         if (summaryToDownload == null) {
             // See if there is an ongoing job for the provided jobId.
-            MonitorableJob job = StatusController.getJobByJobId(jobId);
+            MonitorableJob job = JobUtils.getJobByJobId(jobId);
             if (job instanceof DeployJob) {
                 uriString = ((DeployJob) job).getS3FolderURI().toString();
             } else {
@@ -180,22 +180,24 @@ public class DeploymentController {
             // Return deployments for project
             Project project = Persistence.projects.getById(projectId);
             if (project == null) logMessageAndHalt(req, 400, "Must provide valid projectId value.");
-            if (!userProfile.canAdministerProject(projectId, project.organizationId))
+            if (!userProfile.canAdministerProject(project)) {
                 logMessageAndHalt(req, 401, "User not authorized to view project deployments.");
+            }
             return project.retrieveDeployments();
         } else if (feedSourceId != null) {
             // Return test deployments for feed source (note: these only include test deployments specific to the feed
             // source and will not include all deployments that reference this feed source).
             FeedSource feedSource = Persistence.feedSources.getById(feedSourceId);
             if (feedSource == null) logMessageAndHalt(req, 400, "Must provide valid feedSourceId value.");
-            Project project = feedSource.retrieveProject();
-            if (!userProfile.canViewFeed(project.organizationId, project.id, feedSourceId))
+            if (!userProfile.canViewFeed(feedSource)) {
                 logMessageAndHalt(req, 401, "User not authorized to view feed source deployments.");
+            }
             return feedSource.retrieveDeployments();
         } else {
             // If no query parameter is supplied, return all deployments for application.
-            if (!userProfile.canAdministerApplication())
+            if (!userProfile.canAdministerApplication()) {
                 logMessageAndHalt(req, 401, "User not authorized to view application deployments.");
+            }
             return Persistence.deployments.getAll();
         }
     }
@@ -210,12 +212,10 @@ public class DeploymentController {
         Auth0UserProfile userProfile = req.attribute("user");
         Document newDeploymentFields = Document.parse(req.body());
         String projectId = newDeploymentFields.getString("projectId");
-        String organizationId = newDeploymentFields.getString("organizationId");
-
-        boolean allowedToCreate = userProfile.canAdministerProject(projectId, organizationId);
+        Project project = Persistence.projects.getById(projectId);
+        boolean allowedToCreate = userProfile.canAdministerProject(project);
 
         if (allowedToCreate) {
-            Project project = Persistence.projects.getById(projectId);
             Deployment newDeployment = new Deployment(project);
 
             // FIXME: Here we are creating a deployment and updating it with the JSON string (two db operations)
@@ -243,15 +243,16 @@ public class DeploymentController {
         // 3) have access to this feed through project permissions
         // if all fail, the user cannot do this.
         if (
-                !userProfile.canAdministerProject(feedSource.projectId, feedSource.organizationId()) &&
+                !userProfile.canAdministerProject(feedSource) &&
                 !userProfile.getUser_id().equals(feedSource.user())
             )
             logMessageAndHalt(req, 401, "User not authorized to perform this action");
 
         if (feedSource.latestVersionId() == null)
             logMessageAndHalt(req, 400, "Cannot create a deployment from a feed source with no versions.");
-
-        Deployment deployment = new Deployment(feedSource);
+        
+        boolean useDefaultRouter = !isExtensionEnabled("nysdot");
+        Deployment deployment = new Deployment(feedSource, useDefaultRouter);
         deployment.storeUser(userProfile);
         Persistence.deployments.create(deployment);
         return deployment;
@@ -273,14 +274,29 @@ public class DeploymentController {
             List<Document> versions = (List<Document>) updateDocument.get("feedVersions");
             ArrayList<FeedVersion> versionsToInsert = new ArrayList<>(versions.size());
             for (Document version : versions) {
-                if (!version.containsKey("id")) {
-                    logMessageAndHalt(req, 400, "Version not supplied");
-                }
                 FeedVersion feedVersion = null;
-                try {
-                    feedVersion = Persistence.feedVersions.getById(version.getString("id"));
-                } catch (Exception e) {
-                    logMessageAndHalt(req, 404, "Version not found");
+                if (version.containsKey("feedSourceId") && version.containsKey("version")) {
+                    String feedSourceId = version.getString("feedSourceId");
+                    int versionNumber = version.getInteger("version");
+                    try {
+                        feedVersion = Persistence.feedVersions.getOneFiltered(
+                            and(
+                                eq("feedSourceId", feedSourceId),
+                                eq("version", versionNumber)
+                            )
+                        );
+                    } catch (Exception e) {
+                        logMessageAndHalt(req, 404, "Version not found for " + feedSourceId + ":" + versionNumber);
+                    }
+                } else if (version.containsKey("id")) {
+                    String id = version.getString("id");
+                    try {
+                        feedVersion = Persistence.feedVersions.getById(id);
+                    } catch (Exception e) {
+                        logMessageAndHalt(req, 404, "Version not found for id: " + id);
+                    }
+                } else {
+                    logMessageAndHalt(req, 400, "Version not supplied with either id OR feedSourceId + version");
                 }
                 if (feedVersion == null) {
                     logMessageAndHalt(req, 404, "Version not found");
@@ -396,8 +412,9 @@ public class DeploymentController {
         String target = req.params("target");
         Deployment deployment = getDeploymentWithPermissions(req, res);
         Project project = Persistence.projects.getById(deployment.projectId);
-        if (project == null)
+        if (project == null) {
             logMessageAndHalt(req, 400, "Internal reference error. Deployment's project ID is invalid");
+        }
         // Get server by ID
         OtpServer otpServer = Persistence.servers.getById(target);
         if (otpServer == null) {
@@ -406,26 +423,9 @@ public class DeploymentController {
         }
 
         // Check that permissions of user allow them to deploy to target.
-        boolean isProjectAdmin = userProfile.canAdministerProject(deployment.projectId, deployment.organizationId());
+        boolean isProjectAdmin = userProfile.canAdministerProject(deployment);
         if (!isProjectAdmin && otpServer.admin) {
             logMessageAndHalt(req, 401, "User not authorized to deploy to admin-only target OTP server.");
-        }
-
-        // Check that we can deploy to the specified target. (Any deploy job for the target that is presently active will
-        // cause a halt.)
-        if (deploymentJobsByServer.containsKey(target)) {
-            // There is a deploy job for the server. Check if it is active.
-            DeployJob deployJob = deploymentJobsByServer.get(target);
-            if (deployJob != null && !deployJob.status.completed) {
-                // Job for the target is still active! Send a 202 to the requester to indicate that it is not possible
-                // to deploy to this target right now because someone else is deploying.
-                String message = String.format(
-                        "Will not process request to deploy %s. Deployment currently in progress for target: %s",
-                        deployment.name,
-                        target);
-                LOG.warn(message);
-                logMessageAndHalt(req, HttpStatus.ACCEPTED_202, message);
-            }
         }
 
         // Get the URLs to deploy to.
@@ -438,19 +438,17 @@ public class DeploymentController {
             );
         }
 
-        // For any previous deployments sent to the server/router combination, set deployedTo to null because
-        // this new one will overwrite it. NOTE: deployedTo for the current deployment will only be updated after the
-        // successful completion of the deploy job.
-        for (Deployment oldDeployment : Deployment.retrieveDeploymentForServerAndRouterId(target, deployment.routerId)) {
-            LOG.info("Setting deployment target to null id={}", oldDeployment.id);
-            Persistence.deployments.updateField(oldDeployment.id, "deployedTo", null);
-        }
-
         // Execute the deployment job and keep track of it in the jobs for server map.
-        DeployJob job = new DeployJob(deployment, userProfile, otpServer);
-        DataManager.heavyExecutor.execute(job);
-        deploymentJobsByServer.put(target, job);
-
+        DeployJob job = JobUtils.queueDeployJob(deployment, userProfile, otpServer);
+        if (job == null) {
+            // Job for the target is still active! Send a 202 to the requester to indicate that it is not possible
+            // to deploy to this target right now because someone else is deploying.
+            String message = String.format(
+                "Will not process request to deploy %s. Deployment currently in progress for target: %s",
+                deployment.name,
+                target);
+            logMessageAndHalt(req, HttpStatus.ACCEPTED_202, message);
+        }
         return SparkUtils.formatJobMessage(job.jobId, "Deployment initiating.");
     }
 

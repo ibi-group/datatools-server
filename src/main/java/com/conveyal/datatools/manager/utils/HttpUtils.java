@@ -10,6 +10,7 @@ import org.apache.http.client.methods.HttpPut;
 import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.CloseableHttpClient;
+import org.apache.http.impl.client.HttpClientBuilder;
 import org.apache.http.impl.client.HttpClients;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,14 +24,17 @@ public class HttpUtils {
     public enum REQUEST_METHOD {GET, POST, DELETE, PUT}
 
     /**
-     * Makes an http get/post request and returns the response. The request is based on the provided params.
+     * Makes an http get/post/etc. request and returns the response. The request is based on the provided params.
+     * @return a {@link SimpleHttpResponse} that consumes and closes the entity (verifying that the HTTP connection is
+     *   closed)
      */
     //TODO: Replace with java.net.http once migrated to JDK 11. See HttpUtils under otp-middleware.
-    public static HttpResponse httpRequestRawResponse(
+    public static SimpleHttpResponse httpRequestRawResponse(
         URI uri,
         int connectionTimeout,
         REQUEST_METHOD method,
-        String bodyContent) {
+        String bodyContent
+    ) {
 
         RequestConfig timeoutConfig = RequestConfig.custom()
             .setConnectionRequestTimeout(connectionTimeout)
@@ -50,7 +54,7 @@ public class HttpUtils {
             case POST:
                 try {
                     HttpPost postRequest = new HttpPost(uri);
-                    postRequest.setEntity(new StringEntity(bodyContent));
+                    if (bodyContent != null) postRequest.setEntity(new StringEntity(bodyContent));
                     postRequest.setConfig(timeoutConfig);
                     httpUriRequest = postRequest;
                 } catch (UnsupportedEncodingException e) {
@@ -81,7 +85,7 @@ public class HttpUtils {
 
         try (CloseableHttpClient httpClient = HttpClients.createDefault();
              CloseableHttpResponse response = httpClient.execute(httpUriRequest)) {
-            return response;
+            return new SimpleHttpResponse(response);
         } catch (IOException e) {
             LOG.error("An exception occurred while making a request to {}", uri, e);
             return null;

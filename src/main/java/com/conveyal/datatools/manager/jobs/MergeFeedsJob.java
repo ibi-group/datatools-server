@@ -1,6 +1,6 @@
 package com.conveyal.datatools.manager.jobs;
 
-import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.common.status.FeedSourceJob;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
@@ -123,7 +123,7 @@ import static com.conveyal.gtfs.loader.Field.getFieldIndex;
  *      example, directions for routes that are not in the future routes.txt file should be appended
  *      to the future directions.txt file in the merged feed.
  */
-public class MergeFeedsJob extends MonitorableJob {
+public class MergeFeedsJob extends FeedSourceJob {
 
     private static final Logger LOG = LoggerFactory.getLogger(MergeFeedsJob.class);
     public static final ObjectMapper mapper = new ObjectMapper();
@@ -520,8 +520,9 @@ public class MergeFeedsJob extends MonitorableJob {
                                 }
                                 LOG.info("total stops: {}", stopsCount);
                                 LOG.info("stops missing stop_code: {}", stopsMissingStopCodeCount);
-                                if (stopsMissingStopCodeCount == stopsCount) {
-                                    // If all stops are missing stop_code, we simply default to merging on stop_id.
+                                if (stopsMissingStopCodeCount + specialStopsCount == stopsCount) {
+                                    // If all stops are missing stop_code (taking into account the special stops that do
+                                    // not require stop_code), we simply default to merging on stop_id.
                                     LOG.warn(
                                         "stop_code is not present in file {}/{}. Reverting to stop_id",
                                         feedIndex + 1, feedsToMerge.size());
@@ -1051,5 +1052,9 @@ public class MergeFeedsJob extends MonitorableJob {
             this.version = version;
             this.zipFile = new ZipFile(version.retrieveGtfsFile());
         }
+    }
+
+    public String getFeedSourceId() {
+        return feedSource.id;
     }
 }

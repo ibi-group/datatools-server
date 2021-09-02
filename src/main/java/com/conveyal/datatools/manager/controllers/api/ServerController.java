@@ -54,7 +54,7 @@ public class ServerController {
         if (server == null) {
             logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Server does not exist.");
         } else {
-            boolean isProjectAdmin = userProfile.canAdministerProject(server.projectId, server.organizationId());
+            boolean isProjectAdmin = userProfile.canAdministerProject(server);
             if (!isProjectAdmin && !userProfile.getUser_id().equals(server.user())) {
                 // If user is not a project admin and did not create the deployment, access to the deployment is denied.
                 logMessageAndHalt(req, HttpStatus.UNAUTHORIZED_401, "User not authorized for deployment.");
@@ -109,7 +109,7 @@ public class ServerController {
         // be a project admin.
         boolean allowedToCreate = newServer.projectId == null
             ? userProfile.canAdministerApplication()
-            : userProfile.canAdministerProject(newServer.projectId, newServer.organizationId());
+            : userProfile.canAdministerProject(newServer);
         if (allowedToCreate) {
             validateFields(req, newServer);
             Persistence.servers.create(newServer);
@@ -130,7 +130,7 @@ public class ServerController {
         if (projectId != null) {
             Project project = Persistence.projects.getById(projectId);
             if (project == null) logMessageAndHalt(req, 400, "Must provide a valid project ID.");
-            else if (userProfile.canAdministerProject(projectId, null)) return project.availableOtpServers();
+            else if (userProfile.canAdministerProject(project)) return project.availableOtpServers();
         }
         else if (userProfile.canAdministerApplication()) return Persistence.servers.getAll();
         return Collections.emptyList();
@@ -147,7 +147,7 @@ public class ServerController {
             server != null &&
             server.projectId != null &&
                 !userProfile.canAdministerApplication() &&
-                !userProfile.canAdministerProject(server.projectId)
+                !userProfile.canAdministerProject(server)
         ) {
             logMessageAndHalt(req, 403, "Not authorized to view this server");
             return null;

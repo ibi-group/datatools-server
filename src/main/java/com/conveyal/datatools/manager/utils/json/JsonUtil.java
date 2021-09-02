@@ -1,12 +1,18 @@
 package com.conveyal.datatools.manager.utils.json;
 
+import com.conveyal.datatools.manager.utils.SimpleHttpResponse;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.ObjectReader;
+import com.fasterxml.jackson.databind.type.CollectionType;
+import org.apache.http.HttpResponse;
+import org.apache.http.util.EntityUtils;
 import spark.Request;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.getObjectNode;
@@ -49,6 +55,31 @@ public class JsonUtil {
             logMessageAndHalt(req, 400, "Failed to parse JSON String", e);
             return null;
         }
+    }
+
+    public static <T> T getPOJOFromResponse(SimpleHttpResponse response, Class<T> clazz) throws IOException {
+        return objectMapper.readValue(response.body, clazz);
+    }
+
+    public static JsonNode getJsonNodeFromResponse(SimpleHttpResponse response) throws IOException {
+        return objectMapper.readTree(response.body);
+    }
+
+    /**
+     * Utility method to parse generic objects from {@link JsonNode} and return as list
+     * (or at least an empty list).
+     */
+    public static <T> List<T> getPOJOFromJSONAsList(JsonNode json, Class<T> clazz) {
+        if (json != null) {
+            CollectionType type = objectMapper.getTypeFactory().constructCollectionType(List.class, clazz);
+            ObjectReader reader = objectMapper.readerFor(type);
+            try {
+                return reader.readValue(json);
+            } catch (IOException e) {
+                e.printStackTrace();
+            }
+        }
+        return new ArrayList<>();
     }
 
     /**

@@ -12,11 +12,16 @@ import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.models.transform.NormalizeFieldTransformation;
+import com.conveyal.datatools.manager.models.transform.Substitution;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.JobUtils;
+import com.conveyal.datatools.manager.utils.PersistenceUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.lang3.StringUtils;
+import org.bson.conversions.Bson;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -37,6 +42,11 @@ import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.getPOJOFromRequestBody;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.models.ExternalFeedSourceProperty.constructId;
+import static com.conveyal.datatools.manager.models.transform.NormalizeFieldTransformation.getInvalidSubstitutionMessage;
+import static com.conveyal.datatools.manager.models.transform.NormalizeFieldTransformation.getInvalidSubstitutionPatterns;
+import static com.mongodb.client.model.Filters.and;
+import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Filters.in;
 import static spark.Spark.delete;
 import static spark.Spark.get;
 import static spark.Spark.post;
@@ -67,10 +77,14 @@ public class FeedSourceController {
         Collection<FeedSource> feedSourcesToReturn = new ArrayList<>();
         Auth0UserProfile user = req.attribute("user");
         String projectId = req.queryParams("projectId");
+
         Project project = Persistence.projects.getById(projectId);
+
         if (project == null) {
             logMessageAndHalt(req, 400, "Must provide valid projectId query param to retrieve feed sources.");
         }
+        boolean isAdmin = user.canAdministerProject(project);
+
         Collection<FeedSource> projectFeedSources = project.retrieveProjectFeedSources();
         for (FeedSource source: projectFeedSources) {
             String orgId = source.organizationId();
@@ -81,7 +95,8 @@ public class FeedSourceController {
                 source.projectId != null && source.projectId.equals(projectId) &&
                     user.canManageOrViewFeed(orgId, source.projectId, source.id)
             ) {
-                feedSourcesToReturn.add(source);
+                // Remove labels user can't view, then add to list of feeds to return
+                feedSourcesToReturn.add(cleanFeedSourceForNonAdmins(source, isAdmin));
             }
         }
         return feedSourcesToReturn;
@@ -123,29 +138,23 @@ public class FeedSourceController {
         }
     }
 
-    private static boolean stringIsPresent(String value, String fieldName, Request req) {
-        if (StringUtils.isEmpty(value)) {
-            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, String.format("Feed source %s must not be empty", fieldName));
-            return false;
-        }
-
-        return true;
-    }
-
     /**
      * Check that updated or new feedSource object is valid. This method should be called before a feedSource is
      * persisted to the database.
      * TODO: Determine if other checks ought to be applied here.
      */
-    private static boolean validate(Request req, FeedSource feedSource) {
-        if (!stringIsPresent(feedSource.name, "name", req)) {
-            return false;
+    private static void validate(Request req, FeedSource feedSource) {
+        List<String> validationIssues = new ArrayList<>();
+        if (StringUtils.isEmpty(feedSource.name)) {
+            validationIssues.add("Name field must not be empty.");
         }
         if (feedSource.retrieveProject() == null) {
-            logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Valid project ID must be provided.");
-            return false;
+            validationIssues.add("Valid project ID must be provided.");
         }
-        // Collect all retrieval methods found in tranform rules into a list.
+        if (Persistence.labels.getByIds(feedSource.labelIds).size() != feedSource.labelIds.size()) {
+            validationIssues.add("All labels assigned to feed must exist.");
+        }
+        // Collect all retrieval methods found in transform rules into a list.
         List<FeedRetrievalMethod> retrievalMethods = feedSource.transformRules.stream()
             .map(rule -> rule.retrievalMethods)
             .flatMap(Collection::stream)
@@ -154,14 +163,27 @@ public class FeedSourceController {
         if (retrievalMethods.size() > retrievalMethodSet.size()) {
             // Explicitly check that the list of retrieval methods is not larger than the set (i.e., that there are no
             // duplicates).
+            validationIssues.add("Retrieval methods cannot be defined more than once in transformation rules.");
+        }
+        // Validate transformations (currently this just checks that regex patterns are valid).
+        List<Substitution> substitutions = feedSource.transformRules.stream()
+            .map(rule -> rule.transformations)
+            .flatMap(Collection::stream)
+            .filter(t -> t instanceof NormalizeFieldTransformation)
+            .map(t -> ((NormalizeFieldTransformation) t).substitutions)
+            .flatMap(Collection::stream)
+            .collect(Collectors.toList());
+        List<String> invalidPatterns = getInvalidSubstitutionPatterns(substitutions);
+        if (!invalidPatterns.isEmpty()) {
+            validationIssues.add(getInvalidSubstitutionMessage(invalidPatterns));
+        }
+        if (!validationIssues.isEmpty()) {
             logMessageAndHalt(
                 req,
                 HttpStatus.BAD_REQUEST_400,
-                "Retrieval methods cannot be defined more than once in transformation rules."
+                "Request was invalid for the following reasons: " + String.join(", ", validationIssues)
             );
-            return false;
         }
-        return true;
     }
 
     /**
@@ -181,6 +203,10 @@ public class FeedSourceController {
             updatedFeedSource.lastFetched = null;
         }
         Persistence.feedSources.replace(feedSourceId, updatedFeedSource);
+
+        if (shouldNotifyUsersOnFeedUpdated(formerFeedSource, updatedFeedSource)) {
+            return updatedFeedSource;
+        }
         // After successful save, handle auto fetch job setup.
         Scheduler.handleAutoFeedFetch(updatedFeedSource);
         // Notify feed- and project-subscribed users after successful save
@@ -273,7 +299,7 @@ public class FeedSourceController {
         // Run in light executor, but if a new feed is found, do not continue thread (a new one will be started in
         // heavyExecutor in the body of the fetch job.
         FetchSingleFeedJob fetchSingleFeedJob = new FetchSingleFeedJob(s, userProfile, false);
-        DataManager.lightExecutor.execute(fetchSingleFeedJob);
+        JobUtils.lightExecutor.execute(fetchSingleFeedJob);
 
         // Return the jobId so that the requester can track the job's progress.
         return formatJobMessage(fetchSingleFeedJob.jobId, "Fetching latest feed source.");
@@ -290,6 +316,7 @@ public class FeedSourceController {
         if (id == null) {
             logMessageAndHalt(req, 400, "Please specify id param");
         }
+
         return checkFeedSourcePermissions(req, Persistence.feedSources.getById(id), action);
     }
 
@@ -300,20 +327,21 @@ public class FeedSourceController {
             logMessageAndHalt(req, 400, "Feed source ID does not exist");
             return null;
         }
-        String orgId = feedSource.organizationId();
+        boolean isProjectAdmin = userProfile.canAdministerProject(feedSource);
         boolean authorized;
+
         switch (action) {
             case CREATE:
-                authorized = userProfile.canAdministerProject(feedSource.projectId, orgId);
+                authorized = isProjectAdmin;
                 break;
             case MANAGE:
-                authorized = userProfile.canManageFeed(orgId, feedSource.projectId, feedSource.id);
+                authorized = userProfile.canManageFeed(feedSource);
                 break;
             case EDIT:
-                authorized = userProfile.canEditGTFS(orgId, feedSource.projectId, feedSource.id);
+                authorized = userProfile.canEditGTFS(feedSource);
                 break;
             case VIEW:
-                authorized = userProfile.canViewFeed(orgId, feedSource.projectId, feedSource.id);
+                authorized = userProfile.canViewFeed(feedSource);
                 break;
             default:
                 authorized = false;
@@ -323,7 +351,41 @@ public class FeedSourceController {
             // Throw halt if user not authorized.
             logMessageAndHalt(req, 403, "User not authorized to perform action on feed source");
         }
+
+
         // If we make it here, user has permission and the requested feed source is valid.
+        // This final step removes labels the user can't view
+        return cleanFeedSourceForNonAdmins(feedSource, isProjectAdmin);
+    }
+
+    /** Determines whether a change to a feed source is significant enough that it warrants sending a notification
+     *
+     * @param formerFeedSource  A feed source object, without new changes
+     * @param updatedFeedSource A feed source object, with new changes
+     * @return                  A boolean value indicating if the updated feed source is changed enough to warrant sending a notification.
+     */
+    private static boolean shouldNotifyUsersOnFeedUpdated(FeedSource formerFeedSource, FeedSource updatedFeedSource) {
+        return
+                // If only labels have changed, don't send out an email
+                formerFeedSource.equalsExceptLabels(updatedFeedSource);
+    }
+
+    /**
+     * Removes labels and notes from a feed that a user is not allowed to view. Returns cleaned feed source.
+     * @param feedSource    The feed source to clean
+     * @param isAdmin       Is the user an admin? Changes what is returned.
+     * @return              A feed source containing only labels/notes the user is allowed to see
+     */
+    protected static FeedSource cleanFeedSourceForNonAdmins(FeedSource feedSource, boolean isAdmin) {
+        // Admin can view all feed labels, but a non-admin should only see those with adminOnly=false
+        feedSource.labelIds = Persistence.labels
+            .getFiltered(PersistenceUtils.applyAdminFilter(in("_id", feedSource.labelIds), isAdmin)).stream()
+            .map(label -> label.id)
+            .collect(Collectors.toList());
+        feedSource.noteIds = Persistence.notes
+            .getFiltered(PersistenceUtils.applyAdminFilter(in("_id", feedSource.noteIds), isAdmin)).stream()
+            .map(note -> note.id)
+            .collect(Collectors.toList());
         return feedSource;
     }
 

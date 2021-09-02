@@ -4,14 +4,20 @@ import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.model.CannedAccessControlList;
 import com.amazonaws.services.s3.model.DeleteObjectsRequest;
 import com.amazonaws.services.s3.model.ObjectMetadata;
+import com.conveyal.datatools.common.status.FeedSourceJob;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.jobs.CreateFeedVersionFromSnapshotJob;
+import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
+import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
+import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
 import com.conveyal.datatools.manager.models.transform.FeedTransformation;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.JobUtils;
 import com.conveyal.gtfs.GTFS;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -20,6 +26,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.model.Sorts;
+import org.bson.codecs.pojo.annotations.BsonIgnore;
+import org.bson.conversions.Bson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -34,12 +42,13 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Filters.in;
+import static com.mongodb.client.model.Updates.pull;
 
 /**
  * Created by demory on 3/22/16.
@@ -137,6 +146,11 @@ public class FeedSource extends Model implements Cloneable {
      * This is the String-formatted snapshot ID, which is the base64-encoded ID and the version number.
      */
     public String snapshotVersion;
+
+    /**
+     * IDs of Labels assigned to this Feed
+     */
+    public List<String> labelIds = new ArrayList<>();
 
     /**
      * The SQL namespace for the most recently verified published {@link FeedVersion}.
@@ -316,6 +330,29 @@ public class FeedSource extends Model implements Cloneable {
         return this.name.compareTo(o.name);
     }
 
+    /**
+     * Similar to a standard Java .equals() method, except that the labels field is ignored.
+     * @param o Second FeedSource to compare to this one
+     * @return  True or false depending on if the FeedSources are equal, barring labels.
+     */
+    public boolean equalsExceptLabels(FeedSource o) {
+        // Compare every property other than labels
+        return this.name.equals(o.name) &&
+                this.preserveStopTimesSequence == o.preserveStopTimesSequence &&
+                this.transformRules.equals(o.transformRules) &&
+                this.isPublic == o.isPublic &&
+                this.deployable == o.deployable &&
+                this.retrievalMethod.equals(o.retrievalMethod) &&
+                this.fetchFrequency.equals(o.fetchFrequency) &&
+                this.fetchInterval == o.fetchInterval &&
+                this.lastFetched.equals(o.lastFetched) &&
+                this.url.equals(o.url) &&
+                this.s3Url.equals(o.s3Url) &&
+                this.snapshotVersion.equals(o.snapshotVersion) &&
+                this.publishedVersionId.equals(o.publishedVersionId) &&
+                this.editorNamespace.equals(o.editorNamespace);
+    }
+
     public String toString () {
         return "<FeedSource " + this.name + " (" + this.id + ")>";
     }
@@ -365,6 +402,14 @@ public class FeedSource extends Model implements Cloneable {
     public String latestVersionId() {
         FeedVersion latest = retrieveLatest();
         return latest != null ? latest.id : null;
+    }
+
+    /**
+     * Number of {@link FeedVersion}s that exist for the feed source.
+     */
+    @BsonIgnore
+    public long getVersionCount() {
+        return Persistence.feedVersions.count(eq("feedSourceId", this.id));
     }
 
     /**
@@ -425,6 +470,14 @@ public class FeedSource extends Model implements Cloneable {
     }
 
     /**
+     * Find all project feed sources that contain the label and remove label from list.
+     */
+    public static void removeLabelFromFeedSources(Label label) {
+        Bson query = and(eq("projectId", label.projectId), in("labelIds", label.id));
+        Persistence.feedSources.updateMany(query, pull("labelIds", label.id));
+    }
+
+    /**
      * Get all of the feed versions for this source
      * @return collection of feed versions
      */
@@ -451,8 +504,6 @@ public class FeedSource extends Model implements Cloneable {
         return Persistence.deployments.getFiltered(eq(Snapshot.FEED_SOURCE_REF, this.id));
     }
 
-//    @JsonView(JsonViews.UserInterface.class)
-//    @JsonProperty("feedVersionCount")
     public int feedVersionCount() {
         return retrieveFeedVersions().size();
     }
@@ -564,6 +615,8 @@ public class FeedSource extends Model implements Cloneable {
             retrieveFeedVersions().forEach(FeedVersion::delete);
             // Remove all snapshot records for this feed source
             retrieveSnapshots().forEach(Snapshot::delete);
+            // Remove any notes for this feed source
+            retrieveNotes(true).forEach(Note::delete);
             // Remove any scheduled job for feed source.
             Scheduler.removeAllFeedSourceJobs(this.id, true);
             // Delete active editor buffer if exists.
@@ -592,6 +645,27 @@ public class FeedSource extends Model implements Cloneable {
 
     public FeedSource clone () throws CloneNotSupportedException {
         return (FeedSource) super.clone();
+    }
+
+    /**
+     * Check if there are active jobs to fetch or process a new version for this feed source. This is helpful in the
+     * context of auto-deploying to OTP to determine if there are any jobs occurring that could result in a new feed
+     * version being created (we want to throttle auto-deployments if multiple jobs to create new feed versions are
+     * occurring at the same time).
+     */
+    public boolean hasJobsInProgress() {
+        return JobUtils.getAllActiveJobs().stream().anyMatch(job -> {
+            String jobFeedSourceId = null;
+            if (
+                job instanceof FetchSingleFeedJob ||
+                job instanceof ProcessSingleFeedJob ||
+                job instanceof CreateFeedVersionFromSnapshotJob ||
+                job instanceof MergeFeedsJob
+            ) {
+                jobFeedSourceId = ((FeedSourceJob) job).getFeedSourceId();
+            }
+            return this.id.equals(jobFeedSourceId);
+        });
     }
 
     public <T extends FeedTransformation> boolean hasTransformationsOfType(FeedVersion target, Class<T> clazz) {

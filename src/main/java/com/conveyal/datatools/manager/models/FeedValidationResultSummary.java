@@ -4,10 +4,13 @@ import java.io.Serializable;
 import java.time.LocalDate;
 import java.util.Collection;
 
+import com.conveyal.datatools.editor.utils.JacksonSerializers;
 import com.conveyal.gtfs.loader.FeedLoadResult;
 import com.conveyal.gtfs.validator.ValidationResult;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 
 /**
  * Represents a subset of a feed validation result, just enough for display, without overwhelming the browser
@@ -37,14 +40,21 @@ public class FeedValidationResultSummary implements Serializable {
 
     /** The first date the feed has service, either in calendar.txt or calendar_dates.txt */
     @JsonInclude(Include.ALWAYS)
+    @JsonSerialize(using = JacksonSerializers.LocalDateIsoSerializer.class)
+    @JsonDeserialize(using = JacksonSerializers.LocalDateIsoDeserializer.class)
     public LocalDate startDate;
 
     /** The last date the feed has service, either in calendar.txt or calendar_dates.txt */
     @JsonInclude(Include.ALWAYS)
+    @JsonSerialize(using = JacksonSerializers.LocalDateIsoSerializer.class)
+    @JsonDeserialize(using = JacksonSerializers.LocalDateIsoDeserializer.class)
     public LocalDate endDate;
 
     @JsonInclude(Include.ALWAYS)
     public Bounds bounds;
+
+    /** No-arg constructor for de-/serialization. */
+    public FeedValidationResultSummary () {}
 
     /**
      * Construct a summarized version of the given FeedValidationResult.

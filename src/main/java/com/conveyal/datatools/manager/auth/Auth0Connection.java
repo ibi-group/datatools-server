@@ -44,6 +44,7 @@ public class Auth0Connection {
      * be overridden (e.g., in tests) with {@link #setAuthDisabled(boolean)}.
      */
     private static boolean authDisabled = getDefaultAuthDisabled();
+    private static Auth0UserProfile testUser = getDefaultTestUser();
 
 
     /**
@@ -53,9 +54,9 @@ public class Auth0Connection {
      */
     public static void checkUser(Request req) {
         if (isAuthDisabled() || inTestingEnvironment()) {
-            // If in a development or testing environment, assign a mock profile of an admin user to the request
-            // attribute and skip authentication.
-            req.attribute("user", Auth0UserProfile.createTestAdminUser());
+            // If in a development or testing environment, assign a test user (defaults to an application admin) to the
+            // request attribute and skip authentication.
+            req.attribute("user", getTestUser());
             return;
         }
         // Check that auth header is present and formatted correctly (Authorization: Bearer [token]).
@@ -91,6 +92,31 @@ public class Auth0Connection {
             LOG.warn("Login failed to verify with our authorization provider.", e);
             logMessageAndHalt(req, 401, "Could not verify user's token");
         }
+    }
+
+    /**
+     * @return the actively applied test user when running the application in a test environment.
+     */
+    private static Auth0UserProfile getTestUser() {
+        return testUser;
+    }
+
+    /**
+     * @return the default test user (an application admin) when running the application in a test environment.
+     */
+    public static Auth0UserProfile getDefaultTestUser() {
+        return Auth0UserProfile.createTestAdminUser();
+    }
+
+    /**
+     * This method allows test classes to override the default test user when running the application in a test
+     * environment.
+     *
+     * NOTE: Following the conclusion of a test where this method is called, it is generally recommended that you call
+     * this method again (e.g., in an @afterEach method) with {@link #getDefaultTestUser()} to reset things.
+     */
+    public static void setTestUser(Auth0UserProfile updatedUser) {
+        testUser = updatedUser;
     }
 
     /**
@@ -167,7 +193,7 @@ public class Auth0Connection {
         }
 
         if (!request.requestMethod().equals("GET")) {
-            if (!userProfile.canEditGTFS(feedSource.organizationId(), feedSource.projectId, feedSource.id)) {
+            if (!userProfile.canEditGTFS(feedSource)) {
                 LOG.warn("User {} cannot edit GTFS for {}", userProfile.email, feedId);
                 logMessageAndHalt(request, 403, "User does not have permission to edit GTFS for feedId");
             }
@@ -213,7 +239,7 @@ public class Auth0Connection {
         }
 
         if (!request.requestMethod().equals("GET")) {
-            if (!userProfile.canEditGTFS(feedSource.organizationId(), feedSource.projectId, feedSource.id)) {
+            if (!userProfile.canEditGTFS(feedSource)) {
                 LOG.warn("User {} cannot edit GTFS for {}", userProfile.email, feedId);
                 logMessageAndHalt(request, 403, "User does not have permission to edit GTFS for feedId");
             }

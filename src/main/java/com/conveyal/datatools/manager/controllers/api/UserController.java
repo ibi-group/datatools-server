@@ -311,9 +311,9 @@ public class UserController {
                     for (String targetId : sub.getTarget()) {
                         FeedSource fs = Persistence.feedSources.getById(targetId);
                         if (fs == null) continue;
-
+                        boolean isProjectAdmin = userProfile.canAdministerProject(fs);
                         // FeedSource comments
-                        for (Note note : fs.retrieveNotes()) {
+                        for (Note note : fs.retrieveNotes(isProjectAdmin)) {
                             ZonedDateTime datePosted = toZonedDateTime(note.date);
                             if (datePosted.isBefore(from) || datePosted.isAfter(to)) continue;
                             activityList.add(new FeedSourceCommentActivity(note, fs));
@@ -328,7 +328,7 @@ public class UserController {
                             }
 
                             // FeedVersion comments
-                            for (Note note : version.retrieveNotes()) {
+                            for (Note note : version.retrieveNotes(isProjectAdmin)) {
                                 ZonedDateTime datePosted = toZonedDateTime(note.date);
                                 if (datePosted.isBefore(from) || datePosted.isAfter(to)) continue;
                                 activityList.add(new FeedVersionCommentActivity(note, fs, version));

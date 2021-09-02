@@ -306,12 +306,16 @@ public class Auth0Users {
      * Get users subscribed to a given target ID.
      */
     public static String getUsersBySubscription(String subscriptionType, String target) {
+        if (Auth0Connection.isAuthDisabled()) {
+            LOG.warn("Auth is disabled. Skipping Auth0 request for subscribed users.");
+            return "";
+        }
         return getAuth0Users("app_metadata.datatools.subscriptions.type:" + subscriptionType + " AND app_metadata.datatools.subscriptions.target:" + target);
     }
 
     public static Set<String> getVerifiedEmailsBySubscription(String subscriptionType, String target) {
         String json = getUsersBySubscription(subscriptionType, target);
-        JsonNode firstNode = null;
+        JsonNode firstNode;
         Set<String> emails = new HashSet<>();
         try {
             firstNode = mapper.readTree(json);

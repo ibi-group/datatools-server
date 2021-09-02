@@ -1,16 +1,20 @@
 package com.conveyal.datatools.manager.models;
 
+import com.conveyal.datatools.manager.jobs.AutoDeployType;
 import com.conveyal.datatools.manager.persistence.Persistence;
-import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import org.bson.codecs.pojo.annotations.BsonIgnore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Collection;
+import java.util.Date;
+import java.util.HashSet;
 import java.util.List;
-import java.util.stream.Collectors;
+import java.util.Set;
 
+import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 import static com.mongodb.client.model.Filters.or;
 
@@ -39,6 +43,9 @@ public class Project extends Model {
 
     public String organizationId;
 
+    /** Last successful auto deploy. **/
+    public Date lastAutoDeploy;
+
     /**
      * A list of servers that are available to deploy project feeds/OSM to. This includes servers assigned to this
      * project as well as those that belong to no project.
@@ -60,6 +67,16 @@ public class Project extends Model {
     // Bounds is used for either OSM custom deployment bounds (if useCustomOsmBounds is true)
     // and/or for applying a geographic filter when syncing with external feed registries.
     public Bounds bounds;
+
+    /**
+     * Defines when the {@link #pinnedDeploymentId} should be auto-deployed.
+     */
+    public Set<AutoDeployType> autoDeployTypes = new HashSet<>();
+
+    /**
+     * Whether to auto-deploy feeds that have critical errors.
+     */
+    public boolean autoDeployWithCriticalErrors = false;
 
     // Identifies a specific "pinned" deployment for the project. This is used in datatools-ui in 2 places:
     // 1. In the list of project deployments, a "pinned" deployment is shown first and highlighted.
@@ -84,10 +101,23 @@ public class Project extends Model {
      */
     public Collection<FeedSource> retrieveProjectFeedSources() {
         // TODO: use index, but not important for now because we generally only have one FeedCollection
-        return Persistence.feedSources.getAll().stream()
-                .filter(fs -> this.id.equals(fs.projectId))
-                .collect(Collectors.toList());
+        return Persistence.feedSources.getFiltered(eq("projectId", this.id));
     }
+
+    /**
+     * Get all the labels for this project, depending on if user is admin
+     */
+    public Collection<Label> retrieveProjectLabels(boolean isAdmin) {
+        if (isAdmin) {
+            return Persistence.labels.getFiltered(eq("projectId", this.id));
+        }
+        return Persistence.labels.getFiltered(and(eq("adminOnly", false ), eq("projectId", this.id)));
+    }
+
+    // Keep an empty collection here which is filled dynamically later
+    @BsonIgnore
+    public Collection<Label> labels;
+
 
     // Note: Previously a numberOfFeeds() dynamic Jackson JsonProperty was in place here. But when the number of projects
     // in the database grows large, the efficient calculation of this field does not scale.
@@ -114,6 +144,9 @@ public class Project extends Model {
         retrieveProjectFeedSources().forEach(FeedSource::delete);
         // Delete each deployment in the project.
         retrieveDeployments().forEach(Deployment::delete);
+        // Delete each label in the project.
+        // Pass the user object for deletion, assuming the user is admin
+        retrieveProjectLabels(true).forEach(Label::delete);
         // Finally, delete the project.
         Persistence.projects.removeById(this.id);
     }

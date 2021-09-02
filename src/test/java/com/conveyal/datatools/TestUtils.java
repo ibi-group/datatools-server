@@ -2,9 +2,11 @@ package com.conveyal.datatools;
 
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
+import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.utils.HttpUtils;
+import com.conveyal.datatools.manager.utils.SimpleHttpResponse;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.io.IOUtils;
@@ -23,14 +25,13 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import static com.conveyal.datatools.manager.DataManager.GTFS_DATA_SOURCE;
+import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
-import static org.junit.Assert.assertThat;
 
 public class TestUtils {
     private static final Logger LOG = LoggerFactory.getLogger(TestUtils.class);
@@ -98,19 +99,68 @@ public class TestUtils {
      * so that tasks can run synchronously.
      */
     public static FeedVersion createFeedVersion(FeedSource source, File gtfsFile) {
-        FeedVersion version = new FeedVersion(source);
-        InputStream is;
-        try {
-            is = new FileInputStream(gtfsFile);
-            version.newGtfsFile(is);
-        } catch (IOException e) {
-            e.printStackTrace();
-        }
+        FeedVersion version = getFeedVersionFromGTFSFile(source, gtfsFile);
         Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
         ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(version, user, true);
         // Run in same thread to keep things synchronous.
         processSingleFeedJob.run();
         return version;
+    }
+
+    /**
+     * Utility function to create a {@link ProcessSingleFeedJob} during tests.
+     */
+    public static ProcessSingleFeedJob createProcessSingleFeedJob(FeedSource source, File gtfsFile) {
+        FeedVersion version = getFeedVersionFromGTFSFile(source, gtfsFile);
+        Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
+        return new ProcessSingleFeedJob(version, user, true);
+    }
+
+    /**
+     * Utility function to create a feed version from a GTFS file.
+     */
+    public static FeedVersion getFeedVersionFromGTFSFile(FeedSource source, File gtfsFile) {
+        FeedVersion version = new FeedVersion(source);
+
+        try (InputStream is = new FileInputStream(gtfsFile)) {
+            version.newGtfsFile(is);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return version;
+    }
+
+    /**
+     * Utility function to create a feed version and assign a GTFS file to it.
+     */
+    public static FeedVersion createFeedVersionAndAssignGtfsFile(FeedSource source, String  gtfsFileName) {
+        File gtfsFile = new File(getGtfsResourcePath(gtfsFileName));
+        FeedVersion version = new FeedVersion(source);
+
+        try (InputStream is = new FileInputStream(gtfsFile)) {
+            version.newGtfsFile(is);
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return version;
+    }
+
+    /**
+     * Utility function to construct a mock feed version from a feedSourceId
+     */
+    public static FeedVersion createMockFeedVersion(String feedSourceId) {
+        FeedVersion f = new FeedVersion();
+        f.feedSourceId = feedSourceId;
+        f.retrievalMethod = FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
+        return f;
+    }
+
+    /**
+     * Utility function to create a {@link ProcessSingleFeedJob} for a {@Link FeedVersion} during tests.
+     */
+    public static ProcessSingleFeedJob createProcessSingleFeedJob(FeedVersion version) {
+        Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
+        return new ProcessSingleFeedJob(version, user, true);
     }
 
     /**
@@ -226,13 +276,32 @@ public class TestUtils {
     /**
      * Send request to provided URL.
      */
-    public static HttpResponse makeRequest(String path, String body, HttpUtils.REQUEST_METHOD requestMethod) {
+    public static SimpleHttpResponse makeRequest(String path, String body, HttpUtils.REQUEST_METHOD requestMethod) {
         return HttpUtils.httpRequestRawResponse(
             URI.create(BASE_URL + path),
             1000,
             requestMethod,
             body
         );
+    }
+
+    /**
+     * Counts the number of schemas in the GTFS database. This is helpful for determining whether or not a schema for a
+     * new version was created.
+     */
+    public static int countSchemaInDb() {
+        int count = 0;
+        String countSchemaSql = "SELECT count(schema_name) FROM information_schema.schemata";
+        LOG.info(countSchemaSql);
+        try (Connection connection = GTFS_DATA_SOURCE.getConnection()) {
+            ResultSet resultSet = connection.prepareStatement(countSchemaSql).executeQuery();
+            while (resultSet.next()) {
+                count = resultSet.getInt(1);
+            }
+        } catch (SQLException e) {
+            LOG.error("Could not count schema for database", e);
+        }
+        return count;
     }
 
 }

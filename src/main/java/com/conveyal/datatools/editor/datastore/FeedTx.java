@@ -1,6 +1,19 @@
 package com.conveyal.datatools.editor.datastore;
 
-import com.conveyal.datatools.editor.models.transit.*;
+
+import com.conveyal.datatools.editor.models.transit.Agency;
+import com.conveyal.datatools.editor.models.transit.AttributeAvailabilityType;
+import com.conveyal.datatools.editor.models.transit.EditorFeed;
+import com.conveyal.datatools.editor.models.transit.Fare;
+import com.conveyal.datatools.editor.models.transit.Route;
+import com.conveyal.datatools.editor.models.transit.ScheduleException;
+import com.conveyal.datatools.editor.models.transit.ServiceCalendar;
+import com.conveyal.datatools.editor.models.transit.StatusType;
+import com.conveyal.datatools.editor.models.transit.Stop;
+import com.conveyal.datatools.editor.models.transit.StopTime;
+import com.conveyal.datatools.editor.models.transit.Trip;
+import com.conveyal.datatools.editor.models.transit.TripPattern;
+import com.conveyal.datatools.editor.models.transit.TripPatternStop;
 import com.conveyal.datatools.editor.utils.GeoUtils;
 import com.conveyal.gtfs.GTFSFeed;
 import com.conveyal.gtfs.model.CalendarDate;

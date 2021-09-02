@@ -1,0 +1,10 @@
+route_id,agency_id,route_short_name,route_long_name,route_desc,route_type,route_url,route_color,route_text_color
+1,BART,Yellow,Antioch - SFO/Millbrae,,1,http://www.bart.gov/schedules/bylineresults?route=1,ffff33,
+3,BART,Orange,Warm Springs/South Fremont - Richmond,,1,http://www.bart.gov/schedules/,ff9933,
+5,BART,Green,Warm Springs/South Fremont - Daly City,,1,http://www.bart.gov/schedules/,339933,
+7,BART,Red,Richmond - Daly City/Millbrae,,1,http://www.bart.gov/schedules/,ff0000,
+9,BART,Blue-Sun,Dublin/Pleasanton - MacArthur,,1,http://www.bart.gov/schedules/,0099cc,
+11,BART,Blue-Wkd/Sat,Dublin/Pleasanton - Daly City,,1,http://www.bart.gov/schedules/,0099cc,
+13,BART,Purple,Millbrae - SFO,,1,http://www.bart.gov/schedules/,c463c5,
+19,BART,Beige,OAK - Coliseum,,1,http://www.bart.gov/schedules/,d5cfa3,
+

@@ -1,7 +1,7 @@
 package com.conveyal.datatools;
 
 import com.conveyal.datatools.manager.DataManager;
-import org.junit.BeforeClass;
+import org.junit.jupiter.api.BeforeAll;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.yaml.snakeyaml.Yaml;
@@ -25,7 +25,7 @@ public abstract class DatatoolsTest {
     private static boolean setUpIsDone = false;
     private static final Yaml yaml = new Yaml(); // needed for writing config files on CI for the e2e tests
 
-    @BeforeClass
+    @BeforeAll
     public static void setUp() throws RuntimeException, IOException {
         if (setUpIsDone) {
             return;
@@ -45,6 +45,18 @@ public abstract class DatatoolsTest {
             File f = new File(arg);
             if (!f.exists() || f.isDirectory()) {
                 throw new IOException(String.format("Required config file %s does not exist!", f.getName()));
+            }
+        }
+
+        // If NOT in the e2e environment, ensure that /tmp/gtfsplus folder exists
+        // (otherwise some unit tests will be skipped).
+        if (!TestUtils.isRunningE2E()) {
+            File f = new File("/tmp/gtfsplus");
+            if (f.exists() && !f.isDirectory()) {
+                f.delete();
+            }
+            if (!f.exists()) {
+                f.mkdirs();
             }
         }
 

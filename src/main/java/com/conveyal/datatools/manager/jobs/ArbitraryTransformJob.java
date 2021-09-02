@@ -12,7 +12,7 @@ import com.conveyal.datatools.manager.models.transform.ZipTransformation;
 /**
  * This job will apply a {@link ZipTransformation} or {@link DbTransformation} to a GTFS zip file or database namespace,
  * respectively, and generate the required FeedTransformTarget object from those inputs, which is passed into the
- * {@link FeedTransformation#transform} method.
+ * {@link FeedTransformation#doTransform} method.
  */
 public class ArbitraryTransformJob extends MonitorableJob {
 
@@ -43,6 +43,6 @@ public class ArbitraryTransformJob extends MonitorableJob {
         target.validate(status);
         if (status.error) return;
         // If target is valid, perform transformation.
-        transformation.transform(target, status);
+        transformation.doTransform(target, status);
     }
 }

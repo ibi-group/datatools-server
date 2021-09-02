@@ -6,9 +6,9 @@ import com.conveyal.datatools.editor.datastore.VersionedDataStore;
 import com.conveyal.datatools.editor.jobs.ConvertEditorMapDBToSQL;
 import com.conveyal.datatools.editor.models.Snapshot;
 import com.conveyal.datatools.manager.controllers.DumpController;
-import com.conveyal.datatools.manager.controllers.api.StatusController;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.JobUtils;
 import org.apache.commons.io.FileUtils;
 import org.mapdb.Fun;
 import org.slf4j.Logger;
@@ -97,15 +97,15 @@ public class ConvertMain {
         // STEP 3A: For each snapshot/editor DB, create a snapshot Mongo object for the feed source with the FeedLoadResult.
         migrateEditorFeeds();
         LOG.info("Done queueing!!!!!!!!");
-        int totalJobs = StatusController.getAllJobs().size();
-        while (!StatusController.filterActiveJobs(StatusController.getAllJobs()).isEmpty()) {
+        int totalJobs = JobUtils.getAllJobs().size();
+        while (!JobUtils.getAllActiveJobs().isEmpty()) {
             // While there are still active jobs, continue waiting.
-            Set<MonitorableJob> activeJobs = StatusController.filterActiveJobs(StatusController.getAllJobs());
+            Set<MonitorableJob> activeJobs = JobUtils.getAllActiveJobs();
             LOG.info(String.format("%d/%d jobs still active. Checking for completion again in 5 seconds...", activeJobs.size(), totalJobs));
 //            LOG.info(String.join(", ", activeJobs.stream().map(job -> job.name).collect(Collectors.toList())));
-            int jobsInExecutor = ((ThreadPoolExecutor) DataManager.heavyExecutor).getActiveCount();
+            int jobsInExecutor = ((ThreadPoolExecutor) JobUtils.heavyExecutor).getActiveCount();
             LOG.info(String.format("Jobs in thread pool executor: %d", jobsInExecutor));
-            LOG.info(String.format("Jobs completed by executor: %d", ((ThreadPoolExecutor) DataManager.heavyExecutor).getCompletedTaskCount()));
+            LOG.info(String.format("Jobs completed by executor: %d", ((ThreadPoolExecutor) JobUtils.heavyExecutor).getCompletedTaskCount()));
             Thread.sleep(5000);
         }
         long durationInMillis = System.currentTimeMillis() - startTime;
@@ -141,11 +141,11 @@ public class ConvertMain {
                     if (!feedSourcesEncountered.contains(feedSource.id)) {
                         // If this is the first feed encountered, load the editor buffer.
                         ConvertEditorMapDBToSQL convertEditorBufferToSQL = new ConvertEditorMapDBToSQL(snapshot.id.a, null);
-                        DataManager.heavyExecutor.execute(convertEditorBufferToSQL);
+                        JobUtils.heavyExecutor.execute(convertEditorBufferToSQL);
                         count++;
                     }
                     ConvertEditorMapDBToSQL convertEditorMapDBToSQL = new ConvertEditorMapDBToSQL(snapshot.id.a, snapshot.id.b);
-                    DataManager.heavyExecutor.execute(convertEditorMapDBToSQL);
+                    JobUtils.heavyExecutor.execute(convertEditorMapDBToSQL);
                     LOG.info(count + "/" + snapshotCount + " snapshot conversion queued");
                     feedSourcesEncountered.add(feedSource.id);
                     count++;
