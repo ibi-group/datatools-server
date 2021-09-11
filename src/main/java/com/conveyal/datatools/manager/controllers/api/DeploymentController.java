@@ -521,9 +521,8 @@ public class DeploymentController {
             removeDeletedCsvFiles(updatedCsvList, deployment, req);
             return Persistence.deployments.updateField(deployment.id, "peliasCsvFiles", updatedCsvList);
 
-        } catch (AmazonServiceException e) {
-            e.printStackTrace();
-            logMessageAndHalt(req, 500, "Failed to upload file to S3. Check server logs.");
+        } catch (Exception e) {
+            logMessageAndHalt(req, 500, "Failed to upload file to S3.", e);
             return null;
         }
     }

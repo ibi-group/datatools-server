@@ -11,6 +11,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.io.ByteStreams;
 import org.apache.commons.io.IOUtils;
+import org.apache.commons.lang3.exception.ExceptionUtils;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -83,7 +84,10 @@ public class SparkUtils {
      * supplied details about the exception encountered.
      */
     public static ObjectNode getObjectNode(String message, int code, Exception e) {
-        String detail = e != null ? e.getMessage() : null;
+        String detail = null;
+        if (e != null) {
+            detail = e.getMessage() != null ? e.getMessage() : ExceptionUtils.getStackTrace(e);
+        }
         return mapper.createObjectNode()
             .put("result", code >= 400 ? "ERR" : "OK")
             .put("message", message)
