@@ -76,7 +76,7 @@ public class Deployment extends Model implements Serializable {
     /* Pelias fields, used to determine where/if to send data to the Pelias webhook */
     public String peliasWebhookUrl;
     public boolean peliasUpdate;
-    public List<String> peliasCsvFiles;
+    public List<String> peliasCsvFiles = new ArrayList<>();
 
     /**
      * Get parent project for deployment. Note: at one point this was a JSON property of this class, but severe

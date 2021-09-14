@@ -1,0 +1,4 @@
+service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date
+WKDY,1,1,1,1,1,0,0,20190211,20200210
+SAT,0,0,0,0,0,1,0,20190211,20200210
+SUN,0,0,0,0,0,0,1,20190211,20200210

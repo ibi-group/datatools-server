@@ -8,6 +8,7 @@ import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.error.NewGTFSErrorType;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
@@ -26,6 +27,7 @@ import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static com.conveyal.datatools.TestUtils.zipFolderFiles;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.MANUALLY_UPLOADED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -45,6 +47,7 @@ public class MergeFeedsJobTest extends UnitTest {
     private static FeedVersion bothCalendarFilesVersion3;
     private static FeedVersion onlyCalendarVersion;
     private static FeedVersion onlyCalendarDatesVersion;
+    private static FeedSource bart;
 
     /**
      * Prepare and start a testing-specific web server
@@ -60,7 +63,7 @@ public class MergeFeedsJobTest extends UnitTest {
         Persistence.projects.create(project);
 
         // Bart
-        FeedSource bart = new FeedSource("BART", project.id, MANUALLY_UPLOADED);
+        bart = new FeedSource("BART", project.id, MANUALLY_UPLOADED);
         Persistence.feedSources.create(bart);
         bartVersion1 = createFeedVersionFromGtfsZip(bart, "bart_old.zip");
         bartVersion2 = createFeedVersionFromGtfsZip(bart, "bart_new.zip");
@@ -98,6 +101,13 @@ public class MergeFeedsJobTest extends UnitTest {
             fakeAgency,
             zipFolderFiles("fake-agency-with-calendar-and-calendar-dates-3")
         );
+    }
+
+    @AfterAll
+    public static void tearDown() {
+        if (project != null) {
+            project.delete();
+        }
     }
 
     /**
@@ -642,6 +652,31 @@ public class MergeFeedsJobTest extends UnitTest {
                 mergedNamespace
             ),
             1
+        );
+    }
+
+    /**
+     * Verify that merging BART feeds that contain "special stops" (i.e., stops with location_type > 0, including
+     * entrances, generic nodes, etc.) handles missing stop codes correctly.
+     */
+    @Test
+    public void canMergeBARTFeedsWithSpecialStops() throws SQLException, IOException {
+        // Mini BART old/new feeds are pared down versions of the zips (bart_new.zip and bart_old.zip). They each have
+        // only one trip and its corresponding stop_times. They do contain a full set of routes and stops. The stops are
+        // from a recent (as of August 2021) GTFS file that includes a bunch of new stop records that act as entrances).
+        FeedVersion miniBartOld = createFeedVersion(bart, zipFolderFiles("mini-bart-old"));
+        FeedVersion miniBartNew = createFeedVersion(bart, zipFolderFiles("mini-bart-new"));
+        Set<FeedVersion> versions = new HashSet<>();
+        versions.add(miniBartOld);
+        versions.add(miniBartNew);
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.SERVICE_PERIOD);
+        mergeFeedsJob.run();
+        // Job should succeed.
+        assertFeedMergeSucceeded(mergeFeedsJob);
+        // Verify that the stop count is equal to the number of stops found in each of the input stops.txt files.
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.stops", mergeFeedsJob.mergedVersion.namespace),
+            182
         );
     }
 

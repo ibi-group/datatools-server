@@ -387,7 +387,7 @@ public class Auth0UserProfile {
     }
 
     public boolean canAdministerProject(Deployment deployment) {
-        return canAdministerProject(deployment.id, deployment.organizationId());
+        return canAdministerProject(deployment.projectId, deployment.organizationId());
     }
 
     public boolean canAdministerProject(OtpServer server) {
