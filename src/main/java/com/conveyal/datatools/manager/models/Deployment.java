@@ -73,6 +73,11 @@ public class Deployment extends Model implements Serializable {
 
     private ObjectMapper otpConfigMapper = new ObjectMapper().setSerializationInclusion(Include.NON_NULL);
 
+    /* Pelias fields, used to determine where/if to send data to the Pelias webhook */
+    public String peliasWebhookUrl;
+    public boolean peliasUpdate;
+    public List<String> peliasCsvFiles = new ArrayList<>();
+
     /**
      * Get parent project for deployment. Note: at one point this was a JSON property of this class, but severe
      * performance issues prevent this field from scaling to be fetched/assigned to a large collection of deployments.

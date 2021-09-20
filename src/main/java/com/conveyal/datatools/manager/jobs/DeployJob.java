@@ -12,43 +12,14 @@ import com.amazonaws.services.ec2.model.InstanceStateChange;
 import com.amazonaws.services.ec2.model.InstanceType;
 import com.amazonaws.services.ec2.model.RunInstancesRequest;
 import com.amazonaws.services.ec2.model.Tag;
-import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancing;
 import com.amazonaws.services.ec2.model.TerminateInstancesResult;
+import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancing;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3URI;
 import com.amazonaws.services.s3.model.CopyObjectRequest;
 import com.amazonaws.services.s3.transfer.TransferManager;
 import com.amazonaws.services.s3.transfer.TransferManagerBuilder;
 import com.amazonaws.services.s3.transfer.Upload;
-
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.Serializable;
-import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.nio.channels.Channels;
-import java.nio.channels.FileChannel;
-import java.nio.channels.WritableByteChannel;
-import java.text.SimpleDateFormat;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Date;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Scanner;
-import java.util.Set;
-import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
-
 import com.amazonaws.waiters.Waiter;
 import com.amazonaws.waiters.WaiterParameters;
 import com.conveyal.datatools.common.status.MonitorableJob;
@@ -81,6 +52,34 @@ import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.Serializable;
+import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
+import java.net.URL;
+import java.nio.channels.Channels;
+import java.nio.channels.FileChannel;
+import java.nio.channels.WritableByteChannel;
+import java.text.SimpleDateFormat;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Date;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Scanner;
+import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
+
 import static com.conveyal.datatools.manager.models.Deployment.DEFAULT_OTP_VERSION;
 
 /**
@@ -91,7 +90,7 @@ import static com.conveyal.datatools.manager.models.Deployment.DEFAULT_OTP_VERSI
 public class DeployJob extends MonitorableJob {
 
     private static final Logger LOG = LoggerFactory.getLogger(DeployJob.class);
-    private static final String bundlePrefix = "bundles";
+    public static final String bundlePrefix = "bundles";
     // Indicates whether EC2 instances should be EBS optimized.
     private static final boolean EBS_OPTIMIZED = "true".equals(DataManager.getConfigPropertyAsText("modules.deployment.ec2.ebs_optimized"));
     // Indicates the node.js version installed by nvm to set the PATH variable to point to
@@ -341,6 +340,17 @@ public class DeployJob extends MonitorableJob {
             // Set baseUrl after success.
             status.baseUrl = otpServer.publicUrl;
         }
+
+        // Now that the main instance is updated successfully, update Pelias
+        if (deployment.peliasUpdate) {
+            // Get log upload URI from deploy job
+            AmazonS3URI logUploadS3URI = getS3FolderURI();
+
+            // Execute the pelias update job and keep track of it
+            PeliasUpdateJob peliasUpdateJob = new PeliasUpdateJob(owner, "Updating Custom Geocoder Database", deployment, logUploadS3URI);
+            this.addNextJob(peliasUpdateJob);
+        }
+
         status.completed = true;
     }
 

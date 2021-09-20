@@ -78,7 +78,8 @@ public abstract class MonitorableJob implements Runnable, Serializable {
         VALIDATE_ALL_FEEDS,
         MONITOR_SERVER_STATUS,
         MERGE_FEED_VERSIONS,
-        RECREATE_BUILD_IMAGE
+        RECREATE_BUILD_IMAGE,
+        UPDATE_PELIAS
     }
 
     public MonitorableJob(Auth0UserProfile owner, String name, JobType type) {
