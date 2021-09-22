@@ -42,6 +42,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
@@ -339,18 +340,18 @@ public class FeedSource extends Model implements Cloneable {
         // Compare every property other than labels
         return this.name.equals(o.name) &&
                 this.preserveStopTimesSequence == o.preserveStopTimesSequence &&
-                this.transformRules.equals(o.transformRules) &&
+                Objects.equals(this.transformRules, o.transformRules) &&
                 this.isPublic == o.isPublic &&
                 this.deployable == o.deployable &&
-                this.retrievalMethod.equals(o.retrievalMethod) &&
-                this.fetchFrequency.equals(o.fetchFrequency) &&
+                Objects.equals(this.retrievalMethod, o.retrievalMethod) &&
+                Objects.equals(this.fetchFrequency, o.fetchFrequency) &&
                 this.fetchInterval == o.fetchInterval &&
-                this.lastFetched.equals(o.lastFetched) &&
-                this.url.equals(o.url) &&
-                this.s3Url.equals(o.s3Url) &&
-                this.snapshotVersion.equals(o.snapshotVersion) &&
-                this.publishedVersionId.equals(o.publishedVersionId) &&
-                this.editorNamespace.equals(o.editorNamespace);
+                Objects.equals(this.lastFetched, o.lastFetched) &&
+                Objects.equals(this.url, o.url) &&
+                Objects.equals(this.s3Url, o.s3Url) &&
+                Objects.equals(this.snapshotVersion, o.snapshotVersion) &&
+                Objects.equals(this.publishedVersionId, o.publishedVersionId) &&
+                Objects.equals(this.editorNamespace, o.editorNamespace);
     }
 
     public String toString () {
