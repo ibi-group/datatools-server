@@ -315,7 +315,16 @@ public class DeployJob extends MonitorableJob {
                 } catch (Exception e) {
                     status.fail(String.format("Error uploading/copying deployment bundle to s3://%s", s3Bucket), e);
                 }
+            }
+            
+            // Now that the build was successful, update Pelias
+            if (deployment.peliasUpdate) {
+                // Get log upload URI from deploy job
+                AmazonS3URI logUploadS3URI = getS3FolderURI();
 
+                // Execute the pelias update job and keep track of it
+                PeliasUpdateJob peliasUpdateJob = new PeliasUpdateJob(owner, "Updating Custom Geocoder Database", deployment, logUploadS3URI);
+                addNextJob(peliasUpdateJob);
             }
         }
 
@@ -341,15 +350,6 @@ public class DeployJob extends MonitorableJob {
             status.baseUrl = otpServer.publicUrl;
         }
 
-        // Now that the main instance is updated successfully, update Pelias
-        if (deployment.peliasUpdate) {
-            // Get log upload URI from deploy job
-            AmazonS3URI logUploadS3URI = getS3FolderURI();
-
-            // Execute the pelias update job and keep track of it
-            PeliasUpdateJob peliasUpdateJob = new PeliasUpdateJob(owner, "Updating Custom Geocoder Database", deployment, logUploadS3URI);
-            this.addNextJob(peliasUpdateJob);
-        }
 
         status.completed = true;
     }
