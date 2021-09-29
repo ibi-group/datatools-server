@@ -315,18 +315,17 @@ public class DeployJob extends MonitorableJob {
                 } catch (Exception e) {
                     status.fail(String.format("Error uploading/copying deployment bundle to s3://%s", s3Bucket), e);
                 }
-
             }
-        }
+            
+            // Now that the build was successful, update Pelias
+            if (deployment.peliasUpdate) {
+                // Get log upload URI from deploy job
+                AmazonS3URI logUploadS3URI = getS3FolderURI();
 
-        // Now that the build was successful, update Pelias
-        if (deployment.peliasUpdate) {
-            // Get log upload URI from deploy job
-            AmazonS3URI logUploadS3URI = getS3FolderURI();
-
-            // Execute the pelias update job and keep track of it
-            PeliasUpdateJob peliasUpdateJob = new PeliasUpdateJob(owner, "Updating Custom Geocoder Database", deployment, logUploadS3URI);
-            addNextJob(peliasUpdateJob);
+                // Execute the pelias update job and keep track of it
+                PeliasUpdateJob peliasUpdateJob = new PeliasUpdateJob(owner, "Updating Custom Geocoder Database", deployment, logUploadS3URI);
+                addNextJob(peliasUpdateJob);
+            }
         }
 
         // Handle spinning up new EC2 servers for the load balancer's target group.
