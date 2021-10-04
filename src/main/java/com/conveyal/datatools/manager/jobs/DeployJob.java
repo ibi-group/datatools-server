@@ -394,8 +394,8 @@ public class DeployJob extends MonitorableJob {
                 // (In E2E environments, there is already an OTP instance running in the background)
                 manifest.runServer = false;
 
-                // Write manifest to file (create dirs also if needed).
-                String otpRunnerManifestFile = String.format("/var/%s/otp-runner-manifest.json", getTripPlannerString());
+                // Write manifest to temp file (create dirs also if needed).
+                String otpRunnerManifestFile = String.format("/tmp/%s/otp-runner-manifest.json", getTripPlannerString());
                 File otpManifestFile = new File(otpRunnerManifestFile);
                 boolean mkdirSucceeded = otpManifestFile.mkdirs();
                 if (!mkdirSucceeded) {
