@@ -56,6 +56,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
@@ -340,6 +341,91 @@ public class DeployJob extends MonitorableJob {
                 return;
             }
         }
+        else if ("true".equals(System.getenv("RUN_E2E"))) {
+            // If running E2E tests, fire up an otp-runner graph build on the same machine.
+            try {
+                // Generate a basic otp-runner manifest
+                OtpRunnerManifest manifest = new OtpRunnerManifest();
+                // add common settings
+                manifest.baseFolder = String.format("/var/%s/graphs", getTripPlannerString());
+                manifest.baseFolderDownloads = new ArrayList<>();
+                manifest.jarFile = getJarFileOnInstance();
+                manifest.nonce = this.nonce;
+                // This must be added here because logging starts immediately before defaults are set while validating the
+                // manifest
+                manifest.otpRunnerLogFile = OTP_RUNNER_LOG_FILE;
+                manifest.otpVersion = isOtp2()
+                    ? "2.x"
+                    : "1.x";
+                manifest.prefixLogUploadsWithInstanceId = true;
+                manifest.statusFileLocation = String.format("%s/%s", "/var/log", OTP_RUNNER_STATUS_FILE);
+                manifest.uploadOtpRunnerLogs = false;
+                // add settings applicable to current instance. Two different manifest files are generated when deploying with
+                // different instance types for graph building vs server running
+                // settings when graph building needs to happen
+                manifest.buildGraph = true;
+                try {
+                    if (deployment.feedVersionIds.size() > 0) {
+                        // add OSM data
+                        URL osmDownloadUrl = deployment.getUrlForOsmExtract();
+                        if (osmDownloadUrl != null) {
+                            addUriAsBaseFolderDownload(manifest, osmDownloadUrl.toString());
+                        }
+
+                        // add GTFS data
+                        for (String feedVersionId : deployment.feedVersionIds) {
+                            CustomFile gtfsFile = new CustomFile();
+                            // OTP 2.x must have the string `gtfs` somewhere inside the filename, so prepend the filename
+                            // with the string `gtfs-`.
+                            gtfsFile.filename = String.format("gtfs-%s", feedVersionId);
+                            gtfsFile.uri = S3Utils.getS3FeedUri(feedVersionId);
+                            addCustomFileAsBaseFolderDownload(manifest, gtfsFile);
+                        }
+                    }
+                } catch (MalformedURLException e) {
+                    status.fail("Failed to create base folder download URLs!", e);
+                    return;
+                }
+                manifest.uploadGraph = false;
+                manifest.uploadGraphBuildLogs = false;
+                manifest.uploadGraphBuildReport = false;
+
+                // This instance should be ran to only build the graph
+                // (In E2E environments, there is already an OTP instance running in the background)
+                manifest.runServer = false;
+
+                // Write manifest to file
+                String otpRunnerManifestFile = String.format("/var/%s/otp-runner-manifest.json", getTripPlannerString());
+                File otpManifestFile = new File(otpRunnerManifestFile);
+                try (
+                    FileWriter fw =  new FileWriter(otpManifestFile)
+                ) {
+                    ObjectMapper mapper = new ObjectMapper();
+                    mapper.setSerializationInclusion(JsonInclude.Include.NON_EMPTY);
+                    otpManifestFile.createNewFile();
+                    fw.write(mapper.writeValueAsString(manifest));
+                } catch (JsonProcessingException e) {
+                    status.fail("Failed to create E2E manifest for otp-runner!", e);
+                    return;
+                }
+
+                // Temporarily install otp-runner globally, as in EC2 startup scripts
+                // Assumes yarn is available, which is the case in E2E CI environment.
+                Runtime.getRuntime().exec("yarn global add https://github.com/ibi-group/otp-runner.git");
+
+                // Run otp-runner with the manifest produced earlier.
+                Process p = Runtime.getRuntime().exec(String.format("otp-runner %s", otpRunnerManifestFile));
+                p.waitFor();
+                System.out.println("otp-runner exit code: " + p.exitValue());
+
+                // Remove the otp-runner install.
+                //Runtime.getRuntime().exec("yarn global remove https://github.com/ibi-group/otp-runner.git");
+            } catch (IOException e) {
+                e.printStackTrace();
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            }
+        }
 
         // If there are no OTP targets (i.e. we're only deploying to S3), we're done.
         if(otpServer.internalUrl != null) {
@@ -349,7 +435,6 @@ public class DeployJob extends MonitorableJob {
             // Set baseUrl after success.
             status.baseUrl = otpServer.publicUrl;
         }
-
 
         status.completed = true;
     }
