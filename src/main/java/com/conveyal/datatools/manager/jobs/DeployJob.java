@@ -394,9 +394,14 @@ public class DeployJob extends MonitorableJob {
                 // (In E2E environments, there is already an OTP instance running in the background)
                 manifest.runServer = false;
 
-                // Write manifest to file
+                // Write manifest to file (create dirs also if needed).
                 String otpRunnerManifestFile = String.format("/var/%s/otp-runner-manifest.json", getTripPlannerString());
                 File otpManifestFile = new File(otpRunnerManifestFile);
+                boolean mkdirSucceeded = otpManifestFile.mkdirs();
+                if (!mkdirSucceeded) {
+                    status.fail("Failed to create directories for otp-runner E2E manifest.");
+                    return;
+                }
                 try (
                     FileWriter fw =  new FileWriter(otpManifestFile)
                 ) {
@@ -416,10 +421,7 @@ public class DeployJob extends MonitorableJob {
                 // Run otp-runner with the manifest produced earlier.
                 Process p = Runtime.getRuntime().exec(String.format("otp-runner %s", otpRunnerManifestFile));
                 p.waitFor();
-                System.out.println("otp-runner exit code: " + p.exitValue());
-
-                // Remove the otp-runner install.
-                //Runtime.getRuntime().exec("yarn global remove https://github.com/ibi-group/otp-runner.git");
+                System.out.println(String.format("otp-runner exit code: %d", p.exitValue()));
             } catch (IOException e) {
                 e.printStackTrace();
             } catch (InterruptedException e) {
