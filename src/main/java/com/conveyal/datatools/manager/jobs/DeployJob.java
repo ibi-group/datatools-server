@@ -402,12 +402,12 @@ public class DeployJob extends MonitorableJob {
                     status.fail("Failed to create directories for otp-runner E2E manifest.");
                     return;
                 }
+                otpManifestFile.createNewFile();
                 try (
                     FileWriter fw =  new FileWriter(otpManifestFile)
                 ) {
                     ObjectMapper mapper = new ObjectMapper();
                     mapper.setSerializationInclusion(JsonInclude.Include.NON_EMPTY);
-                    otpManifestFile.createNewFile();
                     fw.write(mapper.writeValueAsString(manifest));
                 } catch (JsonProcessingException e) {
                     status.fail("Failed to create E2E manifest for otp-runner!", e);
