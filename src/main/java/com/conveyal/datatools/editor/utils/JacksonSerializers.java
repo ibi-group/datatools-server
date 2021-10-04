@@ -1,6 +1,5 @@
 package com.conveyal.datatools.editor.utils;
 
-import com.conveyal.datatools.editor.models.transit.GtfsRouteType;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.databind.DeserializationContext;
@@ -159,36 +158,6 @@ public class JacksonSerializers {
 //            System.out.println(jp.getValueAsLong());
 //            System.out.println(date.format(DateTimeFormatter.BASIC_ISO_DATE));
             return null;
-        }
-    }
-
-    /** serialize GtfsRouteType as GTFS integer value */
-    public static class GtfsRouteTypeSerializer extends StdScalarSerializer<GtfsRouteType> {
-        private static final long serialVersionUID = -8179814233698591433L;
-
-        public GtfsRouteTypeSerializer() {
-            super(GtfsRouteType.class, false);
-        }
-
-        @Override
-        public void serialize(GtfsRouteType gtfsRouteType, JsonGenerator jsonGenerator,
-                              SerializerProvider arg2) throws IOException {
-            jsonGenerator.writeNumber(gtfsRouteType.toGtfs());
-        }
-    }
-
-    /** serialize GTFS integer value  to GtfsRouteType */
-    public static class GtfsRouteTypeDeserializer extends StdScalarDeserializer<GtfsRouteType> {
-        private static final long serialVersionUID = 2771914080477037467L;
-
-        public GtfsRouteTypeDeserializer () {
-            super(GtfsRouteType.class);
-        }
-
-        @Override
-        public GtfsRouteType deserialize(JsonParser jp,
-                                     DeserializationContext arg1) throws IOException {
-            return GtfsRouteType.fromGtfs(jp.getValueAsInt());
         }
     }
 
