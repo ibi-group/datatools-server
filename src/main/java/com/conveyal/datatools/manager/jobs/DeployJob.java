@@ -397,10 +397,14 @@ public class DeployJob extends MonitorableJob {
                 // Write manifest to temp file (create dirs also if needed).
                 String otpRunnerManifestFile = String.format("/tmp/%s/otp-runner-manifest.json", getTripPlannerString());
                 File otpManifestFile = new File(otpRunnerManifestFile);
-                boolean mkdirSucceeded = otpManifestFile.mkdirs();
-                if (!mkdirSucceeded) {
-                    status.fail("Failed to create directories for otp-runner E2E manifest.");
-                    return;
+                if (otpManifestFile.exists()) {
+                    otpManifestFile.delete();
+                } else {
+                    boolean mkdirSucceeded = otpManifestFile.getParentFile().mkdirs();
+                    if (!mkdirSucceeded) {
+                        status.fail("Failed to create directories for otp-runner E2E manifest.");
+                        return;
+                    }
                 }
                 otpManifestFile.createNewFile();
                 try (
