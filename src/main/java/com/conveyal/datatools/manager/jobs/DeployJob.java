@@ -351,8 +351,6 @@ public class DeployJob extends MonitorableJob {
                 manifest.baseFolderDownloads = new ArrayList<>();
                 manifest.jarFile = getJarFileOnInstance();
                 manifest.nonce = this.nonce;
-                // This must be added here because logging starts immediately before defaults are set while validating the
-                // manifest
                 manifest.otpRunnerLogFile = OTP_RUNNER_LOG_FILE;
                 manifest.otpVersion = isOtp2()
                     ? "2.x"
@@ -360,9 +358,6 @@ public class DeployJob extends MonitorableJob {
                 manifest.prefixLogUploadsWithInstanceId = true;
                 manifest.statusFileLocation = String.format("%s/%s", "/var/log", OTP_RUNNER_STATUS_FILE);
                 manifest.uploadOtpRunnerLogs = false;
-                // add settings applicable to current instance. Two different manifest files are generated when deploying with
-                // different instance types for graph building vs server running
-                // settings when graph building needs to happen
                 manifest.buildGraph = true;
                 try {
                     if (deployment.feedVersionIds.size() > 0) {
@@ -386,12 +381,13 @@ public class DeployJob extends MonitorableJob {
                     status.fail("Failed to create base folder download URLs!", e);
                     return;
                 }
+                // The graph stays on this machine for e2e tests.
                 manifest.uploadGraph = false;
                 manifest.uploadGraphBuildLogs = false;
                 manifest.uploadGraphBuildReport = false;
-
-                // This instance should be ran to only build the graph
-                // (In E2E environments, there is already an OTP instance running in the background)
+                // A new OTP instance should not be started.
+                // In E2E environments, there is already an OTP instance running in the background,
+                // and the test emulates updating the existing router.
                 manifest.runServer = false;
 
                 // Write manifest to temp file (create dirs also if needed).
@@ -418,7 +414,7 @@ public class DeployJob extends MonitorableJob {
                     return;
                 }
 
-                // Temporarily install otp-runner globally, as in EC2 startup scripts
+                // Install otp-runner globally, as in EC2 startup scripts.
                 // Assumes yarn is available, which is the case in E2E CI environment.
                 Runtime.getRuntime().exec("yarn global add https://github.com/ibi-group/otp-runner.git");
 
@@ -426,9 +422,7 @@ public class DeployJob extends MonitorableJob {
                 Process p = Runtime.getRuntime().exec(String.format("otp-runner %s", otpRunnerManifestFile));
                 p.waitFor();
                 System.out.println(String.format("otp-runner exit code: %d", p.exitValue()));
-            } catch (IOException e) {
-                e.printStackTrace();
-            } catch (InterruptedException e) {
+            } catch (IOException | InterruptedException e) {
                 e.printStackTrace();
             }
         }
