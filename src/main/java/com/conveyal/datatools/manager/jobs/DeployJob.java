@@ -317,16 +317,6 @@ public class DeployJob extends MonitorableJob {
                     status.fail(String.format("Error uploading/copying deployment bundle to s3://%s", s3Bucket), e);
                 }
             }
-            
-            // Now that the build was successful, update Pelias
-            if (deployment.peliasUpdate) {
-                // Get log upload URI from deploy job
-                AmazonS3URI logUploadS3URI = getS3FolderURI();
-
-                // Execute the pelias update job and keep track of it
-                PeliasUpdateJob peliasUpdateJob = new PeliasUpdateJob(owner, "Updating Custom Geocoder Database", deployment, logUploadS3URI);
-                addNextJob(peliasUpdateJob);
-            }
         }
 
         // Handle spinning up new EC2 servers for the load balancer's target group.
@@ -334,8 +324,6 @@ public class DeployJob extends MonitorableJob {
             if ("true".equals(DataManager.getConfigPropertyAsText("modules.deployment.ec2.enabled"))) {
                 replaceEC2Servers();
                 tasksCompleted++;
-                // If creating a new server, there is no need to deploy to an existing one.
-                return;
             } else {
                 status.fail("Cannot complete deployment. EC2 deployment disabled in server configuration.");
                 return;
@@ -434,6 +422,16 @@ public class DeployJob extends MonitorableJob {
             if (!sendOverWireSuccessful) return;
             // Set baseUrl after success.
             status.baseUrl = otpServer.publicUrl;
+        }
+
+        // Now that the build + deployment was successful, update Pelias
+        if (deployment.peliasUpdate) {
+            // Get log upload URI from deploy job
+            AmazonS3URI logUploadS3URI = getS3FolderURI();
+
+            // Execute the pelias update job and keep track of it
+            PeliasUpdateJob peliasUpdateJob = new PeliasUpdateJob(owner, "Updating Custom Geocoder Database", deployment, logUploadS3URI);
+            addNextJob(peliasUpdateJob);
         }
 
         status.completed = true;
