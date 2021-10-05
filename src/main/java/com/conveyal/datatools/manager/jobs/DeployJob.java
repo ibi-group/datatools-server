@@ -335,7 +335,7 @@ public class DeployJob extends MonitorableJob {
                 // Generate a basic otp-runner manifest
                 OtpRunnerManifest manifest = new OtpRunnerManifest();
                 // add common settings
-                manifest.baseFolder = String.format("/var/%s/graphs", getTripPlannerString());
+                manifest.baseFolder = String.format("/tmp/%s/graphs", getTripPlannerString());
                 manifest.baseFolderDownloads = new ArrayList<>();
                 manifest.jarFile = getJarFileOnInstance();
                 manifest.nonce = this.nonce;
@@ -344,7 +344,7 @@ public class DeployJob extends MonitorableJob {
                     ? "2.x"
                     : "1.x";
                 manifest.prefixLogUploadsWithInstanceId = true;
-                manifest.statusFileLocation = String.format("%s/%s", "/var/log", OTP_RUNNER_STATUS_FILE);
+                manifest.statusFileLocation = String.format("%s/%s", "/tmp/log", OTP_RUNNER_STATUS_FILE);
                 manifest.uploadOtpRunnerLogs = false;
                 manifest.buildGraph = true;
                 try {
@@ -401,10 +401,6 @@ public class DeployJob extends MonitorableJob {
                     status.fail("Failed to create E2E manifest for otp-runner!", e);
                     return;
                 }
-
-                // Install otp-runner globally, as in EC2 startup scripts.
-                // Assumes yarn is available, which is the case in E2E CI environment.
-                Runtime.getRuntime().exec("yarn global add https://github.com/ibi-group/otp-runner.git");
 
                 // Run otp-runner with the manifest produced earlier.
                 Process p = Runtime.getRuntime().exec(String.format("otp-runner %s", otpRunnerManifestFile));
