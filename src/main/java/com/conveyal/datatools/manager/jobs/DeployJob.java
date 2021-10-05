@@ -373,9 +373,9 @@ public class DeployJob extends MonitorableJob {
                 manifest.uploadGraph = false;
                 manifest.uploadGraphBuildLogs = false;
                 manifest.uploadGraphBuildReport = false;
-                // A new OTP instance should not be started.
-                // In E2E environments, there is already an OTP instance running in the background,
-                // and the test emulates updating the existing router.
+                // A new OTP instance should not be started. In E2E environments,
+                // there is already an OTP instance running in the background,
+                // and the test emulates updating the router graph in that OTP instance.
                 manifest.runServer = false;
 
                 // Write manifest to temp file (create dirs also if needed).
