@@ -344,7 +344,7 @@ public class DeployJob extends MonitorableJob {
                     ? "2.x"
                     : "1.x";
                 manifest.prefixLogUploadsWithInstanceId = true;
-                manifest.statusFileLocation = String.format("%s/%s", "/tmp/log", OTP_RUNNER_STATUS_FILE);
+                manifest.statusFileLocation = String.format("%s/%s", "/var/log", OTP_RUNNER_STATUS_FILE);
                 manifest.uploadOtpRunnerLogs = false;
                 manifest.buildGraph = true;
                 try {
@@ -378,25 +378,20 @@ public class DeployJob extends MonitorableJob {
                 // and the test emulates updating the router graph in that OTP instance.
                 manifest.runServer = false;
 
-                // Write manifest to temp file (create dirs also if needed).
+                // Write manifest to temp file
+                // (CI directories are managed separately).
                 String otpRunnerManifestFile = String.format("/tmp/%s/otp-runner-manifest.json", getTripPlannerString());
                 File otpManifestFile = new File(otpRunnerManifestFile);
-                if (otpManifestFile.exists()) {
-                    otpManifestFile.delete();
-                } else {
-                    boolean mkdirSucceeded = otpManifestFile.getParentFile().mkdirs();
-                    if (!mkdirSucceeded) {
-                        status.fail("Failed to create directories for otp-runner E2E manifest.");
-                        return;
-                    }
-                }
                 otpManifestFile.createNewFile();
+                LOG.info("E2E otp-runner empty manifest file created.");
+
                 try (
                     FileWriter fw =  new FileWriter(otpManifestFile)
                 ) {
                     ObjectMapper mapper = new ObjectMapper();
                     mapper.setSerializationInclusion(JsonInclude.Include.NON_EMPTY);
                     fw.write(mapper.writeValueAsString(manifest));
+                    LOG.info("E2E otp-runner manifest file written.");
                 } catch (JsonProcessingException e) {
                     status.fail("Failed to create E2E manifest for otp-runner!", e);
                     return;
@@ -405,7 +400,7 @@ public class DeployJob extends MonitorableJob {
                 // Run otp-runner with the manifest produced earlier.
                 Process p = Runtime.getRuntime().exec(String.format("otp-runner %s", otpRunnerManifestFile));
                 p.waitFor();
-                System.out.println(String.format("otp-runner exit code: %d", p.exitValue()));
+                LOG.info("otp-runner exit code: {}", p.exitValue());
             } catch (IOException | InterruptedException e) {
                 e.printStackTrace();
             }
