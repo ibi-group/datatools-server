@@ -344,7 +344,7 @@ public class DeployJob extends MonitorableJob {
             AmazonS3URI logUploadS3URI = getS3FolderURI();
 
             // Execute the pelias update job and keep track of it
-            PeliasUpdateJob peliasUpdateJob = new PeliasUpdateJob(owner, "Updating Custom Geocoder Database", deployment, logUploadS3URI);
+            PeliasUpdateJob peliasUpdateJob = new PeliasUpdateJob(owner, "Updating Local Places Index", deployment, logUploadS3URI);
             addNextJob(peliasUpdateJob);
         }
 
