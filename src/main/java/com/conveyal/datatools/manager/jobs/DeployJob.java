@@ -56,6 +56,7 @@ import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
@@ -326,6 +327,82 @@ public class DeployJob extends MonitorableJob {
             } else {
                 status.fail("Cannot complete deployment. EC2 deployment disabled in server configuration.");
                 return;
+            }
+        }
+        else if ("true".equals(System.getenv("RUN_E2E"))) {
+            // If running E2E tests, fire up an otp-runner graph build on the same machine.
+            try {
+                // Generate a basic otp-runner manifest
+                OtpRunnerManifest manifest = new OtpRunnerManifest();
+                // add common settings
+                manifest.baseFolder = String.format("/tmp/%s/graphs", getTripPlannerString());
+                manifest.baseFolderDownloads = new ArrayList<>();
+                manifest.jarFile = getJarFileOnInstance();
+                manifest.nonce = this.nonce;
+                manifest.otpRunnerLogFile = OTP_RUNNER_LOG_FILE;
+                manifest.otpVersion = isOtp2()
+                    ? "2.x"
+                    : "1.x";
+                manifest.prefixLogUploadsWithInstanceId = true;
+                manifest.statusFileLocation = String.format("%s/%s", "/var/log", OTP_RUNNER_STATUS_FILE);
+                manifest.uploadOtpRunnerLogs = false;
+                manifest.buildGraph = true;
+                try {
+                    if (deployment.feedVersionIds.size() > 0) {
+                        // add OSM data
+                        URL osmDownloadUrl = deployment.getUrlForOsmExtract();
+                        if (osmDownloadUrl != null) {
+                            addUriAsBaseFolderDownload(manifest, osmDownloadUrl.toString());
+                        }
+
+                        // add GTFS data
+                        for (String feedVersionId : deployment.feedVersionIds) {
+                            CustomFile gtfsFile = new CustomFile();
+                            // OTP 2.x must have the string `gtfs` somewhere inside the filename, so prepend the filename
+                            // with the string `gtfs-`.
+                            gtfsFile.filename = String.format("gtfs-%s", feedVersionId);
+                            gtfsFile.uri = S3Utils.getS3FeedUri(feedVersionId);
+                            addCustomFileAsBaseFolderDownload(manifest, gtfsFile);
+                        }
+                    }
+                } catch (MalformedURLException e) {
+                    status.fail("Failed to create base folder download URLs!", e);
+                    return;
+                }
+                // The graph stays on this machine for e2e tests.
+                manifest.uploadGraph = false;
+                manifest.uploadGraphBuildLogs = false;
+                manifest.uploadGraphBuildReport = false;
+                // A new OTP instance should not be started. In E2E environments,
+                // there is already an OTP instance running in the background,
+                // and the test emulates updating the router graph in that OTP instance.
+                manifest.runServer = false;
+
+                // Write manifest to temp file
+                // (CI directories are managed separately).
+                String otpRunnerManifestFile = String.format("/tmp/%s/otp-runner-manifest.json", getTripPlannerString());
+                File otpManifestFile = new File(otpRunnerManifestFile);
+                otpManifestFile.createNewFile();
+                LOG.info("E2E otp-runner empty manifest file created.");
+
+                try (
+                    FileWriter fw =  new FileWriter(otpManifestFile)
+                ) {
+                    ObjectMapper mapper = new ObjectMapper();
+                    mapper.setSerializationInclusion(JsonInclude.Include.NON_EMPTY);
+                    fw.write(mapper.writeValueAsString(manifest));
+                    LOG.info("E2E otp-runner manifest file written.");
+                } catch (JsonProcessingException e) {
+                    status.fail("Failed to create E2E manifest for otp-runner!", e);
+                    return;
+                }
+
+                // Run otp-runner with the manifest produced earlier.
+                Process p = Runtime.getRuntime().exec(String.format("otp-runner %s", otpRunnerManifestFile));
+                p.waitFor();
+                LOG.info("otp-runner exit code: {}", p.exitValue());
+            } catch (IOException | InterruptedException e) {
+                e.printStackTrace();
             }
         }
 
