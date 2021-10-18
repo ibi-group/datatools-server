@@ -131,6 +131,7 @@ public class PeliasUpdateJob extends MonitorableJob {
         peliasWebhookRequestBody.csvFiles = deployment.peliasCsvFiles;
         peliasWebhookRequestBody.logUploadUrl = logUploadS3URI.toString();
         peliasWebhookRequestBody.deploymentId = deployment.id;
+        peliasWebhookRequestBody.resetDb = deployment.peliasResetDb;
 
         String query = JsonUtil.toJson(peliasWebhookRequestBody);
 
@@ -203,6 +204,7 @@ public class PeliasUpdateJob extends MonitorableJob {
         public List<String> csvFiles;
         public String logUploadUrl;
         public String deploymentId;
+        public boolean resetDb;
     }
 
     /**
