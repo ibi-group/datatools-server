@@ -167,6 +167,7 @@ public class GtfsPlusValidation implements Serializable {
             }
             rowIndex++;
         }
+        csvReader.close();
 
         // Add issue for wrong number of columns after processing all rows.
         // Note: We considered adding an issue for each row, but opted for the single error approach because there's no
