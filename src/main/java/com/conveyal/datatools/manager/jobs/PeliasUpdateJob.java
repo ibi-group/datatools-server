@@ -76,7 +76,7 @@ public class PeliasUpdateJob extends MonitorableJob {
     }
 
     private void getWebhookStatus() {
-        URI url = getWebhookURI(deployment.peliasWebhookUrl + "/status/" + workerId);
+        URI url = getWebhookURI(deployment.parentProject().peliasWebhookUrl + "/status/" + workerId);
 
         // Convert raw body to JSON
         PeliasWebhookStatusMessage statusResponse;
@@ -118,7 +118,7 @@ public class PeliasUpdateJob extends MonitorableJob {
      * @return The workerID of the run created on the Pelias server
      */
     private String makeWebhookRequest() {
-        URI url = getWebhookURI(deployment.peliasWebhookUrl);
+        URI url = getWebhookURI(deployment.parentProject().peliasWebhookUrl);
 
         // Convert from feedVersionIds to Pelias Config objects
         List<PeliasWebhookGTFSFeedFormat> gtfsFeeds = Persistence.feedVersions.getFiltered(in("_id", deployment.feedVersionIds))
