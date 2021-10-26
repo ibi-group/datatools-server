@@ -23,6 +23,7 @@ import static org.hamcrest.Matchers.equalTo;
 public class GtfsPlusValidationTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(MergeFeedsJobTest.class);
     private static FeedVersion bartVersion1;
+    private static FeedVersion bartVersion1WithQuotedValues;
     private static Project project;
 
     /**
@@ -40,13 +41,25 @@ public class GtfsPlusValidationTest extends UnitTest {
         bart.projectId = project.id;
         Persistence.feedSources.create(bart);
         bartVersion1 = createFeedVersionFromGtfsZip(bart, "bart_new.zip");
+        bartVersion1WithQuotedValues = createFeedVersionFromGtfsZip(bart, "bart_new_with_quoted_values.zip");
     }
 
     @Test
-    public void canValidateCleanGtfsPlus() throws Exception {
+    void canValidateCleanGtfsPlus() throws Exception {
         LOG.info("Validation BART GTFS+");
         GtfsPlusValidation validation = GtfsPlusValidation.validate(bartVersion1.id);
         // Expect issues to be zero.
         assertThat("Issues count for clean BART feed is zero", validation.issues.size(), equalTo(0));
+    }
+
+    @Test
+    void canValidateGtfsPlusWithQuotedValues() throws Exception {
+        LOG.info("Validation BART GTFS+ with quoted values");
+        GtfsPlusValidation validation = GtfsPlusValidation.validate(bartVersion1WithQuotedValues.id);
+        // Expect issues to be zero.
+        assertThat(
+            "Issues count for clean BART feed (quoted values) is zero",
+            validation.issues.size(), equalTo(0)
+        );
     }
 }
