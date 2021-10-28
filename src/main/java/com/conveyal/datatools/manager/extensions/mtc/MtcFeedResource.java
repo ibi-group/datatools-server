@@ -280,7 +280,7 @@ public class MtcFeedResource implements ExternalFeedResource {
                     source,
                     resourceType,
                     entry.getKey(),
-                    entry.getValue().asText()
+                    convertRtdString(entry.getValue().asText())
                 );
 
                 // Update the attributes in Mongo.
@@ -311,5 +311,15 @@ public class MtcFeedResource implements ExternalFeedResource {
             LOG.error("Error writing to RTD", e);
             throw e;
         }
+    }
+
+    /**
+     * This method converts the RTD attribute value "null" to "" by MTC request,
+     * so that it is displayed in the UI under Mtc Properties as "(none)".
+     * @return An empty string if the provided string is the string "null", else the passed string itself.
+     */
+    static String convertRtdString(String s) {
+        if ("null".equals(s)) return "";
+        return s;
     }
 }
