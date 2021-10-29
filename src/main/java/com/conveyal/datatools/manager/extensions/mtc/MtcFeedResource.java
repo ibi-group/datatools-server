@@ -233,7 +233,12 @@ public class MtcFeedResource implements ExternalFeedResource {
             osw.write(carrierJson);
             osw.flush();
             osw.close();
-            LOG.info("RTD API response: {}/{}", connection.getResponseCode(), connection.getResponseMessage());
+            LOG.info(
+                "RTD API {} response: {}/{}",
+                connection.getRequestMethod(),
+                connection.getResponseCode(),
+                connection.getResponseMessage()
+            );
         } catch (Exception e) {
             LOG.error("Error writing to RTD", e);
             throw e;
@@ -263,53 +268,68 @@ public class MtcFeedResource implements ExternalFeedResource {
             }
             in.close();
 
-            LOG.info("RTD API response: {}/{}", connection.getResponseCode(), connection.getResponseMessage());
+            LOG.info("RTD API GET response: {}/{}", connection.getResponseCode(), connection.getResponseMessage());
 
-            // Parse the response
+            // Parse the response and update Mongo.
             ObjectMapper responseMapper = new ObjectMapper();
             JsonNode node = responseMapper.readTree(response.toString());
-
-            String resourceType = this.getResourceType();
-            Iterator<Map.Entry<String, JsonNode>> fieldsIterator = node.fields();
-            List<String> rtdKeys = new ArrayList<>();
-
-            // Iterate over fields found in body and update external properties accordingly.
-            while (fieldsIterator.hasNext()) {
-                Map.Entry<String, JsonNode> entry = fieldsIterator.next();
-                ExternalFeedSourceProperty property = new ExternalFeedSourceProperty(
-                    source,
-                    resourceType,
-                    entry.getKey(),
-                    entry.getValue().asText()
-                );
-
-                // Update the attributes in Mongo.
-                ExternalFeedSourceProperty existingProperty = Persistence.externalFeedSourceProperties.getById(
-                    property.id
-                );
-                if (existingProperty != null) {
-                    // TODO: convert "null" into an empty string ""?
-                    Persistence.externalFeedSourceProperties.updateField(
-                        property.id,
-                        "value",
-                        property.value
-                    );
-                } else {
-                    Persistence.externalFeedSourceProperties.create(property);
-                }
-
-                // Hold the received attribute keys to delete the extra ones from Mongo that are assumed not used.
-                rtdKeys.add(property.name);
-            }
-
-            // Get the attributes stored in Mongo, remove those not in the RTD response.
-            Persistence.externalFeedSourceProperties.getFiltered(eq("feedSourceId", source.id))
-                .stream()
-                .filter(property -> !rtdKeys.contains(property.name))
-                .forEach(property -> Persistence.externalFeedSourceProperties.removeById(property.id));
+            updateMongoExternalFeedProperties(source, node);
         } catch (Exception e) {
             LOG.error("Error writing to RTD", e);
             throw e;
         }
+    }
+
+    /**
+     * Updates Mongo using the provided JSON object from RTD.
+     */
+    void updateMongoExternalFeedProperties(FeedSource source, JsonNode rtdResponse) {
+        String resourceType = this.getResourceType();
+        Iterator<Map.Entry<String, JsonNode>> fieldsIterator = rtdResponse.fields();
+        List<String> rtdKeys = new ArrayList<>();
+
+        // Iterate over fields found in body and update external properties accordingly.
+        while (fieldsIterator.hasNext()) {
+            Map.Entry<String, JsonNode> entry = fieldsIterator.next();
+            ExternalFeedSourceProperty property = new ExternalFeedSourceProperty(
+                source,
+                resourceType,
+                entry.getKey(),
+                convertRtdString(entry.getValue().asText())
+            );
+
+            // Update the attributes in Mongo.
+            ExternalFeedSourceProperty existingProperty = Persistence.externalFeedSourceProperties.getById(
+                property.id
+            );
+            if (existingProperty != null) {
+                Persistence.externalFeedSourceProperties.updateField(
+                    property.id,
+                    "value",
+                    property.value
+                );
+            } else {
+                Persistence.externalFeedSourceProperties.create(property);
+            }
+
+            // Hold the received attribute keys to delete the extra ones from Mongo that are assumed not used.
+            rtdKeys.add(property.name);
+        }
+
+        // Get the attributes stored in Mongo, remove those not in the RTD response.
+        Persistence.externalFeedSourceProperties.getFiltered(eq("feedSourceId", source.id))
+            .stream()
+            .filter(property -> !rtdKeys.contains(property.name))
+            .forEach(property -> Persistence.externalFeedSourceProperties.removeById(property.id));
+    }
+
+    /**
+     * This method converts the RTD attribute value "null" to "" by MTC request,
+     * so that it is displayed in the UI under Mtc Properties as "(none)".
+     * @return An empty string if the provided string is the string "null", else the passed string itself.
+     */
+    static String convertRtdString(String s) {
+        if ("null".equals(s)) return "";
+        return s;
     }
 }
