@@ -233,7 +233,12 @@ public class MtcFeedResource implements ExternalFeedResource {
             osw.write(carrierJson);
             osw.flush();
             osw.close();
-            LOG.info("RTD API response: {}/{}", connection.getResponseCode(), connection.getResponseMessage());
+            LOG.info(
+                "RTD API {} response: {}/{}",
+                connection.getRequestMethod(),
+                connection.getResponseCode(),
+                connection.getResponseMessage()
+            );
         } catch (Exception e) {
             LOG.error("Error writing to RTD", e);
             throw e;
@@ -263,7 +268,7 @@ public class MtcFeedResource implements ExternalFeedResource {
             }
             in.close();
 
-            LOG.info("RTD API response: {}/{}", connection.getResponseCode(), connection.getResponseMessage());
+            LOG.info("RTD API GET response: {}/{}", connection.getResponseCode(), connection.getResponseMessage());
 
             // Parse the response and update Mongo.
             ObjectMapper responseMapper = new ObjectMapper();
