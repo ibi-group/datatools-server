@@ -28,11 +28,11 @@ jobs:
         uses: actions/setup-java@v1
         with:
           java-version: 1.8
-      # Install node 12 for running e2e tests (and for maven-semantic-release).
-      - name: Use Node.js 12.x
+      # Install node 14 for running e2e tests (and for maven-semantic-release).
+      - name: Use Node.js 14.x
         uses: actions/setup-node@v1
         with:
-          node-version: 12.x
+          node-version: 14.x
       - name: Start MongoDB
         uses: supercharge/mongodb-github-action@1.3.0
         with:
@@ -103,9 +103,11 @@ jobs:
           semantic-release --prepare @conveyal/maven-semantic-release --publish @semantic-release/github,@conveyal/maven-semantic-release --verify-conditions @semantic-release/github,@conveyal/maven-semantic-release --verify-release @conveyal/maven-semantic-release --use-conveyal-workflow --dev-branch=dev --skip-maven-deploy
       # The git commands get the commit hash of the HEAD commit and the commit just before HEAD.
       - name: Prepare deploy artifacts
+        # Only deploy on push (pull_request will deploy a temp. merge commit. See #400.)
+        if: github.event_name == 'push'
         run: |
           # get branch name of current branch for use in jar name
-          export BRANCH=$GITHUB_HEAD_REF_SLUG
+          export BRANCH=$GITHUB_REF_SLUG
           # Replace forward slashes with underscores in branch name.
           export BRANCH_CLEAN=${BRANCH//\//_}
           # Create directory that will contain artifacts to deploy to s3.
@@ -122,5 +124,6 @@ jobs:
           FIRST_JAR="${ALL_JARS[0]}"
           cp "$FIRST_JAR" "deploy/dt-latest-$BRANCH_CLEAN.jar"
       - name: Deploy to S3
+        if: github.event_name == 'push'
         run: |
           aws s3 cp ./deploy s3://datatools-builds --recursive --acl public-read

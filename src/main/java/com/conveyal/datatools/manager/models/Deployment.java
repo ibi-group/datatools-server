@@ -73,6 +73,12 @@ public class Deployment extends Model implements Serializable {
 
     private ObjectMapper otpConfigMapper = new ObjectMapper().setSerializationInclusion(Include.NON_NULL);
 
+    /* Pelias fields, used to determine where/if to send data to the Pelias webhook */
+    public String peliasWebhookUrl;
+    public boolean peliasUpdate;
+    public boolean peliasResetDb;
+    public List<String> peliasCsvFiles = new ArrayList<>();
+
     /**
      * Get parent project for deployment. Note: at one point this was a JSON property of this class, but severe
      * performance issues prevent this field from scaling to be fetched/assigned to a large collection of deployments.
@@ -194,7 +200,7 @@ public class Deployment extends Model implements Serializable {
     }
 
     /**
-     * The routerId of this deployment
+     * The routerId of this deployment. If null, the deployment will use the 'default' router.
      */
     public String routerId;
 
@@ -234,8 +240,11 @@ public class Deployment extends Model implements Serializable {
         return ret;
     }
 
-    /** Create a single-agency (testing) deployment for the given feed source */
-    public Deployment(FeedSource feedSource) {
+    /**
+     * Create a single-agency (testing) deployment for the given feed source
+     * @param useDefaultRouter should the deployment use the default router (non feed source specific)?
+     */
+    public Deployment(FeedSource feedSource, boolean useDefaultRouter) {
         super();
 
         this.feedSourceId = feedSource.id;
@@ -249,8 +258,9 @@ public class Deployment extends Model implements Serializable {
         // always use the latest, no matter how broken it is, so we can at least see how broken it is
         this.feedVersionIds.add(feedSource.latestVersionId());
 
-        this.routerId = StringUtils.getCleanName(feedSource.name) + "_" + feedSourceId;
-
+        if (!useDefaultRouter) {
+            this.routerId = StringUtils.getCleanName(feedSource.name) + "_" + feedSourceId;
+        }
         this.deployedTo = null;
     }
 
@@ -596,6 +606,9 @@ public class Deployment extends Model implements Serializable {
         public String previousVersionId;
         public String nextVersionId;
         public int version;
+
+        /** No-arg constructor for de-/serialization. */
+        public SummarizedFeedVersion() { }
 
         public SummarizedFeedVersion (FeedVersion version) {
             this.validationResult = new FeedValidationResultSummary(version);

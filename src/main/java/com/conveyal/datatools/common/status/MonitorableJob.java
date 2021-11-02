@@ -36,8 +36,9 @@ public abstract class MonitorableJob implements Runnable, Serializable {
      */
     public boolean active = false;
 
-    protected String parentJobId;
-    protected JobType parentJobType;
+    // The two fields below are public because they are used by the UI through the /jobs endpoint.
+    public String parentJobId;
+    public JobType parentJobType;
     // Status is not final to allow some jobs to have extra status fields.
     public Status status = new Status();
     // Name is not final in case it needs to be amended during job processing.
@@ -77,7 +78,8 @@ public abstract class MonitorableJob implements Runnable, Serializable {
         VALIDATE_ALL_FEEDS,
         MONITOR_SERVER_STATUS,
         MERGE_FEED_VERSIONS,
-        RECREATE_BUILD_IMAGE
+        RECREATE_BUILD_IMAGE,
+        UPDATE_PELIAS
     }
 
     public MonitorableJob(Auth0UserProfile owner, String name, JobType type) {

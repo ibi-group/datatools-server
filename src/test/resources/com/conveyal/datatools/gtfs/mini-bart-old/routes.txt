@@ -1,0 +1,7 @@
+route_id,agency_id,route_short_name,route_long_name,route_desc,route_type,route_url,route_color,route_text_color
+01,BART,Yellow,Antioch - SFIA/Millbrae,,1,http://www.bart.gov/schedules/bylineresults?route=1,ffff33,
+03,BART,Orange,Warm Springs/South Fremont - Richmond,,1,http://www.bart.gov/schedules/bylineresults?route=3,ff9933,
+05,BART,Green,Warm Springs/South Fremont - Daly City,,1,http://www.bart.gov/schedules/bylineresults?route=5,339933,
+07,BART,Red,Richmond - Daly City/Millbrae,,1,http://www.bart.gov/schedules/bylineresults?route=7,ff0000,
+11,BART,Blue,Dublin/Pleasanton - Daly City,,1,http://www.bart.gov/schedules/bylineresults?route=11,0099cc,
+19,BART,Beige,Oakland Airport - Coliseum,,1,http://www.bart.gov/schedules/bylineresults?route=19,d5cfa3,

@@ -2,9 +2,11 @@ package com.conveyal.datatools;
 
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
+import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.utils.HttpUtils;
+import com.conveyal.datatools.manager.utils.SimpleHttpResponse;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.commons.io.IOUtils;
@@ -144,6 +146,16 @@ public class TestUtils {
     }
 
     /**
+     * Utility function to construct a mock feed version from a feedSourceId
+     */
+    public static FeedVersion createMockFeedVersion(String feedSourceId) {
+        FeedVersion f = new FeedVersion();
+        f.feedSourceId = feedSourceId;
+        f.retrievalMethod = FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
+        return f;
+    }
+
+    /**
      * Utility function to create a {@link ProcessSingleFeedJob} for a {@Link FeedVersion} during tests.
      */
     public static ProcessSingleFeedJob createProcessSingleFeedJob(FeedVersion version) {
@@ -264,7 +276,7 @@ public class TestUtils {
     /**
      * Send request to provided URL.
      */
-    public static HttpResponse makeRequest(String path, String body, HttpUtils.REQUEST_METHOD requestMethod) {
+    public static SimpleHttpResponse makeRequest(String path, String body, HttpUtils.REQUEST_METHOD requestMethod) {
         return HttpUtils.httpRequestRawResponse(
             URI.create(BASE_URL + path),
             1000,

@@ -6,7 +6,10 @@ import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.gtfsplus.tables.GtfsPlusTable;
+import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.ErrorUtils;
 import com.conveyal.gtfs.loader.Feed;
 import com.conveyal.gtfs.loader.Table;
@@ -35,6 +38,7 @@ import static com.conveyal.datatools.manager.jobs.MergeFeedsType.SERVICE_PERIOD;
 import static com.conveyal.datatools.manager.jobs.MergeFeedsType.REGIONAL;
 import static com.conveyal.datatools.manager.jobs.MergeStrategy.CHECK_STOP_TIMES;
 import static com.conveyal.datatools.manager.jobs.MergeStrategy.EXTEND_FUTURE;
+import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.REGIONAL_MERGE;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.*;
 
 /**
@@ -111,6 +115,7 @@ public class MergeFeedsJob extends FeedSourceJob {
     private static final Logger LOG = LoggerFactory.getLogger(MergeFeedsJob.class);
     public static final ObjectMapper mapper = new ObjectMapper();
     private final Set<FeedVersion> feedVersions;
+    private final FeedSource feedSource;
     public final MergeFeedsResult mergeFeedsResult;
     private final String filename;
     public final String projectId;
@@ -165,6 +170,28 @@ public class MergeFeedsJob extends FeedSourceJob {
         // is used by the client to download the merged feed upon job completion.
         this.projectId = mergeType.equals(REGIONAL) ? file : null;
         this.mergeType = mergeType;
+        // Assuming job is successful, mergedVersion will contain the resulting feed version.
+        Project project = Persistence.projects.getById(projectId);
+        // Grab parent feed source depending on merge type.
+        FeedSource regionalFeedSource = null;
+        // If storing a regional merge as a new version, find the feed source designated by the project.
+        if (mergeType.equals(REGIONAL) && storeNewVersion) {
+            regionalFeedSource = Persistence.feedSources.getById(project.regionalFeedSourceId);
+            // Create new feed source if this is the first regional merge.
+            if (regionalFeedSource == null) {
+                regionalFeedSource = new FeedSource("REGIONAL MERGE", project.id, REGIONAL_MERGE);
+                // Store new feed source.
+                Persistence.feedSources.create(regionalFeedSource);
+                // Update regional feed source ID on project.
+                project.regionalFeedSourceId = regionalFeedSource.id;
+                Persistence.projects.replace(project.id, project);
+            }
+        }
+        // Assign regional feed source or simply the first parent feed source found in the feed version list (these
+        // should all belong to the same feed source if the merge is not regional).
+        this.feedSource = mergeType.equals(REGIONAL)
+            ? regionalFeedSource
+            : feedVersions.iterator().next().parentFeedSource();
         // Assuming job is successful, mergedVersion will contain the resulting feed version.
         // Merged version will be null if the new version should not be stored.
         this.mergedVersion = getMergedVersion(this, storeNewVersion);

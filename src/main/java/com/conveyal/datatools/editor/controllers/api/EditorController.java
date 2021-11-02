@@ -1,11 +1,6 @@
 package com.conveyal.datatools.editor.controllers.api;
 
-import com.amazonaws.AmazonServiceException;
-import com.amazonaws.services.s3.model.CannedAccessControlList;
-import com.amazonaws.services.s3.model.PutObjectRequest;
 import com.conveyal.datatools.common.utils.SparkUtils;
-import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
-import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.editor.controllers.EditorLockController;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -23,7 +18,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import org.apache.commons.dbutils.DbUtils;
-import org.apache.commons.io.IOUtils;
 import org.eclipse.jetty.http.HttpStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,14 +25,8 @@ import spark.HaltException;
 import spark.Request;
 import spark.Response;
 
-import javax.servlet.MultipartConfigElement;
-import javax.servlet.ServletException;
-import javax.servlet.http.Part;
 import javax.sql.DataSource;
-import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
@@ -106,49 +94,6 @@ public abstract class EditorController<T extends Entity> {
         this.classToLowercase = table.getEntityClass().getSimpleName().toLowerCase();
         this.ROOT_ROUTE = apiPrefix + SECURE + classToLowercase;
         registerRoutes();
-    }
-
-    public static String uploadBranding(Request req, String key) {
-        String url;
-
-        // Get file from request
-        if (req.raw().getAttribute("org.eclipse.jetty.multipartConfig") == null) {
-            MultipartConfigElement multipartConfigElement = new MultipartConfigElement(System.getProperty("java.io.tmpdir"));
-            req.raw().setAttribute("org.eclipse.jetty.multipartConfig", multipartConfigElement);
-        }
-        String extension = null;
-        File tempFile = null;
-        try {
-            Part part = req.raw().getPart("file");
-            extension = "." + part.getContentType().split("/", 0)[1];
-            tempFile = File.createTempFile(key + "_branding", extension);
-            InputStream inputStream;
-            inputStream = part.getInputStream();
-            FileOutputStream out = new FileOutputStream(tempFile);
-            IOUtils.copy(inputStream, out);
-        } catch (IOException | ServletException e) {
-            e.printStackTrace();
-            logMessageAndHalt(req, 400, "Unable to read uploaded file");
-        }
-
-        try {
-            String keyName = "branding/" + key + extension;
-            url = S3Utils.getDefaultBucketUrlForKey(keyName);
-            // FIXME: This may need to change during feed store refactor
-            S3Utils.getDefaultS3Client().putObject(new PutObjectRequest(
-                    S3Utils.DEFAULT_BUCKET, keyName, tempFile)
-                    // grant public read
-                    .withCannedAcl(CannedAccessControlList.PublicRead));
-            return url;
-        } catch (AmazonServiceException | CheckedAWSException e) {
-            logMessageAndHalt(req, 500, "Error uploading file to S3", e);
-            return null;
-        } finally {
-            boolean deleted = tempFile.delete();
-            if (!deleted) {
-                LOG.error("Could not delete s3 upload file.");
-            }
-        }
     }
 
     /**
@@ -399,7 +344,7 @@ public abstract class EditorController<T extends Entity> {
         int id = getIdFromRequest(req);
         String url;
         try {
-            url = uploadBranding(req, String.format("%s_%d", classToLowercase, id));
+            url = SparkUtils.uploadMultipartRequestBodyToS3(req, "branding", String.format("%s_%d", classToLowercase, id));
         } catch (HaltException e) {
             // Do not re-catch halts thrown for exceptions that have already been caught.
             throw e;

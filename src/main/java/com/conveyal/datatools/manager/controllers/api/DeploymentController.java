@@ -1,9 +1,11 @@
 package com.conveyal.datatools.manager.controllers.api;
 
+import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.s3.AmazonS3URI;
+import com.amazonaws.services.s3.model.DeleteObjectRequest;
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.SparkUtils;
+import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.EC2Utils;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
@@ -32,9 +34,12 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.UUID;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
+import static com.conveyal.datatools.manager.DataManager.isExtensionEnabled;
+import static com.conveyal.datatools.manager.jobs.DeployJob.bundlePrefix;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 import static spark.Spark.delete;
@@ -61,7 +66,7 @@ public class DeploymentController {
         if (deployment == null) {
             logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Deployment does not exist.");
         }
-        boolean isProjectAdmin = userProfile.canAdministerProject(deployment.projectId, deployment.organizationId());
+        boolean isProjectAdmin = userProfile.canAdministerProject(deployment);
         if (!isProjectAdmin && !userProfile.getUser_id().equals(deployment.user())) {
             // If user is not a project admin and did not create the deployment, access to the deployment is denied.
             logMessageAndHalt(req, HttpStatus.UNAUTHORIZED_401, "User not authorized for deployment.");
@@ -179,22 +184,24 @@ public class DeploymentController {
             // Return deployments for project
             Project project = Persistence.projects.getById(projectId);
             if (project == null) logMessageAndHalt(req, 400, "Must provide valid projectId value.");
-            if (!userProfile.canAdministerProject(projectId, project.organizationId))
+            if (!userProfile.canAdministerProject(project)) {
                 logMessageAndHalt(req, 401, "User not authorized to view project deployments.");
+            }
             return project.retrieveDeployments();
         } else if (feedSourceId != null) {
             // Return test deployments for feed source (note: these only include test deployments specific to the feed
             // source and will not include all deployments that reference this feed source).
             FeedSource feedSource = Persistence.feedSources.getById(feedSourceId);
             if (feedSource == null) logMessageAndHalt(req, 400, "Must provide valid feedSourceId value.");
-            Project project = feedSource.retrieveProject();
-            if (!userProfile.canViewFeed(project.organizationId, project.id, feedSourceId))
+            if (!userProfile.canViewFeed(feedSource)) {
                 logMessageAndHalt(req, 401, "User not authorized to view feed source deployments.");
+            }
             return feedSource.retrieveDeployments();
         } else {
             // If no query parameter is supplied, return all deployments for application.
-            if (!userProfile.canAdministerApplication())
+            if (!userProfile.canAdministerApplication()) {
                 logMessageAndHalt(req, 401, "User not authorized to view application deployments.");
+            }
             return Persistence.deployments.getAll();
         }
     }
@@ -209,12 +216,10 @@ public class DeploymentController {
         Auth0UserProfile userProfile = req.attribute("user");
         Document newDeploymentFields = Document.parse(req.body());
         String projectId = newDeploymentFields.getString("projectId");
-        String organizationId = newDeploymentFields.getString("organizationId");
-
-        boolean allowedToCreate = userProfile.canAdministerProject(projectId, organizationId);
+        Project project = Persistence.projects.getById(projectId);
+        boolean allowedToCreate = userProfile.canAdministerProject(project);
 
         if (allowedToCreate) {
-            Project project = Persistence.projects.getById(projectId);
             Deployment newDeployment = new Deployment(project);
 
             // FIXME: Here we are creating a deployment and updating it with the JSON string (two db operations)
@@ -242,15 +247,16 @@ public class DeploymentController {
         // 3) have access to this feed through project permissions
         // if all fail, the user cannot do this.
         if (
-                !userProfile.canAdministerProject(feedSource.projectId, feedSource.organizationId()) &&
+                !userProfile.canAdministerProject(feedSource) &&
                 !userProfile.getUser_id().equals(feedSource.user())
             )
             logMessageAndHalt(req, 401, "User not authorized to perform this action");
 
         if (feedSource.latestVersionId() == null)
             logMessageAndHalt(req, 400, "Cannot create a deployment from a feed source with no versions.");
-
-        Deployment deployment = new Deployment(feedSource);
+        
+        boolean useDefaultRouter = !isExtensionEnabled("nysdot");
+        Deployment deployment = new Deployment(feedSource, useDefaultRouter);
         deployment.storeUser(userProfile);
         Persistence.deployments.create(deployment);
         return deployment;
@@ -309,6 +315,12 @@ public class DeploymentController {
             List<String> versionIds = versionsToInsert.stream().map(v -> v.id).collect(Collectors.toList());
             Persistence.deployments.updateField(deploymentToUpdate.id, "feedVersionIds", versionIds);
         }
+
+        // If updatedDocument has deleted a CSV file, also delete that CSV file from S3
+        if (updateDocument.containsKey("peliasCsvFiles")) {
+            List<String> csvUrls = (List<String>) updateDocument.get("peliasCsvFiles");
+            removeDeletedCsvFiles(csvUrls, deploymentToUpdate, req);
+        }
         Deployment updatedDeployment = Persistence.deployments.update(deploymentToUpdate.id, req.body());
         // TODO: Should updates to the deployment's fields trigger a notification to subscribers? This could get
         // very noisy.
@@ -334,6 +346,29 @@ public class DeploymentController {
 //        DeployJob.DeploySummary latestDeployJob = deployment.latest();
 //
 //    }
+
+    /**
+     * Helper method for update steps which removes all removed csv files from s3.
+     * @param csvUrls               The new list of csv files
+     * @param deploymentToUpdate    An existing deployment, which contains csv files to check changes against
+     * @param req                   A request object used to report failure
+     */
+    private static void removeDeletedCsvFiles(List<String> csvUrls, Deployment deploymentToUpdate, Request req) {
+        // Only delete if the array differs
+        if (deploymentToUpdate.peliasCsvFiles != null && !csvUrls.equals(deploymentToUpdate.peliasCsvFiles)) {
+            for (String existingCsvUrl : deploymentToUpdate.peliasCsvFiles) {
+                // Only delete if the file does not exist in the deployment
+                if (!csvUrls.contains(existingCsvUrl)) {
+                    try {
+                        AmazonS3URI s3URIToDelete = new AmazonS3URI(existingCsvUrl);
+                        S3Utils.getDefaultS3Client().deleteObject(new DeleteObjectRequest(s3URIToDelete.getBucket(), s3URIToDelete.getKey()));
+                    } catch(Exception e) {
+                        logMessageAndHalt(req, 500, "Failed to delete file from S3.", e);
+                    }
+                }
+            }
+        }
+    }
 
     /**
      * HTTP endpoint to deregister and terminate a set of instance IDs that are associated with a particular deployment.
@@ -421,7 +456,7 @@ public class DeploymentController {
         }
 
         // Check that permissions of user allow them to deploy to target.
-        boolean isProjectAdmin = userProfile.canAdministerProject(deployment.projectId, deployment.organizationId());
+        boolean isProjectAdmin = userProfile.canAdministerProject(deployment);
         if (!isProjectAdmin && otpServer.admin) {
             logMessageAndHalt(req, 401, "User not authorized to deploy to admin-only target OTP server.");
         }
@@ -450,6 +485,48 @@ public class DeploymentController {
         return SparkUtils.formatJobMessage(job.jobId, "Deployment initiating.");
     }
 
+    /**
+     * Uploads a file from Spark request object to the s3 bucket of the deployment the Pelias Update Job is associated with.
+     * Follows https://github.com/ibi-group/datatools-server/blob/dev/src/main/java/com/conveyal/datatools/editor/controllers/api/EditorController.java#L111
+     * @return      S3 URL the file has been uploaded to
+     */
+    private static Deployment uploadToS3 (Request req, Response res) {
+        // Check parameters supplied in request for validity.
+        Deployment deployment = getDeploymentWithPermissions(req, res);
+
+        String url;
+        try {
+
+            String keyName = String.join(
+                    "/",
+                    bundlePrefix,
+                    deployment.projectId,
+                    deployment.id,
+                    // Where filenames are generated. Prepend random UUID to prevent overwriting
+                    UUID.randomUUID().toString()
+            );
+            url = SparkUtils.uploadMultipartRequestBodyToS3(req, "csvUpload", keyName);
+
+            // Update deployment csvs
+            List<String> updatedCsvList = new ArrayList<>(deployment.peliasCsvFiles);
+            updatedCsvList.add(url);
+
+            // If this is set, a file is being replaced
+            String s3FileToRemove = req.raw().getHeader("urlToDelete");
+            if (s3FileToRemove != null) {
+                updatedCsvList.remove(s3FileToRemove);
+            }
+
+            // Persist changes after removing deleted csv files from s3
+            removeDeletedCsvFiles(updatedCsvList, deployment, req);
+            return Persistence.deployments.updateField(deployment.id, "peliasCsvFiles", updatedCsvList);
+
+        } catch (Exception e) {
+            logMessageAndHalt(req, 500, "Failed to upload file to S3.", e);
+            return null;
+        }
+    }
+
     public static void register (String apiPrefix) {
         // Construct JSON managers which help serialize the response. Slim JSON is the generic JSON view. Full JSON
         // contains additional fields (at the moment just #ec2Instances) and should only be used when the controller
@@ -475,5 +552,7 @@ public class DeploymentController {
         post(apiPrefix + "secure/deployments", DeploymentController::createDeployment, fullJson::write);
         put(apiPrefix + "secure/deployments/:id", DeploymentController::updateDeployment, fullJson::write);
         post(apiPrefix + "secure/deployments/fromfeedsource/:id", DeploymentController::createDeploymentFromFeedSource, fullJson::write);
+        post(apiPrefix + "secure/deployments/:id/upload", DeploymentController::uploadToS3, fullJson::write);
+
     }
 }

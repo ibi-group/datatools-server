@@ -270,7 +270,7 @@
         <dependency>
             <groupId>com.github.conveyal</groupId>
             <artifactId>gtfs-lib</artifactId>
-            <version>6.2.4</version>
+            <version>7.0.3</version>
             <!-- Exclusions added in order to silence SLF4J warnings about multiple bindings:
                 http://www.slf4j.org/codes.html#multiple_bindings
             -->
@@ -365,7 +365,7 @@
         <!-- Error reporting -->
         <dependency>
             <groupId>com.bugsnag</groupId>
-            <version>3.3.0</version>
+            <version>3.6.2</version>
             <artifactId>bugsnag</artifactId>
         </dependency>
 
@@ -408,7 +408,7 @@
         <dependency>
             <groupId>org.yaml</groupId>
             <artifactId>snakeyaml</artifactId>
-            <version>1.23</version>
+            <version>1.26</version>
         </dependency>
         <!-- Used for writing csv for merged feeds. Note: this appears to be one of the only
           CSV libraries that will only quote values when necessary (e.g., there is a comma character

@@ -607,8 +607,9 @@ public class MergeLineContext {
             }
             LOG.info("total stops: {}", stopsCount);
             LOG.info("stops missing stop_code: {}", stopsMissingStopCodeCount);
-            if (stopsMissingStopCodeCount == stopsCount) {
-                // If all stops are missing stop_code, we simply default to merging on stop_id.
+            if (stopsMissingStopCodeCount + specialStopsCount == stopsCount) {
+                // If all stops are missing stop_code (taking into account the special stops that do
+                // not require stop_code), we simply default to merging on stop_id.
                 LOG.warn(
                     "stop_code is not present in file {}/{}. Reverting to stop_id",
                     feedIndex + 1, feedsToMerge.size());
