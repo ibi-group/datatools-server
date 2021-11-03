@@ -149,11 +149,6 @@ public class MergeFeedsJobTest extends UnitTest {
     public void canMergeRegional() throws SQLException {
         // Set up list of feed versions to merge.
         Set<FeedVersion> versions = new HashSet<>();
-        napaVersion = createFeedVersionFromGtfsZip(napa, "napa-no-agency-id.zip");
-        calTrainVersion = createFeedVersionFromGtfsZip(caltrain, "caltrain_gtfs.zip");
-        versions.add(bartVersion1);
-        versions.add(calTrainVersion);
-        versions.add(napaVersion);
         versions.add(bartVersionOldLite);
         versions.add(calTrainVersionLite);
         versions.add(napaVersionLite);
