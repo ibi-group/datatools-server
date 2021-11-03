@@ -450,8 +450,6 @@ public class MergeFeedsJobTest extends UnitTest {
     @Test
     public void canMergeBARTFeeds() throws SQLException {
         Set<FeedVersion> versions = new HashSet<>();
-        versions.add(bartVersion1);
-        versions.add(bartVersion2SameTrips);
         versions.add(bartVersionOldLite);
         versions.add(bartVersionNewLite);
         MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.SERVICE_PERIOD);
@@ -471,7 +469,6 @@ public class MergeFeedsJobTest extends UnitTest {
         );
         // Check GTFS file line numbers.
         assertEquals(
-            // 4629, // Magic number represents the number of trips in the merged BART feed.
             3, // Magic number represents the number of trips in the merged BART feed.
             mergeFeedsJob.mergedVersion.feedLoadResult.trips.rowCount,
             "Merged feed trip count should equal expected value."
@@ -483,15 +480,70 @@ public class MergeFeedsJobTest extends UnitTest {
         );
         assertEquals(
             // During merge, if identical shape_id is found in both feeds, active feed shape_id should be feed-scoped.
-            // bartVersion1.feedLoadResult.shapes.rowCount + bartVersion2SameTrips.feedLoadResult.shapes.rowCount,
             bartVersionOldLite.feedLoadResult.shapes.rowCount + bartVersionNewLite.feedLoadResult.shapes.rowCount,
             mergeFeedsJob.mergedVersion.feedLoadResult.shapes.rowCount,
             "Merged feed shapes count should equal expected value."
         );
         // Expect that two calendar dates are excluded from the active feed (because they occur after the first date of
-        // the future feed) .
-        // int expectedCalendarDatesCount = bartVersion1.feedLoadResult.calendarDates.rowCount + bartVersion2SameTrips.feedLoadResult.calendarDates.rowCount - 2;
+        // the future feed).
         int expectedCalendarDatesCount = bartVersionOldLite.feedLoadResult.calendarDates.rowCount + bartVersionNewLite.feedLoadResult.calendarDates.rowCount - 2;
+        assertEquals(
+            // During merge, if identical shape_id is found in both feeds, active feed shape_id should be feed-scoped.
+            expectedCalendarDatesCount,
+            mergeFeedsJob.mergedVersion.feedLoadResult.calendarDates.rowCount,
+            "Merged feed calendar_dates count should equal expected value."
+        );
+        // Ensure there are no referential integrity errors or duplicate ID errors.
+        assertThatFeedHasNoErrorsOfType(
+            mergeFeedsJob.mergedVersion.namespace,
+            NewGTFSErrorType.REFERENTIAL_INTEGRITY.toString(),
+            NewGTFSErrorType.DUPLICATE_ID.toString()
+        );
+    }
+
+    /**
+     * Tests that the MTC merge strategy will successfully merge BART feeds.
+     */
+    @Test
+    public void canMergeBARTFeedsSameTrips() throws SQLException {
+        Set<FeedVersion> versions = new HashSet<>();
+        versions.add(bartVersion1);
+        versions.add(bartVersion2SameTrips);
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.SERVICE_PERIOD);
+        // Result should succeed this time.
+        mergeFeedsJob.run();
+        assertFeedMergeSucceeded(mergeFeedsJob);
+        // Check GTFS+ line numbers.
+        assertEquals(
+            2, // Magic number represents expected number of lines after merge.
+            mergeFeedsJob.mergeFeedsResult.linesPerTable.get("directions").intValue(),
+            "Merged directions count should equal expected value."
+        );
+        assertEquals(
+            2, // Magic number represents the number of stop_attributes in the merged BART feed.
+            mergeFeedsJob.mergeFeedsResult.linesPerTable.get("stop_attributes").intValue(),
+            "Merged feed stop_attributes count should equal expected value."
+        );
+        // Check GTFS file line numbers.
+        assertEquals(
+            4629, // Magic number represents the number of trips in the merged BART feed.
+            mergeFeedsJob.mergedVersion.feedLoadResult.trips.rowCount,
+            "Merged feed trip count should equal expected value."
+        );
+        assertEquals(
+            9, // Magic number represents the number of routes in the merged BART feed.
+            mergeFeedsJob.mergedVersion.feedLoadResult.routes.rowCount,
+            "Merged feed route count should equal expected value."
+        );
+        assertEquals(
+            // During merge, if identical shape_id is found in both feeds, active feed shape_id should be feed-scoped.
+            bartVersion1.feedLoadResult.shapes.rowCount + bartVersion2SameTrips.feedLoadResult.shapes.rowCount,
+            mergeFeedsJob.mergedVersion.feedLoadResult.shapes.rowCount,
+            "Merged feed shapes count should equal expected value."
+        );
+        // Expect that two calendar dates are excluded from the active feed (because they occur after the first date of
+        // the future feed).
+        int expectedCalendarDatesCount = bartVersion1.feedLoadResult.calendarDates.rowCount + bartVersion2SameTrips.feedLoadResult.calendarDates.rowCount - 2;
         assertEquals(
             // During merge, if identical shape_id is found in both feeds, active feed shape_id should be feed-scoped.
             expectedCalendarDatesCount,
