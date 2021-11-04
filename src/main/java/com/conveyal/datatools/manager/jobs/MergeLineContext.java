@@ -487,10 +487,14 @@ public class MergeLineContext {
         // future routes/stops file.
         if (useAltKey()) {
             if (hasPrimaryKeyErrors(primaryKeyErrors)) {
-                // If alt key is empty (which is permitted), skip
+                // If alt key is empty (which is permitted) and primary key is duplicate, skip
                 // checking of alt key dupe errors/re-mapping values and
                 // simply use the primary key (route_id/stop_id).
-                skipRecord = true;
+                //
+                // Otherwise, allow the record to be written in output.
+                if (hasDuplicateError(primaryKeyErrors)) {
+                    skipRecord = true;
+                }
             } else if (hasDuplicateError(idErrors)) {
                 // If we encounter a route/stop that shares its alt.
                 // ID with a previous route/stop, we need to
@@ -552,7 +556,7 @@ public class MergeLineContext {
     }
 
     private boolean hasPrimaryKeyErrors(Set<NewGTFSError> primaryKeyErrors) {
-        return "".equals(keyValue) && field.name.equals(table.getKeyFieldName()) && hasDuplicateError(primaryKeyErrors);
+        return "".equals(keyValue) && field.name.equals(table.getKeyFieldName());
     }
 
     private boolean useAltKey() {
@@ -605,6 +609,7 @@ public class MergeLineContext {
                 if (isSpecialStop(locationType)) specialStopsCount++;
                 else if (stopCodeIsMissing) stopsMissingStopCodeCount++;
             }
+            stopsReader.close();
             LOG.info("total stops: {}", stopsCount);
             LOG.info("stops missing stop_code: {}", stopsMissingStopCodeCount);
             if (stopsMissingStopCodeCount + specialStopsCount == stopsCount) {

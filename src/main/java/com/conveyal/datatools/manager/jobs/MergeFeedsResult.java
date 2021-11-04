@@ -13,8 +13,6 @@ import java.util.Set;
 public class MergeFeedsResult implements Serializable {
     private static final long serialVersionUID = 1L;
 
-    /** Number of feeds merged */
-    public int feedCount;
     /** Type of merge operation performed */
     public MergeFeedsType type;
     public MergeStrategy mergeStrategy = MergeStrategy.DEFAULT;

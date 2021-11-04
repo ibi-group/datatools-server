@@ -271,6 +271,9 @@ public class MergeFeedsJob extends FeedSourceJob {
                 }
             }
         }
+        for (FeedToMerge feed : feedsToMerge) {
+            feed.close();
+        }
         if (!mergeFeedsResult.failed) {
             // Store feed locally and (if applicable) upload regional feed to S3.
             storeMergedFeed();
@@ -388,7 +391,6 @@ public class MergeFeedsJob extends FeedSourceJob {
             // Iterate over each zip file. For service period merge, the first feed is the future GTFS.
             for (int feedIndex = 0; feedIndex < feedsToMerge.size(); feedIndex++) {
                 ctx.startNewFeed(feedIndex);
-                mergeFeedsResult.feedCount++;
                 if (ctx.skipFile) continue;
                 LOG.info("Adding {} table for {}{}", table.name, ctx.feedSource.name, ctx.version.version);
                 // Iterate over the rows of the table and write them to the merged output table. If an error was

@@ -4,8 +4,6 @@ import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.jobs.FeedToMerge;
 import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
 import com.conveyal.datatools.manager.jobs.MergeFeedsType;
-import com.conveyal.datatools.manager.jobs.MergeLineContext;
-import com.conveyal.datatools.manager.jobs.MergeStrategy;
 import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -17,13 +15,10 @@ import com.conveyal.gtfs.loader.Field;
 import com.conveyal.gtfs.loader.Table;
 import com.conveyal.gtfs.model.StopTime;
 import com.csvreader.CsvReader;
-import com.google.common.collect.Sets;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
@@ -32,16 +27,12 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
-import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 import static com.conveyal.datatools.manager.jobs.MergeFeedsType.REGIONAL;
 import static com.conveyal.datatools.manager.jobs.MergeFeedsType.SERVICE_PERIOD;
-import static com.conveyal.datatools.manager.jobs.MergeStrategy.CHECK_STOP_TIMES;
-import static com.conveyal.datatools.manager.jobs.MergeStrategy.EXTEND_FUTURE;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.REGIONAL_MERGE;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.SERVICE_PERIOD_MERGE;
-import static com.conveyal.gtfs.loader.DateField.GTFS_DATE_FORMATTER;
 import static com.conveyal.gtfs.loader.Field.getFieldIndex;
 
 public class MergeFeedUtils {
@@ -127,6 +118,7 @@ public class MergeFeedUtils {
             // Get fields found from headers and add them to the shared fields set.
             Field[] fieldsFoundInZip = table.getFieldsFromFieldHeaders(csvReader.getHeaders(), null);
             sharedFields.addAll(Arrays.asList(fieldsFoundInZip));
+            csvReader.close();
         }
         return sharedFields;
     }

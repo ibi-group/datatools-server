@@ -6,6 +6,7 @@ import com.google.common.collect.HashMultimap;
 import com.google.common.collect.SetMultimap;
 import com.google.common.collect.Sets;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.util.HashSet;
 import java.util.Set;
@@ -17,7 +18,7 @@ import static com.conveyal.datatools.manager.utils.MergeFeedUtils.getIdsForTable
  * Helper class that collects the feed version and its zip file. Note: this class helps with sorting versions to
  * merge in a list collection.
  */
-public class FeedToMerge {
+public class FeedToMerge implements Closeable {
     public FeedVersion version;
     public ZipFile zipFile;
     public SetMultimap<Table, String> idsForTable = HashMultimap.create();
@@ -36,5 +37,9 @@ public class FeedToMerge {
         }
         serviceIds.addAll(idsForTable.get(Table.CALENDAR));
         serviceIds.addAll(idsForTable.get(Table.CALENDAR_DATES));
+    }
+
+    public void close() throws IOException {
+        this.zipFile.close();
     }
 }
