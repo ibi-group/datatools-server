@@ -219,12 +219,11 @@ public class MergeFeedsJob extends FeedSourceJob {
         try {
             Files.delete(mergedTempFile.toPath());
         } catch (IOException e) {
-            LOG.error(
+            logAndReportToBugsnag(
+                e,
                 "Merged feed file {} not deleted. This may contribute to storage space shortages.",
-                mergedTempFile.getAbsolutePath(),
-                e
+                mergedTempFile.getAbsolutePath()
             );
-            ErrorUtils.reportToBugsnag(e, owner);
         }
     }
 
@@ -233,14 +232,21 @@ public class MergeFeedsJob extends FeedSourceJob {
      * the resulting zip file to storage.
      */
     @Override
-    public void jobLogic() throws IOException, CheckedAWSException {
+    public void jobLogic() {
         // Create temp zip file to add merged feed content to.
-        mergedTempFile = File.createTempFile(filename, null);
+        try {
+            mergedTempFile = File.createTempFile(filename, null);
+        } catch (IOException e) {
+
+            String message = "Error creating temp file for feed merge.";
+            logAndReportToBugsnag(e, message);
+            status.fail(message, e);
+        }
         mergedTempFile.deleteOnExit();
         // Create the zipfile with try with resources so that it is always closed.
         try (ZipOutputStream out = new ZipOutputStream(new FileOutputStream(mergedTempFile))) {
             LOG.info("Created merge file: {}", mergedTempFile.getAbsolutePath());
-            feedsToMerge = collectAndSortFeeds(feedVersions);
+            feedsToMerge = collectAndSortFeeds(feedVersions, owner);
 
             // Determine which tables to merge (only merge GTFS+ tables for MTC extension).
             final List<Table> tablesToMerge = getTablesToMerge();
@@ -270,9 +276,18 @@ public class MergeFeedsJob extends FeedSourceJob {
                     LOG.error("Merge {} table failed!", table.name);
                 }
             }
-        }
-        for (FeedToMerge feed : feedsToMerge) {
-            feed.close();
+        } catch (IOException e) {
+            String message = "Error creating output stream for feed merge.";
+            logAndReportToBugsnag(e, message);
+            status.fail(message, e);
+        } finally {
+            for (FeedToMerge feed : feedsToMerge) {
+                try {
+                    feed.close();
+                } catch (IOException e) {
+                    logAndReportToBugsnag(e, "Error closing FeedToMerge object");
+                }
+            }
         }
         if (!mergeFeedsResult.failed) {
             // Store feed locally and (if applicable) upload regional feed to S3.
@@ -347,14 +362,13 @@ public class MergeFeedsJob extends FeedSourceJob {
      * Handles writing the GTFS zip file to disk. For REGIONAL merges, this will end up in a project subdirectory on s3.
      * Otherwise, it will write to a new version.
      */
-    private void storeMergedFeed() throws IOException, CheckedAWSException {
+    private void storeMergedFeed() {
         if (mergedVersion != null) {
             // Store the zip file for the merged feed version.
             try {
                 mergedVersion.newGtfsFile(new FileInputStream(mergedTempFile));
             } catch (IOException e) {
-                LOG.error("Could not store merged feed for new version", e);
-                throw e;
+                logAndReportToBugsnag(e, "Could not store merged feed for new version");
             }
         }
         // Write the new latest regional merge file to s3://$BUCKET/project/$PROJECT_ID.zip
@@ -363,14 +377,21 @@ public class MergeFeedsJob extends FeedSourceJob {
             // Store the project merged zip locally or on s3
             if (DataManager.useS3) {
                 String s3Key = String.join("/", "project", filename);
-                S3Utils.getDefaultS3Client().putObject(S3Utils.DEFAULT_BUCKET, s3Key, mergedTempFile);
+                try {
+                    S3Utils.getDefaultS3Client().putObject(S3Utils.DEFAULT_BUCKET, s3Key, mergedTempFile);
+                } catch (CheckedAWSException e) {
+                    String message = "Could not upload store merged feed for new version";
+                    logAndReportToBugsnag(e, message);
+                    status.fail(message, e);
+                }
                 LOG.info("Storing merged project feed at {}", S3Utils.getDefaultBucketUriForKey(s3Key));
             } else {
                 try {
                     FeedVersion.feedStore.newFeed(filename, new FileInputStream(mergedTempFile), null);
                 } catch (IOException e) {
-                    LOG.error("Could not store feed for project " + filename, e);
-                    throw e;
+                    String message = "Could not store feed for project " + filename;
+                    logAndReportToBugsnag(e, message);
+                    status.fail(message, e);
                 }
             }
         }
@@ -384,10 +405,11 @@ public class MergeFeedsJob extends FeedSourceJob {
      * @param out          output stream to write table into
      * @return number of lines in merged table
      */
-    private int constructMergedTable(Table table, List<FeedToMerge> feedsToMerge,
-        ZipOutputStream out) throws IOException {
-        MergeLineContext ctx = new MergeLineContext(this, table, out);
+    private int constructMergedTable(Table table, List<FeedToMerge> feedsToMerge, ZipOutputStream out) {
+        MergeLineContext ctx = null;
         try {
+            ctx = new MergeLineContext(this, table, out);
+
             // Iterate over each zip file. For service period merge, the first feed is the future GTFS.
             for (int feedIndex = 0; feedIndex < feedsToMerge.size(); feedIndex++) {
                 ctx.startNewFeed(feedIndex);
@@ -400,16 +422,20 @@ public class MergeFeedsJob extends FeedSourceJob {
                 }
             }
             ctx.flushAndClose();
-        } catch (Exception e) {
+        } catch (IOException e) {
             List<String> versionNames = feedVersions.stream()
                 .map(version -> version.parentFeedSource().name)
                 .collect(Collectors.toList());
-            LOG.error("Error merging feed sources: {}", versionNames, e);
-            throw e;
+            String message = "Error merging feed sources: " + versionNames;
+            logAndReportToBugsnag(e, message);
+            status.fail(message, e);
         }
-        // Track the number of lines in the merged table and return final number.
-        mergeFeedsResult.linesPerTable.put(table.name, ctx.mergedLineNumber);
-        return ctx.mergedLineNumber;
+        if (ctx != null) {
+            // Track the number of lines in the merged table and return final number.
+            mergeFeedsResult.linesPerTable.put(table.name, ctx.mergedLineNumber);
+            return ctx.mergedLineNumber;
+        }
+        return 0;
     }
 
     /**
@@ -512,5 +538,10 @@ public class MergeFeedsJob extends FeedSourceJob {
 
     public String getFeedSourceId() {
         return feedSource.id;
+    }
+
+    private void logAndReportToBugsnag(Exception e, String message, Object... args) {
+        LOG.error(message, args, e);
+        ErrorUtils.reportToBugsnag(e, "datatools", message, owner);
     }
 }

@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.utils;
 
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.FeedToMerge;
 import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
 import com.conveyal.datatools.manager.jobs.MergeFeedsType;
@@ -79,13 +80,14 @@ public class MergeFeedUtils {
      * Note: feed versions are sorted by first calendar date so that future dataset is iterated over first. This is
      * required for the MTC merge strategy which prefers entities from the future dataset over active feed entities.
      */
-    public static List<FeedToMerge> collectAndSortFeeds(Set<FeedVersion> feedVersions) {
+    public static List<FeedToMerge> collectAndSortFeeds(Set<FeedVersion> feedVersions, Auth0UserProfile owner) {
         return feedVersions.stream()
             .map(version -> {
                 try {
                     return new FeedToMerge(version);
                 } catch (Exception e) {
                     LOG.error("Could not create zip file for version: {}", version.version);
+                    ErrorUtils.reportToBugsnag(e, owner);
                     return null;
                 }
             })

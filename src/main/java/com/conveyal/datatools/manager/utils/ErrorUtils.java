@@ -7,6 +7,7 @@ import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -30,6 +31,21 @@ public class ErrorUtils {
      */
     public static void reportToBugsnag(Throwable e, Auth0UserProfile userProfile) {
         reportToBugsnag(e, null, userProfile);
+    }
+
+    /**
+     * Log an error, and create and send a report to bugsnag if configured.
+     *
+     * @param e The throwable object to send to Bugsnag. This MUST be provided or a report will not be generated.
+     * @param sourceApp The application generating the message (datatools, otp-runner, ...).
+     * @param message The message to log and to send to Bugsnag.
+     * @param userProfile An optional user profile. If provided, the email address from this profile will be set in the
+     *                    Bugsnag report.
+     */
+    public static void reportToBugsnag(Throwable e, String sourceApp, String message, Auth0UserProfile userProfile) {
+        Map<String, String> debuggingMessages = new HashMap<>();
+        debuggingMessages.put(sourceApp + " message", message);
+        reportToBugsnag(e, debuggingMessages, userProfile);
     }
 
     /**
