@@ -1,4 +1,4 @@
-package com.conveyal.datatools.manager.jobs;
+package com.conveyal.datatools.manager.jobs.feedmerge;
 
 /**
  * This enum defines the different strategies for merging, which is currently dependent on whether trip_ids and/or

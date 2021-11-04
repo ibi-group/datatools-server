@@ -1,4 +1,6 @@
-package com.conveyal.datatools.manager.jobs;
+package com.conveyal.datatools.manager.jobs.feedmerge;
+
+import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
 
 import java.io.Serializable;
 import java.util.Date;

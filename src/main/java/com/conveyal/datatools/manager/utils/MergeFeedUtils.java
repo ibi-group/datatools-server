@@ -2,9 +2,9 @@ package com.conveyal.datatools.manager.utils;
 
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
-import com.conveyal.datatools.manager.jobs.FeedToMerge;
+import com.conveyal.datatools.manager.jobs.feedmerge.FeedToMerge;
 import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
-import com.conveyal.datatools.manager.jobs.MergeFeedsType;
+import com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType;
 import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -30,8 +30,8 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.zip.ZipFile;
 
-import static com.conveyal.datatools.manager.jobs.MergeFeedsType.REGIONAL;
-import static com.conveyal.datatools.manager.jobs.MergeFeedsType.SERVICE_PERIOD;
+import static com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType.REGIONAL;
+import static com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType.SERVICE_PERIOD;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.REGIONAL_MERGE;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.SERVICE_PERIOD_MERGE;
 import static com.conveyal.gtfs.loader.Field.getFieldIndex;

@@ -6,6 +6,11 @@ import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.gtfsplus.tables.GtfsPlusTable;
+import com.conveyal.datatools.manager.jobs.feedmerge.FeedToMerge;
+import com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsResult;
+import com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType;
+import com.conveyal.datatools.manager.jobs.feedmerge.MergeLineContext;
+import com.conveyal.datatools.manager.jobs.feedmerge.MergeStrategy;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
@@ -34,10 +39,10 @@ import java.util.Set;
 import java.util.stream.Collectors;
 import java.util.zip.ZipOutputStream;
 
-import static com.conveyal.datatools.manager.jobs.MergeFeedsType.SERVICE_PERIOD;
-import static com.conveyal.datatools.manager.jobs.MergeFeedsType.REGIONAL;
-import static com.conveyal.datatools.manager.jobs.MergeStrategy.CHECK_STOP_TIMES;
-import static com.conveyal.datatools.manager.jobs.MergeStrategy.EXTEND_FUTURE;
+import static com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType.SERVICE_PERIOD;
+import static com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType.REGIONAL;
+import static com.conveyal.datatools.manager.jobs.feedmerge.MergeStrategy.CHECK_STOP_TIMES;
+import static com.conveyal.datatools.manager.jobs.feedmerge.MergeStrategy.EXTEND_FUTURE;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.REGIONAL_MERGE;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.*;
 

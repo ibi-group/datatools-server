@@ -1,4 +1,4 @@
-package com.conveyal.datatools.manager.jobs;
+package com.conveyal.datatools.manager.jobs.feedmerge;
 
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.gtfs.loader.Table;
