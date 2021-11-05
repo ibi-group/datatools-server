@@ -229,8 +229,7 @@ public class MergeLineContext {
             String key = getTableScopedValue(field.referenceTable, idScope, fieldContext.getValue());
             // Check if we're performing a service period merge, this ref field is a service_id, and it
             // is not found in the list of service_ids (e.g., it was removed).
-            String valueToWrite = fieldContext.getValueToWrite();
-            boolean isValidServiceId = mergeFeedsResult.serviceIds.contains(valueToWrite);
+            boolean isValidServiceId = mergeFeedsResult.serviceIds.contains(fieldContext.getValueToWrite());
 
             // If the current foreign ref points to another record that has
             // been skipped or is a ref to a non-existent service_id during a service period merge, skip
@@ -241,7 +240,7 @@ public class MergeLineContext {
                 // valid service_ids found in calendar_dates, do not skip that record for both the
                 // calendar_date and any related trips.
                 if (fieldNameEquals(SERVICE_ID) && isValidServiceId) {
-                    LOG.warn("Not skipping valid service_id {} for {} {}", valueToWrite, table.name, keyValue);
+                    LOG.warn("Not skipping valid service_id {} for {} {}", fieldContext.getValueToWrite(), table.name, keyValue);
                 } else {
                     String skippedKey = getTableScopedValue(table, idScope, keyValue);
                     if (orderField != null) {
@@ -258,7 +257,7 @@ public class MergeLineContext {
             if (mergeFeedsResult.remappedIds.containsKey(key)) {
                 mergeFeedsResult.remappedReferences++;
                 // If the value has been remapped update the value to write.
-                valueToWrite = mergeFeedsResult.remappedIds.get(key);
+                fieldContext.setValueToWrite(mergeFeedsResult.remappedIds.get(key));
             }
         }
         return true;
