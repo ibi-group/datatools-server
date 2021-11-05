@@ -1,12 +1,14 @@
 package com.conveyal.datatools.manager.jobs.feedmerge;
 
 import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
+import com.conveyal.gtfs.error.NewGTFSError;
 import com.conveyal.gtfs.loader.Table;
 import com.csvreader.CsvReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
+import java.util.Set;
 import java.util.zip.ZipOutputStream;
 
 import static com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType.SERVICE_PERIOD;
@@ -24,6 +26,11 @@ public class StopsMergeLineContext extends MergeLineContext {
     @Override
     public void checkFirstLineConditions() throws IOException {
         checkStopCodeStuff();
+    }
+
+    @Override
+    public void checkFieldsForMergeConflicts(Set<NewGTFSError> idErrors) throws IOException {
+        checkRoutesAndStopsIds(idErrors);
     }
 
     private void checkStopCodeStuff() throws IOException {

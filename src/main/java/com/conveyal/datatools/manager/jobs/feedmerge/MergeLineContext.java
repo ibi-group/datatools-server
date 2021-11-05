@@ -4,7 +4,6 @@ import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.gtfs.error.NewGTFSError;
-import com.conveyal.gtfs.error.NewGTFSErrorType;
 import com.conveyal.gtfs.loader.Field;
 import com.conveyal.gtfs.loader.ReferenceTracker;
 import com.conveyal.gtfs.loader.Table;
@@ -17,7 +16,6 @@ import org.supercsv.prefs.CsvPreference;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.time.LocalDate;
-import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -30,7 +28,6 @@ import java.util.zip.ZipOutputStream;
 
 import static com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType.REGIONAL;
 import static com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType.SERVICE_PERIOD;
-import static com.conveyal.datatools.manager.jobs.feedmerge.MergeStrategy.CHECK_STOP_TIMES;
 import static com.conveyal.datatools.manager.jobs.feedmerge.MergeStrategy.EXTEND_FUTURE;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.containsField;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.getAllFields;
@@ -42,22 +39,22 @@ import static com.conveyal.gtfs.loader.DateField.GTFS_DATE_FORMATTER;
 
 public class MergeLineContext {
     private static final String AGENCY_ID = "agency_id";
-    private static final String SERVICE_ID = "service_id";
+    protected static final String SERVICE_ID = "service_id";
     private static final String STOPS = "stops";
     private static final Logger LOG = LoggerFactory.getLogger(MergeLineContext.class);
     protected final MergeFeedsJob job;
     private final ZipOutputStream out;
-    protected final Set<Field> allFields;
-    private LocalDate futureFirstCalendarStartDate;
-    private final LocalDate activeFeedFirstDate;
-    private LocalDate futureFeedFirstDate;
+    protected final Set<Field> allFields; // try to make private
+    protected LocalDate futureFirstCalendarStartDate;
+    protected final LocalDate activeFeedFirstDate;
+    protected LocalDate futureFeedFirstDate; // try to make private
     private boolean handlingActiveFeed;
     private boolean handlingFutureFeed;
     private String idScope;
     // CSV writer used to write to zip file.
     private final CsvListWriter writer;
     private CsvReader csvReader;
-    private boolean skipRecord;
+    protected boolean skipRecord;
     protected String newAgencyId; // move
     protected boolean keyFieldMissing;
     private String[] rowValues;
@@ -65,10 +62,10 @@ public class MergeLineContext {
     protected final Table table;
     protected FeedToMerge feed;
     protected String keyValue;
-    private final ReferenceTracker referenceTracker = new ReferenceTracker();
+    protected final ReferenceTracker referenceTracker = new ReferenceTracker();
     protected String keyField;
     private String orderField;
-    private final MergeFeedsResult mergeFeedsResult;
+    protected final MergeFeedsResult mergeFeedsResult;
     protected final List<FeedToMerge> feedsToMerge;
     protected int keyFieldIndex;
     protected Field[] fieldsFoundInZip; // try to make private
@@ -77,12 +74,10 @@ public class MergeLineContext {
     // Set up objects for tracking the rows encountered
     private final Map<String, String[]> rowValuesForStopOrRouteId = new HashMap<>();
     private final Set<String> rowStrings = new HashSet<>();
-    // Track shape_ids found in future feed in order to check for conflicts with active feed (MTC only).
-    private final Set<String> shapeIdsInFutureFeed = new HashSet<>();
     private List<Field> sharedSpecFields;
     private int index;
-    private String val;
-    private String valueToWrite;
+    protected String val;
+    protected String valueToWrite;
     protected int feedIndex;
 
     public FeedVersion version;
@@ -94,27 +89,25 @@ public class MergeLineContext {
         switch (table.name) {
             case "agency":
                 return new AgencyMergeLineContext(job, table, out);
+            case "calendar":
+                return new CalendarMergeLineContext(job, table, out);
+            case "calendar_dates":
+                return new CalendarDatesMergeLineContext(job, table, out);
+            case "routes":
+                return new RoutesMergeLineContext(job, table, out);
+            case "shapes":
+                return new ShapesMergeLineContext(job, table, out);
             case STOPS:
                 return new StopsMergeLineContext(job, table, out);
-/*
-            case "calendar":
-                break;
-            case "calendar_dates":
-                break;
-            case "feed_info":
-                break;
-            case "routes":
-                break;
-            case "shapes":
-                break;
-            case "stops":
-                break;
             case "trips":
+                return new TripsMergeLineContext(job, table, out);
+/*
+            case "feed_info":
                 break;
 */
             default:
                 return new MergeLineContext(job, table, out);
-                //throw new IllegalArgumentException(table.name);
+            //throw new IllegalArgumentException(table.name);
         }
         //return null;
     }
@@ -191,6 +184,7 @@ public class MergeLineContext {
 
     /**
      * Iterate over all rows in table and write them to the output zip.
+     *
      * @return false, if a failing condition was encountered. true, if everything was ok.
      */
     public boolean iterateOverRows() throws IOException {
@@ -250,7 +244,7 @@ public class MergeLineContext {
                     String skippedKey = getTableScopedValue(table, idScope, keyValue);
                     if (orderField != null) {
                         skippedKey = String.join(":", skippedKey,
-                            csvReader.get(getFieldIndex(orderField)));
+                            getCsvValue(orderField));
                     }
                     mergeFeedsResult.skippedIds.add(skippedKey);
                     skipRecord = true;
@@ -275,40 +269,12 @@ public class MergeLineContext {
         return mergeFeedsResult.skippedIds.contains(key) || serviceIdShouldBeSkipped;
     }
 
-    public void checkFieldsForMergeConflicts() throws IOException {
-        Set<NewGTFSError> idErrors = getIdErrors();
-        // Store values for key fields that have been encountered and update any key values that need modification due
-        // to conflicts.
-        switch (table.name) {
-            case "calendar":
-                checkCalendarIds(idErrors);
-                break;
-            case "calendar_dates":
-                checkCalendarDatesIds();
-                break;
-            case "shapes":
-                checkShapeIds(idErrors);
-                break;
-            case "trips":
-                checkTripIds(idErrors);
-                break;
-            // When stop_code is included, stop merging will be based on that. If stop_code is not
-            // included, it will be based on stop_id. All stops in future data will be carried
-            // forward and any stops found in active data that are not in the future data shall be
-            // appended. If one of the feed is missing stop_code, merge fails with a notification to
-            // the user with suggestion that the feed with missing stop_code must be fixed with
-            // stop_code.
-            // NOTE: route case is also used by the stops case, so the route
-            // case must follow this block.
-            case STOPS:
-            case "routes":
-                checkRoutesAndStopsIds(idErrors);
-                break;
-            default:
-                // For any other table, skip any duplicate record.
-                if (hasDuplicateError(idErrors)) skipRecord = true;
-                break;
-        }
+
+    /**
+     * Overridable method whose default behavior below is to skip a record if it creates a duplicate id.
+     */
+    public void checkFieldsForMergeConflicts(Set<NewGTFSError> idErrors) throws IOException {
+        if (hasDuplicateError(idErrors)) skipRecord = true;
     }
 
     private Set<NewGTFSError> getIdErrors() {
@@ -332,171 +298,7 @@ public class MergeLineContext {
         return idErrors;
     }
 
-    private void checkTripIds(Set<NewGTFSError> idErrors) {
-        // trip_ids between active and future datasets must not match. The tripIdsToSkip and
-        // tripIdsToModify sets below are determined based on the MergeStrategy used for MTC
-        // service period merges.
-        if (handlingActiveFeed) {
-            // Handling active feed. Skip or modify trip id if found in one of the
-            // respective sets.
-            if (job.tripIdsToSkipForActiveFeed.contains(keyValue)) {
-                skipRecord = true;
-            } else if (job.tripIdsToModifyForActiveFeed.contains(keyValue)) {
-                valueToWrite = String.join(":", idScope, val);
-                // Update key value for subsequent ID conflict checks for this row.
-                keyValue = valueToWrite;
-                mergeFeedsResult.remappedIds.put(
-                    getTableScopedValue(table, idScope, val),
-                    valueToWrite
-                );
-            }
-        }
-        for (NewGTFSError error : idErrors) {
-            if (error.errorType.equals(NewGTFSErrorType.DUPLICATE_ID)) {
-                valueToWrite = String.join(":", idScope, val);
-                // Update key value for subsequent ID conflict checks for this row.
-                keyValue = valueToWrite;
-                mergeFeedsResult.remappedIds.put(
-                    getTableScopedValue(table, idScope, val),
-                    valueToWrite
-                );
-            }
-        }
-    }
-
-    private void checkShapeIds(Set<NewGTFSError> idErrors) {
-        // If a shape_id is found in both future and active datasets, all shape points from
-        // the active dataset must be feed-scoped. Otherwise, the merged dataset may contain
-        // shape_id:shape_pt_sequence values from both datasets (e.g., if future dataset contains
-        // sequences 1,2,3,10 and active contains 1,2,7,9,10; the merged set will contain
-        // 1,2,3,7,9,10).
-        if (field.name.equals("shape_id")) {
-            if (handlingFutureFeed) {
-                // Track shape_id if working on future feed.
-                shapeIdsInFutureFeed.add(val);
-            } else if (shapeIdsInFutureFeed.contains(val)) {
-                // For the active feed, if the shape_id was already processed from the
-                // future feed, we need to add the feed-scope to avoid weird, hybrid shapes
-                // with points from both feeds.
-                valueToWrite = String.join(":", idScope, val);
-                // Update key value for subsequent ID conflict checks for this row.
-                keyValue = valueToWrite;
-                mergeFeedsResult.remappedIds.put(
-                    getTableScopedValue(table, idScope, val),
-                    valueToWrite
-                );
-                // Re-check refs and uniqueness after changing shape_id value. (Note: this
-                // probably won't have any impact, but there's not much harm in including it.)
-                idErrors = referenceTracker
-                    .checkReferencesAndUniqueness(keyValue, lineNumber, field, valueToWrite,
-                        table, keyField, orderField);
-            }
-        }
-        // Skip record if normal duplicate errors are found.
-        if (hasDuplicateError(idErrors)) skipRecord = true;
-    }
-
-    private void checkCalendarDatesIds() throws IOException {
-        // Drop any calendar_dates.txt records from the existing feed for dates that are
-        // not before the first date of the future feed.
-        int dateIndex = getFieldIndex("date");
-        LocalDate date = LocalDate.parse(csvReader.get(dateIndex), GTFS_DATE_FORMATTER);
-        if (handlingActiveFeed && !date.isBefore(futureFeedFirstDate)) {
-            LOG.warn(
-                "Skipping calendar_dates entry {} because it operates in the time span of future feed (i.e., after or on {}).",
-                keyValue,
-                futureFeedFirstDate);
-            String key = getTableScopedValue(table, idScope, keyValue);
-            mergeFeedsResult.skippedIds.add(key);
-            skipRecord = true;
-        }
-        // Track service ID because we want to avoid removing trips that may reference this
-        // service_id when the service_id is used by calendar.txt records that operate in
-        // the valid date range, i.e., before the future feed's first date.
-        if (!skipRecord && field.name.equals(SERVICE_ID)) mergeFeedsResult.serviceIds.add(valueToWrite);
-    }
-
-    private void checkCalendarIds(Set<NewGTFSError> idErrors) throws IOException {
-        // If any service_id in the active feed matches with the future
-        // feed, it should be modified and all associated trip records
-        // must also be changed with the modified service_id.
-        // TODO How can we check that calendar_dates entries are
-        //  duplicates? I think we would need to consider the
-        //  service_id:exception_type:date as the unique key and include any
-        //  all entries as long as they are unique on this key.
-        if (hasDuplicateError(idErrors)) {
-            String key = getTableScopedValue(table, idScope, val);
-            // Modify service_id and ensure that referencing trips
-            // have service_id updated.
-            valueToWrite = String.join(":", idScope, val);
-            mergeFeedsResult.remappedIds.put(key, valueToWrite);
-        }
-        int startDateIndex = getFieldIndex("start_date");
-        LocalDate startDate = LocalDate.parse(csvReader.get(startDateIndex), GTFS_DATE_FORMATTER);
-        if (handlingFutureFeed) {
-            // For the future feed, check if the calendar's start date is earlier than the
-            // previous earliest value and update if so.
-            if (futureFirstCalendarStartDate.isAfter(startDate)) {
-                futureFirstCalendarStartDate = startDate;
-            }
-            // FIXME: Move this below so that a cloned service doesn't get prematurely
-            //  modified? (do we want the cloned record to have the original values?)
-            if (shouldUpdateFutureFeedStartDate(startDateIndex)) {
-                // Update start_date to extend service through the active feed's
-                // start date if the merge strategy dictates. The justification for this logic is that the active feed's
-                // service_id will be modified to a different unique value and the trips shared between the future/active
-                // service are exactly matching.
-                val = valueToWrite = activeFeedFirstDate.format(GTFS_DATE_FORMATTER);
-            }
-        } else {
-            // If a service_id from the active calendar has both the
-            // start_date and end_date in the future, the service will be
-            // excluded from the merged file. Records in trips,
-            // calendar_dates, and calendar_attributes referencing this
-            // service_id shall also be removed/ignored. Stop_time records
-            // for the ignored trips shall also be removed.
-            if (!startDate.isBefore(futureFeedFirstDate)) {
-                LOG.warn(
-                    "Skipping calendar entry {} because it operates fully within the time span of future feed.",
-                    keyValue);
-                String key = getTableScopedValue(table, idScope, keyValue);
-                mergeFeedsResult.skippedIds.add(key);
-                skipRecord = true;
-            } else {
-                // If a service_id from the active calendar has only the
-                // end_date in the future, the end_date shall be set to one
-                // day prior to the earliest start_date in future dataset
-                // before appending the calendar record to the merged file.
-                int endDateIndex = getFieldIndex("end_date");
-                if (index == endDateIndex) {
-                    LocalDate endDate = LocalDate
-                        .parse(csvReader.get(endDateIndex), GTFS_DATE_FORMATTER);
-                    if (!endDate.isBefore(futureFeedFirstDate)) {
-                        val = valueToWrite = futureFeedFirstDate
-                            .minus(1, ChronoUnit.DAYS)
-                            .format(GTFS_DATE_FORMATTER);
-                    }
-                }
-            }
-        }
-        // Track service ID because we want to avoid removing trips that may reference this
-        // service_id when the service_id is used by calendar_dates that operate in the valid
-        // date range, i.e., before the future feed's first date.
-        if (!skipRecord && field.name.equals(SERVICE_ID)) mergeFeedsResult.serviceIds.add(valueToWrite);
-    }
-
-    private boolean shouldUpdateFutureFeedStartDate(int startDateIndex) {
-        return index == startDateIndex &&
-            (
-                EXTEND_FUTURE == mergeFeedsResult.mergeStrategy ||
-                (
-                    CHECK_STOP_TIMES == mergeFeedsResult.mergeStrategy &&
-                        job.serviceIdsToExtend.contains(keyValue)
-                )
-            );
-    }
-
-    private void checkRoutesAndStopsIds(Set<NewGTFSError> idErrors) throws IOException {
+    protected void checkRoutesAndStopsIds(Set<NewGTFSError> idErrors) throws IOException {
         // First, check uniqueness of primary key value (i.e., stop or route ID)
         // in case the stop_code or route_short_name are being used. This
         // must occur unconditionally because each record must be tracked
@@ -656,10 +458,16 @@ public class MergeLineContext {
         return false;
     }
 
-    public void checkFirstLineConditions() throws IOException {}
+    /**
+     * Overridable placeholder for checking the first line of a file.
+     */
+    public void checkFirstLineConditions() throws IOException {
+        // Default is to do nothing.
+    }
 
     /**
      * Check for some conditions that could occur when handling a service period merge.
+     *
      * @return true if the merge encountered failing conditions
      */
     public boolean checkMismatchedAgency() {
@@ -792,7 +600,10 @@ public class MergeLineContext {
             // track references for a large number of feeds (e.g., every feed in New
             // York State).
             if (job.mergeType.equals(SERVICE_PERIOD)) {
-                checkFieldsForMergeConflicts();
+                Set<NewGTFSError> idErrors = getIdErrors();
+                // Store values for key fields that have been encountered and update any key values that need modification due
+                // to conflicts.
+                checkFieldsForMergeConflicts(idErrors);
                 if (skipRecord) continue;
             }
             // If the current field is a foreign reference, check if the reference has been removed in the
@@ -836,6 +647,10 @@ public class MergeLineContext {
         return false;
     }
 
+    public boolean isHandlingActiveFeed() {
+        return handlingActiveFeed;
+    }
+
     public boolean isHandlingFutureFeed() {
         return handlingFutureFeed;
     }
@@ -846,5 +661,32 @@ public class MergeLineContext {
 
     protected int getFieldIndex(String fieldName) {
         return Field.getFieldIndex(fieldsFoundInZip, fieldName);
+    }
+
+    protected String getIdScope() {
+        return idScope;
+    }
+
+    protected Field getField() {
+        return field;
+    }
+
+    protected int getLineNumber() {
+        return lineNumber;
+    }
+
+    /**
+     * Retrieves the value for the specified CSV field.
+     */
+    protected String getCsvValue(String fieldName) throws IOException {
+        int fieldIndex = getFieldIndex(fieldName);
+        return csvReader.get(fieldIndex);
+    }
+
+    /**
+     * Retrieves the value for the specified CSV field as {@link LocalDate}.
+     */
+    protected LocalDate getCsvDate(String fieldName) throws IOException {
+        return LocalDate.parse(getCsvValue(fieldName), GTFS_DATE_FORMATTER);
     }
 }
