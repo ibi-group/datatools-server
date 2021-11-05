@@ -9,7 +9,6 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.zip.ZipOutputStream;
 
-import static com.conveyal.datatools.manager.utils.MergeFeedUtils.getTableScopedValue;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.hasDuplicateError;
 
 public class ShapesMergeLineContext extends MergeLineContext {
@@ -21,7 +20,7 @@ public class ShapesMergeLineContext extends MergeLineContext {
     }
 
     @Override
-    public void checkFieldsForMergeConflicts(Set<NewGTFSError> idErrors) throws IOException {
+    public void checkFieldsForMergeConflicts(Set<NewGTFSError> idErrors) {
         checkShapeIds(idErrors);
     }
 
@@ -39,13 +38,7 @@ public class ShapesMergeLineContext extends MergeLineContext {
                 // For the active feed, if the shape_id was already processed from the
                 // future feed, we need to add the feed-scope to avoid weird, hybrid shapes
                 // with points from both feeds.
-                valueToWrite = String.join(":", getIdScope(), val);
-                // Update key value for subsequent ID conflict checks for this row.
-                keyValue = valueToWrite;
-                mergeFeedsResult.remappedIds.put(
-                    getTableScopedValue(table, getIdScope(), val),
-                    valueToWrite
-                );
+                updateAndRemapValue(true);
                 // Re-check refs and uniqueness after changing shape_id value. (Note: this
                 // probably won't have any impact, but there's not much harm in including it.)
                 idErrors = referenceTracker

@@ -282,11 +282,7 @@ public class MergeLineContext {
         // If analyzing the second feed (active feed), the service_id always gets feed scoped.
         // See https://github.com/ibi-group/datatools-server/issues/244
         if (handlingActiveFeed && field.name.equals(SERVICE_ID)) {
-            valueToWrite = String.join(":", idScope, val);
-            mergeFeedsResult.remappedIds.put(
-                getTableScopedValue(table, idScope, val),
-                valueToWrite
-            );
+            updateAndRemapValue();
             idErrors = referenceTracker
                 .checkReferencesAndUniqueness(keyValue, lineNumber, field, valueToWrite,
                     table, keyField, orderField);
@@ -359,11 +355,9 @@ public class MergeLineContext {
             // both of these routes to end up in the merged feed in this case because we're
             // matching on short name, so we must modify the route_id.
             if (!skipRecord && !referenceTracker.transitIds.contains(String.join(":", keyField, keyValue)) && hasDuplicateError(primaryKeyErrors)) {
-                String key = getTableScopedValue(table, idScope, val);
                 // Modify route_id and ensure that referencing trips
                 // have route_id updated.
-                valueToWrite = String.join(":", idScope, val);
-                mergeFeedsResult.remappedIds.put(key, valueToWrite);
+                updateAndRemapValue();
             }
         } else {
             // Key field has defaulted to the standard primary key field
@@ -688,5 +682,26 @@ public class MergeLineContext {
      */
     protected LocalDate getCsvDate(String fieldName) throws IOException {
         return LocalDate.parse(getCsvValue(fieldName), GTFS_DATE_FORMATTER);
+    }
+
+    /**
+     * Updates output for the current field and remaps the record id.
+     */
+    protected void updateAndRemapValue(boolean updateKeyValue) {
+        valueToWrite = String.join(":", idScope, val);
+        if (updateKeyValue) {
+            keyValue = valueToWrite;
+        }
+        mergeFeedsResult.remappedIds.put(
+            getTableScopedValue(table, idScope, val),
+            valueToWrite
+        );
+    }
+
+    /**
+     * Shorthand for the above method.
+     */
+    protected void updateAndRemapValue() {
+        updateAndRemapValue(false);
     }
 }

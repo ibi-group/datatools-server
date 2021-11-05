@@ -39,14 +39,10 @@ public class CalendarMergeLineContext extends MergeLineContext {
         //  service_id:exception_type:date as the unique key and include any
         //  all entries as long as they are unique on this key.
 
-        String idScope = getIdScope();
-
         if (hasDuplicateError(idErrors)) {
-            String key = getTableScopedValue(table, idScope, val);
             // Modify service_id and ensure that referencing trips
             // have service_id updated.
-            valueToWrite = String.join(":", idScope, val);
-            mergeFeedsResult.remappedIds.put(key, valueToWrite);
+            updateAndRemapValue();
         }
 
         LocalDate startDate = getCsvDate("start_date");
@@ -76,7 +72,7 @@ public class CalendarMergeLineContext extends MergeLineContext {
                 LOG.warn(
                     "Skipping calendar entry {} because it operates fully within the time span of future feed.",
                     keyValue);
-                String key = getTableScopedValue(table, idScope, keyValue);
+                String key = getTableScopedValue(table, getIdScope(), keyValue);
                 mergeFeedsResult.skippedIds.add(key);
                 skipRecord = true;
             } else {
