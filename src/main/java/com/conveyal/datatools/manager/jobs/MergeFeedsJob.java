@@ -413,7 +413,7 @@ public class MergeFeedsJob extends FeedSourceJob {
     private int constructMergedTable(Table table, List<FeedToMerge> feedsToMerge, ZipOutputStream out) {
         MergeLineContext ctx = null;
         try {
-            ctx = new MergeLineContext(this, table, out);
+            ctx = MergeLineContext.create(this, table, out);
 
             // Iterate over each zip file. For service period merge, the first feed is the future GTFS.
             for (int feedIndex = 0; feedIndex < feedsToMerge.size(); feedIndex++) {

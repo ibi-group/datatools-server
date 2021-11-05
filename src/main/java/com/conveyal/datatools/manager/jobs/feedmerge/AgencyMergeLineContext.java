@@ -11,18 +11,17 @@ import java.util.List;
 import java.util.UUID;
 import java.util.zip.ZipOutputStream;
 
-public class AgencyLineContext extends MergeLineContext {
-    public AgencyLineContext(MergeFeedsJob job, Table table, ZipOutputStream out) throws IOException {
+public class AgencyMergeLineContext extends MergeLineContext {
+    public AgencyMergeLineContext(MergeFeedsJob job, Table table, ZipOutputStream out) throws IOException {
         super(job, table, out);
     }
 
-    // @Override
+    @Override
     public void checkFirstLineConditions() {
         checkForMissingAgencyId();
     }
 
     private void checkForMissingAgencyId() {
-        /*
         if ((keyFieldMissing || keyValue.equals(""))) {
             // agency_id is optional if only one agency is present, but that will
             // cause issues for the feed merge, so we need to insert an agency_id
@@ -37,7 +36,5 @@ public class AgencyLineContext extends MergeLineContext {
             }
             fieldsFoundList = Arrays.asList(fieldsFoundInZip);
         }
-
-         */
     }
 }

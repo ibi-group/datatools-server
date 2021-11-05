@@ -9,7 +9,6 @@ import com.conveyal.gtfs.loader.Field;
 import com.conveyal.gtfs.loader.ReferenceTracker;
 import com.conveyal.gtfs.loader.Table;
 import com.csvreader.CsvReader;
-import org.apache.commons.lang3.NotImplementedException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.supercsv.io.CsvListWriter;
@@ -19,14 +18,12 @@ import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.time.LocalDate;
 import java.time.temporal.ChronoUnit;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
@@ -40,19 +37,17 @@ import static com.conveyal.datatools.manager.utils.MergeFeedUtils.getAllFields;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.getMergeKeyField;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.getTableScopedValue;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.hasDuplicateError;
-import static com.conveyal.datatools.manager.utils.MergeFeedUtils.stopCodeFailureMessage;
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.conveyal.gtfs.loader.DateField.GTFS_DATE_FORMATTER;
-import static com.conveyal.gtfs.loader.Field.getFieldIndex;
 
 public class MergeLineContext {
     private static final String AGENCY_ID = "agency_id";
     private static final String SERVICE_ID = "service_id";
     private static final String STOPS = "stops";
     private static final Logger LOG = LoggerFactory.getLogger(MergeLineContext.class);
-    private final MergeFeedsJob job;
+    protected final MergeFeedsJob job;
     private final ZipOutputStream out;
-    private final Set<Field> allFields;
+    protected final Set<Field> allFields;
     private LocalDate futureFirstCalendarStartDate;
     private final LocalDate activeFeedFirstDate;
     private LocalDate futureFeedFirstDate;
@@ -63,33 +58,32 @@ public class MergeLineContext {
     private final CsvListWriter writer;
     private CsvReader csvReader;
     private boolean skipRecord;
-    private String newAgencyId;
-    private boolean keyFieldMissing;
+    protected String newAgencyId; // move
+    protected boolean keyFieldMissing;
     private String[] rowValues;
     private int lineNumber = 0;
     protected final Table table;
-    private FeedToMerge feed;
-    private String keyValue;
+    protected FeedToMerge feed;
+    protected String keyValue;
     private final ReferenceTracker referenceTracker = new ReferenceTracker();
-    private String keyField;
+    protected String keyField;
     private String orderField;
     private final MergeFeedsResult mergeFeedsResult;
-    private final List<FeedToMerge> feedsToMerge;
-    private int keyFieldIndex;
-    private Field[] fieldsFoundInZip;
-    private List<Field> fieldsFoundList;
+    protected final List<FeedToMerge> feedsToMerge;
+    protected int keyFieldIndex;
+    protected Field[] fieldsFoundInZip; // try to make private
+    protected List<Field> fieldsFoundList;
     private Field field;
     // Set up objects for tracking the rows encountered
     private final Map<String, String[]> rowValuesForStopOrRouteId = new HashMap<>();
     private final Set<String> rowStrings = new HashSet<>();
-    private boolean stopCodeMissingFromFutureFeed = false;
     // Track shape_ids found in future feed in order to check for conflicts with active feed (MTC only).
     private final Set<String> shapeIdsInFutureFeed = new HashSet<>();
     private List<Field> sharedSpecFields;
     private int index;
     private String val;
     private String valueToWrite;
-    private int feedIndex;
+    protected int feedIndex;
 
     public FeedVersion version;
     public FeedSource feedSource;
@@ -99,7 +93,10 @@ public class MergeLineContext {
     public static MergeLineContext create(MergeFeedsJob job, Table table, ZipOutputStream out) throws IOException {
         switch (table.name) {
             case "agency":
-                return new AgencyLineContext(job, table, out);
+                return new AgencyMergeLineContext(job, table, out);
+            case STOPS:
+                return new StopsMergeLineContext(job, table, out);
+/*
             case "calendar":
                 break;
             case "calendar_dates":
@@ -114,13 +111,15 @@ public class MergeLineContext {
                 break;
             case "trips":
                 break;
+*/
             default:
-                throw new IllegalArgumentException(table.name);
+                return new MergeLineContext(job, table, out);
+                //throw new IllegalArgumentException(table.name);
         }
-        return null;
+        //return null;
     }
 
-    public MergeLineContext(MergeFeedsJob job, Table table, ZipOutputStream out) throws IOException {
+    protected MergeLineContext(MergeFeedsJob job, Table table, ZipOutputStream out) throws IOException {
         this.job = job;
         this.table = table;
         this.feedsToMerge = job.getFeedsToMerge();
@@ -172,7 +171,7 @@ public class MergeLineContext {
         fieldsFoundInZip = table.getFieldsFromFieldHeaders(csvReader.getHeaders(), null);
         fieldsFoundList = Arrays.asList(fieldsFoundInZip);
         // Determine the index of the key field for this version's table.
-        keyFieldIndex = getFieldIndex(fieldsFoundInZip, keyField);
+        keyFieldIndex = getFieldIndex(keyField);
         if (keyFieldIndex == -1) {
             LOG.error("No {} field exists for {} table (feed={})", keyField, table.name, version.id);
             keyFieldMissing = true;
@@ -204,10 +203,12 @@ public class MergeLineContext {
             }
             updateFutureFeedFirstDate();
             // If checkMismatchedAgency flagged skipFile, loop back to the while loop. (Note: this is
-            // intentional because we want to check all of the agency ids in the file).
+            // intentional because we want to check all agency ids in the file).
             if (skipFile || lineIsBlank()) continue;
             // Check certain initial conditions on the first line of the file.
-            checkFirstLineConditions();
+            if (lineNumber == 0) {
+                checkFirstLineConditions();
+            }
             initializeRowValues();
             // Construct row values. If a failure condition was encountered, return.
             if (!constructRowValues()) {
@@ -249,7 +250,7 @@ public class MergeLineContext {
                     String skippedKey = getTableScopedValue(table, idScope, keyValue);
                     if (orderField != null) {
                         skippedKey = String.join(":", skippedKey,
-                            csvReader.get(getFieldIndex(fieldsFoundInZip, orderField)));
+                            csvReader.get(getFieldIndex(orderField)));
                     }
                     mergeFeedsResult.skippedIds.add(skippedKey);
                     skipRecord = true;
@@ -398,7 +399,7 @@ public class MergeLineContext {
     private void checkCalendarDatesIds() throws IOException {
         // Drop any calendar_dates.txt records from the existing feed for dates that are
         // not before the first date of the future feed.
-        int dateIndex = getFieldIndex(fieldsFoundInZip, "date");
+        int dateIndex = getFieldIndex("date");
         LocalDate date = LocalDate.parse(csvReader.get(dateIndex), GTFS_DATE_FORMATTER);
         if (handlingActiveFeed && !date.isBefore(futureFeedFirstDate)) {
             LOG.warn(
@@ -430,7 +431,7 @@ public class MergeLineContext {
             valueToWrite = String.join(":", idScope, val);
             mergeFeedsResult.remappedIds.put(key, valueToWrite);
         }
-        int startDateIndex = getFieldIndex(fieldsFoundInZip, "start_date");
+        int startDateIndex = getFieldIndex("start_date");
         LocalDate startDate = LocalDate.parse(csvReader.get(startDateIndex), GTFS_DATE_FORMATTER);
         if (handlingFutureFeed) {
             // For the future feed, check if the calendar's start date is earlier than the
@@ -466,7 +467,7 @@ public class MergeLineContext {
                 // end_date in the future, the end_date shall be set to one
                 // day prior to the earliest start_date in future dataset
                 // before appending the calendar record to the merged file.
-                int endDateIndex = getFieldIndex(fieldsFoundInZip, "end_date");
+                int endDateIndex = getFieldIndex("end_date");
                 if (index == endDateIndex) {
                     LocalDate endDate = LocalDate
                         .parse(csvReader.get(endDateIndex), GTFS_DATE_FORMATTER);
@@ -585,94 +586,6 @@ public class MergeLineContext {
         return keyField.equals("stop_code") || keyField.equals("route_short_name");
     }
 
-    public void checkMissingAgencyId() {
-        if (table.name.equals(Table.AGENCY.name) && (keyFieldMissing || keyValue.equals(""))) {
-            // agency_id is optional if only one agency is present, but that will
-            // cause issues for the feed merge, so we need to insert an agency_id
-            // for the single entry.
-            newAgencyId = UUID.randomUUID().toString();
-            if (keyFieldMissing) {
-                // Only add agency_id field if it is missing in table.
-                List<Field> fieldsList = new ArrayList<>(Arrays.asList(fieldsFoundInZip));
-                fieldsList.add(Table.AGENCY.fields[0]);
-                fieldsFoundInZip = fieldsList.toArray(fieldsFoundInZip);
-                allFields.add(Table.AGENCY.fields[0]);
-            }
-            fieldsFoundList = Arrays.asList(fieldsFoundInZip);
-        }
-    }
-
-    public void checkStopCodeStuff() throws IOException {
-        if (shouldCheckStopCodes()) {
-            // Before reading any lines in stops.txt, first determine whether all records contain
-            // properly filled stop_codes. The rules governing this logic are as follows:
-            // 1. Stops with location_type greater than 0 (i.e., anything but 0 or empty) are permitted
-            //    to have empty stop_codes (even if there are other stops in the feed that have
-            //    stop_code values). This is because these location_types represent special entries
-            //    that are either stations, entrances/exits, or generic nodes (e.g., for
-            //    pathways.txt).
-            // 2. For regular stops (location_type = 0 or empty), all or none of the stops must
-            //    contain stop_codes. Otherwise, the merge feeds job will be failed.
-            int stopsMissingStopCodeCount = 0;
-            int stopsCount = 0;
-            int specialStopsCount = 0;
-            int locationTypeIndex = getFieldIndex(fieldsFoundInZip, "location_type");
-            int stopCodeIndex = getFieldIndex(fieldsFoundInZip, "stop_code");
-            // Get special stops reader to iterate over every stop and determine if stop_code values
-            // are present.
-            CsvReader stopsReader = table.getCsvReader(feed.zipFile, null);
-            while (stopsReader.readRecord()) {
-                stopsCount++;
-                // Special stop records (i.e., a station, entrance, or anything with
-                // location_type > 0) do not need to specify stop_code. Other stops should.
-                String stopCode = stopsReader.get(stopCodeIndex);
-                boolean stopCodeIsMissing = "".equals(stopCode);
-                String locationType = stopsReader.get(locationTypeIndex);
-                if (isSpecialStop(locationType)) specialStopsCount++;
-                else if (stopCodeIsMissing) stopsMissingStopCodeCount++;
-            }
-            stopsReader.close();
-            LOG.info("total stops: {}", stopsCount);
-            LOG.info("stops missing stop_code: {}", stopsMissingStopCodeCount);
-            if (stopsMissingStopCodeCount + specialStopsCount == stopsCount) {
-                // If all stops are missing stop_code (taking into account the special stops that do
-                // not require stop_code), we simply default to merging on stop_id.
-                LOG.warn(
-                    "stop_code is not present in file {}/{}. Reverting to stop_id",
-                    feedIndex + 1, feedsToMerge.size());
-                // If the key value for stop_code is not present, revert to stop_id.
-                keyField = table.getKeyFieldName();
-                keyFieldIndex = table.getKeyFieldIndex(fieldsFoundInZip);
-                keyValue = csvReader.get(keyFieldIndex);
-                // When all stops missing stop_code for the first feed, there's nothing to do (i.e.,
-                // no failure condition has been triggered yet). Just indicate this in the flag and
-                // proceed with the merge.
-                if (handlingFutureFeed) stopCodeMissingFromFutureFeed = true;
-                // However... if the second feed was missing stop_codes and the first feed was not,
-                // fail the merge job.
-                else if (!stopCodeMissingFromFutureFeed) {
-                    job.failMergeJob(
-                        stopCodeFailureMessage(stopsMissingStopCodeCount, stopsCount, specialStopsCount)
-                    );
-                }
-            } else if (stopsMissingStopCodeCount > 0) {
-                // If some, but not all, stops are missing stop_code, the merge feeds job must fail.
-                job.failMergeJob(
-                    stopCodeFailureMessage(stopsMissingStopCodeCount, stopsCount, specialStopsCount)
-                );
-            }
-        }
-    }
-
-    private boolean shouldCheckStopCodes() {
-        return job.mergeType.equals(SERVICE_PERIOD) && table.name.equals(STOPS);
-    }
-
-    /** Determine if stop is "special" via its locationType. I.e., a station, entrance, (location_type > 0). */
-    private boolean isSpecialStop(String locationType) {
-        return !"".equals(locationType) && !"0".equals(locationType);
-    }
-
     public boolean updateAgencyIdIfNeeded() {
         if (newAgencyId != null && field.name.equals(AGENCY_ID) && job.mergeType.equals(REGIONAL)) {
             if (val.equals("") && table.name.equals("agency") && lineNumber > 0) {
@@ -717,7 +630,7 @@ public class MergeLineContext {
                 // defined above, we will be using the found fields index, which will
                 // cause major issues when trying to put and get values into the
                 // below map.
-                int fieldIndex = getFieldIndex(sharedSpecFields.toArray(new Field[0]), keyField);
+                int fieldIndex = Field.getFieldIndex(sharedSpecFields.toArray(new Field[0]), keyField);
                 String key = String.join(":", keyField, rowValues[fieldIndex]);
                 rowValuesForStopOrRouteId.put(key, rowValues);
                 break;
@@ -743,12 +656,7 @@ public class MergeLineContext {
         return false;
     }
 
-    public void checkFirstLineConditions() throws IOException {
-        if (lineNumber == 0) {
-            checkMissingAgencyId();
-            checkStopCodeStuff();
-        }
-    }
+    public void checkFirstLineConditions() throws IOException {}
 
     /**
      * Check for some conditions that could occur when handling a service period merge.
@@ -926,5 +834,17 @@ public class MergeLineContext {
             return true;
         }
         return false;
+    }
+
+    public boolean isHandlingFutureFeed() {
+        return handlingFutureFeed;
+    }
+
+    protected CsvReader getCsvReader() {
+        return csvReader;
+    }
+
+    protected int getFieldIndex(String fieldName) {
+        return Field.getFieldIndex(fieldsFoundInZip, fieldName);
     }
 }
