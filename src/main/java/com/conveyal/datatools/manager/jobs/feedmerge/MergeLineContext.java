@@ -38,7 +38,7 @@ import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.conveyal.gtfs.loader.DateField.GTFS_DATE_FORMATTER;
 
 public class MergeLineContext {
-    private static final String AGENCY_ID = "agency_id";
+    protected static final String AGENCY_ID = "agency_id";
     protected static final String SERVICE_ID = "service_id";
     private static final String STOPS = "stops";
     private static final Logger LOG = LoggerFactory.getLogger(MergeLineContext.class);
@@ -101,15 +101,9 @@ public class MergeLineContext {
                 return new StopsMergeLineContext(job, table, out);
             case "trips":
                 return new TripsMergeLineContext(job, table, out);
-/*
-            case "feed_info":
-                break;
-*/
             default:
                 return new MergeLineContext(job, table, out);
-            //throw new IllegalArgumentException(table.name);
         }
-        //return null;
     }
 
     protected MergeLineContext(MergeFeedsJob job, Table table, ZipOutputStream out) throws IOException {
@@ -183,6 +177,14 @@ public class MergeLineContext {
     }
 
     /**
+     * Overridable method that determines whether to process rows of the current feed table.
+     * @return true by default.
+     */
+    public boolean shouldProcessRows() {
+        return true;
+    }
+
+    /**
      * Iterate over all rows in table and write them to the output zip.
      *
      * @return false, if a failing condition was encountered. true, if everything was ok.
@@ -191,11 +193,12 @@ public class MergeLineContext {
         // Iterate over rows in table, writing them to the out file.
         while (csvReader.readRecord()) {
             startNewRow();
-            if (checkMismatchedAgency()) {
-                // If there is a mismatched agency, return immediately.
+
+            if (!shouldProcessRows()) {
+                // e.g. If there is a mismatched agency, return immediately.
                 return false;
             }
-            updateFutureFeedFirstDate();
+
             // If checkMismatchedAgency flagged skipFile, loop back to the while loop. (Note: this is
             // intentional because we want to check all agency ids in the file).
             if (skipFile || lineIsBlank()) continue;
@@ -459,42 +462,6 @@ public class MergeLineContext {
         // Default is to do nothing.
     }
 
-    /**
-     * Check for some conditions that could occur when handling a service period merge.
-     *
-     * @return true if the merge encountered failing conditions
-     */
-    public boolean checkMismatchedAgency() {
-        if (handlingActiveFeed && job.mergeType.equals(SERVICE_PERIOD) && table.name.equals("agency")) {
-            // If merging the agency table, we should only skip the following feeds if performing an MTC merge
-            // because that logic assumes the two feeds share the same agency (or
-            // agencies). NOTE: feed_info file is skipped by default (outside of this
-            // method) for a regional merge), which is why this block is exclusively
-            // for an MTC merge. Note, this statement may print multiple log
-            // statements, but it is deliberately nested in the csv while block in
-            // order to detect agency_id mismatches and fail the merge if found.
-            // The second feed's agency table must contain the same agency_id
-            // value as the first feed.
-            String agencyId = String.join(":", keyField, keyValue);
-            if (!"".equals(keyValue) && !referenceTracker.transitIds.contains(agencyId)) {
-                String otherAgencyId = referenceTracker.transitIds.stream()
-                    .filter(transitId -> transitId.startsWith(AGENCY_ID))
-                    .findAny()
-                    .orElse(null);
-                job.failMergeJob(String.format(
-                    "MTC merge detected mismatching agency_id values between two "
-                        + "feeds (%s and %s). Failing merge operation.",
-                    agencyId,
-                    otherAgencyId
-                ));
-                return true;
-            }
-            LOG.warn("Skipping {} file for feed {}/{} (future file preferred)", table.name, feedIndex, feedsToMerge.size());
-            skipFile = true;
-        }
-        return false;
-    }
-
     public void scopeValueIfNeeded() {
         boolean isKeyField = field.isForeignReference() || keyField.equals(field.name);
         if (job.mergeType.equals(REGIONAL) && isKeyField && !val.isEmpty()) {
@@ -556,21 +523,6 @@ public class MergeLineContext {
             .map(f -> f.name)
             .toArray(String[]::new);
         writeValuesToTable(headers, false);
-    }
-
-    public void updateFutureFeedFirstDate() {
-        if (
-            table.name.equals("calendar_dates") &&
-                handlingActiveFeed &&
-                job.mergeType.equals(SERVICE_PERIOD) &&
-                futureFirstCalendarStartDate.isBefore(LocalDate.MAX) &&
-                futureFeedFirstDate.isBefore(futureFirstCalendarStartDate)
-        ) {
-            // If the future feed's first date is before its first calendar start date,
-            // override the future feed first date with the calendar start date for use when checking
-            // MTC calendar_dates and calendar records for modification/exclusion.
-            futureFeedFirstDate = futureFirstCalendarStartDate;
-        }
     }
 
     public boolean constructRowValues() throws IOException {

@@ -26,6 +26,12 @@ public class CalendarDatesMergeLineContext extends MergeLineContext {
         checkCalendarDatesIds();
     }
 
+    @Override
+    public void startNewRow() throws IOException {
+        super.startNewRow();
+        updateFutureFeedFirstDate();
+    }
+
     private void checkCalendarDatesIds() throws IOException {
         // Drop any calendar_dates.txt records from the existing feed for dates that are
         // not before the first date of the future feed.
@@ -45,12 +51,12 @@ public class CalendarDatesMergeLineContext extends MergeLineContext {
         if (!skipRecord && getField().name.equals(SERVICE_ID)) mergeFeedsResult.serviceIds.add(valueToWrite);
     }
 
-    private void updateFutureFeedFirstDate_placeHolder() {
+    private void updateFutureFeedFirstDate() {
         if (
-                isHandlingActiveFeed() &&
-                job.mergeType.equals(SERVICE_PERIOD) &&
-                futureFirstCalendarStartDate.isBefore(LocalDate.MAX) &&
-                futureFeedFirstDate.isBefore(futureFirstCalendarStartDate)
+            isHandlingActiveFeed() &&
+            job.mergeType.equals(SERVICE_PERIOD) &&
+            futureFirstCalendarStartDate.isBefore(LocalDate.MAX) &&
+            futureFeedFirstDate.isBefore(futureFirstCalendarStartDate)
         ) {
             // If the future feed's first date is before its first calendar start date,
             // override the future feed first date with the calendar start date for use when checking
