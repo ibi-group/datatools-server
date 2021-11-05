@@ -48,7 +48,7 @@ public class CalendarDatesMergeLineContext extends MergeLineContext {
         // Track service ID because we want to avoid removing trips that may reference this
         // service_id when the service_id is used by calendar.txt records that operate in
         // the valid date range, i.e., before the future feed's first date.
-        if (!skipRecord && getField().name.equals(SERVICE_ID)) mergeFeedsResult.serviceIds.add(valueToWrite);
+        if (!skipRecord && fieldNameEquals(SERVICE_ID)) mergeFeedsResult.serviceIds.add(getFieldContext().getValueToWrite());
     }
 
     private void updateFutureFeedFirstDate() {

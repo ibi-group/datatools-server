@@ -29,12 +29,12 @@ public class TripsMergeLineContext extends MergeLineContext {
             if (job.tripIdsToSkipForActiveFeed.contains(keyValue)) {
                 skipRecord = true;
             } else if (job.tripIdsToModifyForActiveFeed.contains(keyValue)) {
-                updateAndRemapValue(true);
+                updateAndRemapOutput(true);
             }
         }
         for (NewGTFSError error : idErrors) {
             if (error.errorType.equals(NewGTFSErrorType.DUPLICATE_ID)) {
-                updateAndRemapValue(true);
+                updateAndRemapOutput(true);
             }
         }
     }

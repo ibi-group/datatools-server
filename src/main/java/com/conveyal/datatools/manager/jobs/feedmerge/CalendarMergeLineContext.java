@@ -42,7 +42,7 @@ public class CalendarMergeLineContext extends MergeLineContext {
         if (hasDuplicateError(idErrors)) {
             // Modify service_id and ensure that referencing trips
             // have service_id updated.
-            updateAndRemapValue();
+            updateAndRemapOutput();
         }
 
         LocalDate startDate = getCsvDate("start_date");
@@ -59,7 +59,7 @@ public class CalendarMergeLineContext extends MergeLineContext {
                 // start date if the merge strategy dictates. The justification for this logic is that the active feed's
                 // service_id will be modified to a different unique value and the trips shared between the future/active
                 // service are exactly matching.
-                val = valueToWrite = activeFeedFirstDate.format(GTFS_DATE_FORMATTER);
+                getFieldContext().resetValue(activeFeedFirstDate.format(GTFS_DATE_FORMATTER));
             }
         } else {
             // If a service_id from the active calendar has both the
@@ -80,12 +80,12 @@ public class CalendarMergeLineContext extends MergeLineContext {
                 // end_date in the future, the end_date shall be set to one
                 // day prior to the earliest start_date in future dataset
                 // before appending the calendar record to the merged file.
-                if (getField().name.equals("end_date")) {
+                if (fieldNameEquals("end_date")) {
                     LocalDate endDate = getCsvDate("end_date");
                     if (!endDate.isBefore(futureFeedFirstDate)) {
-                        val = valueToWrite = futureFeedFirstDate
+                        getFieldContext().resetValue(futureFeedFirstDate
                             .minus(1, ChronoUnit.DAYS)
-                            .format(GTFS_DATE_FORMATTER);
+                            .format(GTFS_DATE_FORMATTER));
                     }
                 }
             }
@@ -93,11 +93,11 @@ public class CalendarMergeLineContext extends MergeLineContext {
         // Track service ID because we want to avoid removing trips that may reference this
         // service_id when the service_id is used by calendar_dates that operate in the valid
         // date range, i.e., before the future feed's first date.
-        if (!skipRecord && getField().name.equals(SERVICE_ID)) mergeFeedsResult.serviceIds.add(valueToWrite);
+        if (!skipRecord && fieldNameEquals(SERVICE_ID)) mergeFeedsResult.serviceIds.add(getFieldContext().getValueToWrite());
     }
 
     private boolean shouldUpdateFutureFeedStartDate() {
-        return getField().name.equals("start_date") &&
+        return fieldNameEquals("start_date") &&
             (
                 EXTEND_FUTURE == mergeFeedsResult.mergeStrategy ||
                     (
