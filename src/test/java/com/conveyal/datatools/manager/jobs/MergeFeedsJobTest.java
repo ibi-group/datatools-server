@@ -293,8 +293,7 @@ public class MergeFeedsJobTest extends UnitTest {
     }
 
     /**
-     * Ensures that an MTC merge of feeds that has exactly matching trips but mismatched services fails according to the
-     * strategy {@link MergeStrategy#FAIL_DUE_TO_MATCHING_TRIP_IDS}.
+     * Ensures that an MTC merge of feeds that has exactly matching trips but mismatched services fails.
      */
     @Test
     public void mergeMTCShouldFailOnDuplicateTripsButMismatchedServices() {
@@ -304,11 +303,6 @@ public class MergeFeedsJobTest extends UnitTest {
         MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.SERVICE_PERIOD);
         // Run the job in this thread (we're not concerned about concurrency here).
         mergeFeedsJob.run();
-        // Check that correct strategy was used.
-        assertEquals(
-            MergeStrategy.FAIL_DUE_TO_MATCHING_TRIP_IDS,
-            mergeFeedsJob.mergeFeedsResult.mergeStrategy
-        );
         // Result should fail.
         assertTrue(
             mergeFeedsJob.mergeFeedsResult.failed,

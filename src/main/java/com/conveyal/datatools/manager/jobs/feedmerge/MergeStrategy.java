@@ -19,12 +19,6 @@ public enum MergeStrategy {
      */
     EXTEND_FUTURE,
     /**
-     * If trip_ids provided in active and future feeds are the same but the service_ids are unique then merge
-     * functionality shall reject feeds from merging. The user shall be notified that a new service requires unique
-     * trip_ids for merging.
-     */
-    FAIL_DUE_TO_MATCHING_TRIP_IDS,
-    /**
      * If service_ids in active and future feed exactly match but only some of the trip_ids match then the merge
      * strategy shall handle the following three cases:
      * - *trip_id in both feeds*: The service shall start from the data merge date and end at the future feed’s service
