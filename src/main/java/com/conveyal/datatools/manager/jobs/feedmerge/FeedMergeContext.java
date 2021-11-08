@@ -30,9 +30,14 @@ public class FeedMergeContext implements Closeable {
     public final LocalDate activeFeedFirstDate;
     private LocalDate futureFeedFirstDate;
     private LocalDate futureFirstCalendarStartDate = LocalDate.MAX;
-    /** Trip ids shared between the active and future feed. */
+    /**
+     * Trip ids shared between the active and future feed.
+     */
     public final Set<String> sharedTripIds;
-
+    /**
+     * Holds the auto-generated agency id to be updated if none was provided.
+     */
+    private String newAgencyId;
 
     public FeedMergeContext(Set<FeedVersion> feedVersions, Auth0UserProfile owner) throws IOException {
         feedsToMerge = MergeFeedUtils.collectAndSortFeeds(feedVersions, owner);
@@ -124,6 +129,14 @@ public class FeedMergeContext implements Closeable {
 
     public void setFutureFeedFirstDate(LocalDate futureFeedFirstDate) {
         this.futureFeedFirstDate = futureFeedFirstDate;
+    }
+
+    public String getNewAgencyId() {
+        return newAgencyId;
+    }
+
+    public void setNewAgencyId(String newAgencyId) {
+        this.newAgencyId = newAgencyId;
     }
 
     /**

@@ -53,7 +53,6 @@ public class MergeLineContext {
     private final CsvListWriter writer;
     private CsvReader csvReader;
     protected boolean skipRecord;
-    protected String newAgencyId; // move
     protected boolean keyFieldMissing;
     private String[] rowValues;
     private int lineNumber = 0;
@@ -126,8 +125,8 @@ public class MergeLineContext {
         keyFieldMissing = false;
         // Use for a new agency ID for use if the feed does not contain one. Initialize to
         // null. If the value becomes non-null, the agency_id is missing and needs to be
-        // replaced with the generated value stored in this variable.
-        newAgencyId = null;
+        // replaced in other affected tables with the generated value stored in this variable.
+        feedMergeContext.setNewAgencyId(null);
         // Generate ID prefix to scope GTFS identifiers to avoid conflicts.
         idScope = getCleanName(feedSource.name) + version.version;
         csvReader = table.getCsvReader(feed.zipFile, null);
@@ -358,6 +357,7 @@ public class MergeLineContext {
             if (hasDuplicateError(idErrors)) skipRecord = true;
         }
 
+        String newAgencyId = feedMergeContext.getNewAgencyId();
         if (newAgencyId != null && fieldNameEquals(AGENCY_ID)) {
             LOG.info(
                 "Updating route#agency_id to (auto-generated) {} for route={}",
@@ -375,6 +375,7 @@ public class MergeLineContext {
     }
 
     public boolean updateAgencyIdIfNeeded() {
+        String newAgencyId = feedMergeContext.getNewAgencyId();
         if (newAgencyId != null && fieldNameEquals(AGENCY_ID) && job.mergeType.equals(REGIONAL)) {
             if (fieldContext.getValue().equals("") && table.name.equals("agency") && lineNumber > 0) {
                 // If there is no agency_id value for a second (or greater) agency
