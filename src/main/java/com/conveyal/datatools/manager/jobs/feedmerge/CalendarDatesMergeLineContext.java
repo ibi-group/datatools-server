@@ -36,6 +36,7 @@ public class CalendarDatesMergeLineContext extends MergeLineContext {
         // Drop any calendar_dates.txt records from the existing feed for dates that are
         // not before the first date of the future feed.
         LocalDate date = getCsvDate("date");
+        LocalDate futureFeedFirstDate = feedMergeContext.getFutureFeedFirstDate();
         if (isHandlingActiveFeed() && !date.isBefore(futureFeedFirstDate)) {
             LOG.warn(
                 "Skipping calendar_dates entry {} because it operates in the time span of future feed (i.e., after or on {}).",
@@ -52,16 +53,17 @@ public class CalendarDatesMergeLineContext extends MergeLineContext {
     }
 
     private void updateFutureFeedFirstDate() {
+        LocalDate futureFirstCalendarStartDate = feedMergeContext.getFutureFirstCalendarStartDate();
         if (
             isHandlingActiveFeed() &&
             job.mergeType.equals(SERVICE_PERIOD) &&
-            futureFirstCalendarStartDate.isBefore(LocalDate.MAX) &&
-            futureFeedFirstDate.isBefore(futureFirstCalendarStartDate)
+                futureFirstCalendarStartDate.isBefore(LocalDate.MAX) &&
+                feedMergeContext.getFutureFeedFirstDate().isBefore(futureFirstCalendarStartDate)
         ) {
             // If the future feed's first date is before its first calendar start date,
             // override the future feed first date with the calendar start date for use when checking
             // MTC calendar_dates and calendar records for modification/exclusion.
-            futureFeedFirstDate = futureFirstCalendarStartDate;
+            feedMergeContext.setFutureFeedFirstDate(futureFirstCalendarStartDate);
         }
     }
 }

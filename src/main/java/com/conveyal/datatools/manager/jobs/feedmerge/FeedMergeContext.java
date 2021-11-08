@@ -10,6 +10,7 @@ import com.google.common.collect.Sets;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.time.LocalDate;
 import java.util.List;
 import java.util.Set;
 
@@ -26,6 +27,9 @@ public class FeedMergeContext implements Closeable {
     public final boolean tripIdsMatch;
     public final Feed futureFeed;
     public final Feed activeFeed;
+    public final LocalDate activeFeedFirstDate;
+    private LocalDate futureFeedFirstDate;
+    private LocalDate futureFirstCalendarStartDate = LocalDate.MAX;
     /** Trip ids shared between the active and future feed. */
     public final Set<String> sharedTripIds;
 
@@ -46,6 +50,15 @@ public class FeedMergeContext implements Closeable {
         futureFeed = new Feed(DataManager.GTFS_DATA_SOURCE, futureFeedToMerge.version.namespace);
         activeFeed = new Feed(DataManager.GTFS_DATA_SOURCE, activeFeedToMerge.version.namespace);
         sharedTripIds = Sets.intersection(activeTripIds, futureTripIds);
+
+        // Initialize future and active feed's first date to the first calendar date from validation result.
+        // This is equivalent to either the earliest date of service defined for a calendar_date record or the
+        // earliest start_date value for a calendars.txt record. For MTC, however, they require that GTFS
+        // providers use calendars.txt entries and prefer that this value (which is used to determine cutoff
+        // dates for the active feed when merging with the future) be strictly assigned the earliest
+        // calendar#start_date (unless that table for some reason does not exist).
+        activeFeedFirstDate = activeFeedToMerge.version.validationResult.firstCalendarDate;
+        futureFeedFirstDate = futureFeedToMerge.version.validationResult.firstCalendarDate;
     }
 
     @Override
@@ -95,6 +108,22 @@ public class FeedMergeContext implements Closeable {
         String futureServiceId = futureFeed.trips.get(tripId).service_id;
         String activeServiceId = activeFeed.trips.get(tripId).service_id;
         return new TripMismatchedServiceIds(tripId, !futureServiceId.equals(activeServiceId), activeServiceId, futureServiceId);
+    }
+
+    public LocalDate getFutureFirstCalendarStartDate() {
+        return futureFirstCalendarStartDate;
+    }
+
+    public void setFutureFirstCalendarStartDate(LocalDate futureFirstCalendarStartDate) {
+        this.futureFirstCalendarStartDate = futureFirstCalendarStartDate;
+    }
+
+    public LocalDate getFutureFeedFirstDate() {
+        return futureFeedFirstDate;
+    }
+
+    public void setFutureFeedFirstDate(LocalDate futureFeedFirstDate) {
+        this.futureFeedFirstDate = futureFeedFirstDate;
     }
 
     /**

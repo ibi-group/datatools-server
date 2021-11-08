@@ -535,4 +535,9 @@ public class MergeFeedsJob extends FeedSourceJob {
         LOG.error(message, args, e);
         ErrorUtils.reportToBugsnag(e, "datatools", message, owner);
     }
+
+    @BsonIgnore @JsonIgnore
+    public FeedMergeContext getFeedMergeContext() {
+        return feedMergeContext;
+    }
 }

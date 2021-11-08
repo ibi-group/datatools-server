@@ -1,15 +1,11 @@
 package com.conveyal.datatools.manager.jobs.feedmerge;
 
 import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
-import com.conveyal.gtfs.loader.Field;
 import com.conveyal.gtfs.loader.Table;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
 import java.util.UUID;
 import java.util.zip.ZipOutputStream;
 
@@ -75,7 +71,7 @@ public class AgencyMergeLineContext extends MergeLineContext {
                 ));
                 return true;
             }
-            LOG.warn("Skipping {} file for feed {}/{} (future file preferred)", table.name, getFeedIndex(), feedsToMerge.size());
+            LOG.warn("Skipping {} file for feed {}/{} (future file preferred)", table.name, getFeedIndex(), feedMergeContext.feedsToMerge.size());
             skipFile = true;
         }
         return false;

@@ -46,9 +46,6 @@ public class MergeLineContext {
     protected final MergeFeedsJob job;
     private final ZipOutputStream out;
     private final Set<Field> allFields;
-    protected LocalDate futureFirstCalendarStartDate;
-    protected final LocalDate activeFeedFirstDate;
-    protected LocalDate futureFeedFirstDate; // try to make private
     private boolean handlingActiveFeed;
     private boolean handlingFutureFeed;
     private String idScope;
@@ -67,7 +64,7 @@ public class MergeLineContext {
     protected String keyField;
     private String orderField;
     protected final MergeFeedsResult mergeFeedsResult;
-    protected final List<FeedToMerge> feedsToMerge;
+    protected final FeedMergeContext feedMergeContext;
     protected int keyFieldIndex;
     private Field[] fieldsFoundInZip;
     private List<Field> fieldsFoundList;
@@ -107,22 +104,13 @@ public class MergeLineContext {
     protected MergeLineContext(MergeFeedsJob job, Table table, ZipOutputStream out) throws IOException {
         this.job = job;
         this.table = table;
-        this.feedsToMerge = job.getFeedsToMerge();
+        this.feedMergeContext = job.getFeedMergeContext();
         // Get shared fields between all feeds being merged. This is used to filter the spec fields so that only
         // fields found in the collection of feeds are included in the merged table.
-        allFields = getAllFields(feedsToMerge, table);
+        allFields = getAllFields(feedMergeContext.feedsToMerge, table);
         this.mergeFeedsResult = job.mergeFeedsResult;
         this.writer = new CsvListWriter(new OutputStreamWriter(out), CsvPreference.STANDARD_PREFERENCE);
         this.out = out;
-        // Initialize future and active feed's first date to the first calendar date from validation result.
-        // This is equivalent to either the earliest date of service defined for a calendar_date record or the
-        // earliest start_date value for a calendars.txt record. For MTC, however, they require that GTFS
-        // providers use calendars.txt entries and prefer that this value (which is used to determine cutoff
-        // dates for the active feed when merging with the future) be strictly assigned the earliest
-        // calendar#start_date (unless that table for some reason does not exist).
-        futureFeedFirstDate = job.getFutureFeed().version.validationResult.firstCalendarDate;
-        activeFeedFirstDate = job.getActiveFeed().version.validationResult.firstCalendarDate;
-        futureFirstCalendarStartDate = LocalDate.MAX;
     }
 
     public void startNewFeed(int feedIndex) throws IOException {
@@ -130,7 +118,7 @@ public class MergeLineContext {
         handlingActiveFeed = feedIndex > 0;
         handlingFutureFeed = feedIndex == 0;
         this.feedIndex = feedIndex;
-        this.feed = feedsToMerge.get(feedIndex);
+        this.feed = feedMergeContext.feedsToMerge.get(feedIndex);
         this.version = feed.version;
         this.feedSource = version.parentFeedSource();
         keyField = getMergeKeyField(table, job.mergeType);
@@ -274,6 +262,7 @@ public class MergeLineContext {
 
     /**
      * Overridable method whose default behavior below is to skip a record if it creates a duplicate id.
+     * @throws IOException Some overrides throw IOException.
      */
     public void checkFieldsForMergeConflicts(Set<NewGTFSError> idErrors) throws IOException {
         if (hasDuplicateError(idErrors)) skipRecord = true;

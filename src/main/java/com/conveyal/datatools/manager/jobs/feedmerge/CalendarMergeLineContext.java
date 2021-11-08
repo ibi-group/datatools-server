@@ -49,8 +49,8 @@ public class CalendarMergeLineContext extends MergeLineContext {
         if (isHandlingFutureFeed()) {
             // For the future feed, check if the calendar's start date is earlier than the
             // previous earliest value and update if so.
-            if (futureFirstCalendarStartDate.isAfter(startDate)) {
-                futureFirstCalendarStartDate = startDate;
+            if (feedMergeContext.getFutureFirstCalendarStartDate().isAfter(startDate)) {
+                feedMergeContext.setFutureFirstCalendarStartDate(startDate);
             }
             // FIXME: Move this below so that a cloned service doesn't get prematurely
             //  modified? (do we want the cloned record to have the original values?)
@@ -59,7 +59,7 @@ public class CalendarMergeLineContext extends MergeLineContext {
                 // start date if the merge strategy dictates. The justification for this logic is that the active feed's
                 // service_id will be modified to a different unique value and the trips shared between the future/active
                 // service are exactly matching.
-                getFieldContext().resetValue(activeFeedFirstDate.format(GTFS_DATE_FORMATTER));
+                getFieldContext().resetValue(feedMergeContext.activeFeedFirstDate.format(GTFS_DATE_FORMATTER));
             }
         } else {
             // If a service_id from the active calendar has both the
@@ -68,6 +68,7 @@ public class CalendarMergeLineContext extends MergeLineContext {
             // calendar_dates, and calendar_attributes referencing this
             // service_id shall also be removed/ignored. Stop_time records
             // for the ignored trips shall also be removed.
+            LocalDate futureFeedFirstDate = feedMergeContext.getFutureFeedFirstDate();
             if (!startDate.isBefore(futureFeedFirstDate)) {
                 LOG.warn(
                     "Skipping calendar entry {} because it operates fully within the time span of future feed.",
