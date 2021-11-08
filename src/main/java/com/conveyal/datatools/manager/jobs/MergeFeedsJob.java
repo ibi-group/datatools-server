@@ -464,11 +464,10 @@ public class MergeFeedsJob extends FeedSourceJob {
      */
     private MergeStrategy getMergeStrategy() {
         if (feedMergeContext.tripIdsMatch) {
+            // If trip ids and service ids match, these ids will be extended to the future per MTC requirements.
             // Effectively this exact match condition means that the future feed will be used as is
             // (including stops, routes, etc.), the only modification being service date ranges.
-            // This is Condition 2 in the docs.
-            // (If only trip IDs match, do not permit merge to continue
-            // - that is handled by method shouldFailJobDueToMatchingTripIds.)
+            // (If service ids mismatch, shouldFailJobDueToMatchingTripIds will fail the merge.)
             return feedMergeContext.serviceIdsMatch ? EXTEND_FUTURE : MergeStrategy.DEFAULT;
         }
         if (feedMergeContext.serviceIdsMatch) {
