@@ -8,14 +8,11 @@ import com.conveyal.gtfs.loader.Field;
  */
 public class FieldContext {
     private final Field field;
-    private final int index;
     private String value;
     private String valueToWrite;
 
-    public FieldContext(Field field, int index, String value) {
+    public FieldContext(Field field, String value) {
         this.field = field;
-        // Get index of field from GTFS spec as it appears in feed
-        this.index = index;
         // Default value to write is unchanged from value found in csv (i.e. val). Note: if looking to
         // modify the value that is written in the merged file, you must update valueToWrite (e.g.,
         // updating this feed's end_date or accounting for cases where IDs conflict).

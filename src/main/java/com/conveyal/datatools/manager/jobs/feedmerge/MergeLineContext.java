@@ -16,6 +16,7 @@ import org.supercsv.prefs.CsvPreference;
 import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.time.LocalDate;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -44,7 +45,7 @@ public class MergeLineContext {
     private static final Logger LOG = LoggerFactory.getLogger(MergeLineContext.class);
     protected final MergeFeedsJob job;
     private final ZipOutputStream out;
-    protected final Set<Field> allFields; // try to make private
+    private final Set<Field> allFields;
     protected LocalDate futureFirstCalendarStartDate;
     protected final LocalDate activeFeedFirstDate;
     protected LocalDate futureFeedFirstDate; // try to make private
@@ -68,14 +69,14 @@ public class MergeLineContext {
     protected final MergeFeedsResult mergeFeedsResult;
     protected final List<FeedToMerge> feedsToMerge;
     protected int keyFieldIndex;
-    protected Field[] fieldsFoundInZip; // try to make private
-    protected List<Field> fieldsFoundList;
+    private Field[] fieldsFoundInZip;
+    private List<Field> fieldsFoundList;
     // Set up objects for tracking the rows encountered
     private final Map<String, String[]> rowValuesForStopOrRouteId = new HashMap<>();
     private final Set<String> rowStrings = new HashSet<>();
     private List<Field> sharedSpecFields;
     private FieldContext fieldContext;
-    protected int feedIndex;
+    private int feedIndex;
 
     public FeedVersion version;
     public FeedSource feedSource;
@@ -301,7 +302,7 @@ public class MergeLineContext {
         // in case the stop_code or route_short_name are being used. This
         // must occur unconditionally because each record must be tracked
         // by the reference tracker.
-        String primaryKeyValue = csvReader.get(table.getKeyFieldIndex(fieldsFoundInZip));
+        String primaryKeyValue = csvReader.get(getKeyFieldIndex());
         Set<NewGTFSError> primaryKeyErrors = referenceTracker
             .checkReferencesAndUniqueness(primaryKeyValue, lineNumber, fieldContext.getField(), fieldContext.getValue(), table);
         // Merging will be based on route_short_name/stop_code in the active and future datasets. All
@@ -399,20 +400,6 @@ public class MergeLineContext {
             fieldContext.setValue(newAgencyId);
         }
         return true;
-    }
-
-    public void startNewField(int specFieldIndex) throws IOException {
-        Field field = sharedSpecFields.get(specFieldIndex);
-        // Get index of field from GTFS spec as it appears in feed
-        int index = fieldsFoundList.indexOf(field);
-        // Default value to write is unchanged from value found in csv (i.e. val). Note: if looking to
-        // modify the value that is written in the merged file, you must update valueToWrite (e.g.,
-        // updating this feed's end_date or accounting for cases where IDs conflict).
-        fieldContext = new FieldContext(
-            field,
-            index,
-            csvReader.get(index)
-        );
     }
 
     public boolean storeRowAndStopValues() {
@@ -534,7 +521,14 @@ public class MergeLineContext {
             // There is nothing to do in this loop if it has already been determined that the record should
             // be skipped.
             if (skipRecord) break;
-            startNewField(specFieldIndex);
+            Field field = sharedSpecFields.get(specFieldIndex);
+            // Default value to write is unchanged from value found in csv (i.e. val). Note: if looking to
+            // modify the value that is written in the merged file, you must update valueToWrite (e.g.,
+            // updating this feed's end_date or accounting for cases where IDs conflict).
+            fieldContext = new FieldContext(
+                field,
+                csvReader.get(fieldsFoundList.indexOf(field))
+            );
             // Handle filling in agency_id if missing when merging regional feeds. If false is returned,
             // the job has encountered a failing condition (the method handles failing the job itself).
             if (!updateAgencyIdIfNeeded()) {
@@ -548,17 +542,17 @@ public class MergeLineContext {
             // track references for a large number of feeds (e.g., every feed in New
             // York State).
             if (job.mergeType.equals(SERVICE_PERIOD)) {
-                Set<NewGTFSError> idErrors = getIdErrors();
+                Set<NewGTFSError> idErrors = getIdErrors(); // FIXME: Rename. This method is imperative.
                 // Store values for key fields that have been encountered and update any key values that need modification due
                 // to conflicts.
-                checkFieldsForMergeConflicts(idErrors);
+                checkFieldsForMergeConflicts(idErrors); // FIXME: This method changes skipRecord;
                 if (skipRecord) continue;
             }
             // If the current field is a foreign reference, check if the reference has been removed in the
             // merged result. If this is the case (or other conditions are met), we will need to skip this
             // record. Likewise, if the reference has been modified, ensure that the value written to the
             // merged result is correctly updated.
-            if (!areForeignRefsOk()) continue;
+            if (!areForeignRefsOk()) continue; // FIXME: This method changes skipRecord;
             rowValues[specFieldIndex] = fieldContext.getValueToWrite();
         }
         return true;
@@ -619,6 +613,8 @@ public class MergeLineContext {
         return fieldContext;
     }
 
+    protected int getFeedIndex() { return feedIndex; }
+
     protected boolean fieldNameEquals(String value) {
         return fieldContext.getField().name.equals(value);
     }
@@ -663,5 +659,23 @@ public class MergeLineContext {
      */
     protected void updateAndRemapOutput() {
         updateAndRemapOutput(false);
+    }
+
+    /**
+     * Add the specified field once record reading has started.
+     */
+    protected void addField(Field field) {
+        List<Field> fieldsList = new ArrayList<>(Arrays.asList(fieldsFoundInZip));
+        fieldsList.add(field);
+        fieldsFoundInZip = fieldsList.toArray(fieldsFoundInZip);
+        allFields.add(field);
+        fieldsFoundList = Arrays.asList(fieldsFoundInZip);
+    }
+
+    /**
+     * Helper method to get the key field position.
+     */
+    protected int getKeyFieldIndex() {
+        return table.getKeyFieldIndex(fieldsFoundInZip);
     }
 }

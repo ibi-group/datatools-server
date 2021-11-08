@@ -40,12 +40,8 @@ public class AgencyMergeLineContext extends MergeLineContext {
             newAgencyId = UUID.randomUUID().toString();
             if (keyFieldMissing) {
                 // Only add agency_id field if it is missing in table.
-                List<Field> fieldsList = new ArrayList<>(Arrays.asList(fieldsFoundInZip));
-                fieldsList.add(Table.AGENCY.fields[0]);
-                fieldsFoundInZip = fieldsList.toArray(fieldsFoundInZip);
-                allFields.add(Table.AGENCY.fields[0]);
+                addField(Table.AGENCY.fields[0]);
             }
-            fieldsFoundList = Arrays.asList(fieldsFoundInZip);
         }
     }
 
@@ -79,7 +75,7 @@ public class AgencyMergeLineContext extends MergeLineContext {
                 ));
                 return true;
             }
-            LOG.warn("Skipping {} file for feed {}/{} (future file preferred)", table.name, feedIndex, feedsToMerge.size());
+            LOG.warn("Skipping {} file for feed {}/{} (future file preferred)", table.name, getFeedIndex(), feedsToMerge.size());
             skipFile = true;
         }
         return false;

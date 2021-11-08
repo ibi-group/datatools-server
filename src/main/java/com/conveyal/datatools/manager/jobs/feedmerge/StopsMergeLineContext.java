@@ -70,10 +70,10 @@ public class StopsMergeLineContext extends MergeLineContext {
                 // not require stop_code), we simply default to merging on stop_id.
                 LOG.warn(
                     "stop_code is not present in file {}/{}. Reverting to stop_id",
-                    feedIndex + 1, feedsToMerge.size());
+                    getFeedIndex() + 1, feedsToMerge.size());
                 // If the key value for stop_code is not present, revert to stop_id.
                 keyField = table.getKeyFieldName();
-                keyFieldIndex = table.getKeyFieldIndex(fieldsFoundInZip);
+                keyFieldIndex = getKeyFieldIndex();
                 keyValue = getCsvReader().get(keyFieldIndex);
                 // When all stops missing stop_code for the first feed, there's nothing to do (i.e.,
                 // no failure condition has been triggered yet). Just indicate this in the flag and
