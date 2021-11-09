@@ -1,2 +1,2 @@
 route_id,service_id,trip_id,trip_headsign,direction_id,block_id,wheelchair_accessible,bikes_allowed
-1,WKDY,3610458WKDY,San Francisco International Airport,0,1,1
+1,WKDY,3610458WKDY,San Francisco International Airport,0,1,1,1

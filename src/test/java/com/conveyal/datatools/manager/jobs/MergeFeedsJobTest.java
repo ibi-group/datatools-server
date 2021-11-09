@@ -3,6 +3,8 @@ package com.conveyal.datatools.manager.jobs;
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType;
+import com.conveyal.datatools.manager.jobs.feedmerge.MergeStrategy;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
@@ -38,7 +40,7 @@ public class MergeFeedsJobTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(MergeFeedsJobTest.class);
     private static Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
     private static FeedVersion bartVersion1;
-    private static FeedVersion bartVersion2;
+    private static FeedVersion bartVersion2SameTrips;
     private static FeedVersion calTrainVersion;
     private static FeedVersion bartVersionOldLite;
     private static FeedVersion bartVersionNewLite;
@@ -51,6 +53,18 @@ public class MergeFeedsJobTest extends UnitTest {
     private static FeedVersion bothCalendarFilesVersion3;
     private static FeedVersion onlyCalendarVersion;
     private static FeedVersion onlyCalendarDatesVersion;
+    /** The base feed for testing the MTC merge strategies. */
+    private static FeedVersion fakeTransitBase;
+    /** The base feed but with calendar start/end dates that have been transposed to the future. */
+    private static FeedVersion fakeTransitFuture;
+    /** The base feed with start/end dates that have been transposed to the future AND unique trip and service IDs. */
+    private static FeedVersion fakeTransitFutureUnique;
+    /** The base feed but with differing service_ids. */
+    private static FeedVersion fakeTransitModService;
+    /** The base feed (transposed to the future dates) but with differing trip_ids. */
+    private static FeedVersion fakeTransitModTrips;
+    private static FeedSource napa;
+    private static FeedSource caltrain;
     private static FeedSource bart;
 
     /**
@@ -70,18 +84,18 @@ public class MergeFeedsJobTest extends UnitTest {
         bart = new FeedSource("BART", project.id, MANUALLY_UPLOADED);
         Persistence.feedSources.create(bart);
         bartVersion1 = createFeedVersionFromGtfsZip(bart, "bart_old.zip");
-        bartVersion2 = createFeedVersionFromGtfsZip(bart, "bart_new.zip");
+        bartVersion2SameTrips = createFeedVersionFromGtfsZip(bart, "bart_new.zip");
         bartVersionOldLite = createFeedVersionFromGtfsZip(bart, "bart_old_lite.zip");
         bartVersionNewLite = createFeedVersionFromGtfsZip(bart, "bart_new_lite.zip");
 
         // Caltrain
-        FeedSource caltrain = new FeedSource("Caltrain", project.id, MANUALLY_UPLOADED);
+        caltrain = new FeedSource("Caltrain", project.id, MANUALLY_UPLOADED);
         Persistence.feedSources.create(caltrain);
         calTrainVersion = createFeedVersionFromGtfsZip(caltrain, "caltrain_gtfs.zip");
         calTrainVersionLite = createFeedVersionFromGtfsZip(caltrain, "caltrain_gtfs_lite.zip");
 
         // Napa
-        FeedSource napa = new FeedSource("Napa", project.id, MANUALLY_UPLOADED);
+        napa = new FeedSource("Napa", project.id, MANUALLY_UPLOADED);
         Persistence.feedSources.create(napa);
         napaVersion = createFeedVersionFromGtfsZip(napa, "napa-no-agency-id.zip");
         napaVersionLite = createFeedVersionFromGtfsZip(napa, "napa-no-agency-id-lite.zip");
@@ -109,8 +123,20 @@ public class MergeFeedsJobTest extends UnitTest {
             fakeAgency,
             zipFolderFiles("fake-agency-with-calendar-and-calendar-dates-3")
         );
+
+        // Other fake feeds for testing MTC MergeStrategy types.
+        FeedSource fakeTransit = new FeedSource("Fake Transit", project.id, MANUALLY_UPLOADED);
+        Persistence.feedSources.create(fakeTransit);
+        fakeTransitBase = createFeedVersion(fakeTransit, zipFolderFiles("merge-data-base"));
+        fakeTransitFuture = createFeedVersion(fakeTransit, zipFolderFiles("merge-data-future"));
+        fakeTransitFutureUnique = createFeedVersion(fakeTransit, zipFolderFiles("merge-data-future-unique-ids"));
+        fakeTransitModService = createFeedVersion(fakeTransit, zipFolderFiles("merge-data-mod-services"));
+        fakeTransitModTrips = createFeedVersion(fakeTransit, zipFolderFiles("merge-data-mod-trips"));
     }
 
+    /**
+     * Delete project on tear down (feed sources/versions will also be deleted).
+     */
     @AfterAll
     public static void tearDown() {
         if (project != null) {
@@ -267,27 +293,150 @@ public class MergeFeedsJobTest extends UnitTest {
     }
 
     /**
-     * Ensures that an MTC merge of feeds with duplicate trip IDs will fail.
+     * Ensures that an MTC merge of feeds that has exactly matching trips but mismatched services fails.
      */
     @Test
-    public void mergeMTCShouldFailOnDuplicateTrip() {
+    public void mergeMTCShouldFailOnDuplicateTripsButMismatchedServices() {
         Set<FeedVersion> versions = new HashSet<>();
-        versions.add(bartVersion1);
-        versions.add(bartVersion2);
+        versions.add(fakeTransitBase);
+        versions.add(fakeTransitModService);
         MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.SERVICE_PERIOD);
         // Run the job in this thread (we're not concerned about concurrency here).
         mergeFeedsJob.run();
         // Result should fail.
         assertTrue(
             mergeFeedsJob.mergeFeedsResult.failed,
-            "Merge feeds job should fail due to duplicate trip IDs."
+            "Merge feeds job should fail if feeds have exactly matching trips but mismatched services."
         );
     }
 
     /**
-     * Tests that the MTC merge strategy will successfully merge BART feeds. Note: this test turns off
-     * {@link MergeFeedsJob#failOnDuplicateTripId} in order to force the merge to succeed even though there are duplicate
-     * trips contained within.
+     * Ensures that an MTC merge of feeds with exact matches of service_ids and trip_ids will utilize the
+     * {@link MergeStrategy#EXTEND_FUTURE} strategy correctly.
+     */
+    @Test
+    public void mergeMTCShouldHandleExtendFutureStrategy() throws SQLException {
+        Set<FeedVersion> versions = new HashSet<>();
+        versions.add(fakeTransitBase);
+        versions.add(fakeTransitFuture);
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.SERVICE_PERIOD);
+        // Run the job in this thread (we're not concerned about concurrency here).
+        mergeFeedsJob.run();
+        // Result should fail.
+        assertFalse(
+            mergeFeedsJob.mergeFeedsResult.failed,
+            "Merge feeds job should succeed with EXTEND_FEED strategy."
+        );
+        assertEquals(
+            MergeStrategy.EXTEND_FUTURE,
+            mergeFeedsJob.mergeFeedsResult.mergeStrategy
+        );
+        // assert service_ids start_dates have been extended to the start_date of the base feed.
+        String mergedNamespace = mergeFeedsJob.mergedVersion.namespace;
+
+        // - calendar table
+        // expect a total of 2 records in calendar table
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.calendar", mergedNamespace),
+            2
+        );
+        // expect that both records in calendar table have the correct start_date
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.calendar where start_date = '20170918' and monday = 1", mergedNamespace),
+            2
+        );
+    }
+
+    /**
+     * Ensures that an MTC merge of feeds with exact matches of service_ids and trip_ids will utilize the
+     * {@link MergeStrategy#CHECK_STOP_TIMES} strategy correctly.
+     */
+    @Test
+    public void mergeMTCShouldHandleCheckStopTimesStrategy() throws SQLException {
+        Set<FeedVersion> versions = new HashSet<>();
+        versions.add(fakeTransitBase);
+        versions.add(fakeTransitModTrips);
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.SERVICE_PERIOD);
+        // Run the job in this thread (we're not concerned about concurrency here).
+        mergeFeedsJob.run();
+        // Check that correct strategy was used.
+        assertEquals(
+            MergeStrategy.CHECK_STOP_TIMES,
+            mergeFeedsJob.mergeFeedsResult.mergeStrategy
+        );
+        // Result should succeed.
+        assertFalse(
+            mergeFeedsJob.mergeFeedsResult.failed,
+            "Merge feeds job should succeed with CHECK_STOP_TIMES strategy."
+        );
+        // assert service_ids start_dates have been extended to the start_date of the base feed.
+        String mergedNamespace = mergeFeedsJob.mergedVersion.namespace;
+
+        // - calendar table
+        // expect a total of 5 records in calendar table:
+        // - 2 original (common_id start date extended)
+        // - 2 cloned for active feed (from MergeFeedsJob#serviceIdsToCloneAndRename)
+        // - 1 cloned and modified for future feed (from MergeFeedsJob#serviceIdsToExtend)
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.calendar", mergedNamespace),
+            5
+        );
+        // expect that 2 calendars (1 common_id extended from future and 1 Fake_Transit1:common_id from active) have
+        // start_date pinned to start date of active feed.
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.calendar where start_date = '20170918'", mergedNamespace),
+            2
+        );
+        // Out of 6 total trips from the input datasets, expect 5 trips in merged output.
+        // 1 trip from active feed skipped because it matches the trip_id from the future feed exactly.
+        // 1 trip from active feed is cloned/modified because it differs from its future counterpart.
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.trips", mergedNamespace),
+            5
+        );
+    }
+
+    /**
+     * Ensures that an MTC merge of feeds with non-matching service_ids and trip_ids will utilize the
+     * {@link MergeStrategy#DEFAULT} strategy correctly.
+     */
+    @Test
+    public void mergeMTCShouldHandleDefaultStrategy() throws SQLException {
+        Set<FeedVersion> versions = new HashSet<>();
+        versions.add(fakeTransitBase);
+        versions.add(fakeTransitFutureUnique);
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.SERVICE_PERIOD);
+        // Run the job in this thread (we're not concerned about concurrency here).
+        mergeFeedsJob.run();
+        // Check that correct strategy was used.
+        assertEquals(
+            MergeStrategy.DEFAULT,
+            mergeFeedsJob.mergeFeedsResult.mergeStrategy
+        );
+        // Result should succeed.
+        assertFalse(
+            mergeFeedsJob.mergeFeedsResult.failed,
+            "Merge feeds job should utilize DEFAULT strategy."
+        );
+        // assert service_ids start_dates have been extended to the start_date of the base feed.
+        String mergedNamespace = mergeFeedsJob.mergedVersion.namespace;
+
+        // - calendar table
+        // expect a total of 4 records in calendar table (all records from original files are included).
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.calendar", mergedNamespace),
+            4
+        );
+        // - trips table
+        // expect a total of 4 records in trips table (all records from original files are included).
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.trips", mergedNamespace),
+            4
+        );
+    }
+
+    /**
+     * Tests that the MTC merge strategy will successfully merge BART feeds.
      */
     @Test
     public void canMergeBARTFeeds() throws SQLException {
@@ -295,8 +444,6 @@ public class MergeFeedsJobTest extends UnitTest {
         versions.add(bartVersionOldLite);
         versions.add(bartVersionNewLite);
         MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.SERVICE_PERIOD);
-        // This time, turn off the failOnDuplicateTripId flag.
-        mergeFeedsJob.failOnDuplicateTripId = false;
         // Result should succeed this time.
         mergeFeedsJob.run();
         assertFeedMergeSucceeded(mergeFeedsJob);
@@ -328,9 +475,66 @@ public class MergeFeedsJobTest extends UnitTest {
             mergeFeedsJob.mergedVersion.feedLoadResult.shapes.rowCount,
             "Merged feed shapes count should equal expected value."
         );
-        // Expect that two calendar dates are excluded from the past feed (because they occur after the first date of
-        // the future feed) .
+        // Expect that two calendar dates are excluded from the active feed (because they occur after the first date of
+        // the future feed).
         int expectedCalendarDatesCount = bartVersionOldLite.feedLoadResult.calendarDates.rowCount + bartVersionNewLite.feedLoadResult.calendarDates.rowCount - 2;
+        assertEquals(
+            // During merge, if identical shape_id is found in both feeds, active feed shape_id should be feed-scoped.
+            expectedCalendarDatesCount,
+            mergeFeedsJob.mergedVersion.feedLoadResult.calendarDates.rowCount,
+            "Merged feed calendar_dates count should equal expected value."
+        );
+        // Ensure there are no referential integrity errors or duplicate ID errors.
+        assertThatFeedHasNoErrorsOfType(
+            mergeFeedsJob.mergedVersion.namespace,
+            NewGTFSErrorType.REFERENTIAL_INTEGRITY.toString(),
+            NewGTFSErrorType.DUPLICATE_ID.toString()
+        );
+    }
+
+    /**
+     * Tests that the MTC merge strategy will successfully merge BART feeds.
+     */
+    @Test
+    public void canMergeBARTFeedsSameTrips() throws SQLException {
+        Set<FeedVersion> versions = new HashSet<>();
+        versions.add(bartVersion1);
+        versions.add(bartVersion2SameTrips);
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.SERVICE_PERIOD);
+        // Result should succeed this time.
+        mergeFeedsJob.run();
+        assertFeedMergeSucceeded(mergeFeedsJob);
+        // Check GTFS+ line numbers.
+        assertEquals(
+            2, // Magic number represents expected number of lines after merge.
+            mergeFeedsJob.mergeFeedsResult.linesPerTable.get("directions").intValue(),
+            "Merged directions count should equal expected value."
+        );
+        assertEquals(
+            2, // Magic number represents the number of stop_attributes in the merged BART feed.
+            mergeFeedsJob.mergeFeedsResult.linesPerTable.get("stop_attributes").intValue(),
+            "Merged feed stop_attributes count should equal expected value."
+        );
+        // Check GTFS file line numbers.
+        assertEquals(
+            4629, // Magic number represents the number of trips in the merged BART feed.
+            mergeFeedsJob.mergedVersion.feedLoadResult.trips.rowCount,
+            "Merged feed trip count should equal expected value."
+        );
+        assertEquals(
+            9, // Magic number represents the number of routes in the merged BART feed.
+            mergeFeedsJob.mergedVersion.feedLoadResult.routes.rowCount,
+            "Merged feed route count should equal expected value."
+        );
+        assertEquals(
+            // During merge, if identical shape_id is found in both feeds, active feed shape_id should be feed-scoped.
+            bartVersion1.feedLoadResult.shapes.rowCount + bartVersion2SameTrips.feedLoadResult.shapes.rowCount,
+            mergeFeedsJob.mergedVersion.feedLoadResult.shapes.rowCount,
+            "Merged feed shapes count should equal expected value."
+        );
+        // Expect that two calendar dates are excluded from the active feed (because they occur after the first date of
+        // the future feed).
+        int expectedCalendarDatesCount = bartVersion1.feedLoadResult.calendarDates.rowCount + bartVersion2SameTrips.feedLoadResult.calendarDates.rowCount - 2;
         assertEquals(
             // During merge, if identical shape_id is found in both feeds, active feed shape_id should be feed-scoped.
             expectedCalendarDatesCount,
@@ -598,7 +802,7 @@ public class MergeFeedsJobTest extends UnitTest {
             1
         );
         // Modified cal_to_remove should still exist in calendar_dates. It is modified even though it does not exist in
-        // the future feed due to the MTC requirement to update all service_ids in the past feed.
+        // the future feed due to the MTC requirement to update all service_ids in the active feed.
         // See https://github.com/ibi-group/datatools-server/issues/244
         assertThatSqlCountQueryYieldsExpectedCount(
             String.format(

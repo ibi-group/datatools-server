@@ -325,12 +325,11 @@ public class MonitorServerStatusJob extends MonitorableJob {
         // if the otp-runner status file contains an error message, fail the job
         if (otpRunnerStatus.error) {
             // report to bugsnag if configured
-            Map<String, String> debuggingMessages = new HashMap<>();
-            debuggingMessages.put("otp-runner message", otpRunnerStatus.message);
             ErrorUtils.reportToBugsnag(
                 new RuntimeException("otp-runner reported an error"),
-                debuggingMessages,
-                this.owner
+                "otp-runner",
+                otpRunnerStatus.message,
+                owner
             );
             failJob(otpRunnerStatus.message);
             return false;
