@@ -20,18 +20,18 @@ public class ShapesMergeLineContext extends MergeLineContext {
     }
 
     @Override
-    public void checkFieldsForMergeConflicts(Set<NewGTFSError> idErrors) {
-        checkShapeIds(idErrors);
+    public void checkFieldsForMergeConflicts(Set<NewGTFSError> idErrors, FieldContext fieldContext) {
+        checkShapeIds(idErrors, fieldContext);
     }
 
-    private void checkShapeIds(Set<NewGTFSError> idErrors) {
+    private void checkShapeIds(Set<NewGTFSError> idErrors, FieldContext fieldContext) {
         // If a shape_id is found in both future and active datasets, all shape points from
         // the active dataset must be feed-scoped. Otherwise, the merged dataset may contain
         // shape_id:shape_pt_sequence values from both datasets (e.g., if future dataset contains
         // sequences 1,2,3,10 and active contains 1,2,7,9,10; the merged set will contain
         // 1,2,3,7,9,10).
-        if (fieldNameEquals("shape_id")) {
-            String val = getFieldContext().getValue();
+        if (fieldContext.nameEquals("shape_id")) {
+            String val = fieldContext.getValue();
             if (isHandlingFutureFeed()) {
                 // Track shape_id if working on future feed.
                 shapeIdsInFutureFeed.add(val);
@@ -39,15 +39,15 @@ public class ShapesMergeLineContext extends MergeLineContext {
                 // For the active feed, if the shape_id was already processed from the
                 // future feed, we need to add the feed-scope to avoid weird, hybrid shapes
                 // with points from both feeds.
-                updateAndRemapOutput(true);
+                updateAndRemapOutput(fieldContext,true);
                 // Re-check refs and uniqueness after changing shape_id value. (Note: this
                 // probably won't have any impact, but there's not much harm in including it.)
                 idErrors = referenceTracker
                     .checkReferencesAndUniqueness(
                         keyValue,
                         getLineNumber(),
-                        getFieldContext().getField(),
-                        getFieldContext().getValueToWrite(),
+                        fieldContext.getField(),
+                        fieldContext.getValueToWrite(),
                         table,
                         keyField,
                         table.getOrderFieldName());

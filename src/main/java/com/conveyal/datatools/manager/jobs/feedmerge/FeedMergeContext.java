@@ -6,6 +6,7 @@ import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.utils.MergeFeedUtils;
 import com.conveyal.gtfs.loader.Feed;
 import com.conveyal.gtfs.loader.Table;
+import com.conveyal.gtfs.model.Calendar;
 import com.google.common.collect.Sets;
 
 import java.io.Closeable;
@@ -64,6 +65,13 @@ public class FeedMergeContext implements Closeable {
         // calendar#start_date (unless that table for some reason does not exist).
         activeFeedFirstDate = activeFeedToMerge.version.validationResult.firstCalendarDate;
         futureFeedFirstDate = futureFeedToMerge.version.validationResult.firstCalendarDate;
+
+        // Initialize, before processing rows, the calendar start dates from the future feed.
+        for (Calendar c : futureFeed.calendars.getAll()) {
+            if (futureFirstCalendarStartDate.isAfter(c.start_date)) {
+                futureFirstCalendarStartDate = c.start_date;
+            }
+        }
     }
 
     @Override
@@ -74,6 +82,16 @@ public class FeedMergeContext implements Closeable {
     }
 
     /**
+     * Partially handles the Revised MTC Feed Merge Requirement
+     * to detect disjoint trip ids between the active/future feeds.
+     * @return true if no trip ids from the active feed is found in the future feed, and vice-versa.
+     */
+    public boolean areActiveAndFutureTripIdsDisjoint() {
+        return sharedTripIds.isEmpty();
+    }
+
+    /**
+     * FIXME: Remove - this is from the old merge logic.
      * Partially handles MTC Requirement to detect matching trip ids linked to different service ids.
      * @return true if trip ids match but not service ids (in such situation, merge should fail).
      */
@@ -117,10 +135,6 @@ public class FeedMergeContext implements Closeable {
 
     public LocalDate getFutureFirstCalendarStartDate() {
         return futureFirstCalendarStartDate;
-    }
-
-    public void setFutureFirstCalendarStartDate(LocalDate futureFirstCalendarStartDate) {
-        this.futureFirstCalendarStartDate = futureFirstCalendarStartDate;
     }
 
     public LocalDate getFutureFeedFirstDate() {

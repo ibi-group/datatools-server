@@ -45,4 +45,11 @@ public class FieldContext {
     public void resetValue(String newValue) {
         value = valueToWrite = newValue;
     }
+
+    /**
+     * Convenience method to compare if this field name equals a specified one.
+     */
+    public boolean nameEquals(String fieldName) {
+        return field.name.equals(fieldName);
+    }
 }
