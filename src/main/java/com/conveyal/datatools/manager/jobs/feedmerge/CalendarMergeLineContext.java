@@ -109,7 +109,6 @@ public class CalendarMergeLineContext extends MergeLineContext {
                 // service are exactly matching.
                 fieldContext.resetValue(feedMergeContext.activeFeedFirstDate.format(GTFS_DATE_FORMATTER));
             }
-        } else {
         }
         // Track service ID because we want to avoid removing trips that may reference this
         // service_id when the service_id is used by calendar_dates that operate in the valid

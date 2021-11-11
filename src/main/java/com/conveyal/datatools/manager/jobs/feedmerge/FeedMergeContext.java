@@ -90,49 +90,6 @@ public class FeedMergeContext implements Closeable {
         return sharedTripIds.isEmpty();
     }
 
-    /**
-     * FIXME: Remove - this is from the old merge logic.
-     * Partially handles MTC Requirement to detect matching trip ids linked to different service ids.
-     * @return true if trip ids match but not service ids (in such situation, merge should fail).
-     */
-    public boolean areTripIdsMatchingButNotServiceIds() {
-        // If only trip IDs match and not service IDs, do not permit merge to continue.
-        return tripIdsMatch && !serviceIdsMatch;
-    }
-
-    /**
-     * Determines whether there a same trip id is linked to different service ids in the active and future feed
-     * (MTC requirement).
-     * @return the first {@link TripMismatchedServiceIds} whose trip id is linked to different service ids,
-     *         or null if nothing found.
-     */
-    public TripMismatchedServiceIds shouldFailJobDueToMatchingTripIds() {
-        if (serviceIdsMatch) {
-            // If just the service_ids are an exact match, check the that the stop_times having matching signatures
-            // between the two feeds (i.e., each stop time in the ordered list is identical between the two feeds).
-            for (String tripId : sharedTripIds) {
-                TripMismatchedServiceIds mismatchInfo = tripIdHasMismatchedServiceIds(tripId, futureFeed, activeFeed);
-                if (mismatchInfo.hasMismatch) {
-                    return mismatchInfo;
-                }
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Compare stop times for the given tripId between the future and active feeds. The comparison will inform whether
-     * trip and/or service IDs should be modified in the output merged feed.
-     * @return A {@link TripMismatchedServiceIds} with info on whether the given tripId is found in
-     *         different service ids in the active and future feed.
-     */
-    public static TripMismatchedServiceIds tripIdHasMismatchedServiceIds(String tripId, Feed futureFeed, Feed activeFeed) {
-        String futureServiceId = futureFeed.trips.get(tripId).service_id;
-        String activeServiceId = activeFeed.trips.get(tripId).service_id;
-        return new TripMismatchedServiceIds(tripId, !futureServiceId.equals(activeServiceId), activeServiceId, futureServiceId);
-    }
-
     public LocalDate getFutureFirstCalendarStartDate() {
         return futureFirstCalendarStartDate;
     }

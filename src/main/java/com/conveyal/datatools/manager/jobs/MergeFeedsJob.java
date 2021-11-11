@@ -296,7 +296,7 @@ public class MergeFeedsJob extends FeedSourceJob {
                 Set<String> tripIdsWithInconsistentSignature = getSharedTripIdsWithInconsistentSignature();
                 if (!tripIdsWithInconsistentSignature.isEmpty()) {
                     failMergeJob(
-                        String.format("Trips %s in new feed have differing makeup from matching trips in active feed." +
+                        String.format("Trips %s in new feed have differing makeup from matching trips in active feed. " +
                                 "If a trip characteristic has changed, a new trip_id must be assigned.",
                             String.join(", ", tripIdsWithInconsistentSignature)
                         )
@@ -538,24 +538,6 @@ public class MergeFeedsJob extends FeedSourceJob {
                     .collect(Collectors.toList())
             );
 
-/*
-            // If a trip only in the active feed references a service_id that is set to be extended, that
-            // service_id needs to be cloned and renamed to differentiate it from the same service_id in
-            // the future feed. (The trip in question will be linked to the cloned service_id.)
-            Set<String> tripsOnlyInActiveFeed = Sets.difference(feedMergeContext.activeTripIds, feedMergeContext.futureTripIds);
-            tripsOnlyInActiveFeed.stream()
-                .map(tripId -> activeFeed.trips.get(tripId).service_id)
-                .filter(serviceId -> serviceIdsToExtend.contains(serviceId))
-                .forEach(serviceId -> serviceIdsToCloneAndRename.add(serviceId));
-            // If a trip only in the future feed references a service_id that is set to be extended, that
-            // service_id needs to be cloned and renamed to differentiate it from the same service_id in
-            // the future feed. (The trip in question will be linked to the cloned service_id.)
-            Set<String> tripsOnlyInFutureFeed = Sets.difference(feedMergeContext.futureTripIds, feedMergeContext.activeTripIds);
-            tripsOnlyInFutureFeed.stream()
-                .map(tripId -> futureFeed.trips.get(tripId).service_id)
-                .filter(serviceId -> serviceIdsToExtend.contains(serviceId))
-                .forEach(serviceId -> serviceIdsToCloneAndRename.add(serviceId));
-*/
             mergeFeedsResult.mergeStrategy = CHECK_STOP_TIMES;
         }
     }
