@@ -59,16 +59,14 @@ public class CalendarMergeLineContext extends MergeLineContext {
                 //     but the ending date will be set to the day before the **start date of the new feed**.
                 LocalDate endDate = getCsvDate("end_date");
                 LocalDate futureStartDate = null;
-                boolean activeAndFutureTripIdsDisjoint = job.sharedTripIdsWithConsistentSignature.isEmpty();
-                if (activeAndFutureTripIdsDisjoint) {
+                boolean activeAndFutureTripIdsAreDisjoint = job.sharedTripIdsWithConsistentSignature.isEmpty();
+                if (activeAndFutureTripIdsAreDisjoint) {
                     futureStartDate = feedMergeContext.getFutureFirstCalendarStartDate();
+                } else if (job.serviceIdsToTerminateEarly.contains(keyValue)) {
+                    futureStartDate = futureFeedFirstDate;
                 } else {
-                    if (job.isActiveCalendarOfSharedTripId(keyValue)) {
-                        // New calendar entry is already flagged for insertion from getMergeStrategy.
-                        // Insert this calendar record for other trip ids that may reference it.
-                    } else {
-                        futureStartDate = futureFeedFirstDate;
-                    }
+                    // New calendar entry is already flagged for insertion from getMergeStrategy.
+                    // Insert this calendar record for other trip ids that may reference it.
                 }
 
                 if (fieldContext.nameEquals("end_date")) {

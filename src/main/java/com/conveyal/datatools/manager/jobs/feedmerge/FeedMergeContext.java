@@ -111,6 +111,13 @@ public class FeedMergeContext implements Closeable {
     }
 
     /**
+     * Obtains the active trip ids found in the active feed, but not in the future feed.
+     */
+    public Sets.SetView<String> getActiveTripIdsNotInFutureFeed() {
+        return Sets.difference(activeTripIds, futureTripIds);
+    }
+
+    /**
      * Holds the status of a trip service id mismatch determination.
      */
     public static class TripMismatchedServiceIds {

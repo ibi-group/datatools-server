@@ -140,7 +140,7 @@ public class MergeFeedsJob extends FeedSourceJob {
     @JsonIgnore @BsonIgnore
     public Set<String> serviceIdsToCloneAndRename = new HashSet<>();
     @JsonIgnore @BsonIgnore
-    public Set<String> serviceIdsToInsert = new HashSet<>();
+    public Set<String> serviceIdsToTerminateEarly = new HashSet<>();
 
     private List<TripAndCalendars> sharedConsistentTripAndCalendarIds = new ArrayList<>();
 
@@ -263,36 +263,13 @@ public class MergeFeedsJob extends FeedSourceJob {
             final List<Table> tablesToMerge = getTablesToMerge();
             int numberOfTables = tablesToMerge.size();
 
-/*
-            // Skip merging process altogether if the failing condition is met
-            FeedMergeContext.TripMismatchedServiceIds serviceIdMismatch;
-            if (feedMergeContext.areTripIdsMatchingButNotServiceIds()) {
-                failMergeJob("Feed merge failed because the trip_ids are identical in the future and active feeds. A new service requires unique trip_ids for merging.");
-                return;
-            } else if ((serviceIdMismatch = feedMergeContext.shouldFailJobDueToMatchingTripIds()) != null) {
-                // We cannot account for the case where service_ids do not match! It would be a bit too complicated
-                // to handle this unique case, so instead just include in the failure reasons and use failure
-                // strategy.
-                failMergeJob(
-                    String.format("Shared trip_id (%s) had mismatched service id between two feeds (active: %s, future: %s)",
-                        serviceIdMismatch.tripId,
-                        serviceIdMismatch.activeServiceId,
-                        serviceIdMismatch.futureServiceId
-                    )
-                );
-                return;
-            }
-
- */
-
             // Before initiating the merge process, get the merge strategy to use, which runs some pre-processing to
             // check for id conflicts for certain tables (e.g., trips and calendars).
             if (mergeType.equals(SERVICE_PERIOD)) {
                 determineMergeStrategy();
 
-                // "If a single trip signature does not match the merge process shall stop with the following
+                // Failure condition "if a single trip signature does not match the merge process shall stop with the following
                 // error message along with matching trip_ids with differing trip signatures."
-                // (MTC revised merge Step 2)
                 Set<String> tripIdsWithInconsistentSignature = getSharedTripIdsWithInconsistentSignature();
                 if (!tripIdsWithInconsistentSignature.isEmpty()) {
                     failMergeJob(
@@ -538,6 +515,14 @@ public class MergeFeedsJob extends FeedSourceJob {
                     .collect(Collectors.toList())
             );
 
+            // Build the set of calendars to be shortened to the day before the future feed start date
+            // from trips in the active feed but not in the future feed.
+            serviceIdsToTerminateEarly.addAll(
+                feedMergeContext.getActiveTripIdsNotInFutureFeed().stream()
+                    .map(tripId -> activeFeed.trips.get(tripId).service_id)
+                    .collect(Collectors.toList())
+            );
+
             mergeFeedsResult.mergeStrategy = CHECK_STOP_TIMES;
         }
     }
@@ -579,18 +564,6 @@ public class MergeFeedsJob extends FeedSourceJob {
     @BsonIgnore @JsonIgnore
     public FeedMergeContext getFeedMergeContext() {
         return feedMergeContext;
-    }
-
-    /**
-     * @return true if the specified calendar id is listed as the active calendar id in any of the trips/calendar items.
-     */
-    public boolean isActiveCalendarOfSharedTripId(String calendarId) {
-        for (TripAndCalendars item : sharedConsistentTripAndCalendarIds) {
-            if (item.activeCalendarId.equals(calendarId)) {
-                return true;
-            }
-        }
-        return false;
     }
 
     private static class TripAndCalendars {

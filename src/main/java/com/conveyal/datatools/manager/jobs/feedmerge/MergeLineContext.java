@@ -456,26 +456,33 @@ public class MergeLineContext {
         rowValues = new String[sharedSpecFields.size()];
     }
 
+    /**
+     * Adds a cloned service id for trips with the same signature in both the active & future feeds.
+     * The cloned service id spans from the start date in the active feed until the end date in the future feed.
+     * @throws IOException
+     */
     public void addClonedServiceId() throws IOException {
-        if ((table.name.equals("calendar")) && job.serviceIdsToCloneAndRename.contains(rowValues[keyFieldIndex])) {
-            // FIXME: Do we need to worry about calendar_dates?
-            String[] clonedValues = rowValues.clone();
-            String newServiceId = clonedValues[keyFieldIndex] = String.join(":", idScope, rowValues[keyFieldIndex]);
-            // Modify start/end date.
-            int startDateIndex = Table.CALENDAR.getFieldIndex("start_date");
-            int endDateIndex = Table.CALENDAR.getFieldIndex("end_date");
-            clonedValues[startDateIndex] = feed.version.validationResult.firstCalendarDate.format(GTFS_DATE_FORMATTER);
-            clonedValues[endDateIndex] = feed.version.validationResult.lastCalendarDate.format(GTFS_DATE_FORMATTER);
-            referenceTracker.checkReferencesAndUniqueness(
-                keyValue,
-                lineNumber,
-                table.fields[0],
-                newServiceId,
-                table,
-                keyField,
-                orderField
-            );
-            writeValuesToTable(clonedValues, true);
+        if (table.name.equals("calendar")) {
+            String originalServiceId = rowValues[keyFieldIndex];
+            if (job.serviceIdsToCloneAndRename.contains(originalServiceId)) {
+                // FIXME: Do we need to worry about calendar_dates?
+                String[] clonedValues = rowValues.clone();
+                String newServiceId = clonedValues[keyFieldIndex] = String.join(":", idScope, originalServiceId);
+                // Modify start date only (preserve the end date on the future calendar entry).
+                int startDateIndex = Table.CALENDAR.getFieldIndex("start_date");
+                clonedValues[startDateIndex] = feedMergeContext.activeFeed.calendars.get(originalServiceId).start_date
+                    .format(GTFS_DATE_FORMATTER);
+                referenceTracker.checkReferencesAndUniqueness(
+                    keyValue,
+                    lineNumber,
+                    table.fields[0],
+                    newServiceId,
+                    table,
+                    keyField,
+                    orderField
+                );
+                writeValuesToTable(clonedValues, true);
+            }
         }
     }
 

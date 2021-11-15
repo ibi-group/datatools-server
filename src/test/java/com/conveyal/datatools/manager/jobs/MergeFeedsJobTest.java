@@ -61,8 +61,16 @@ public class MergeFeedsJobTest extends UnitTest {
     private static FeedVersion fakeTransitFutureUnique;
     /** The base feed but with differing service_ids. */
     private static FeedVersion fakeTransitModService;
-    /** The base feed (transposed to the future dates) but with differing trip_ids. */
-    private static FeedVersion fakeTransitModTrips;
+    /**
+     * The base feed (transposed to the future dates), with some trip_ids from the base feed with different signatures
+     * and some added trips.
+     */
+    private static FeedVersion fakeTransitNewSignatureTrips;
+    /**
+     * The base feed (transposed to the future dates), with some trip_ids from the base feed with the same signature,
+     * and some added trips, and a trip from the base feed removed.
+     */
+    private static FeedVersion fakeTransitSameSignatureTrips;
     private static FeedSource napa;
     private static FeedSource caltrain;
     private static FeedSource bart;
@@ -131,7 +139,8 @@ public class MergeFeedsJobTest extends UnitTest {
         fakeTransitFuture = createFeedVersion(fakeTransit, zipFolderFiles("merge-data-future"));
         fakeTransitFutureUnique = createFeedVersion(fakeTransit, zipFolderFiles("merge-data-future-unique-ids"));
         fakeTransitModService = createFeedVersion(fakeTransit, zipFolderFiles("merge-data-mod-services"));
-        fakeTransitModTrips = createFeedVersion(fakeTransit, zipFolderFiles("merge-data-mod-trips"));
+        fakeTransitNewSignatureTrips = createFeedVersion(fakeTransit, zipFolderFiles("merge-data-mod-trips"));
+        fakeTransitSameSignatureTrips = createFeedVersion(fakeTransit, zipFolderFiles("merge-data-added-trips"));
     }
 
     /**
@@ -348,14 +357,15 @@ public class MergeFeedsJobTest extends UnitTest {
     }
 
     /**
-     * Ensures that an MTC merge of feeds with exact matches of service_ids and trip_ids will utilize the
+     * Ensures that an MTC merge of feeds with exact matches of service_ids and trip_ids,
+     * trip ids having the same signature (same stop times) will utilize the
      * {@link MergeStrategy#CHECK_STOP_TIMES} strategy correctly.
      */
     @Test
-    public void mergeMTCShouldHandleCheckStopTimesStrategy() throws SQLException {
+    public void mergeMTCShouldHandleMatchingTripIdsWithSameSignature() throws SQLException {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(fakeTransitBase);
-        versions.add(fakeTransitModTrips);
+        versions.add(fakeTransitSameSignatureTrips);
         MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.SERVICE_PERIOD);
         // Run the job in this thread (we're not concerned about concurrency here).
         mergeFeedsJob.run();
@@ -369,39 +379,79 @@ public class MergeFeedsJobTest extends UnitTest {
             mergeFeedsJob.mergeFeedsResult.failed,
             "Merge feeds job should succeed with CHECK_STOP_TIMES strategy."
         );
-        // assert service_ids start_dates have been extended to the start_date of the base feed.
+
         String mergedNamespace = mergeFeedsJob.mergedVersion.namespace;
 
         // - calendar table
-        // expect a total of 5 records in calendar table:
-        // - 2 original (common_id start date extended)
-        // - 2 cloned for active feed (from MergeFeedsJob#serviceIdsToCloneAndRename)
-        // - 1 cloned and modified for future feed (from MergeFeedsJob#serviceIdsToExtend)
+        // expect a total of 4 records in calendar table:
+        // - 1 from the active feed (common_id start date is changed to one day before first start_date in future feed)
+        //   (the other one is unused and is discarded)
+        // - 2 from the future feed
+        // - 1 cloned for the matching trip id present in both active and future feeds
+        //   (from MergeFeedsJob#serviceIdsToCloneAndRename).
         assertThatSqlCountQueryYieldsExpectedCount(
             String.format("SELECT count(*) FROM %s.calendar", mergedNamespace),
-            5
+            4
         );
+
         // expect that 2 calendars (1 common_id extended from future and 1 Fake_Transit1:common_id from active) have
         // start_date pinned to start date of active feed.
         assertThatSqlCountQueryYieldsExpectedCount(
             String.format("SELECT count(*) FROM %s.calendar where start_date = '20170918'", mergedNamespace),
             2
         );
-        // Out of 6 total trips from the input datasets, expect 5 trips in merged output.
-        // 1 trip from active feed skipped because it matches the trip_id from the future feed exactly.
-        // 1 trip from active feed is cloned/modified because it differs from its future counterpart.
+        // One of the calendars above should have been extended
+        // until the end date of that entry in the future feed.
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.calendar where start_date = '20170918' and end_date='20170925'", mergedNamespace),
+            1
+        );
+        // The other one should have end_date set to a day before the start of the future feed start date
+        // (in the test data, that first date comes from the other calendar entry).
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.calendar where start_date = '20170918' and end_date='20170919'", mergedNamespace),
+            1
+        );
+        // Out of all trips from the input datasets, expect 4 trips in merged output.
+        // 1 trip from active feed that is not in the future feed,
+        // 1 trip in both the active and future feeds, with the same signature (same stop times),
+        // 2 trips from the future feed not in the active feed.
         assertThatSqlCountQueryYieldsExpectedCount(
             String.format("SELECT count(*) FROM %s.trips", mergedNamespace),
-            5
+            4
         );
     }
 
     /**
-     * Ensures that an MTC merge of feeds with non-matching service_ids and trip_ids will utilize the
+     * Ensures that an MTC merge of feeds with trip_ids matching in the active and future feed,
+     * but with different signatures (e.g. different stop times) fails.
+     */
+    @Test
+    public void mergeMTCShouldHandleMatchingTripIdsWithDifferentSignatures() {
+        Set<FeedVersion> versions = new HashSet<>();
+        versions.add(fakeTransitBase);
+        versions.add(fakeTransitNewSignatureTrips);
+        MergeFeedsJob mergeFeedsJob = new MergeFeedsJob(user, versions, "merged_output", MergeFeedsType.SERVICE_PERIOD);
+        // Run the job in this thread (we're not concerned about concurrency here).
+        mergeFeedsJob.run();
+        // Check that correct strategy was used.
+        assertEquals(
+            MergeStrategy.CHECK_STOP_TIMES,
+            mergeFeedsJob.mergeFeedsResult.mergeStrategy
+        );
+        // Result should fail.
+        assertTrue(
+            mergeFeedsJob.mergeFeedsResult.failed,
+            "Merge feeds job with trip ids of different signatures should fail."
+        );
+    }
+
+    /**
+     * Ensures that an MTC merge of feeds with disjoint (non-matching) trip_ids will utilize the
      * {@link MergeStrategy#DEFAULT} strategy correctly.
      */
     @Test
-    public void mergeMTCShouldHandleDefaultStrategy() throws SQLException {
+    public void mergeMTCShouldHandleDisjointTripIds() throws SQLException {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(fakeTransitBase);
         versions.add(fakeTransitFutureUnique);
@@ -422,11 +472,25 @@ public class MergeFeedsJobTest extends UnitTest {
         String mergedNamespace = mergeFeedsJob.mergedVersion.namespace;
 
         // - calendar table
-        // expect a total of 4 records in calendar table (all records from original files are included).
+        // expect a total of 3 records in calendar table
+        // - 2 records from future feed
+        // - 1 records from active feed that is used
+        // - the unused record from the active feed is discarded.
         assertThatSqlCountQueryYieldsExpectedCount(
             String.format("SELECT count(*) FROM %s.calendar", mergedNamespace),
-            4
+            3
         );
+        // The one calendar entry for the active feed should end one day before the first calendar start date
+        // of the future feed.
+        final String activeCalendarNewEndDate = "20170919"; // One day before 20170920.
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format(
+                "SELECT count(*) FROM %s.calendar WHERE end_date='%s' AND service_id in ('Fake_Transit1:common_id', 'Fake_Transit1:only_calendar_id')",
+                mergedNamespace,
+                activeCalendarNewEndDate),
+            1
+        );
+
         // - trips table
         // expect a total of 4 records in trips table (all records from original files are included).
         assertThatSqlCountQueryYieldsExpectedCount(
