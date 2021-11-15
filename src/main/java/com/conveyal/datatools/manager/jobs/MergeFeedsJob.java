@@ -136,8 +136,6 @@ public class MergeFeedsJob extends FeedSourceJob {
     @JsonIgnore @BsonIgnore
     public Set<String> sharedTripIdsWithConsistentSignature = new HashSet<>();
     @JsonIgnore @BsonIgnore
-    public Set<String> serviceIdsToExtend = new HashSet<>();
-    @JsonIgnore @BsonIgnore
     public Set<String> serviceIdsToCloneAndRename = new HashSet<>();
     @JsonIgnore @BsonIgnore
     public Set<String> serviceIdsToTerminateEarly = new HashSet<>();

@@ -12,8 +12,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.Set;
 import java.util.zip.ZipOutputStream;
 
-import static com.conveyal.datatools.manager.jobs.feedmerge.MergeStrategy.CHECK_STOP_TIMES;
-import static com.conveyal.datatools.manager.jobs.feedmerge.MergeStrategy.EXTEND_FUTURE;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.getTableScopedValue;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.hasDuplicateError;
 import static com.conveyal.gtfs.loader.DateField.GTFS_DATE_FORMATTER;
@@ -64,24 +62,26 @@ public class CalendarMergeLineContext extends MergeLineContext {
                     futureStartDate = feedMergeContext.getFutureFirstCalendarStartDate();
                 } else if (job.serviceIdsToTerminateEarly.contains(keyValue)) {
                     futureStartDate = futureFeedFirstDate;
-                } else {
-                    // New calendar entry is already flagged for insertion from getMergeStrategy.
-                    // Insert this calendar record for other trip ids that may reference it.
                 }
+                // In other cases not covered above, new calendar entry is already flagged for insertion
+                // from getMergeStrategy, so that trip ids may reference it.
 
-                if (fieldContext.nameEquals("end_date")) {
-                    if (futureStartDate != null && !endDate.isBefore(futureStartDate)) {
-                        fieldContext.resetValue(futureStartDate
-                            .minus(1, ChronoUnit.DAYS)
-                            .format(GTFS_DATE_FORMATTER));
-                    }
+
+                if (
+                    fieldContext.nameEquals("end_date") &&
+                    futureStartDate != null &&
+                    !endDate.isBefore(futureStartDate)
+                ) {
+                    fieldContext.resetValue(futureStartDate
+                        .minus(1, ChronoUnit.DAYS)
+                        .format(GTFS_DATE_FORMATTER));
                 }
             }
-        } else if (isHandlingFutureFeed()) {
-            // In the MTC revised feed merge logic:
-            // - Calendar entries from the future feed will be inserted as is in the merged feed.
-            // so no additional processing needed here.
         }
+        // If handling the future feed, the MTC revised feed merge logic is as follows:
+        // - Calendar entries from the future feed will be inserted as is in the merged feed.
+        // so no additional processing needed here.
+
 
         // If any service_id in the active feed matches with the future
         // feed, it should be modified and all associated trip records
@@ -97,31 +97,9 @@ public class CalendarMergeLineContext extends MergeLineContext {
             updateAndRemapOutput(fieldContext);
         }
 
-        if (isHandlingFutureFeed()) {
-            // FIXME: Move this below so that a cloned service doesn't get prematurely
-            //  modified? (do we want the cloned record to have the original values?)
-            if (shouldUpdateFutureFeedStartDate(fieldContext)) {
-                // Update start_date to extend service through the active feed's
-                // start date if the merge strategy dictates. The justification for this logic is that the active feed's
-                // service_id will be modified to a different unique value and the trips shared between the future/active
-                // service are exactly matching.
-                fieldContext.resetValue(feedMergeContext.activeFeedFirstDate.format(GTFS_DATE_FORMATTER));
-            }
-        }
         // Track service ID because we want to avoid removing trips that may reference this
         // service_id when the service_id is used by calendar_dates that operate in the valid
         // date range, i.e., before the future feed's first date.
         if (!skipRecord && fieldContext.nameEquals(SERVICE_ID)) mergeFeedsResult.serviceIds.add(fieldContext.getValueToWrite());
-    }
-
-    private boolean shouldUpdateFutureFeedStartDate(FieldContext fieldContext) {
-        return fieldContext.nameEquals("start_date") &&
-            (
-                EXTEND_FUTURE == mergeFeedsResult.mergeStrategy ||
-                    (
-                        CHECK_STOP_TIMES == mergeFeedsResult.mergeStrategy &&
-                            job.serviceIdsToExtend.contains(keyValue)
-                    )
-            );
     }
 }

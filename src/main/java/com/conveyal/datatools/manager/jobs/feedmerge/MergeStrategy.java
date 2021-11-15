@@ -13,13 +13,6 @@ public enum MergeStrategy {
      */
     DEFAULT,
     /**
-     * FIXME: Remove - no longer used (was in the old MTC feed merge)
-     * If service_ids and trip_ids in active feed are the same as future feed then the service end date for the
-     * merged feed shall match with future feed’s service end date and the service start date for the merged feed
-     * should be the merged date. All files from the future feed only shall be used in the merged feed.
-     */
-    EXTEND_FUTURE,
-    /**
      * If service_ids in active and future feed exactly match but only some of the trip_ids match then the merge
      * strategy shall handle the following three cases:
      * - *trip_id in both feeds*: The service shall start from the data merge date and end at the future feed’s service

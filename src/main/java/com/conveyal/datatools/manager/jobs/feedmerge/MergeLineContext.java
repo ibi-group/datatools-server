@@ -29,7 +29,6 @@ import java.util.zip.ZipOutputStream;
 
 import static com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType.REGIONAL;
 import static com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType.SERVICE_PERIOD;
-import static com.conveyal.datatools.manager.jobs.feedmerge.MergeStrategy.EXTEND_FUTURE;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.containsField;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.getAllFields;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.getMergeKeyField;
@@ -155,7 +154,7 @@ public class MergeLineContext {
         if (handlingActiveFeed && job.mergeType.equals(SERVICE_PERIOD)) {
             // Always prefer the "future" file for the feed_info table, which means
             // we can skip any iterations following the first one.
-            return EXTEND_FUTURE.equals(mergeFeedsResult.mergeStrategy) || table.name.equals("feed_info");
+            return table.name.equals("feed_info");
         }
         return false;
     }

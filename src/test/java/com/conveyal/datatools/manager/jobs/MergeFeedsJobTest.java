@@ -45,7 +45,6 @@ public class MergeFeedsJobTest extends UnitTest {
     private static FeedVersion bartVersionNewLite;
     private static FeedVersion calTrainVersionLite;
     private static Project project;
-    private static FeedVersion napaVersion;
     private static FeedVersion napaVersionLite;
     private static FeedVersion bothCalendarFilesVersion;
     private static FeedVersion bothCalendarFilesVersion2;
