@@ -463,7 +463,7 @@ public class MergeLineContext {
     public void addClonedServiceId() throws IOException {
         if (table.name.equals("calendar")) {
             String originalServiceId = rowValues[keyFieldIndex];
-            if (job.serviceIdsToCloneAndRename.contains(originalServiceId)) {
+            if (job.serviceIdsToCloneRenameAndExtend.contains(originalServiceId)) {
                 // FIXME: Do we need to worry about calendar_dates?
                 String[] clonedValues = rowValues.clone();
                 String newServiceId = clonedValues[keyFieldIndex] = String.join(":", idScope, originalServiceId);
