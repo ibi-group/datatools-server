@@ -24,8 +24,8 @@ public class CalendarMergeLineContext extends MergeLineContext {
     }
 
     @Override
-    public void checkFieldsForMergeConflicts(Set<NewGTFSError> idErrors, FieldContext fieldContext) throws IOException {
-        checkCalendarIds(idErrors, fieldContext);
+    public boolean checkFieldsForMergeConflicts(Set<NewGTFSError> idErrors, FieldContext fieldContext) throws IOException {
+        return checkCalendarIds(idErrors, fieldContext);
     }
 
     @Override
@@ -37,6 +37,7 @@ public class CalendarMergeLineContext extends MergeLineContext {
     }
 
     private void checkCalendarIds(Set<NewGTFSError> idErrors, FieldContext fieldContext) throws IOException {
+        boolean shouldSkipRecord = false;
         if (isHandlingActiveFeed()) {
             LocalDate startDate = getCsvDate("start_date");
             // If a service_id from the active calendar has both the
@@ -51,7 +52,7 @@ public class CalendarMergeLineContext extends MergeLineContext {
                     keyValue);
                 String key = getTableScopedValue(table, getIdScope(), keyValue);
                 mergeFeedsResult.skippedIds.add(key);
-                skipRecord = true;
+                shouldSkipRecord = true;
             } else {
                 // In the MTC revised feed merge logic:
                 // - If trip ids in active and future feed are disjoint,
@@ -107,7 +108,9 @@ public class CalendarMergeLineContext extends MergeLineContext {
         // Track service ID because we want to avoid removing trips that may reference this
         // service_id when the service_id is used by calendar_dates that operate in the valid
         // date range, i.e., before the future feed's first date.
-        if (!skipRecord && fieldContext.nameEquals(SERVICE_ID)) mergeFeedsResult.serviceIds.add(fieldContext.getValueToWrite());
+        if (!shouldSkipRecord && fieldContext.nameEquals(SERVICE_ID)) mergeFeedsResult.serviceIds.add(fieldContext.getValueToWrite());
+
+        return !shouldSkipRecord;
     }
 
     /**

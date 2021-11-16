@@ -20,11 +20,12 @@ public class ShapesMergeLineContext extends MergeLineContext {
     }
 
     @Override
-    public void checkFieldsForMergeConflicts(Set<NewGTFSError> idErrors, FieldContext fieldContext) {
-        checkShapeIds(idErrors, fieldContext);
+    public boolean checkFieldsForMergeConflicts(Set<NewGTFSError> idErrors, FieldContext fieldContext) {
+        return checkShapeIds(idErrors, fieldContext);
     }
 
-    private void checkShapeIds(Set<NewGTFSError> idErrors, FieldContext fieldContext) {
+    private boolean checkShapeIds(Set<NewGTFSError> idErrors, FieldContext fieldContext) {
+        boolean shouldSkipRecord = false;
         // If a shape_id is found in both future and active datasets, all shape points from
         // the active dataset must be feed-scoped. Otherwise, the merged dataset may contain
         // shape_id:shape_pt_sequence values from both datasets (e.g., if future dataset contains
@@ -54,6 +55,11 @@ public class ShapesMergeLineContext extends MergeLineContext {
             }
         }
         // Skip record if normal duplicate errors are found.
-        if (hasDuplicateError(idErrors)) skipRecord = true;
+        // FIXME: refactor (used in super class)
+        if (hasDuplicateError(idErrors)) {
+            shouldSkipRecord = true;
+        }
+
+        return !shouldSkipRecord;
     }
 }
