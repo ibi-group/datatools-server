@@ -264,10 +264,10 @@ public class MergeLineContext {
         return !hasDuplicateError(idErrors);
     }
 
-    private Set<NewGTFSError> getIdErrors() {
+    private Set<NewGTFSError> getIdErrors(FieldContext fieldContext) {
         // If analyzing the second feed (active feed), the service_id always gets feed scoped.
         // See https://github.com/ibi-group/datatools-server/issues/244
-        String fieldValue = handlingActiveFeed && fieldNameEquals(SERVICE_ID)
+        String fieldValue = handlingActiveFeed && fieldContext.nameEquals(SERVICE_ID)
             ? fieldContext.getValueToWrite()
             : fieldContext.getValue();
 
@@ -275,7 +275,7 @@ public class MergeLineContext {
             fieldValue, table, keyField, orderField);
     }
 
-    protected boolean checkRoutesAndStopsIds(Set<NewGTFSError> idErrors) throws IOException {
+    protected boolean checkRoutesAndStopsIds(Set<NewGTFSError> idErrors, FieldContext fieldContext) throws IOException {
         boolean shouldSkipRecord = false;
         // First, check uniqueness of primary key value (i.e., stop or route ID)
         // in case the stop_code or route_short_name are being used. This
@@ -520,14 +520,14 @@ public class MergeLineContext {
                 // Remap service id from active feed to distinguish them
                 // from entries with the same id in the future feed.
                 // See https://github.com/ibi-group/datatools-server/issues/244
-                if (handlingActiveFeed && fieldNameEquals(SERVICE_ID)) {
-                    updateAndRemapOutput();
+                if (handlingActiveFeed && fieldContext.nameEquals(SERVICE_ID)) {
+                    updateAndRemapOutput(fieldContext);
                 }
 
                 // Store values for key fields that have been encountered and update any key values that need modification due
                 // to conflicts.
                 // This method can change skipRecord.
-                if (!checkFieldsForMergeConflicts(getIdErrors(), fieldContext)) {
+                if (!checkFieldsForMergeConflicts(getIdErrors(fieldContext), fieldContext)) {
                     skipRecord = true;
                     break;
                 }
@@ -536,7 +536,7 @@ public class MergeLineContext {
             // merged result. If this is the case (or other conditions are met), we will need to skip this
             // record. Likewise, if the reference has been modified, ensure that the value written to the
             // merged result is correctly updated.
-            if (!checkForeignReferences()) {
+            if (!checkForeignReferences(fieldContext)) {
                 skipRecord = true;
                 break;
             }

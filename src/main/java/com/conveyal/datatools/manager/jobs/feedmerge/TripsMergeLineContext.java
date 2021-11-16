@@ -23,17 +23,16 @@ public class TripsMergeLineContext extends MergeLineContext {
 
     private boolean checkTripIds(Set<NewGTFSError> idErrors, FieldContext fieldContext) {
         boolean shouldSkipRecord = false;
-        // trip_ids between active and future datasets must not match. The tripIdsToSkip and
-        // tripIdsToModify sets below are determined based on the MergeStrategy used for MTC
-        // service period merges.
-        if (isHandlingActiveFeed()) {
-            // Handling active feed. Skip or modify trip id if found in one of the
-            // respective sets.
-            if (job.tripIdsToSkipForActiveFeed.contains(keyValue)) {
-                shouldSkipRecord = true;
-            } else if (job.tripIdsToModifyForActiveFeed.contains(keyValue)) {
-                updateAndRemapOutput(true);
-            }
+        // For the MTC revised feed merge process,
+        // the updated logic requires to insert all trips from both the active and future feed,
+        // except if they are present in both, in which case we only insert the trip entry from the future feed.
+        if (
+            job.mergeType.equals(SERVICE_PERIOD) &&
+            isHandlingActiveFeed() &&
+            job.sharedTripIdsWithConsistentSignature.contains(keyValue)
+        ) {
+            // Skip this record, we will use the one from the future feed.
+            shouldSkipRecord = true;
         }
 
         // Remap duplicate trip ids.

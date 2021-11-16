@@ -36,7 +36,7 @@ public class CalendarMergeLineContext extends MergeLineContext {
         addClonedServiceId();
     }
 
-    private void checkCalendarIds(Set<NewGTFSError> idErrors, FieldContext fieldContext) throws IOException {
+    private boolean checkCalendarIds(Set<NewGTFSError> idErrors, FieldContext fieldContext) throws IOException {
         boolean shouldSkipRecord = false;
         if (isHandlingActiveFeed()) {
             LocalDate startDate = getCsvDate("start_date");
