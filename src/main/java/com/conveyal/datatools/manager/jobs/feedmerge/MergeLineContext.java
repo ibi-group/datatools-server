@@ -348,7 +348,6 @@ public class MergeLineContext {
             // Key field has defaulted to the standard primary key field
             // (stop_id or route_id), which makes the check much
             // simpler (just skip the duplicate record).
-            // FIXME: refactor.
             if (hasDuplicateError(idErrors)) {
                 shouldSkipRecord = true;
             }
@@ -367,13 +366,10 @@ public class MergeLineContext {
     }
 
     private String getNewAgencyIdForFeed() {
-        String newAgencyId;
-        if (handlingActiveFeed) {
-            newAgencyId = feedMergeContext.getActiveFeedNewAgencyId();
-        } else {
-            newAgencyId = feedMergeContext.getFutureFeedNewAgencyId();
-        }
-        return newAgencyId;
+        return (handlingActiveFeed
+            ? feedMergeContext.active
+            : feedMergeContext.future
+        ).getNewAgencyId();
     }
 
     private boolean hasBlankPrimaryKey() {

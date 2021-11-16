@@ -60,7 +60,7 @@ public class CalendarMergeLineContext extends MergeLineContext {
                 // start date if the merge strategy dictates. The justification for this logic is that the active feed's
                 // service_id will be modified to a different unique value and the trips shared between the future/active
                 // service are exactly matching.
-                getFieldContext().resetValue(feedMergeContext.activeFeedFirstDate.format(GTFS_DATE_FORMATTER));
+                getFieldContext().resetValue(feedMergeContext.active.getFeedFirstDate().format(GTFS_DATE_FORMATTER));
             }
         } else {
             // If a service_id from the active calendar has both the
@@ -69,7 +69,7 @@ public class CalendarMergeLineContext extends MergeLineContext {
             // calendar_dates, and calendar_attributes referencing this
             // service_id shall also be removed/ignored. Stop_time records
             // for the ignored trips shall also be removed.
-            LocalDate futureFeedFirstDate = feedMergeContext.getFutureFeedFirstDate();
+            LocalDate futureFeedFirstDate = feedMergeContext.future.getFeedFirstDate();
             if (!startDate.isBefore(futureFeedFirstDate)) {
                 LOG.warn(
                     "Skipping calendar entry {} because it operates fully within the time span of future feed.",

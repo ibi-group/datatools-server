@@ -55,7 +55,6 @@ public class ShapesMergeLineContext extends MergeLineContext {
             }
         }
         // Skip record if normal duplicate errors are found.
-        // FIXME: refactor (used in super class)
         if (hasDuplicateError(idErrors)) {
             shouldSkipRecord = true;
         }

@@ -402,15 +402,15 @@ public class MergeFeedsJob extends FeedSourceJob {
         if (feedMergeContext.serviceIdsMatch) {
             // If just the service_ids are an exact match, check the that the stop_times having matching signatures
             // between the two feeds (i.e., each stop time in the ordered list is identical between the two feeds).
-            Feed futureFeed = feedMergeContext.futureFeed;
-            Feed activeFeed = feedMergeContext.activeFeed;
+            Feed futureFeed = feedMergeContext.future.feed;
+            Feed activeFeed = feedMergeContext.active.feed;
             for (String tripId : feedMergeContext.sharedTripIds) {
                 compareStopTimesAndCollectTripAndServiceIds(tripId, futureFeed, activeFeed);
             }
             // If a trip only in the active feed references a service_id that is set to be extended, that
             // service_id needs to be cloned and renamed to differentiate it from the same service_id in
             // the future feed. (The trip in question will be linked to the cloned service_id.)
-            Set<String> tripsOnlyInActiveFeed = Sets.difference(feedMergeContext.activeTripIds, feedMergeContext.futureTripIds);
+            Set<String> tripsOnlyInActiveFeed = Sets.difference(feedMergeContext.active.tripIds, feedMergeContext.future.tripIds);
             tripsOnlyInActiveFeed.stream()
                 .map(tripId -> activeFeed.trips.get(tripId).service_id)
                 .filter(serviceId -> serviceIdsToExtend.contains(serviceId))
@@ -418,7 +418,7 @@ public class MergeFeedsJob extends FeedSourceJob {
             // If a trip only in the future feed references a service_id that is set to be extended, that
             // service_id needs to be cloned and renamed to differentiate it from the same service_id in
             // the future feed. (The trip in question will be linked to the cloned service_id.)
-            Set<String> tripsOnlyInFutureFeed = Sets.difference(feedMergeContext.futureTripIds, feedMergeContext.activeTripIds);
+            Set<String> tripsOnlyInFutureFeed = Sets.difference(feedMergeContext.future.tripIds, feedMergeContext.active.tripIds);
             tripsOnlyInFutureFeed.stream()
                 .map(tripId -> futureFeed.trips.get(tripId).service_id)
                 .filter(serviceId -> serviceIdsToExtend.contains(serviceId))
