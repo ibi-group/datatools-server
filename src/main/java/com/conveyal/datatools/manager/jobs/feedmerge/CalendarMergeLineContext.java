@@ -26,11 +26,12 @@ public class CalendarMergeLineContext extends MergeLineContext {
     }
 
     @Override
-    public void checkFieldsForMergeConflicts(Set<NewGTFSError> idErrors) throws IOException {
-        checkCalendarIds(idErrors);
+    public boolean checkFieldsForMergeConflicts(Set<NewGTFSError> idErrors) throws IOException {
+        return checkCalendarIds(idErrors);
     }
 
-    private void checkCalendarIds(Set<NewGTFSError> idErrors) throws IOException {
+    private boolean checkCalendarIds(Set<NewGTFSError> idErrors) throws IOException {
+        boolean shouldSkipRecord = false;
         // If any service_id in the active feed matches with the future
         // feed, it should be modified and all associated trip records
         // must also be changed with the modified service_id.
@@ -75,7 +76,7 @@ public class CalendarMergeLineContext extends MergeLineContext {
                     keyValue);
                 String key = getTableScopedValue(table, getIdScope(), keyValue);
                 mergeFeedsResult.skippedIds.add(key);
-                skipRecord = true;
+                shouldSkipRecord = true;
             } else {
                 // If a service_id from the active calendar has only the
                 // end_date in the future, the end_date shall be set to one
@@ -94,7 +95,9 @@ public class CalendarMergeLineContext extends MergeLineContext {
         // Track service ID because we want to avoid removing trips that may reference this
         // service_id when the service_id is used by calendar_dates that operate in the valid
         // date range, i.e., before the future feed's first date.
-        if (!skipRecord && fieldNameEquals(SERVICE_ID)) mergeFeedsResult.serviceIds.add(getFieldContext().getValueToWrite());
+        if (!shouldSkipRecord && fieldNameEquals(SERVICE_ID)) mergeFeedsResult.serviceIds.add(getFieldContext().getValueToWrite());
+
+        return !shouldSkipRecord;
     }
 
     private boolean shouldUpdateFutureFeedStartDate() {

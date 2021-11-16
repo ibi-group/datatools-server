@@ -22,8 +22,8 @@ public class CalendarDatesMergeLineContext extends MergeLineContext {
     }
 
     @Override
-    public void checkFieldsForMergeConflicts(Set<NewGTFSError> idErrors) throws IOException {
-        checkCalendarDatesIds();
+    public boolean checkFieldsForMergeConflicts(Set<NewGTFSError> idErrors) throws IOException {
+        return checkCalendarDatesIds();
     }
 
     @Override
@@ -32,7 +32,8 @@ public class CalendarDatesMergeLineContext extends MergeLineContext {
         updateFutureFeedFirstDate();
     }
 
-    private void checkCalendarDatesIds() throws IOException {
+    private boolean checkCalendarDatesIds() throws IOException {
+        boolean shouldSkipRecord = false;
         // Drop any calendar_dates.txt records from the existing feed for dates that are
         // not before the first date of the future feed.
         LocalDate date = getCsvDate("date");
@@ -44,12 +45,14 @@ public class CalendarDatesMergeLineContext extends MergeLineContext {
                 futureFeedFirstDate);
             String key = getTableScopedValue(table, getIdScope(), keyValue);
             mergeFeedsResult.skippedIds.add(key);
-            skipRecord = true;
+            shouldSkipRecord = true;
         }
         // Track service ID because we want to avoid removing trips that may reference this
         // service_id when the service_id is used by calendar.txt records that operate in
         // the valid date range, i.e., before the future feed's first date.
-        if (!skipRecord && fieldNameEquals(SERVICE_ID)) mergeFeedsResult.serviceIds.add(getFieldContext().getValueToWrite());
+        if (!shouldSkipRecord && fieldNameEquals(SERVICE_ID)) mergeFeedsResult.serviceIds.add(getFieldContext().getValueToWrite());
+
+        return !shouldSkipRecord;
     }
 
     private void updateFutureFeedFirstDate() {

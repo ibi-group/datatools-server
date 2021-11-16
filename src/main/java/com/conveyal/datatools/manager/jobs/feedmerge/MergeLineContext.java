@@ -51,7 +51,7 @@ public class MergeLineContext {
     // CSV writer used to write to zip file.
     private final CsvListWriter writer;
     private CsvReader csvReader;
-    protected boolean skipRecord;
+    private boolean skipRecord;
     protected boolean keyFieldMissing;
     private String[] rowValues;
     private int lineNumber = 0;
@@ -210,7 +210,7 @@ public class MergeLineContext {
             .collect(Collectors.toList());
     }
 
-    public boolean areForeignRefsOk() throws IOException {
+    public boolean checkForeignReferences() throws IOException {
         Field field = fieldContext.getField();
         if (field.isForeignReference()) {
             String key = getTableScopedValue(field.referenceTable, idScope, fieldContext.getValue());
@@ -235,7 +235,6 @@ public class MergeLineContext {
                             getCsvValue(orderField));
                     }
                     mergeFeedsResult.skippedIds.add(skippedKey);
-                    skipRecord = true;
                     return false;
                 }
             }
@@ -260,27 +259,26 @@ public class MergeLineContext {
 
     /**
      * Overridable method whose default behavior below is to skip a record if it creates a duplicate id.
+     * @return false, if a failing condition was encountered. true, if everything was ok.
      * @throws IOException Some overrides throw IOException.
      */
-    public void checkFieldsForMergeConflicts(Set<NewGTFSError> idErrors) throws IOException {
-        if (hasDuplicateError(idErrors)) skipRecord = true;
+    public boolean checkFieldsForMergeConflicts(Set<NewGTFSError> idErrors) throws IOException {
+        return !hasDuplicateError(idErrors);
     }
 
     private Set<NewGTFSError> getIdErrors() {
-        String fieldValue;
         // If analyzing the second feed (active feed), the service_id always gets feed scoped.
         // See https://github.com/ibi-group/datatools-server/issues/244
-        if (handlingActiveFeed && fieldNameEquals(SERVICE_ID)) {
-            updateAndRemapOutput();
-            fieldValue = fieldContext.getValueToWrite();
-        } else {
-            fieldValue = fieldContext.getValue();
-        }
+        String fieldValue = handlingActiveFeed && fieldNameEquals(SERVICE_ID)
+            ? fieldContext.getValueToWrite()
+            : fieldContext.getValue();
+
         return referenceTracker.checkReferencesAndUniqueness(keyValue, lineNumber, fieldContext.getField(),
             fieldValue, table, keyField, orderField);
     }
 
-    protected void checkRoutesAndStopsIds(Set<NewGTFSError> idErrors) throws IOException {
+    protected boolean checkRoutesAndStopsIds(Set<NewGTFSError> idErrors) throws IOException {
+        boolean shouldSkipRecord = false;
         // First, check uniqueness of primary key value (i.e., stop or route ID)
         // in case the stop_code or route_short_name are being used. This
         // must occur unconditionally because each record must be tracked
@@ -300,7 +298,7 @@ public class MergeLineContext {
                 //
                 // Otherwise, allow the record to be written in output.
                 if (hasDuplicateError(primaryKeyErrors)) {
-                    skipRecord = true;
+                    shouldSkipRecord = true;
                 }
             } else if (hasDuplicateError(idErrors)) {
                 // If we encounter a route/stop that shares its alt.
@@ -333,7 +331,7 @@ public class MergeLineContext {
                     // have their references updated.
                     mergeFeedsResult.remappedIds.put(key, keyForMatchingAltId);
                 }
-                skipRecord = true;
+                shouldSkipRecord = true;
             }
             // Next check for regular ID conflicts (e.g., on route_id or stop_id) because any
             // conflicts here will actually break the feed. This essentially handles the case
@@ -341,7 +339,7 @@ public class MergeLineContext {
             // both of these routes to end up in the merged feed in this case because we're
             // matching on short name, so we must modify the route_id.
             if (
-                !skipRecord &&
+                !shouldSkipRecord &&
                 !referenceTracker.transitIds.contains(String.join(":", keyField, keyValue)) &&
                 hasDuplicateError(primaryKeyErrors)
             ) {
@@ -353,7 +351,10 @@ public class MergeLineContext {
             // Key field has defaulted to the standard primary key field
             // (stop_id or route_id), which makes the check much
             // simpler (just skip the duplicate record).
-            if (hasDuplicateError(idErrors)) skipRecord = true;
+            // FIXME: refactor.
+            if (hasDuplicateError(idErrors)) {
+                shouldSkipRecord = true;
+            }
         }
 
         String newAgencyId = feedMergeContext.getNewAgencyId();
@@ -363,6 +364,8 @@ public class MergeLineContext {
                 newAgencyId, keyValue);
             fieldContext.setValue(newAgencyId);
         }
+
+        return !shouldSkipRecord;
     }
 
     private boolean hasBlankPrimaryKey() {
@@ -503,13 +506,14 @@ public class MergeLineContext {
         writeValuesToTable(headers, false);
     }
 
+    /**
+     * Constructs a new row value.
+     * @return false, if a failing condition was encountered. true, if everything was ok.
+     */
     public boolean constructRowValues() throws IOException {
         // Piece together the row to write, which should look practically identical to the original
         // row except for the identifiers receiving a prefix to avoid ID conflicts.
         for (int specFieldIndex = 0; specFieldIndex < sharedSpecFields.size(); specFieldIndex++) {
-            // There is nothing to do in this loop if it has already been determined that the record should
-            // be skipped.
-            if (skipRecord) break;
             Field field = sharedSpecFields.get(specFieldIndex);
             // Default value to write is unchanged from value found in csv (i.e. val). Note: if looking to
             // modify the value that is written in the merged file, you must update valueToWrite (e.g.,
@@ -531,17 +535,29 @@ public class MergeLineContext {
             // track references for a large number of feeds (e.g., every feed in New
             // York State).
             if (job.mergeType.equals(SERVICE_PERIOD)) {
-                Set<NewGTFSError> idErrors = getIdErrors(); // FIXME: Rename. This method is imperative.
+                // Remap service id from active feed to distinguish them
+                // from entries with the same id in the future feed.
+                // See https://github.com/ibi-group/datatools-server/issues/244
+                if (handlingActiveFeed && fieldNameEquals(SERVICE_ID)) {
+                    updateAndRemapOutput();
+                }
+
                 // Store values for key fields that have been encountered and update any key values that need modification due
                 // to conflicts.
-                checkFieldsForMergeConflicts(idErrors); // FIXME: This method changes skipRecord;
-                if (skipRecord) continue;
+                // This method can change skipRecord.
+                if (!checkFieldsForMergeConflicts(getIdErrors())) {
+                    skipRecord = true;
+                    break;
+                }
             }
             // If the current field is a foreign reference, check if the reference has been removed in the
             // merged result. If this is the case (or other conditions are met), we will need to skip this
             // record. Likewise, if the reference has been modified, ensure that the value written to the
             // merged result is correctly updated.
-            if (!areForeignRefsOk()) continue; // FIXME: This method changes skipRecord;
+            if (!checkForeignReferences()) {
+                skipRecord = true;
+                break;
+            }
             rowValues[specFieldIndex] = fieldContext.getValueToWrite();
         }
         return true;

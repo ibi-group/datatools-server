@@ -29,8 +29,8 @@ public class StopsMergeLineContext extends MergeLineContext {
     }
 
     @Override
-    public void checkFieldsForMergeConflicts(Set<NewGTFSError> idErrors) throws IOException {
-        checkRoutesAndStopsIds(idErrors);
+    public boolean checkFieldsForMergeConflicts(Set<NewGTFSError> idErrors) throws IOException {
+        return checkRoutesAndStopsIds(idErrors);
     }
 
     /**
