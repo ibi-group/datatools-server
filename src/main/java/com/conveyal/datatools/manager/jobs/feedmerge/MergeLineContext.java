@@ -41,7 +41,6 @@ import static com.conveyal.gtfs.loader.DateField.GTFS_DATE_FORMATTER;
 public class MergeLineContext {
     protected static final String AGENCY_ID = "agency_id";
     protected static final String SERVICE_ID = "service_id";
-    private static final String STOPS = "stops";
     private static final Logger LOG = LoggerFactory.getLogger(MergeLineContext.class);
     protected final MergeFeedsJob job;
     private final ZipOutputStream out;
@@ -91,7 +90,7 @@ public class MergeLineContext {
                 return new RoutesMergeLineContext(job, table, out);
             case "shapes":
                 return new ShapesMergeLineContext(job, table, out);
-            case STOPS:
+            case "stops":
                 return new StopsMergeLineContext(job, table, out);
             case "trips":
                 return new TripsMergeLineContext(job, table, out);
@@ -268,21 +267,17 @@ public class MergeLineContext {
     }
 
     private Set<NewGTFSError> getIdErrors() {
-        Set<NewGTFSError> idErrors;
-        Field field = fieldContext.getField();
+        String fieldValue;
         // If analyzing the second feed (active feed), the service_id always gets feed scoped.
         // See https://github.com/ibi-group/datatools-server/issues/244
         if (handlingActiveFeed && fieldNameEquals(SERVICE_ID)) {
             updateAndRemapOutput();
-            idErrors = referenceTracker
-                .checkReferencesAndUniqueness(keyValue, lineNumber, field, fieldContext.getValueToWrite(),
-                    table, keyField, orderField);
+            fieldValue = fieldContext.getValueToWrite();
         } else {
-            idErrors = referenceTracker
-                .checkReferencesAndUniqueness(keyValue, lineNumber, field, fieldContext.getValue(),
-                    table, keyField, orderField);
+            fieldValue = fieldContext.getValue();
         }
-        return idErrors;
+        return referenceTracker.checkReferencesAndUniqueness(keyValue, lineNumber, fieldContext.getField(),
+            fieldValue, table, keyField, orderField);
     }
 
     protected void checkRoutesAndStopsIds(Set<NewGTFSError> idErrors) throws IOException {
@@ -345,7 +340,11 @@ public class MergeLineContext {
             // where two routes have different short_names, but share the same route_id. We want
             // both of these routes to end up in the merged feed in this case because we're
             // matching on short name, so we must modify the route_id.
-            if (!skipRecord && !referenceTracker.transitIds.contains(String.join(":", keyField, keyValue)) && hasDuplicateError(primaryKeyErrors)) {
+            if (
+                !skipRecord &&
+                !referenceTracker.transitIds.contains(String.join(":", keyField, keyValue)) &&
+                hasDuplicateError(primaryKeyErrors)
+            ) {
                 // Modify route_id and ensure that referencing trips
                 // have route_id updated.
                 updateAndRemapOutput();
@@ -398,7 +397,7 @@ public class MergeLineContext {
             // Store row values for route or stop ID (or alternative ID field) in order
             // to check for ID conflicts. NOTE: This is only intended to be used for
             // routes and stops. Otherwise, this might (will) consume too much memory.
-            case STOPS:
+            case "stops":
             case "routes":
                 // FIXME: This should be revised for tables with order fields, but it should work fine for its
                 //  primary purposes: to detect exact copy rows and to temporarily hold the data in case a reference

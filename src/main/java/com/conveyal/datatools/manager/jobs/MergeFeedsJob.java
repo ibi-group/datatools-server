@@ -55,7 +55,8 @@ import static com.conveyal.datatools.manager.utils.MergeFeedUtils.*;
  * found in any other feed version. Note: There is absolutely no attempt to merge
  * entities based on either expected shared IDs or entity location (e.g., stop
  * coordinates).
- * - {@link MergeFeedsType#SERVICE_PERIOD}:      this strategy is defined in detail at https://github.com/conveyal/datatools-server/issues/185,
+ * - {@link MergeFeedsType#SERVICE_PERIOD}:
+ * this strategy is defined in detail at https://github.com/conveyal/datatools-server/issues/185,
  * but in essence, this strategy attempts to merge an active and future feed into
  * a combined file. For certain entities (specifically stops and routes) it uses
  * alternate fields as primary keys (stop_code and route_short_name) if they are
@@ -66,55 +67,6 @@ import static com.conveyal.datatools.manager.utils.MergeFeedUtils.*;
  * prefer entities from the active version, so that entities edited in Data Tools would override the values found
  * in the "future" file, which may have limited data attributes due to being exported from scheduling software with
  * limited GTFS support.
- *
- * Reproduced from https://github.com/conveyal/datatools-server/issues/185 on 2019/04/23:
- *
- * 1. When a new GTFS+ feed is loaded in TDM, check as part of the loading and validation process if
- *    the dataset is for a future date. (If all services start in the future, consider the dataset
- *    to be for the future).
- * 2. If it is a future dataset, automatically notify the user that the feed needs to be merged with
- *    most recent active version or a selected one in order to further process the feed.
- * 3. Use the chosen version to merge the future feed. The merging process needs to be efficient so
- *    that the user doesn’t need to wait more than a tolerable time.
- * 4. The merge process shall compare the active and future datasets, validate the following rules
- *    and generate the Merge Validation Report:
- *    i. Merging will be based on route_short_name in the active and future datasets. All matching
- *      route_short_names between the datasets shall be considered same route. Any route_short_name
- *      in active data not present in the future will be appended to the future routes file.
- *    ii. Future feed_info.txt file should get priority over active feed file when difference is
- *      identified.
- *    iii. When difference is found in agency.txt file between active and future feeds, the future
- *      agency.txt file data should be used. Possible issue with missing agency_id referenced by routes
- *    iv. When stop_code is included, stop merging will be based on that. If stop_code is not
- *      included, it will be based on stop_id. All stops in future data will be carried forward and
- *      any stops found in active data that are not in the future data shall be appended. If one
- *      of the feed is missing stop_code, merge fails with a notification to the user with
- *      suggestion that the feed with missing stop_code must be fixed with stop_code.
- *    v. If any service_id in the active feed matches with the future feed, it should be modified
- *      and all associated trip records must also be changed with the modified service_id.
- *      If a service_id from the active calendar has both the start_date and end_date in the
- *      future, the service shall not be appended to the merged file. Records in trips,
- *      calendar_dates, and calendar_attributes referencing this service_id shall also be
- *      removed/ignored. Stop_time records for the ignored trips shall also be removed.
- *      If a service_id from the active calendar has only the end_date in the future, the end_date
- *      shall be set to one day prior to the earliest start_date in future dataset before appending
- *      the calendar record to the merged file.
- *      trip_ids between active and future datasets must not match. If any trip_id is found to be
- *      matching, the merge should fail with appropriate notification to user with the cause of the
- *      failure. Notification should include all matched trip_ids.
- *    vi. New shape_ids in the future datasets should be appended in the merged feed.
- *    vii. Merging fare_attributes will be based on fare_id in the active and future datasets. All
- *      matching fare_ids between the datasets shall be considered same fare. Any fare_id in active
- *      data not present in the future will be appended to the future fare_attributes file.
- *    viii. All fare rules from the future dataset will be included. Any identical fare rules from
- *      the active dataset will be discarded. Any fare rules unique to the active dataset will be
- *      appended to the future file.
- *    ix. All transfers.txt entries with unique stop pairs (from - to) from both the future and
- *      active datasets will be included in the merged file. Entries with duplicate stop pairs from
- *      the active dataset will be discarded.
- *    x. All GTFS+ files should be merged based on how the associated base GTFS file is merged. For
- *      example, directions for routes that are not in the future routes.txt file should be appended
- *      to the future directions.txt file in the merged feed.
  */
 public class MergeFeedsJob extends FeedSourceJob {
 
@@ -143,31 +95,13 @@ public class MergeFeedsJob extends FeedSourceJob {
     // Variables used for a service period merge.
     private FeedMergeContext feedMergeContext;
 
-    public MergeFeedsJob(Auth0UserProfile owner, Set<FeedVersion> feedVersions, String file, MergeFeedsType mergeType) {
-        this(owner, feedVersions, file, mergeType, true);
-    }
-
-    /** Shorthand method to get the future feed during a service period merge */
-    @BsonIgnore @JsonIgnore
-    public FeedToMerge getFutureFeed() {
-        return feedMergeContext.futureFeedToMerge;
-    }
-
-    /** Shorthand method to get the active feed during a service period merge */
-    @BsonIgnore @JsonIgnore
-    public FeedToMerge getActiveFeed() {
-        return feedMergeContext.activeFeedToMerge;
-    }
-
     /**
      * @param owner             user ID that initiated job
      * @param feedVersions      set of feed versions to merge
      * @param file              resulting merge filename (without .zip)
      * @param mergeType         the type of merge to perform {@link MergeFeedsType}
-     * @param storeNewVersion   whether to store merged feed as new version
      */
-    public MergeFeedsJob(Auth0UserProfile owner, Set<FeedVersion> feedVersions, String file,
-                         MergeFeedsType mergeType, boolean storeNewVersion) {
+    public MergeFeedsJob(Auth0UserProfile owner, Set<FeedVersion> feedVersions, String file, MergeFeedsType mergeType) {
         super(owner, mergeType.equals(REGIONAL) ? "Merging project feeds" : "Merging feed versions",
             JobType.MERGE_FEED_VERSIONS);
         this.feedVersions = feedVersions;
@@ -182,7 +116,7 @@ public class MergeFeedsJob extends FeedSourceJob {
         // Grab parent feed source depending on merge type.
         FeedSource regionalFeedSource = null;
         // If storing a regional merge as a new version, find the feed source designated by the project.
-        if (mergeType.equals(REGIONAL) && storeNewVersion) {
+        if (mergeType.equals(REGIONAL)) {
             regionalFeedSource = Persistence.feedSources.getById(project.regionalFeedSourceId);
             // Create new feed source if this is the first regional merge.
             if (regionalFeedSource == null) {
@@ -201,18 +135,13 @@ public class MergeFeedsJob extends FeedSourceJob {
             : feedVersions.iterator().next().parentFeedSource();
         // Assuming job is successful, mergedVersion will contain the resulting feed version.
         // Merged version will be null if the new version should not be stored.
-        this.mergedVersion = getMergedVersion(this, storeNewVersion);
+        this.mergedVersion = getMergedVersion(this, true);
         this.mergeFeedsResult = new MergeFeedsResult(mergeType);
     }
 
     @BsonIgnore @JsonIgnore
     public Set<FeedVersion> getFeedVersions() {
         return this.feedVersions;
-    }
-
-    @BsonIgnore @JsonIgnore
-    public List<FeedToMerge> getFeedsToMerge() {
-        return this.feedMergeContext.feedsToMerge;
     }
 
     /**

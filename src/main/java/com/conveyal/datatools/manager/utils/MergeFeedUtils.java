@@ -50,11 +50,16 @@ public class MergeFeedUtils {
             LOG.warn("Table {} not found in zip file: {}", table.name, zipFile.getName());
             return ids;
         }
-        Field[] fieldsFoundInZip = table.getFieldsFromFieldHeaders(csvReader.getHeaders(), null);
-        // Get the key field (id value) for each row.
-        int keyFieldIndex = getFieldIndex(fieldsFoundInZip, keyField);
-        while (csvReader.readRecord()) ids.add(csvReader.get(keyFieldIndex));
-        csvReader.close();
+        try {
+            Field[] fieldsFoundInZip = table.getFieldsFromFieldHeaders(csvReader.getHeaders(), null);
+            // Get the key field (id value) for each row.
+            int keyFieldIndex = getFieldIndex(fieldsFoundInZip, keyField);
+            while (csvReader.readRecord()) {
+                ids.add(csvReader.get(keyFieldIndex));
+            }
+        } finally {
+            csvReader.close();
+        }
         return ids;
     }
 
@@ -117,10 +122,13 @@ public class MergeFeedUtils {
             if (csvReader == null) {
                 continue;
             }
-            // Get fields found from headers and add them to the shared fields set.
-            Field[] fieldsFoundInZip = table.getFieldsFromFieldHeaders(csvReader.getHeaders(), null);
-            sharedFields.addAll(Arrays.asList(fieldsFoundInZip));
-            csvReader.close();
+            try {
+                // Get fields found from headers and add them to the shared fields set.
+                Field[] fieldsFoundInZip = table.getFieldsFromFieldHeaders(csvReader.getHeaders(), null);
+                sharedFields.addAll(Arrays.asList(fieldsFoundInZip));
+            } finally {
+                csvReader.close();
+            }
         }
         return sharedFields;
     }

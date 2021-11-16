@@ -25,7 +25,7 @@ public class StopsMergeLineContext extends MergeLineContext {
 
     @Override
     public void checkFirstLineConditions() throws IOException {
-        checkStopCodeStuff();
+        checkThatStopCodesArePopulatedWhereRequired();
     }
 
     @Override
@@ -33,7 +33,11 @@ public class StopsMergeLineContext extends MergeLineContext {
         checkRoutesAndStopsIds(idErrors);
     }
 
-    private void checkStopCodeStuff() throws IOException {
+    /**
+     * Checks that the stop_code field of the Stop entities to merge is populated where required.
+     * @throws IOException
+     */
+    private void checkThatStopCodesArePopulatedWhereRequired() throws IOException {
         if (shouldCheckStopCodes()) {
             // Before reading any lines in stops.txt, first determine whether all records contain
             // properly filled stop_codes. The rules governing this logic are as follows:
