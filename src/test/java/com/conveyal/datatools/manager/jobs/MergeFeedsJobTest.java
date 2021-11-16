@@ -920,7 +920,7 @@ public class MergeFeedsJobTest extends UnitTest {
         );
         // there shouldn't be records with blank agency_id
         assertThatSqlCountQueryYieldsExpectedCount(
-            String.format("SELECT count(*) FROM %s.agency where agency_id = '' and agency_id is not null", mergedNamespace),
+            String.format("SELECT count(*) FROM %s.agency where agency_id = '' or agency_id is null", mergedNamespace),
             0
         );
         // - routes
@@ -931,7 +931,7 @@ public class MergeFeedsJobTest extends UnitTest {
         );
         // there shouldn't be records with blank agency_id
         assertThatSqlCountQueryYieldsExpectedCount(
-            String.format("SELECT count(*) FROM %s.routes where agency_id = '' and agency_id is not null", mergedNamespace),
+            String.format("SELECT count(*) FROM %s.routes where agency_id = '' or agency_id is null", mergedNamespace),
             0
         );
         // - trips

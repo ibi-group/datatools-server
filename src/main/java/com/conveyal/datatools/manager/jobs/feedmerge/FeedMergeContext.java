@@ -35,9 +35,10 @@ public class FeedMergeContext implements Closeable {
      */
     public final Set<String> sharedTripIds;
     /**
-     * Holds the auto-generated agency id to be updated if none was provided.
+     * Holds the auto-generated agency id to be updated for each feed if none was provided.
      */
-    private String newAgencyId;
+    private String activeFeedNewAgencyId;
+    private String futureFeedNewAgencyId;
 
     public FeedMergeContext(Set<FeedVersion> feedVersions, Auth0UserProfile owner) throws IOException {
         feedsToMerge = MergeFeedUtils.collectAndSortFeeds(feedVersions, owner);
@@ -131,12 +132,20 @@ public class FeedMergeContext implements Closeable {
         this.futureFeedFirstDate = futureFeedFirstDate;
     }
 
-    public String getNewAgencyId() {
-        return newAgencyId;
+    public String getActiveFeedNewAgencyId() {
+        return activeFeedNewAgencyId;
     }
 
-    public void setNewAgencyId(String newAgencyId) {
-        this.newAgencyId = newAgencyId;
+    public String getFutureFeedNewAgencyId() {
+        return futureFeedNewAgencyId;
+    }
+
+    public void setActiveFeedNewAgencyId(String newAgencyId) {
+        this.activeFeedNewAgencyId = newAgencyId;
+    }
+
+    public void setFutureFeedNewAgencyId(String newAgencyId) {
+        this.futureFeedNewAgencyId = newAgencyId;
     }
 
     /**
