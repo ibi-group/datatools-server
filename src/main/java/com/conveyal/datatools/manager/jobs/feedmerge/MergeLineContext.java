@@ -439,6 +439,13 @@ public class MergeLineContext {
         // Default is to do nothing.
     }
 
+    /**
+     * Overridable placeholder for additional processing after writing the current row.
+     */
+    public void afterRowWrite() throws IOException {
+        // Default is to do nothing.
+    }
+
     public void scopeValueIfNeeded(FieldContext fieldContext) {
         boolean isKeyField = fieldContext.getField().isForeignReference() || fieldContext.nameEquals(keyField);
         if (job.mergeType.equals(REGIONAL) && isKeyField && !fieldContext.getValue().isEmpty()) {
@@ -453,36 +460,6 @@ public class MergeLineContext {
         skipRecord = false;
         // Reset the row values (this must happen after the first line is checked).
         rowValues = new String[sharedSpecFields.size()];
-    }
-
-    /**
-     * Adds a cloned service id for trips with the same signature in both the active & future feeds.
-     * The cloned service id spans from the start date in the active feed until the end date in the future feed.
-     * @throws IOException
-     */
-    public void addClonedServiceId() throws IOException {
-        if (table.name.equals("calendar")) {
-            String originalServiceId = rowValues[keyFieldIndex];
-            if (job.serviceIdsToCloneRenameAndExtend.contains(originalServiceId)) {
-                // FIXME: Do we need to worry about calendar_dates?
-                String[] clonedValues = rowValues.clone();
-                String newServiceId = clonedValues[keyFieldIndex] = String.join(":", idScope, originalServiceId);
-                // Modify start date only (preserve the end date on the future calendar entry).
-                int startDateIndex = Table.CALENDAR.getFieldIndex("start_date");
-                clonedValues[startDateIndex] = feedMergeContext.activeFeed.calendars.get(originalServiceId).start_date
-                    .format(GTFS_DATE_FORMATTER);
-                referenceTracker.checkReferencesAndUniqueness(
-                    keyValue,
-                    lineNumber,
-                    table.fields[0],
-                    newServiceId,
-                    table,
-                    keyField,
-                    orderField
-                );
-                writeValuesToTable(clonedValues, true);
-            }
-        }
     }
 
     public void writeValuesToTable(String[] values, boolean incrementLineNumbers) throws IOException {
@@ -570,10 +547,9 @@ public class MergeLineContext {
         }
         // Write line to table.
         writeValuesToTable(rowValues, true);
-        // If the current row is for a calendar service_id that is marked for cloning/renaming, clone the
-        // values, change the ID, extend the start/end dates to the feed's full range, and write the
-        // additional line to the file.
-        addClonedServiceId();
+
+        // Optional table-specific additional processing.
+        afterRowWrite();
     }
 
     public boolean lineIsBlank() throws IOException {
@@ -609,6 +585,8 @@ public class MergeLineContext {
     protected int getLineNumber() {
         return lineNumber;
     }
+
+    protected String[] getRowValues() { return rowValues; }
 
     /**
      * Retrieves the value for the specified CSV field.

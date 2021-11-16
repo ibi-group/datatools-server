@@ -28,6 +28,14 @@ public class CalendarMergeLineContext extends MergeLineContext {
         checkCalendarIds(idErrors, fieldContext);
     }
 
+    @Override
+    public void afterRowWrite() throws IOException {
+        // If the current row is for a calendar service_id that is marked for cloning/renaming, clone the
+        // values, change the ID, extend the start/end dates to the feed's full range, and write the
+        // additional line to the file.
+        addClonedServiceId();
+    }
+
     private void checkCalendarIds(Set<NewGTFSError> idErrors, FieldContext fieldContext) throws IOException {
         if (isHandlingActiveFeed()) {
             LocalDate startDate = getCsvDate("start_date");
@@ -100,5 +108,33 @@ public class CalendarMergeLineContext extends MergeLineContext {
         // service_id when the service_id is used by calendar_dates that operate in the valid
         // date range, i.e., before the future feed's first date.
         if (!skipRecord && fieldContext.nameEquals(SERVICE_ID)) mergeFeedsResult.serviceIds.add(fieldContext.getValueToWrite());
+    }
+
+    /**
+     * Adds a cloned service id for trips with the same signature in both the active & future feeds.
+     * The cloned service id spans from the start date in the active feed until the end date in the future feed.
+     * @throws IOException
+     */
+    public void addClonedServiceId() throws IOException {
+        String originalServiceId = getRowValues()[keyFieldIndex];
+        if (job.serviceIdsToCloneRenameAndExtend.contains(originalServiceId)) {
+            // FIXME: Do we need to worry about calendar_dates?
+            String[] clonedValues = getRowValues().clone();
+            String newServiceId = clonedValues[keyFieldIndex] = String.join(":", getIdScope(), originalServiceId);
+            // Modify start date only (preserve the end date on the future calendar entry).
+            int startDateIndex = Table.CALENDAR.getFieldIndex("start_date");
+            clonedValues[startDateIndex] = feedMergeContext.activeFeed.calendars.get(originalServiceId).start_date
+                .format(GTFS_DATE_FORMATTER);
+            referenceTracker.checkReferencesAndUniqueness(
+                keyValue,
+                getLineNumber(),
+                table.fields[0],
+                newServiceId,
+                table,
+                keyField,
+                table.getOrderFieldName()
+            );
+            writeValuesToTable(clonedValues, true);
+        }
     }
 }

@@ -17,6 +17,7 @@ import static com.conveyal.datatools.manager.utils.MergeFeedUtils.getTableScoped
 public class CalendarDatesMergeLineContext extends MergeLineContext {
     private static final Logger LOG = LoggerFactory.getLogger(CalendarDatesMergeLineContext.class);
 
+    /** Holds the date used to check calendar validity */
     private LocalDate futureFeedFirstDateForCalendarValidity;
 
     public CalendarDatesMergeLineContext(MergeFeedsJob job, Table table, ZipOutputStream out) throws IOException {
@@ -29,8 +30,8 @@ public class CalendarDatesMergeLineContext extends MergeLineContext {
     }
 
     @Override
-    public void startNewRow() throws IOException {
-        super.startNewRow();
+    public void startNewFeed(int feedIndex) throws IOException {
+        super.startNewFeed(feedIndex);
         futureFeedFirstDateForCalendarValidity = getFutureFeedFirstDateForCheckingCalendarValidity();
     }
 
