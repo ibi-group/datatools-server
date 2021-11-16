@@ -29,8 +29,8 @@ public class FeedMergeContext implements Closeable {
     public final Feed futureFeed;
     public final Feed activeFeed;
     public final LocalDate activeFeedFirstDate;
-    private LocalDate futureFeedFirstDate;
-    private LocalDate futureFirstCalendarStartDate = LocalDate.MAX;
+    public final LocalDate futureFeedFirstDate;
+    public final LocalDate futureFirstCalendarStartDate;
     /**
      * Trip ids shared between the active and future feed.
      */
@@ -67,11 +67,13 @@ public class FeedMergeContext implements Closeable {
         futureFeedFirstDate = futureFeedToMerge.version.validationResult.firstCalendarDate;
 
         // Initialize, before processing rows, the calendar start dates from the future feed.
+        LocalDate futureFirstCalStartDate = LocalDate.MAX;
         for (Calendar c : futureFeed.calendars.getAll()) {
-            if (futureFirstCalendarStartDate.isAfter(c.start_date)) {
-                futureFirstCalendarStartDate = c.start_date;
+            if (futureFirstCalStartDate.isAfter(c.start_date)) {
+                futureFirstCalStartDate = c.start_date;
             }
         }
+        this.futureFirstCalendarStartDate = futureFirstCalStartDate;
     }
 
     @Override
@@ -90,18 +92,6 @@ public class FeedMergeContext implements Closeable {
         return sharedTripIds.isEmpty();
     }
 
-    public LocalDate getFutureFirstCalendarStartDate() {
-        return futureFirstCalendarStartDate;
-    }
-
-    public LocalDate getFutureFeedFirstDate() {
-        return futureFeedFirstDate;
-    }
-
-    public void setFutureFeedFirstDate(LocalDate futureFeedFirstDate) {
-        this.futureFeedFirstDate = futureFeedFirstDate;
-    }
-
     public String getNewAgencyId() {
         return newAgencyId;
     }
@@ -115,22 +105,5 @@ public class FeedMergeContext implements Closeable {
      */
     public Sets.SetView<String> getActiveTripIdsNotInFutureFeed() {
         return Sets.difference(activeTripIds, futureTripIds);
-    }
-
-    /**
-     * Holds the status of a trip service id mismatch determination.
-     */
-    public static class TripMismatchedServiceIds {
-        public final String tripId;
-        public final String activeServiceId;
-        public final String futureServiceId;
-        public final boolean hasMismatch;
-
-        TripMismatchedServiceIds(String tripId, boolean hasMismatch, String activeServiceId, String futureServiceId) {
-            this.tripId = tripId;
-            this.hasMismatch = hasMismatch;
-            this.activeServiceId = activeServiceId;
-            this.futureServiceId = futureServiceId;
-        }
     }
 }

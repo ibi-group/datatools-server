@@ -221,7 +221,7 @@ public class MergeLineContext {
             // been skipped or is a ref to a non-existent service_id during a service period merge, skip
             // this record and add its primary key to the list of skipped IDs (so that other references
             // can be properly omitted).
-            if (serviceIdHasOrShouldBeSkipped(fieldContext, key, isValidServiceId)) {
+            if (serviceIdHasKeyOrShouldBeSkipped(fieldContext, key, isValidServiceId)) {
                 // If a calendar#service_id has been skipped (it's listed in skippedIds), but there were
                 // valid service_ids found in calendar_dates, do not skip that record for both the
                 // calendar_date and any related trips.
@@ -249,7 +249,7 @@ public class MergeLineContext {
         return true;
     }
 
-    private boolean serviceIdHasOrShouldBeSkipped(FieldContext fieldContext, String key, boolean isValidServiceId) {
+    private boolean serviceIdHasKeyOrShouldBeSkipped(FieldContext fieldContext, String key, boolean isValidServiceId) {
         boolean serviceIdShouldBeSkipped = job.mergeType.equals(SERVICE_PERIOD) &&
             fieldContext.nameEquals(SERVICE_ID) &&
             !isValidServiceId;

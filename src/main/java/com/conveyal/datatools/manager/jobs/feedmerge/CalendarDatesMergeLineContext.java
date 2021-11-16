@@ -17,6 +17,8 @@ import static com.conveyal.datatools.manager.utils.MergeFeedUtils.getTableScoped
 public class CalendarDatesMergeLineContext extends MergeLineContext {
     private static final Logger LOG = LoggerFactory.getLogger(CalendarDatesMergeLineContext.class);
 
+    private LocalDate futureFeedFirstDateForCalendarValidity;
+
     public CalendarDatesMergeLineContext(MergeFeedsJob job, Table table, ZipOutputStream out) throws IOException {
         super(job, table, out);
     }
@@ -29,19 +31,18 @@ public class CalendarDatesMergeLineContext extends MergeLineContext {
     @Override
     public void startNewRow() throws IOException {
         super.startNewRow();
-        updateFutureFeedFirstDate();
+        futureFeedFirstDateForCalendarValidity = getFutureFeedFirstDateForCheckingCalendarValidity();
     }
 
     private void checkCalendarDatesIds(FieldContext fieldContext) throws IOException {
         // Drop any calendar_dates.txt records from the existing feed for dates that are
         // not before the first date of the future feed.
         LocalDate date = getCsvDate("date");
-        LocalDate futureFeedFirstDate = feedMergeContext.getFutureFeedFirstDate();
-        if (isHandlingActiveFeed() && !date.isBefore(futureFeedFirstDate)) {
+        if (isHandlingActiveFeed() && !date.isBefore(futureFeedFirstDateForCalendarValidity)) {
             LOG.warn(
                 "Skipping calendar_dates entry {} because it operates in the time span of future feed (i.e., after or on {}).",
                 keyValue,
-                futureFeedFirstDate);
+                futureFeedFirstDateForCalendarValidity);
             String key = getTableScopedValue(table, getIdScope(), keyValue);
             mergeFeedsResult.skippedIds.add(key);
             skipRecord = true;
@@ -52,21 +53,22 @@ public class CalendarDatesMergeLineContext extends MergeLineContext {
         if (!skipRecord && fieldContext.nameEquals(SERVICE_ID)) mergeFeedsResult.serviceIds.add(fieldContext.getValueToWrite());
     }
 
-    // FIXME: move this (almost seems irrelevant)
-    private void updateFutureFeedFirstDate() {
-        // This will be populated because calendar dates is processed
-        // after calendar, which populates FutureFirstCalendarStartDate.
-        LocalDate futureFirstCalendarStartDate = feedMergeContext.getFutureFirstCalendarStartDate();
+    /**
+     * Obtains the future feed start date to use
+     * if the future feed's first date is before its first calendar start date,
+     * when checking MTC calendar_dates and calendar records for modification/exclusion.
+     */
+    private LocalDate getFutureFeedFirstDateForCheckingCalendarValidity() {
+        LocalDate futureFirstCalendarStartDate = feedMergeContext.futureFirstCalendarStartDate;
+        LocalDate futureFeedFirstDate = feedMergeContext.futureFeedFirstDate;
         if (
             isHandlingActiveFeed() &&
-            job.mergeType.equals(SERVICE_PERIOD) &&
+                job.mergeType.equals(SERVICE_PERIOD) &&
                 futureFirstCalendarStartDate.isBefore(LocalDate.MAX) &&
-                feedMergeContext.getFutureFeedFirstDate().isBefore(futureFirstCalendarStartDate)
+                futureFeedFirstDate.isBefore(futureFirstCalendarStartDate)
         ) {
-            // If the future feed's first date is before its first calendar start date,
-            // override the future feed first date with the calendar start date for use when checking
-            // MTC calendar_dates and calendar records for modification/exclusion.
-            feedMergeContext.setFutureFeedFirstDate(futureFirstCalendarStartDate);
+            return futureFirstCalendarStartDate;
         }
+        return futureFeedFirstDate;
     }
 }
