@@ -79,10 +79,6 @@ public class MergeFeedsJob extends FeedSourceJob {
     public final String projectId;
     public final MergeFeedsType mergeType;
     private File mergedTempFile = null;
-    /**
-     * If {@link MergeFeedsJob} storeNewVersion variable is true, a new version will be created from the merged GTFS
-     * dataset. Otherwise, this will be null throughout the life of the job.
-     */
     final FeedVersion mergedVersion;
     @JsonIgnore @BsonIgnore
     public Set<String> tripIdsToModifyForActiveFeed = new HashSet<>();
@@ -178,7 +174,7 @@ public class MergeFeedsJob extends FeedSourceJob {
             logAndReportToBugsnag(e, message);
             status.fail(message, e);
         }
-        mergedTempFile.deleteOnExit();
+
         // Create the zipfile with try with resources so that it is always closed.
         try (ZipOutputStream out = new ZipOutputStream(new FileOutputStream(mergedTempFile))) {
             LOG.info("Created merge file: {}", mergedTempFile.getAbsolutePath());
