@@ -195,11 +195,10 @@ public class MergeFeedsJob extends FeedSourceJob {
                 // error message along with matching trip_ids with differing trip signatures."
                 Set<String> tripIdsWithInconsistentSignature = getSharedTripIdsWithInconsistentSignature();
                 if (!tripIdsWithInconsistentSignature.isEmpty()) {
+                    mergeFeedsResult.tripIdsToCheck.addAll(tripIdsWithInconsistentSignature);
                     failMergeJob(
-                        String.format("Trips %s in new feed have differing makeup from matching trips in active feed. " +
-                                "If a trip characteristic has changed, a new trip_id must be assigned.",
-                            String.join(", ", tripIdsWithInconsistentSignature)
-                        )
+                    "Trips in the new feed have differing makeup from matching trips in active feed. " +
+                        "If a trip characteristic has changed, a new trip_id must be assigned."
                     );
                     return;
                 }
