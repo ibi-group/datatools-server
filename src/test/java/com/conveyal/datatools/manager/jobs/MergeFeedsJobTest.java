@@ -70,6 +70,8 @@ public class MergeFeedsJobTest extends UnitTest {
      */
     private static FeedVersion fakeTransitSameSignatureTrips;
     private static FeedSource bart;
+    private static FeedVersion noAgencyVersion1;
+    private static FeedVersion noAgencyVersion2;
 
     /**
      * Prepare and start a testing-specific web server
@@ -135,6 +137,12 @@ public class MergeFeedsJobTest extends UnitTest {
         fakeTransitModService = createFeedVersion(fakeTransit, zipFolderFiles("merge-data-mod-services"));
         fakeTransitNewSignatureTrips = createFeedVersion(fakeTransit, zipFolderFiles("merge-data-mod-trips"));
         fakeTransitSameSignatureTrips = createFeedVersion(fakeTransit, zipFolderFiles("merge-data-added-trips"));
+
+        // Feeds with no agency id
+        FeedSource noAgencyIds = new FeedSource("no-agency-ids", project.id, MANUALLY_UPLOADED);
+        Persistence.feedSources.create(noAgencyIds);
+        noAgencyVersion1 = createFeedVersion(noAgencyIds, zipFolderFiles("no-agency-id-1"));
+        noAgencyVersion2 = createFeedVersion(noAgencyIds, zipFolderFiles("no-agency-id-2"));
     }
 
     /**
@@ -151,7 +159,7 @@ public class MergeFeedsJobTest extends UnitTest {
      * Ensures that a regional feed merge will produce a feed that includes all entities from each feed.
      */
     @Test
-    public void canMergeRegional() throws SQLException {
+    void canMergeRegional() throws SQLException {
         // Set up list of feed versions to merge.
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(bartVersionOldLite);
@@ -210,7 +218,7 @@ public class MergeFeedsJobTest extends UnitTest {
      * calendar_dates and another with only the calendar.
      */
     @Test
-    public void canMergeRegionalWithOnlyCalendarFeed () throws SQLException {
+    void canMergeRegionalWithOnlyCalendarFeed () throws SQLException {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(onlyCalendarDatesVersion);
         versions.add(onlyCalendarVersion);
@@ -299,7 +307,7 @@ public class MergeFeedsJobTest extends UnitTest {
      * Ensures that an MTC merge of feeds that has exactly matching trips but mismatched services fails.
      */
     @Test
-    public void mergeMTCShouldFailOnDuplicateTripsButMismatchedServices() {
+    void mergeMTCShouldFailOnDuplicateTripsButMismatchedServices() {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(fakeTransitBase);
         versions.add(fakeTransitModService);
@@ -318,7 +326,7 @@ public class MergeFeedsJobTest extends UnitTest {
      * {@link MergeStrategy#CHECK_STOP_TIMES} strategy correctly.
      */
     @Test
-    public void mergeMTCShouldHandleExtendFutureStrategy() throws SQLException {
+    void mergeMTCShouldHandleExtendFutureStrategy() throws SQLException {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(fakeTransitBase);
         versions.add(fakeTransitFuture);
@@ -357,7 +365,7 @@ public class MergeFeedsJobTest extends UnitTest {
      * {@link MergeStrategy#CHECK_STOP_TIMES} strategy correctly.
      */
     @Test
-    public void mergeMTCShouldHandleMatchingTripIdsWithSameSignature() throws SQLException {
+    void mergeMTCShouldHandleMatchingTripIdsWithSameSignature() throws SQLException {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(fakeTransitBase);
         versions.add(fakeTransitSameSignatureTrips);
@@ -422,7 +430,7 @@ public class MergeFeedsJobTest extends UnitTest {
      * but with different signatures (e.g. different stop times) fails.
      */
     @Test
-    public void mergeMTCShouldHandleMatchingTripIdsWithDifferentSignatures() {
+    void mergeMTCShouldHandleMatchingTripIdsWithDifferentSignatures() {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(fakeTransitBase);
         versions.add(fakeTransitNewSignatureTrips);
@@ -446,7 +454,7 @@ public class MergeFeedsJobTest extends UnitTest {
      * {@link MergeStrategy#DEFAULT} strategy correctly.
      */
     @Test
-    public void mergeMTCShouldHandleDisjointTripIds() throws SQLException {
+    void mergeMTCShouldHandleDisjointTripIds() throws SQLException {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(fakeTransitBase);
         versions.add(fakeTransitFutureUnique);
@@ -498,7 +506,7 @@ public class MergeFeedsJobTest extends UnitTest {
      * Tests that the MTC merge strategy will successfully merge BART feeds.
      */
     @Test
-    public void canMergeBARTFeeds() throws SQLException {
+    void canMergeBARTFeeds() throws SQLException {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(bartVersionOldLite);
         versions.add(bartVersionNewLite);
@@ -556,7 +564,7 @@ public class MergeFeedsJobTest extends UnitTest {
      * between active and future feeds cannot be merged per MTC revised merge logic.
      */
     @Test
-    public void shouldNotMergeBARTFeedsSameTrips() {
+    void shouldNotMergeBARTFeedsSameTrips() {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(bartVersion1);
         versions.add(bartVersion2SameTrips);
@@ -576,7 +584,7 @@ public class MergeFeedsJobTest extends UnitTest {
      * other has only the calendar file.
      */
     @Test
-    public void canMergeFeedsWithMTCForServiceIds1 () throws SQLException {
+    void canMergeFeedsWithMTCForServiceIds1 () throws SQLException {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(bothCalendarFilesVersion);
         versions.add(onlyCalendarVersion);
@@ -679,7 +687,7 @@ public class MergeFeedsJobTest extends UnitTest {
      * and the other has only the calendar file.
      */
     @Test
-    public void canMergeFeedsWithMTCForServiceIds2 () throws SQLException {
+    void canMergeFeedsWithMTCForServiceIds2 () throws SQLException {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(onlyCalendarDatesVersion);
         versions.add(onlyCalendarVersion);
@@ -768,7 +776,7 @@ public class MergeFeedsJobTest extends UnitTest {
      * that service_id.
      */
     @Test
-    public void canMergeFeedsWithMTCForServiceIds3 () throws SQLException {
+    void canMergeFeedsWithMTCForServiceIds3 () throws SQLException {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(bothCalendarFilesVersion);
         versions.add(bothCalendarFilesVersion2);
@@ -840,7 +848,7 @@ public class MergeFeedsJobTest extends UnitTest {
      * that service_id.
      */
     @Test
-    public void canMergeFeedsWithMTCForServiceIds4 () throws SQLException {
+    void canMergeFeedsWithMTCForServiceIds4 () throws SQLException {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(bothCalendarFilesVersion);
         versions.add(bothCalendarFilesVersion3);
@@ -893,7 +901,7 @@ public class MergeFeedsJobTest extends UnitTest {
      * entrances, generic nodes, etc.) handles missing stop codes correctly.
      */
     @Test
-    public void canMergeBARTFeedsWithSpecialStops() throws SQLException, IOException {
+    void canMergeBARTFeedsWithSpecialStops() throws SQLException, IOException {
         // Mini BART old/new feeds are pared down versions of the zips (bart_new.zip and bart_old.zip). They each have
         // only one trip and its corresponding stop_times. They do contain a full set of routes and stops. The stops are
         // from a recent (as of August 2021) GTFS file that includes a bunch of new stop records that act as entrances).
@@ -914,8 +922,49 @@ public class MergeFeedsJobTest extends UnitTest {
     }
 
     /**
+     * Tests whether feeds without agency ids can be merged.
+     * The merged feed should have autogenerated agency ids.
+     */
+    @Test
+    void canMergeFeedsWithoutAgencyIds () throws SQLException {
+        Set<FeedVersion> versions = new HashSet<>();
+        versions.add(noAgencyVersion1);
+        versions.add(noAgencyVersion2);
+        FeedVersion mergedVersion = regionallyMergeVersions(versions);
+
+        String mergedNamespace = mergedVersion.namespace;
+        // - agency
+        // expect a total of 2 records
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.agency", mergedNamespace),
+            2
+        );
+        // there shouldn't be records with blank agency_id
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.agency where agency_id = '' or agency_id is null", mergedNamespace),
+            0
+        );
+        // - routes
+        // expect a total of 2 records
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.routes", mergedNamespace),
+            2
+        );
+        // there shouldn't be records with blank agency_id
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.routes where agency_id = '' or agency_id is null", mergedNamespace),
+            0
+        );
+        // - trips
+        // expect 4 records
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.trips", mergedNamespace),
+            4
+        );
+    }
+
+    /**
      * Verifies that a completed merge feeds job did not fail.
-     * @param mergeFeedsJob
      */
     private void assertFeedMergeSucceeded(MergeFeedsJob mergeFeedsJob) {
         if (mergeFeedsJob.mergedVersion.namespace == null || mergeFeedsJob.mergeFeedsResult.failed) {

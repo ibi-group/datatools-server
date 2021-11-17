@@ -120,10 +120,7 @@ public class MergeLineContext {
         keyField = getMergeKeyField(table, job.mergeType);
         orderField = table.getOrderFieldName();
         keyFieldMissing = false;
-        // Use for a new agency ID for use if the feed does not contain one. Initialize to
-        // null. If the value becomes non-null, the agency_id is missing and needs to be
-        // replaced in other affected tables with the generated value stored in this variable.
-        feedMergeContext.setNewAgencyId(null);
+
         // Generate ID prefix to scope GTFS identifiers to avoid conflicts.
         idScope = getCleanName(feedSource.name) + version.version;
         csvReader = table.getCsvReader(feed.zipFile, null);
@@ -349,13 +346,12 @@ public class MergeLineContext {
             // Key field has defaulted to the standard primary key field
             // (stop_id or route_id), which makes the check much
             // simpler (just skip the duplicate record).
-            // FIXME: refactor.
             if (hasDuplicateError(idErrors)) {
                 shouldSkipRecord = true;
             }
         }
 
-        String newAgencyId = feedMergeContext.getNewAgencyId();
+        String newAgencyId = getNewAgencyIdForFeed();
         if (newAgencyId != null && fieldContext.nameEquals(AGENCY_ID)) {
             LOG.info(
                 "Updating route#agency_id to (auto-generated) {} for route={}",
@@ -370,12 +366,19 @@ public class MergeLineContext {
         return "".equals(keyValue) && fieldContext.nameEquals(table.getKeyFieldName());
     }
 
+    private String getNewAgencyIdForFeed() {
+        return (handlingActiveFeed
+            ? feedMergeContext.active
+            : feedMergeContext.future
+        ).getNewAgencyId();
+    }
+
     private boolean useAltKey() {
         return keyField.equals("stop_code") || keyField.equals("route_short_name");
     }
 
     public boolean updateAgencyIdIfNeeded(FieldContext fieldContext) {
-        String newAgencyId = feedMergeContext.getNewAgencyId();
+        String newAgencyId = getNewAgencyIdForFeed();
         if (newAgencyId != null && fieldContext.nameEquals(AGENCY_ID) && job.mergeType.equals(REGIONAL)) {
             if (fieldContext.getValue().equals("") && table.name.equals("agency") && lineNumber > 0) {
                 // If there is no agency_id value for a second (or greater) agency

@@ -64,7 +64,7 @@ public class CalendarDatesMergeLineContext extends MergeLineContext {
      */
     private LocalDate getFutureFeedFirstDateForCheckingCalendarValidity() {
         LocalDate futureFirstCalendarStartDate = feedMergeContext.futureFirstCalendarStartDate;
-        LocalDate futureFeedFirstDate = feedMergeContext.futureFeedFirstDate;
+        LocalDate futureFeedFirstDate = feedMergeContext.future.getFeedFirstDate();
         if (
             isHandlingActiveFeed() &&
                 job.mergeType.equals(SERVICE_PERIOD) &&

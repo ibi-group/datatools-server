@@ -1,0 +1,3 @@
+route_id,trip_id,trip_headsign,trip_short_name,direction_id,block_id,shape_id,bikes_allowed,wheelchair_accessible,service_id
+1,t104-sl2-p18-r45,08_1,,0,802,03c47dc1-bf37-4668-8c58-9847a496f92d,0,0,bd6e404d-6e02-45c1-826c-a569ca947fce
+1,t104-sl3-p17-r1B,08_1,,0,2008,03c47dc1-bf37-4668-8c58-9847a496f92d,0,0,ef5a027b-353d-4071-b10b-f232e1c6b8cf

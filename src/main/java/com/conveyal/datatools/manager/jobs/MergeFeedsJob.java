@@ -78,10 +78,6 @@ public class MergeFeedsJob extends FeedSourceJob {
     public final String projectId;
     public final MergeFeedsType mergeType;
     private File mergedTempFile = null;
-    /**
-     * If {@link MergeFeedsJob} storeNewVersion variable is true, a new version will be created from the merged GTFS
-     * dataset. Otherwise, this will be null throughout the life of the job.
-     */
     final FeedVersion mergedVersion;
     @JsonIgnore @BsonIgnore
     public Set<String> sharedTripIdsWithInconsistentSignature = new HashSet<>();
@@ -180,7 +176,7 @@ public class MergeFeedsJob extends FeedSourceJob {
             logAndReportToBugsnag(e, message);
             status.fail(message, e);
         }
-        mergedTempFile.deleteOnExit();
+
         // Create the zipfile with try with resources so that it is always closed.
         try (ZipOutputStream out = new ZipOutputStream(new FileOutputStream(mergedTempFile))) {
             LOG.info("Created merge file: {}", mergedTempFile.getAbsolutePath());
@@ -427,8 +423,8 @@ public class MergeFeedsJob extends FeedSourceJob {
             // => Step 2 is the CHECK_STOP_TIMES strategy
             // If just the service_ids are an exact match, check the that the stop_times having matching signatures
             // between the two feeds (i.e., each stop time in the ordered list is identical between the two feeds).
-            Feed futureFeed = feedMergeContext.futureFeed;
-            Feed activeFeed = feedMergeContext.activeFeed;
+            Feed futureFeed = feedMergeContext.future.feed;
+            Feed activeFeed = feedMergeContext.active.feed;
             for (String tripId : feedMergeContext.sharedTripIds) {
                 compareStopTimesAndCollectTripAndServiceIds(tripId, futureFeed, activeFeed);
             }
@@ -455,7 +451,7 @@ public class MergeFeedsJob extends FeedSourceJob {
      */
     private List<String> getActiveServiceIds(Set<String> tripIds) {
         return tripIds.stream()
-            .map(tripId -> feedMergeContext.activeFeed.trips.get(tripId).service_id)
+            .map(tripId -> feedMergeContext.active.feed.trips.get(tripId).service_id)
             .collect(Collectors.toList());
     }
 
