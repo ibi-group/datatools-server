@@ -29,7 +29,6 @@ import java.util.zip.ZipOutputStream;
 
 import static com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType.REGIONAL;
 import static com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType.SERVICE_PERIOD;
-import static com.conveyal.datatools.manager.jobs.feedmerge.MergeStrategy.EXTEND_FUTURE;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.containsField;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.getAllFields;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.getMergeKeyField;
@@ -70,7 +69,6 @@ public class MergeLineContext {
     private final Map<String, String[]> rowValuesForStopOrRouteId = new HashMap<>();
     private final Set<String> rowStrings = new HashSet<>();
     private List<Field> sharedSpecFields;
-    private FieldContext fieldContext;
     private int feedIndex;
 
     public FeedVersion version;
@@ -152,7 +150,7 @@ public class MergeLineContext {
         if (handlingActiveFeed && job.mergeType.equals(SERVICE_PERIOD)) {
             // Always prefer the "future" file for the feed_info table, which means
             // we can skip any iterations following the first one.
-            return EXTEND_FUTURE.equals(mergeFeedsResult.mergeStrategy) || table.name.equals("feed_info");
+            return table.name.equals("feed_info");
         }
         return false;
     }
@@ -207,7 +205,7 @@ public class MergeLineContext {
             .collect(Collectors.toList());
     }
 
-    public boolean checkForeignReferences() throws IOException {
+    public boolean checkForeignReferences(FieldContext fieldContext) throws IOException {
         Field field = fieldContext.getField();
         if (field.isForeignReference()) {
             String key = getTableScopedValue(field.referenceTable, idScope, fieldContext.getValue());
@@ -219,11 +217,11 @@ public class MergeLineContext {
             // been skipped or is a ref to a non-existent service_id during a service period merge, skip
             // this record and add its primary key to the list of skipped IDs (so that other references
             // can be properly omitted).
-            if (serviceIdHasOrShouldBeSkipped(key, isValidServiceId)) {
+            if (serviceIdHasKeyOrShouldBeSkipped(fieldContext, key, isValidServiceId)) {
                 // If a calendar#service_id has been skipped (it's listed in skippedIds), but there were
                 // valid service_ids found in calendar_dates, do not skip that record for both the
                 // calendar_date and any related trips.
-                if (fieldNameEquals(SERVICE_ID) && isValidServiceId) {
+                if (fieldContext.nameEquals(SERVICE_ID) && isValidServiceId) {
                     LOG.warn("Not skipping valid service_id {} for {} {}", fieldContext.getValueToWrite(), table.name, keyValue);
                 } else {
                     String skippedKey = getTableScopedValue(table, idScope, keyValue);
@@ -246,9 +244,9 @@ public class MergeLineContext {
         return true;
     }
 
-    private boolean serviceIdHasOrShouldBeSkipped(String key, boolean isValidServiceId) {
+    private boolean serviceIdHasKeyOrShouldBeSkipped(FieldContext fieldContext, String key, boolean isValidServiceId) {
         boolean serviceIdShouldBeSkipped = job.mergeType.equals(SERVICE_PERIOD) &&
-            fieldNameEquals(SERVICE_ID) &&
+            fieldContext.nameEquals(SERVICE_ID) &&
             !isValidServiceId;
         return mergeFeedsResult.skippedIds.contains(key) || serviceIdShouldBeSkipped;
     }
@@ -259,14 +257,14 @@ public class MergeLineContext {
      * @return false, if a failing condition was encountered. true, if everything was ok.
      * @throws IOException Some overrides throw IOException.
      */
-    public boolean checkFieldsForMergeConflicts(Set<NewGTFSError> idErrors) throws IOException {
+    public boolean checkFieldsForMergeConflicts(Set<NewGTFSError> idErrors, FieldContext fieldContext) throws IOException {
         return !hasDuplicateError(idErrors);
     }
 
-    private Set<NewGTFSError> getIdErrors() {
+    private Set<NewGTFSError> getIdErrors(FieldContext fieldContext) {
         // If analyzing the second feed (active feed), the service_id always gets feed scoped.
         // See https://github.com/ibi-group/datatools-server/issues/244
-        String fieldValue = handlingActiveFeed && fieldNameEquals(SERVICE_ID)
+        String fieldValue = handlingActiveFeed && fieldContext.nameEquals(SERVICE_ID)
             ? fieldContext.getValueToWrite()
             : fieldContext.getValue();
 
@@ -274,7 +272,7 @@ public class MergeLineContext {
             fieldValue, table, keyField, orderField);
     }
 
-    protected boolean checkRoutesAndStopsIds(Set<NewGTFSError> idErrors) throws IOException {
+    protected boolean checkRoutesAndStopsIds(Set<NewGTFSError> idErrors, FieldContext fieldContext) throws IOException {
         boolean shouldSkipRecord = false;
         // First, check uniqueness of primary key value (i.e., stop or route ID)
         // in case the stop_code or route_short_name are being used. This
@@ -288,7 +286,7 @@ public class MergeLineContext {
         // route_short_name/stop_code in active data not present in the future will be appended to the
         // future routes/stops file.
         if (useAltKey()) {
-            if (hasBlankPrimaryKey()) {
+            if (hasBlankPrimaryKey(fieldContext)) {
                 // If alt key is empty (which is permitted) and primary key is duplicate, skip
                 // checking of alt key dupe errors/re-mapping values and
                 // simply use the primary key (route_id/stop_id).
@@ -342,7 +340,7 @@ public class MergeLineContext {
             ) {
                 // Modify route_id and ensure that referencing trips
                 // have route_id updated.
-                updateAndRemapOutput();
+                updateAndRemapOutput(fieldContext);
             }
         } else {
             // Key field has defaulted to the standard primary key field
@@ -354,8 +352,7 @@ public class MergeLineContext {
         }
 
         String newAgencyId = getNewAgencyIdForFeed();
-
-        if (newAgencyId != null && fieldNameEquals(AGENCY_ID)) {
+        if (newAgencyId != null && fieldContext.nameEquals(AGENCY_ID)) {
             LOG.info(
                 "Updating route#agency_id to (auto-generated) {} for route={}",
                 newAgencyId, keyValue);
@@ -365,6 +362,10 @@ public class MergeLineContext {
         return !shouldSkipRecord;
     }
 
+    private boolean hasBlankPrimaryKey(FieldContext fieldContext) {
+        return "".equals(keyValue) && fieldContext.nameEquals(table.getKeyFieldName());
+    }
+
     private String getNewAgencyIdForFeed() {
         return (handlingActiveFeed
             ? feedMergeContext.active
@@ -372,17 +373,13 @@ public class MergeLineContext {
         ).getNewAgencyId();
     }
 
-    private boolean hasBlankPrimaryKey() {
-        return "".equals(keyValue) && fieldNameEquals(table.getKeyFieldName());
-    }
-
     private boolean useAltKey() {
         return keyField.equals("stop_code") || keyField.equals("route_short_name");
     }
 
-    public boolean updateAgencyIdIfNeeded() {
+    public boolean updateAgencyIdIfNeeded(FieldContext fieldContext) {
         String newAgencyId = getNewAgencyIdForFeed();
-        if (newAgencyId != null && fieldNameEquals(AGENCY_ID) && job.mergeType.equals(REGIONAL)) {
+        if (newAgencyId != null && fieldContext.nameEquals(AGENCY_ID) && job.mergeType.equals(REGIONAL)) {
             if (fieldContext.getValue().equals("") && table.name.equals("agency") && lineNumber > 0) {
                 // If there is no agency_id value for a second (or greater) agency
                 // record, return null which will trigger a failed merge feed job.
@@ -447,8 +444,15 @@ public class MergeLineContext {
         // Default is to do nothing.
     }
 
-    public void scopeValueIfNeeded() {
-        boolean isKeyField = fieldContext.getField().isForeignReference() || fieldNameEquals(keyField);
+    /**
+     * Overridable placeholder for additional processing after writing the current row.
+     */
+    public void afterRowWrite() throws IOException {
+        // Default is to do nothing.
+    }
+
+    public void scopeValueIfNeeded(FieldContext fieldContext) {
+        boolean isKeyField = fieldContext.getField().isForeignReference() || fieldContext.nameEquals(keyField);
         if (job.mergeType.equals(REGIONAL) && isKeyField && !fieldContext.getValue().isEmpty()) {
             // For regional merge, if field is a GTFS identifier (e.g., route_id,
             // stop_id, etc.), add scoped prefix.
@@ -461,29 +465,6 @@ public class MergeLineContext {
         skipRecord = false;
         // Reset the row values (this must happen after the first line is checked).
         rowValues = new String[sharedSpecFields.size()];
-    }
-
-    public void addClonedServiceId() throws IOException {
-        if ((table.name.equals("calendar")) && job.serviceIdsToCloneAndRename.contains(rowValues[keyFieldIndex])) {
-            // FIXME: Do we need to worry about calendar_dates?
-            String[] clonedValues = rowValues.clone();
-            String newServiceId = clonedValues[keyFieldIndex] = String.join(":", idScope, rowValues[keyFieldIndex]);
-            // Modify start/end date.
-            int startDateIndex = Table.CALENDAR.getFieldIndex("start_date");
-            int endDateIndex = Table.CALENDAR.getFieldIndex("end_date");
-            clonedValues[startDateIndex] = feed.version.validationResult.firstCalendarDate.format(GTFS_DATE_FORMATTER);
-            clonedValues[endDateIndex] = feed.version.validationResult.lastCalendarDate.format(GTFS_DATE_FORMATTER);
-            referenceTracker.checkReferencesAndUniqueness(
-                keyValue,
-                lineNumber,
-                table.fields[0],
-                newServiceId,
-                table,
-                keyField,
-                orderField
-            );
-            writeValuesToTable(clonedValues, true);
-        }
     }
 
     public void writeValuesToTable(String[] values, boolean incrementLineNumbers) throws IOException {
@@ -522,17 +503,17 @@ public class MergeLineContext {
             // Default value to write is unchanged from value found in csv (i.e. val). Note: if looking to
             // modify the value that is written in the merged file, you must update valueToWrite (e.g.,
             // updating this feed's end_date or accounting for cases where IDs conflict).
-            fieldContext = new FieldContext(
+            FieldContext fieldContext = new FieldContext(
                 field,
                 csvReader.get(fieldsFoundList.indexOf(field))
             );
             // Handle filling in agency_id if missing when merging regional feeds. If false is returned,
             // the job has encountered a failing condition (the method handles failing the job itself).
-            if (!updateAgencyIdIfNeeded()) {
+            if (!updateAgencyIdIfNeeded(fieldContext)) {
                 return false;
             }
             // Determine if field is a GTFS identifier (and scope if needed).
-            scopeValueIfNeeded();
+            scopeValueIfNeeded(fieldContext);
             // Only need to check for merge conflicts if using MTC merge type because
             // the regional merge type scopes all identifiers by default. Also, the
             // reference tracker will get far too large if we attempt to use it to
@@ -542,14 +523,14 @@ public class MergeLineContext {
                 // Remap service id from active feed to distinguish them
                 // from entries with the same id in the future feed.
                 // See https://github.com/ibi-group/datatools-server/issues/244
-                if (handlingActiveFeed && fieldNameEquals(SERVICE_ID)) {
-                    updateAndRemapOutput();
+                if (handlingActiveFeed && fieldContext.nameEquals(SERVICE_ID)) {
+                    updateAndRemapOutput(fieldContext);
                 }
 
                 // Store values for key fields that have been encountered and update any key values that need modification due
                 // to conflicts.
                 // This method can change skipRecord.
-                if (!checkFieldsForMergeConflicts(getIdErrors())) {
+                if (!checkFieldsForMergeConflicts(getIdErrors(fieldContext), fieldContext)) {
                     skipRecord = true;
                     break;
                 }
@@ -558,7 +539,7 @@ public class MergeLineContext {
             // merged result. If this is the case (or other conditions are met), we will need to skip this
             // record. Likewise, if the reference has been modified, ensure that the value written to the
             // merged result is correctly updated.
-            if (!checkForeignReferences()) {
+            if (!checkForeignReferences(fieldContext)) {
                 skipRecord = true;
                 break;
             }
@@ -584,10 +565,9 @@ public class MergeLineContext {
         }
         // Write line to table.
         writeValuesToTable(rowValues, true);
-        // If the current row is for a calendar service_id that is marked for cloning/renaming, clone the
-        // values, change the ID, extend the start/end dates to the feed's full range, and write the
-        // additional line to the file.
-        addClonedServiceId();
+
+        // Optional table-specific additional processing.
+        afterRowWrite();
     }
 
     public boolean lineIsBlank() throws IOException {
@@ -618,19 +598,13 @@ public class MergeLineContext {
         return idScope;
     }
 
-    protected FieldContext getFieldContext() {
-        return fieldContext;
-    }
-
     protected int getFeedIndex() { return feedIndex; }
-
-    protected boolean fieldNameEquals(String value) {
-        return fieldContext.getField().name.equals(value);
-    }
 
     protected int getLineNumber() {
         return lineNumber;
     }
+
+    protected String[] getRowValues() { return rowValues; }
 
     /**
      * Retrieves the value for the specified CSV field.
@@ -650,7 +624,7 @@ public class MergeLineContext {
     /**
      * Updates output for the current field and remaps the record id.
      */
-    protected void updateAndRemapOutput(boolean updateKeyValue) {
+    protected void updateAndRemapOutput(FieldContext fieldContext, boolean updateKeyValue) {
         String value = fieldContext.getValue();
         String valueToWrite = String.join(":", idScope, value);
         fieldContext.setValueToWrite(valueToWrite);
@@ -666,8 +640,8 @@ public class MergeLineContext {
     /**
      * Shorthand for the above method.
      */
-    protected void updateAndRemapOutput() {
-        updateAndRemapOutput(false);
+    protected void updateAndRemapOutput(FieldContext fieldContext) {
+        updateAndRemapOutput(fieldContext,false);
     }
 
     /**

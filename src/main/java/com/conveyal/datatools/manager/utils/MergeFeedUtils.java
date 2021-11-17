@@ -158,14 +158,24 @@ public class MergeFeedUtils {
     }
 
     /**
-     * Checks whether the future and active stop_times for a particular trip_id are an exact match.
+     * Checks whether the future and active stop_times for a particular trip_id are an exact match,
+     * using these criteria only: arrival_time, departure_time, stop_id, and stop_sequence
+     * instead of StopTime::equals (Revised MTC feed merge requirement).
      */
-    public static boolean stopTimesMatch(List<StopTime> futureStopTimes, List<StopTime> activeStopTimes) {
+    public static boolean stopTimesMatchSimplified(List<StopTime> futureStopTimes, List<StopTime> activeStopTimes) {
         if (futureStopTimes.size() != activeStopTimes.size()) {
             return false;
         }
         for (int i = 0; i < activeStopTimes.size(); i++) {
-            if (!activeStopTimes.get(i).equals(futureStopTimes.get(i))) {
+            StopTime activeTime = activeStopTimes.get(i);
+            StopTime futureTime = futureStopTimes.get(i);
+
+            if (
+                activeTime.arrival_time != futureTime.arrival_time ||
+                activeTime.departure_time != futureTime.departure_time ||
+                activeTime.stop_sequence != futureTime.stop_sequence ||
+                !activeTime.stop_id.equals(futureTime.stop_id)
+            ) {
                 return false;
             }
         }
