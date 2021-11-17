@@ -172,6 +172,7 @@ public class FeedSource extends Model implements Cloneable {
      * time a feed version is retrieved as different feed versions may or may not be flex. The process to determine a
      * flex feed is defined in {@link FeedLoadResult#isGTFSFlex()}.
      */
+    @BsonIgnore
     public boolean flex;
 
     /**
