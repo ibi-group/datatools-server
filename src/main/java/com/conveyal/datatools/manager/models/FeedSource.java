@@ -19,6 +19,7 @@ import com.conveyal.datatools.manager.models.transform.FeedTransformation;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.JobUtils;
 import com.conveyal.gtfs.GTFS;
+import com.conveyal.gtfs.loader.FeedLoadResult;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
@@ -165,6 +166,13 @@ public class FeedSource extends Model implements Cloneable {
     public String publishedVersionId;
 
     public String editorNamespace;
+
+    /**
+     * If this feed source references a feed version that is GTFS Flex, this value will be true. This is updated every
+     * time a feed version is retrieved as different feed versions may or may not be flex. The process to determine a
+     * flex feed is defined in {@link FeedLoadResult#isGTFSFlex()}.
+     */
+    public boolean flex;
 
     /**
      * Create a new feed.
@@ -323,6 +331,7 @@ public class FeedSource extends Model implements Cloneable {
             String message = String.format("Fetch complete for %s", this.name);
             LOG.info(message);
             status.completeSuccessfully(message);
+            setFlex(version);
             return version;
         }
     }
@@ -370,6 +379,7 @@ public class FeedSource extends Model implements Cloneable {
             // Is this what happens if there are none?
             return null;
         }
+        setFlex(newestVersion);
         return newestVersion;
     }
 
@@ -386,6 +396,7 @@ public class FeedSource extends Model implements Cloneable {
             // Is this what happens if there are none?
             return null;
         }
+        setFlex(publishedVersion);
         return publishedVersion;
     }
 
@@ -694,5 +705,12 @@ public class FeedSource extends Model implements Cloneable {
             .map(rule -> rule.getActiveTransformations(target, clazz))
             .flatMap(Collection::stream)
             .collect(Collectors.toList());
+    }
+
+    /**
+     * Set the flex value according to the feed version loaded.
+     */
+    private void setFlex(FeedVersion feedVersion) {
+        flex = feedVersion.feedLoadResult.isGTFSFlex();
     }
 }
