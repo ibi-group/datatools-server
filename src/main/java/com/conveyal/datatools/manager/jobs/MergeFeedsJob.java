@@ -23,7 +23,6 @@ import com.conveyal.gtfs.model.StopTime;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 import org.bson.codecs.pojo.annotations.BsonIgnore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -33,6 +32,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.file.Files;
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
@@ -43,7 +43,6 @@ import java.util.zip.ZipOutputStream;
 import static com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType.SERVICE_PERIOD;
 import static com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType.REGIONAL;
 import static com.conveyal.datatools.manager.jobs.feedmerge.MergeStrategy.CHECK_STOP_TIMES;
-import static com.conveyal.datatools.manager.jobs.feedmerge.MergeStrategy.EXTEND_FUTURE;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.REGIONAL_MERGE;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.*;
 
@@ -55,7 +54,8 @@ import static com.conveyal.datatools.manager.utils.MergeFeedUtils.*;
  * found in any other feed version. Note: There is absolutely no attempt to merge
  * entities based on either expected shared IDs or entity location (e.g., stop
  * coordinates).
- * - {@link MergeFeedsType#SERVICE_PERIOD}:      this strategy is defined in detail at https://github.com/conveyal/datatools-server/issues/185,
+ * - {@link MergeFeedsType#SERVICE_PERIOD}:
+ * this strategy is defined in detail at https://github.com/conveyal/datatools-server/issues/185,
  * but in essence, this strategy attempts to merge an active and future feed into
  * a combined file. For certain entities (specifically stops and routes) it uses
  * alternate fields as primary keys (stop_code and route_short_name) if they are
@@ -66,55 +66,6 @@ import static com.conveyal.datatools.manager.utils.MergeFeedUtils.*;
  * prefer entities from the active version, so that entities edited in Data Tools would override the values found
  * in the "future" file, which may have limited data attributes due to being exported from scheduling software with
  * limited GTFS support.
- *
- * Reproduced from https://github.com/conveyal/datatools-server/issues/185 on 2019/04/23:
- *
- * 1. When a new GTFS+ feed is loaded in TDM, check as part of the loading and validation process if
- *    the dataset is for a future date. (If all services start in the future, consider the dataset
- *    to be for the future).
- * 2. If it is a future dataset, automatically notify the user that the feed needs to be merged with
- *    most recent active version or a selected one in order to further process the feed.
- * 3. Use the chosen version to merge the future feed. The merging process needs to be efficient so
- *    that the user doesn’t need to wait more than a tolerable time.
- * 4. The merge process shall compare the active and future datasets, validate the following rules
- *    and generate the Merge Validation Report:
- *    i. Merging will be based on route_short_name in the active and future datasets. All matching
- *      route_short_names between the datasets shall be considered same route. Any route_short_name
- *      in active data not present in the future will be appended to the future routes file.
- *    ii. Future feed_info.txt file should get priority over active feed file when difference is
- *      identified.
- *    iii. When difference is found in agency.txt file between active and future feeds, the future
- *      agency.txt file data should be used. Possible issue with missing agency_id referenced by routes
- *    iv. When stop_code is included, stop merging will be based on that. If stop_code is not
- *      included, it will be based on stop_id. All stops in future data will be carried forward and
- *      any stops found in active data that are not in the future data shall be appended. If one
- *      of the feed is missing stop_code, merge fails with a notification to the user with
- *      suggestion that the feed with missing stop_code must be fixed with stop_code.
- *    v. If any service_id in the active feed matches with the future feed, it should be modified
- *      and all associated trip records must also be changed with the modified service_id.
- *      If a service_id from the active calendar has both the start_date and end_date in the
- *      future, the service shall not be appended to the merged file. Records in trips,
- *      calendar_dates, and calendar_attributes referencing this service_id shall also be
- *      removed/ignored. Stop_time records for the ignored trips shall also be removed.
- *      If a service_id from the active calendar has only the end_date in the future, the end_date
- *      shall be set to one day prior to the earliest start_date in future dataset before appending
- *      the calendar record to the merged file.
- *      trip_ids between active and future datasets must not match. If any trip_id is found to be
- *      matching, the merge should fail with appropriate notification to user with the cause of the
- *      failure. Notification should include all matched trip_ids.
- *    vi. New shape_ids in the future datasets should be appended in the merged feed.
- *    vii. Merging fare_attributes will be based on fare_id in the active and future datasets. All
- *      matching fare_ids between the datasets shall be considered same fare. Any fare_id in active
- *      data not present in the future will be appended to the future fare_attributes file.
- *    viii. All fare rules from the future dataset will be included. Any identical fare rules from
- *      the active dataset will be discarded. Any fare rules unique to the active dataset will be
- *      appended to the future file.
- *    ix. All transfers.txt entries with unique stop pairs (from - to) from both the future and
- *      active datasets will be included in the merged file. Entries with duplicate stop pairs from
- *      the active dataset will be discarded.
- *    x. All GTFS+ files should be merged based on how the associated base GTFS file is merged. For
- *      example, directions for routes that are not in the future routes.txt file should be appended
- *      to the future directions.txt file in the merged feed.
  */
 public class MergeFeedsJob extends FeedSourceJob {
 
@@ -127,47 +78,28 @@ public class MergeFeedsJob extends FeedSourceJob {
     public final String projectId;
     public final MergeFeedsType mergeType;
     private File mergedTempFile = null;
-    /**
-     * If {@link MergeFeedsJob} storeNewVersion variable is true, a new version will be created from the merged GTFS
-     * dataset. Otherwise, this will be null throughout the life of the job.
-     */
     final FeedVersion mergedVersion;
     @JsonIgnore @BsonIgnore
-    public Set<String> tripIdsToModifyForActiveFeed = new HashSet<>();
+    public Set<String> sharedTripIdsWithInconsistentSignature = new HashSet<>();
     @JsonIgnore @BsonIgnore
-    public Set<String> tripIdsToSkipForActiveFeed = new HashSet<>();
+    public Set<String> sharedTripIdsWithConsistentSignature = new HashSet<>();
     @JsonIgnore @BsonIgnore
-    public Set<String> serviceIdsToExtend = new HashSet<>();
+    public Set<String> serviceIdsToCloneRenameAndExtend = new HashSet<>();
     @JsonIgnore @BsonIgnore
-    public Set<String> serviceIdsToCloneAndRename = new HashSet<>();
+    public Set<String> serviceIdsToTerminateEarly = new HashSet<>();
+
+    private List<TripAndCalendars> sharedConsistentTripAndCalendarIds = new ArrayList<>();
+
     // Variables used for a service period merge.
     private FeedMergeContext feedMergeContext;
-
-    public MergeFeedsJob(Auth0UserProfile owner, Set<FeedVersion> feedVersions, String file, MergeFeedsType mergeType) {
-        this(owner, feedVersions, file, mergeType, true);
-    }
-
-    /** Shorthand method to get the future feed during a service period merge */
-    @BsonIgnore @JsonIgnore
-    public FeedToMerge getFutureFeed() {
-        return feedMergeContext.futureFeedToMerge;
-    }
-
-    /** Shorthand method to get the active feed during a service period merge */
-    @BsonIgnore @JsonIgnore
-    public FeedToMerge getActiveFeed() {
-        return feedMergeContext.activeFeedToMerge;
-    }
 
     /**
      * @param owner             user ID that initiated job
      * @param feedVersions      set of feed versions to merge
      * @param file              resulting merge filename (without .zip)
      * @param mergeType         the type of merge to perform {@link MergeFeedsType}
-     * @param storeNewVersion   whether to store merged feed as new version
      */
-    public MergeFeedsJob(Auth0UserProfile owner, Set<FeedVersion> feedVersions, String file,
-                         MergeFeedsType mergeType, boolean storeNewVersion) {
+    public MergeFeedsJob(Auth0UserProfile owner, Set<FeedVersion> feedVersions, String file, MergeFeedsType mergeType) {
         super(owner, mergeType.equals(REGIONAL) ? "Merging project feeds" : "Merging feed versions",
             JobType.MERGE_FEED_VERSIONS);
         this.feedVersions = feedVersions;
@@ -182,7 +114,7 @@ public class MergeFeedsJob extends FeedSourceJob {
         // Grab parent feed source depending on merge type.
         FeedSource regionalFeedSource = null;
         // If storing a regional merge as a new version, find the feed source designated by the project.
-        if (mergeType.equals(REGIONAL) && storeNewVersion) {
+        if (mergeType.equals(REGIONAL)) {
             regionalFeedSource = Persistence.feedSources.getById(project.regionalFeedSourceId);
             // Create new feed source if this is the first regional merge.
             if (regionalFeedSource == null) {
@@ -201,18 +133,13 @@ public class MergeFeedsJob extends FeedSourceJob {
             : feedVersions.iterator().next().parentFeedSource();
         // Assuming job is successful, mergedVersion will contain the resulting feed version.
         // Merged version will be null if the new version should not be stored.
-        this.mergedVersion = getMergedVersion(this, storeNewVersion);
+        this.mergedVersion = getMergedVersion(this, true);
         this.mergeFeedsResult = new MergeFeedsResult(mergeType);
     }
 
     @BsonIgnore @JsonIgnore
     public Set<FeedVersion> getFeedVersions() {
         return this.feedVersions;
-    }
-
-    @BsonIgnore @JsonIgnore
-    public List<FeedToMerge> getFeedsToMerge() {
-        return this.feedMergeContext.feedsToMerge;
     }
 
     /**
@@ -249,7 +176,7 @@ public class MergeFeedsJob extends FeedSourceJob {
             logAndReportToBugsnag(e, message);
             status.fail(message, e);
         }
-        mergedTempFile.deleteOnExit();
+
         // Create the zipfile with try with resources so that it is always closed.
         try (ZipOutputStream out = new ZipOutputStream(new FileOutputStream(mergedTempFile))) {
             LOG.info("Created merge file: {}", mergedTempFile.getAbsolutePath());
@@ -259,30 +186,24 @@ public class MergeFeedsJob extends FeedSourceJob {
             final List<Table> tablesToMerge = getTablesToMerge();
             int numberOfTables = tablesToMerge.size();
 
-            // Skip merging process altogether if the failing condition is met.
-            FeedMergeContext.TripMismatchedServiceIds serviceIdMismatch;
-            if (feedMergeContext.areTripIdsMatchingButNotServiceIds()) {
-                failMergeJob("Feed merge failed because the trip_ids are identical in the future and active feeds. A new service requires unique trip_ids for merging.");
-                return;
-            } else if ((serviceIdMismatch = feedMergeContext.shouldFailJobDueToMatchingTripIds()) != null) {
-                // We cannot account for the case where service_ids do not match! It would be a bit too complicated
-                // to handle this unique case, so instead just include in the failure reasons and use failure
-                // strategy.
-                failMergeJob(
-                    String.format("Shared trip_id (%s) had mismatched service id between two feeds (active: %s, future: %s)",
-                        serviceIdMismatch.tripId,
-                        serviceIdMismatch.activeServiceId,
-                        serviceIdMismatch.futureServiceId
-                    )
-                );
-                return;
-            }
-
             // Before initiating the merge process, get the merge strategy to use, which runs some pre-processing to
             // check for id conflicts for certain tables (e.g., trips and calendars).
             if (mergeType.equals(SERVICE_PERIOD)) {
-                mergeFeedsResult.mergeStrategy = getMergeStrategy();
+                determineMergeStrategy();
+
+                // Failure condition "if a single trip signature does not match the merge process shall stop with the following
+                // error message along with matching trip_ids with differing trip signatures."
+                Set<String> tripIdsWithInconsistentSignature = getSharedTripIdsWithInconsistentSignature();
+                if (!tripIdsWithInconsistentSignature.isEmpty()) {
+                    mergeFeedsResult.tripIdsToCheck.addAll(tripIdsWithInconsistentSignature);
+                    failMergeJob(
+                    "Trips in the new feed have differing makeup from matching trips in active feed. " +
+                        "If a trip characteristic has changed, a new trip_id must be assigned."
+                    );
+                    return;
+                }
             }
+
             // Loop over GTFS tables and merge each feed one table at a time.
             for (int i = 0; i < numberOfTables; i++) {
                 Table table = tablesToMerge.get(i);
@@ -322,6 +243,13 @@ public class MergeFeedsJob extends FeedSourceJob {
             // subJobs are run.
             addNextJob(new ProcessSingleFeedJob(mergedVersion, owner, true));
         }
+    }
+
+    /**
+     * Obtains trip ids whose entries in the stop_times table differ between the active and future feed.
+     */
+    private Set<String> getSharedTripIdsWithInconsistentSignature() {
+        return sharedTripIdsWithInconsistentSignature;
     }
 
     private List<Table> getTablesToMerge() {
@@ -462,43 +390,68 @@ public class MergeFeedsJob extends FeedSourceJob {
      * Get the merge strategy to use for MTC service period merges by checking the active and future feeds for various
      * combinations of matching trip and service IDs.
      */
-    private MergeStrategy getMergeStrategy() {
-        if (feedMergeContext.tripIdsMatch) {
-            // If trip ids and service ids match, these ids will be extended to the future per MTC requirements.
-            // Effectively this exact match condition means that the future feed will be used as is
-            // (including stops, routes, etc.), the only modification being service date ranges.
-            // (If service ids mismatch, shouldFailJobDueToMatchingTripIds will fail the merge.)
-            return feedMergeContext.serviceIdsMatch ? EXTEND_FUTURE : MergeStrategy.DEFAULT;
-        }
-        if (feedMergeContext.serviceIdsMatch) {
+    private void determineMergeStrategy() {
+        // Revised merge logic
+        // Step 1: TDM Merge functionality shall start with first comparing trip_ids
+        // between active and future GTFS feed.
+        if (feedMergeContext.areActiveAndFutureTripIdsDisjoint()) {
+            // If none of the trip_ids in active GTFS feed match with the trip_ids
+            // available in future GTFS feed, then proceed to Step 3; otherwise continue to the next step [Step 2].
+            // Step 3: When the complete set of trip_ids between active and future GTFS feeds is different,
+            // all trip records from both feeds shall be added to the merged feed as per the following rule
+            // and the merge process will exit.
+            //    If a service_id from an active calendar has an end date in the future,
+            //    the end_date shall be set to one day prior to the earliest start_date in the future dataset
+            //    before appending the calendar record to the merged file.
+            //    The merge process shall end here by publishing the merge feed and inform the user
+            //    that trip_ids were unique which successfully created a merge feed.
+
+            // => Step 3 is the existing DEFAULT merge strategy.
+            mergeFeedsResult.mergeStrategy = MergeStrategy.DEFAULT;
+        } else {
+            // Step 2: If matching trip_ids are provided in active and future GTFS feed, for those matching trips,
+            // trip signatures – a combination of arrival_time, departure_time, stop_id,
+            // and stop_sequence – in stop_times.txt file should be compared.
+            // If all the matching trip_ids contain the same trip signatures, the merge process shall proceed
+            // to step 4. If a single trip signature does not match
+            // the merge process shall stop with the following error message
+            // along with matching trip_ids with differing trip signatures.
+            //    Error Message: Trips [trip_id] in new feed have differing makeup from matching trips in active feed.
+            //    If a trip character has changed, new trip_id must be assigned.
+
+            // => Step 2 is the CHECK_STOP_TIMES strategy
             // If just the service_ids are an exact match, check the that the stop_times having matching signatures
             // between the two feeds (i.e., each stop time in the ordered list is identical between the two feeds).
-            Feed futureFeed = feedMergeContext.futureFeed;
-            Feed activeFeed = feedMergeContext.activeFeed;
+            Feed futureFeed = feedMergeContext.future.feed;
+            Feed activeFeed = feedMergeContext.active.feed;
             for (String tripId : feedMergeContext.sharedTripIds) {
                 compareStopTimesAndCollectTripAndServiceIds(tripId, futureFeed, activeFeed);
             }
-            // If a trip only in the active feed references a service_id that is set to be extended, that
-            // service_id needs to be cloned and renamed to differentiate it from the same service_id in
-            // the future feed. (The trip in question will be linked to the cloned service_id.)
-            Set<String> tripsOnlyInActiveFeed = Sets.difference(feedMergeContext.activeTripIds, feedMergeContext.futureTripIds);
-            tripsOnlyInActiveFeed.stream()
-                .map(tripId -> activeFeed.trips.get(tripId).service_id)
-                .filter(serviceId -> serviceIdsToExtend.contains(serviceId))
-                .forEach(serviceId -> serviceIdsToCloneAndRename.add(serviceId));
-            // If a trip only in the future feed references a service_id that is set to be extended, that
-            // service_id needs to be cloned and renamed to differentiate it from the same service_id in
-            // the future feed. (The trip in question will be linked to the cloned service_id.)
-            Set<String> tripsOnlyInFutureFeed = Sets.difference(feedMergeContext.futureTripIds, feedMergeContext.activeTripIds);
-            tripsOnlyInFutureFeed.stream()
-                .map(tripId -> futureFeed.trips.get(tripId).service_id)
-                .filter(serviceId -> serviceIdsToExtend.contains(serviceId))
-                .forEach(serviceId -> serviceIdsToCloneAndRename.add(serviceId));
 
-            return CHECK_STOP_TIMES;
+            // Build the set of calendars to be cloned/renamed/extended from trip ids present
+            // in both active/future feeds and that have consistent signature.
+            // These trips will be linked to the new service_ids.
+            serviceIdsToCloneRenameAndExtend.addAll(
+                getActiveServiceIds(this.sharedTripIdsWithConsistentSignature)
+            );
+
+            // Build the set of calendars to be shortened to the day before the future feed start date
+            // from trips in the active feed but not in the future feed.
+            serviceIdsToTerminateEarly.addAll(
+                getActiveServiceIds(feedMergeContext.getActiveTripIdsNotInFutureFeed())
+            );
+
+            mergeFeedsResult.mergeStrategy = CHECK_STOP_TIMES;
         }
-        // If neither the trips or services are exact matches, use the default merge strategy.
-        return MergeStrategy.DEFAULT;
+    }
+
+    /**
+     * Obtains the service ids corresponding to the provided trip ids.
+     */
+    private List<String> getActiveServiceIds(Set<String> tripIds) {
+        return tripIds.stream()
+            .map(tripId -> feedMergeContext.active.feed.trips.get(tripId).service_id)
+            .collect(Collectors.toList());
     }
 
     /**
@@ -511,18 +464,18 @@ public class MergeFeedsJob extends FeedSourceJob {
         // (ignoring the other identical one). If they do not match, modify the active trip_id and include.
         List<StopTime> futureStopTimes = Lists.newArrayList(futureFeed.stopTimes.getOrdered(tripId));
         List<StopTime> activeStopTimes = Lists.newArrayList(activeFeed.stopTimes.getOrdered(tripId));
+        String activeServiceId = activeFeed.trips.get(tripId).service_id;
         String futureServiceId = futureFeed.trips.get(tripId).service_id;
-        if (!stopTimesMatch(futureStopTimes, activeStopTimes)) {
-            // If stop_times or services do not match, the trip will be cloned. Also, track the service_id
-            // (it will need to be cloned and renamed for both active feeds).
-            tripIdsToModifyForActiveFeed.add(tripId);
-            serviceIdsToCloneAndRename.add(futureServiceId);
+        if (!stopTimesMatchSimplified(futureStopTimes, activeStopTimes)) {
+            // If stop_times or services do not match, merge will fail and no other action will be taken.
+            sharedTripIdsWithInconsistentSignature.add(tripId);
         } else {
             // If the trip's stop_times are an exact match, we can safely include just the
-            // future trip and exclude the active one. Also, track the service_id (it will need to be
-            // extended to the full time range).
-            tripIdsToSkipForActiveFeed.add(tripId);
-            serviceIdsToExtend.add(futureServiceId);
+            // future trip and exclude the active one. Also, mark the service_id for cloning,
+            // the cloned service id will need to be extended to the full time range.
+            sharedTripIdsWithConsistentSignature.add(tripId);
+            serviceIdsToCloneRenameAndExtend.add(futureServiceId);
+            sharedConsistentTripAndCalendarIds.add(new TripAndCalendars(tripId, activeServiceId, futureServiceId));
         }
     }
 
@@ -538,5 +491,17 @@ public class MergeFeedsJob extends FeedSourceJob {
     @BsonIgnore @JsonIgnore
     public FeedMergeContext getFeedMergeContext() {
         return feedMergeContext;
+    }
+
+    private static class TripAndCalendars {
+        public final String tripId;
+        public final String activeCalendarId;
+        public final String futureCalendarId;
+
+        public TripAndCalendars(String tripId, String activeCalendarId, String futureCalendarId) {
+            this.tripId = tripId;
+            this.activeCalendarId = activeCalendarId;
+            this.futureCalendarId = futureCalendarId;
+        }
     }
 }

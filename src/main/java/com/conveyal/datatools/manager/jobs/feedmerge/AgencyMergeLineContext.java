@@ -33,7 +33,11 @@ public class AgencyMergeLineContext extends MergeLineContext {
             // agency_id is optional if only one agency is present, but that will
             // cause issues for the feed merge, so we need to insert an agency_id
             // for the single entry.
-            feedMergeContext.setNewAgencyId(UUID.randomUUID().toString());
+            (isHandlingActiveFeed()
+                ? feedMergeContext.active
+                : feedMergeContext.future
+            ).setNewAgencyId(UUID.randomUUID().toString());
+
             if (keyFieldMissing) {
                 // Only add agency_id field if it is missing in table.
                 addField(Table.AGENCY.fields[0]);

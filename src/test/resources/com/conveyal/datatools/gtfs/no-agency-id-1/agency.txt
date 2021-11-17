@@ -1,0 +1,2 @@
+agency_id,agency_name,agency_url,agency_lang,agency_phone,agency_email,agency_timezone,agency_fare_url,agency_branding_url
+,Agency1,http://agency1.example.com/,en,888-555-1111,agency1@example.com,America/New_York,,
