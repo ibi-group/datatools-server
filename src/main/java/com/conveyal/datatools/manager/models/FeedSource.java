@@ -331,7 +331,7 @@ public class FeedSource extends Model implements Cloneable {
             String message = String.format("Fetch complete for %s", this.name);
             LOG.info(message);
             status.completeSuccessfully(message);
-            setFlex(version);
+            presetFlex(version);
             return version;
         }
     }
@@ -379,7 +379,7 @@ public class FeedSource extends Model implements Cloneable {
             // Is this what happens if there are none?
             return null;
         }
-        setFlex(newestVersion);
+        presetFlex(newestVersion);
         return newestVersion;
     }
 
@@ -396,7 +396,7 @@ public class FeedSource extends Model implements Cloneable {
             // Is this what happens if there are none?
             return null;
         }
-        setFlex(publishedVersion);
+        presetFlex(publishedVersion);
         return publishedVersion;
     }
 
@@ -710,8 +710,17 @@ public class FeedSource extends Model implements Cloneable {
     /**
      * Set the flex value according to the feed version loaded.
      */
-    @BsonIgnore
-    private void setFlex(FeedVersion feedVersion) {
+    public void presetFlex(FeedVersion feedVersion) {
         flex = feedVersion.feedLoadResult.isGTFSFlex();
+    }
+
+    @BsonIgnore
+    public boolean isFlex() {
+        return flex;
+    }
+
+    @BsonIgnore
+    public void setFlex(boolean flex) {
+        this.flex = flex;
     }
 }
