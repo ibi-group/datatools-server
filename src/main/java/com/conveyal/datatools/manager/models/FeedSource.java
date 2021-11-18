@@ -713,14 +713,4 @@ public class FeedSource extends Model implements Cloneable {
     public void presetFlex(FeedVersion feedVersion) {
         flex = feedVersion.feedLoadResult.isGTFSFlex();
     }
-
-    @BsonIgnore
-    public boolean isFlex() {
-        return flex;
-    }
-
-    @BsonIgnore
-    public void setFlex(boolean flex) {
-        this.flex = flex;
-    }
 }
