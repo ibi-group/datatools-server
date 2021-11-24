@@ -352,6 +352,7 @@ public class MergeFeedsJobTest extends UnitTest {
         String mergedNamespace = mergeFeedsJob.mergedVersion.namespace;
 
         assertNoUnusedServiceIds(mergedNamespace);
+        assertNoRefIntegrityErrors(mergedNamespace);
 
         // - calendar table
         // expect a total of 1 record in calendar table that
@@ -364,14 +365,6 @@ public class MergeFeedsJobTest extends UnitTest {
         assertThatSqlCountQueryYieldsExpectedCount(
             String.format("SELECT count(*) FROM %s.calendar where start_date = '20170918' and monday = 1", mergedNamespace),
             1
-        );
-    }
-
-    private void assertNoUnusedServiceIds(String mergedNamespace) throws SQLException {
-        // There should be no unused service ids.
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format("SELECT count(*) FROM %s.errors where error_type = 'SERVICE_UNUSED'", mergedNamespace),
-            0
         );
     }
 
@@ -423,6 +416,7 @@ public class MergeFeedsJobTest extends UnitTest {
         );
 
         assertNoUnusedServiceIds(mergedNamespace);
+        assertNoRefIntegrityErrors(mergedNamespace);
 
         // expect that 2 calendars (1 common_id extended from future and 1 Fake_Transit1:common_id from active) have
         // start_date pinned to start date of active feed.
@@ -491,6 +485,7 @@ public class MergeFeedsJobTest extends UnitTest {
         );
 
         assertNoUnusedServiceIds(mergedNamespace);
+        assertNoRefIntegrityErrors(mergedNamespace);
     }
 
     /**
@@ -1049,5 +1044,25 @@ public class MergeFeedsJobTest extends UnitTest {
         mergeFeedsJob.run();
         LOG.info("Regional merged file: {}", mergeFeedsJob.mergedVersion.retrieveGtfsFile().getAbsolutePath());
         return mergeFeedsJob.mergedVersion;
+    }
+
+    /**
+     * Checks there are no unused service ids.
+     */
+    private void assertNoUnusedServiceIds(String mergedNamespace) throws SQLException {
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.errors where error_type = 'SERVICE_UNUSED'", mergedNamespace),
+            0
+        );
+    }
+
+    /**
+     * Checks there are no referential integrity issues.
+     */
+    private void assertNoRefIntegrityErrors(String mergedNamespace) throws SQLException {
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.errors where error_type = 'REFERENTIAL_INTEGRITY'", mergedNamespace),
+            0
+        );
     }
 }

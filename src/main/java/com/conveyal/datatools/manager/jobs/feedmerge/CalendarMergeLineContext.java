@@ -12,6 +12,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.Set;
 import java.util.zip.ZipOutputStream;
 
+import static com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType.SERVICE_PERIOD;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.getTableScopedValue;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.hasDuplicateError;
 import static com.conveyal.gtfs.loader.DateField.GTFS_DATE_FORMATTER;

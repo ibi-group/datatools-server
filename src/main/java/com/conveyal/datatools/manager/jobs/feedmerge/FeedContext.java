@@ -3,10 +3,12 @@ package com.conveyal.datatools.manager.jobs.feedmerge;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.gtfs.loader.Feed;
 import com.conveyal.gtfs.loader.Table;
+import com.google.common.collect.Sets;
 
 import java.io.IOException;
 import java.time.LocalDate;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 /**
  * Contains information related to a feed to merge.
@@ -15,11 +17,12 @@ public class FeedContext {
     public final FeedToMerge feedToMerge;
     public final Set<String> tripIds;
     public final Feed feed;
-    private LocalDate feedFirstDate;
+    private final LocalDate feedFirstDate;
     /**
      * Holds the auto-generated agency id to be updated for each feed if none was provided.
      */
     private String newAgencyId;
+    private Set<String> serviceIdsToRemove;
 
     public FeedContext(FeedToMerge givenFeedToMerge) throws IOException {
         feedToMerge = givenFeedToMerge;
@@ -44,5 +47,25 @@ public class FeedContext {
 
     public void setNewAgencyId(String agencyId) {
         newAgencyId = agencyId;
+    }
+
+    public Set<String> getServiceIdsToRemove() {
+        return serviceIdsToRemove;
+    }
+
+    public void setServiceIdsToRemoveFromOtherFeed(Set<String> idsNotInOtherFeed) {
+        serviceIdsToRemove = Sets.difference(
+            feedToMerge.serviceIds,
+            getServiceIds(idsNotInOtherFeed)
+        );
+    }
+
+    /**
+     * Obtains the service ids corresponding to the provided trip ids.
+     */
+    public Set<String> getServiceIds(Set<String> tripIds) {
+        return tripIds.stream()
+            .map(tripId -> feed.trips.get(tripId).service_id)
+            .collect(Collectors.toSet());
     }
 }
