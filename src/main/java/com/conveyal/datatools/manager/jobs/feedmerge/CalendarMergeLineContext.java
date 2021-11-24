@@ -12,7 +12,6 @@ import java.time.temporal.ChronoUnit;
 import java.util.Set;
 import java.util.zip.ZipOutputStream;
 
-import static com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType.SERVICE_PERIOD;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.getTableScopedValue;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.hasDuplicateError;
 import static com.conveyal.gtfs.loader.DateField.GTFS_DATE_FORMATTER;
@@ -89,7 +88,7 @@ public class CalendarMergeLineContext extends MergeLineContext {
             }
 
             // Remove calendar entries that are no longer used.
-            if (job.serviceIdsFromActiveFeedToRemove.contains(keyValue)) {
+            if (feedMergeContext.active.getServiceIdsToRemove().contains(keyValue)) {
                 LOG.warn(
                     "Skipping active calendar entry {} because it will become unused in the merged feed.",
                     keyValue);
@@ -101,7 +100,7 @@ public class CalendarMergeLineContext extends MergeLineContext {
             // - Calendar entries from the future feed will be inserted as is in the merged feed.
             // so no additional processing needed here, unless the calendar entry is no longer used,
             // in that case we drop the calendar entry.
-            if (job.serviceIdsFromFutureFeedToRemove.contains(keyValue)) {
+            if (feedMergeContext.future.getServiceIdsToRemove().contains(keyValue)) {
                 LOG.warn(
                     "Skipping future calendar entry {} because it will become unused in the merged feed.",
                     keyValue);

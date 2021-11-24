@@ -7,6 +7,7 @@ import com.google.common.collect.Sets;
 
 import java.io.IOException;
 import java.time.LocalDate;
+import java.util.HashSet;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -22,7 +23,7 @@ public class FeedContext {
      * Holds the auto-generated agency id to be updated for each feed if none was provided.
      */
     private String newAgencyId;
-    private Set<String> serviceIdsToRemove;
+    private Set<String> serviceIdsToRemove = new HashSet<>();
 
     public FeedContext(FeedToMerge givenFeedToMerge) throws IOException {
         feedToMerge = givenFeedToMerge;

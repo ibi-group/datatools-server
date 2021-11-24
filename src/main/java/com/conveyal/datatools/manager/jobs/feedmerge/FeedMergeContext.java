@@ -31,11 +31,6 @@ public class FeedMergeContext implements Closeable {
         active = new FeedContext(activeFeedToMerge);
         future = new FeedContext(futureFeedToMerge);
 
-        // Build the set of calendars ids from the active|future feed to be removed
-        // because they become no longer used after shared trips are remapped to another service id.
-        active.setServiceIdsToRemoveFromOtherFeed(getActiveTripIdsNotInFutureFeed());
-        future.setServiceIdsToRemoveFromOtherFeed(getFutureTripIdsNotInActiveFeed());
-
         // Determine whether service and trip IDs are exact matches.
         serviceIdsMatch = activeFeedToMerge.serviceIdsInUse.equals(futureFeedToMerge.serviceIdsInUse);
         tripIdsMatch = active.tripIds.equals(future.tripIds);
@@ -49,6 +44,11 @@ public class FeedMergeContext implements Closeable {
             }
         }
         this.futureFirstCalendarStartDate = futureFirstCalStartDate;
+    }
+
+    public void collectServiceIdsToRemove() {
+        active.setServiceIdsToRemoveFromOtherFeed(getActiveTripIdsNotInFutureFeed());
+        future.setServiceIdsToRemoveFromOtherFeed(getFutureTripIdsNotInActiveFeed());
     }
 
     @Override

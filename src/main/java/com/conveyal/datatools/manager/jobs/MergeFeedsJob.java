@@ -23,7 +23,6 @@ import com.conveyal.gtfs.model.StopTime;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.Lists;
-import com.google.common.collect.Sets;
 import org.bson.codecs.pojo.annotations.BsonIgnore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -88,10 +87,6 @@ public class MergeFeedsJob extends FeedSourceJob {
     public Set<String> serviceIdsToCloneRenameAndExtend = new HashSet<>();
     @JsonIgnore @BsonIgnore
     public Set<String> serviceIdsFromActiveFeedToTerminateEarly = new HashSet<>();
-    @JsonIgnore @BsonIgnore
-    public Set<String> serviceIdsFromActiveFeedToRemove = new HashSet<>();
-    @JsonIgnore @BsonIgnore
-    public Set<String> serviceIdsFromFutureFeedToRemove = new HashSet<>();
 
     private List<TripAndCalendars> sharedConsistentTripAndCalendarIds = new ArrayList<>();
 
@@ -446,19 +441,10 @@ public class MergeFeedsJob extends FeedSourceJob {
                 getActiveServiceIds(feedMergeContext.getActiveTripIdsNotInFutureFeed())
             );
 
-            // Build the set of calendars ids from the future feed to be removed
-            // because they become no longer used after shared trips are remapped to another service id.
-            serviceIdsFromFutureFeedToRemove = Sets.difference(
-                feedMergeContext.future.feedToMerge.serviceIds,
-                getFutureServiceIds(feedMergeContext.getFutureTripIdsNotInActiveFeed())
-            );
 
-            // Build the set of calendars ids from the active feed to be removed
+            // Build the set of calendars ids from the active|future feed to be removed
             // because they become no longer used after shared trips are remapped to another service id.
-            serviceIdsFromActiveFeedToRemove = Sets.difference(
-                feedMergeContext.active.feedToMerge.serviceIds,
-                getActiveServiceIds(feedMergeContext.getActiveTripIdsNotInFutureFeed())
-            );
+            feedMergeContext.collectServiceIdsToRemove();
 
             mergeFeedsResult.mergeStrategy = CHECK_STOP_TIMES;
         }
