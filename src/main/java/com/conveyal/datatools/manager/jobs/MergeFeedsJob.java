@@ -86,7 +86,7 @@ public class MergeFeedsJob extends FeedSourceJob {
     @JsonIgnore @BsonIgnore
     public Set<String> serviceIdsToCloneRenameAndExtend = new HashSet<>();
     @JsonIgnore @BsonIgnore
-    public Set<String> serviceIdsToTerminateEarly = new HashSet<>();
+    public Set<String> serviceIdsFromActiveFeedToTerminateEarly = new HashSet<>();
 
     private List<TripAndCalendars> sharedConsistentTripAndCalendarIds = new ArrayList<>();
 
@@ -437,7 +437,7 @@ public class MergeFeedsJob extends FeedSourceJob {
 
             // Build the set of calendars to be shortened to the day before the future feed start date
             // from trips in the active feed but not in the future feed.
-            serviceIdsToTerminateEarly.addAll(
+            serviceIdsFromActiveFeedToTerminateEarly.addAll(
                 getActiveServiceIds(feedMergeContext.getActiveTripIdsNotInFutureFeed())
             );
 

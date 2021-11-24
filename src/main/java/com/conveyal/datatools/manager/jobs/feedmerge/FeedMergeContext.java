@@ -32,7 +32,7 @@ public class FeedMergeContext implements Closeable {
         future = new FeedContext(futureFeedToMerge);
 
         // Determine whether service and trip IDs are exact matches.
-        serviceIdsMatch = activeFeedToMerge.serviceIds.equals(futureFeedToMerge.serviceIds);
+        serviceIdsMatch = activeFeedToMerge.serviceIdsInUse.equals(futureFeedToMerge.serviceIdsInUse);
         tripIdsMatch = active.tripIds.equals(future.tripIds);
         sharedTripIds = Sets.intersection(active.tripIds, future.tripIds);
 
@@ -63,9 +63,16 @@ public class FeedMergeContext implements Closeable {
     }
 
     /**
-     * Obtains the active trip ids found in the active feed, but not in the future feed.
+     * Obtains the trip ids found in the active feed, but not in the future feed.
      */
     public Sets.SetView<String> getActiveTripIdsNotInFutureFeed() {
         return Sets.difference(active.tripIds, future.tripIds);
+    }
+
+    /**
+     * Obtains the trip ids found in the future feed, but not in the active feed.
+     */
+    public Sets.SetView<String> getFutureTripIdsNotInActiveFeed() {
+        return Sets.difference(future.tripIds, active.tripIds);
     }
 }

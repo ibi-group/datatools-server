@@ -387,14 +387,29 @@ public class MergeFeedsJobTest extends UnitTest {
 
         // - calendar table
         // expect a total of 4 records in calendar table:
-        // - 1 from the active feed (common_id start date is changed to one day before first start_date in future feed)
-        //   (the other one is unused and is discarded)
-        // - 2 from the future feed
-        // - 1 cloned for the matching trip id present in both active and future feeds
-        //   (from MergeFeedsJob#serviceIdsToCloneAndRename).
+        // - common_id from the active feed (but start date is changed to one day before first start_date in future feed),
+        // - common_id from the future feed (because of one future trip not in the active feed),
+        // - common_id cloned and extended for the matching trip id present in both active and future feeds
+        //   (from MergeFeedsJob#serviceIdsToCloneAndRename),
+        // - only_calendar_id used in the future feed.
         assertThatSqlCountQueryYieldsExpectedCount(
             String.format("SELECT count(*) FROM %s.calendar", mergedNamespace),
             4
+        );
+
+        // Out of all trips from the input datasets, expect 4 trips in merged output.
+        // 1 trip from active feed that is not in the future feed,
+        // 1 trip in both the active and future feeds, with the same signature (same stop times),
+        // 2 trips from the future feed not in the active feed.
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.trips", mergedNamespace),
+            4
+        );
+
+        // There should be no unused service ids.
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.errors where error_type = 'SERVICE_UNUSED'", mergedNamespace),
+            0
         );
 
         // expect that 2 calendars (1 common_id extended from future and 1 Fake_Transit1:common_id from active) have
@@ -414,14 +429,6 @@ public class MergeFeedsJobTest extends UnitTest {
         assertThatSqlCountQueryYieldsExpectedCount(
             String.format("SELECT count(*) FROM %s.calendar where start_date = '20170918' and end_date='20170919'", mergedNamespace),
             1
-        );
-        // Out of all trips from the input datasets, expect 4 trips in merged output.
-        // 1 trip from active feed that is not in the future feed,
-        // 1 trip in both the active and future feeds, with the same signature (same stop times),
-        // 2 trips from the future feed not in the active feed.
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format("SELECT count(*) FROM %s.trips", mergedNamespace),
-            4
         );
     }
 

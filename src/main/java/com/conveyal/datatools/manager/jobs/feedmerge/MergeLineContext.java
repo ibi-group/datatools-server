@@ -144,6 +144,14 @@ public class MergeLineContext {
             // If there is no agency_id for agency table, create one and ensure that
             // route#agency_id gets set.
         }
+
+        if (handlingFutureFeed) {
+            mergeFeedsResult.serviceIds.addAll(
+                job.serviceIdsToCloneRenameAndExtend.stream().map(
+                    id -> String.join(":", idScope, id)
+                ).collect(Collectors.toSet())
+            );
+        }
     }
 
     public boolean shouldSkipFile() {
@@ -395,6 +403,24 @@ public class MergeLineContext {
         return true;
     }
 
+    public boolean updateServiceIdsIfNeeded(FieldContext fieldContext) {
+        String fieldValue = fieldContext.getValue();
+        if (table.name.equals(Table.TRIPS.name) &&
+            fieldContext.nameEquals(SERVICE_ID) &&
+            job.serviceIdsToCloneRenameAndExtend.contains(fieldValue) &&
+            job.mergeType.equals(SERVICE_PERIOD)
+        ) {
+            // Future trip ids not in the active feed will not get the service id remapped,
+            // they will use the service id as defined in the future feed instead.
+            if (!(handlingFutureFeed && feedMergeContext.getFutureTripIdsNotInActiveFeed().contains(keyValue))) {
+                String newServiceId = String.join(":", idScope, fieldValue);
+                LOG.info("Updating {}#service_id to (auto-generated) {} for ID {}", table.name, newServiceId, keyValue);
+                fieldContext.setValueToWrite(newServiceId);
+            }
+        }
+        return true;
+    }
+
     public boolean storeRowAndStopValues() {
         String newLine = String.join(",", rowValues);
         switch (table.name) {
@@ -527,9 +553,10 @@ public class MergeLineContext {
                     updateAndRemapOutput(fieldContext);
                 }
 
+                updateServiceIdsIfNeeded(fieldContext);
+
                 // Store values for key fields that have been encountered and update any key values that need modification due
                 // to conflicts.
-                // This method can change skipRecord.
                 if (!checkFieldsForMergeConflicts(getIdErrors(fieldContext), fieldContext)) {
                     skipRecord = true;
                     break;

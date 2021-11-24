@@ -38,8 +38,6 @@ public class FeedContext {
 
     public LocalDate getFeedFirstDate() { return feedFirstDate; }
 
-    public void setFeedFirstDate(LocalDate firstDate) { feedFirstDate = firstDate; }
-
     public String getNewAgencyId() {
         return newAgencyId;
     }
