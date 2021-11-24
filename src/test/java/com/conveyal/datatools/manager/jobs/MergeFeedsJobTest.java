@@ -351,11 +351,7 @@ public class MergeFeedsJobTest extends UnitTest {
         // assert service_ids start_dates have been extended to the start_date of the base feed.
         String mergedNamespace = mergeFeedsJob.mergedVersion.namespace;
 
-        // There should be no unused service ids.
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format("SELECT count(*) FROM %s.errors where error_type = 'SERVICE_UNUSED'", mergedNamespace),
-            0
-        );
+        assertNoUnusedServiceIds(mergedNamespace);
 
         // - calendar table
         // expect a total of 1 record in calendar table that
@@ -364,11 +360,18 @@ public class MergeFeedsJobTest extends UnitTest {
             String.format("SELECT count(*) FROM %s.calendar", mergedNamespace),
             1
         );
-        // expect that two records in calendar table have the correct start_date
-        // (one for the original calendar entry, one for the extended service id for trips with same signature)
+        // expect that the record in calendar table has the correct start_date.
         assertThatSqlCountQueryYieldsExpectedCount(
             String.format("SELECT count(*) FROM %s.calendar where start_date = '20170918' and monday = 1", mergedNamespace),
             1
+        );
+    }
+
+    private void assertNoUnusedServiceIds(String mergedNamespace) throws SQLException {
+        // There should be no unused service ids.
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.errors where error_type = 'SERVICE_UNUSED'", mergedNamespace),
+            0
         );
     }
 
@@ -419,11 +422,7 @@ public class MergeFeedsJobTest extends UnitTest {
             4
         );
 
-        // There should be no unused service ids.
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format("SELECT count(*) FROM %s.errors where error_type = 'SERVICE_UNUSED'", mergedNamespace),
-            0
-        );
+        assertNoUnusedServiceIds(mergedNamespace);
 
         // expect that 2 calendars (1 common_id extended from future and 1 Fake_Transit1:common_id from active) have
         // start_date pinned to start date of active feed.
@@ -472,9 +471,8 @@ public class MergeFeedsJobTest extends UnitTest {
         String mergedNamespace = mergeFeedsJob.mergedVersion.namespace;
 
         // - calendar table
-        // expect a total of 4 records in calendar table:
+        // expect a total of 3 records in calendar table:
         // - common_id from the active feed (but start date is changed to one day before first start_date in future feed),
-        // - common_id from the future feed (because of one future trip not in the active feed),
         // - common_id cloned and extended for the matching trip id present in both active and future feeds
         //   (from MergeFeedsJob#serviceIdsToCloneAndRename),
         // - only_calendar_id used in the future feed.
@@ -486,17 +484,13 @@ public class MergeFeedsJobTest extends UnitTest {
         // Out of all trips from the input datasets, expect 4 trips in merged output.
         // 1 trip from active feed that is not in the future feed,
         // 1 trip in both the active and future feeds, with the same signature (same stop times),
-        // 2 trips from the future feed not in the active feed.
+        // 1 trip from the future feed not in the active feed.
         assertThatSqlCountQueryYieldsExpectedCount(
             String.format("SELECT count(*) FROM %s.trips", mergedNamespace),
             3
         );
 
-        // There should be no unused service ids.
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format("SELECT count(*) FROM %s.errors where error_type = 'SERVICE_UNUSED'", mergedNamespace),
-            0
-        );
+        assertNoUnusedServiceIds(mergedNamespace);
     }
 
     /**
