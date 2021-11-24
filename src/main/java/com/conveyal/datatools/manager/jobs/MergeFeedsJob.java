@@ -432,13 +432,13 @@ public class MergeFeedsJob extends FeedSourceJob {
             // in both active/future feeds and that have consistent signature.
             // These trips will be linked to the new service_ids.
             serviceIdsToCloneRenameAndExtend.addAll(
-                getActiveServiceIds(this.sharedTripIdsWithConsistentSignature)
+                feedMergeContext.active.getServiceIds(this.sharedTripIdsWithConsistentSignature)
             );
 
             // Build the set of calendars to be shortened to the day before the future feed start date
             // from trips in the active feed but not in the future feed.
             serviceIdsFromActiveFeedToTerminateEarly.addAll(
-                getActiveServiceIds(feedMergeContext.getActiveTripIdsNotInFutureFeed())
+                feedMergeContext.active.getServiceIds(feedMergeContext.getActiveTripIdsNotInFutureFeed())
             );
 
 
@@ -448,24 +448,6 @@ public class MergeFeedsJob extends FeedSourceJob {
 
             mergeFeedsResult.mergeStrategy = CHECK_STOP_TIMES;
         }
-    }
-
-    /**
-     * Obtains the service ids corresponding to the provided trip ids.
-     */
-    private Set<String> getActiveServiceIds(Set<String> tripIds) {
-        return tripIds.stream()
-            .map(tripId -> feedMergeContext.active.feed.trips.get(tripId).service_id)
-            .collect(Collectors.toSet());
-    }
-
-    /**
-     * Obtains the service ids corresponding to the provided trip ids.
-     */
-    private Set<String> getFutureServiceIds(Set<String> tripIds) {
-        return tripIds.stream()
-            .map(tripId -> feedMergeContext.future.feed.trips.get(tripId).service_id)
-            .collect(Collectors.toSet());
     }
 
     /**

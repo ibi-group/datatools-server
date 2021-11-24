@@ -76,6 +76,7 @@ public class MergeLineContext {
     public FeedSource feedSource;
     public boolean skipFile;
     public int mergedLineNumber = 0;
+    private boolean headersWritten = false;
 
     public static MergeLineContext create(MergeFeedsJob job, Table table, ZipOutputStream out) throws IOException {
         switch (table.name) {
@@ -509,7 +510,7 @@ public class MergeLineContext {
         out.closeEntry();
     }
 
-    public void writeHeaders() throws IOException {
+    private void writeHeaders() throws IOException {
         // Create entry for zip file.
         ZipEntry tableEntry = new ZipEntry(table.name + ".txt");
         out.putNextEntry(tableEntry);
@@ -518,6 +519,8 @@ public class MergeLineContext {
             .map(f -> f.name)
             .toArray(String[]::new);
         writeValuesToTable(headers, false);
+
+        headersWritten = true;
     }
 
     /**
@@ -596,7 +599,7 @@ public class MergeLineContext {
         }
 
         // Finally, handle writing lines to zip entry.
-        if (mergedLineNumber == 0) {
+        if (mergedLineNumber == 0 && !headersWritten) {
             writeHeaders();
         }
 

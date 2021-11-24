@@ -12,6 +12,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.Set;
 import java.util.zip.ZipOutputStream;
 
+import static com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType.SERVICE_PERIOD;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.getTableScopedValue;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.hasDuplicateError;
 import static com.conveyal.gtfs.loader.DateField.GTFS_DATE_FORMATTER;
@@ -141,10 +142,9 @@ public class CalendarMergeLineContext extends MergeLineContext {
      * @throws IOException
      */
     public void addClonedServiceId() throws IOException {
-        if (isHandlingFutureFeed()) {
+        if (isHandlingFutureFeed() && job.mergeType.equals(SERVICE_PERIOD)) {
             String originalServiceId = keyValue;
             if (job.serviceIdsToCloneRenameAndExtend.contains(originalServiceId)) {
-                // FIXME: Do we need to worry about calendar_dates?
                 String[] clonedValues = getOriginalRowValues().clone();
                 String newServiceId = clonedValues[keyFieldIndex] = String.join(":", getIdScope(), originalServiceId);
                 // Modify start date only (preserve the end date from the future calendar entry).

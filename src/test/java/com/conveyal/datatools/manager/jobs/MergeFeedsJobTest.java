@@ -484,6 +484,12 @@ public class MergeFeedsJobTest extends UnitTest {
             3
         );
 
+        // The calendar_dates entry should be preserved, but remapped to a different id.
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.calendar_dates", mergedNamespace),
+            1
+        );
+
         assertNoUnusedServiceIds(mergedNamespace);
         assertNoRefIntegrityErrors(mergedNamespace);
     }
