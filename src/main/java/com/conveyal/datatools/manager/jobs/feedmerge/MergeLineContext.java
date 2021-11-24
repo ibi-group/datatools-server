@@ -52,6 +52,7 @@ public class MergeLineContext {
     private CsvReader csvReader;
     private boolean skipRecord;
     protected boolean keyFieldMissing;
+    private String[] originalRowValues;
     private String[] rowValues;
     private int lineNumber = 0;
     protected final Table table;
@@ -198,6 +199,7 @@ public class MergeLineContext {
             if (!constructRowValues()) {
                 return false;
             }
+
             finishRowAndWriteToZip();
         }
         return true;
@@ -491,6 +493,7 @@ public class MergeLineContext {
         skipRecord = false;
         // Reset the row values (this must happen after the first line is checked).
         rowValues = new String[sharedSpecFields.size()];
+        originalRowValues = new String[sharedSpecFields.size()];
     }
 
     public void writeValuesToTable(String[] values, boolean incrementLineNumbers) throws IOException {
@@ -522,6 +525,7 @@ public class MergeLineContext {
      * @return false, if a failing condition was encountered. true, if everything was ok.
      */
     public boolean constructRowValues() throws IOException {
+        boolean result = true;
         // Piece together the row to write, which should look practically identical to the original
         // row except for the identifiers receiving a prefix to avoid ID conflicts.
         for (int specFieldIndex = 0; specFieldIndex < sharedSpecFields.size(); specFieldIndex++) {
@@ -533,65 +537,73 @@ public class MergeLineContext {
                 field,
                 csvReader.get(fieldsFoundList.indexOf(field))
             );
-            // Handle filling in agency_id if missing when merging regional feeds. If false is returned,
-            // the job has encountered a failing condition (the method handles failing the job itself).
-            if (!updateAgencyIdIfNeeded(fieldContext)) {
-                return false;
-            }
-            // Determine if field is a GTFS identifier (and scope if needed).
-            scopeValueIfNeeded(fieldContext);
-            // Only need to check for merge conflicts if using MTC merge type because
-            // the regional merge type scopes all identifiers by default. Also, the
-            // reference tracker will get far too large if we attempt to use it to
-            // track references for a large number of feeds (e.g., every feed in New
-            // York State).
-            if (job.mergeType.equals(SERVICE_PERIOD)) {
-                // Remap service id from active feed to distinguish them
-                // from entries with the same id in the future feed.
-                // See https://github.com/ibi-group/datatools-server/issues/244
-                if (handlingActiveFeed && fieldContext.nameEquals(SERVICE_ID)) {
-                    updateAndRemapOutput(fieldContext);
+            originalRowValues[specFieldIndex] = fieldContext.getValueToWrite();
+            if (!skipRecord) {
+                // Handle filling in agency_id if missing when merging regional feeds. If false is returned,
+                // the job has encountered a failing condition (the method handles failing the job itself).
+                if (!updateAgencyIdIfNeeded(fieldContext)) {
+                    result = false;
                 }
+                // Determine if field is a GTFS identifier (and scope if needed).
+                scopeValueIfNeeded(fieldContext);
+                // Only need to check for merge conflicts if using MTC merge type because
+                // the regional merge type scopes all identifiers by default. Also, the
+                // reference tracker will get far too large if we attempt to use it to
+                // track references for a large number of feeds (e.g., every feed in New
+                // York State).
+                if (job.mergeType.equals(SERVICE_PERIOD)) {
+                    // Remap service id from active feed to distinguish them
+                    // from entries with the same id in the future feed.
+                    // See https://github.com/ibi-group/datatools-server/issues/244
+                    if (handlingActiveFeed && fieldContext.nameEquals(SERVICE_ID)) {
+                        updateAndRemapOutput(fieldContext);
+                    }
 
-                updateServiceIdsIfNeeded(fieldContext);
+                    updateServiceIdsIfNeeded(fieldContext);
 
-                // Store values for key fields that have been encountered and update any key values that need modification due
-                // to conflicts.
-                if (!checkFieldsForMergeConflicts(getIdErrors(fieldContext), fieldContext)) {
+                    // Store values for key fields that have been encountered and update any key values that need modification due
+                    // to conflicts.
+                    if (!checkFieldsForMergeConflicts(getIdErrors(fieldContext), fieldContext)) {
+                        skipRecord = true;
+                        continue;
+                    }
+                }
+                // If the current field is a foreign reference, check if the reference has been removed in the
+                // merged result. If this is the case (or other conditions are met), we will need to skip this
+                // record. Likewise, if the reference has been modified, ensure that the value written to the
+                // merged result is correctly updated.
+                if (!checkForeignReferences(fieldContext)) {
                     skipRecord = true;
-                    break;
+                    continue;
                 }
+                rowValues[specFieldIndex] = fieldContext.getValueToWrite();
             }
-            // If the current field is a foreign reference, check if the reference has been removed in the
-            // merged result. If this is the case (or other conditions are met), we will need to skip this
-            // record. Likewise, if the reference has been modified, ensure that the value written to the
-            // merged result is correctly updated.
-            if (!checkForeignReferences(fieldContext)) {
-                skipRecord = true;
-                break;
-            }
-            rowValues[specFieldIndex] = fieldContext.getValueToWrite();
         }
-        return true;
+        return result;
     }
 
-    public void finishRowAndWriteToZip() throws IOException {
+    private void finishRowAndWriteToZip() throws IOException {
+        boolean shouldWriteCurrentRow = true;
         // Do not write rows that are designated to be skipped.
         if (skipRecord && job.mergeType.equals(SERVICE_PERIOD)) {
             mergeFeedsResult.recordsSkipCount++;
-            return;
+            shouldWriteCurrentRow = false;
         }
         // Store row and stop values. If the return value is true, the record has been skipped and we
         // should skip writing the row to the merged table.
         if (storeRowAndStopValues()) {
-            return;
+            shouldWriteCurrentRow = false;
         }
+
         // Finally, handle writing lines to zip entry.
         if (mergedLineNumber == 0) {
             writeHeaders();
         }
-        // Write line to table.
-        writeValuesToTable(rowValues, true);
+
+        if (shouldWriteCurrentRow) {
+            // Write line to table.
+            writeValuesToTable(rowValues, true);
+        }
 
         // Optional table-specific additional processing.
         afterRowWrite();
@@ -631,7 +643,7 @@ public class MergeLineContext {
         return lineNumber;
     }
 
-    protected String[] getRowValues() { return rowValues; }
+    protected String[] getOriginalRowValues() { return originalRowValues; }
 
     /**
      * Retrieves the value for the specified CSV field.

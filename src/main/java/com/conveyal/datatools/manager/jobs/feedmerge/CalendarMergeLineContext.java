@@ -86,10 +86,20 @@ public class CalendarMergeLineContext extends MergeLineContext {
                         .format(GTFS_DATE_FORMATTER));
                 }
             }
-/*        } else {
+
+            // Remove calendar entries that are no longer used.
+            if (job.serviceIdsFromActiveFeedToRemove.contains(keyValue)) {
+                LOG.warn(
+                    "Skipping active calendar entry {} because it will become unused in the merged feed.",
+                    keyValue);
+                mergeFeedsResult.skippedIds.add(key);
+                shouldSkipRecord = true;
+            }
+        } else {
             // If handling the future feed, the MTC revised feed merge logic is as follows:
             // - Calendar entries from the future feed will be inserted as is in the merged feed.
-            // so no additional processing needed here, unless the calendar entry is no longer used.
+            // so no additional processing needed here, unless the calendar entry is no longer used,
+            // in that case we drop the calendar entry.
             if (job.serviceIdsFromFutureFeedToRemove.contains(keyValue)) {
                 LOG.warn(
                     "Skipping future calendar entry {} because it will become unused in the merged feed.",
@@ -97,8 +107,6 @@ public class CalendarMergeLineContext extends MergeLineContext {
                 mergeFeedsResult.skippedIds.add(key);
                 shouldSkipRecord = true;
             }
-
- */
         }
 
 
@@ -137,7 +145,7 @@ public class CalendarMergeLineContext extends MergeLineContext {
             String originalServiceId = keyValue;
             if (job.serviceIdsToCloneRenameAndExtend.contains(originalServiceId)) {
                 // FIXME: Do we need to worry about calendar_dates?
-                String[] clonedValues = getRowValues().clone();
+                String[] clonedValues = getOriginalRowValues().clone();
                 String newServiceId = clonedValues[keyFieldIndex] = String.join(":", getIdScope(), originalServiceId);
                 // Modify start date only (preserve the end date from the future calendar entry).
                 int startDateIndex = Table.CALENDAR.getFieldIndex("start_date");
