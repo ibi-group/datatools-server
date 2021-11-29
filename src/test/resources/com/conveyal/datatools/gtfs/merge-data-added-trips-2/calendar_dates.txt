@@ -1,0 +1,2 @@
+service_id,date,exception_type
+common_id,20190218,1

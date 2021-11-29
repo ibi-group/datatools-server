@@ -86,7 +86,7 @@ public class MergeFeedsJob extends FeedSourceJob {
     @JsonIgnore @BsonIgnore
     public Set<String> serviceIdsToCloneRenameAndExtend = new HashSet<>();
     @JsonIgnore @BsonIgnore
-    public Set<String> serviceIdsToTerminateEarly = new HashSet<>();
+    public Set<String> serviceIdsFromActiveFeedToTerminateEarly = new HashSet<>();
 
     private List<TripAndCalendars> sharedConsistentTripAndCalendarIds = new ArrayList<>();
 
@@ -432,26 +432,22 @@ public class MergeFeedsJob extends FeedSourceJob {
             // in both active/future feeds and that have consistent signature.
             // These trips will be linked to the new service_ids.
             serviceIdsToCloneRenameAndExtend.addAll(
-                getActiveServiceIds(this.sharedTripIdsWithConsistentSignature)
+                feedMergeContext.active.getServiceIds(this.sharedTripIdsWithConsistentSignature)
             );
 
             // Build the set of calendars to be shortened to the day before the future feed start date
             // from trips in the active feed but not in the future feed.
-            serviceIdsToTerminateEarly.addAll(
-                getActiveServiceIds(feedMergeContext.getActiveTripIdsNotInFutureFeed())
+            serviceIdsFromActiveFeedToTerminateEarly.addAll(
+                feedMergeContext.active.getServiceIds(feedMergeContext.getActiveTripIdsNotInFutureFeed())
             );
+
+
+            // Build the set of calendars ids from the active|future feed to be removed
+            // because they become no longer used after shared trips are remapped to another service id.
+            feedMergeContext.collectServiceIdsToRemove();
 
             mergeFeedsResult.mergeStrategy = CHECK_STOP_TIMES;
         }
-    }
-
-    /**
-     * Obtains the service ids corresponding to the provided trip ids.
-     */
-    private List<String> getActiveServiceIds(Set<String> tripIds) {
-        return tripIds.stream()
-            .map(tripId -> feedMergeContext.active.feed.trips.get(tripId).service_id)
-            .collect(Collectors.toList());
     }
 
     /**
