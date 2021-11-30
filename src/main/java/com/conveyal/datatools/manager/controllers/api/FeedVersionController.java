@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.common.utils.SparkUtils;
+import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
@@ -260,27 +261,30 @@ public class FeedVersionController  {
 
         // notify any extensions of the change
         try {
-            for (String resourceType : DataManager.feedResources.keySet()) {
-                DataManager.feedResources.get(resourceType).feedVersionCreated(version, null);
-            }
-            if (!DataManager.isExtensionEnabled("mtc")) {
-                // update published version ID on feed source
-                Persistence.feedSources.updateField(version.feedSourceId, "publishedVersionId", version.namespace);
-                return version;
-            } else {
-                // NOTE: If the MTC extension is enabled, the parent feed source's publishedVersionId will not be updated to the
-                // version's namespace until the FeedUpdater has successfully downloaded the feed from the share S3 bucket.
-                Date publishedDate = new Date();
-                // Set "sent" timestamp to now and reset "processed" timestamp (in the case that it had previously been
-                // published as the active version.
-                version.sentToExternalPublisher = publishedDate;
-                version.processedByExternalPublisher = null;
-                Persistence.feedVersions.replace(version.id, version);
-                return version;
-            }
+            publishToExternalResource(version);
+            return version;
         } catch (Exception e) {
             logMessageAndHalt(req, 500, "Could not publish feed.", e);
             return null;
+        }
+    }
+
+    public static void publishToExternalResource(FeedVersion version) throws CheckedAWSException {
+        for (String resourceType : DataManager.feedResources.keySet()) {
+            DataManager.feedResources.get(resourceType).feedVersionCreated(version, null);
+        }
+        if (!DataManager.isExtensionEnabled("mtc")) {
+            // update published version ID on feed source
+            Persistence.feedSources.updateField(version.feedSourceId, "publishedVersionId", version.namespace);
+        } else {
+            // NOTE: If the MTC extension is enabled, the parent feed source's publishedVersionId will not be updated to the
+            // version's namespace until the FeedUpdater has successfully downloaded the feed from the share S3 bucket.
+            Date publishedDate = new Date();
+            // Set "sent" timestamp to now and reset "processed" timestamp (in the case that it had previously been
+            // published as the active version.
+            version.sentToExternalPublisher = publishedDate;
+            version.processedByExternalPublisher = null;
+            Persistence.feedVersions.replace(version.id, version);
         }
     }
 

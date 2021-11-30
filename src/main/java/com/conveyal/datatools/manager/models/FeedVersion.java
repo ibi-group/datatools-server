@@ -430,6 +430,22 @@ public class FeedVersion extends Model implements Serializable {
         return false;
     }
 
+    /**
+     * Checks for issues that block feed publishing, consistent with UI.
+     */
+    public boolean hasBlockingIssuesForPublishing() {
+        return this.validationResult.fatalException != null;
+        /*
+        if () return true;
+        const errorCounts = version.validationResult.error_counts
+            return errorCounts &&
+                !!(errorCounts.find(ec => BLOCKING_ERROR_TYPES.indexOf(ec.type) !== -1))
+        }
+
+
+         */
+    }
+
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("noteCount")
     public int noteCount() {
