@@ -6,7 +6,6 @@ import com.conveyal.datatools.manager.controllers.api.FeedVersionController;
 import com.conveyal.datatools.manager.gtfsplus.GtfsPlusValidation;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
-import com.conveyal.datatools.manager.models.Project;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,17 +14,11 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * Auto publish the latest feed versions of a feed source if there are no blocking validation errors.
- * The following other conditions are checked:
- *
- * 1) {@link Project#pinnedDeploymentId} is not null.
- * 2) The project is not locked/already being deployed by another instance of {@link AutoPublishJob}.
- * 3) The deployment is not null, has feed versions and has been previously deployed.
- * 4) The deployment does not conflict with an already active deployment.
- * 5) There are no related feed versions with critical errors or feed fetches in progress.
- *
- * If there are related feed fetches in progress auto deploy is skipped but the deployment's feed versions are still
- * advanced to the latest versions.
+ * Auto publish the latest feed versions of a feed source if:
+ * - there are no blocking validation errors, and.
+ * - the feed source is not locked/already being published by another instance of {@link AutoPublishJob}.
+ * This class assumes that feed attributes such as autoPublish and retrievalMethod
+ * have been checked.
  */
 public class AutoPublishJob extends MonitorableJob {
     public static final Logger LOG = LoggerFactory.getLogger(AutoPublishJob.class);
