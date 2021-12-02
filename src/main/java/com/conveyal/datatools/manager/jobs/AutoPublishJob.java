@@ -99,6 +99,7 @@ public class AutoPublishJob extends MonitorableJob {
             // If validation successful, just execute the feed updating process.
             // FIXME: move method to another class.
             FeedVersionController.publishToExternalResource(latestFeedVersion);
+            LOG.info("Auto-published feed source {} to external resource.", feedSource.id);
         } catch (Exception e) {
             status.fail(
                 String.format("Could not auto-publish feed source %s!", feedSource.name),
