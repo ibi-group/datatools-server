@@ -193,7 +193,7 @@ public class MtcFeedResource implements ExternalFeedResource {
                 constructId(feedVersion.parentFeedSource(), this.getResourceType(), AGENCY_ID_FIELDNAME)
         );
 
-        if(agencyIdProp == null || agencyIdProp.value.equals("null")) {
+        if(agencyIdProp == null || agencyIdProp.value == null || agencyIdProp.value.equals("null")) {
             LOG.error("Could not read {} for FeedSource {}", AGENCY_ID_FIELDNAME, feedVersion.feedSourceId);
             return;
         }
