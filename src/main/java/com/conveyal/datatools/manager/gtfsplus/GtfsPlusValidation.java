@@ -1,23 +1,22 @@
 package com.conveyal.datatools.manager.gtfsplus;
 
-import com.conveyal.datatools.common.utils.Consts;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.GTFSFeed;
+import com.csvreader.CsvReader;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.apache.commons.io.input.BOMInputStream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.Serializable;
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Enumeration;
@@ -124,10 +123,15 @@ public class GtfsPlusValidation implements Serializable {
         GTFSFeed gtfsFeed
     ) throws IOException {
         String tableId = specTable.get("id").asText();
+
         // Read in table data from input stream.
-        BufferedReader in = new BufferedReader(new InputStreamReader(inputStreamToValidate));
-        String line = in.readLine();
-        String[] inputHeaders = line.split(",");
+        CsvReader csvReader = new CsvReader(inputStreamToValidate, ',', StandardCharsets.UTF_8);
+        // Don't skip empty records (this is set to true by default on CsvReader. We want to check for empty records
+        // during table load, so that they are logged as validation issues (rows with wrong number of columns).
+        csvReader.setSkipEmptyRecords(false);
+        csvReader.readHeaders();
+
+        String[] inputHeaders = csvReader.getHeaders();
         List<String> fieldList = Arrays.asList(inputHeaders);
         JsonNode[] fieldsFound = new JsonNode[inputHeaders.length];
         JsonNode specFields = specTable.get("fields");
@@ -144,24 +148,27 @@ public class GtfsPlusValidation implements Serializable {
                 issues.add(new ValidationIssue(tableId, fieldName, -1, "Required column missing."));
             }
         }
+
         // Iterate over each row and validate each field value.
         int rowIndex = 0;
         int rowsWithWrongNumberOfColumns = 0;
-        while ((line = in.readLine()) != null) {
-            String[] values = line.split(Consts.COLUMN_SPLIT, -1);
+        while (csvReader.readRecord()) {
             // First, check that row has the correct number of fields.
-            if (values.length != fieldsFound.length) {
+            int recordColumnCount = csvReader.getColumnCount();
+            if (recordColumnCount != fieldsFound.length) {
                 rowsWithWrongNumberOfColumns++;
             }
             // Validate each value in row. Note: we iterate over the fields and not values because a row may be missing
             // columns, but we still want to validate that missing value (e.g., if it is missing a required field).
             for (int f = 0; f < fieldsFound.length; f++) {
                 // If value exists for index, use that. Otherwise, default to null to avoid out of bounds exception.
-                String val = f < values.length ? values[f] : null;
+                String val = f < recordColumnCount ? csvReader.get(f) : null;
                 validateTableValue(issues, tableId, rowIndex, val, fieldsFound[f], gtfsFeed);
             }
             rowIndex++;
         }
+        csvReader.close();
+
         // Add issue for wrong number of columns after processing all rows.
         // Note: We considered adding an issue for each row, but opted for the single error approach because there's no
         // concept of a row-level issue in the UI right now. So we would potentially need to add that to the UI

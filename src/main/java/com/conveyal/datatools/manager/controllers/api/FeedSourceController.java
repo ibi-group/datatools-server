@@ -252,13 +252,14 @@ public class FeedSourceController {
             }
             // Hold previous value for use when updating third-party resource
             String previousValue = prop.value;
-            // Update the property in our database.
-            ExternalFeedSourceProperty updatedProp = Persistence.externalFeedSourceProperties.updateField(
-                    propertyId, "value", entry.getValue().asText());
 
-            // Trigger an event on the external resource
+            // Update the property with the value to be submitted.
+            prop.value = entry.getValue().asText();
+
+            // Trigger an event on the external resource.
+            // After updating the external resource, we will update Mongo with values sent by the external resource.
             try {
-                externalFeedResource.propertyUpdated(updatedProp, previousValue, req.headers("Authorization"));
+                externalFeedResource.propertyUpdated(prop, previousValue, req.headers("Authorization"));
             } catch (IOException e) {
                 logMessageAndHalt(req, 500, "Could not update external feed source", e);
             }
