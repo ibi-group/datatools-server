@@ -415,16 +415,6 @@ public class DeployJob extends MonitorableJob {
             status.baseUrl = otpServer.publicUrl;
         }
 
-        // Now that the build + deployment was successful, update Pelias
-        if (deployment.peliasUpdate) {
-            // Get log upload URI from deploy job
-            AmazonS3URI logUploadS3URI = getS3FolderURI();
-
-            // Execute the pelias update job and keep track of it
-            PeliasUpdateJob peliasUpdateJob = new PeliasUpdateJob(owner, "Updating Local Places Index", deployment, logUploadS3URI);
-            addNextJob(peliasUpdateJob);
-        }
-
         status.completed = true;
     }
 

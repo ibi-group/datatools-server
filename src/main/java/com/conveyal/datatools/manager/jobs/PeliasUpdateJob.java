@@ -6,6 +6,7 @@ import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HttpUtils;
 import com.conveyal.datatools.manager.utils.SimpleHttpResponse;
@@ -57,6 +58,18 @@ public class PeliasUpdateJob extends MonitorableJob {
         this.deployment = deployment;
         this.timer = new Timer();
         this.logUploadS3URI = logUploadS3URI;
+    }
+    public PeliasUpdateJob(Auth0UserProfile owner, String name, Deployment deployment) {
+        super(owner, name, JobType.UPDATE_PELIAS);
+        this.deployment = deployment;
+        this.timer = new Timer();
+
+        if (deployment.deployJobSummaries.size() <= 0) {
+            throw new RuntimeException("Deployment must be deployed to at least one server to update Pelias!");
+        }
+
+        // Get log upload URI from deployment (the latest build artifacts folder is where the logs get uploaded to)
+        this.logUploadS3URI = new AmazonS3URI(deployment.deployJobSummaries.get(deployment.deployJobSummaries.size() - 1).buildArtifactsFolder);
     }
 
     /**
