@@ -30,6 +30,7 @@ import static com.conveyal.datatools.TestUtils.zipFolderFiles;
 import static com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource.TEST_AGENCY;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -85,11 +86,10 @@ public class AutoPublishJobTest extends UnitTest {
     @MethodSource("createPublishFeedCases")
     void shouldProcessFeed(String resourceName, boolean isError, String errorMessage) throws IOException {
         // Add the version to the feed source
-        FeedVersion createdVersion;
         if (resourceName.endsWith(".zip")) {
-            createdVersion = createFeedVersionFromGtfsZip(feedSource, resourceName);
+            createFeedVersionFromGtfsZip(feedSource, resourceName);
         } else {
-            createdVersion = createFeedVersion(feedSource, zipFolderFiles(resourceName));
+            createFeedVersion(feedSource, zipFolderFiles(resourceName));
         }
 
         // Create the job
@@ -140,7 +140,7 @@ public class AutoPublishJobTest extends UnitTest {
         // Run the job in this thread (we're not concerned about concurrency here).
         autoPublishJob.run();
 
-        assertEquals(false, autoPublishJob.status.error);
+        assertFalse(autoPublishJob.status.error);
 
         // Make sure that the publish-pending attribute has been set for the feed version in Mongo.
         FeedVersion updatedFeedVersion = Persistence.feedVersions.getById(createdVersion.id);
@@ -178,6 +178,10 @@ public class AutoPublishJobTest extends UnitTest {
         assertEquals(namespace, updatedFeedVersionAfter2.namespace);
     }
 
+    /**
+     * Mocks the results of an {@link S3ObjectSummary} retrieval before/after the
+     * external MTC publishing process is complete.
+     */
     private static class TestCompletedFeedRetriever implements FeedUpdater.CompletedFeedRetriever {
         public boolean isPublishingComplete;
 

@@ -55,7 +55,6 @@ public class AutoPublishJob extends MonitorableJobWithResourceLock<FeedSource> {
         }
 
         // If validation successful, just execute the feed updating process.
-        // FIXME: move method to another class.
         FeedVersionController.publishToExternalResource(latestFeedVersion);
         LOG.info("Auto-published feed source {} to external resource.", feedSource.id);
     }

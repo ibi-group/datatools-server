@@ -59,11 +59,13 @@ public class FeedUpdater {
     private static final String TEST_BUCKET = "test-bucket";
     private static final String TEST_COMPLETED_FOLDER = "test-completed";
     private static final Logger LOG = LoggerFactory.getLogger(FeedUpdater.class);
+    public static final String SENT_TO_EXTERNAL_PUBLISHER_FIELD = "sentToExternalPublisher";
+    public static final String PROCESSED_BY_EXTERNAL_PUBLISHER_FIELD = "processedByExternalPublisher";
 
     private Map<String, String> eTagForFeed;
     private final String feedBucket;
     private final String bucketFolder;
-    private CompletedFeedRetriever completedFeedRetriever;
+    private final CompletedFeedRetriever completedFeedRetriever;
     private List<String> versionsToMarkAsProcessed;
 
 
@@ -126,16 +128,15 @@ public class FeedUpdater {
             eTagForFeed = new HashMap<>();
         }
 
-        // The feed versions that need to be marked as processed are versions where
-        // all conditions below apply:
+        // The feed versions corresponding to entries in objectSummaries
+        // that need to be marked as processed should meet all conditions below:
         // - sentToExternalPublisher is not null,
-        // - an entry for that version is in objectSummaries below,
         // - processedByExternalPublisher is null or before sentToExternalPublisher.
         Bson query = and(
-            ne("sentToExternalPublisher", null),
+            ne(SENT_TO_EXTERNAL_PUBLISHER_FIELD, null),
             or(
-                eq("processedByExternalPublisher", null),
-                lt("processedByExternalPublisher", "sentToExternalPublisher")
+                eq(PROCESSED_BY_EXTERNAL_PUBLISHER_FIELD, null),
+                lt(PROCESSED_BY_EXTERNAL_PUBLISHER_FIELD, SENT_TO_EXTERNAL_PUBLISHER_FIELD)
             )
         );
         versionsToMarkAsProcessed = Persistence.feedVersions.getFiltered(query)
@@ -190,14 +191,15 @@ public class FeedUpdater {
         return newTags;
     }
 
+    /**
+     * Obtains the {@link FeedSource} for the given feed id (for MTC, that's the 2-letter agency code).
+     */
     private FeedSource getFeedSource(String feedId) {
         FeedSource feedSource = null;
         List<ExternalFeedSourceProperty> properties = Persistence.externalFeedSourceProperties.getFiltered(
             and(eq("value", feedId), eq("name", AGENCY_ID_FIELDNAME))
         );
         if (properties.size() > 1) {
-            StringBuilder b = new StringBuilder();
-            properties.forEach(b::append);
             LOG.warn("Found multiple feed sources for {}: {}",
                 feedId,
                     properties.stream().map(p -> p.feedSourceId).collect(Collectors.joining(",")));
@@ -217,7 +219,8 @@ public class FeedUpdater {
     private boolean shouldMarkFeedAsProcessed(String eTag, FeedSource feedSource) {
         if (eTagForFeed.containsValue(eTag)) return false;
 
-        FeedVersion publishedVersion = getFeedVersionToUpdate(feedSource);
+        FeedVersion publishedVersion = getLatestPublishedVersion(feedSource);
+        if (publishedVersion == null) return false;
         return versionsToMarkAsProcessed.contains(publishedVersion.id);
     }
 
@@ -228,7 +231,7 @@ public class FeedUpdater {
      */
     private void updatePublishedFeedVersion(String feedId, FeedSource feedSource) {
         try {
-            FeedVersion publishedVersion = getFeedVersionToUpdate(feedSource);
+            FeedVersion publishedVersion = getLatestPublishedVersion(feedSource);
             if (publishedVersion != null) {
                 if (publishedVersion.sentToExternalPublisher == null) {
                     LOG.warn("Not updating published version for {} (version was never sent to external publisher)", feedId);
@@ -236,7 +239,7 @@ public class FeedUpdater {
                 }
                 // Set published namespace to the feed version and set the processedByExternalPublisher timestamp.
                 LOG.info("Latest published version (sent at {}) for {} is {}", publishedVersion.sentToExternalPublisher, feedId, publishedVersion.id);
-                Persistence.feedVersions.updateField(publishedVersion.id, "processedByExternalPublisher", new Date());
+                Persistence.feedVersions.updateField(publishedVersion.id, PROCESSED_BY_EXTERNAL_PUBLISHER_FIELD, new Date());
                 Persistence.feedSources.updateField(feedSource.id, "publishedVersionId", publishedVersion.namespace);
             } else {
                 LOG.error("No published versions found for {} ({} id={})", feedId, feedSource.name, feedSource.id);
@@ -253,16 +256,13 @@ public class FeedUpdater {
      * could be that more than one versions were recently "published" and the latest published version was a bad
      * feed that failed processing by RTD.
      */
-    private static FeedVersion getFeedVersionToUpdate(FeedSource feedSource) {
+    private static FeedVersion getLatestPublishedVersion(FeedSource feedSource) {
         // Collect the feed versions for the feed source.
         Collection<FeedVersion> versions = feedSource.retrieveFeedVersions();
         Optional<FeedVersion> lastPublishedVersionCandidate = versions
             .stream()
             .min(Comparator.comparing(v -> v.sentToExternalPublisher, Comparator.nullsLast(Comparator.reverseOrder())));
-        if (lastPublishedVersionCandidate.isPresent()) {
-            return lastPublishedVersionCandidate.get();
-        }
-        return null;
+        return lastPublishedVersionCandidate.orElse(null);
     }
 
     /**
@@ -306,10 +306,16 @@ public class FeedUpdater {
         return matchingVersion;
     }
 
+    /**
+     * Helper interface for fetching a list of feeds deemed production-complete.
+     */
     public interface CompletedFeedRetriever {
         List<S3ObjectSummary> retrieveCompletedFeeds();
     }
 
+    /**
+     * Implements the default behavior for above interface.
+     */
     public class DefaultCompletedFeedRetriever implements CompletedFeedRetriever {
         @Override
         public List<S3ObjectSummary> retrieveCompletedFeeds() {
