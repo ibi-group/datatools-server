@@ -13,6 +13,7 @@ import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
 import com.google.common.io.ByteStreams;
+import org.bson.conversions.Bson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,6 +36,9 @@ import static com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource.AGEN
 import static com.conveyal.datatools.common.utils.Scheduler.schedulerService;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Filters.lt;
+import static com.mongodb.client.model.Filters.ne;
+import static com.mongodb.client.model.Filters.or;
 
 /**
  * This class is used to schedule an {@link UpdateFeedsTask}, which will check the specified S3 bucket (and prefix) for
@@ -52,16 +56,32 @@ import static com.mongodb.client.model.Filters.eq;
  *   it in a “failed” folder, yet there is no check by Data Tools to see if the feed landed there.
  */
 public class FeedUpdater {
+    private static final String TEST_BUCKET = "test-bucket";
+    private static final String TEST_COMPLETED_FOLDER = "test-completed";
+    private static final Logger LOG = LoggerFactory.getLogger(FeedUpdater.class);
+
     private Map<String, String> eTagForFeed;
     private final String feedBucket;
     private final String bucketFolder;
-    private static final Logger LOG = LoggerFactory.getLogger(FeedUpdater.class);
+    private CompletedFeedRetriever completedFeedRetriever;
+    private List<String> versionsToMarkAsProcessed;
+
 
     private FeedUpdater(int updateFrequencySeconds, String feedBucket, String bucketFolder) {
         LOG.info("Setting feed update to check every {} seconds", updateFrequencySeconds);
         schedulerService.scheduleAtFixedRate(new UpdateFeedsTask(), 0, updateFrequencySeconds, TimeUnit.SECONDS);
         this.feedBucket = feedBucket;
         this.bucketFolder = bucketFolder;
+        this.completedFeedRetriever = new DefaultCompletedFeedRetriever();
+    }
+
+    /**
+     * Constructor used for tests.
+     */
+    private FeedUpdater(CompletedFeedRetriever completedFeedRetriever) {
+        this.feedBucket = TEST_BUCKET;
+        this.bucketFolder = TEST_COMPLETED_FOLDER;
+        this.completedFeedRetriever = completedFeedRetriever;
     }
 
     /**
@@ -70,6 +90,13 @@ public class FeedUpdater {
      */
     public static FeedUpdater schedule(int updateFrequencySeconds, String s3Bucket, String s3Prefix) {
         return new FeedUpdater(updateFrequencySeconds, s3Bucket, s3Prefix);
+    }
+
+    /**
+     * Helper method used in tests to create a {@link FeedUpdater}.
+     */
+    public static FeedUpdater createForTest(CompletedFeedRetriever completedFeedRetriever) {
+        return new FeedUpdater(completedFeedRetriever);
     }
 
     private class UpdateFeedsTask implements Runnable {
@@ -92,54 +119,55 @@ public class FeedUpdater {
      * objects in order to keep data-tools application in sync with external processes (for example, MTC RTD).
      * @return          map of feedIDs to eTag values
      */
-    private Map<String, String> checkForUpdatedFeeds() {
+    public Map<String, String> checkForUpdatedFeeds() {
         if (eTagForFeed == null) {
             // If running the check for the first time, instantiate the eTag map.
             LOG.info("Running initial check for feeds on S3.");
             eTagForFeed = new HashMap<>();
         }
+
+        // The feed versions that need to be marked as processed are versions where
+        // all conditions below apply:
+        // - sentToExternalPublisher is not null,
+        // - an entry for that version is in objectSummaries below,
+        // - processedByExternalPublisher is null or before sentToExternalPublisher.
+        Bson query = and(
+            ne("sentToExternalPublisher", null),
+            or(
+                eq("processedByExternalPublisher", null),
+                lt("processedByExternalPublisher", "sentToExternalPublisher")
+            )
+        );
+        versionsToMarkAsProcessed = Persistence.feedVersions.getFiltered(query)
+            .stream()
+            .map(v -> v.id)
+            .collect(Collectors.toList());
+
         LOG.debug("Checking for feeds on S3.");
         Map<String, String> newTags = new HashMap<>();
         // iterate over feeds in download_prefix folder and register to (MTC project)
-        ObjectListing gtfsList = null;
-        try {
-            gtfsList = S3Utils.getDefaultS3Client().listObjects(feedBucket, bucketFolder);
-        } catch (AmazonServiceException | CheckedAWSException e) {
-            LOG.error("Failed to list S3 Objects", e);
+        List<S3ObjectSummary> objectSummaries = completedFeedRetriever.retrieveCompletedFeeds();
+        if (objectSummaries == null) {
             return newTags;
         }
-        LOG.debug(eTagForFeed.toString());
-        for (S3ObjectSummary objSummary : gtfsList.getObjectSummaries()) {
 
+        LOG.debug(eTagForFeed.toString());
+        for (S3ObjectSummary objSummary : objectSummaries) {
             String eTag = objSummary.getETag();
             String keyName = objSummary.getKey();
             LOG.debug("{} etag = {}", keyName, eTag);
-            if (!eTagForFeed.containsValue(eTag)) {
+
+            if (keyName.equals(bucketFolder)) continue;
+            String filename = keyName.split("/")[1];
+            String feedId = filename.replace(".zip", "");
+            FeedSource feedSource = getFeedSource(feedId);
+
+            if (shouldMarkFeedAsProcessed(eTag, feedSource)) {
                 // Don't add object if it is a dir
-                if (keyName.equals(bucketFolder)) continue;
-                String filename = keyName.split("/")[1];
-                String feedId = filename.replace(".zip", "");
                 // Skip object if the filename is null
                 if ("null".equals(feedId)) continue;
                 try {
                     LOG.info("New version found for {} at s3://{}/{}. ETag = {}.", feedId, feedBucket, keyName, eTag);
-                    FeedSource feedSource = null;
-                    List<ExternalFeedSourceProperty> properties = Persistence.externalFeedSourceProperties.getFiltered(
-                        and(eq("value", feedId), eq("name", AGENCY_ID_FIELDNAME))
-                    );
-                    if (properties.size() > 1) {
-                        StringBuilder b = new StringBuilder();
-                        properties.forEach(b::append);
-                        LOG.warn("Found multiple feed sources for {}: {}",
-                                feedId,
-                                properties.stream().map(p -> p.feedSourceId).collect(Collectors.joining(",")));
-                    }
-                    for (ExternalFeedSourceProperty prop : properties) {
-                        // FIXME: What if there are multiple props found for different feed sources. This could happen if
-                        // multiple projects have been synced with MTC or if the ExternalFeedSourceProperty for a feed
-                        // source is not deleted properly when the feed source is deleted.
-                        feedSource = Persistence.feedSources.getById(prop.feedSourceId);
-                    }
                     if (feedSource == null) {
                         LOG.error("No feed source found for feed ID {}", feedId);
                         continue;
@@ -162,24 +190,46 @@ public class FeedUpdater {
         return newTags;
     }
 
+    private FeedSource getFeedSource(String feedId) {
+        FeedSource feedSource = null;
+        List<ExternalFeedSourceProperty> properties = Persistence.externalFeedSourceProperties.getFiltered(
+            and(eq("value", feedId), eq("name", AGENCY_ID_FIELDNAME))
+        );
+        if (properties.size() > 1) {
+            StringBuilder b = new StringBuilder();
+            properties.forEach(b::append);
+            LOG.warn("Found multiple feed sources for {}: {}",
+                feedId,
+                    properties.stream().map(p -> p.feedSourceId).collect(Collectors.joining(",")));
+        }
+        for (ExternalFeedSourceProperty prop : properties) {
+            // FIXME: What if there are multiple props found for different feed sources. This could happen if
+            // multiple projects have been synced with MTC or if the ExternalFeedSourceProperty for a feed
+            // source is not deleted properly when the feed source is deleted.
+            feedSource = Persistence.feedSources.getById(prop.feedSourceId);
+        }
+        return feedSource;
+    }
+
+    /**
+     * @return true if the feed with the corresponding etag should be mark as processed, false otherwise.
+     */
+    private boolean shouldMarkFeedAsProcessed(String eTag, FeedSource feedSource) {
+        if (eTagForFeed.containsValue(eTag)) return false;
+
+        FeedVersion publishedVersion = getFeedVersionToUpdate(feedSource);
+        return versionsToMarkAsProcessed.contains(publishedVersion.id);
+    }
+
     /**
      * Update the published feed version for the feed source.
      * @param feedId the unique ID used by MTC to identify a feed source
      * @param feedSource the feed source for which a newly published version should be registered
      */
     private void updatePublishedFeedVersion(String feedId, FeedSource feedSource) {
-        // Collect the feed versions for the feed source.
-        Collection<FeedVersion> versions = feedSource.retrieveFeedVersions();
         try {
-            // Get the latest published version (if there is one). NOTE: This is somewhat flawed because it presumes
-            // that the latest published version is guaranteed to be the one found in the "completed" folder, but it
-            // could be that more than one versions were recently "published" and the latest published version was a bad
-            // feed that failed processing by RTD.
-            Optional<FeedVersion> lastPublishedVersionCandidate = versions
-                .stream()
-                .min(Comparator.comparing(v -> v.sentToExternalPublisher, Comparator.nullsLast(Comparator.reverseOrder())));
-            if (lastPublishedVersionCandidate.isPresent()) {
-                FeedVersion publishedVersion = lastPublishedVersionCandidate.get();
+            FeedVersion publishedVersion = getFeedVersionToUpdate(feedSource);
+            if (publishedVersion != null) {
                 if (publishedVersion.sentToExternalPublisher == null) {
                     LOG.warn("Not updating published version for {} (version was never sent to external publisher)", feedId);
                     return;
@@ -195,6 +245,24 @@ public class FeedUpdater {
             e.printStackTrace();
             LOG.error("Error encountered while checking for latest published version for {}", feedId);
         }
+    }
+
+    /**
+     * Get the latest published version (if there is one). NOTE: This is somewhat flawed because it presumes
+     * that the latest published version is guaranteed to be the one found in the "completed" folder, but it
+     * could be that more than one versions were recently "published" and the latest published version was a bad
+     * feed that failed processing by RTD.
+     */
+    private static FeedVersion getFeedVersionToUpdate(FeedSource feedSource) {
+        // Collect the feed versions for the feed source.
+        Collection<FeedVersion> versions = feedSource.retrieveFeedVersions();
+        Optional<FeedVersion> lastPublishedVersionCandidate = versions
+            .stream()
+            .min(Comparator.comparing(v -> v.sentToExternalPublisher, Comparator.nullsLast(Comparator.reverseOrder())));
+        if (lastPublishedVersionCandidate.isPresent()) {
+            return lastPublishedVersionCandidate.get();
+        }
+        return null;
     }
 
     /**
@@ -238,4 +306,20 @@ public class FeedUpdater {
         return matchingVersion;
     }
 
+    public interface CompletedFeedRetriever {
+        List<S3ObjectSummary> retrieveCompletedFeeds();
+    }
+
+    public class DefaultCompletedFeedRetriever implements CompletedFeedRetriever {
+        @Override
+        public List<S3ObjectSummary> retrieveCompletedFeeds() {
+            try {
+                ObjectListing gtfsList = S3Utils.getDefaultS3Client().listObjects(feedBucket, bucketFolder);
+                return gtfsList.getObjectSummaries();
+            } catch (CheckedAWSException e) {
+                LOG.error("Failed to list S3 Objects", e);
+                return null;
+            }
+        }
+    }
 }
