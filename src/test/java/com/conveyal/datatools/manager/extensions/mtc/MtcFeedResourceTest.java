@@ -155,6 +155,10 @@ class MtcFeedResourceTest extends UnitTest {
         // Removed field AgencyPublicId from RTD should be deleted from Mongo.
         ExternalFeedSourceProperty removedPublicIdProp = Persistence.externalFeedSourceProperties.getById(agencyPublicIdProp.id);
         assertThat(removedPublicIdProp, nullValue());
+
+        Persistence.externalFeedSourceProperties.removeById(agencyIdProp.id);
+        Persistence.externalFeedSourceProperties.removeById(agencyPublicIdProp.id);
+        Persistence.externalFeedSourceProperties.removeById(agencyEmailProp.id);
     }
 
     @Test
@@ -167,12 +171,13 @@ class MtcFeedResourceTest extends UnitTest {
             "AgencyId",
             null
         );
-        agencyIdProp.feedSourceId = feedSource.id;
         Persistence.externalFeedSourceProperties.create(agencyIdProp);
 
         // Trigger the feed update process (it should not upload anything to S3).
         FeedVersion feedVersion = createFeedVersion(feedSource,  zipFolderFiles("mini-bart-new"));
         MtcFeedResource mtcFeedResource = new MtcFeedResource();
         assertDoesNotThrow(() -> mtcFeedResource.feedVersionCreated(feedVersion, null));
+
+        Persistence.externalFeedSourceProperties.removeById(agencyIdProp.id);
     }
 }

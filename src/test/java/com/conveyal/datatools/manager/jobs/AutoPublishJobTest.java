@@ -42,6 +42,7 @@ public class AutoPublishJobTest extends UnitTest {
     private static final Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
     private static Project project;
     private static FeedSource feedSource;
+    private static ExternalFeedSourceProperty agencyIdProp;
 
     /**
      * Prepare and start a testing-specific web server
@@ -63,7 +64,7 @@ public class AutoPublishJobTest extends UnitTest {
         // Add an AgencyId entry to ExternalFeedSourceProperty
         // (one-time, it will be reused for this feed source)
         // but set the value to TEST_AGENCY to prevent actual S3 upload.
-        ExternalFeedSourceProperty agencyIdProp = new ExternalFeedSourceProperty(
+        agencyIdProp = new ExternalFeedSourceProperty(
             feedSource,
             "MTC",
             "AgencyId",
@@ -77,6 +78,7 @@ public class AutoPublishJobTest extends UnitTest {
         if (project != null) {
             project.delete();
         }
+        Persistence.externalFeedSourceProperties.removeById(agencyIdProp.id);
     }
 
     /**
