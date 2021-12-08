@@ -9,6 +9,7 @@ import java.util.Set;
 import java.util.zip.ZipOutputStream;
 
 import static com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType.SERVICE_PERIOD;
+import static com.conveyal.datatools.manager.utils.MergeFeedUtils.getTableScopedValue;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.hasDuplicateError;
 
 public class TripsMergeLineContext extends MergeLineContext {
@@ -22,22 +23,28 @@ public class TripsMergeLineContext extends MergeLineContext {
     }
 
     private boolean checkTripIds(Set<NewGTFSError> idErrors, FieldContext fieldContext) {
-        boolean shouldSkipRecord = false;
         // For the MTC revised feed merge process,
         // the updated logic requires to insert all trips from both the active and future feed,
-        // except if they are present in both, in which case we only insert the trip entry from the future feed.
-        if (
+        // except if they are present in both, in which case
+        // we only insert the trip entry from the future feed and skip the one in the active feed.
+        boolean shouldSkipRecord =
             job.mergeType.equals(SERVICE_PERIOD) &&
             isHandlingActiveFeed() &&
-            job.sharedTripIdsWithConsistentSignature.contains(keyValue)
-        ) {
-            // Skip this record, we will use the one from the future feed.
-            shouldSkipRecord = true;
+            job.sharedTripIdsWithConsistentSignature.contains(keyValue);
+
+        // Remap duplicate trip ids for records that are not skipped.
+        if (!shouldSkipRecord && hasDuplicateError(idErrors)) {
+            updateAndRemapOutput(fieldContext, true);
         }
 
-        // Remap duplicate trip ids.
-        if (hasDuplicateError(idErrors)) {
-            updateAndRemapOutput(fieldContext, true);
+        // Remove remapped service_ids associated to the trips table from the merge summary
+        // (the remapped id is already listed under the calendar/calendar_dates tables,
+        // so there is no need to add that foreign key again).
+        if (fieldContext.nameEquals(SERVICE_ID)) {
+            String tableScopedValue = getTableScopedValue(table, getIdScope(), fieldContext.getValue());
+            if (mergeFeedsResult.remappedIds.containsKey(tableScopedValue)) {
+                mergeFeedsResult.remappedIds.remove(tableScopedValue);
+            }
         }
 
         return !shouldSkipRecord;
