@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.jobs;
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.gtfsplus.GtfsPlusValidation;
 import com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType;
 import com.conveyal.datatools.manager.jobs.feedmerge.MergeStrategy;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -421,7 +422,7 @@ public class MergeFeedsJobTest extends UnitTest {
      * {@link MergeStrategy#CHECK_STOP_TIMES} strategy correctly and drop unused future service ids.
      */
     @Test
-    void mergeMTCShouldHandleMatchingTripIdsAndDropUnusedFutureCalendar() throws SQLException {
+    void mergeMTCShouldHandleMatchingTripIdsAndDropUnusedFutureCalendar() throws Exception {
         Set<FeedVersion> versions = new HashSet<>();
         versions.add(fakeTransitBase);
         versions.add(fakeTransitSameSignatureTrips2);
@@ -458,11 +459,23 @@ public class MergeFeedsJobTest extends UnitTest {
         // The calendar_dates entry should be preserved, but remapped to a different id.
         assertRowCountInTable(mergedNamespace, "calendar_dates", 1);
 
-        // The GTFS+ calendar_attributes table should contain the same number of entries as the calendar table.
+        // The GTFS+ calendar_attributes table should contain the same number of entries as the calendar table
+        // (reported by MTC).
         assertEquals(
             3,
             mergeFeedsJob.mergeFeedsResult.linesPerTable.get("calendar_attributes").intValue(),
             "Merged calendar_dates table count should equal expected value."
+        );
+
+        // The GTFS+ timepoints table should not contain any trip ids not in the trips table
+        // (reported by MTC).
+        GtfsPlusValidation validation = GtfsPlusValidation.validate(mergeFeedsJob.mergedVersion.id);
+        assertEquals(
+            0L,
+            validation.issues.stream().filter(
+                issue -> issue.tableId.equals("timepoints") && issue.fieldName.equals("trip_id")
+            ).count(),
+            "There should not be trip_id issues in the GTFS+ timepoints table."
         );
 
         assertNoUnusedServiceIds(mergedNamespace);

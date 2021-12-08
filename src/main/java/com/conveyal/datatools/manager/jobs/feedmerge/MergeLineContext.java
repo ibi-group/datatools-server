@@ -95,6 +95,8 @@ public class MergeLineContext {
             case "stops":
                 return new StopsMergeLineContext(job, table, out);
             case "trips":
+            case "timepoints":
+                // Use same merge logic to filter out trips in both tables.
                 return new TripsMergeLineContext(job, table, out);
             default:
                 return new MergeLineContext(job, table, out);
