@@ -478,6 +478,17 @@ public class MergeFeedsJobTest extends UnitTest {
             "There should not be trip_id issues in the GTFS+ timepoints table."
         );
 
+        // There should be mention of any remapped trip ids in the job summary
+        // because no remapped trip ids should have been written to the trips/timepoints tables
+        // (reported by MTC).
+        assertEquals(
+            0L,
+            mergeFeedsJob.mergeFeedsResult.remappedIds.keySet().stream().filter(
+                key -> key.startsWith("trips:")
+            ).count(),
+            "Job summary should not mention remapped uninserted trip ids."
+        );
+
         assertNoUnusedServiceIds(mergedNamespace);
         assertNoRefIntegrityErrors(mergedNamespace);
     }
