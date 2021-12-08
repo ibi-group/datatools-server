@@ -458,6 +458,13 @@ public class MergeFeedsJobTest extends UnitTest {
         // The calendar_dates entry should be preserved, but remapped to a different id.
         assertRowCountInTable(mergedNamespace, "calendar_dates", 1);
 
+        // The GTFS+ calendar_attributes table should contain the same number of entries as the calendar table.
+        assertEquals(
+            3,
+            mergeFeedsJob.mergeFeedsResult.linesPerTable.get("calendar_attributes").intValue(),
+            "Merged calendar_dates table count should equal expected value."
+        );
+
         assertNoUnusedServiceIds(mergedNamespace);
         assertNoRefIntegrityErrors(mergedNamespace);
     }

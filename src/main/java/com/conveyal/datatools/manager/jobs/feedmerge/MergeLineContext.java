@@ -84,6 +84,8 @@ public class MergeLineContext {
                 return new AgencyMergeLineContext(job, table, out);
             case "calendar":
                 return new CalendarMergeLineContext(job, table, out);
+            case "calendar_attributes":
+                return new CalendarAttributesMergeLineContext(job, table, out);
             case "calendar_dates":
                 return new CalendarDatesMergeLineContext(job, table, out);
             case "routes":
