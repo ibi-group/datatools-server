@@ -12,11 +12,12 @@ import java.time.temporal.ChronoUnit;
 import java.util.Set;
 import java.util.zip.ZipOutputStream;
 
-import static com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType.SERVICE_PERIOD;
-import static com.conveyal.datatools.manager.utils.MergeFeedUtils.getTableScopedValue;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.hasDuplicateError;
 import static com.conveyal.gtfs.loader.DateField.GTFS_DATE_FORMATTER;
 
+/**
+ * Contains logic for merging records in the GTFS calendar table.
+ */
 public class CalendarMergeLineContext extends MergeLineContext {
     private static final Logger LOG = LoggerFactory.getLogger(CalendarMergeLineContext.class);
 
@@ -31,15 +32,12 @@ public class CalendarMergeLineContext extends MergeLineContext {
 
     @Override
     public void afterRowWrite() throws IOException {
-        // If the current row is for a calendar service_id that is marked for cloning/renaming, clone the
-        // values, change the ID, extend the start/end dates to the feed's full range, and write the
-        // additional line to the file.
         addClonedServiceId();
     }
 
     private boolean checkCalendarIds(Set<NewGTFSError> idErrors, FieldContext fieldContext) throws IOException {
         boolean shouldSkipRecord = false;
-        String key = getTableScopedValue(table, getIdScope(), keyValue);
+        String key = getTableScopedValue(keyValue);
 
         if (isHandlingActiveFeed()) {
             LocalDate startDate = getCsvDate("start_date");
@@ -87,29 +85,11 @@ public class CalendarMergeLineContext extends MergeLineContext {
                         .format(GTFS_DATE_FORMATTER));
                 }
             }
-
-            // Remove calendar entries that are no longer used.
-            if (feedMergeContext.active.getServiceIdsToRemove().contains(keyValue)) {
-                LOG.warn(
-                    "Skipping active calendar entry {} because it will become unused in the merged feed.",
-                    keyValue);
-                mergeFeedsResult.skippedIds.add(key);
-                shouldSkipRecord = true;
-            }
-        } else {
-            // If handling the future feed, the MTC revised feed merge logic is as follows:
-            // - Calendar entries from the future feed will be inserted as is in the merged feed.
-            // so no additional processing needed here, unless the calendar entry is no longer used,
-            // in that case we drop the calendar entry.
-            if (feedMergeContext.future.getServiceIdsToRemove().contains(keyValue)) {
-                LOG.warn(
-                    "Skipping future calendar entry {} because it will become unused in the merged feed.",
-                    keyValue);
-                mergeFeedsResult.skippedIds.add(key);
-                shouldSkipRecord = true;
-            }
         }
 
+        if (isServiceIdUnused()) {
+            shouldSkipRecord = true;
+        }
 
         // If any service_id in the active feed matches with the future
         // feed, it should be modified and all associated trip records
@@ -134,34 +114,5 @@ public class CalendarMergeLineContext extends MergeLineContext {
         }
 
         return !shouldSkipRecord;
-    }
-
-    /**
-     * Adds a cloned service id for trips with the same signature in both the active & future feeds.
-     * The cloned service id spans from the start date in the active feed until the end date in the future feed.
-     * @throws IOException
-     */
-    public void addClonedServiceId() throws IOException {
-        if (isHandlingFutureFeed() && job.mergeType.equals(SERVICE_PERIOD)) {
-            String originalServiceId = keyValue;
-            if (job.serviceIdsToCloneRenameAndExtend.contains(originalServiceId)) {
-                String[] clonedValues = getOriginalRowValues().clone();
-                String newServiceId = clonedValues[keyFieldIndex] = String.join(":", getIdScope(), originalServiceId);
-                // Modify start date only (preserve the end date from the future calendar entry).
-                int startDateIndex = Table.CALENDAR.getFieldIndex("start_date");
-                clonedValues[startDateIndex] = feedMergeContext.active.feed.calendars.get(originalServiceId).start_date
-                    .format(GTFS_DATE_FORMATTER);
-                referenceTracker.checkReferencesAndUniqueness(
-                    keyValue,
-                    getLineNumber(),
-                    table.fields[0],
-                    newServiceId,
-                    table,
-                    keyField,
-                    table.getOrderFieldName()
-                );
-                writeValuesToTable(clonedValues, true);
-            }
-        }
     }
 }

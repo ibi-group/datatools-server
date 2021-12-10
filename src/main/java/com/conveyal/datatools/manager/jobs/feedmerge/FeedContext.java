@@ -54,10 +54,10 @@ public class FeedContext {
         return serviceIdsToRemove;
     }
 
-    public void setServiceIdsToRemoveFromOtherFeed(Set<String> idsNotInOtherFeed) {
+    public void setServiceIdsToRemoveUsingOtherFeed(Set<String> tripIdsNotInOtherFeed) {
         serviceIdsToRemove = Sets.difference(
             feedToMerge.serviceIds,
-            getServiceIds(idsNotInOtherFeed)
+            getServiceIds(tripIdsNotInOtherFeed)
         );
     }
 

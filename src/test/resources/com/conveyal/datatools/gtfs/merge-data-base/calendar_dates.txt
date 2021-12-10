@@ -1,0 +1,6 @@
+service_id,date,exception_type
+dropped_calendar_id,20170919,1
+only_calendar_id,20170921,1
+only_calendar_id,20170922,1
+common_id,20170917,1
+common_id,20170919,2

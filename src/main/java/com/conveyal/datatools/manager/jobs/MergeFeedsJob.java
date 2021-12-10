@@ -369,6 +369,7 @@ public class MergeFeedsJob extends FeedSourceJob {
                     return -1;
                 }
             }
+            ctx.afterTableRecords();
             ctx.flushAndClose();
         } catch (IOException e) {
             List<String> versionNames = feedVersions.stream()

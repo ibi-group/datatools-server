@@ -149,14 +149,6 @@ public class MergeFeedUtils {
         return false;
     }
 
-    /** Get table-scoped value used for key when remapping references for a particular feed. */
-    public static String getTableScopedValue(Table table, String prefix, String id) {
-        return String.join(":",
-            table.name,
-            prefix,
-            id);
-    }
-
     /**
      * Checks whether the future and active stop_times for a particular trip_id are an exact match,
      * using these criteria only: arrival_time, departure_time, stop_id, and stop_sequence

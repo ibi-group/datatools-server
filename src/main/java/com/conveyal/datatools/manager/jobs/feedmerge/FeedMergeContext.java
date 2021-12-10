@@ -47,8 +47,8 @@ public class FeedMergeContext implements Closeable {
     }
 
     public void collectServiceIdsToRemove() {
-        active.setServiceIdsToRemoveFromOtherFeed(getActiveTripIdsNotInFutureFeed());
-        future.setServiceIdsToRemoveFromOtherFeed(getFutureTripIdsNotInActiveFeed());
+        active.setServiceIdsToRemoveUsingOtherFeed(getActiveTripIdsNotInFutureFeed());
+        future.setServiceIdsToRemoveUsingOtherFeed(getFutureTripIdsNotInActiveFeed());
     }
 
     @Override
