@@ -484,6 +484,14 @@ public class MergeLineContext {
         // Default is to do nothing.
     }
 
+    /**
+     * Overridable placeholder for additional processing after processing the table
+     * (whether any rows are available or not).
+     */
+    public void afterTableRecords() throws IOException {
+        // Default is to do nothing.
+    }
+
     public void scopeValueIfNeeded(FieldContext fieldContext) {
         boolean isKeyField = fieldContext.getField().isForeignReference() || fieldContext.nameEquals(keyField);
         if (job.mergeType.equals(REGIONAL) && isKeyField && !fieldContext.getValue().isEmpty()) {
@@ -642,6 +650,15 @@ public class MergeLineContext {
 
     protected String getIdScope() {
         return idScope;
+    }
+
+    /**
+     * Obtains the id scope to use for cloned items.
+     * It is set to the id scope corresponding to the future feed.
+     */
+    protected String getClonedIdScope() {
+        // TODO: refactor name creation
+        return getCleanName(feedSource.name) + this.feedMergeContext.future.feedToMerge.version.version;
     }
 
     protected int getFeedIndex() { return feedIndex; }

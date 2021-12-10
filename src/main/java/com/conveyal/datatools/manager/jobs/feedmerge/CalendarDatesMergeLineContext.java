@@ -14,7 +14,6 @@ import java.util.zip.ZipOutputStream;
 
 import static com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType.SERVICE_PERIOD;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.getTableScopedValue;
-import static com.conveyal.datatools.manager.utils.MergeFeedUtils.hasDuplicateError;
 import static com.conveyal.gtfs.loader.DateField.GTFS_DATE_FORMATTER;
 
 /**
@@ -36,11 +35,11 @@ public class CalendarDatesMergeLineContext extends MergeLineContext {
     }
 
     @Override
-    public void afterRowWrite() throws IOException {
+    public void afterTableRecords() throws IOException {
         // If the current row is for a calendar service_id that is marked for cloning/renaming, clone the
         // values, change the ID, extend the start/end dates to the feed's full range, and write the
         // additional line to the file.
-        addClonedServiceId();
+        addClonedServiceIds();
     }
 
     @Override
@@ -135,31 +134,22 @@ public class CalendarDatesMergeLineContext extends MergeLineContext {
      * The cloned service id spans from the start date in the active feed until the end date in the future feed.
      * @throws IOException
      */
-    public void addClonedServiceId() throws IOException {
-        if (isHandlingFutureFeed() && job.mergeType.equals(SERVICE_PERIOD)) {
-            String originalServiceId = keyValue;
-            if (job.serviceIdsToCloneRenameAndExtend.contains(originalServiceId)) {
-                String[] clonedValues = getOriginalRowValues().clone();
-                String newServiceId = clonedValues[keyFieldIndex] = String.join(":", getIdScope(), originalServiceId);
+    public void addClonedServiceIds() throws IOException {
+        if (job.mergeType.equals(SERVICE_PERIOD)) {
+            for (String id : job.serviceIdsToCloneRenameAndExtend) {
+                String newServiceId = String.join(":", getClonedIdScope(), id);
 
-                referenceTracker.checkReferencesAndUniqueness(
-                    keyValue,
-                    getLineNumber(),
-                    table.fields[0],
-                    newServiceId,
-                    table,
-                    keyField,
-                    table.getOrderFieldName()
-                );
-
-                // Add entries in the future feed.
-                writeValuesToTable(clonedValues, true);
-
-                // Because this service has been extended from the future feed into the active feed,
-                // we need to add all entries for the original service id under the active feed
-                // (and of course rename service id).
+                // Because this service has been extended to span both active and future feed,
+                // we need to add all calendar_dates entries for the original service id
+                // under the active AND future feed (and of course rename service id).
+                // TODO: refactor
                 for (CalendarDate calDate : feedMergeContext.active.feed.calendarDates.getAll()) {
-                    if (calDate.service_id.equals(originalServiceId)) {
+                    if (calDate.service_id.equals(id)) {
+                        writeValuesToTable(getCalendarRowValues(calDate, newServiceId), true);
+                    }
+                }
+                for (CalendarDate calDate : feedMergeContext.future.feed.calendarDates.getAll()) {
+                    if (calDate.service_id.equals(id)) {
                         writeValuesToTable(getCalendarRowValues(calDate, newServiceId), true);
                     }
                 }
