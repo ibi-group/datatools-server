@@ -4,13 +4,17 @@ import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
 import com.conveyal.gtfs.error.NewGTFSError;
 import com.conveyal.gtfs.loader.Table;
 import com.conveyal.gtfs.model.CalendarDate;
-import com.google.common.collect.Iterables;
+import com.google.common.collect.Lists;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 import java.util.zip.ZipOutputStream;
 
 import static com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType.SERVICE_PERIOD;
@@ -50,23 +54,26 @@ public class CalendarDatesMergeLineContext extends MergeLineContext {
 
     private boolean checkCalendarDatesIds(FieldContext fieldContext) throws IOException {
         boolean shouldSkipRecord = false;
-        String key = getTableScopedValue(keyValue);
-        // Drop any calendar_dates.txt records from the existing feed for dates that are
-        // not before the first date of the future feed.
-        LocalDate date = getCsvDate("date");
-        if (
-            isHandlingActiveFeed() && !date.isBefore(futureFeedFirstDateForCalendarValidity)
-        ) {
-            LOG.warn(
-                "Skipping calendar_dates entry {} because it operates in the time span of future feed (i.e., after or on {}).",
-                keyValue,
-                futureFeedFirstDateForCalendarValidity);
-            mergeFeedsResult.skippedIds.add(key);
-            shouldSkipRecord = true;
-        }
+        if (job.mergeType.equals(SERVICE_PERIOD)) {
+            // Drop any calendar_dates.txt records from the existing feed for dates that are
+            // not before the first date of the future feed.
+            LocalDate date = getCsvDate("date");
+            if (
+                isHandlingActiveFeed() && !isBeforeFutureFeedStartDate(date)
+            ) {
+                String key = getTableScopedValue(keyValue);
+                LOG.warn(
+                    "Skipping calendar_dates entry {} because it operates in the time span of future feed (i.e., after or on {}).",
+                    keyValue,
+                    futureFeedFirstDateForCalendarValidity
+                );
+                mergeFeedsResult.skippedIds.add(key);
+                shouldSkipRecord = true;
+            }
 
-        if (job.mergeType.equals(SERVICE_PERIOD) && isServiceIdUnused()) {
-            shouldSkipRecord = true;
+            if (isServiceIdUnused()) {
+                shouldSkipRecord = true;
+            }
         }
 
         // Track service ID because we want to avoid removing trips that may reference this
@@ -98,22 +105,38 @@ public class CalendarDatesMergeLineContext extends MergeLineContext {
         return futureFeedFirstDate;
     }
 
+    private boolean isBeforeFutureFeedStartDate(LocalDate date) {
+        return date.isBefore(futureFeedFirstDateForCalendarValidity);
+    }
+
     /**
      * Adds a cloned service id for trips with the same signature in both the active & future feeds.
      * The cloned service id spans from the start date in the active feed until the end date in the future feed.
      */
     public void addClonedServiceIds() throws IOException {
         if (job.mergeType.equals(SERVICE_PERIOD)) {
+            String clonedIdScope = getClonedIdScope();
+
+            // Retrieve all active and future calendar dates ahead
+            // to avoid repeat database get-all queries,
+            // and exclude active entries with a date after the future feed start date.
+            List<CalendarDate> allCalendarDates = new ArrayList<>();
+            allCalendarDates.addAll(Lists.newArrayList(
+                StreamSupport.stream(feedMergeContext.active.feed.calendarDates.spliterator(), false)
+                    .filter(calDate -> isBeforeFutureFeedStartDate(calDate.date))
+                    .collect(Collectors.toList())
+            ));
+            allCalendarDates.addAll(Lists.newArrayList(
+                feedMergeContext.future.feed.calendarDates.getAll()
+            ));
+
             for (String id : job.serviceIdsToCloneRenameAndExtend) {
-                String newServiceId = getIdWithScope(id, getClonedIdScope());
+                String newServiceId = getIdWithScope(id, clonedIdScope);
 
                 // Because this service has been extended to span both active and future feed,
                 // we need to add all calendar_dates entries for the original service id
                 // under the active AND future feed (and of course rename service id).
-                for (CalendarDate calDate : Iterables.concat(
-                    feedMergeContext.active.feed.calendarDates.getAll(),
-                    feedMergeContext.future.feed.calendarDates.getAll()
-                )) {
+                for (CalendarDate calDate : allCalendarDates) {
                     if (calDate.service_id.equals(id)) {
                         writeValuesToTable(getCalendarRowValues(calDate, newServiceId), true);
                     }
