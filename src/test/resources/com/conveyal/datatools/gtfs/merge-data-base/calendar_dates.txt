@@ -1,0 +1,3 @@
+service_id,date,exception_type
+only_calendar_id,20170919,1
+common_id,20170919,2

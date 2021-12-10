@@ -17,6 +17,9 @@ import static com.conveyal.datatools.manager.utils.MergeFeedUtils.getTableScoped
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.hasDuplicateError;
 import static com.conveyal.gtfs.loader.DateField.GTFS_DATE_FORMATTER;
 
+/**
+ * Contains logic for merging records in the GTFS calendar table.
+ */
 public class CalendarMergeLineContext extends MergeLineContext {
     private static final Logger LOG = LoggerFactory.getLogger(CalendarMergeLineContext.class);
 

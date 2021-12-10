@@ -456,8 +456,30 @@ public class MergeFeedsJobTest extends UnitTest {
         // 1 trip from the future feed not in the active feed.
         assertRowCountInTable(mergedNamespace, "trips", 3);
 
-        // The calendar_dates entry should be preserved, but remapped to a different id.
-        assertRowCountInTable(mergedNamespace, "calendar_dates", 1);
+        // 3 calendar_dates entries should be in the merged feed:
+        // - 2 entries for the calendar item that was extended due to shared trip,
+        //   (1 from the active feed, 1 from the future feed)
+        // - 1 entry for the calendar item in the active feed for trips not in the future feed.
+        // See also specific query for each entry underneath.
+        // (reported by MTC).
+
+        // The entry from calendar_dates for the extended service_id from active feed should be present.
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.calendar_dates where service_id = 'Fake_Transit7:common_id' and date='20170919' and exception_type = 2", mergedNamespace),
+            1
+        );
+        // One entry from calendar_dates for the service_id that is used the active feed
+        // and that is not in the future feed should be present.
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.calendar_dates where service_id = 'Fake_Transit1:common_id' and date='20170919' and exception_type = 2", mergedNamespace),
+            1
+        );
+        // Unused calendar_dates service_ids in the active feed should still be dropped.
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format("SELECT count(*) FROM %s.calendar_dates where service_id = 'Fake_Transit1:only_calendar_id' and date='20170919' and exception_type = 1", mergedNamespace),
+            0
+        );
+        assertRowCountInTable(mergedNamespace, "calendar_dates", 3);
 
         // The GTFS+ calendar_attributes table should contain the same number of entries as the calendar table
         // (reported by MTC).
@@ -834,8 +856,17 @@ public class MergeFeedsJobTest extends UnitTest {
         // - calendar table should have 3 records.
         assertRowCountInTable(mergedNamespace, "calendar", 3);
 
-        // - calendar_dates should have 3 records.
-        assertRowCountInTable(mergedNamespace, "calendar_dates", 3);
+        // calendar_dates should have 1 record.
+        // - one for common_id from the future feed,
+        // Note that the common_id from the active feed is not included because it operates
+        // within the future feed timespan.
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format(
+                "SELECT count(*) FROM %s.calendar_dates WHERE service_id = 'common_id' and date = '20170916'",
+                mergedNamespace
+            ),
+            1
+        );
 
         // - trips table should have 3 records.
         assertRowCountInTable(mergedNamespace, "trips", 3);
@@ -899,7 +930,14 @@ public class MergeFeedsJobTest extends UnitTest {
         // - calendar_dates table
         // expect 2 records in calendar_dates table (all records from future feed removed)
         assertRowCountInTable(mergedNamespace, "calendar_dates", 3);
-
+/*
+        // calendar_dates table should have 2 records
+        // - common_id from the future feed
+        // - both_id from the future feed
+        // Entries from the active feed are discarded because they don't have a corresponding calendar entry
+        // (that would create a ref integrity issue) or it is after the future feed start date.
+        assertRowCountInTable(mergedNamespace, "calendar_dates", 2);
+*/
         // - trips table should have 3 records.
         assertRowCountInTable(mergedNamespace, "trips", 3);
 
