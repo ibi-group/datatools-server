@@ -10,10 +10,11 @@ import java.io.IOException;
 import java.util.Set;
 import java.util.zip.ZipOutputStream;
 
-import static com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType.SERVICE_PERIOD;
-import static com.conveyal.datatools.manager.utils.MergeFeedUtils.getTableScopedValue;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.hasDuplicateError;
 
+/**
+ * Holds the logic for merging entries from the GTFS+ calendar_attributes table.
+ */
 public class CalendarAttributesMergeLineContext extends MergeLineContext {
     private static final Logger LOG = LoggerFactory.getLogger(CalendarAttributesMergeLineContext.class);
 
@@ -28,9 +29,6 @@ public class CalendarAttributesMergeLineContext extends MergeLineContext {
 
     @Override
     public void afterRowWrite() throws IOException {
-        // If the current row is for a calendar service_id that is marked for cloning/renaming, clone the
-        // values, change the ID, extend the start/end dates to the feed's full range, and write the
-        // additional line to the file.
         addClonedServiceId();
     }
 
@@ -51,7 +49,7 @@ public class CalendarAttributesMergeLineContext extends MergeLineContext {
         }
 
         // Skip record (based on remapped id if necessary) if it was skipped in the calendar table.
-        String keyInCalendarTable = getTableScopedValue(Table.CALENDAR, getIdScope(), keyValue);
+        String keyInCalendarTable = getTableScopedValue(Table.CALENDAR, keyValue);
         if (mergeFeedsResult.skippedIds.contains(keyInCalendarTable)) {
             LOG.warn(
                 "Skipping calendar entry {} because it was skipped in the merged calendar table.",
@@ -60,31 +58,5 @@ public class CalendarAttributesMergeLineContext extends MergeLineContext {
         }
 
         return !shouldSkipRecord;
-    }
-
-    /**
-     * Adds a cloned service id for trips with the same signature in both the active & future feeds.
-     * The cloned service id spans from the start date in the active feed until the end date in the future feed.
-     * @throws IOException
-     */
-    public void addClonedServiceId() throws IOException {
-        if (isHandlingFutureFeed() && job.mergeType.equals(SERVICE_PERIOD)) {
-            String originalServiceId = keyValue;
-            if (job.serviceIdsToCloneRenameAndExtend.contains(originalServiceId)) {
-                String[] clonedValues = getOriginalRowValues().clone();
-                String newServiceId = clonedValues[keyFieldIndex] = String.join(":", getIdScope(), originalServiceId);
-
-                referenceTracker.checkReferencesAndUniqueness(
-                    keyValue,
-                    getLineNumber(),
-                    table.fields[0],
-                    newServiceId,
-                    table,
-                    keyField,
-                    table.getOrderFieldName()
-                );
-                writeValuesToTable(clonedValues, true);
-            }
-        }
     }
 }

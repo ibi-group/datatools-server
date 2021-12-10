@@ -32,7 +32,6 @@ import static com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType.SERVI
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.containsField;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.getAllFields;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.getMergeKeyField;
-import static com.conveyal.datatools.manager.utils.MergeFeedUtils.getTableScopedValue;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.hasDuplicateError;
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.conveyal.gtfs.loader.DateField.GTFS_DATE_FORMATTER;
@@ -127,8 +126,7 @@ public class MergeLineContext {
         orderField = table.getOrderFieldName();
         keyFieldMissing = false;
 
-        // Generate ID prefix to scope GTFS identifiers to avoid conflicts.
-        idScope = getCleanName(feedSource.name) + version.version;
+        idScope = makeIdScope(version);
         csvReader = table.getCsvReader(feed.zipFile, null);
         // If csv reader is null, the table was not found in the zip file. There is no need
         // to handle merging this table for this zip file.
@@ -154,10 +152,25 @@ public class MergeLineContext {
         if (handlingFutureFeed) {
             mergeFeedsResult.serviceIds.addAll(
                 job.serviceIdsToCloneRenameAndExtend.stream().map(
-                    id -> String.join(":", idScope, id)
+                    this::getIdWithScope
                 ).collect(Collectors.toSet())
             );
         }
+    }
+
+    /**
+     * Returns a scoped identifier of the form e.g. FeedName3:some_id
+     * (to distinguish an id when used in multiple tables).
+     */
+    protected String getIdWithScope(String id, String scope) {
+        return String.join(":", scope, id);
+    }
+
+    /**
+     * Shorthand for above using current idScope.
+     */
+    protected String getIdWithScope(String id) {
+        return getIdWithScope(id, idScope);
     }
 
     public boolean shouldSkipFile() {
@@ -223,7 +236,7 @@ public class MergeLineContext {
     public boolean checkForeignReferences(FieldContext fieldContext) throws IOException {
         Field field = fieldContext.getField();
         if (field.isForeignReference()) {
-            String key = getTableScopedValue(field.referenceTable, idScope, fieldContext.getValue());
+            String key = getTableScopedValue(field.referenceTable, fieldContext.getValue());
             // Check if we're performing a service period merge, this ref field is a service_id, and it
             // is not found in the list of service_ids (e.g., it was removed).
             boolean isValidServiceId = mergeFeedsResult.serviceIds.contains(fieldContext.getValueToWrite());
@@ -239,10 +252,9 @@ public class MergeLineContext {
                 if (fieldContext.nameEquals(SERVICE_ID) && isValidServiceId) {
                     LOG.warn("Not skipping valid service_id {} for {} {}", fieldContext.getValueToWrite(), table.name, keyValue);
                 } else {
-                    String skippedKey = getTableScopedValue(table, idScope, keyValue);
+                    String skippedKey = getTableScopedValue(keyValue);
                     if (orderField != null) {
-                        skippedKey = String.join(":", skippedKey,
-                            getCsvValue(orderField));
+                        skippedKey = String.join(":", skippedKey, getCsvValue(orderField));
                     }
                     mergeFeedsResult.skippedIds.add(skippedKey);
                     return false;
@@ -327,7 +339,7 @@ public class MergeLineContext {
                 String currentPrimaryKey = rowValues[0];
                 // Get unique key to check for remapped ID when
                 // writing values to file.
-                String key = getTableScopedValue(table, idScope, currentPrimaryKey);
+                String key = getTableScopedValue(currentPrimaryKey);
                 // Extract the route/stop ID value used for the
                 // route/stop with already encountered matching
                 // short name/stop code.
@@ -410,7 +422,7 @@ public class MergeLineContext {
         return true;
     }
 
-    public boolean updateServiceIdsIfNeeded(FieldContext fieldContext) {
+    private void updateServiceIdsIfNeeded(FieldContext fieldContext) {
         String fieldValue = fieldContext.getValue();
         if (table.name.equals(Table.TRIPS.name) &&
             fieldContext.nameEquals(SERVICE_ID) &&
@@ -420,12 +432,11 @@ public class MergeLineContext {
             // Future trip ids not in the active feed will not get the service id remapped,
             // they will use the service id as defined in the future feed instead.
             if (!(handlingFutureFeed && feedMergeContext.getFutureTripIdsNotInActiveFeed().contains(keyValue))) {
-                String newServiceId = String.join(":", idScope, fieldValue);
+                String newServiceId = getIdWithScope(fieldValue);
                 LOG.info("Updating {}#service_id to (auto-generated) {} for ID {}", table.name, newServiceId, keyValue);
                 fieldContext.setValueToWrite(newServiceId);
             }
         }
-        return true;
     }
 
     public boolean storeRowAndStopValues() {
@@ -497,7 +508,7 @@ public class MergeLineContext {
         if (job.mergeType.equals(REGIONAL) && isKeyField && !fieldContext.getValue().isEmpty()) {
             // For regional merge, if field is a GTFS identifier (e.g., route_id,
             // stop_id, etc.), add scoped prefix.
-            fieldContext.setValueToWrite(String.join(":", idScope, fieldContext.getValue()));
+            fieldContext.setValueToWrite(getIdWithScope(fieldContext.getValue()));
         }
     }
 
@@ -648,8 +659,26 @@ public class MergeLineContext {
         return Field.getFieldIndex(fieldsFoundInZip, fieldName);
     }
 
-    protected String getIdScope() {
-        return idScope;
+    /**
+     * Generate ID prefix to scope GTFS identifiers to avoid conflicts.
+     */
+    private String makeIdScope(FeedVersion version) {
+        return getCleanName(feedSource.name) + version.version;
+    }
+
+    /** Get table-scoped value used for key when remapping references for a particular feed. */
+    protected String getTableScopedValue(Table table, String id) {
+        return String.join(
+            ":",
+            table.name,
+            idScope,
+            id
+        );
+    }
+
+    /** Shorthand for above using ambient table. */
+    protected String getTableScopedValue(String id) {
+        return getTableScopedValue(table, id);
     }
 
     /**
@@ -657,8 +686,7 @@ public class MergeLineContext {
      * It is set to the id scope corresponding to the future feed.
      */
     protected String getClonedIdScope() {
-        // TODO: refactor name creation
-        return getCleanName(feedSource.name) + this.feedMergeContext.future.feedToMerge.version.version;
+        return makeIdScope(feedMergeContext.future.feedToMerge.version);
     }
 
     protected int getFeedIndex() { return feedIndex; }
@@ -689,13 +717,13 @@ public class MergeLineContext {
      */
     protected void updateAndRemapOutput(FieldContext fieldContext, boolean updateKeyValue) {
         String value = fieldContext.getValue();
-        String valueToWrite = String.join(":", idScope, value);
+        String valueToWrite = getIdWithScope(value);
         fieldContext.setValueToWrite(valueToWrite);
         if (updateKeyValue) {
             keyValue = valueToWrite;
         }
         mergeFeedsResult.remappedIds.put(
-            getTableScopedValue(table, idScope, value),
+            getTableScopedValue(value),
             valueToWrite
         );
     }
@@ -723,5 +751,63 @@ public class MergeLineContext {
      */
     protected int getKeyFieldIndex() {
         return table.getKeyFieldIndex(fieldsFoundInZip);
+    }
+
+    /**
+     * Helper method that determines whether a service id for the
+     * current calendar-related table is unused or not.
+     */
+    protected boolean isServiceIdUnused() {
+        boolean isUnused = false;
+        FeedContext feedContext = handlingActiveFeed ? feedMergeContext.active : feedMergeContext.future;
+
+        if (feedContext.getServiceIdsToRemove().contains(keyValue)) {
+            String activeOrFuture = handlingActiveFeed ? "active" : "future";
+            LOG.warn(
+                "Skipping {} {} entry {} because it will become unused in the merged feed.",
+                activeOrFuture,
+                table.name,
+                keyValue
+            );
+
+            mergeFeedsResult.skippedIds.add(getTableScopedValue(keyValue));
+
+            isUnused = true;
+        }
+
+        return isUnused;
+    }
+
+    /**
+     * Adds a cloned service id for trips with the same signature in both the active & future feeds.
+     * The cloned service id spans from the start date in the active feed until the end date in the future feed.
+     * If dealing with the calendar table, this will update the start_date field accordingly.
+     */
+    public void addClonedServiceId() throws IOException {
+        if (isHandlingFutureFeed() && job.mergeType.equals(SERVICE_PERIOD)) {
+            String originalServiceId = keyValue;
+            if (job.serviceIdsToCloneRenameAndExtend.contains(originalServiceId)) {
+                String[] clonedValues = getOriginalRowValues().clone();
+                String newServiceId = clonedValues[keyFieldIndex] = getIdWithScope(originalServiceId);
+
+                if (table.name.equals(Table.CALENDAR.name)) {
+                    // Modify start date only (preserve the end date from the future calendar entry).
+                    int startDateIndex = Table.CALENDAR.getFieldIndex("start_date");
+                    clonedValues[startDateIndex] = feedMergeContext.active.feed.calendars.get(originalServiceId)
+                        .start_date.format(GTFS_DATE_FORMATTER);
+                }
+
+                referenceTracker.checkReferencesAndUniqueness(
+                    keyValue,
+                    getLineNumber(),
+                    table.fields[0],
+                    newServiceId,
+                    table,
+                    keyField,
+                    table.getOrderFieldName()
+                );
+                writeValuesToTable(clonedValues, true);
+            }
+        }
     }
 }

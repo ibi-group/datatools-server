@@ -9,7 +9,6 @@ import java.util.Set;
 import java.util.zip.ZipOutputStream;
 
 import static com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType.SERVICE_PERIOD;
-import static com.conveyal.datatools.manager.utils.MergeFeedUtils.getTableScopedValue;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.hasDuplicateError;
 
 public class TripsMergeLineContext extends MergeLineContext {
@@ -41,10 +40,9 @@ public class TripsMergeLineContext extends MergeLineContext {
         // (the remapped id is already listed under the calendar/calendar_dates tables,
         // so there is no need to add that foreign key again).
         if (fieldContext.nameEquals(SERVICE_ID)) {
-            String tableScopedValue = getTableScopedValue(table, getIdScope(), fieldContext.getValue());
-            if (mergeFeedsResult.remappedIds.containsKey(tableScopedValue)) {
-                mergeFeedsResult.remappedIds.remove(tableScopedValue);
-            }
+            mergeFeedsResult.remappedIds.remove(
+                getTableScopedValue(fieldContext.getValue())
+            );
         }
 
         return !shouldSkipRecord;
