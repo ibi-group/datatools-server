@@ -10,6 +10,7 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.SqlAssert;
 import com.conveyal.gtfs.error.NewGTFSErrorType;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -24,7 +25,6 @@ import java.util.HashSet;
 import java.util.Set;
 
 import static com.conveyal.datatools.TestUtils.assertThatFeedHasNoErrorsOfType;
-import static com.conveyal.datatools.TestUtils.assertThatSqlCountQueryYieldsExpectedCount;
 import static com.conveyal.datatools.TestUtils.createFeedVersion;
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static com.conveyal.datatools.TestUtils.zipFolderFiles;
@@ -230,69 +230,34 @@ public class MergeFeedsJobTest extends UnitTest {
         versions.add(onlyCalendarDatesVersion);
         versions.add(onlyCalendarVersion);
         FeedVersion mergedVersion = regionallyMergeVersions(versions);
-
-        // assert service_ids have been feed scoped properly
-        String mergedNamespace = mergedVersion.namespace;
+        SqlAssert sqlAssert = new SqlAssert(mergedVersion);
 
         // - calendar table should have 2 records.
-        assertRowCountInTable(mergedNamespace, "calendar", 2);
+        sqlAssert.calendar.assertCount(2);
 
         // onlyCalendarVersion's common_id service_id should be scoped
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.calendar WHERE service_id='Fake_Agency2:common_id'",
-                mergedNamespace
-            ),
-            1
-        );
+        sqlAssert.calendar.assertCount(1, "service_id='Fake_Agency2:common_id'");
+
         // onlyCalendarVersion's only_calendar_id service_id should be scoped
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.calendar WHERE service_id='Fake_Agency2:only_calendar_id'",
-                mergedNamespace
-            ),
-            1
-        );
+        sqlAssert.calendar.assertCount(1, "service_id='Fake_Agency2:only_calendar_id'");
 
         // - calendar_dates table should have 2 records.
-        assertRowCountInTable(mergedNamespace, "calendar_dates", 2);
+        sqlAssert.calendarDates.assertCount(2);
 
         // onlyCalendarDatesVersion's common_id service_id should be scoped
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.calendar_dates WHERE service_id='Fake_Agency3:common_id'",
-                mergedNamespace
-            ),
-            1
-        );
+        sqlAssert.calendarDates.assertCount(1, "service_id='Fake_Agency3:common_id'");
+
         // onlyCalendarDatesVersion's only_calendar_dates_id service_id should be scoped
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.calendar_dates WHERE service_id='Fake_Agency3:only_calendar_dates_id'",
-                mergedNamespace
-            ),
-            1
-        );
+        sqlAssert.calendarDates.assertCount(1, "service_id='Fake_Agency3:only_calendar_dates_id'");
 
         // - trips table should have 2 + 1 = 3 records.
-        assertRowCountInTable(mergedNamespace, "trips", 3);
+        sqlAssert.trips.assertCount(3);
 
         // onlyCalendarDatesVersion's common_id service_id should be scoped
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.trips WHERE service_id='Fake_Agency3:common_id'",
-                mergedNamespace
-            ),
-            1
-        );
+        sqlAssert.trips.assertCount(1, "service_id='Fake_Agency3:common_id'");
+
         // 2 trips with onlyCalendarVersion's common_id service_id should be scoped
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.trips WHERE service_id='Fake_Agency2:common_id'",
-                mergedNamespace
-            ),
-            2
-        );
+        sqlAssert.trips.assertCount(2, "service_id='Fake_Agency2:common_id'");
     }
 
     /**
@@ -334,20 +299,15 @@ public class MergeFeedsJobTest extends UnitTest {
             MergeStrategy.CHECK_STOP_TIMES,
             mergeFeedsJob.mergeFeedsResult.mergeStrategy
         );
-        // assert service_ids start_dates have been extended to the start_date of the base feed.
-        String mergedNamespace = mergeFeedsJob.mergedVersion.namespace;
-
-        assertNoUnusedServiceIds(mergedNamespace);
-        assertNoRefIntegrityErrors(mergedNamespace);
+        SqlAssert sqlAssert = new SqlAssert(mergeFeedsJob.mergedVersion);
+        sqlAssert.assertNoUnusedServiceIds();
+        sqlAssert.assertNoRefIntegrityErrors();
 
         // calendar table should have 2 records (all calendar ids are used and extended)
-        assertRowCountInTable(mergedNamespace, "calendar", 2);
+        sqlAssert.calendar.assertCount(2);
 
         // expect that the record in calendar table has the correct start_date.
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format("SELECT count(*) FROM %s.calendar where start_date = '20170918' and monday = 1", mergedNamespace),
-            1
-        );
+        sqlAssert.calendar.assertCount(1, "start_date='20170918' and monday=1");
     }
 
     /**
@@ -373,8 +333,9 @@ public class MergeFeedsJobTest extends UnitTest {
             mergeFeedsJob.mergeFeedsResult.failed,
             "Merge feeds job should succeed with CHECK_STOP_TIMES strategy."
         );
-
-        String mergedNamespace = mergeFeedsJob.mergedVersion.namespace;
+        SqlAssert sqlAssert = new SqlAssert(mergeFeedsJob.mergedVersion);
+        sqlAssert.assertNoUnusedServiceIds();
+        sqlAssert.assertNoRefIntegrityErrors();
 
         // - calendar table
         // expect a total of 4 records in calendar table:
@@ -383,7 +344,7 @@ public class MergeFeedsJobTest extends UnitTest {
         // - common_id cloned and extended for the matching trip id present in both active and future feeds
         //   (from MergeFeedsJob#serviceIdsToCloneAndRename),
         // - only_calendar_id used in the future feed.
-        assertRowCountInTable(mergedNamespace, "calendar", 4);
+        sqlAssert.calendar.assertCount(4);
 
         // Expect 4 trips in merged output:
         // 1 trip from active feed that are not in the future feed,
@@ -391,29 +352,19 @@ public class MergeFeedsJobTest extends UnitTest {
         //   starts after the future feed start date)
         // 1 trip in both the active and future feeds, with the same signature (same stop times),
         // 2 trips from the future feed not in the active feed.
-        assertRowCountInTable(mergedNamespace, "trips", 4);
-
-        assertNoUnusedServiceIds(mergedNamespace);
-        assertNoRefIntegrityErrors(mergedNamespace);
+        sqlAssert.trips.assertCount(4);
 
         // expect that 2 calendars (1 common_id extended from future and 1 Fake_Transit1:common_id from active) have
         // start_date pinned to start date of active feed.
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format("SELECT count(*) FROM %s.calendar where start_date = '20170918'", mergedNamespace),
-            2
-        );
+        sqlAssert.calendar.assertCount(2, "start_date='20170918'");
+
         // One of the calendars above should have been extended
         // until the end date of that entry in the future feed.
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format("SELECT count(*) FROM %s.calendar where start_date = '20170918' and end_date='20170925'", mergedNamespace),
-            1
-        );
+        sqlAssert.calendar.assertCount(1, "start_date='20170918' and end_date='20170925'");
+
         // The other one should have end_date set to a day before the start of the future feed start date
         // (in the test data, that first date comes from the other calendar entry).
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format("SELECT count(*) FROM %s.calendar where start_date = '20170918' and end_date='20170919'", mergedNamespace),
-            1
-        );
+        sqlAssert.calendar.assertCount(1, "start_date = '20170918' and end_date='20170919'");
     }
 
     /**
@@ -440,7 +391,9 @@ public class MergeFeedsJobTest extends UnitTest {
             "Merge feeds job should succeed with CHECK_STOP_TIMES strategy."
         );
 
-        String mergedNamespace = mergeFeedsJob.mergedVersion.namespace;
+        SqlAssert sqlAssert = new SqlAssert(mergeFeedsJob.mergedVersion);
+        sqlAssert.assertNoUnusedServiceIds();
+        sqlAssert.assertNoRefIntegrityErrors();
 
         // - calendar table
         // expect a total of 3 records in calendar table:
@@ -448,7 +401,7 @@ public class MergeFeedsJobTest extends UnitTest {
         // - common_id cloned and extended for the matching trip id present in both active and future feeds
         //   (from MergeFeedsJob#serviceIdsToCloneAndRename),
         // - only_calendar_id used in the future feed.
-        assertRowCountInTable(mergedNamespace, "calendar", 3);
+        sqlAssert.calendar.assertCount(3);
 
         // Expect 3 trips in merged output:
         // 1 trip from active feed that are not in the future feed,
@@ -456,46 +409,22 @@ public class MergeFeedsJobTest extends UnitTest {
         //  starts after the future feed start date)
         // 1 trip in both the active and future feeds, with the same signature (same stop times),
         // 1 trip from the future feed not in the active feed.
-        assertRowCountInTable(mergedNamespace, "trips", 3);
+        sqlAssert.trips.assertCount(3);
 
         // 5 calendar_dates entries should be in the merged feed:
+        // (reported by MTC).
+        sqlAssert.calendarDates.assertCount(5);
         // - only_calendar_id:
-        //   1 from future feed,
+        //   1 from future feed (that service id is not scoped),
+        sqlAssert.calendarDates.assertCount(1, "service_id = 'only_calendar_id'");
         //   0 from active feed
         //   (in the active feed, that service id starts after the future feed start date)
+        sqlAssert.calendarDates.assertCount(0, "service_id = 'Fake_Transit1:dropped_calendar_id'");
         // - common_id:
         //   2 from active feed for the calendar item that was extended due to shared trip,
+        sqlAssert.calendarDates.assertCount(2, "service_id = 'Fake_Transit7:common_id'");
         //   2 from active feed for the active trip not in the future feed.
-        // See also specific query for each entry underneath.
-        // (reported by MTC).
-
-        // The entries from calendar_dates for the service_id that is used the active feed
-        // and that is not in the future feed should be present.
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format("SELECT count(*) FROM %s.calendar_dates where service_id = 'Fake_Transit1:common_id'", mergedNamespace),
-            2
-        );
-
-        // The entries from calendar_dates for the extended service_id from active feed should be present.
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format("SELECT count(*) FROM %s.calendar_dates where service_id = 'Fake_Transit7:common_id'", mergedNamespace),
-            2
-        );
-
-        // The entries from calendar_dates for the active service_id that is entirely in the future feed
-        // should be present (that service id is not scoped).
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format("SELECT count(*) FROM %s.calendar_dates where service_id = 'only_calendar_id'", mergedNamespace),
-            1
-        );
-
-        // Unused calendar_dates service_ids in the active feed should still be dropped.
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format("SELECT count(*) FROM %s.calendar_dates where service_id = 'Fake_Transit1:dropped_calendar_id' and date='20170919' and exception_type = 1", mergedNamespace),
-            0
-        );
-
-        assertRowCountInTable(mergedNamespace, "calendar_dates", 5);
+        sqlAssert.calendarDates.assertCount(2, "service_id = 'Fake_Transit1:common_id'");
 
         // The GTFS+ calendar_attributes table should contain the same number of entries as the calendar table
         // (reported by MTC).
@@ -526,9 +455,6 @@ public class MergeFeedsJobTest extends UnitTest {
             ).count(),
             "Job summary should not mention remapped uninserted trip ids."
         );
-
-        assertNoUnusedServiceIds(mergedNamespace);
-        assertNoRefIntegrityErrors(mergedNamespace);
     }
 
     /**
@@ -577,31 +503,23 @@ public class MergeFeedsJobTest extends UnitTest {
             mergeFeedsJob.mergeFeedsResult.failed,
             "Merge feeds job should utilize DEFAULT strategy."
         );
-        // assert service_ids start_dates have been extended to the start_date of the base feed.
-        String mergedNamespace = mergeFeedsJob.mergedVersion.namespace;
 
-        // - calendar table
-        // expect a total of 4 records in calendar table
+        SqlAssert sqlAssert = new SqlAssert(mergeFeedsJob.mergedVersion);
+
+        // calendar table should have 4 records
         // - 2 records from future feed, including only_calendar_dates which absorbs its active counterpart,
         // - 1 record from active feed that is used
         // - 1 unused record from the active feed that is NOT discarded (default strategy).
-        assertRowCountInTable(mergedNamespace, "calendar", 4);
+        sqlAssert.calendar.assertCount(4);
 
         // The calendar entry for the active feed ending 20170920 should end one day before the first calendar start date
         // of the future feed.
-        final String activeCalendarNewEndDate = "20170919"; // One day before 20170920.
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.calendar WHERE end_date='%s' AND service_id in ('Fake_Transit1:common_id')",
-                mergedNamespace,
-                activeCalendarNewEndDate),
-            1
-        );
+        sqlAssert.calendar.assertCount(1, "end_date='20170919' AND service_id in ('Fake_Transit1:common_id')");
 
         // trips table should have 4 records
         // (all records from original files except the active trip for only_calendar_trips,
         // which is skipped because it operates in the future feed).
-        assertRowCountInTable(mergedNamespace, "trips", 4);
+        sqlAssert.trips.assertCount(4);
     }
 
     /**
@@ -694,88 +612,44 @@ public class MergeFeedsJobTest extends UnitTest {
         // Run the job in this thread (we're not concerned about concurrency here).
         mergeFeedsJob.run();
         assertFeedMergeSucceeded(mergeFeedsJob);
-        // assert service_ids have been feed scoped properly
-        String mergedNamespace = mergeFeedsJob.mergedVersion.namespace;
+        SqlAssert sqlAssert = new SqlAssert(mergeFeedsJob.mergedVersion);
 
         // - calendar table should have 4 records.
-        assertRowCountInTable(mergedNamespace, "calendar", 4);
+        sqlAssert.calendar.assertCount(4);
 
         // bothCalendarFilesVersion's common_id service_id should be scoped
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.calendar WHERE service_id='Fake_Agency1:common_id'",
-                mergedNamespace
-            ),
-            1
-        );
+        sqlAssert.calendar.assertCount(1, "service_id='Fake_Agency1:common_id'");
+
         // bothCalendarFilesVersion's both_id service_id should be scoped
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.calendar WHERE service_id='Fake_Agency1:both_id'",
-                mergedNamespace
-            ),
-            1
-        );
+        sqlAssert.calendar.assertCount(1, "service_id='Fake_Agency1:both_id'");
+
         // onlyCalendarVersion's common id should not be scoped
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.calendar WHERE service_id='common_id'",
-                mergedNamespace
-            ),
-            1
-        );
+        sqlAssert.calendar.assertCount(1, "service_id='common_id'");
+
         // onlyCalendarVersion's only_calendar_id service_id should not be scoped
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.calendar WHERE service_id='only_calendar_id'",
-                mergedNamespace
-            ),
-            1
-        );
+        sqlAssert.calendar.assertCount(1, "service_id='only_calendar_id'");
 
         // - calendar_dates table should have only 2 records.
-        assertRowCountInTable(mergedNamespace, "calendar_dates", 2);
+        sqlAssert.calendarDates.assertCount(2);
 
         // bothCalendarFilesVersion's common_id service_id should be scoped
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.calendar_dates WHERE service_id='Fake_Agency1:common_id'",
-                mergedNamespace
-            ),
-            1
-        );
+        sqlAssert.calendarDates.assertCount(1, "service_id='Fake_Agency1:common_id'");
+
         // bothCalendarFilesVersion's both_id service_id should be scoped
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.calendar_dates WHERE service_id='Fake_Agency1:both_id'",
-                mergedNamespace
-            ),
-            1
-        );
+        sqlAssert.calendarDates.assertCount(1, "service_id='Fake_Agency1:both_id'");
 
         // - trips should have 2 + 1 = 3 records.
-        assertRowCountInTable(mergedNamespace, "trips", 3);
+        sqlAssert.trips.assertCount(3);
 
         // bothCalendarFilesVersion's common_id service_id should be scoped
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.trips WHERE service_id='Fake_Agency1:common_id'",
-                mergedNamespace
-            ),
-            1
-        );
+        sqlAssert.trips.assertCount(1, "service_id='Fake_Agency1:common_id'");
+
         // 2 trips with onlyCalendarVersion's common_id service_id should not be scoped
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.trips WHERE service_id='common_id'",
-                mergedNamespace
-            ),
-            2
-        );
+        sqlAssert.trips.assertCount(2, "service_id='common_id'");
     }
 
     /**
-     * Tests whether a MTC feed merge of two feed versions correctly feed scopes the service_id's of the feed that is
+     * Tests whether an MTC feed merge of two feed versions correctly feed scopes the service_id's of the feed that is
      * chronologically before the other one. This tests two feeds where one of them has only the calendar_dates files,
      * and the other has only the calendar file.
      */
@@ -788,68 +662,35 @@ public class MergeFeedsJobTest extends UnitTest {
         // Run the job in this thread (we're not concerned about concurrency here).
         mergeFeedsJob.run();
         assertFeedMergeSucceeded(mergeFeedsJob);
-        // assert service_ids have been feed scoped properly
-        String mergedNamespace = mergeFeedsJob.mergedVersion.namespace;
+        SqlAssert sqlAssert = new SqlAssert(mergeFeedsJob.mergedVersion);
 
-        // - calendar table should have 4 records.
-        assertRowCountInTable(mergedNamespace, "calendar", 2);
+        // - calendar table should have 2 records.
+        sqlAssert.calendar.assertCount(2);
 
         // onlyCalendarVersion's common id should not be scoped
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.calendar WHERE service_id='common_id'",
-                mergedNamespace
-            ),
-            1
-        );
+        sqlAssert.calendar.assertCount(1, "service_id='common_id'");
+
         // onlyCalendarVersion's only_calendar_id service_id should not be scoped
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.calendar WHERE service_id='only_calendar_id'",
-                mergedNamespace
-            ),
-            1
-        );
+        sqlAssert.calendar.assertCount(1, "service_id='only_calendar_id'");
 
         // - calendar_dates table should have only 2 records.
-        assertRowCountInTable(mergedNamespace, "calendar_dates", 2);
+        sqlAssert.calendarDates.assertCount(2);
 
         // onlyCalendarDatesVersion's common_id service_id should be scoped
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.calendar_dates WHERE service_id='Fake_Agency3:common_id'",
-                mergedNamespace
-            ),
-            1
-        );
+        sqlAssert.calendarDates.assertCount(1, "service_id='Fake_Agency3:common_id'");
+
         // onlyCalendarDatesVersion's only_calendar_dates_id service_id should be scoped
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.calendar_dates WHERE service_id='Fake_Agency3:only_calendar_dates_id'",
-                mergedNamespace
-            ),
-            1
-        );
+        sqlAssert.calendarDates.assertCount(1, "service_id='Fake_Agency3:only_calendar_dates_id'");
 
         // - trips table should have 2 + 1 = 3 records.
-        assertRowCountInTable(mergedNamespace, "trips", 3);
+        sqlAssert.trips.assertCount(3);
 
         // bothCalendarFilesVersion's common_id service_id should be scoped
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.trips WHERE service_id='Fake_Agency3:common_id'",
-                mergedNamespace
-            ),
-            1
-        );
+        sqlAssert.trips.assertCount(1, "service_id='Fake_Agency3:common_id'");
+
         // 2 trips with onlyCalendarVersion's common_id service_id should not be scoped
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.trips WHERE service_id='common_id'",
-                mergedNamespace
-            ),
-            2
-        );
+        sqlAssert.trips.assertCount(2, "service_id='common_id'");
+
         // This fails, but if remappedReferences isn't actually needed maybe the current implementation is good-to-go
         // assertThat(mergeFeedsJob.mergeFeedsResult.remappedReferences, equalTo(1));
     }
@@ -868,61 +709,34 @@ public class MergeFeedsJobTest extends UnitTest {
         // Run the job in this thread (we're not concerned about concurrency here).
         mergeFeedsJob.run();
         assertFeedMergeSucceeded(mergeFeedsJob);
-        // assert service_ids have been feed scoped properly
-        String mergedNamespace = mergeFeedsJob.mergedVersion.namespace;
+        SqlAssert sqlAssert = new SqlAssert(mergeFeedsJob.mergedVersion);
+
         // - calendar table should have 3 records.
-        assertRowCountInTable(mergedNamespace, "calendar", 3);
+        sqlAssert.calendar.assertCount(3);
 
         // calendar_dates should have 1 record.
         // - one for common_id from the future feed,
         // Note that the common_id from the active feed is not included because it operates
         // within the future feed timespan.
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.calendar_dates WHERE service_id = 'common_id' and date = '20170916'",
-                mergedNamespace
-            ),
-            1
-        );
+        sqlAssert.calendarDates.assertCount(1, "service_id='common_id' and date='20170916'");
 
         // - trips table should have 3 records.
-        assertRowCountInTable(mergedNamespace, "trips", 3);
+        sqlAssert.trips.assertCount(3);
 
         // common_id service_id should be scoped for earlier feed version.
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.trips WHERE service_id='Fake_Agency4:common_id'",
-                mergedNamespace
-            ),
-            1
-        );
+        sqlAssert.trips.assertCount(1, "service_id='Fake_Agency4:common_id'");
+
         // cal_to_remove service_id should be scoped for earlier feed version.
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.trips WHERE service_id='Fake_Agency4:cal_to_remove'",
-                mergedNamespace
-            ),
-            1
-        );
+        sqlAssert.trips.assertCount(1, "service_id='Fake_Agency4:cal_to_remove'");
+
         // Amended calendar record from earlier feed version should also have a modified end date (one day before the
         // earliest start_date from the future feed).
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.calendar WHERE service_id='Fake_Agency4:common_id' AND end_date='20170914'",
-                mergedNamespace
-            ),
-            1
-        );
+        sqlAssert.calendar.assertCount(1, "service_id='Fake_Agency4:common_id' AND end_date='20170914'");
+
         // Modified cal_to_remove should still exist in calendar_dates. It is modified even though it does not exist in
         // the future feed due to the MTC requirement to update all service_ids in the active feed.
         // See https://github.com/ibi-group/datatools-server/issues/244
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.calendar_dates WHERE service_id='Fake_Agency4:cal_to_remove'",
-                mergedNamespace
-            ),
-            1
-        );
+        sqlAssert.calendarDates.assertCount(1, "service_id='Fake_Agency4:cal_to_remove'");
     }
 
     /**
@@ -939,35 +753,24 @@ public class MergeFeedsJobTest extends UnitTest {
         // Run the job in this thread (we're not concerned about concurrency here).
         mergeFeedsJob.run();
         assertFeedMergeSucceeded(mergeFeedsJob);
-        // assert service_ids have been feed scoped properly
-        String mergedNamespace = mergeFeedsJob.mergedVersion.namespace;
+        SqlAssert sqlAssert = new SqlAssert(mergeFeedsJob.mergedVersion);
+
         // - calendar table should have 3 records.
-        assertRowCountInTable(mergedNamespace, "calendar", 3);
+        sqlAssert.calendar.assertCount(3);
 
         // calendar_dates table should have 3 records:
         // all records from future feed and keep_one from the active feed.
-        assertRowCountInTable(mergedNamespace, "calendar_dates", 3);
+        sqlAssert.calendarDates.assertCount(3);
 
         // - trips table should have 3 records.
-        assertRowCountInTable(mergedNamespace, "trips", 3);
+        sqlAssert.trips.assertCount(3);
 
         // common_id service_id should be scoped for earlier feed version.
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.trips WHERE service_id='Fake_Agency5:common_id'",
-                mergedNamespace
-            ),
-            1
-        );
+        sqlAssert.trips.assertCount(1, "service_id='Fake_Agency5:common_id'");
+
         // Amended calendar record from earlier feed version should also have a modified end date (one day before the
         // earliest start_date from the future feed).
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.calendar WHERE service_id='Fake_Agency5:common_id' AND end_date='20170914'",
-                mergedNamespace
-            ),
-            1
-        );
+        sqlAssert.calendar.assertCount(1, "service_id='Fake_Agency5:common_id' AND end_date='20170914'");
     }
 
     /**
@@ -989,7 +792,8 @@ public class MergeFeedsJobTest extends UnitTest {
         // Job should succeed.
         assertFeedMergeSucceeded(mergeFeedsJob);
         // Verify that the stop count is equal to the number of stops found in each of the input stops.txt files.
-        assertRowCountInTable(mergeFeedsJob.mergedVersion.namespace, "stops", 182);
+        SqlAssert sqlAssert = new SqlAssert(mergeFeedsJob.mergedVersion);
+        sqlAssert.stops.assertCount(182);
     }
 
     /**
@@ -1002,26 +806,23 @@ public class MergeFeedsJobTest extends UnitTest {
         versions.add(noAgencyVersion1);
         versions.add(noAgencyVersion2);
         FeedVersion mergedVersion = regionallyMergeVersions(versions);
+        SqlAssert sqlAssert = new SqlAssert(mergedVersion);
+        final String agencyIdIsBlankOrNull = "agency_id='' or agency_id is null";
 
-        String mergedNamespace = mergedVersion.namespace;
         // - agency should have 2 records.
-        assertRowCountInTable(mergedNamespace, "agency", 2);
+        sqlAssert.agency.assertCount(2);
 
         // there shouldn't be records with blank agency_id
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format("SELECT count(*) FROM %s.agency where agency_id = '' or agency_id is null", mergedNamespace),
-            0
-        );
+        sqlAssert.agency.assertCount(0, agencyIdIsBlankOrNull);
+
         // - routes should have 2 records
-        assertRowCountInTable(mergedNamespace, "routes", 2);
+        sqlAssert.routes.assertCount(2);
 
-        // there shouldn't be records with blank agency_id
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format("SELECT count(*) FROM %s.routes where agency_id = '' or agency_id is null", mergedNamespace),
-            0
-        );
+        // there shouldn't be route records with blank agency_id
+        sqlAssert.routes.assertCount(0, agencyIdIsBlankOrNull);
+
         // - trips should have 4 records
-        assertRowCountInTable(mergedNamespace, "trips", 4);
+        sqlAssert.trips.assertCount(4);
     }
 
     /**
@@ -1042,35 +843,5 @@ public class MergeFeedsJobTest extends UnitTest {
         mergeFeedsJob.run();
         LOG.info("Regional merged file: {}", mergeFeedsJob.mergedVersion.retrieveGtfsFile().getAbsolutePath());
         return mergeFeedsJob.mergedVersion;
-    }
-
-    /**
-     * Checks there are no unused service ids.
-     */
-    private void assertNoUnusedServiceIds(String mergedNamespace) throws SQLException {
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format("SELECT count(*) FROM %s.errors where error_type = 'SERVICE_UNUSED'", mergedNamespace),
-            0
-        );
-    }
-
-    /**
-     * Checks there are no referential integrity issues.
-     */
-    private void assertNoRefIntegrityErrors(String mergedNamespace) throws SQLException {
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format("SELECT count(*) FROM %s.errors where error_type = 'REFERENTIAL_INTEGRITY'", mergedNamespace),
-            0
-        );
-    }
-
-    /**
-     * Shorthand method for asserting an expected number of rows in a table.
-     */
-    private void assertRowCountInTable(String namespace, String tableName, int count) throws SQLException {
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format("SELECT count(*) FROM %s.%s", namespace, tableName),
-            count
-        );
     }
 }
