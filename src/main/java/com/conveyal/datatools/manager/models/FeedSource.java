@@ -103,6 +103,12 @@ public class FeedSource extends Model implements Cloneable {
     public boolean deployable;
 
     /**
+     * Determines whether this feed will be auto-published (e.g. after fetching a new version)
+     * if no blocking errors are found (requires MTC extension).
+     */
+    public boolean autoPublish;
+
+    /**
      * How do we receive this feed?
      */
     public FeedRetrievalMethod retrievalMethod;
