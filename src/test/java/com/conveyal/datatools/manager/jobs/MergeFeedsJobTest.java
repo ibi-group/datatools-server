@@ -231,6 +231,7 @@ public class MergeFeedsJobTest extends UnitTest {
         versions.add(onlyCalendarVersion);
         FeedVersion mergedVersion = regionallyMergeVersions(versions);
         SqlAssert sqlAssert = new SqlAssert(mergedVersion);
+        sqlAssert.assertNoRefIntegrityErrors();
 
         // - calendar table should have 2 records.
         sqlAssert.calendar.assertCount(2);
@@ -416,15 +417,15 @@ public class MergeFeedsJobTest extends UnitTest {
         sqlAssert.calendarDates.assertCount(5);
         // - only_calendar_id:
         //   1 from future feed (that service id is not scoped),
-        sqlAssert.calendarDates.assertCount(1, "service_id = 'only_calendar_id'");
+        sqlAssert.calendarDates.assertCount(1, "service_id='only_calendar_id'");
         //   0 from active feed
         //   (in the active feed, that service id starts after the future feed start date)
-        sqlAssert.calendarDates.assertCount(0, "service_id = 'Fake_Transit1:dropped_calendar_id'");
+        sqlAssert.calendarDates.assertCount(0, "service_id='Fake_Transit1:dropped_calendar_id'");
         // - common_id:
         //   2 from active feed for the calendar item that was extended due to shared trip,
-        sqlAssert.calendarDates.assertCount(2, "service_id = 'Fake_Transit7:common_id'");
+        sqlAssert.calendarDates.assertCount(2, "service_id='Fake_Transit7:common_id'");
         //   2 from active feed for the active trip not in the future feed.
-        sqlAssert.calendarDates.assertCount(2, "service_id = 'Fake_Transit1:common_id'");
+        sqlAssert.calendarDates.assertCount(2, "service_id='Fake_Transit1:common_id'");
 
         // The GTFS+ calendar_attributes table should contain the same number of entries as the calendar table
         // (reported by MTC).
@@ -505,6 +506,7 @@ public class MergeFeedsJobTest extends UnitTest {
         );
 
         SqlAssert sqlAssert = new SqlAssert(mergeFeedsJob.mergedVersion);
+        sqlAssert.assertNoRefIntegrityErrors();
 
         // calendar table should have 4 records
         // - 2 records from future feed, including only_calendar_dates which absorbs its active counterpart,
@@ -613,6 +615,7 @@ public class MergeFeedsJobTest extends UnitTest {
         mergeFeedsJob.run();
         assertFeedMergeSucceeded(mergeFeedsJob);
         SqlAssert sqlAssert = new SqlAssert(mergeFeedsJob.mergedVersion);
+        sqlAssert.assertNoRefIntegrityErrors();
 
         // - calendar table should have 4 records.
         sqlAssert.calendar.assertCount(4);
@@ -663,6 +666,7 @@ public class MergeFeedsJobTest extends UnitTest {
         mergeFeedsJob.run();
         assertFeedMergeSucceeded(mergeFeedsJob);
         SqlAssert sqlAssert = new SqlAssert(mergeFeedsJob.mergedVersion);
+        sqlAssert.assertNoRefIntegrityErrors();
 
         // - calendar table should have 2 records.
         sqlAssert.calendar.assertCount(2);
@@ -710,6 +714,7 @@ public class MergeFeedsJobTest extends UnitTest {
         mergeFeedsJob.run();
         assertFeedMergeSucceeded(mergeFeedsJob);
         SqlAssert sqlAssert = new SqlAssert(mergeFeedsJob.mergedVersion);
+        sqlAssert.assertNoRefIntegrityErrors();
 
         // - calendar table should have 3 records.
         sqlAssert.calendar.assertCount(3);
@@ -720,23 +725,23 @@ public class MergeFeedsJobTest extends UnitTest {
         // within the future feed timespan.
         sqlAssert.calendarDates.assertCount(1, "service_id='common_id' and date='20170916'");
 
-        // - trips table should have 3 records.
-        sqlAssert.trips.assertCount(3);
+        // trips table should have 2 records.
+        // - this includes all trips from both feed except the trip associated
+        //   with cal_to_remove, which calendar operates within the future feed.
+        sqlAssert.trips.assertCount(2);
 
         // common_id service_id should be scoped for earlier feed version.
         sqlAssert.trips.assertCount(1, "service_id='Fake_Agency4:common_id'");
 
-        // cal_to_remove service_id should be scoped for earlier feed version.
-        sqlAssert.trips.assertCount(1, "service_id='Fake_Agency4:cal_to_remove'");
+        // trips for cal_to_remove service_id should be removed.
+        sqlAssert.trips.assertCount(0, "service_id='Fake_Agency4:cal_to_remove'");
 
         // Amended calendar record from earlier feed version should also have a modified end date (one day before the
         // earliest start_date from the future feed).
         sqlAssert.calendar.assertCount(1, "service_id='Fake_Agency4:common_id' AND end_date='20170914'");
 
-        // Modified cal_to_remove should still exist in calendar_dates. It is modified even though it does not exist in
-        // the future feed due to the MTC requirement to update all service_ids in the active feed.
-        // See https://github.com/ibi-group/datatools-server/issues/244
-        sqlAssert.calendarDates.assertCount(1, "service_id='Fake_Agency4:cal_to_remove'");
+        // cal_to_remove should be removed from calendar_dates.
+        sqlAssert.calendarDates.assertCount(0, "service_id='Fake_Agency4:cal_to_remove'");
     }
 
     /**
@@ -754,6 +759,8 @@ public class MergeFeedsJobTest extends UnitTest {
         mergeFeedsJob.run();
         assertFeedMergeSucceeded(mergeFeedsJob);
         SqlAssert sqlAssert = new SqlAssert(mergeFeedsJob.mergedVersion);
+        // FIXME: "version3" contains ref integrity errors... was hat intentional?
+        // sqlAssert.assertNoRefIntegrityErrors();
 
         // - calendar table should have 3 records.
         sqlAssert.calendar.assertCount(3);

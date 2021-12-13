@@ -56,10 +56,16 @@ public class CalendarDatesMergeLineContext extends MergeLineContext {
         boolean shouldSkipRecord = false;
         if (job.mergeType.equals(SERVICE_PERIOD)) {
             // Drop any calendar_dates.txt records from the existing feed for dates that are
-            // not before the first date of the future feed.
+            // not before the first date of the future feed,
+            // or for corresponding calendar entries that have been dropped.
             LocalDate date = getCsvDate("date");
+            String calendarKey = getTableScopedValue(Table.CALENDAR, keyValue);
             if (
-                isHandlingActiveFeed() && !isBeforeFutureFeedStartDate(date)
+                isHandlingActiveFeed() &&
+                    (
+                        job.mergeFeedsResult.skippedIds.contains(calendarKey) ||
+                        !isBeforeFutureFeedStartDate(date)
+                    )
             ) {
                 String key = getTableScopedValue(keyValue);
                 LOG.warn(
