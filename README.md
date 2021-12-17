@@ -1,6 +1,6 @@
 # Transit Data Manager
 
-The core application for Conveyal's transit data tools suite.
+The core application for IBI Group's transit data tools suite.
 
 ## Documentation
 
