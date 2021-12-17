@@ -77,7 +77,7 @@ public class PeliasUpdateJob extends MonitorableJob {
      */
     @Override
     public void jobLogic() throws Exception {
-        status.message = "Launching custom geocoder update request";
+        status.message = "Launching Local Places Index update request";
         workerId = this.makeWebhookRequest();
         status.percentComplete = 1.0;
 

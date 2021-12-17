@@ -498,7 +498,7 @@ public class DeploymentController {
         }
 
         // Execute the pelias update job and keep track of it
-        PeliasUpdateJob peliasUpdateJob = new PeliasUpdateJob(userProfile, "Updating Custom Geocoder Database", deployment);
+        PeliasUpdateJob peliasUpdateJob = new PeliasUpdateJob(userProfile, "Updating Local Places Index", deployment);
         JobUtils.heavyExecutor.execute(peliasUpdateJob);
         return SparkUtils.formatJobMessage(peliasUpdateJob.jobId, "Pelias update initiating.");
     }
