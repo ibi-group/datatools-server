@@ -162,6 +162,10 @@ public class FeedUpdater {
             String filename = keyName.split("/")[1];
             String feedId = filename.replace(".zip", "");
             FeedSource feedSource = getFeedSource(feedId);
+            if (feedSource == null) {
+                LOG.error("No feed source found for feed ID {}", feedId);
+                continue;
+            }
 
             if (shouldMarkFeedAsProcessed(eTag, feedSource)) {
                 // Don't add object if it is a dir
@@ -169,10 +173,6 @@ public class FeedUpdater {
                 if ("null".equals(feedId)) continue;
                 try {
                     LOG.info("New version found for {} at s3://{}/{}. ETag = {}.", feedId, feedBucket, keyName, eTag);
-                    if (feedSource == null) {
-                        LOG.error("No feed source found for feed ID {}", feedId);
-                        continue;
-                    }
                     updatePublishedFeedVersion(feedId, feedSource);
                     // TODO: Explore if MD5 checksum can be used to find matching feed version.
                     // findMatchingFeedVersion(md5, feedId, feedSource);
