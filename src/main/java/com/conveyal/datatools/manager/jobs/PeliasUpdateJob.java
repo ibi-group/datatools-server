@@ -6,6 +6,7 @@ import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HttpUtils;
 import com.conveyal.datatools.manager.utils.SimpleHttpResponse;
@@ -58,13 +59,25 @@ public class PeliasUpdateJob extends MonitorableJob {
         this.timer = new Timer();
         this.logUploadS3URI = logUploadS3URI;
     }
+    public PeliasUpdateJob(Auth0UserProfile owner, String name, Deployment deployment) {
+        super(owner, name, JobType.UPDATE_PELIAS);
+        this.deployment = deployment;
+        this.timer = new Timer();
+
+        if (deployment.deployJobSummaries.size() <= 0) {
+            throw new RuntimeException("Deployment must be deployed to at least one server to update Pelias!");
+        }
+
+        // Get log upload URI from deployment (the latest build artifacts folder is where the logs get uploaded to)
+        this.logUploadS3URI = new AmazonS3URI(deployment.deployJobSummaries.get(deployment.deployJobSummaries.size() - 1).buildArtifactsFolder);
+    }
 
     /**
      * This method must be overridden by subclasses to perform the core steps of the job.
      */
     @Override
     public void jobLogic() throws Exception {
-        status.message = "Launching custom geocoder update request";
+        status.message = "Launching Local Places Index update request";
         workerId = this.makeWebhookRequest();
         status.percentComplete = 1.0;
 
@@ -76,7 +89,7 @@ public class PeliasUpdateJob extends MonitorableJob {
     }
 
     private void getWebhookStatus() {
-        URI url = getWebhookURI(deployment.peliasWebhookUrl + "/status/" + workerId);
+        URI url = getWebhookURI(deployment.parentProject().peliasWebhookUrl + "/status/" + workerId);
 
         // Convert raw body to JSON
         PeliasWebhookStatusMessage statusResponse;
@@ -118,7 +131,7 @@ public class PeliasUpdateJob extends MonitorableJob {
      * @return The workerID of the run created on the Pelias server
      */
     private String makeWebhookRequest() {
-        URI url = getWebhookURI(deployment.peliasWebhookUrl);
+        URI url = getWebhookURI(deployment.parentProject().peliasWebhookUrl);
 
         // Convert from feedVersionIds to Pelias Config objects
         List<PeliasWebhookGTFSFeedFormat> gtfsFeeds = Persistence.feedVersions.getFiltered(in("_id", deployment.feedVersionIds))
