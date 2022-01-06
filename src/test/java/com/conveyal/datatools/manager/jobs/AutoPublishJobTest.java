@@ -88,10 +88,11 @@ public class AutoPublishJobTest extends UnitTest {
     @MethodSource("createPublishFeedCases")
     void shouldProcessFeed(String resourceName, boolean isError, String errorMessage) throws IOException {
         // Add the version to the feed source
+        FeedVersion originalFeedVersion;
         if (resourceName.endsWith(".zip")) {
-            createFeedVersionFromGtfsZip(feedSource, resourceName);
+            originalFeedVersion = createFeedVersionFromGtfsZip(feedSource, resourceName);
         } else {
-            createFeedVersion(feedSource, zipFolderFiles(resourceName));
+            originalFeedVersion = createFeedVersion(feedSource, zipFolderFiles(resourceName));
         }
 
         // Create the job
@@ -108,6 +109,10 @@ public class AutoPublishJobTest extends UnitTest {
 
         if (isError) {
             assertEquals(errorMessage, autoPublishJob.status.message);
+
+            // In case of error, the sentToExternalPublisher flag should not be set.
+            FeedVersion updatedFeedVersion = Persistence.feedVersions.getById(originalFeedVersion.id);
+            assertNull(updatedFeedVersion.sentToExternalPublisher);
         }
     }
 
