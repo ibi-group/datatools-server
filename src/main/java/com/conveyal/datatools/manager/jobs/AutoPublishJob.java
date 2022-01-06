@@ -43,19 +43,21 @@ public class AutoPublishJob extends MonitorableJobWithResourceLock<FeedSource> {
         // Validate and check for blocking issues in the feed version to deploy.
         if (latestFeedVersion.hasBlockingIssuesForPublishing()) {
             status.fail("Could not publish this feed version because it contains blocking errors.");
-        }
-
-        try {
-            GtfsPlusValidation gtfsPlusValidation = GtfsPlusValidation.validate(latestFeedVersion.id);
-            if (!gtfsPlusValidation.issues.isEmpty()) {
-                status.fail("Could not publish this feed version because it contains GTFS+ blocking errors.");
+        } else {
+            try {
+                GtfsPlusValidation gtfsPlusValidation = GtfsPlusValidation.validate(latestFeedVersion.id);
+                if (!gtfsPlusValidation.issues.isEmpty()) {
+                    status.fail("Could not publish this feed version because it contains GTFS+ blocking errors.");
+                }
+            } catch(Exception e) {
+                status.fail("Could not read GTFS+ zip file", e);
             }
-        } catch(Exception e) {
-            status.fail("Could not read GTFS+ zip file", e);
         }
 
         // If validation successful, just execute the feed updating process.
-        FeedVersionController.publishToExternalResource(latestFeedVersion);
-        LOG.info("Auto-published feed source {} to external resource.", feedSource.id);
+        if (!status.error) {
+            FeedVersionController.publishToExternalResource(latestFeedVersion);
+            LOG.info("Auto-published feed source {} to external resource.", feedSource.id);
+        }
     }
 }
