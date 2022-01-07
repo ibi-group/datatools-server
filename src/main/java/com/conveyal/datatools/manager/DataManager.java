@@ -213,7 +213,7 @@ public class DataManager {
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.FEED_INFO, DataManager.GTFS_DATA_SOURCE);
             // NOTE: location groups is a GTFS Flex addition.
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.LOCATION_GROUPS, DataManager.GTFS_DATA_SOURCE);
-            new EditorControllerImpl(EDITOR_API_PREFIX, Table.LOCATION_META_DATA, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.LOCATIONS, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.LOCATION_SHAPES, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.ROUTES, DataManager.GTFS_DATA_SOURCE);
             // NOTE: Patterns controller handles updates to nested tables shapes, pattern stops, and frequencies.
