@@ -158,6 +158,7 @@ public class FeedUpdater {
             String keyName = objSummary.getKey();
             LOG.debug("{} etag = {}", keyName, eTag);
 
+            // Don't add object if it is a dir
             if (keyName.equals(bucketFolder)) continue;
             String filename = keyName.split("/")[1];
             String feedId = filename.replace(".zip", "");
@@ -166,16 +167,20 @@ public class FeedUpdater {
                 LOG.error("No feed source found for feed ID {}", feedId);
                 continue;
             }
+            // Skip object if the filename is null
+            if ("null".equals(feedId)) continue;
 
-            if (shouldMarkFeedAsProcessed(eTag, feedSource)) {
-                // Don't add object if it is a dir
-                // Skip object if the filename is null
-                if ("null".equals(feedId)) continue;
+            FeedVersion latestVersionSentForPublishing = getLatestVersionSentForPublishing(feedId, feedSource);
+            if (shouldMarkFeedAsProcessed(eTag, latestVersionSentForPublishing)) {
                 try {
-                    LOG.info("New version found for {} at s3://{}/{}. ETag = {}.", feedId, feedBucket, keyName, eTag);
-                    updatePublishedFeedVersion(feedId, feedSource);
-                    // TODO: Explore if MD5 checksum can be used to find matching feed version.
-                    // findMatchingFeedVersion(md5, feedId, feedSource);
+                    // Don't mark a feed version as published if previous published version is before sentToExternalPublisher.
+                    if (!objSummary.getLastModified().before(latestVersionSentForPublishing.sentToExternalPublisher)) {
+                        LOG.info("New version found for {} at s3://{}/{}. ETag = {}.", feedId, feedBucket, keyName, eTag);
+                        updatePublishedFeedVersion(feedId, latestVersionSentForPublishing);
+                        // TODO: Explore if MD5 checksum can be used to find matching feed version.
+                        // findMatchingFeedVersion(md5, feedId, feedSource);
+                    }
+
                 } catch (Exception e) {
                     LOG.warn("Could not load feed " + keyName, e);
                 } finally {
@@ -200,7 +205,7 @@ public class FeedUpdater {
             and(eq("value", feedId), eq("name", AGENCY_ID_FIELDNAME))
         );
         if (properties.size() > 1) {
-            LOG.warn("Found multiple feed sources for {}: {}",
+            LOG.warn("Found multiple feed sources for {}: {}. The published status on some feed versions will be incorrect.",
                 feedId,
                     properties.stream().map(p -> p.feedSourceId).collect(Collectors.joining(",")));
         }
@@ -216,22 +221,20 @@ public class FeedUpdater {
     /**
      * @return true if the feed with the corresponding etag should be mark as processed, false otherwise.
      */
-    private boolean shouldMarkFeedAsProcessed(String eTag, FeedSource feedSource) {
+    private boolean shouldMarkFeedAsProcessed(String eTag, FeedVersion publishedVersion) {
         if (eTagForFeed.containsValue(eTag)) return false;
-
-        FeedVersion publishedVersion = getLatestPublishedVersion(feedSource);
         if (publishedVersion == null) return false;
+
         return versionsToMarkAsProcessed.contains(publishedVersion.id);
     }
 
     /**
      * Update the published feed version for the feed source.
      * @param feedId the unique ID used by MTC to identify a feed source
-     * @param feedSource the feed source for which a newly published version should be registered
+     * @param publishedVersion the feed version to be registered
      */
-    private void updatePublishedFeedVersion(String feedId, FeedSource feedSource) {
+    private void updatePublishedFeedVersion(String feedId, FeedVersion publishedVersion) {
         try {
-            FeedVersion publishedVersion = getLatestPublishedVersion(feedSource);
             if (publishedVersion != null) {
                 if (publishedVersion.sentToExternalPublisher == null) {
                     LOG.warn("Not updating published version for {} (version was never sent to external publisher)", feedId);
@@ -240,13 +243,18 @@ public class FeedUpdater {
                 // Set published namespace to the feed version and set the processedByExternalPublisher timestamp.
                 LOG.info("Latest published version (sent at {}) for {} is {}", publishedVersion.sentToExternalPublisher, feedId, publishedVersion.id);
                 Persistence.feedVersions.updateField(publishedVersion.id, PROCESSED_BY_EXTERNAL_PUBLISHER_FIELD, new Date());
-                Persistence.feedSources.updateField(feedSource.id, "publishedVersionId", publishedVersion.namespace);
+                Persistence.feedSources.updateField(publishedVersion.feedSourceId, "publishedVersionId", publishedVersion.namespace);
             } else {
-                LOG.error("No published versions found for {} ({} id={})", feedId, feedSource.name, feedSource.id);
+                LOG.error(
+                    "No published versions found for {} ({} id={})",
+                    feedId,
+                    publishedVersion.parentFeedSource().name,
+                    publishedVersion.feedSourceId
+                );
             }
         } catch (Exception e) {
             e.printStackTrace();
-            LOG.error("Error encountered while checking for latest published version for {}", feedId);
+            LOG.error("Error encountered while updating the latest published version for {}", feedId);
         }
     }
 
@@ -256,13 +264,19 @@ public class FeedUpdater {
      * could be that more than one versions were recently "published" and the latest published version was a bad
      * feed that failed processing by RTD.
      */
-    private static FeedVersion getLatestPublishedVersion(FeedSource feedSource) {
-        // Collect the feed versions for the feed source.
-        Collection<FeedVersion> versions = feedSource.retrieveFeedVersions();
-        Optional<FeedVersion> lastPublishedVersionCandidate = versions
-            .stream()
-            .min(Comparator.comparing(v -> v.sentToExternalPublisher, Comparator.nullsLast(Comparator.reverseOrder())));
-        return lastPublishedVersionCandidate.orElse(null);
+    private static FeedVersion getLatestVersionSentForPublishing(String feedId, FeedSource feedSource) {
+        try {
+            // Collect the feed versions for the feed source.
+            Collection<FeedVersion> versions = feedSource.retrieveFeedVersions();
+            Optional<FeedVersion> lastPublishedVersionCandidate = versions
+                .stream()
+                .min(Comparator.comparing(v -> v.sentToExternalPublisher, Comparator.nullsLast(Comparator.reverseOrder())));
+            return lastPublishedVersionCandidate.orElse(null);
+        } catch (Exception e) {
+            e.printStackTrace();
+            LOG.error("Error encountered while checking for latest published version for {}", feedId);
+            return null;
+        }
     }
 
     /**
