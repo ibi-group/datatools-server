@@ -12,6 +12,7 @@ import com.conveyal.datatools.manager.persistence.Persistence;
 import com.google.common.collect.Lists;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -163,7 +164,7 @@ public class AutoPublishJobTest extends UnitTest {
         assertTrue(etags.isEmpty());
 
         // Simulate completion of feed publishing.
-        completedFeedRetriever.isPublishingComplete = true;
+        completedFeedRetriever.makePublished();
 
         // The etags should contain the id of the agency.
         // If a feed has been republished since last check, it will have a new etag/file hash,
@@ -210,12 +211,61 @@ public class AutoPublishJobTest extends UnitTest {
     }
 
     /**
+     * This test ensures that, upon server startup,
+     * feeds that meet all these criteria should not be updated/marked as published:
+     * - the feed has been sent to publisher (RTD),
+     * - the publisher has not published the feed,
+     * - a previous version of the feed was already published.
+     */
+    @Test
+    void shouldNotUpdateFromAPreviouslyPublishedVersionOnStartup() {
+        final int TWO_DAYS_MILLIS = 48 * 3600000;
+
+        // Set up a test FeedUpdater instance that fakes an external published date in the past.
+        TestCompletedFeedRetriever completedFeedRetriever = new TestCompletedFeedRetriever(TEST_AGENCY);
+        FeedUpdater feedUpdater = FeedUpdater.createForTest(completedFeedRetriever);
+        completedFeedRetriever.makePublished(new Date(System.currentTimeMillis() - TWO_DAYS_MILLIS));
+
+        // Add the version to the feed source, with
+        // sentToExternalPublisher set to a date after a previous publish date.
+        FeedVersion createdVersion = createFeedVersionFromGtfsZip(feedSource, "bart_new_lite.zip");
+        createdVersion.sentToExternalPublisher = new Date();
+        Persistence.feedVersions.replace(createdVersion.id, createdVersion);
+
+        // The list of feeds processed externally (completed) should contain an entry for the agency we want.
+        Map<String, String> etags = feedUpdater.checkForUpdatedFeeds();
+        assertNotNull(etags.get(TEST_AGENCY));
+
+        // Make sure that the feed remains unpublished.
+        FeedVersion updatedFeedVersion = Persistence.feedVersions.getById(createdVersion.id);
+        assertNull(updatedFeedVersion.processedByExternalPublisher);
+
+        // Now perform publishing.
+        AutoPublishJob autoPublishJob = new AutoPublishJob(feedSource, user);
+        autoPublishJob.run();
+        assertFalse(autoPublishJob.status.error);
+
+        // Simulate another publishing process
+        completedFeedRetriever.makePublished(new Date());
+
+        // The list of feeds processed externally (completed) should contain an entry for the agency we want.
+        Map<String, String> etagsAfter = feedUpdater.checkForUpdatedFeeds();
+        assertNotNull(etagsAfter.get(TEST_AGENCY));
+
+        // The feed should be published.
+        FeedVersion publishedFeedVersion = Persistence.feedVersions.getById(createdVersion.id);
+        assertNotNull(publishedFeedVersion.processedByExternalPublisher);
+
+    }
+
+    /**
      * Mocks the results of an {@link S3ObjectSummary} retrieval before/after the
      * external MTC publishing process is complete.
      */
     private static class TestCompletedFeedRetriever implements FeedUpdater.CompletedFeedRetriever {
         private final String agencyId;
-        public boolean isPublishingComplete;
+        private boolean isPublishingComplete;
+        private Date publishDate;
 
         public TestCompletedFeedRetriever(String agencyId) {
             this.agencyId = agencyId;
@@ -229,8 +279,18 @@ public class AutoPublishJobTest extends UnitTest {
                 S3ObjectSummary objSummary = new S3ObjectSummary();
                 objSummary.setETag("test-etag");
                 objSummary.setKey(String.format("%s/%s", TEST_COMPLETED_FOLDER, agencyId));
+                objSummary.setLastModified(publishDate);
                 return Lists.newArrayList(objSummary);
             }
+        }
+
+        public void makePublished() {
+            makePublished(new Date());
+        }
+
+        public void makePublished(Date publishDate) {
+            isPublishingComplete = true;
+            this.publishDate = publishDate;
         }
     }
 }
