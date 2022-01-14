@@ -1,0 +1,3 @@
+shape_id,shape_pt_lat,shape_pt_lon,shape_pt_sequence,shape_dist_traveled
+03c47dc1-bf37-4668-8c58-9847a496f92d,38.3223235,-122.3105574,1,0.0000000
+03c47dc1-bf37-4668-8c58-9847a496f92d,38.3221392,-122.3104330,2,23.1739361

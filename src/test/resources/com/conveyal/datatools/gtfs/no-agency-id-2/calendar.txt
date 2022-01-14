@@ -1,0 +1,4 @@
+service_id,monday,tuesday,wednesday,thursday,friday,saturday,sunday,start_date,end_date
+2-bb285e71-c906-4b67-ab68-0212fc864728,0,0,0,0,0,0,1,20180823,20190823
+2-bd6e404d-6e02-45c1-826c-a569ca947fce,1,1,1,1,1,0,0,20180823,20190823
+2-ef5a027b-353d-4071-b10b-f232e1c6b8cf,0,0,0,0,0,1,0,20180823,20190823

@@ -1,0 +1,5 @@
+trip_id,stop_id
+only-calendar-trip1,4u6g
+only-calendar-trip1,johv
+only-calendar-trip2,johv
+only-calendar-trip2,4u6g

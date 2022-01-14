@@ -4,6 +4,7 @@ import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
+import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.databind.JsonNode;
@@ -15,7 +16,9 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.util.Date;
 
+import static com.conveyal.datatools.TestUtils.createFeedVersion;
 import static com.conveyal.datatools.TestUtils.parseJson;
+import static com.conveyal.datatools.TestUtils.zipFolderFiles;
 import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
@@ -27,6 +30,7 @@ import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 class MtcFeedResourceTest extends UnitTest {
     private static Project project;
@@ -151,5 +155,29 @@ class MtcFeedResourceTest extends UnitTest {
         // Removed field AgencyPublicId from RTD should be deleted from Mongo.
         ExternalFeedSourceProperty removedPublicIdProp = Persistence.externalFeedSourceProperties.getById(agencyPublicIdProp.id);
         assertThat(removedPublicIdProp, nullValue());
+
+        Persistence.externalFeedSourceProperties.removeById(agencyIdProp.id);
+        Persistence.externalFeedSourceProperties.removeById(agencyPublicIdProp.id);
+        Persistence.externalFeedSourceProperties.removeById(agencyEmailProp.id);
+    }
+
+    @Test
+    void shouldTolerateNullObjectInExternalPropertyAgencyId() throws IOException {
+        // Add an entry in the ExternalFeedSourceProperties collection
+        // with AgencyId value set to null.
+        ExternalFeedSourceProperty agencyIdProp = new ExternalFeedSourceProperty(
+            feedSource,
+            "MTC",
+            "AgencyId",
+            null
+        );
+        Persistence.externalFeedSourceProperties.create(agencyIdProp);
+
+        // Trigger the feed update process (it should not upload anything to S3).
+        FeedVersion feedVersion = createFeedVersion(feedSource,  zipFolderFiles("mini-bart-new"));
+        MtcFeedResource mtcFeedResource = new MtcFeedResource();
+        assertDoesNotThrow(() -> mtcFeedResource.feedVersionCreated(feedVersion, null));
+
+        Persistence.externalFeedSourceProperties.removeById(agencyIdProp.id);
     }
 }

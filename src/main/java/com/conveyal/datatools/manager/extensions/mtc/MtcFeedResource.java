@@ -48,11 +48,12 @@ import static com.mongodb.client.model.Filters.eq;
 public class MtcFeedResource implements ExternalFeedResource {
 
     public static final Logger LOG = LoggerFactory.getLogger(MtcFeedResource.class);
+    public static final String TEST_AGENCY = "test-agency";
+    public static final String AGENCY_ID_FIELDNAME = "AgencyId";
+    public static final String RESOURCE_TYPE = "MTC";
 
     private String rtdApi, s3Bucket, s3Prefix;
 
-    public static final String AGENCY_ID_FIELDNAME = "AgencyId";
-    public static final String RESOURCE_TYPE = "MTC";
     public MtcFeedResource() {
         rtdApi = DataManager.getExtensionPropertyAsText(RESOURCE_TYPE, "rtd_api");
         s3Bucket = DataManager.getExtensionPropertyAsText(RESOURCE_TYPE, "s3_bucket");
@@ -193,8 +194,13 @@ public class MtcFeedResource implements ExternalFeedResource {
                 constructId(feedVersion.parentFeedSource(), this.getResourceType(), AGENCY_ID_FIELDNAME)
         );
 
-        if(agencyIdProp == null || agencyIdProp.value.equals("null")) {
+        if (agencyIdProp == null || agencyIdProp.value == null || agencyIdProp.value.equals("null")) {
             LOG.error("Could not read {} for FeedSource {}", AGENCY_ID_FIELDNAME, feedVersion.feedSourceId);
+            return;
+        }
+
+        if (agencyIdProp.value.equals(TEST_AGENCY)) {
+            LOG.info("Skipping S3 upload for unit test.");
             return;
         }
 
