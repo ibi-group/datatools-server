@@ -1,0 +1,3 @@
+stop_id,stop_code,stop_name,stop_desc,stop_lat,stop_lon,zone_id,stop_url,location_type,parent_station,stop_timezone,wheelchair_boarding
+100,89062,Terrace Dr at Liberty Dr,,38.2933330,-122.2694440,,http://ridethevine.rideralerts.com/InfoPoint/89062,0,,,
+102,89140,Trancas St at Jefferson St,,38.3225000,-122.3011110,,http://ridethevine.rideralerts.com/InfoPoint/89140,0,,,
