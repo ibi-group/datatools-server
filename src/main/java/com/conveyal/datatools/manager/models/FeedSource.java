@@ -45,6 +45,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
@@ -214,7 +215,7 @@ public class FeedSource extends Model implements Cloneable {
         // We create a new FeedVersion now, so that the fetched date is (milliseconds) before
         // fetch occurs. That way, in the highly unlikely event that a feed is updated while we're
         // fetching it, we will not miss a new feed.
-        FeedVersion version = new FeedVersion(this, FeedRetrievalMethod.FETCHED_AUTOMATICALLY);
+        FeedVersion version = new FeedVersion(this, FETCHED_AUTOMATICALLY);
 
         // build the URL from which to fetch
         URL url = null;
@@ -246,8 +247,12 @@ public class FeedSource extends Model implements Cloneable {
         // Get latest version to check that the fetched version does not duplicate a feed already loaded.
         FeedVersion latest = retrieveLatest();
         // lastFetched is set to null when the URL changes and when latest feed version is deleted
-        if (latest != null && this.lastFetched != null)
+        if (latest != null && latest.retrievalMethod.equals(FETCHED_AUTOMATICALLY) && this.lastFetched != null) {
+            // If the last feed was automatically fetched,
+            // set a modified threshold to skip download unless there is a more recent feed
+            // (if the source server supports it)/
             conn.setIfModifiedSince(Math.min(latest.updated.getTime(), this.lastFetched.getTime()));
+        }
 
         File newGtfsFile;
 
@@ -305,7 +310,7 @@ public class FeedSource extends Model implements Cloneable {
             e.printStackTrace();
             return null;
         }
-        if (latest != null && version.hash.equals(latest.hash)) {
+        if (version.isSameAs(latest)) {
             // If new version hash equals the hash for the latest version, do not error. Simply indicate that server
             // operators should add If-Modified-Since support to avoid wasting bandwidth.
             String message = String.format("Feed %s was fetched but has not changed; server operators should add If-Modified-Since support to avoid wasting bandwidth", this.name);
