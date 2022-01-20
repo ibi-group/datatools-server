@@ -139,7 +139,8 @@ public class FetchLoadFeedCombinationTest extends UnitTest {
         // Assert no version 2 is created.
         assertVersionCount(1);
 
-        // create wiremock stub for get users endpoint
+        // Some servers support a 304 (not modified) response,
+        // and that should also result in no new version created.
         wireMockServer.stubFor(
             get(urlPathEqualTo(MOCKED_FETCH_URL))
                 .willReturn(
@@ -148,7 +149,7 @@ public class FetchLoadFeedCombinationTest extends UnitTest {
                 )
         );
 
-        // Simulate the second fetch with the response as "unchanged".
+        // Simulate the re-fetch with the response as "unchanged".
         simulateFetch();
 
         // Assert no version 2 is created.
@@ -167,7 +168,7 @@ public class FetchLoadFeedCombinationTest extends UnitTest {
                 .response()
         );
         FeedVersion newVersion = new FeedVersion(feedSource, FETCHED_AUTOMATICALLY);
-        newVersion = feedSource.fetch(
+        newVersion = feedSource.processFetchResponse(
             new MonitorableJob.Status(),
             null,
             newVersion,

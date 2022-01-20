@@ -222,20 +222,12 @@ public class FeedSource extends Model implements Cloneable {
         // Get latest version to check that the fetched version does not duplicate a feed already loaded.
         FeedVersion latest = retrieveLatest();
 
-        Long modifiedThreshold = null;
-        // lastFetched is set to null when the URL changes and when latest feed version is deleted
-        if (latest != null && latest.retrievalMethod.equals(FETCHED_AUTOMATICALLY) && this.lastFetched != null) {
-            // If the last feed was automatically fetched,
-            // set a modified threshold to skip download unless there is a more recent feed
-            // (if the source server supports it).
-            modifiedThreshold = Math.min(latest.updated.getTime(), this.lastFetched.getTime());
-        }
-        HttpURLConnection conn = makeHttpURLConnection(status, optionalUrlOverride, modifiedThreshold);
+        HttpURLConnection conn = makeHttpURLConnection(status, optionalUrlOverride, getModifiedThreshold(latest));
         if (conn == null) return null;
 
         try {
             conn.connect();
-            return fetch(status, optionalUrlOverride, version, latest, new HttpURLConnectionResponse(conn));
+            return processFetchResponse(status, optionalUrlOverride, version, latest, new HttpURLConnectionResponse(conn));
         } catch (IOException e) {
             String message = String.format("Unable to connect to %s; not fetching %s feed", conn.getURL(), this.name); // url, this.name);
             LOG.error(message);
@@ -245,6 +237,25 @@ public class FeedSource extends Model implements Cloneable {
         }
     }
 
+    /**
+     * Computes the modified time to set to the HttpURLConnection
+     * so that if a version has not been published since the last fetch,
+     * then download can be skipped.
+     * @return The computed threshold if the latest feed version exists and was auto-fetched
+     *         and there is a record for the last fetch action, null otherwise.
+     */
+    private Long getModifiedThreshold(FeedVersion latest) {
+        Long modifiedThreshold = null;
+        // lastFetched is set to null when the URL changes and when latest feed version is deleted
+        if (latest != null && latest.retrievalMethod.equals(FETCHED_AUTOMATICALLY) && this.lastFetched != null) {
+            modifiedThreshold = Math.min(latest.updated.getTime(), this.lastFetched.getTime());
+        }
+        return modifiedThreshold;
+    }
+
+    /**
+     * Builds an {@link HttpURLConnection}.
+     */
     private HttpURLConnection makeHttpURLConnection(MonitorableJob.Status status, String optionalUrlOverride, Long modifiedThreshold) {
         // build the URL from which to fetch
         URL url = null;
@@ -280,10 +291,16 @@ public class FeedSource extends Model implements Cloneable {
     }
 
     /**
-     * Processes the given response.
+     * Processes the given fetch response.
      * @return true if a new FeedVersion was created from the response, false otherwise.
      */
-    public FeedVersion fetch(MonitorableJob.Status status, String optionalUrlOverride, FeedVersion version, FeedVersion latest, ConnectionResponse response) {
+    public FeedVersion processFetchResponse(
+        MonitorableJob.Status status,
+        String optionalUrlOverride,
+        FeedVersion version,
+        FeedVersion latest,
+        ConnectionResponse response
+    ) {
         File newGtfsFile;
         try {
             String message;
