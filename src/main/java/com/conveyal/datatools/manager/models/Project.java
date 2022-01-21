@@ -90,6 +90,12 @@ public class Project extends Model {
      */
     public String regionalFeedSourceId;
 
+    /**
+     * Webhook URL for the Pelias webhook endpoint, used during Pelias deployment.
+     */
+    public String peliasWebhookUrl;
+
+
     public Project() {
         this.buildConfig = new OtpBuildConfig();
         this.routerConfig = new OtpRouterConfig();

@@ -74,8 +74,6 @@ public class Deployment extends Model implements Serializable {
     private ObjectMapper otpConfigMapper = new ObjectMapper().setSerializationInclusion(Include.NON_NULL);
 
     /* Pelias fields, used to determine where/if to send data to the Pelias webhook */
-    public String peliasWebhookUrl;
-    public boolean peliasUpdate;
     public boolean peliasResetDb;
     public List<String> peliasCsvFiles = new ArrayList<>();
 

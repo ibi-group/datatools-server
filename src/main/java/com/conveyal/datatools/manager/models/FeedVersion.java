@@ -531,4 +531,14 @@ public class FeedVersion extends Model implements Serializable {
     public void assignGtfsFileAttributes(File newGtfsFile) {
         assignGtfsFileAttributes(newGtfsFile, null);
     }
+
+    /**
+     * Determines whether this feed version matches another one specified, i.e.,
+     * whether the otherVersion doesn't have a different hash, thus has not changed, compared to this one.
+     * @param otherVersion The version to compare the hash to.
+     * @return true if the otherVersion hash is the same, false if the hashes differ or the otherVersion is null.
+     */
+    public boolean isSameAs(FeedVersion otherVersion) {
+        return otherVersion != null && this.hash.equals(otherVersion.hash);
+    }
 }
