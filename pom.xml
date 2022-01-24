@@ -270,7 +270,7 @@
         <dependency>
             <groupId>com.github.conveyal</groupId>
             <artifactId>gtfs-lib</artifactId>
-            <version>ecb239daf43dac248698ecf9be8b017088c8771e</version>
+            <version>f1816642acb015846790ccf4ac217f39f39b86f5</version>
             <!-- Exclusions added in order to silence SLF4J warnings about multiple bindings:
                 http://www.slf4j.org/codes.html#multiple_bindings
             -->
@@ -391,10 +391,12 @@
             <scope>test</scope>
         </dependency>
         <!-- Snapshotting library for testing -->
+        <!-- This should only be temporary until https://github.com/Zenika/java-snapshot-matcher is updated to work with
+        the latest version of jackson databind -->
         <dependency>
-            <groupId>com.github.conveyal</groupId>
-            <artifactId>java-snapshot-matcher</artifactId>
-            <version>3495b32f7b4d3f82590e0a2284029214070b6984</version>
+            <groupId>com.github.ibi-group</groupId>
+            <artifactId>ibi-java-snapshot-matcher</artifactId>
+            <version>0820e1a3a2a6c7f845038859d0c4c09bf18c7910</version>
             <scope>test</scope>
         </dependency>
         <!-- wiremock is used to mock http requests -->
