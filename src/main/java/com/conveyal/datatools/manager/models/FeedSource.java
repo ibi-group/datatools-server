@@ -18,6 +18,8 @@ import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
 import com.conveyal.datatools.manager.models.transform.FeedTransformation;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.JobUtils;
+import com.conveyal.datatools.manager.utils.connections.ConnectionResponse;
+import com.conveyal.datatools.manager.utils.connections.HttpURLConnectionResponse;
 import com.conveyal.gtfs.GTFS;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -45,6 +47,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.stream.Collectors;
 
+import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
@@ -214,8 +217,46 @@ public class FeedSource extends Model implements Cloneable {
         // We create a new FeedVersion now, so that the fetched date is (milliseconds) before
         // fetch occurs. That way, in the highly unlikely event that a feed is updated while we're
         // fetching it, we will not miss a new feed.
-        FeedVersion version = new FeedVersion(this, FeedRetrievalMethod.FETCHED_AUTOMATICALLY);
+        FeedVersion version = new FeedVersion(this, FETCHED_AUTOMATICALLY);
 
+        // Get latest version to check that the fetched version does not duplicate a feed already loaded.
+        FeedVersion latest = retrieveLatest();
+
+        HttpURLConnection conn = makeHttpURLConnection(status, optionalUrlOverride, getModifiedThreshold(latest));
+        if (conn == null) return null;
+
+        try {
+            conn.connect();
+            return processFetchResponse(status, optionalUrlOverride, version, latest, new HttpURLConnectionResponse(conn));
+        } catch (IOException e) {
+            String message = String.format("Unable to connect to %s; not fetching %s feed", conn.getURL(), this.name); // url, this.name);
+            LOG.error(message);
+            status.fail(message);
+            e.printStackTrace();
+            return null;
+        }
+    }
+
+    /**
+     * Computes the modified time to set to the HttpURLConnection
+     * so that if a version has not been published since the last fetch,
+     * then download can be skipped.
+     * @return The computed threshold if the latest feed version exists and was auto-fetched
+     *         and there is a record for the last fetch action, null otherwise.
+     */
+    private Long getModifiedThreshold(FeedVersion latest) {
+        Long modifiedThreshold = null;
+        // lastFetched is set to null when the URL changes and when latest feed version is deleted
+        if (latest != null && latest.retrievalMethod.equals(FETCHED_AUTOMATICALLY) && this.lastFetched != null) {
+            modifiedThreshold = Math.min(latest.updated.getTime(), this.lastFetched.getTime());
+        }
+        return modifiedThreshold;
+    }
+
+    /**
+     * Builds an {@link HttpURLConnection}.
+     */
+    private HttpURLConnection makeHttpURLConnection(MonitorableJob.Status status, String optionalUrlOverride, Long modifiedThreshold) {
         // build the URL from which to fetch
         URL url = null;
         try {
@@ -243,18 +284,27 @@ public class FeedSource extends Model implements Cloneable {
         }
 
         conn.setDefaultUseCaches(true);
-        // Get latest version to check that the fetched version does not duplicate a feed already loaded.
-        FeedVersion latest = retrieveLatest();
-        // lastFetched is set to null when the URL changes and when latest feed version is deleted
-        if (latest != null && this.lastFetched != null)
-            conn.setIfModifiedSince(Math.min(latest.updated.getTime(), this.lastFetched.getTime()));
 
+        if (modifiedThreshold != null) conn.setIfModifiedSince(modifiedThreshold);
+
+        return conn;
+    }
+
+    /**
+     * Processes the given fetch response.
+     * @return true if a new FeedVersion was created from the response, false otherwise.
+     */
+    public FeedVersion processFetchResponse(
+        MonitorableJob.Status status,
+        String optionalUrlOverride,
+        FeedVersion version,
+        FeedVersion latest,
+        ConnectionResponse response
+    ) {
         File newGtfsFile;
-
         try {
-            conn.connect();
             String message;
-            int responseCode = conn.getResponseCode();
+            int responseCode = response.getResponseCode();
             LOG.info("Fetch feed response code={}", responseCode);
             switch (responseCode) {
                 case HttpURLConnection.HTTP_NOT_MODIFIED:
@@ -269,17 +319,17 @@ public class FeedSource extends Model implements Cloneable {
                     status.update(message, 75.0);
                     // Create new file from input stream (this also handles hashing the file and other version fields
                     // calculated from the GTFS file.
-                    newGtfsFile = version.newGtfsFile(conn.getInputStream());
+                    newGtfsFile = version.newGtfsFile(response.getInputStream());
                     break;
                 case HttpURLConnection.HTTP_MOVED_TEMP:
                 case HttpURLConnection.HTTP_MOVED_PERM:
                 case HttpURLConnection.HTTP_SEE_OTHER:
                     // Get redirect url from "location" header field
-                    String newUrl = conn.getHeaderField("Location");
+                    String redirectUrl = response.getRedirectUrl();
                     if (optionalUrlOverride != null) {
                         // Only permit recursion one level deep. If more than one redirect is detected, fail the job and
                         // suggest that user try again with new URL.
-                        message = String.format("More than one redirects for fetch URL detected. Please try fetch again with latest URL: %s", newUrl);
+                        message = String.format("More than one redirects for fetch URL detected. Please try fetch again with latest URL: %s", redirectUrl);
                         LOG.error(message);
                         status.fail(message);
                         return null;
@@ -287,13 +337,13 @@ public class FeedSource extends Model implements Cloneable {
                         // If override URL is null, this is the zeroth fetch. Recursively call fetch, but only one time
                         // to prevent multiple (possibly infinite?) redirects. Any more redirects than one should
                         // probably be met with user action to update the fetch URL.
-                        LOG.info("Recursively calling fetch feed with new URL: {}", newUrl);
-                        return fetch(status, newUrl);
+                        LOG.info("Recursively calling fetch feed with new URL: {}", redirectUrl);
+                        return fetch(status, redirectUrl);
                     }
                 default:
                     // Any other HTTP codes result in failure.
                     // FIXME Are there "success" codes we're not accounting for?
-                    message = String.format("HTTP status (%d: %s) retrieving %s feed", responseCode, conn.getResponseMessage(), this.name);
+                    message = String.format("HTTP status (%d: %s) retrieving %s feed", responseCode, response.getResponseMessage(), this.name);
                     LOG.error(message);
                     status.fail(message);
                     return null;
@@ -305,7 +355,7 @@ public class FeedSource extends Model implements Cloneable {
             e.printStackTrace();
             return null;
         }
-        if (latest != null && version.hash.equals(latest.hash)) {
+        if (version.isSameAs(latest)) {
             // If new version hash equals the hash for the latest version, do not error. Simply indicate that server
             // operators should add If-Modified-Since support to avoid wasting bandwidth.
             String message = String.format("Feed %s was fetched but has not changed; server operators should add If-Modified-Since support to avoid wasting bandwidth", this.name);
@@ -325,7 +375,7 @@ public class FeedSource extends Model implements Cloneable {
             Persistence.feedSources.updateField(this.id, "lastFetched", version.updated);
 
             // Set file timestamp according to last modified header from connection
-            version.fileTimestamp = conn.getLastModified();
+            version.fileTimestamp = response.getLastModified();
             String message = String.format("Fetch complete for %s", this.name);
             LOG.info(message);
             status.completeSuccessfully(message);
