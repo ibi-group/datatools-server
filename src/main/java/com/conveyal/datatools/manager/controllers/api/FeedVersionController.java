@@ -120,8 +120,8 @@ public class FeedVersionController  {
         LOG.info("Last modified: {}", new Date(newGtfsFile.lastModified()));
 
         // Check that the hashes of the feeds don't match, i.e. that the feed has changed since the last version.
-        // (as long as there is a latest version, i.e. the feed source is not completely new)
-        if (latestVersion != null && latestVersion.hash.equals(newFeedVersion.hash)) {
+        // (as long as there is a latest version, the feed source is not completely new)
+        if (newFeedVersion.isSameAs(latestVersion)) {
             // Uploaded feed matches latest. Delete GTFS file because it is a duplicate.
             LOG.error("Upload version {} matches latest version {}.", newFeedVersion.id, latestVersion.id);
             newGtfsFile.delete();
