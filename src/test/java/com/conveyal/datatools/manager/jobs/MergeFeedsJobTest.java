@@ -259,6 +259,12 @@ public class MergeFeedsJobTest extends UnitTest {
 
         // 2 trips with onlyCalendarVersion's common_id service_id should be scoped
         sqlAssert.trips.assertCount(2, "service_id='Fake_Agency2:common_id'");
+
+        // 2 parent stations should reference the updated stop_id for Fake_Agency2
+        sqlAssert.stops.assertCount(2, "parent_station='Fake_Agency2:123'");
+
+        // 2 parent stations should reference the updated stop_id for Fake_Agency3
+        sqlAssert.stops.assertCount(2, "parent_station='Fake_Agency3:123'");
     }
 
     /**

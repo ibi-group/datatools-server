@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.jobs.feedmerge;
 
 import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
 import com.conveyal.gtfs.error.NewGTFSError;
+import com.conveyal.gtfs.loader.Field;
 import com.conveyal.gtfs.loader.Table;
 import com.csvreader.CsvReader;
 import org.slf4j.Logger;
@@ -31,6 +32,25 @@ public class StopsMergeLineContext extends MergeLineContext {
     @Override
     public boolean checkFieldsForMergeConflicts(Set<NewGTFSError> idErrors, FieldContext fieldContext) throws IOException {
         return checkRoutesAndStopsIds(idErrors, fieldContext);
+    }
+
+    @Override
+    public void checkFieldsForReferences(FieldContext fieldContext) {
+        updateParentStationReference(fieldContext);
+    }
+
+    /**
+     * If there is a parent station reference, update to include the scope stop_id.
+     */
+    private void updateParentStationReference(FieldContext fieldContext) {
+        if (fieldContext.nameEquals("parent_station")) {
+            String parentStation = fieldContext.getValue();
+            if (!"".equals(parentStation)) {
+                LOG.debug("Updating parent station to: {}", getIdWithScope(parentStation));
+                fieldContext.resetValue(parentStation);
+                updateAndRemapOutput(fieldContext);
+            }
+        }
     }
 
     /**
