@@ -43,8 +43,7 @@ public class StopsMergeLineContext extends MergeLineContext {
      * If there is a parent station reference, update to include the scope stop_id.
      */
     private void updateParentStationReference(FieldContext fieldContext) {
-        Field field = fieldContext.getField();
-        if (field.name.equals("parent_station")) {
+        if (fieldContext.nameEquals("parent_station")) {
             String parentStation = fieldContext.getValue();
             if (!"".equals(parentStation)) {
                 LOG.debug("Updating parent station to: " + getIdWithScope(parentStation));
