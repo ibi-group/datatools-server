@@ -164,6 +164,16 @@ public class TypedPersistence<T extends Model> {
     }
 
     /**
+     * Get all objects satisfying the supplied Mongo filter.
+     * This ties our persistence directly to Mongo for now but is expedient.
+     * We should really have a bit more abstraction here.
+     * @return
+     */
+    public List<T> getFilteredWithProjection (Bson filter, Bson projection) {
+        return mongoCollection.find(filter).projection(projection).into(new ArrayList<>());
+    }
+
+    /**
      * Expose the internal MongoCollection to the caller.
      * This ties our persistence directly to Mongo for now but is expedient.
      * We will write all the queries we need in the calling methods, then make an abstraction here on TypedPersistence

@@ -52,6 +52,7 @@ import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 import static com.mongodb.client.model.Filters.in;
+import static com.mongodb.client.model.Projections.include;
 import static com.mongodb.client.model.Updates.pull;
 
 /**
@@ -541,6 +542,25 @@ public class FeedSource extends Model implements Cloneable {
     @JsonIgnore
     public Collection<FeedVersion> retrieveFeedVersions() {
         return Persistence.feedVersions.getFiltered(eq("feedSourceId", this.id));
+    }
+
+    /**
+     * Get all of the feed versions for this source
+     * @return collection of feed versions
+     */
+    @JsonIgnore
+    public Collection<FeedVersion> retrieveFeedVersionSummaries() {
+        return Persistence.feedVersions.getFilteredWithProjection(
+            eq("feedSourceId", this.id),
+            include(
+                "dateCreated",
+                "lastUpdated",
+                "retrievalMethod",
+                "version",
+                "name",
+                "namespace"
+            )
+        );
     }
 
     /**

@@ -68,6 +68,15 @@ public class FeedVersionController  {
     /**
      * Get all feed versions for a given feedSource (whose ID is specified in the request).
      */
+    private static Collection<FeedVersion> getAllFeedVersionsForFeedSource01(Request req, Response res) {
+        // Check permissions and get the FeedSource whose FeedVersions we want.
+        FeedSource feedSource = requestFeedSourceById(req, Actions.VIEW);
+        return feedSource.retrieveFeedVersionSummaries();
+    }
+
+    /**
+     * Get all feed versions for a given feedSource (whose ID is specified in the request).
+     */
     private static Collection<FeedVersion> getAllFeedVersionsForFeedSource(Request req, Response res) {
         // Check permissions and get the FeedSource whose FeedVersions we want.
         FeedSource feedSource = requestFeedSourceById(req, Actions.VIEW);
@@ -413,6 +422,7 @@ public class FeedVersionController  {
         get(apiPrefix + "secure/feedversion/:id/download", FeedVersionController::downloadFeedVersionDirectly);
         get(apiPrefix + "secure/feedversion/:id/downloadtoken", FeedVersionController::getDownloadCredentials, json::write);
         post(apiPrefix + "secure/feedversion/:id/validate", FeedVersionController::validate, json::write);
+        //get(apiPrefix + "secure/feedversionsummaries", FeedVersionController::getAllFeedVersionsForFeedSource, json::write);
         get(apiPrefix + "secure/feedversion", FeedVersionController::getAllFeedVersionsForFeedSource, json::write);
         post(apiPrefix + "secure/feedversion", FeedVersionController::createFeedVersionViaUpload, json::write);
         post(apiPrefix + "secure/feedversion/shapes", FeedVersionController::exportGis, json::write);
