@@ -601,9 +601,13 @@ public class MergeLineContext {
                         skipRecord = true;
                         continue;
                     }
+                } else {
+                    // TODO: this method renames a lot of fields which don't seem to be updated
+                    // when using SERVICE_PERIOD. However, it may do other things which are needed even when
+                    // using SERVICE_PERIOD
+                    checkFieldsForReferences(fieldContext);
                 }
 
-                checkFieldsForReferences(fieldContext);
 
                 // If the current field is a foreign reference, check if the reference has been removed in the
                 // merged result. If this is the case (or other conditions are met), we will need to skip this
