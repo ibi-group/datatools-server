@@ -601,13 +601,12 @@ public class MergeLineContext {
                         skipRecord = true;
                         continue;
                     }
-                } else {
-                    // TODO: this method renames a lot of fields which don't seem to be updated
-                    // when using SERVICE_PERIOD. However, it may do other things which are needed even when
-                    // using SERVICE_PERIOD
+                } else if (job.mergeType.equals(REGIONAL)){
+                    // If merging feed versions from different agencies, the reference id is updated to avoid conflicts.
+                    // e.g. stop_id becomes Fake_Agency2:123 instead of 123. This method allows referencing fields to be
+                    // updated to the newer id.
                     checkFieldsForReferences(fieldContext);
                 }
-
 
                 // If the current field is a foreign reference, check if the reference has been removed in the
                 // merged result. If this is the case (or other conditions are met), we will need to skip this
