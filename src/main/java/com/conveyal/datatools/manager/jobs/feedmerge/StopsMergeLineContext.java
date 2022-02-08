@@ -47,7 +47,6 @@ public class StopsMergeLineContext extends MergeLineContext {
             String parentStation = fieldContext.getValue();
             if (!"".equals(parentStation)) {
                 LOG.debug("Updating parent station to: {}", getIdWithScope(parentStation));
-                fieldContext.resetValue(parentStation);
                 updateAndRemapOutput(fieldContext);
             }
         }
