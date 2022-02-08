@@ -1,4 +1,6 @@
-package com.conveyal.datatools.manager.jobs;
+package com.conveyal.datatools.manager.jobs.feedmerge;
+
+import com.conveyal.datatools.manager.jobs.MergeFeedsJob;
 
 /**
  * This enum contains the types of merge feeds that {@link MergeFeedsJob} can currently perform.

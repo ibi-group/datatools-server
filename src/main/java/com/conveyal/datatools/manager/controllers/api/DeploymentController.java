@@ -10,6 +10,7 @@ import com.conveyal.datatools.common.utils.aws.EC2Utils;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.DeployJob;
+import com.conveyal.datatools.manager.jobs.PeliasUpdateJob;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.EC2InstanceSummary;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -486,6 +487,23 @@ public class DeploymentController {
     }
 
     /**
+     * Create a Pelias update job based on an existing, live deployment
+     */
+    private static String peliasUpdate (Request req, Response res) {
+        Auth0UserProfile userProfile = req.attribute("user");
+        Deployment deployment = getDeploymentWithPermissions(req, res);
+        Project project = Persistence.projects.getById(deployment.projectId);
+        if (project == null) {
+            logMessageAndHalt(req, 400, "Internal reference error. Deployment's project ID is invalid");
+        }
+
+        // Execute the pelias update job and keep track of it
+        PeliasUpdateJob peliasUpdateJob = new PeliasUpdateJob(userProfile, "Updating Local Places Index", deployment);
+        JobUtils.heavyExecutor.execute(peliasUpdateJob);
+        return SparkUtils.formatJobMessage(peliasUpdateJob.jobId, "Pelias update initiating.");
+    }
+
+    /**
      * Uploads a file from Spark request object to the s3 bucket of the deployment the Pelias Update Job is associated with.
      * Follows https://github.com/ibi-group/datatools-server/blob/dev/src/main/java/com/conveyal/datatools/editor/controllers/api/EditorController.java#L111
      * @return      S3 URL the file has been uploaded to
@@ -537,6 +555,7 @@ public class DeploymentController {
         fullJson.addMixin(Deployment.class, Deployment.DeploymentWithEc2InstancesMixin.class);
 
         post(apiPrefix + "secure/deployments/:id/deploy/:target", DeploymentController::deploy, slimJson::write);
+        post(apiPrefix + "secure/deployments/:id/updatepelias", DeploymentController::peliasUpdate, slimJson::write);
         post(apiPrefix + "secure/deployments/:id/deploy/", ((request, response) -> {
             logMessageAndHalt(request, 400, "Must provide valid deployment target name");
             return null;

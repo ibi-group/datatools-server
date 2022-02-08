@@ -100,11 +100,12 @@ public class RtdCarrier {
 
     /**
      * Get the value stored in the database for a particular field.
-     *
-     * TODO: Are there cases where this might throw NPEs?
      */
     private String getValueForField (FeedSource source, String fieldName) {
-        return Persistence.externalFeedSourceProperties.getById(getPropId(source, fieldName)).value;
+        ExternalFeedSourceProperty property = Persistence.externalFeedSourceProperties.getById(
+            getPropId(source, fieldName)
+        );
+        return property != null ? property.value : null;
     }
 
     /**

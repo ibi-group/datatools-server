@@ -137,9 +137,8 @@ public class SparkUtils {
 
         if (statusCode >= 500) {
             LOG.error(message);
-
-            // create report to notify bugsnag if configured
-            ErrorUtils.reportToBugsnag(e, request.attribute("user"));
+            Auth0UserProfile userProfile = request != null ? request.attribute("user") : null;
+            ErrorUtils.reportToBugsnag(e, userProfile);
         }
 
         JsonNode json = getObjectNode(message, statusCode, e);

@@ -150,6 +150,16 @@ public class ProcessSingleFeedJob extends FeedVersionJob {
         ) {
             addNextJob(new AutoDeployJob(feedSource.retrieveProject(), owner));
         }
+
+        // If auto-publish job is enabled (MTC extension required),
+        // create an auto-publish job for feeds that are fetched automatically.
+        if (
+            DataManager.isExtensionEnabled("mtc") &&
+                feedSource.autoPublish &&
+                feedVersion.retrievalMethod == FeedRetrievalMethod.FETCHED_AUTOMATICALLY
+        ) {
+            addNextJob(new AutoPublishJob(feedSource, owner));
+        }
     }
 
     /**

@@ -407,10 +407,34 @@ public class FeedVersion extends Model implements Serializable {
      * @return whether high severity error types have been flagged.
      */
     private boolean hasHighSeverityErrorTypes() {
-        Set<String> highSeverityErrorTypes = Stream.of(NewGTFSErrorType.values())
-                .filter(type -> type.priority == Priority.HIGH)
-                .map(NewGTFSErrorType::toString)
-                .collect(Collectors.toSet());
+        return hasSpecificErrorTypes(Stream.of(NewGTFSErrorType.values())
+            .filter(type -> type.priority == Priority.HIGH));
+    }
+
+    /**
+     * Checks for issues that block feed publishing, consistent with UI.
+     */
+    public boolean hasBlockingIssuesForPublishing() {
+        if (this.validationResult.fatalException != null) return true;
+
+        return hasSpecificErrorTypes(Stream.of(
+            NewGTFSErrorType.ILLEGAL_FIELD_VALUE,
+            NewGTFSErrorType.MISSING_COLUMN,
+            NewGTFSErrorType.REFERENTIAL_INTEGRITY,
+            NewGTFSErrorType.SERVICE_WITHOUT_DAYS_OF_WEEK,
+            NewGTFSErrorType.TABLE_MISSING_COLUMN_HEADERS,
+            NewGTFSErrorType.TABLE_IN_SUBDIRECTORY,
+            NewGTFSErrorType.WRONG_NUMBER_OF_FIELDS
+        ));
+    }
+
+    /**
+     * Determines whether this feed has specific error types.
+     */
+    private boolean hasSpecificErrorTypes(Stream<NewGTFSErrorType> errorTypes) {
+        Set<String> highSeverityErrorTypes = errorTypes
+            .map(NewGTFSErrorType::toString)
+            .collect(Collectors.toSet());
         try (Connection connection = GTFS_DATA_SOURCE.getConnection()) {
             String sql = String.format("select distinct error_type from %s.errors", namespace);
             PreparedStatement preparedStatement = connection.prepareStatement(sql);
@@ -427,6 +451,7 @@ public class FeedVersion extends Model implements Serializable {
             // is invalid for one reason or another.
             return true;
         }
+
         return false;
     }
 
@@ -505,5 +530,15 @@ public class FeedVersion extends Model implements Serializable {
      */
     public void assignGtfsFileAttributes(File newGtfsFile) {
         assignGtfsFileAttributes(newGtfsFile, null);
+    }
+
+    /**
+     * Determines whether this feed version matches another one specified, i.e.,
+     * whether the otherVersion doesn't have a different hash, thus has not changed, compared to this one.
+     * @param otherVersion The version to compare the hash to.
+     * @return true if the otherVersion hash is the same, false if the hashes differ or the otherVersion is null.
+     */
+    public boolean isSameAs(FeedVersion otherVersion) {
+        return otherVersion != null && this.hash.equals(otherVersion.hash);
     }
 }
