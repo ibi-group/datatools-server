@@ -204,14 +204,13 @@ public class DataManager {
             String gtfs = IOUtils.toString(DataManager.class.getResourceAsStream("/gtfs/gtfs.yml"));
             gtfsConfig = yamlMapper.readTree(gtfs);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.AGENCY, DataManager.GTFS_DATA_SOURCE);
-            // NOTE: booking_rules is a GTFS Flex addition.
-            new EditorControllerImpl(EDITOR_API_PREFIX, Table.BOOKING_RULES, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.ATTRIBUTIONS, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.CALENDAR, DataManager.GTFS_DATA_SOURCE);
             // NOTE: fare_attributes controller handles updates to nested table fare_rules.
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.FARE_ATTRIBUTES, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.FEED_INFO, DataManager.GTFS_DATA_SOURCE);
-            // NOTE: location groups is a GTFS Flex addition.
+            // NOTE: Booking rules, location groups, locations and location shapes are GTFS Flex additions.
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.BOOKING_RULES, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.LOCATION_GROUPS, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.LOCATIONS, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.LOCATION_SHAPES, DataManager.GTFS_DATA_SOURCE);
