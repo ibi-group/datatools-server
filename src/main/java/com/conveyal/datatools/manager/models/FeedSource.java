@@ -183,6 +183,8 @@ public class FeedSource extends Model implements Cloneable {
      */
     public boolean flex;
 
+    public boolean flexUIFeaturesEnabled;
+
     /**
      * Create a new feed.
      */
@@ -764,9 +766,10 @@ public class FeedSource extends Model implements Cloneable {
     }
 
     /**
-     * Set the flex value according to the feed version loaded.
+     * Set the flex value according to the feed version loaded. If a flex feed is loaded, enable the UI flex features.
      */
     public void presetFlex(FeedVersion feedVersion) {
         flex = feedVersion.feedLoadResult.isGTFSFlex();
+        if (flex) flexUIFeaturesEnabled = true;
     }
 }
