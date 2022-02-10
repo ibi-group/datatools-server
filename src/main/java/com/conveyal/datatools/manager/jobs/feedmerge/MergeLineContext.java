@@ -236,36 +236,38 @@ public class MergeLineContext {
     public boolean checkForeignReferences(FieldContext fieldContext) throws IOException {
         Field field = fieldContext.getField();
         if (field.isForeignReference()) {
-            String key = getTableScopedValue(field.referenceTable, fieldContext.getValue());
-            // Check if we're performing a service period merge, this ref field is a service_id, and it
-            // is not found in the list of service_ids (e.g., it was removed).
-            boolean isValidServiceId = mergeFeedsResult.serviceIds.contains(fieldContext.getValueToWrite());
+            for (Table referenceTable: field.referenceTable) {
+                String key = getTableScopedValue(referenceTable, fieldContext.getValue());
+                // Check if we're performing a service period merge, this ref field is a service_id, and it
+                // is not found in the list of service_ids (e.g., it was removed).
+                boolean isValidServiceId = mergeFeedsResult.serviceIds.contains(fieldContext.getValueToWrite());
 
-            // If the current foreign ref points to another record that has
-            // been skipped or is a ref to a non-existent service_id during a service period merge, skip
-            // this record and add its primary key to the list of skipped IDs (so that other references
-            // can be properly omitted).
-            if (serviceIdHasKeyOrShouldBeSkipped(fieldContext, key, isValidServiceId)) {
-                // If a calendar#service_id has been skipped (it's listed in skippedIds), but there were
-                // valid service_ids found in calendar_dates, do not skip that record for both the
-                // calendar_date and any related trips.
-                if (fieldContext.nameEquals(SERVICE_ID) && isValidServiceId) {
-                    LOG.warn("Not skipping valid service_id {} for {} {}", fieldContext.getValueToWrite(), table.name, keyValue);
-                } else {
-                    String skippedKey = getTableScopedValue(keyValue);
-                    if (orderField != null) {
-                        skippedKey = String.join(":", skippedKey, getCsvValue(orderField));
+                // If the current foreign ref points to another record that has
+                // been skipped or is a ref to a non-existent service_id during a service period merge, skip
+                // this record and add its primary key to the list of skipped IDs (so that other references
+                // can be properly omitted).
+                if (serviceIdHasKeyOrShouldBeSkipped(fieldContext, key, isValidServiceId)) {
+                    // If a calendar#service_id has been skipped (it's listed in skippedIds), but there were
+                    // valid service_ids found in calendar_dates, do not skip that record for both the
+                    // calendar_date and any related trips.
+                    if (fieldContext.nameEquals(SERVICE_ID) && isValidServiceId) {
+                        LOG.warn("Not skipping valid service_id {} for {} {}", fieldContext.getValueToWrite(), table.name, keyValue);
+                    } else {
+                        String skippedKey = getTableScopedValue(keyValue);
+                        if (orderField != null) {
+                            skippedKey = String.join(":", skippedKey, getCsvValue(orderField));
+                        }
+                        mergeFeedsResult.skippedIds.add(skippedKey);
+                        return false;
                     }
-                    mergeFeedsResult.skippedIds.add(skippedKey);
-                    return false;
                 }
-            }
-            // If the field is a foreign reference, check to see whether the reference has been
-            // remapped due to a conflicting ID from another feed (e.g., calendar#service_id).
-            if (mergeFeedsResult.remappedIds.containsKey(key)) {
-                mergeFeedsResult.remappedReferences++;
-                // If the value has been remapped update the value to write.
-                fieldContext.setValueToWrite(mergeFeedsResult.remappedIds.get(key));
+                // If the field is a foreign reference, check to see whether the reference has been
+                // remapped due to a conflicting ID from another feed (e.g., calendar#service_id).
+                if (mergeFeedsResult.remappedIds.containsKey(key)) {
+                    mergeFeedsResult.remappedReferences++;
+                    // If the value has been remapped update the value to write.
+                    fieldContext.setValueToWrite(mergeFeedsResult.remappedIds.get(key));
+                }
             }
         }
         return true;
