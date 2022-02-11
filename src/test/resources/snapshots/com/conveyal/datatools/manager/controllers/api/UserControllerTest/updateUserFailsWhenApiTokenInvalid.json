@@ -1,0 +1,6 @@
+{
+  "code" : 404,
+  "detail" : null,
+  "message" : "Could not update user: User with id auth0|test-existing-user not found (or there are issues with the Auth0 configuration)",
+  "result" : "ERR"
+}

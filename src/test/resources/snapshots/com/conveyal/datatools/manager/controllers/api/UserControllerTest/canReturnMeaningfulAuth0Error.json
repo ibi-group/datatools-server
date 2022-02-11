@@ -1,0 +1,6 @@
+{
+  "code" : 409,
+  "detail" : null,
+  "message" : "An Auth0 error occurred: The user already exists.",
+  "result" : "ERR"
+}
