@@ -236,7 +236,7 @@ public class MergeLineContext {
     public boolean checkForeignReferences(FieldContext fieldContext) throws IOException {
         Field field = fieldContext.getField();
         if (field.isForeignReference()) {
-            for (Table referenceTable: field.referenceTable) {
+            for (Table referenceTable: field.referenceTables) {
                 String key = getTableScopedValue(referenceTable, fieldContext.getValue());
                 // Check if we're performing a service period merge, this ref field is a service_id, and it
                 // is not found in the list of service_ids (e.g., it was removed).
