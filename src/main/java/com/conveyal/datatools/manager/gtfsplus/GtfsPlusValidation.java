@@ -20,6 +20,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.zip.ZipEntry;
@@ -27,6 +28,24 @@ import java.util.zip.ZipFile;
 
 /** Generates a GTFS+ validation report for a file. */
 public class GtfsPlusValidation implements Serializable {
+    /**
+     *
+     */
+    public static final HashMap<Integer, Integer> ROUTE_SUBCATEGORY_TO_CATEGORY = new HashMap<Integer, Integer>() {
+        {
+            put(0, 0);
+            put(1, 1);
+            put(2, 1);
+            put(3, 1);
+            put(4, 2);
+            put(5, 2);
+            put(6, 2);
+            put(7, 3);
+            put(8, 3);
+            put(9, 3);
+            put(10, 4);
+        }
+    };
     private static final long serialVersionUID = 1L;
     private static final Logger LOG = LoggerFactory.getLogger(GtfsPlusValidation.class);
     private static final FeedStore gtfsPlusStore = new FeedStore(DataManager.GTFS_PLUS_SUBDIR);
@@ -265,5 +284,9 @@ public class GtfsPlusValidation implements Serializable {
     /** Construct missing ID text for validation issue description. */
     private static String missingIdText(String value, String entity) {
         return String.join(" ", entity, "ID", value, NOT_FOUND);
+    }
+
+    public static boolean isRouteSubcategoryValid(int routeCategoryId, int routeSubcategoryId) {
+        return ROUTE_SUBCATEGORY_TO_CATEGORY.get(routeSubcategoryId) == routeCategoryId;
     }
 }

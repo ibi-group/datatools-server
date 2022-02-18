@@ -9,11 +9,15 @@ import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Date;
+import java.util.stream.Stream;
 
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -60,6 +64,21 @@ public class GtfsPlusValidationTest extends UnitTest {
         assertThat(
             "Issues count for clean BART feed (quoted values) is zero",
             validation.issues.size(), equalTo(0)
+        );
+    }
+
+    @ParameterizedTest
+    @MethodSource("createRouteSubcategoryTestCases")
+    void canCheckRouteSubcategory(int routeCategoryId, int routeSubcategoryId, boolean result) {
+        assertThat(GtfsPlusValidation.isRouteSubcategoryValid(routeCategoryId, routeSubcategoryId), equalTo(result));
+    }
+
+    private static Stream<Arguments> createRouteSubcategoryTestCases() {
+        return Stream.of(
+            Arguments.of(0, 0, true),
+            Arguments.of(1, 3, true),
+            Arguments.of(1, 0, false),
+            Arguments.of(2, 5, true)
         );
     }
 }
