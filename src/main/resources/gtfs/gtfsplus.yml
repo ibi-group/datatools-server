@@ -341,10 +341,9 @@
     columnWidth: 6
     helpContent: From GTFS stop_times.txt file (Include Time point stops only)
 
-
 - id: route_attributes
   name: route_attributes.txt
-  helpContent: foobar
+  helpContent: From GTFS+ route_attributes.txt file
   fields:
     - name: route_id
       required: true
@@ -355,32 +354,53 @@
       required: true
       inputType: DROPDOWN
       options:
-        - value: 'Interregional / Intercity'
-        - value: 'Regional'
-        - value: Local
-        - value: Community
-        - value: Connector
+        - value: '0'
+          text: 'Interregional / Intercity'
+        - value: '1'
+          text: 'Regional'
+        - value: '2'
+          text: Local
+        - value: '3'
+          text: Community
+        - value: '4'
+          text: Connector
     - name: subcategory
       required: true
       inputType: DROPDOWN
       options:
-        - value: Interregional / Intercity
-        - value: Regional All Day
-        - value: Regional Peak
-        - value: Regional Owl
-        - value: Local All Day
-        - value: Local Peak
-        - value: Local Owl
-        - value: Community All Day
-        - value: Community Special
-        - value: Community On Demand
-        - value: First / Last Mile Connector
+        - value: '0'
+          text: Interregional / Intercity
+        - value: '1'
+          text: Regional All Day
+        - value: '2'
+          text: Regional Peak
+        - value: '3'
+          text: Regional Owl
+        - value: '4'
+          text: Local All Day
+        - value: '5'
+          text: Local Peak
+        - value: '6'
+          text: Local Owl
+        - value: '7'
+          text: Community All Day
+        - value: '8'
+          text: Community Special
+        - value: '9'
+          text: Community On Demand
+        - value: '10'
+          text: First / Last Mile Connector
     - name: running_way
       required: true
       inputType: DROPDOWN
       options:
-        - value: Fully / Primarily Dedicated
-        - value: "Limited Dedicated: Highway/HOV"
-        - value: "Limited Dedicated: Local Roadway"
-        - value: "Shared, With Signal Priority"
-        - value: "Shared, No Priority"
+        - value: '0'
+          text: Fully / Primarily Dedicated
+        - value: '1'
+          text: "Limited Dedicated: Highway/HOV"
+        - value: '2'
+          text: "Limited Dedicated: Local Roadway"
+        - value: '3'
+          text: "Shared, With Signal Priority"
+        - value: '4'
+          text: "Shared, No Priority"
