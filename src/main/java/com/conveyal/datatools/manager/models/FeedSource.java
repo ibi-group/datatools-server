@@ -769,7 +769,7 @@ public class FeedSource extends Model implements Cloneable {
      * Set the flex value according to the feed version loaded. If a flex feed is loaded, enable the UI flex features.
      */
     public void presetFlex(FeedVersion feedVersion) {
-        flex = feedVersion.feedLoadResult.isGTFSFlex();
+        if (feedVersion.feedLoadResult != null) flex = feedVersion.feedLoadResult.isGTFSFlex();
         if (flex) flexUIFeaturesEnabled = true;
     }
 }
