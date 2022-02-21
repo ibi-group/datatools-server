@@ -270,7 +270,7 @@
         <dependency>
             <groupId>com.github.conveyal</groupId>
             <artifactId>gtfs-lib</artifactId>
-            <version>f1f8659bfd5e97e36334ad726df0a15084d45219</version>
+            <version>4adfd10cd7c166e041f9d33f12f2daf4e8a4e90d</version>
             <!-- Exclusions added in order to silence SLF4J warnings about multiple bindings:
                 http://www.slf4j.org/codes.html#multiple_bindings
             -->
@@ -393,8 +393,8 @@
         <!-- Snapshotting library for testing -->
         <dependency>
             <groupId>com.github.ibi-group</groupId>
-            <artifactId>ibi-java-snapshot-matcher</artifactId>
-            <version>v1.0.0</version>
+            <artifactId>java-snapshot-matcher</artifactId>
+            <version>master</version>
             <scope>test</scope>
         </dependency>
         <!-- wiremock is used to mock http requests -->
