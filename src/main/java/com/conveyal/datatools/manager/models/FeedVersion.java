@@ -277,7 +277,7 @@ public class FeedVersion extends Model implements Serializable {
 
 
             FeedSource flexSetFeedSource = this.parentFeedSource();
-            flexSetFeedSource.flex = this.feedLoadResult.isGTFSFlex();
+            if (this.feedLoadResult != null) flexSetFeedSource.flex = this.feedLoadResult.isGTFSFlex();
             Persistence.feedSources.replace(this.parentFeedSource().id, flexSetFeedSource);
 
             if (this.feedLoadResult.fatalException != null) {
