@@ -3,7 +3,7 @@ package com.conveyal.datatools.manager.jobs.validation;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.gtfs.error.SQLErrorStorage;
 import com.conveyal.gtfs.loader.Feed;
-import com.conveyal.gtfs.validator.FeedValidator;
+import com.conveyal.gtfs.validator.RouteTypeValidator;
 import com.fasterxml.jackson.databind.JsonNode;
 
 import java.util.ArrayList;
@@ -12,21 +12,15 @@ import java.util.List;
 /**
  * Validates GTFS standard and extended route types that are defined in gtfs.yml.
  */
-public class RouteTypeValidator extends FeedValidator {
-    private static List<Integer> configuredRouteTypes = getConfiguredRouteTypes();
+public class RouteTypeValidatorBuilder {
+    private static final List<Integer> CONFIGURED_ROUTE_TYPES = getConfiguredRouteTypes();
 
-    public RouteTypeValidator(Feed feed, SQLErrorStorage errorStorage) {
-        super(feed, errorStorage);
+    public static RouteTypeValidator buildRouteValidator(Feed feed, SQLErrorStorage errorStorage) {
+        return new RouteTypeValidator(feed, errorStorage, CONFIGURED_ROUTE_TYPES);
     }
 
-    @Override
-    public void validate() {
-
-    }
-
-    public static boolean isRouteTypeValid(int routeType) {
-        return configuredRouteTypes.contains(routeType);
-    }
+    /** No public contructor */
+    private RouteTypeValidatorBuilder() { }
 
     /**
      * Builds a list of configured route types from gtfs.yaml.
