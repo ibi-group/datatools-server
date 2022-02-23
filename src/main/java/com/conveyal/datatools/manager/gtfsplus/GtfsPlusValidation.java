@@ -179,10 +179,11 @@ public class GtfsPlusValidation implements Serializable {
             }
             // Validate each value in row. Note: we iterate over the fields and not values because a row may be missing
             // columns, but we still want to validate that missing value (e.g., if it is missing a required field).
+            String[] rowValues = csvReader.getValues();
             for (int f = 0; f < fieldsFound.length; f++) {
                 // If value exists for index, use that. Otherwise, default to null to avoid out of bounds exception.
-                String val = f < recordColumnCount ? csvReader.get(f) : null;
-                validateTableValue(issues, tableId, rowIndex, val, fieldsFound[f], gtfsFeed);
+                String val = f < recordColumnCount ? rowValues[f] : null;
+                validateTableValue(issues, tableId, rowIndex, rowValues, val, fieldsFound, fieldsFound[f], gtfsFeed);
             }
             rowIndex++;
         }
@@ -210,7 +211,9 @@ public class GtfsPlusValidation implements Serializable {
         Collection<ValidationIssue> issues,
         String tableId,
         int rowIndex,
+        String[] allValues,
         String value,
+        JsonNode[] specFieldsFound,
         JsonNode specField,
         GTFSFeed gtfsFeed
     ) {
@@ -275,6 +278,26 @@ public class GtfsPlusValidation implements Serializable {
             case "GTFS_SERVICE":
                 if (!gtfsFeed.services.containsKey(value)) {
                     issues.add(new ValidationIssue(tableId, fieldName, rowIndex, missingIdText(value, "Service")));
+                }
+                break;
+            case "GTFS_PLUS_ROUTE_SUBCATEGORY":
+                int routeCategoryPosition = -1;
+                for (int i = 0; i < specFieldsFound.length; i++) {
+                    JsonNode field = specFieldsFound[i];
+                    if (field.get("name").asText().equals("category")) {
+                        routeCategoryPosition = i;
+                    }
+                }
+                int routeCategory = Integer.parseInt(allValues[routeCategoryPosition], 10);
+                int routeSubcategory = Integer.parseInt(value, 10);
+                if (!isRouteSubcategoryValid(routeCategory, routeSubcategory)) {
+                    issues.add(new ValidationIssue(tableId, fieldName, rowIndex,
+                        String.format(
+                            "Route subcategory %s is not valid for category %s",
+                            routeSubcategory,
+                            routeCategory
+                        )
+                    ));
                 }
                 break;
         }

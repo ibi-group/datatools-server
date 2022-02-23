@@ -350,7 +350,7 @@
       inputType: GTFS_ROUTE
       columnWidth: 4
       helpContent: From GTFS routes.txt file. This is necessary to maintain relationship between routes in this file and routes in the standard GTFS routes.txt file.
-    - name: category_id
+    - name: category
       required: true
       inputType: DROPDOWN
       options:
@@ -364,7 +364,7 @@
           text: Community
         - value: '4'
           text: Connector
-    - name: subcategory_id
+    - name: subcategory
       required: true
       inputType: GTFS_PLUS_ROUTE_SUBCATEGORY
       options:
@@ -390,7 +390,7 @@
           text: Community On Demand
         - value: '10'
           text: First / Last Mile Connector
-    - name: running_way_id
+    - name: running_way
       required: true
       inputType: DROPDOWN
       options:
