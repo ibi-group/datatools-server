@@ -2,11 +2,13 @@ package com.conveyal.datatools.manager.gtfsplus;
 
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
+import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.jobs.MergeFeedsJobTest;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.fasterxml.jackson.databind.JsonNode;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -84,10 +86,17 @@ public class GtfsPlusValidationTest extends UnitTest {
 
     @Test
     void canGetRouteCategory() {
-        String[] headers = new String[] {
-            "route_id", "category", "subcategory", "running_way"
+        JsonNode routeAttributesFieldsNode = GtfsPlusValidation
+            .findNode(DataManager.gtfsPlusConfig, "id", "route_attributes")
+            .get("fields");
+
+        JsonNode[] fields = new JsonNode[] {
+            GtfsPlusValidation.findNode(routeAttributesFieldsNode, "name", "route_id"),
+            GtfsPlusValidation.findNode(routeAttributesFieldsNode, "name", "category"),
+            GtfsPlusValidation.findNode(routeAttributesFieldsNode, "name", "subcategory"),
+            GtfsPlusValidation.findNode(routeAttributesFieldsNode, "name", "running_way")
         };
         String[] values = new String[] { "route_101", "1", "5", "7" };
-        assertThat(GtfsPlusValidation.getRouteCategory(values, headers), equalTo(1));
+        assertThat(GtfsPlusValidation.getRouteCategory(values, fields), equalTo(1));
     }
 }
