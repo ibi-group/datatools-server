@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.jobs.validation;
 
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
+import com.conveyal.gtfs.validator.RouteTypeValidator;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
@@ -27,5 +28,16 @@ class RouteTypeValidatorBuilderTest extends UnitTest {
         assertTrue(routeTypes.contains(106)); // regional rail
         assertTrue(routeTypes.contains(1702)); // Horse carriage
         assertFalse(routeTypes.contains(98)); // unknown
+    }
+
+    @Test
+    void canCreateRouteTypeValidator() {
+        RouteTypeValidator validator = RouteTypeValidatorBuilder.buildRouteValidator(null, null);
+
+        // Test a small subset of route types.
+        assertTrue(validator.isRouteTypeValid(3)); // bus
+        assertTrue(validator.isRouteTypeValid(106)); // regional rail
+        assertTrue(validator.isRouteTypeValid(1702)); // Horse carriage
+        assertFalse(validator.isRouteTypeValid(98)); // unknown
     }
 }
