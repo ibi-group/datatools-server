@@ -29,7 +29,7 @@ import java.util.zip.ZipFile;
 /** Generates a GTFS+ validation report for a file. */
 public class GtfsPlusValidation implements Serializable {
     /**
-     *
+     * Contains, for each route subcategory (first param), the corresponding route category.
      */
     public static final HashMap<Integer, Integer> ROUTE_SUBCATEGORY_TO_CATEGORY = new HashMap<Integer, Integer>() {
         {
@@ -115,16 +115,14 @@ public class GtfsPlusValidation implements Serializable {
         final Enumeration<? extends ZipEntry> entries = zipFile.entries();
         while (entries.hasMoreElements()) {
             final ZipEntry entry = entries.nextElement();
-            for (int i = 0; i < DataManager.gtfsPlusConfig.size(); i++) {
-                JsonNode tableNode = DataManager.gtfsPlusConfig.get(i);
-                if (tableNode.get("name").asText().equals(entry.getName())) {
-                    LOG.info("Validating GTFS+ table: " + entry.getName());
-                    gtfsPlusTableCount++;
-                    // Skip any byte order mark that may be present. Files must be UTF-8,
-                    // but the GTFS spec says that "files that include the UTF byte order mark are acceptable".
-                    InputStream bis = new BOMInputStream(zipFile.getInputStream(entry));
-                    validateTable(validation.issues, tableNode, bis, gtfsFeed);
-                }
+            JsonNode tableNode = findNode(DataManager.gtfsPlusConfig, "name", entry.getName());
+            if (tableNode != null) {
+                LOG.info("Validating GTFS+ table: " + entry.getName());
+                gtfsPlusTableCount++;
+                // Skip any byte order mark that may be present. Files must be UTF-8,
+                // but the GTFS spec says that "files that include the UTF byte order mark are acceptable".
+                InputStream bis = new BOMInputStream(zipFile.getInputStream(entry));
+                validateTable(validation.issues, tableNode, bis, gtfsFeed);
             }
         }
         gtfsFeed.close();
@@ -208,9 +206,9 @@ public class GtfsPlusValidation implements Serializable {
 
     /** Validate a single value for a GTFS+ table. */
     private static void validateTableValue(
-        Collection<ValidationIssue> issues,
-        String tableId,
-        int rowIndex,
+        Collection<ValidationIssue> issues, // used only for creating new val issue
+        String tableId, // used only for creating new val issue
+        int rowIndex, // used only for creating new val issue
         String[] allValues,
         String value,
         JsonNode[] specFieldsFound,
@@ -281,23 +279,20 @@ public class GtfsPlusValidation implements Serializable {
                 }
                 break;
             case "GTFS_PLUS_ROUTE_SUBCATEGORY":
-                int routeCategoryPosition = -1;
-                for (int i = 0; i < specFieldsFound.length; i++) {
-                    JsonNode field = specFieldsFound[i];
-                    if (field.get("name").asText().equals("category")) {
-                        routeCategoryPosition = i;
+                try {
+                    int routeCategory = getRouteCategory(allValues, specFieldsFound);
+                    int routeSubcategory = Integer.parseInt(value, 10);
+                    if (!isRouteSubcategoryValid(routeCategory, routeSubcategory)) {
+                        issues.add(new ValidationIssue(tableId, fieldName, rowIndex,
+                            String.format(
+                                "Route subcategory %s is not valid for category %s",
+                                routeSubcategory,
+                                routeCategory
+                            )
+                        ));
                     }
-                }
-                int routeCategory = Integer.parseInt(allValues[routeCategoryPosition], 10);
-                int routeSubcategory = Integer.parseInt(value, 10);
-                if (!isRouteSubcategoryValid(routeCategory, routeSubcategory)) {
-                    issues.add(new ValidationIssue(tableId, fieldName, rowIndex,
-                        String.format(
-                            "Route subcategory %s is not valid for category %s",
-                            routeSubcategory,
-                            routeCategory
-                        )
-                    ));
+                } catch (NumberFormatException nfe) {
+                    issues.add(new ValidationIssue(tableId, fieldName, rowIndex, "Value: " + value + " is not a valid option."));
                 }
                 break;
         }
@@ -309,6 +304,35 @@ public class GtfsPlusValidation implements Serializable {
         return String.join(" ", entity, "ID", value, NOT_FOUND);
     }
 
+    /**
+     * Helper method to extract the route category value when validating a route subcategory.
+     */
+    static int getRouteCategory(String[] allValues, JsonNode[] specFieldsFound) {
+        for (int i = 0; i < specFieldsFound.length; i++) {
+            JsonNode nameField = specFieldsFound[i].get("name");
+            if (nameField != null && nameField.asText().equals("category")) {
+                return Integer.parseInt(allValues[i], 10);
+            }
+        }
+        // Return an invalid value if the category was not found.
+        return -1;
+    }
+
+    /**
+     * Helper method to find a node with a given key and value.
+     */
+    public static JsonNode findNode(Iterable<JsonNode> node, String key, String keyValue) {
+        for (JsonNode tableNode : node) {
+            if (tableNode.get(key).asText().equals(keyValue)) {
+                return tableNode;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Determines if a route subcategory is a valid value of (belongs to) a given route category.
+     */
     public static boolean isRouteSubcategoryValid(int routeCategoryId, int routeSubcategoryId) {
         return ROUTE_SUBCATEGORY_TO_CATEGORY.get(routeSubcategoryId) == routeCategoryId;
     }
