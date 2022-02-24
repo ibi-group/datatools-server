@@ -20,7 +20,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Enumeration;
-import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.zip.ZipEntry;
@@ -28,24 +27,6 @@ import java.util.zip.ZipFile;
 
 /** Generates a GTFS+ validation report for a file. */
 public class GtfsPlusValidation implements Serializable {
-    /**
-     * Contains, for each route subcategory (first param), the corresponding route category.
-     */
-    public static final HashMap<Integer, Integer> ROUTE_SUBCATEGORY_TO_CATEGORY = new HashMap<Integer, Integer>() {
-        {
-            put(0, 0);
-            put(1, 1);
-            put(2, 1);
-            put(3, 1);
-            put(4, 2);
-            put(5, 2);
-            put(6, 2);
-            put(7, 3);
-            put(8, 3);
-            put(9, 3);
-            put(10, 4);
-        }
-    };
     private static final long serialVersionUID = 1L;
     private static final Logger LOG = LoggerFactory.getLogger(GtfsPlusValidation.class);
     private static final FeedStore gtfsPlusStore = new FeedStore(DataManager.GTFS_PLUS_SUBDIR);
@@ -243,6 +224,34 @@ public class GtfsPlusValidation implements Serializable {
                 if (invalid) {
                     issues.add(new ValidationIssue(tableId, fieldName, rowIndex, "Value: " + value + " is not a valid option."));
                 }
+
+                // Perform the parent value check if a parent field is set in the field spec.
+                JsonNode parentFieldNode = specField.get("parent");
+                if (parentFieldNode != null) {
+                    int parentValuePosition = getParentFieldPosition(specFieldsFound, parentFieldNode.asText());
+                    String parentValue = parentValuePosition >= 0
+                        ? allValues[parentValuePosition]
+                        : null;
+                    if (!isValueValidWithParent(parentValue, value, specField)) {
+                        // Generate a message showing the text that corresponds
+                        // to the category and subcategory values.
+                        String textForValue = getOptionText(value, specField);
+                        String textForParent = parentValue;
+                        if (parentValuePosition >= 0) {
+                            textForParent = getOptionText(textForParent, specFieldsFound[parentValuePosition]);
+                        }
+
+                        issues.add(new ValidationIssue(tableId, fieldName, rowIndex,
+                            String.format(
+                                "Value '%s' is not valid field '%s' is '%s'",
+                                textForValue,
+                                parentFieldNode.asText(),
+                                textForParent
+                            )
+                        ));
+                    }
+                }
+
                 break;
             case "TEXT":
                 // check if value exceeds max length requirement
@@ -276,34 +285,6 @@ public class GtfsPlusValidation implements Serializable {
             case "GTFS_SERVICE":
                 if (!gtfsFeed.services.containsKey(value)) {
                     issues.add(new ValidationIssue(tableId, fieldName, rowIndex, missingIdText(value, "Service")));
-                }
-                break;
-            case "GTFS_PLUS_ROUTE_SUBCATEGORY":
-                try {
-                    int routeCategoryPosition = getRouteCategorySpecPosition(specFieldsFound);
-                    int routeCategory = routeCategoryPosition >= 0
-                        ? Integer.parseInt(allValues[routeCategoryPosition], 10)
-                        : -1;
-                    int routeSubcategory = Integer.parseInt(value, 10);
-                    if (!isRouteSubcategoryValid(routeCategory, routeSubcategory)) {
-                        // Generate a message showing the text that corresponds
-                        // to the category and subcategory values.
-                        String subcategoryText = getOptionText(value, specField);
-                        String categoryText = String.valueOf(routeCategory);
-                        if (routeCategoryPosition >= 0) {
-                            categoryText = getOptionText(categoryText, specFieldsFound[routeCategoryPosition]);
-                        }
-
-                        issues.add(new ValidationIssue(tableId, fieldName, rowIndex,
-                            String.format(
-                                "Route subcategory '%s' is not valid for category '%s'",
-                                subcategoryText,
-                                categoryText
-                            )
-                        ));
-                    }
-                } catch (NumberFormatException nfe) {
-                    issues.add(new ValidationIssue(tableId, fieldName, rowIndex, "Value: " + value + " is not a valid option."));
                 }
                 break;
         }
@@ -340,9 +321,9 @@ public class GtfsPlusValidation implements Serializable {
     /**
      * Helper method to extract the route category value when validating a route subcategory.
      */
-    static int getRouteCategorySpecPosition(JsonNode[] specFieldsFound) {
+    static int getParentFieldPosition(JsonNode[] specFieldsFound, String parentField) {
         for (int i = 0; i < specFieldsFound.length; i++) {
-            if (nodeHasKey(specFieldsFound[i], "name", "category")) {
+            if (nodeHasKey(specFieldsFound[i], "name", parentField)) {
                 return i;
             }
         }
@@ -367,7 +348,20 @@ public class GtfsPlusValidation implements Serializable {
     /**
      * Determines if a route subcategory is a valid value of (belongs to) a given route category.
      */
-    public static boolean isRouteSubcategoryValid(int routeCategoryId, int routeSubcategoryId) {
-        return ROUTE_SUBCATEGORY_TO_CATEGORY.get(routeSubcategoryId) == routeCategoryId;
+    public static boolean isValueValidWithParent(String parentValue, String value, JsonNode specField) {
+        String optionParentValue = getOptionParentValue(value, specField);
+        // If no parent value is defined, the value is always valid.
+        return optionParentValue == null || optionParentValue.equals(parentValue);
+    }
+
+    public static String getOptionParentValue(String value, JsonNode specField) {
+        JsonNode optionNode = findNode(specField.get("options"), "value", value);
+        if (optionNode != null) {
+            JsonNode parentValueNode = optionNode.get("parentValue");
+            if (parentValueNode != null) {
+                return parentValueNode.asText();
+            }
+        }
+        return null;
     }
 }

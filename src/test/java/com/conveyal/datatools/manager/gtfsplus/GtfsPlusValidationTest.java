@@ -26,6 +26,7 @@ import java.util.stream.Stream;
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
+import static org.hamcrest.Matchers.is;
 
 /** Runs test to verify that GTFS+ validation runs as expected. */
 public class GtfsPlusValidationTest extends UnitTest {
@@ -83,17 +84,35 @@ public class GtfsPlusValidationTest extends UnitTest {
 
     @ParameterizedTest
     @MethodSource("createRouteSubcategoryTestCases")
-    void canCheckRouteSubcategory(int routeCategoryId, int routeSubcategoryId, boolean result) {
-        assertThat(GtfsPlusValidation.isRouteSubcategoryValid(routeCategoryId, routeSubcategoryId), equalTo(result));
+    void canCheckRouteSubcategory(String routeCategoryId, String routeSubcategoryId, boolean result) {
+        assertThat(GtfsPlusValidation.isValueValidWithParent(
+            routeCategoryId,
+            routeSubcategoryId,
+            Objects.requireNonNull(
+                GtfsPlusValidation.findNode(routeAttributesFieldsNode, "name", "subcategory")
+            )
+        ), equalTo(result));
     }
 
     private static Stream<Arguments> createRouteSubcategoryTestCases() {
         return Stream.of(
-            Arguments.of(0, 0, true),
-            Arguments.of(1, 3, true),
-            Arguments.of(1, 0, false),
-            Arguments.of(2, 5, true)
+            Arguments.of("0", "0", true),
+            Arguments.of("1", "3", true),
+            Arguments.of("1", "0", false),
+            Arguments.of("2", "5", true)
         );
+    }
+
+    @Test
+    void canCheckRouteCategory() {
+        // If parent is not defined in the spec, the value should be valid.
+        assertThat(GtfsPlusValidation.isValueValidWithParent(
+            null,
+            "anything",
+            Objects.requireNonNull(
+                GtfsPlusValidation.findNode(routeAttributesFieldsNode, "name", "category")
+            )
+        ), is(true));
     }
 
     @Test
@@ -104,7 +123,7 @@ public class GtfsPlusValidationTest extends UnitTest {
             GtfsPlusValidation.findNode(routeAttributesFieldsNode, "name", "subcategory"),
             GtfsPlusValidation.findNode(routeAttributesFieldsNode, "name", "running_way")
         };
-        assertThat(GtfsPlusValidation.getRouteCategorySpecPosition(fields), equalTo(1));
+        assertThat(GtfsPlusValidation.getParentFieldPosition(fields, "category"), equalTo(1));
     }
 
     @Test
@@ -117,5 +136,16 @@ public class GtfsPlusValidationTest extends UnitTest {
                 )
             ),
             equalTo("Regional Peak"));
+    }
+
+    @Test
+    void canBuildRouteSubcategoryToCategoryMap() {
+        assertThat(
+            GtfsPlusValidation.getOptionParentValue(
+                "7",
+                Objects.requireNonNull(
+                    GtfsPlusValidation.findNode(routeAttributesFieldsNode, "name", "subcategory")
+                )
+            ), equalTo("3"));
     }
 }
