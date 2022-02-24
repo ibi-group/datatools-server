@@ -355,9 +355,9 @@
       inputType: DROPDOWN
       options:
         - value: '0'
-          text: 'Interregional / Intercity'
+          text: Interregional / Intercity
         - value: '1'
-          text: 'Regional'
+          text: Regional
         - value: '2'
           text: Local
         - value: '3'

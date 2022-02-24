@@ -280,14 +280,25 @@ public class GtfsPlusValidation implements Serializable {
                 break;
             case "GTFS_PLUS_ROUTE_SUBCATEGORY":
                 try {
-                    int routeCategory = getRouteCategory(allValues, specFieldsFound);
+                    int routeCategoryPosition = getRouteCategorySpecPosition(specFieldsFound);
+                    int routeCategory = routeCategoryPosition >= 0
+                        ? Integer.parseInt(allValues[routeCategoryPosition], 10)
+                        : -1;
                     int routeSubcategory = Integer.parseInt(value, 10);
                     if (!isRouteSubcategoryValid(routeCategory, routeSubcategory)) {
+                        // Generate a message showing the text that corresponds
+                        // to the category and subcategory values.
+                        String subcategoryText = getOptionText(value, specField);
+                        String categoryText = String.valueOf(routeCategory);
+                        if (routeCategoryPosition >= 0) {
+                            categoryText = getOptionText(categoryText, specFieldsFound[routeCategoryPosition]);
+                        }
+
                         issues.add(new ValidationIssue(tableId, fieldName, rowIndex,
                             String.format(
-                                "Route subcategory %s is not valid for category %s",
-                                routeSubcategory,
-                                routeCategory
+                                "Route subcategory '%s' is not valid for category '%s'",
+                                subcategoryText,
+                                categoryText
                             )
                         ));
                     }
@@ -305,26 +316,49 @@ public class GtfsPlusValidation implements Serializable {
     }
 
     /**
-     * Helper method to extract the route category value when validating a route subcategory.
+     * Gets the displayed text for an option.
      */
-    static int getRouteCategory(String[] allValues, JsonNode[] specFieldsFound) {
-        for (int i = 0; i < specFieldsFound.length; i++) {
-            JsonNode nameField = specFieldsFound[i].get("name");
-            if (nameField != null && nameField.asText().equals("category")) {
-                return Integer.parseInt(allValues[i], 10);
+    static String getOptionText(String value, JsonNode specField) {
+        JsonNode optionNode = findNode(specField.get("options"), "value", value);
+        if (optionNode != null) {
+            JsonNode textNode = optionNode.get("text");
+            if (textNode != null) {
+                return textNode.asText();
             }
         }
-        // Return an invalid value if the category was not found.
+        return value;
+    }
+
+    /**
+     * Determines whether a node has a given key and value.
+     */
+    private static boolean nodeHasKey(JsonNode jsonNode, String key, String keyValue) {
+        JsonNode nameField = jsonNode.get(key);
+        return nameField != null && nameField.asText().equals(keyValue);
+    }
+
+    /**
+     * Helper method to extract the route category value when validating a route subcategory.
+     */
+    static int getRouteCategorySpecPosition(JsonNode[] specFieldsFound) {
+        for (int i = 0; i < specFieldsFound.length; i++) {
+            if (nodeHasKey(specFieldsFound[i], "name", "category")) {
+                return i;
+            }
+        }
+
         return -1;
     }
 
     /**
      * Helper method to find a node with a given key and value.
      */
-    public static JsonNode findNode(Iterable<JsonNode> node, String key, String keyValue) {
-        for (JsonNode tableNode : node) {
-            if (tableNode.get(key).asText().equals(keyValue)) {
-                return tableNode;
+    public static JsonNode findNode(JsonNode parentNode, String key, String keyValue) {
+        if (parentNode != null) {
+            for (JsonNode childNode : parentNode) {
+                if (nodeHasKey(childNode, key, keyValue)) {
+                    return childNode;
+                }
             }
         }
         return null;

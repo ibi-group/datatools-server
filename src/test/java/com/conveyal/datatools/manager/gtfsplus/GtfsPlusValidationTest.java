@@ -9,6 +9,7 @@ import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.databind.JsonNode;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -19,6 +20,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Date;
+import java.util.Objects;
 import java.util.stream.Stream;
 
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
@@ -31,6 +33,8 @@ public class GtfsPlusValidationTest extends UnitTest {
     private static FeedVersion bartVersion1;
     private static FeedVersion bartVersion1WithQuotedValues;
     private static Project project;
+    private static JsonNode routeAttributesFieldsNode;
+
 
     /**
      * Create feed version for GTFS+ validation test.
@@ -41,13 +45,21 @@ public class GtfsPlusValidationTest extends UnitTest {
         DatatoolsTest.setUp();
         // Create a project, feed sources, and feed versions to merge.
         project = new Project();
-        project.name = String.format("Test %s", new Date().toString());
+        project.name = String.format("Test %s", new Date());
         Persistence.projects.create(project);
         FeedSource bart = new FeedSource("BART");
         bart.projectId = project.id;
         Persistence.feedSources.create(bart);
         bartVersion1 = createFeedVersionFromGtfsZip(bart, "bart_new.zip");
         bartVersion1WithQuotedValues = createFeedVersionFromGtfsZip(bart, "bart_new_with_quoted_values.zip");
+        routeAttributesFieldsNode = Objects.requireNonNull(
+                GtfsPlusValidation.findNode(DataManager.gtfsPlusConfig, "id", "route_attributes")
+            ).get("fields");
+    }
+
+    @AfterAll
+    static void tearDown() {
+        project.delete();
     }
 
     @Test
@@ -85,18 +97,25 @@ public class GtfsPlusValidationTest extends UnitTest {
     }
 
     @Test
-    void canGetRouteCategory() {
-        JsonNode routeAttributesFieldsNode = GtfsPlusValidation
-            .findNode(DataManager.gtfsPlusConfig, "id", "route_attributes")
-            .get("fields");
-
+    void canGetRouteCategorySpecPosition() {
         JsonNode[] fields = new JsonNode[] {
             GtfsPlusValidation.findNode(routeAttributesFieldsNode, "name", "route_id"),
             GtfsPlusValidation.findNode(routeAttributesFieldsNode, "name", "category"),
             GtfsPlusValidation.findNode(routeAttributesFieldsNode, "name", "subcategory"),
             GtfsPlusValidation.findNode(routeAttributesFieldsNode, "name", "running_way")
         };
-        String[] values = new String[] { "route_101", "1", "5", "7" };
-        assertThat(GtfsPlusValidation.getRouteCategory(values, fields), equalTo(1));
+        assertThat(GtfsPlusValidation.getRouteCategorySpecPosition(fields), equalTo(1));
+    }
+
+    @Test
+    void canGetOptionText() {
+        assertThat(
+            GtfsPlusValidation.getOptionText(
+                "2",
+                Objects.requireNonNull(
+                    GtfsPlusValidation.findNode(routeAttributesFieldsNode, "name", "subcategory")
+                )
+            ),
+            equalTo("Regional Peak"));
     }
 }
