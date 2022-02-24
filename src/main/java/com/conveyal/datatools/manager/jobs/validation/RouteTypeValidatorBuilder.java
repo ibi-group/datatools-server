@@ -19,40 +19,43 @@ public class RouteTypeValidatorBuilder {
         return new RouteTypeValidator(feed, errorStorage, CONFIGURED_ROUTE_TYPES);
     }
 
-    /** No public contructor */
+    /** No public constructor. */
     private RouteTypeValidatorBuilder() { }
 
     /**
      * Builds a list of configured route types from gtfs.yaml.
      */
-    private static List<Integer> getConfiguredRouteTypes() {
+    static List<Integer> getConfiguredRouteTypes() {
         List<Integer> options = new ArrayList<>();
 
-        // Find the routes.txt node
-        for (JsonNode entry : DataManager.gtfsConfig) {
-            JsonNode idNode = entry.get("id");
-            if (idNode != null && idNode.asText().equals("route")) {
-                // Find the route types node
-                JsonNode fieldsNode = entry.get("fields");
-                if (fieldsNode != null) {
-                    for (JsonNode fileField : fieldsNode) {
-                        JsonNode nameNode = fileField.get("name");
-                        if (nameNode != null && nameNode.asText().equals("route_type")) {
-                            // Collect all options
-                            JsonNode optionsNode = fileField.get("options");
-                            if (optionsNode != null) {
-                                for (JsonNode option : optionsNode) {
-                                    JsonNode valueNode = option.get("value");
-                                    if (valueNode != null) {
-                                        options.add(valueNode.intValue());
-                                    }
-                                }
-                            }
-                        }
+        // Find the node that describes the route fields.
+        JsonNode routeFieldsNode = getNode(DataManager.gtfsConfig, "id", "route", "fields");
+        if (routeFieldsNode != null) {
+            // Find the node that describes the route type options.
+            JsonNode routeTypeOptionsNode = getNode(routeFieldsNode, "name", "route_type", "options");
+            if (routeTypeOptionsNode != null) {
+                // Collect the values in the child nodes.
+                for (JsonNode option : routeTypeOptionsNode) {
+                    JsonNode valueNode = option.get("value");
+                    if (valueNode != null) {
+                        options.add(valueNode.intValue());
                     }
                 }
             }
         }
         return options;
+    }
+
+    /**
+     * Helper method to get a node with the given key and value
+     */
+    private static JsonNode getNode(JsonNode parentNode, String key, String keyValue, String targetKey) {
+        for (JsonNode entry : parentNode) {
+            JsonNode keyNode = entry.get(key);
+            if (keyNode != null && keyNode.asText().equals(keyValue)) {
+                return entry.get(targetKey);
+            }
+        }
+        return null;
     }
 }
