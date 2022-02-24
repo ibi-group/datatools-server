@@ -206,9 +206,9 @@ public class GtfsPlusValidation implements Serializable {
 
     /** Validate a single value for a GTFS+ table. */
     private static void validateTableValue(
-        Collection<ValidationIssue> issues, // used only for creating new val issue
-        String tableId, // used only for creating new val issue
-        int rowIndex, // used only for creating new val issue
+        Collection<ValidationIssue> issues,
+        String tableId,
+        int rowIndex,
         String[] allValues,
         String value,
         JsonNode[] specFieldsFound,
