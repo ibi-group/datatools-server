@@ -503,6 +503,14 @@ public class MergeLineContext {
         // Default is to do nothing.
     }
 
+    /**
+     * Overridable placeholder for checking internal table references. E.g. parent_station references stop_id. It is
+     * illegal to have a self reference within a {@link Table} configuration.
+     */
+    public void checkFieldsForReferences(FieldContext fieldContext) {
+        // Default is to do nothing.
+    }
+
     public void scopeValueIfNeeded(FieldContext fieldContext) {
         boolean isKeyField = fieldContext.getField().isForeignReference() || fieldContext.nameEquals(keyField);
         if (job.mergeType.equals(REGIONAL) && isKeyField && !fieldContext.getValue().isEmpty()) {
@@ -593,7 +601,13 @@ public class MergeLineContext {
                         skipRecord = true;
                         continue;
                     }
+                } else if (job.mergeType.equals(REGIONAL)) {
+                    // If merging feed versions from different agencies, the reference id is updated to avoid conflicts.
+                    // e.g. stop_id becomes Fake_Agency2:123 instead of 123. This method allows referencing fields to be
+                    // updated to the newer id.
+                    checkFieldsForReferences(fieldContext);
                 }
+
                 // If the current field is a foreign reference, check if the reference has been removed in the
                 // merged result. If this is the case (or other conditions are met), we will need to skip this
                 // record. Likewise, if the reference has been modified, ensure that the value written to the
