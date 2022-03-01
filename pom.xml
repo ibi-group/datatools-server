@@ -194,7 +194,7 @@
             </snapshots>
             <id>opengeo</id>
             <name>OpenGeo Maven Repository</name>
-            <url>http://repo.opengeo.org</url>
+            <url>https://repo.opengeo.org</url>
         </repository>
         <repository>
             <id>sonatype</id>
@@ -278,7 +278,7 @@
         <dependency>
             <groupId>com.github.conveyal</groupId>
             <artifactId>gtfs-lib</artifactId>
-            <version>1448ff2a120c9df2526b89c8ac00b47bfb058422</version>
+            <version>47f961ffcdbacdea1536dbc86c2283a59663be74</version>
             <!-- Exclusions added in order to silence SLF4J warnings about multiple bindings:
                 http://www.slf4j.org/codes.html#multiple_bindings
             -->
