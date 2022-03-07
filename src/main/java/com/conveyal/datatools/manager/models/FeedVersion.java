@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.models;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.jobs.validation.RouteTypeValidatorBuilder;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
@@ -353,9 +354,14 @@ public class FeedVersion extends Model implements Serializable {
             // Validate the feed version.
             // Certain extensions, if enabled, have extra validators
             if (isExtensionEnabled("mtc")) {
-                validationResult = GTFS.validate(feedLoadResult.uniqueIdentifier, DataManager.GTFS_DATA_SOURCE, MTCValidator::new);
+                validationResult = GTFS.validate(feedLoadResult.uniqueIdentifier, DataManager.GTFS_DATA_SOURCE,
+                    RouteTypeValidatorBuilder::buildRouteValidator,
+                    MTCValidator::new
+                );
             } else {
-                validationResult = GTFS.validate(feedLoadResult.uniqueIdentifier, DataManager.GTFS_DATA_SOURCE);
+                validationResult = GTFS.validate(feedLoadResult.uniqueIdentifier, DataManager.GTFS_DATA_SOURCE,
+                    RouteTypeValidatorBuilder::buildRouteValidator
+                );
             }
         } catch (Exception e) {
             status.fail(String.format("Unable to validate feed %s", this.id), e);

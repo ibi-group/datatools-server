@@ -117,6 +117,9 @@ public class DataManager {
         loadConfig(args);
         loadProperties();
 
+        String gtfs = IOUtils.toString(DataManager.class.getResourceAsStream("/gtfs/gtfs.yml"));
+        gtfsConfig = yamlMapper.readTree(gtfs);
+
         ErrorUtils.initialize();
 
         // Optionally set port for server. Otherwise, Spark defaults to 4567.
@@ -201,8 +204,6 @@ public class DataManager {
             SnapshotController.register(EDITOR_API_PREFIX);
             EditorLockController.register(EDITOR_API_PREFIX);
 
-            String gtfs = IOUtils.toString(DataManager.class.getResourceAsStream("/gtfs/gtfs.yml"));
-            gtfsConfig = yamlMapper.readTree(gtfs);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.AGENCY, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.ATTRIBUTIONS, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.CALENDAR, DataManager.GTFS_DATA_SOURCE);
