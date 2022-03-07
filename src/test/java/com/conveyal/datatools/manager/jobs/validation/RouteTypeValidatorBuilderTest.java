@@ -15,7 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class RouteTypeValidatorBuilderTest extends UnitTest {
     @BeforeAll
     static void setUp() throws IOException {
-        // start server if it isn't already running
+        // Start server if it isn't already running.
         DatatoolsTest.setUp();
     }
 
