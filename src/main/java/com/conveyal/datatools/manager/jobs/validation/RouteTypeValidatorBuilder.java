@@ -47,7 +47,7 @@ public class RouteTypeValidatorBuilder {
     }
 
     /**
-     * Helper method to get a node with the given key and value
+     * Helper method to get a node with the given key and value.
      */
     private static JsonNode getNode(JsonNode parentNode, String key, String keyValue, String targetKey) {
         for (JsonNode entry : parentNode) {
