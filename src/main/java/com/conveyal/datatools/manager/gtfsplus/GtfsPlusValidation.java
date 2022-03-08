@@ -300,7 +300,7 @@ public class GtfsPlusValidation implements Serializable {
      * Gets the displayed text for an option.
      */
     static String getOptionText(String value, JsonNode specField) {
-        JsonNode optionNode = findNode(specField.get("options"), "value", value);
+        JsonNode optionNode = findOptionNode(value, specField);
         if (optionNode != null) {
             JsonNode textNode = optionNode.get("text");
             if (textNode != null) {
@@ -349,13 +349,34 @@ public class GtfsPlusValidation implements Serializable {
      * Determines if a route subcategory is a valid value of (belongs to) a given route category.
      */
     public static boolean isValueValidWithParent(String parentValue, String value, JsonNode specField) {
-        String optionParentValue = getOptionParentValue(value, specField);
+        // If the provided value is not one of the specField options, then the value is not valid.
+        JsonNode optionNode = findOptionNode(value, specField);
+        if (optionNode == null) return false;
+
+        String optionParentValue = getOptionParentValue(optionNode);
         // If no parent value is defined, the value is always valid.
         return optionParentValue == null || optionParentValue.equals(parentValue);
     }
 
+    /**
+     * Returns the parent value, if any, for an option (used for tests).
+     */
     public static String getOptionParentValue(String value, JsonNode specField) {
-        JsonNode optionNode = findNode(specField.get("options"), "value", value);
+        JsonNode optionNode = findOptionNode(value, specField);
+        return getOptionParentValue(optionNode);
+    }
+
+    /**
+     * Finds an option node, if any, with the given value under the given specField.
+     */
+    private static JsonNode findOptionNode(String value, JsonNode specField) {
+        return findNode(specField.get("options"), "value", value);
+    }
+
+    /**
+     * Returns the parent value, if any, for an option node.
+     */
+    private static String getOptionParentValue(JsonNode optionNode) {
         if (optionNode != null) {
             JsonNode parentValueNode = optionNode.get("parentValue");
             if (parentValueNode != null) {

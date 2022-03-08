@@ -26,7 +26,6 @@ import java.util.stream.Stream;
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
-import static org.hamcrest.Matchers.is;
 
 /** Runs test to verify that GTFS+ validation runs as expected. */
 public class GtfsPlusValidationTest extends UnitTest {
@@ -96,23 +95,13 @@ public class GtfsPlusValidationTest extends UnitTest {
 
     private static Stream<Arguments> createRouteSubcategoryTestCases() {
         return Stream.of(
-            Arguments.of("0", "0", true),
-            Arguments.of("1", "3", true),
-            Arguments.of("1", "0", false),
-            Arguments.of("2", "5", true)
+            // The values "0", "3" below are not valid subcategory options and should be rejected.
+            Arguments.of("0", "0", false),
+            Arguments.of("1", "3", false),
+            // The values "201", "403" below are correct.
+            Arguments.of("2", "201", true),
+            Arguments.of("4", "403", true)
         );
-    }
-
-    @Test
-    void canCheckRouteCategory() {
-        // If parent is not defined in the spec, the value should be valid.
-        assertThat(GtfsPlusValidation.isValueValidWithParent(
-            null,
-            "anything",
-            Objects.requireNonNull(
-                GtfsPlusValidation.findNode(routeAttributesFieldsNode, "name", "category")
-            )
-        ), is(true));
     }
 
     @Test
@@ -130,7 +119,7 @@ public class GtfsPlusValidationTest extends UnitTest {
     void canGetOptionText() {
         assertThat(
             GtfsPlusValidation.getOptionText(
-                "2",
+                "202",
                 Objects.requireNonNull(
                     GtfsPlusValidation.findNode(routeAttributesFieldsNode, "name", "subcategory")
                 )
@@ -142,7 +131,7 @@ public class GtfsPlusValidationTest extends UnitTest {
     void canBuildRouteSubcategoryToCategoryMap() {
         assertThat(
             GtfsPlusValidation.getOptionParentValue(
-                "7",
+                "302",
                 Objects.requireNonNull(
                     GtfsPlusValidation.findNode(routeAttributesFieldsNode, "name", "subcategory")
                 )
