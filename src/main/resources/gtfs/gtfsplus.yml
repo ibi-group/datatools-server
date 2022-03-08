@@ -343,7 +343,7 @@
 
 - id: route_attributes
   name: route_attributes.txt
-  helpContent: From GTFS+ route_attributes.txt file
+  helpContent: This file contains route attributes such as geographical extent, times of service, and right-of-way type.
   fields:
     - name: route_id
       required: true
@@ -354,65 +354,65 @@
       required: true
       inputType: DROPDOWN
       options:
-        - value: '0'
-          text: 'Interregional / Intercity'
-        - value: '1'
-          text: 'Regional'
-        - value: '2'
-          text: Local
-        - value: '3'
-          text: Community
-        - value: '4'
-          text: Connector
+        - text: Interregional / Intercity
+          value: '1'
+        - text: Regional
+          value: '2'
+        - text: Local
+          value: '3'
+        - text: Community
+          value: '4'
+        - text: Connector
+          value: '5'
     - name: subcategory
       required: true
       inputType: DROPDOWN
       parent: 'category'
       options:
-        - parentValue: '0'
+        - parentValue: '1'
           text: Interregional / Intercity
-          value: '0'
-        - parentValue: '1'
+          value: '101'
+        - parentValue: '2'
           text: Regional All Day
-          value: '1'
-        - parentValue: '1'
+          value: '201'
+        - parentValue: '2'
           text: Regional Peak
-          value: '2'
-        - parentValue: '1'
+          value: '202'
+        - parentValue: '2'
           text: Regional Owl
-          value: '3'
-        - parentValue: '2'
+          value: '203'
+        - parentValue: '3'
           text: Local All Day
-          value: '4'
-        - parentValue: '2'
+          value: '301'
+        - parentValue: '3'
           text: Local Peak
-          value: '5'
-        - parentValue: '2'
+          value: '302'
+        - parentValue: '3'
           text: Local Owl
-          value: '6'
-        - parentValue: '3'
-          text: Community All Day
-          value: '7'
-        - parentValue: '3'
-          text: Community Special
-          value: '8'
-        - parentValue: '3'
-          text: Community On Demand
-          value: '9'
+          value: '303'
         - parentValue: '4'
+          text: Community All Day
+          value: '401'
+        - parentValue: '4'
+          text: Community Special
+          value: '402'
+        - parentValue: '4'
+          text: Community On Demand
+          value: '403'
+        - parentValue: '5'
           text: First / Last Mile Connector
-          value: '10'
+          value: '501'
     - name: running_way
       required: true
       inputType: DROPDOWN
       options:
-        - value: '0'
-          text: Fully / Primarily Dedicated
-        - value: '1'
-          text: "Limited Dedicated: Highway/HOV"
-        - value: '2'
-          text: "Limited Dedicated: Local Roadway"
-        - value: '3'
-          text: "Shared, With Signal Priority"
-        - value: '4'
-          text: "Shared, No Priority"
+        - text: Fully / Primarily Dedicated
+          value: '1'
+        - text: "Limited Dedicated: Highway/HOV"
+          value: '2'
+        - text: "Limited Dedicated: Local Roadway"
+          value: '3'
+        - text: Shared, With Signal Priority
+          value: '4'
+        - text: Shared, No Priority
+          value: '5'
