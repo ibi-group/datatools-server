@@ -188,6 +188,14 @@
             <snapshots><enabled>false</enabled></snapshots>
             <releases><enabled>true</enabled></releases>
         </repository>
+        <repository> <!--Add the snapshot repository here-->
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+            <id>opengeo</id>
+            <name>OpenGeo Maven Repository</name>
+            <url>https://repo.opengeo.org</url>
+        </repository>
         <repository>
             <id>sonatype</id>
             <name>sonatype snapshots</name>
