@@ -314,6 +314,8 @@ public class GtfsPlusValidation implements Serializable {
      * Determines whether a node has a given key and value.
      */
     private static boolean nodeHasKey(JsonNode jsonNode, String key, String keyValue) {
+        // jsonNode can be null if a file contains extra columns.
+        if (jsonNode == null) return false;
         JsonNode nameField = jsonNode.get(key);
         return nameField != null && nameField.asText().equals(keyValue);
     }

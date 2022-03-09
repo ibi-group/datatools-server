@@ -41,7 +41,7 @@ public class GtfsPlusValidationTest extends UnitTest {
      */
     @BeforeAll
     public static void setUp() throws IOException {
-        // start server if it isn't already running
+        // Start server if it isn't already running.
         DatatoolsTest.setUp();
         // Create a project, feed sources, and feed versions to merge.
         project = new Project();
@@ -108,11 +108,12 @@ public class GtfsPlusValidationTest extends UnitTest {
     void canGetRouteCategorySpecPosition() {
         JsonNode[] fields = new JsonNode[] {
             GtfsPlusValidation.findNode(routeAttributesFieldsNode, "name", "route_id"),
+            null, // extra column that is not a route_attributes column.
             GtfsPlusValidation.findNode(routeAttributesFieldsNode, "name", "category"),
             GtfsPlusValidation.findNode(routeAttributesFieldsNode, "name", "subcategory"),
             GtfsPlusValidation.findNode(routeAttributesFieldsNode, "name", "running_way")
         };
-        assertThat(GtfsPlusValidation.getParentFieldPosition(fields, "category"), equalTo(1));
+        assertThat(GtfsPlusValidation.getParentFieldPosition(fields, "category"), equalTo(2));
     }
 
     @Test
