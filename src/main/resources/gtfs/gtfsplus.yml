@@ -1,53 +1,17 @@
 ---
-- id: realtime_routes
-  name: realtime_routes.txt
-  helpContent: This file contains additional real-time information for a route.
+- id: calendar_attributes
+  name: calendar_attributes.txt
+  helpContent: This file contains calendar attributes. This file is needed because standard GTFS does not include these fields.
   fields:
-    - name: route_id
+    - name: service_id
       required: true
-      inputType: GTFS_ROUTE
-      columnWidth: 4
-      helpContent: From GTFS routes.txt file. This is necessary to maintain relationship between routes in this file and routes in the standard GTFS routes.txt file.
-    - name: realtime_enabled
-      required: true
-      inputType: DROPDOWN
-      options:
-        - value: '0'
-          text: Disabled
-        - value: '1'
-          text: Enabled
-      columnWidth: 2
-      helpContent: Standard GTFS does not include a field to indicate real-time status of a route. This allows the flexibility for agencies to identify routes that may not have real-time predictions.
-    - name: realtime_routename
-      required: false
-      inputType: TEXT
-      columnWidth: 3
-      helpContent: This field may be empty if route_long_name in GTFS routes.txt file is provided. Otherwise, it should contain the data defined for route_long_name in GTFS routes.txt file.
-    - name: realtime_routecode
-      required: false
-      inputType: TEXT
-      columnWidth: 3
-      helpContent: This field can be empty if real-time route code in MTC’s real-time feed is the same as route_short_name in GTFS routes.txt file
-
-- id: realtime_stops
-  name: realtime_stops.txt
-  helpContent: This file helps map regional real-time stop identifiers with the stop_id in stops.txt file in GTFS. This file can be omitted if GTFS file stops.txt contains the regional real-time stop id in the optional stop_code field.
-  fields:
-    - name: trip_id
-      required: true
-      inputType: GTFS_TRIP
-      columnWidth: 5
-      helpContent: From GTFS stop_times.txt file.
-    - name: stop_id
-      required: true
-      inputType: GTFS_STOP
-      columnWidth: 5
-      helpContent: From GTFS stop_times.txt file when the stop_code in standard GTFS is different from the stop_code used in real-time feed for MTC.
-    - name: realtime_stop_id
+      inputType: GTFS_SERVICE
+      helpContent: From GTFS calendar.txt file
+    - name: service_description
       required: true
       inputType: TEXT
-      columnWidth: 2
-      helpContent: Corresponding stop_code used in real-time feed for MTC.
+      maxLength: 250
+      helpContent: Description of the service, as it should appear on 511.org such as Weekdays, Sunday/Holiday
 
 - id: directions
   name: directions.txt
@@ -87,174 +51,6 @@
         - value: B Loop
       columnWidth: 3
       helpContent: Corresponding direction name.
-
-- id: realtime_trips
-  name: realtime_trips.txt
-  helpContent: This file contains real-time identifiers for trips. This file can be omitted if the GTFS trips.txt file contains the same Trip IDs included in real-time feed for MTC within the trip_id field.
-  fields:
-    - name: trip_id
-      required: true
-      inputType: GTFS_TRIP
-      columnWidth: 6
-      helpContent: From GTFS trips.txt file
-    - name: realtime_trip_id
-      required: true
-      inputType: TEXT
-      # maxLength: 15
-      columnWidth: 6
-      helpContent: Corresponding trip_id provided in real-time feed for MTC.
-
-- id: stop_attributes
-  name: stop_attributes.txt
-  helpContent: This file contains additional attributes for a stop. This file is needed because standard GTFS does not include these fields.
-  fields:
-    - name: stop_id
-      required: true
-      inputType: GTFS_STOP
-      columnWidth: 4
-      helpContent: From GTFS stops.txt file
-    - name: accessibility_id
-      required: false
-      inputType: DROPDOWN
-      options:
-        - value: '0'
-          text: Unknown
-        - value: '1'
-          text: No ADA
-        - value: '2'
-          text: Full ADA
-        - value: '3'
-          text: Wheel Chair
-        - value: '4'
-          text: Blind
-        - value: '5'
-          text: Deaf
-        - value: '6'
-          text: Blind/Wheel Chair
-        - value: '7'
-          text: Deaf/Blind
-        - value: '8'
-          text: Deaf/Wheel Chair
-      columnWidth: 2
-      helpContent: defines accessibility parameters for stop
-    - name: cardinal_direction
-      required: false
-      inputType: DROPDOWN
-      options:
-        - value: ''
-          text: Unknown
-        - value: 'NO'
-          text: North
-        - value: SO
-          text: South
-        - value: EA
-          text: East
-        - value: WE
-          text: West
-        - value: NE
-          text: Northeast
-        - value: NW
-          text: Northwest
-        - value: SE
-          text: Southeast
-        - value: SW
-          text: Southwest
-      columnWidth: 2
-      helpContent: Direction definition of stop position
-    - name: relative_position
-      required: false
-      inputType: DROPDOWN
-      options:
-        - value: ''
-          text: Unknown
-        - value: NS
-          text: Near side of intersection
-        - value: FS
-          text: Far side of intersection
-        - value: AT
-          text: Stop is at position
-        - value: MB
-          text: Mid-block
-        - value: OP
-          text: Stop is across street
-      columnWidth: 2
-      helpContent: Stop position relative to stop name
-    - name: stop_city
-      required: true
-      inputType: TEXT
-      maxLength: 60
-      columnWidth: 2
-      helpContent: City corresponding to the stop
-
-- id: timepoints
-  name: timepoints.txt
-  helpContent: This file can be omitted if the GTFS file stop_times.txt has blank values for arrival_time and departure_time for all the stops that are NOT time points. This file is needed because standard GTFS does not include these fields.
-  fields:
-    - name: trip_id
-      required: true
-      inputType: GTFS_TRIP
-      columnWidth: 6
-      helpContent: From GTFS stop_times.txt file
-    - name: stop_id
-      required: true
-      inputType: GTFS_STOP
-      columnWidth: 6
-      helpContent: From GTFS stop_times.txt file (Include Time point stops only)
-
-- id: rider_categories
-  name: rider_categories.txt
-  helpContent: This file lists the rider categories for fares other than the Regular category. This file is needed because standard GTFS does not include these fields.
-  fields:
-    - name: rider_category_id
-      required: true
-      inputType: DROPDOWN
-      options:
-        - value: '1'
-          text: Regular
-        - value: '2'
-          text: Senior
-        - value: '3'
-          text: Child
-        - value: '4'
-          text: Student
-        - value: '5'
-          text: Youth
-        - value: '6'
-          text: Disabled
-        - value: '7'
-          text: Promotional category
-        - value: '11'
-          text: Military
-        - value: '15'
-          text: Custom (15)
-        - value: '16'
-          text: Custom (16)
-        - value: '17'
-          text: Custom (17)
-        - value: '18'
-          text: Custom (18)
-        - value: '19'
-          text: Custom (19)
-        - value: '20'
-          text: Custom (20)
-        - value: '21'
-          text: Custom (21)
-        - value: '22'
-          text: Custom (22)
-        - value: '23'
-          text: Custom (23)
-        - value: '24'
-          text: Custom (24)
-        - value: '25'
-          text: Custom (25)
-      columnWidth: 6
-      helpContent: Unique rider category ID (agency can assign categories that do not fall under standard categories)
-    - name: rider_category_description
-      required: true
-      inputType: TEXT
-      maxLength: 256
-      columnWidth: 6
-      helpContent: Rider category as it should appear on 511.org, such as Child (ages 5-11), Seniors (Ages 62 & Up)
 
 - id: fare_rider_categories
   name: fare_rider_categories.txt
@@ -310,22 +106,8 @@
     - name: price
       required: true
       inputType: TEXT
-      maxLength: 8
+      maxLength: 6 # MTC: (5,2) number format from 0.00 to 999.99.
       columnWidth: 3
-
-- id: calendar_attributes
-  name: calendar_attributes.txt
-  helpContent: This file contains calendar attributes. This file is needed because standard GTFS does not include these fields.
-  fields:
-    - name: service_id
-      required: true
-      inputType: GTFS_SERVICE
-      helpContent: From GTFS calendar.txt file
-    - name: service_description
-      required: true
-      inputType: TEXT
-      maxLength: 250
-      helpContent: Description of the service, as it should appear on 511.org such as Weekdays, Sunday/Holiday
 
 - id: farezone_attributes
   name: farezone_attributes.txt
@@ -338,8 +120,129 @@
     - name: zone_name
       required: true
       inputType: TEXT
-      maxLength: 35
+      maxLength: 250
       helpContent: Public name of the fare zone, as it should appear on 511.org such as EastBay, WestBay, etc
+
+- id: realtime_routes
+  name: realtime_routes.txt
+  helpContent: This file contains additional real-time information for a route.
+  fields:
+  - name: route_id
+    required: true
+    inputType: GTFS_ROUTE
+    columnWidth: 4
+    helpContent: From GTFS routes.txt file. This is necessary to maintain relationship between routes in this file and routes in the standard GTFS routes.txt file.
+  - name: realtime_enabled
+    required: true
+    inputType: DROPDOWN
+    options:
+    - value: '0'
+      text: Disabled
+    - value: '1'
+      text: Enabled
+    columnWidth: 2
+    helpContent: Standard GTFS does not include a field to indicate real-time status of a route. This allows the flexibility for agencies to identify routes that may not have real-time predictions.
+  - name: realtime_routename
+    required: false
+    inputType: TEXT
+    columnWidth: 3
+    helpContent: This field may be empty if route_long_name in GTFS routes.txt file is provided. Otherwise, it should contain the data defined for route_long_name in GTFS routes.txt file.
+  - name: realtime_routecode
+    required: false
+    inputType: TEXT
+    columnWidth: 3
+    helpContent: This field can be empty if real-time route code in MTC’s real-time feed is the same as route_short_name in GTFS routes.txt file
+
+- id: realtime_stops
+  name: realtime_stops.txt
+  helpContent: This file helps map regional real-time stop identifiers with the stop_id in stops.txt file in GTFS. This file can be omitted if GTFS file stops.txt contains the regional real-time stop id in the optional stop_code field.
+  fields:
+  - name: trip_id
+    required: true
+    inputType: GTFS_TRIP
+    columnWidth: 5
+    helpContent: From GTFS stop_times.txt file.
+  - name: stop_id
+    required: true
+    inputType: GTFS_STOP
+    columnWidth: 5
+    helpContent: From GTFS stop_times.txt file when the stop_code in standard GTFS is different from the stop_code used in real-time feed for MTC.
+  - name: realtime_stop_id
+    required: true
+    inputType: TEXT
+    columnWidth: 2
+    helpContent: Corresponding stop_code used in real-time feed for MTC.
+
+- id: realtime_trips
+  name: realtime_trips.txt
+  helpContent: This file contains real-time identifiers for trips. This file can be omitted if the GTFS trips.txt file contains the same Trip IDs included in real-time feed for MTC within the trip_id field.
+  fields:
+  - name: trip_id
+    required: true
+    inputType: GTFS_TRIP
+    columnWidth: 6
+    helpContent: From GTFS trips.txt file
+  - name: realtime_trip_id
+    required: true
+    inputType: TEXT
+#    maxLength: 15
+    columnWidth: 6
+    helpContent: Corresponding trip_id provided in real-time feed for MTC.
+
+- id: rider_categories
+  name: rider_categories.txt
+  helpContent: This file lists the rider categories for fares other than the Regular category. This file is needed because standard GTFS does not include these fields.
+  fields:
+    - name: rider_category_id
+      required: true
+      inputType: DROPDOWN
+      options:
+        - value: '1'
+          text: Regular
+        - value: '2'
+          text: Senior
+        - value: '3'
+          text: Child
+        - value: '4'
+          text: Student
+        - value: '5'
+          text: Youth
+        - value: '6'
+          text: Disabled
+        - value: '7'
+          text: Promotional category
+        - value: '11'
+          text: Military
+        - value: '15'
+          text: Custom (15)
+        - value: '16'
+          text: Custom (16)
+        - value: '17'
+          text: Custom (17)
+        - value: '18'
+          text: Custom (18)
+        - value: '19'
+          text: Custom (19)
+        - value: '20'
+          text: Custom (20)
+        - value: '21'
+          text: Custom (21)
+        - value: '22'
+          text: Custom (22)
+        - value: '23'
+          text: Custom (23)
+        - value: '24'
+          text: Custom (24)
+        - value: '25'
+          text: Custom (25)
+      columnWidth: 6
+      helpContent: Unique rider category ID (agency can assign categories that do not fall under standard categories)
+    - name: rider_category_description
+      required: true
+      inputType: TEXT
+      maxLength: 256
+      columnWidth: 6
+      helpContent: Rider category as it should appear on 511.org, such as Child (ages 5-11), Seniors (Ages 62 & Up)
 
 - id: route_attributes
   name: route_attributes.txt
@@ -416,3 +319,100 @@
           value: '4'
         - text: Shared, No Priority
           value: '5'
+
+- id: stop_attributes
+  name: stop_attributes.txt
+  helpContent: This file contains additional attributes for a stop. This file is needed because standard GTFS does not include these fields.
+  fields:
+  - name: stop_id
+    required: true
+    inputType: GTFS_STOP
+    columnWidth: 4
+    helpContent: From GTFS stops.txt file
+  - name: accessibility_id
+    required: false
+    inputType: DROPDOWN
+    options:
+    - value: '0'
+      text: Unknown
+    - value: '1'
+      text: No ADA
+    - value: '2'
+      text: Full ADA
+    - value: '3'
+      text: Wheel Chair
+    - value: '4'
+      text: Blind
+    - value: '5'
+      text: Deaf
+    - value: '6'
+      text: Blind/Wheel Chair
+    - value: '7'
+      text: Deaf/Blind
+    - value: '8'
+      text: Deaf/Wheel Chair
+    columnWidth: 2
+    helpContent: defines accessibility parameters for stop
+  - name: cardinal_direction
+    required: false
+    inputType: DROPDOWN
+    options:
+    - value: ''
+      text: Unknown
+    - value: 'NO'
+      text: North
+    - value: SO
+      text: South
+    - value: EA
+      text: East
+    - value: WE
+      text: West
+    - value: NE
+      text: Northeast
+    - value: NW
+      text: Northwest
+    - value: SE
+      text: Southeast
+    - value: SW
+      text: Southwest
+    columnWidth: 2
+    helpContent: Direction definition of stop position
+  - name: relative_position
+    required: false
+    inputType: DROPDOWN
+    options:
+    - value: ''
+      text: Unknown
+    - value: NS
+      text: Near side of intersection
+    - value: FS
+      text: Far side of intersection
+    - value: AT
+      text: Stop is at position
+    - value: MB
+      text: Mid-block
+    - value: OP
+      text: Stop is across street
+    columnWidth: 2
+    helpContent: Stop position relative to stop name
+  - name: stop_city
+    required: true
+    inputType: TEXT
+    maxLength: 60
+    columnWidth: 2
+    helpContent: City corresponding to the stop
+
+- id: timepoints
+  name: timepoints.txt
+  helpContent: This file can be omitted if the GTFS file stop_times.txt has blank values for arrival_time and departure_time for all the stops that are NOT time points. This file is needed because standard GTFS does not include these fields.
+  fields:
+  - name: trip_id
+    required: true
+    inputType: GTFS_TRIP
+    columnWidth: 6
+    helpContent: From GTFS stop_times.txt file
+  - name: stop_id
+    required: true
+    inputType: GTFS_STOP
+    columnWidth: 6
+    helpContent: From GTFS stop_times.txt file (Include Time point stops only)
