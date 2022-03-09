@@ -39,6 +39,8 @@ import static com.conveyal.gtfs.loader.DateField.GTFS_DATE_FORMATTER;
 public class MergeLineContext {
     protected static final String AGENCY_ID = "agency_id";
     protected static final String SERVICE_ID = "service_id";
+    protected static final String ROUTE_ID = "route_id";
+    protected static final String ROUTE_SHORT_NAME = "route_short_name";
     private static final Logger LOG = LoggerFactory.getLogger(MergeLineContext.class);
     protected final MergeFeedsJob job;
     private final ZipOutputStream out;
@@ -89,6 +91,8 @@ public class MergeLineContext {
                 return new CalendarDatesMergeLineContext(job, table, out);
             case "routes":
                 return new RoutesMergeLineContext(job, table, out);
+            case "route_attributes":
+                return new RouteAttributesMergeLineContext(job, table, out);
             case "shapes":
                 return new ShapesMergeLineContext(job, table, out);
             case "stops":
@@ -375,6 +379,17 @@ public class MergeLineContext {
             // simpler (just skip the duplicate record).
             if (hasDuplicateError(idErrors)) {
                 shouldSkipRecord = true;
+            }
+        }
+
+        // Track route ids, so we can remove unused ones later.
+        if (!shouldSkipRecord && job.mergeType.equals(SERVICE_PERIOD) && fieldContext.nameEquals(ROUTE_SHORT_NAME)) {
+            if (handlingFutureFeed) {
+                mergeFeedsResult.routeIds.add(primaryKeyValue);
+            } else {
+                String scopedKey = getTableScopedValue(primaryKeyValue);
+                String mergedRouteId = mergeFeedsResult.remappedIds.get(scopedKey);
+                mergeFeedsResult.routeIds.add(mergedRouteId);
             }
         }
 
@@ -671,6 +686,10 @@ public class MergeLineContext {
 
     protected int getFieldIndex(String fieldName) {
         return Field.getFieldIndex(fieldsFoundInZip, fieldName);
+    }
+
+    protected int getFieldIndexFromSharedSpecs(String fieldName) {
+        return Field.getFieldIndex(sharedSpecFields.toArray(new Field[0]), fieldName);
     }
 
     /**
