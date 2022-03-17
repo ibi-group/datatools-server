@@ -771,5 +771,9 @@ public class FeedSource extends Model implements Cloneable {
     public void presetFlex(FeedVersion feedVersion) {
         if (feedVersion.feedLoadResult != null) flex = feedVersion.feedLoadResult.isGTFSFlex();
         if (flex) flexUIFeaturesEnabled = true;
+
+        // Save flex changes after check
+        Persistence.feedSources.updateField(this.id, "flex", flex);
+        Persistence.feedSources.updateField(this.id, "flexUIFeaturesEnabled", flexUIFeaturesEnabled);
     }
 }
