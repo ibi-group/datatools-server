@@ -14,9 +14,10 @@ tmp/
 deploy/
 
 # Configurations
-configurations/*
+configurations/*.yml
 !configurations/default
 !configurations/test
+!configurations/docker
 
 # Secret config files
 .env
