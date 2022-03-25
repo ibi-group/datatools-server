@@ -116,7 +116,7 @@ public class RtdCarrier {
      */
     public void updateFields(FeedSource feedSource) throws IllegalAccessException {
         // Using reflection, iterate over every field in the class.
-        for(Field carrierField : this.getClass().getDeclaredFields()) {
+        for (Field carrierField : this.getClass().getDeclaredFields()) {
             String fieldName = carrierField.getName();
             String fieldValue = carrierField.get(this) != null ? carrierField.get(this).toString() : null;
             // Construct external feed source property for field with value from carrier.
@@ -131,6 +131,24 @@ public class RtdCarrier {
                 Persistence.externalFeedSourceProperties.create(prop);
             } else {
                 Persistence.externalFeedSourceProperties.updateField(prop.id, fieldName, fieldValue);
+            }
+        }
+    }
+
+    /**
+     * Uses reflection to update the specified field/property of a carrier instance (see above).
+     */
+    public void updateProperty(ExternalFeedSourceProperty updatedProperty) {
+        for (Field carrierField : this.getClass().getDeclaredFields()) {
+            String fieldName = carrierField.getName();
+            if (fieldName.equals(updatedProperty.name)) {
+                try {
+                    carrierField.set(this, updatedProperty.value);
+                } catch (IllegalAccessException iae) {
+                    // Should not be thrown.
+                    iae.printStackTrace();
+                }
+                break;
             }
         }
     }

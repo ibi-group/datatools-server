@@ -162,8 +162,9 @@ public class MtcFeedResource implements ExternalFeedResource {
         String feedSourceId = updatedProperty.feedSourceId;
         FeedSource source = Persistence.feedSources.getById(feedSourceId);
         RtdCarrier carrier = new RtdCarrier(source);
+        carrier.updateProperty(updatedProperty);
 
-        if(updatedProperty.name.equals(AGENCY_ID_FIELDNAME) && previousValue == null) {
+        if (updatedProperty.name.equals(AGENCY_ID_FIELDNAME) && previousValue == null) {
             // If the property being updated is the agency ID field and it previously was null, this indicates that a
             // new carrier should be written to the RTD.
             writeCarrierToRtd(carrier, true, authHeader);

@@ -180,4 +180,21 @@ class MtcFeedResourceTest extends UnitTest {
 
         Persistence.externalFeedSourceProperties.removeById(agencyIdProp.id);
     }
+
+    @Test
+    void shouldUpdateRtdCarrierProperty() {
+        // If a property changes, the blob sent to RTD should contain the new property value.
+        // (For this test, it does not matter which property gets updated.)
+        String address = "123 Transit Avenue, Anywhere USA 99123";
+        ExternalFeedSourceProperty newAddressProp = new ExternalFeedSourceProperty(
+            feedSource,
+            "MTC",
+            "AgencyAddress",
+            address
+        );
+
+        RtdCarrier carrier = new RtdCarrier(feedSource);
+        carrier.updateProperty(newAddressProp);
+        assertThat(carrier.AgencyAddress, equalTo(address));
+    }
 }
