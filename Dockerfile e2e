@@ -1,0 +1,11 @@
+# syntax=docker/dockerfile:1
+FROM maven:3-jdk-8-alpine
+WORKDIR /datatools
+
+# Get code into container
+COPY ./ .
+COPY ./configurations/docker/env.yml ./configurations/test/env.yml.tmp
+COPY ./configurations/docker/server.yml ./configurations/test/server.yml.tmp
+
+ENV SHOULD_RUN_E2E=true
+CMD ["mvn", "test"]
