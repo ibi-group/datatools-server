@@ -227,7 +227,7 @@ public class MtcFeedResource implements ExternalFeedResource {
             String carrierJson = mapper.writeValueAsString(carrier);
 
             URL rtdUrl = new URL(rtdApi + "/Carrier/" + (createNew ? "" : carrier.AgencyId));
-            LOG.info("Writing to RTD URL: {}", rtdUrl);
+            LOG.info("Writing to RTD URL: {} JSON >>>{}", rtdUrl, carrierJson);
             HttpURLConnection connection = (HttpURLConnection) rtdUrl.openConnection();
 
             connection.setRequestMethod(createNew ? "POST" : "PUT");
