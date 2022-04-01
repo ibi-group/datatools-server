@@ -9,6 +9,7 @@ import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.models.FeedVersionSummary;
 import com.conveyal.datatools.manager.models.Label;
 import com.conveyal.datatools.manager.models.Note;
 import com.conveyal.datatools.manager.models.Organization;
@@ -48,6 +49,7 @@ public class Persistence {
     public static TypedPersistence<Deployment> deployments;
     public static TypedPersistence<Project> projects;
     public static TypedPersistence<FeedVersion> feedVersions;
+    public static TypedPersistence<FeedVersionSummary> feedVersionSummaries;
     public static TypedPersistence<Note> notes;
     public static TypedPersistence<Organization> organizations;
     public static TypedPersistence<ExternalFeedSourceProperty> externalFeedSourceProperties;
@@ -110,6 +112,7 @@ public class Persistence {
         feedSources = new TypedPersistence(mongoDatabase, FeedSource.class);
         projects = new TypedPersistence(mongoDatabase, Project.class);
         feedVersions = new TypedPersistence(mongoDatabase, FeedVersion.class);
+        feedVersionSummaries = new TypedPersistence(mongoDatabase, FeedVersionSummary.class, "FeedVersion");
         deployments = new TypedPersistence(mongoDatabase, Deployment.class);
         notes = new TypedPersistence(mongoDatabase, Note.class);
         organizations = new TypedPersistence(mongoDatabase, Organization.class);

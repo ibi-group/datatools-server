@@ -56,9 +56,9 @@ public class TypedPersistence<T extends Model> {
     private String collectionName;
     private final FindOneAndUpdateOptions findOneAndUpdateOptions = new FindOneAndUpdateOptions();
 
-    public TypedPersistence(MongoDatabase mongoDatabase, Class<T> clazz) {
-        mongoCollection = mongoDatabase.getCollection(clazz.getSimpleName(), clazz);
-        collectionName = clazz.getSimpleName();
+    public TypedPersistence(MongoDatabase mongoDatabase, Class<T> clazz, String collectionName) {
+        mongoCollection = mongoDatabase.getCollection(collectionName, clazz);
+        this.collectionName = collectionName;
         try {
             noArgConstructor = clazz.getConstructor(new Class<?>[0]);
         } catch (NoSuchMethodException ex) {
@@ -69,6 +69,13 @@ public class TypedPersistence<T extends Model> {
 
         // TODO: can we merge update and create into createOrUpdate function using upsert option?
 //        findOneAndUpdateOptions.upsert(true);
+    }
+
+    /**
+     * Shorthand for above constructor
+     */
+    public TypedPersistence(MongoDatabase mongoDatabase, Class<T> clazz) {
+        this(mongoDatabase, clazz, clazz.getSimpleName());
     }
 
     /**

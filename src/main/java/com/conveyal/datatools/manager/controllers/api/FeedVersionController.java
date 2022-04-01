@@ -70,7 +70,6 @@ public class FeedVersionController  {
      * Get all feed version summaries for a given feedSource (whose ID is specified in the request).
      */
     private static Collection<FeedVersionSummary> getAllFeedVersionSummariesForFeedSource(Request req, Response res) {
-        // Check permissions and get the FeedSource whose FeedVersions we want.
         FeedSource feedSource = requestFeedSourceById(req, Actions.VIEW);
         Collection<FeedVersionSummary> feedVersions = feedSource.retrieveFeedVersionSummaries();
         return feedVersions;

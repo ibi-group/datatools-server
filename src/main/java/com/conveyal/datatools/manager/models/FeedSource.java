@@ -545,12 +545,12 @@ public class FeedSource extends Model implements Cloneable {
     }
 
     /**
-     * Get all of the feed versions for this source
-     * @return collection of feed versions
+     * Get the summary information for all feed versions for this source.
+     * @return collection of feed version summaries.
      */
     @JsonIgnore
     public Collection<FeedVersionSummary> retrieveFeedVersionSummaries() {
-        return Persistence.feedVersions
+        return Persistence.feedVersionSummaries
             .getFilteredWithProjection(
                 eq("feedSourceId", this.id),
                 include(
@@ -562,10 +562,7 @@ public class FeedSource extends Model implements Cloneable {
                     "namespace",
                     "fileSize"
                 )
-            )
-            .stream()
-            .map(FeedVersionSummary::new)
-            .collect(Collectors.toList());
+            );
     }
 
     /**
