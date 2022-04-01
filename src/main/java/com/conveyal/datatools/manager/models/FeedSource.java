@@ -549,18 +549,22 @@ public class FeedSource extends Model implements Cloneable {
      * @return collection of feed versions
      */
     @JsonIgnore
-    public Collection<FeedVersion> retrieveFeedVersionSummaries() {
-        return Persistence.feedVersions.getFilteredWithProjection(
-            eq("feedSourceId", this.id),
-            include(
-                "dateCreated",
-                "lastUpdated",
-                "retrievalMethod",
-                "version",
-                "name",
-                "namespace"
+    public Collection<FeedVersionSummary> retrieveFeedVersionSummaries() {
+        return Persistence.feedVersions
+            .getFilteredWithProjection(
+                eq("feedSourceId", this.id),
+                include(
+                    "dateCreated",
+                    "lastUpdated",
+                    "retrievalMethod",
+                    "version",
+                    "name",
+                    "namespace"
+                )
             )
-        );
+            .stream()
+            .map(FeedVersionSummary::new)
+            .collect(Collectors.toList());
     }
 
     /**

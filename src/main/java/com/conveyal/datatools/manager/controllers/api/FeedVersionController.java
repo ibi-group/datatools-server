@@ -15,6 +15,7 @@ import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.models.FeedVersionSummary;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Snapshot;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -66,12 +67,13 @@ public class FeedVersionController  {
     }
 
     /**
-     * Get all feed versions for a given feedSource (whose ID is specified in the request).
+     * Get all feed version summaries for a given feedSource (whose ID is specified in the request).
      */
-    private static Collection<FeedVersion> getAllFeedVersionsForFeedSource01(Request req, Response res) {
+    private static Collection<FeedVersionSummary> getAllFeedVersionSummariesForFeedSource(Request req, Response res) {
         // Check permissions and get the FeedSource whose FeedVersions we want.
         FeedSource feedSource = requestFeedSourceById(req, Actions.VIEW);
-        return feedSource.retrieveFeedVersionSummaries();
+        Collection<FeedVersionSummary> feedVersions = feedSource.retrieveFeedVersionSummaries();
+        return feedVersions;
     }
 
     /**
@@ -422,7 +424,7 @@ public class FeedVersionController  {
         get(apiPrefix + "secure/feedversion/:id/download", FeedVersionController::downloadFeedVersionDirectly);
         get(apiPrefix + "secure/feedversion/:id/downloadtoken", FeedVersionController::getDownloadCredentials, json::write);
         post(apiPrefix + "secure/feedversion/:id/validate", FeedVersionController::validate, json::write);
-        //get(apiPrefix + "secure/feedversionsummaries", FeedVersionController::getAllFeedVersionsForFeedSource, json::write);
+        get(apiPrefix + "secure/feedversionsummaries", FeedVersionController::getAllFeedVersionSummariesForFeedSource, json::write);
         get(apiPrefix + "secure/feedversion", FeedVersionController::getAllFeedVersionsForFeedSource, json::write);
         post(apiPrefix + "secure/feedversion", FeedVersionController::createFeedVersionViaUpload, json::write);
         post(apiPrefix + "secure/feedversion/shapes", FeedVersionController::exportGis, json::write);
@@ -433,6 +435,7 @@ public class FeedVersionController  {
         delete(apiPrefix + "secure/feedversion/:id", FeedVersionController::deleteFeedVersion, json::write);
 
         get(apiPrefix + "public/feedversion", FeedVersionController::getAllFeedVersionsForFeedSource, json::write);
+        //get(apiPrefix + "public/feedversionsummaries", FeedVersionController::getAllFeedVersionSummariesForFeedSource, json::write);
         get(apiPrefix + "public/feedversion/:id/downloadtoken", FeedVersionController::getDownloadCredentials, json::write);
 
         get(apiPrefix + "downloadfeed/:token", FeedVersionController::downloadFeedVersionWithToken);
