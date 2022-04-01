@@ -435,7 +435,7 @@ public class FeedVersionController  {
         delete(apiPrefix + "secure/feedversion/:id", FeedVersionController::deleteFeedVersion, json::write);
 
         get(apiPrefix + "public/feedversion", FeedVersionController::getAllFeedVersionsForFeedSource, json::write);
-        //get(apiPrefix + "public/feedversionsummaries", FeedVersionController::getAllFeedVersionSummariesForFeedSource, json::write);
+        get(apiPrefix + "public/feedversionsummaries", FeedVersionController::getAllFeedVersionSummariesForFeedSource, json::write);
         get(apiPrefix + "public/feedversion/:id/downloadtoken", FeedVersionController::getDownloadCredentials, json::write);
 
         get(apiPrefix + "downloadfeed/:token", FeedVersionController::downloadFeedVersionWithToken);

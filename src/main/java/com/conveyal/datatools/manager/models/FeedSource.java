@@ -559,7 +559,8 @@ public class FeedSource extends Model implements Cloneable {
                     "retrievalMethod",
                     "version",
                     "name",
-                    "namespace"
+                    "namespace",
+                    "fileSize"
                 )
             )
             .stream()
