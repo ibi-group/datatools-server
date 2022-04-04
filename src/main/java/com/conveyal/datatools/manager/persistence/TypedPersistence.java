@@ -18,7 +18,6 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
-import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 import static com.mongodb.client.model.Filters.in;
 import static com.mongodb.client.model.Updates.pull;
@@ -56,6 +55,9 @@ public class TypedPersistence<T extends Model> {
     private String collectionName;
     private final FindOneAndUpdateOptions findOneAndUpdateOptions = new FindOneAndUpdateOptions();
 
+    /**
+     * Maps a persistence class to a Mongo collection.
+     */
     public TypedPersistence(MongoDatabase mongoDatabase, Class<T> clazz, String collectionName) {
         mongoCollection = mongoDatabase.getCollection(collectionName, clazz);
         this.collectionName = collectionName;
@@ -72,7 +74,7 @@ public class TypedPersistence<T extends Model> {
     }
 
     /**
-     * Shorthand for above constructor
+     * Shorthand for above constructor using the class name as the collection name.
      */
     public TypedPersistence(MongoDatabase mongoDatabase, Class<T> clazz) {
         this(mongoDatabase, clazz, clazz.getSimpleName());
@@ -168,16 +170,6 @@ public class TypedPersistence<T extends Model> {
      */
     public List<T> getFiltered (Bson filter) {
         return mongoCollection.find(filter).into(new ArrayList<>());
-    }
-
-    /**
-     * Get all objects satisfying the supplied Mongo filter.
-     * This ties our persistence directly to Mongo for now but is expedient.
-     * We should really have a bit more abstraction here.
-     * @return
-     */
-    public List<T> getFilteredWithProjection (Bson filter, Bson projection) {
-        return mongoCollection.find(filter).projection(projection).into(new ArrayList<>());
     }
 
     /**

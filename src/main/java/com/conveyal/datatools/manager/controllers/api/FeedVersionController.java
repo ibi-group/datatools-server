@@ -71,8 +71,7 @@ public class FeedVersionController  {
      */
     private static Collection<FeedVersionSummary> getAllFeedVersionSummariesForFeedSource(Request req, Response res) {
         FeedSource feedSource = requestFeedSourceById(req, Actions.VIEW);
-        Collection<FeedVersionSummary> feedVersions = feedSource.retrieveFeedVersionSummaries();
-        return feedVersions;
+        return feedSource.retrieveFeedVersionSummaries();
     }
 
     /**
