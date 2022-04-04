@@ -4,6 +4,8 @@ import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.lang.reflect.Field;
 
@@ -151,5 +153,15 @@ public class RtdCarrier {
                 break;
             }
         }
+    }
+
+    /**
+     * Converts to JSON for sending to the external publishing system (RTD).
+     */
+    public String toJson() throws JsonProcessingException {
+        return new ObjectMapper()
+            .writeValueAsString(this)
+            // Per MTC, replace empty strings on the right-hand-side with null.
+            .replaceAll(":\"\\s*\"", ":null");
     }
 }

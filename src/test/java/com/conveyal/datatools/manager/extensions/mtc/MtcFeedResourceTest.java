@@ -7,11 +7,14 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.util.Date;
@@ -181,11 +184,11 @@ class MtcFeedResourceTest extends UnitTest {
         Persistence.externalFeedSourceProperties.removeById(agencyIdProp.id);
     }
 
-    @Test
-    void shouldUpdateRtdCarrierProperty() {
+    @ParameterizedTest
+    @ValueSource(strings = {"123 Transit Avenue, Anywhere USA 99123", "  ", ""})
+    void shouldUpdateRtdCarrierProperty(String address) throws JsonProcessingException {
         // If a property changes, the blob sent to RTD should contain the new property value.
         // (For this test, it does not matter which property gets updated.)
-        String address = "123 Transit Avenue, Anywhere USA 99123";
         ExternalFeedSourceProperty newAddressProp = new ExternalFeedSourceProperty(
             feedSource,
             "MTC",
@@ -196,5 +199,11 @@ class MtcFeedResourceTest extends UnitTest {
         RtdCarrier carrier = new RtdCarrier(feedSource);
         carrier.updateProperty(newAddressProp);
         assertThat(carrier.AgencyAddress, equalTo(address));
+
+        String jsonAddress = address.trim().isEmpty() ? "null" : String.format("\"%s\"", address);
+        assertThat(
+            carrier.toJson().contains(String.format(",\"AgencyAddress\":%s,", jsonAddress)),
+            equalTo(true)
+        );
     }
 }

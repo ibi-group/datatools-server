@@ -222,12 +222,7 @@ public class MtcFeedResource implements ExternalFeedResource {
      */
     private void writeCarrierToRtd(RtdCarrier carrier, boolean createNew, String authHeader) throws IOException {
         try {
-            ObjectMapper mapper = new ObjectMapper();
-
-            String carrierJson = mapper.writeValueAsString(carrier);
-
-            // Per MTC, replace empty strings on the right-hand-side with null.
-            carrierJson = carrierJson.replace(":\"\"", ":null");
+            String carrierJson = carrier.toJson();
 
             URL rtdUrl = new URL(rtdApi + "/Carrier/" + (createNew ? "" : carrier.AgencyId));
             LOG.info("Writing to RTD URL: {} JSON >>>{}", rtdUrl, carrierJson);
