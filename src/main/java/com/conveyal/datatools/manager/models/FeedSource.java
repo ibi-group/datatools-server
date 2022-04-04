@@ -549,8 +549,7 @@ public class FeedSource extends Model implements Cloneable {
      */
     @JsonIgnore
     public Collection<FeedVersionSummary> retrieveFeedVersionSummaries() {
-        return Persistence.feedVersionSummaries
-            .getFiltered(eq("feedSourceId", this.id));
+        return Persistence.feedVersionSummaries.getFiltered(eq("feedSourceId", this.id));
     }
 
     /**
