@@ -34,6 +34,7 @@ import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.notNullValue;
 import static org.hamcrest.Matchers.nullValue;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class MtcFeedResourceTest extends UnitTest {
     private static Project project;
@@ -201,9 +202,8 @@ class MtcFeedResourceTest extends UnitTest {
         assertThat(carrier.AgencyAddress, equalTo(address));
 
         String jsonAddress = address.trim().isEmpty() ? "null" : String.format("\"%s\"", address);
-        assertThat(
-            carrier.toJson().contains(String.format(",\"AgencyAddress\":%s,", jsonAddress)),
-            equalTo(true)
+        assertTrue(
+            carrier.toJson().contains(String.format(",\"AgencyAddress\":%s,", jsonAddress))
         );
     }
 }
