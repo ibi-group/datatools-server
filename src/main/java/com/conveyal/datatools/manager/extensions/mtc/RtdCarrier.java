@@ -4,6 +4,8 @@ import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.lang.reflect.Field;
 
@@ -116,7 +118,7 @@ public class RtdCarrier {
      */
     public void updateFields(FeedSource feedSource) throws IllegalAccessException {
         // Using reflection, iterate over every field in the class.
-        for(Field carrierField : this.getClass().getDeclaredFields()) {
+        for (Field carrierField : this.getClass().getDeclaredFields()) {
             String fieldName = carrierField.getName();
             String fieldValue = carrierField.get(this) != null ? carrierField.get(this).toString() : null;
             // Construct external feed source property for field with value from carrier.
@@ -133,5 +135,33 @@ public class RtdCarrier {
                 Persistence.externalFeedSourceProperties.updateField(prop.id, fieldName, fieldValue);
             }
         }
+    }
+
+    /**
+     * Uses reflection to update the specified field/property of a carrier instance (see above).
+     */
+    public void updateProperty(ExternalFeedSourceProperty updatedProperty) {
+        for (Field carrierField : this.getClass().getDeclaredFields()) {
+            String fieldName = carrierField.getName();
+            if (fieldName.equals(updatedProperty.name)) {
+                try {
+                    carrierField.set(this, updatedProperty.value);
+                } catch (IllegalAccessException iae) {
+                    // Should not be thrown.
+                    iae.printStackTrace();
+                }
+                break;
+            }
+        }
+    }
+
+    /**
+     * Converts to JSON for sending to the external publishing system (RTD).
+     */
+    public String toJson() throws JsonProcessingException {
+        return new ObjectMapper()
+            .writeValueAsString(this)
+            // Per MTC, replace empty strings on the right-hand-side with null.
+            .replaceAll(":\"\\s*\"", ":null");
     }
 }
