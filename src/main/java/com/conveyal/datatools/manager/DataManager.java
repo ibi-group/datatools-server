@@ -28,6 +28,7 @@ import com.conveyal.datatools.manager.extensions.transitland.TransitLandFeedReso
 import com.conveyal.datatools.manager.jobs.FeedUpdater;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.ErrorUtils;
+import com.conveyal.datatools.manager.utils.GtfsUtils;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.GraphQLController;
@@ -108,8 +109,17 @@ public class DataManager {
         registerRoutes();
 
         registerExternalResources();
+
+        checkTables();
+
         double startupSeconds = (System.currentTimeMillis() - serverStartTime) / 1000D;
         LOG.info("Data Tools server start up completed in {} seconds.", startupSeconds);
+    }
+
+    private static void checkTables() {
+        // Check that tables from namespaces referenced from projects/feed sources
+        // have the columns we need.
+        GtfsUtils.checkReferencedNamespaces();
     }
 
     static void initializeApplication(String[] args) throws IOException {
