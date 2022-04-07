@@ -13,6 +13,7 @@ public class FeedVersionSummary extends Model implements Serializable {
     public int version;
     public String name;
     public String namespace;
+    public String originNamespace;
     public Long fileSize;
     public Date updated;
 
