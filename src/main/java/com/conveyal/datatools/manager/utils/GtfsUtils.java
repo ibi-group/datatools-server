@@ -57,11 +57,17 @@ public class GtfsUtils {
                 Persistence.feedSources.getFiltered(eq("projectId", p.id)).forEach(
                     fs -> {
                         System.out.println("- FeedSource " + fs.name + " " + fs.id);
+                        if (!Strings.isNullOrEmpty(fs.editorNamespace)) {
+                            System.out.print("    - editor: " + fs.editorNamespace);
+                            checkTablesForNamespace(fs.editorNamespace);
+                        }
+
                         Bson feedSourceIdFilter = eq("feedSourceId", fs.id);
                         Bson feedSourceIdNamespaceFilter = and(
                             eq("feedSourceId", fs.id),
                             not(eq("namespace", null))
                         );
+/*
                         List<FeedVersion> allFeedVersions = Persistence.feedVersions.getFiltered(feedSourceIdFilter);
                         List<FeedVersion> feedVersions = Persistence.feedVersions.getFiltered(feedSourceIdNamespaceFilter);
                         System.out.println("  - FeedVersions (" + feedVersions.size() + "/" + allFeedVersions.size() + " with valid namespace)");
@@ -71,6 +77,7 @@ public class GtfsUtils {
                                 checkTablesForNamespace(fv.namespace);
                             }
                         );
+*/
                         List<Snapshot> allSnapshots = Persistence.snapshots.getFiltered(feedSourceIdFilter);
                         List<Snapshot> snapshots = Persistence.snapshots.getFiltered(feedSourceIdNamespaceFilter);
                         System.out.println("  - Snapshots (" + snapshots.size() + "/" + allSnapshots.size() + " with valid namespace)");
@@ -85,6 +92,7 @@ public class GtfsUtils {
                                 }
                             }
                         );
+
                     }
                 );
             }
@@ -95,7 +103,8 @@ public class GtfsUtils {
         try (Connection connection = DataManager.GTFS_DATA_SOURCE.getConnection()) {
             // Check that all tables for the namespace are present.
             PreparedStatement selectNamespaceTablesStatement = connection.prepareStatement(
-                "select table_name from information_schema.tables where table_schema = ?"
+                //"select table_name from information_schema.tables where table_schema = ?"
+                "select table_name from metatables where table_schema = ?"
             );
             selectNamespaceTablesStatement.setString(1, namespace);
             PreparedStatement selectLoadedDateStatement = connection.prepareStatement(
@@ -147,7 +156,6 @@ public class GtfsUtils {
                 // Are tables missing?
                 for (Table table : Table.tablesInOrder) {
                     if (tableNames.contains(table.name)) {
-                        System.out.println("          Found table: " + table.name);
                         // Are fields missing?
                         checkTableColumns(namespace, connection, table);
                     } else {
@@ -177,7 +185,8 @@ public class GtfsUtils {
     private static void checkTableColumns(String namespace, Connection connection, Table table) throws SQLException {
         // TODO Refactor all prepared statements.
         PreparedStatement selectColumnStatement = connection.prepareStatement(
-            "select column_name, data_type from information_schema.columns where table_schema = ? and table_name = ?"
+            //"select column_name, data_type from information_schema.columns where table_schema = ? and table_name = ?"
+            "select column_name, data_type from metacolumns where table_schema = ? and table_name = ?"
         );
         selectColumnStatement.setString(1, namespace);
         selectColumnStatement.setString(2, table.name);
@@ -190,6 +199,8 @@ public class GtfsUtils {
                 resultSet.getString(2)
             ));
         }
+
+        System.out.println("          Found table: " + table.name);
 
         for (Field field : table.fields) {
             ColumnInfo columnForField = null;
@@ -205,11 +216,11 @@ public class GtfsUtils {
 
                 // Are fields that are present of the correct type?
                 if (!field.getSqlTypeName().equals(columnForField.dataType)) {
-                    System.out.println("Incorrect type for " + field.name + " expected: " + field.getSqlTypeName() + " actual: " + columnForField.dataType);
+                    System.out.println("Incorrect type for column: " + field.name + " expected: " + field.getSqlTypeName() + " actual: " + columnForField.dataType);
                 }
                 // Only the id column seems to be marked as not nullable, so we won't check that for now.
             } else {
-                System.out.println("            Not found: " + field.name);
+                System.out.println("            Missing column: " + field.name);
             }
         }
     }
