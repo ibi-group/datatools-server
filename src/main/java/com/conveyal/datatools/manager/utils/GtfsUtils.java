@@ -67,7 +67,7 @@ public class GtfsUtils {
                             if (scannedNamespaces.size() < 25) {
                                 System.out.println("- FeedSource " + fs.name + " " + fs.id);
                                 if (!Strings.isNullOrEmpty(fs.editorNamespace)) {
-                                    checkTablesForNamespace(fs.editorNamespace, "editor", connection);
+                                    checkTablesForNamespace(fs.editorNamespace, p.name + "/" + fs.name + "/editor", "editor", connection);
                                 }
 
                                 Bson feedSourceIdFilter = eq("feedSourceId", fs.id);
@@ -92,9 +92,9 @@ public class GtfsUtils {
                                 snapshots.forEach(
                                     sn -> {
                                         System.out.println("    - " + sn.name + " " + sn.id);
-                                        checkTablesForNamespace(sn.namespace, "namespace", connection);
+                                        checkTablesForNamespace(sn.namespace, p.name + "/snapshot " + sn.name,  "namespace", connection);
                                         if (!Strings.isNullOrEmpty(sn.snapshotOf) && !sn.snapshotOf.equals("mapdb_editor")) {
-                                            checkTablesForNamespace(sn.snapshotOf, "snapshotOf", connection);
+                                            checkTablesForNamespace(sn.snapshotOf, p.name + "/snapshotOf " + sn.name,  "snapshotOf", connection);
                                         }
                                     }
                                 );
@@ -108,28 +108,28 @@ public class GtfsUtils {
             // Once done, print the SQL statements to update the tables
             System.out.println("-- Overview of changes that should be made");
             scannedNamespaces.values().forEach(nsInfo -> {
+                System.out.println("-- " + nsInfo.nickname);
                 // Add missing tables
                 nsInfo.missingTables.forEach(t -> {
                     System.out.println("CREATE TABLE IF NOT EXISTS " + nsInfo.namespace + "." + t.name + " ... (use table.createSqlTable(...))");
                 });
                 nsInfo.scannedTables.forEach(t -> {
                     // Add missing columns
-                    String alterTableSql = "ALTER TABLE " + nsInfo.namespace + "." + t.table.name;
                     if (!t.missingColumns.isEmpty()) {
-                        String alterSql = alterTableSql;
-                        for (ColumnInfo c : t.missingColumns) {
-                            alterSql += " ADD COLUMN IF NOT EXISTS " + c.columnName + " " + c.expectedType;
-                        }
-                        System.out.println(alterSql);
+                        System.out.printf("ALTER TABLE %s.%s %s;\n",
+                            nsInfo.namespace,
+                            t.table.name,
+                            t.missingColumns.stream().map(ColumnInfo::getAddColumnSql).collect(Collectors.joining(", "))
+                        );
                     }
 
                     // Attempt to fix the columns with wrong types
                     if (!t.columnsWithWrongType.isEmpty()) {
-                        String alterSql = alterTableSql;
-                        for (ColumnInfo c : t.columnsWithWrongType) {
-                            alterSql += " ALTER COLUMN " + c.columnName + " TYPE " + c.expectedType;
-                        }
-                        System.out.println(alterSql);
+                        System.out.printf("ALTER TABLE %s.%s %s;\n",
+                            nsInfo.namespace,
+                            t.table.name,
+                            t.columnsWithWrongType.stream().map(ColumnInfo::getAlterColumnTypeSql).collect(Collectors.joining(", "))
+                        );
                     }
                 });
             });
@@ -138,11 +138,11 @@ public class GtfsUtils {
         }
     }
 
-    public static void checkTablesForNamespace(String namespace, String type, Connection connection) {
+    public static void checkTablesForNamespace(String namespace, String nickname, String type, Connection connection) {
         if (scannedNamespaces.get(namespace) == null) {
             String qualifier = "";
             try {
-                NamespaceInfo nsInfo = new NamespaceInfo(namespace, connection);
+                NamespaceInfo nsInfo = new NamespaceInfo(namespace, nickname, connection);
                 if (nsInfo.isOrphan()) {
                     qualifier = "- orphan";
                 } else if (nsInfo.tableNames.isEmpty()) {
@@ -152,7 +152,7 @@ public class GtfsUtils {
 
                 if (!nsInfo.tableNames.isEmpty()) {
                     // Are tables missing?
-                    nsInfo.missingTables.forEach(t -> System.out.println("          Missing table: " + t));
+                    nsInfo.missingTables.forEach(t -> System.out.println("          Missing table: " + t.name));
                     nsInfo.validTables.forEach(t -> checkTableColumns(nsInfo, connection, t));
                 }
                 scannedNamespaces.put(namespace, nsInfo);
@@ -186,7 +186,7 @@ public class GtfsUtils {
             TableInfo tableInfo = new TableInfo(table, columns);
             if (tableInfo.hasColumnIssues()) {
                 System.out.println("          Issues in table: " + table.name);
-                tableInfo.missingColumns.forEach(c -> System.out.println("            Missing column: " + c));
+                tableInfo.missingColumns.forEach(c -> System.out.println("            Missing column: " + c.columnName));
                 tableInfo.columnsWithWrongType.forEach(
                     c -> System.out.println("            Incorrect type for column: " + c.columnName + " expected: " + c.expectedType + " actual: " + c.dataType)
                 );
@@ -220,9 +220,18 @@ public class GtfsUtils {
             this(field.name, field.getSqlTypeName());
             this.expectedType = field.getSqlTypeName();
         }
+
+        public String getAlterColumnTypeSql() {
+            return String.format("ALTER COLUMN %s TYPE %s", columnName, expectedType);
+        }
+
+        public String getAddColumnSql() {
+            return String.format("ADD COLUMN IF NOT EXISTS %s %s", columnName, expectedType);
+        }
     }
 
     public static class NamespaceInfo {
+        public final String nickname;
         public final String namespace;
         private String loadedDate = "";
         public final List<String> tableNames = new ArrayList<>();
@@ -233,6 +242,7 @@ public class GtfsUtils {
         /** Used for tests only */
         public NamespaceInfo(String namespace, List<String> excludedTables) {
             this.namespace = namespace;
+            this.nickname = namespace;
             for (Table table : Table.tablesInOrder) {
                 this.tableNames.add(table.name);
             }
@@ -240,8 +250,9 @@ public class GtfsUtils {
             sortTables();
         }
 
-        public NamespaceInfo(String namespace, Connection connection) throws SQLException {
+        public NamespaceInfo(String namespace, String nickName, Connection connection) throws SQLException {
             this.namespace = namespace;
+            this.nickname = nickName;
 
             // Check that all tables for the namespace are present.
             PreparedStatement selectNamespaceTablesStatement = connection.prepareStatement(
