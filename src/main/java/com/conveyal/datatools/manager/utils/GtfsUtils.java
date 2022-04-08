@@ -15,7 +15,9 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -27,6 +29,9 @@ import static com.mongodb.client.model.Filters.not;
  * Utility class dealing with GTFS tables.
  */
 public class GtfsUtils {
+    /** Maintain a list of scanned namespaces to avoid duplicate work. */
+    private static Map<String, NamespaceInfo> scannedNamespaces = new HashMap<>();
+
     /**
      * Obtains a GTFS table.
      * @param tableName The name of the table to obtain (e.g. "agency.txt").
@@ -51,23 +56,25 @@ public class GtfsUtils {
     }
 
     public static void checkReferencedNamespaces() {
+        scannedNamespaces = new HashMap<>();
+
         try (Connection connection = DataManager.GTFS_DATA_SOURCE.getConnection()) {
             Persistence.projects.getAll().forEach(
                 p -> {
                     System.out.println("Project " + p.name);
                     Persistence.feedSources.getFiltered(eq("projectId", p.id)).forEach(
                         fs -> {
-                            System.out.println("- FeedSource " + fs.name + " " + fs.id);
-                            if (!Strings.isNullOrEmpty(fs.editorNamespace)) {
-                                System.out.println("  - editor: " + fs.editorNamespace);
-                                checkTablesForNamespace(fs.editorNamespace, connection);
-                            }
+                            if (scannedNamespaces.size() < 25) {
+                                System.out.println("- FeedSource " + fs.name + " " + fs.id);
+                                if (!Strings.isNullOrEmpty(fs.editorNamespace)) {
+                                    checkTablesForNamespace(fs.editorNamespace, "editor", connection);
+                                }
 
-                            Bson feedSourceIdFilter = eq("feedSourceId", fs.id);
-                            Bson feedSourceIdNamespaceFilter = and(
-                                eq("feedSourceId", fs.id),
-                                not(eq("namespace", null))
-                            );
+                                Bson feedSourceIdFilter = eq("feedSourceId", fs.id);
+                                Bson feedSourceIdNamespaceFilter = and(
+                                    eq("feedSourceId", fs.id),
+                                    not(eq("namespace", null))
+                                );
     /*
                             List<FeedVersion> allFeedVersions = Persistence.feedVersions.getFiltered(feedSourceIdFilter);
                             List<FeedVersion> feedVersions = Persistence.feedVersions.getFiltered(feedSourceIdNamespaceFilter);
@@ -79,90 +86,115 @@ public class GtfsUtils {
                                 }
                             );
     */
-                            List<Snapshot> allSnapshots = Persistence.snapshots.getFiltered(feedSourceIdFilter);
-                            List<Snapshot> snapshots = Persistence.snapshots.getFiltered(feedSourceIdNamespaceFilter);
-                            System.out.println("  - Snapshots (" + snapshots.size() + "/" + allSnapshots.size() + " with valid namespace)");
-                            snapshots.forEach(
-                                sn -> {
-                                    System.out.println("    - " + sn.name + " " + sn.id);
-                                    System.out.println("      - namespace: " + sn.namespace);
-                                    checkTablesForNamespace(sn.namespace, connection);
-                                    if (!Strings.isNullOrEmpty(sn.snapshotOf) && !sn.snapshotOf.equals("mapdb_editor")) {
-                                        System.out.println("      - snapshotOf: " + sn.snapshotOf);
-                                        checkTablesForNamespace(sn.snapshotOf, connection);
+                                List<Snapshot> allSnapshots = Persistence.snapshots.getFiltered(feedSourceIdFilter);
+                                List<Snapshot> snapshots = Persistence.snapshots.getFiltered(feedSourceIdNamespaceFilter);
+                                System.out.println("  - Snapshots (" + snapshots.size() + "/" + allSnapshots.size() + " with valid namespace)");
+                                snapshots.forEach(
+                                    sn -> {
+                                        System.out.println("    - " + sn.name + " " + sn.id);
+                                        checkTablesForNamespace(sn.namespace, "namespace", connection);
+                                        if (!Strings.isNullOrEmpty(sn.snapshotOf) && !sn.snapshotOf.equals("mapdb_editor")) {
+                                            checkTablesForNamespace(sn.snapshotOf, "snapshotOf", connection);
+                                        }
                                     }
-                                }
-                            );
+                                );
+                            }
 
                         }
                     );
                 }
             );
+
+            // Once done, print the SQL statements to update the tables
+            System.out.println("-- Overview of changes that should be made");
+            scannedNamespaces.values().forEach(nsInfo -> {
+                // Add missing tables
+                nsInfo.missingTables.forEach(t -> {
+                    System.out.println("CREATE TABLE IF NOT EXISTS " + nsInfo.namespace + "." + t.name + " ... (use table.createSqlTable(...))");
+                });
+                nsInfo.tableInfos.forEach(t -> {
+                    // Add missing columns
+                    String alterTableSql = "ALTER TABLE " + nsInfo.namespace + "." + t.table.name;
+                    if (!t.missingColumns.isEmpty()) {
+                        String alterSql = alterTableSql;
+                        for (ColumnInfo c : t.missingColumns) {
+                            alterSql += " ADD COLUMN IF NOT EXISTS " + c.columnName + " " + c.expectedType;
+                        }
+                        System.out.println(alterSql);
+                    }
+
+                    // Attempt to fix the columns with wrong types
+                    if (!t.columnsWithWrongType.isEmpty()) {
+                        String alterSql = alterTableSql;
+                        for (ColumnInfo c : t.columnsWithWrongType) {
+                            alterSql += " ALTER COLUMN " + c.columnName + " TYPE " + c.expectedType;
+                        }
+                        System.out.println(alterSql);
+                    }
+                });
+            });
         } catch (SQLException sqle) {
             sqle.printStackTrace();
         }
     }
 
-    public static void checkTablesForNamespace(String namespace, Connection connection) {
-        try {
-            NamespaceInfo nsInfo = new NamespaceInfo(namespace, connection);
-
-            if (nsInfo.tableNames.isEmpty()) {
-                if (Strings.isNullOrEmpty(nsInfo.loadedDate)) {
-                    System.out.println(" - orphan");
-                } else {
-                    // Are there tables?
-                    System.out.println("\n          No tables found.");
+    public static void checkTablesForNamespace(String namespace, String type, Connection connection) {
+        if (scannedNamespaces.get(namespace) == null) {
+            String qualifier = "";
+            try {
+                NamespaceInfo nsInfo = new NamespaceInfo(namespace, connection);
+                if (nsInfo.isOrphan()) {
+                    qualifier = "- orphan";
+                } else if (nsInfo.tableNames.isEmpty()) {
+                    qualifier = "- No tables";
                 }
-            } else {
-                // Are tables missing?
-                nsInfo.missingTables.forEach(t -> System.out.println("          Missing table: " + t));
+                System.out.println("      - " + type + ": " + namespace + " " + qualifier);
 
-                for (Table table : Table.tablesInOrder) {
-                    if (nsInfo.tableNames.contains(table.name)) {
-                        // Are fields missing?
-                        checkTableColumns(namespace, connection, table);
-                    }
+                if (!nsInfo.tableNames.isEmpty()) {
+                    // Are tables missing?
+                    nsInfo.missingTables.forEach(t -> System.out.println("          Missing table: " + t));
+                    nsInfo.validTables.forEach(t -> checkTableColumns(nsInfo, connection, t));
                 }
+                scannedNamespaces.put(namespace, nsInfo);
+
+            } catch (SQLException sqle) {
+                // Do nothing
             }
-
-        } catch (SQLException sqle) {
-            // Do nothing
         }
-
-
-
-        // If a table is missing, create it?
-
-        // For tables that were there already, check fields
-
     }
 
-    private static void checkTableColumns(String namespace, Connection connection, Table table) throws SQLException {
+    private static void checkTableColumns(NamespaceInfo nsInfo, Connection connection, Table table) {
         // TODO Refactor all prepared statements.
-        PreparedStatement selectColumnStatement = connection.prepareStatement(
-            //"select column_name, data_type from information_schema.columns where table_schema = ? and table_name = ?"
-            "select column_name, data_type from metacolumns where table_schema = ? and table_name = ?"
-        );
-        selectColumnStatement.setString(1, namespace);
-        selectColumnStatement.setString(2, table.name);
-
-        ResultSet resultSet = selectColumnStatement.executeQuery();
-        List<ColumnInfo> columns = new ArrayList<>();
-        while (resultSet.next()) {
-            columns.add(new ColumnInfo(
-                resultSet.getString(1),
-                resultSet.getString(2)
-            ));
-        }
-
-        TableInfo tableInfo = new TableInfo(table, columns);
-        if (tableInfo.hasColumnIssues()) {
-            System.out.println("          Issues in table: " + table.name);
-            tableInfo.missingColumns.forEach(c -> System.out.println("            Missing column: " + c));
-            tableInfo.columnsWithWrongType.forEach(
-                c -> System.out.println("            Incorrect type for column: " + c.columnName + " expected: " + c.expectedType + " actual: " + c.dataType)
+        PreparedStatement selectColumnStatement = null;
+        try {
+            selectColumnStatement = connection.prepareStatement(
+                //"select column_name, data_type from information_schema.columns where table_schema = ? and table_name = ?"
+                "select column_name, data_type from metacolumns where table_schema = ? and table_name = ?"
             );
+            selectColumnStatement.setString(1, nsInfo.namespace);
+            selectColumnStatement.setString(2, table.name);
+
+            ResultSet resultSet = selectColumnStatement.executeQuery();
+            List<ColumnInfo> columns = new ArrayList<>();
+            while (resultSet.next()) {
+                columns.add(new ColumnInfo(
+                    resultSet.getString(1),
+                    resultSet.getString(2)
+                ));
+            }
+
+            TableInfo tableInfo = new TableInfo(table, columns);
+            if (tableInfo.hasColumnIssues()) {
+                System.out.println("          Issues in table: " + table.name);
+                tableInfo.missingColumns.forEach(c -> System.out.println("            Missing column: " + c));
+                tableInfo.columnsWithWrongType.forEach(
+                    c -> System.out.println("            Incorrect type for column: " + c.columnName + " expected: " + c.expectedType + " actual: " + c.dataType)
+                );
+            }
+
+            nsInfo.tableInfos.add(tableInfo);
+        } catch (SQLException e) {
+            e.printStackTrace();
         }
     }
 
@@ -189,8 +221,9 @@ public class GtfsUtils {
         public final String namespace;
         private String loadedDate = "";
         public final List<String> tableNames = new ArrayList<>();
-        public final List<String> missingTables = new ArrayList<>();
-        public final List<String> validTables = new ArrayList<>();
+        public final List<Table> missingTables = new ArrayList<>();
+        public final List<Table> validTables = new ArrayList<>();
+        public final List<TableInfo> tableInfos = new ArrayList<>();
 
         /** Used for tests only */
         public NamespaceInfo(String namespace, List<String> excludedTables) {
@@ -232,22 +265,27 @@ public class GtfsUtils {
 
         private void sortTables() {
             for (Table table : Table.tablesInOrder) {
-                String tableName = table.name;
-                if (tableNames.contains(tableName)) {
-                    validTables.add(tableName);
+                if (tableNames.contains(table.name)) {
+                    validTables.add(table);
                 } else {
-                    missingTables.add(tableName);
+                    missingTables.add(table);
                 }
             }
+        }
+
+        public boolean isOrphan() {
+            return tableNames.isEmpty() && Strings.isNullOrEmpty(loadedDate);
         }
     }
 
     public static class TableInfo {
+        public final Table table;
         public final List<ColumnInfo> columns;
-        public final List<String> missingColumns = new ArrayList<>();
+        public final List<ColumnInfo> missingColumns = new ArrayList<>();
         public final List<ColumnInfo> columnsWithWrongType = new ArrayList<>();
 
         public TableInfo(Table table, List<ColumnInfo> columns) {
+            this.table = table;
             this.columns = columns;
 
             for (Field field : table.fields) {
@@ -265,7 +303,9 @@ public class GtfsUtils {
                     }
                     // Only the id column seems to be marked as not nullable, so we won't check that for now.
                 } else {
-                    missingColumns.add(field.name);
+                    ColumnInfo c = new ColumnInfo(field.name, field.getSqlTypeName());
+                    c.expectedType = field.getSqlTypeName();
+                    missingColumns.add(c);
                 }
             }
         }
