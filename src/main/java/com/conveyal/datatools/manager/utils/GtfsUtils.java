@@ -112,7 +112,7 @@ public class GtfsUtils {
                 nsInfo.missingTables.forEach(t -> {
                     System.out.println("CREATE TABLE IF NOT EXISTS " + nsInfo.namespace + "." + t.name + " ... (use table.createSqlTable(...))");
                 });
-                nsInfo.tableInfos.forEach(t -> {
+                nsInfo.scannedTables.forEach(t -> {
                     // Add missing columns
                     String alterTableSql = "ALTER TABLE " + nsInfo.namespace + "." + t.table.name;
                     if (!t.missingColumns.isEmpty()) {
@@ -192,14 +192,14 @@ public class GtfsUtils {
                 );
             }
 
-            nsInfo.tableInfos.add(tableInfo);
+            nsInfo.scannedTables.add(tableInfo);
         } catch (SQLException e) {
             e.printStackTrace();
         }
     }
 
     public static class ColumnInfo {
-        public String columnName;
+        public final String columnName;
         public String dataType;
         public String expectedType;
 
@@ -215,6 +215,11 @@ public class GtfsUtils {
                 this.dataType = "text[]";
             }
         }
+
+        public ColumnInfo(Field field) {
+            this(field.name, field.getSqlTypeName());
+            this.expectedType = field.getSqlTypeName();
+        }
     }
 
     public static class NamespaceInfo {
@@ -223,7 +228,7 @@ public class GtfsUtils {
         public final List<String> tableNames = new ArrayList<>();
         public final List<Table> missingTables = new ArrayList<>();
         public final List<Table> validTables = new ArrayList<>();
-        public final List<TableInfo> tableInfos = new ArrayList<>();
+        public final List<TableInfo> scannedTables = new ArrayList<>();
 
         /** Used for tests only */
         public NamespaceInfo(String namespace, List<String> excludedTables) {
@@ -303,9 +308,7 @@ public class GtfsUtils {
                     }
                     // Only the id column seems to be marked as not nullable, so we won't check that for now.
                 } else {
-                    ColumnInfo c = new ColumnInfo(field.name, field.getSqlTypeName());
-                    c.expectedType = field.getSqlTypeName();
-                    missingColumns.add(c);
+                    missingColumns.add(new ColumnInfo(field));
                 }
             }
         }

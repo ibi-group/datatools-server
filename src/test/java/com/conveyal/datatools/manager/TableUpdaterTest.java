@@ -44,7 +44,7 @@ public class TableUpdaterTest extends DatatoolsTest {
         List<GtfsUtils.ColumnInfo> columns = Arrays
             .stream(Table.ROUTES.fields)
             .filter(f -> !removedColumns.contains(f.name))
-            .map(f -> new GtfsUtils.ColumnInfo(f.name, f.getSqlTypeName()))
+            .map(GtfsUtils.ColumnInfo::new)
             .collect(Collectors.toList());
 
         GtfsUtils.TableInfo tableInfo = new GtfsUtils.TableInfo(Table.ROUTES, columns);
@@ -58,7 +58,7 @@ public class TableUpdaterTest extends DatatoolsTest {
     void shouldDetectColumnsWithWrongType() {
         List<GtfsUtils.ColumnInfo> columns = Arrays
             .stream(Table.ROUTES.fields)
-            .map(f -> new GtfsUtils.ColumnInfo(f.name, f.getSqlTypeName()))
+            .map(GtfsUtils.ColumnInfo::new)
             .collect(Collectors.toList());
 
         GtfsUtils.TableInfo tableInfo = new GtfsUtils.TableInfo(Table.ROUTES, columns);
