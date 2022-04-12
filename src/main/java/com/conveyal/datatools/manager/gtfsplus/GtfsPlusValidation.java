@@ -297,7 +297,7 @@ public class GtfsPlusValidation implements Serializable {
     }
 
     /**
-     * Gets the displayed text for an option.
+     * Gets the text that is displayed for an option.
      */
     static String getOptionText(String value, JsonNode specField) {
         JsonNode optionNode = findOptionNode(value, specField);
