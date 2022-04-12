@@ -96,16 +96,14 @@ public class GtfsPlusValidation implements Serializable {
         final Enumeration<? extends ZipEntry> entries = zipFile.entries();
         while (entries.hasMoreElements()) {
             final ZipEntry entry = entries.nextElement();
-            for (int i = 0; i < DataManager.gtfsPlusConfig.size(); i++) {
-                JsonNode tableNode = DataManager.gtfsPlusConfig.get(i);
-                if (tableNode.get("name").asText().equals(entry.getName())) {
-                    LOG.info("Validating GTFS+ table: " + entry.getName());
-                    gtfsPlusTableCount++;
-                    // Skip any byte order mark that may be present. Files must be UTF-8,
-                    // but the GTFS spec says that "files that include the UTF byte order mark are acceptable".
-                    InputStream bis = new BOMInputStream(zipFile.getInputStream(entry));
-                    validateTable(validation.issues, tableNode, bis, gtfsFeed);
-                }
+            JsonNode tableNode = findNode(DataManager.gtfsPlusConfig, "name", entry.getName());
+            if (tableNode != null) {
+                LOG.info("Validating GTFS+ table: " + entry.getName());
+                gtfsPlusTableCount++;
+                // Skip any byte order mark that may be present. Files must be UTF-8,
+                // but the GTFS spec says that "files that include the UTF byte order mark are acceptable".
+                InputStream bis = new BOMInputStream(zipFile.getInputStream(entry));
+                validateTable(validation.issues, tableNode, bis, gtfsFeed);
             }
         }
         gtfsFeed.close();
@@ -160,10 +158,11 @@ public class GtfsPlusValidation implements Serializable {
             }
             // Validate each value in row. Note: we iterate over the fields and not values because a row may be missing
             // columns, but we still want to validate that missing value (e.g., if it is missing a required field).
+            String[] rowValues = csvReader.getValues();
             for (int f = 0; f < fieldsFound.length; f++) {
                 // If value exists for index, use that. Otherwise, default to null to avoid out of bounds exception.
-                String val = f < recordColumnCount ? csvReader.get(f) : null;
-                validateTableValue(issues, tableId, rowIndex, val, fieldsFound[f], gtfsFeed);
+                String val = f < recordColumnCount ? rowValues[f] : null;
+                validateTableValue(issues, tableId, rowIndex, rowValues, val, fieldsFound, fieldsFound[f], gtfsFeed);
             }
             rowIndex++;
         }
@@ -191,7 +190,9 @@ public class GtfsPlusValidation implements Serializable {
         Collection<ValidationIssue> issues,
         String tableId,
         int rowIndex,
+        String[] allValues,
         String value,
+        JsonNode[] specFieldsFound,
         JsonNode specField,
         GTFSFeed gtfsFeed
     ) {
@@ -223,6 +224,34 @@ public class GtfsPlusValidation implements Serializable {
                 if (invalid) {
                     issues.add(new ValidationIssue(tableId, fieldName, rowIndex, "Value: " + value + " is not a valid option."));
                 }
+
+                // Perform the parent value check if a parent field is set in the field spec.
+                JsonNode parentFieldNode = specField.get("parent");
+                if (parentFieldNode != null) {
+                    int parentValuePosition = getParentFieldPosition(specFieldsFound, parentFieldNode.asText());
+                    String parentValue = parentValuePosition >= 0
+                        ? allValues[parentValuePosition]
+                        : null;
+                    if (!isValueValidWithParent(parentValue, value, specField)) {
+                        // Generate a message showing the text that corresponds
+                        // to the category and subcategory values.
+                        String textForValue = getOptionText(value, specField);
+                        String textForParent = parentValue;
+                        if (parentValuePosition >= 0) {
+                            textForParent = getOptionText(textForParent, specFieldsFound[parentValuePosition]);
+                        }
+
+                        issues.add(new ValidationIssue(tableId, fieldName, rowIndex,
+                            String.format(
+                                "Value '%s' is not valid field '%s' is '%s'",
+                                textForValue,
+                                parentFieldNode.asText(),
+                                textForParent
+                            )
+                        ));
+                    }
+                }
+
                 break;
             case "TEXT":
                 // check if value exceeds max length requirement
@@ -268,7 +297,7 @@ public class GtfsPlusValidation implements Serializable {
     }
 
     /**
-     * Gets the text that is displayed for an option.
+     * Gets the displayed text for an option.
      */
     static String getOptionText(String value, JsonNode specField) {
         JsonNode optionNode = findOptionNode(value, specField);

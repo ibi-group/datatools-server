@@ -25,6 +25,11 @@ public class MergeFeedsResult implements Serializable {
      * records should be retained in the merged result.
      */
     public Set<String> serviceIds  = new HashSet<>();
+    /**
+     * Track the set of route IDs to end up in the merged feed in order to determine which route_attributes
+     * records should be retained in the merged result.
+     */
+    public Set<String> routeIds  = new HashSet<>();
     /** Contains the set of IDs that had their values remapped during the merge */
     public Map<String, String> remappedIds = new HashMap<>();
     /** Mapping of table name to line count in merged file */

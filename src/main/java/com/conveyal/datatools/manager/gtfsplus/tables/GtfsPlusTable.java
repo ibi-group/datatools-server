@@ -79,6 +79,13 @@ public class GtfsPlusTable {
         new StringField("zone_name", REQUIRED)
     );
 
+    public static final Table ROUTE_ATTRIBUTES = new Table("route_attributes", RouteAttribute.class, PROPRIETARY,
+        new StringField("route_id", REQUIRED),
+        new StringField("category", REQUIRED),
+        new StringField("subcategory", REQUIRED),
+        new StringField("running_way", REQUIRED)
+    );
+
     /**
      * List of tables in the order such that internal references can be appropriately checked as
      * tables are loaded/encountered.
@@ -93,6 +100,7 @@ public class GtfsPlusTable {
         RIDER_CATEGORIES,
         FARE_RIDER_CATEGORIES,
         CALENDAR_ATTRIBUTES,
-        FAREZONE_ATTRIBUTES
+        FAREZONE_ATTRIBUTES,
+        ROUTE_ATTRIBUTES
     };
 }
