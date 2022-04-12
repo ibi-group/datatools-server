@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.utils.sql;
 
+import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Snapshot;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.loader.Table;
@@ -16,6 +17,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.util.stream.Stream;
 
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
@@ -82,7 +84,7 @@ public class SqlSchemaUpdater {
                         eq("feedSourceId", fs.id),
                         not(eq("namespace", null))
                     );
-/*
+
                     List<FeedVersion> allFeedVersions = Persistence.feedVersions.getFiltered(feedSourceIdFilter);
                     List<FeedVersion> feedVersions = Persistence.feedVersions.getFiltered(feedSourceIdNamespaceFilter);
                     System.out.println("  - FeedVersions (" + feedVersions.size() + "/" + allFeedVersions.size() + " with valid namespace)");
@@ -92,7 +94,7 @@ public class SqlSchemaUpdater {
                             checkTablesForNamespace(fv.namespace, fv.name + "/v" + fv.version, "namespace");
                         }
                     );
-*/
+
                     List<Snapshot> allSnapshots = Persistence.snapshots.getFiltered(feedSourceIdFilter);
                     List<Snapshot> snapshots = Persistence.snapshots.getFiltered(feedSourceIdNamespaceFilter);
                     System.out.println("  - Snapshots (" + snapshots.size() + "/" + allSnapshots.size() + " with valid namespace)");
@@ -177,33 +179,29 @@ public class SqlSchemaUpdater {
 
         for (TableCheck tableCheck : ns.checkedTables) {
             // Add missing columns
-            Statement alterStatement = connection.createStatement();
-            if (!tableCheck.missingColumns.isEmpty()) {
-                String alterTableSql = String.format(
-                    "ALTER TABLE %s.%s %s",
-                    ns.namespace,
-                    tableCheck.table.name,
-                    tableCheck.missingColumns
-                        .stream()
-                        .map(ColumnCheck::getAddColumnSql)
-                        .collect(Collectors.joining(", "))
-                );
-                alterStatement.execute(alterTableSql);
-            }
+            alterTable(ns, tableCheck, tableCheck.missingColumns
+                .stream()
+                .map(ColumnCheck::getAddColumnSql)
+            );
 
             // Attempt to migrate column types
-            if (!tableCheck.columnsWithWrongType.isEmpty()) {
-                String alterTableSql = String.format(
-                    "ALTER TABLE %s.%s %s",
-                    ns.namespace,
-                    tableCheck.table.name,
-                    tableCheck.columnsWithWrongType
-                        .stream()
-                        .map(ColumnCheck::getAlterColumnTypeSql)
-                        .collect(Collectors.joining(", "))
-                );
-                alterStatement.execute(alterTableSql);
-            }
+            alterTable(ns, tableCheck, tableCheck.columnsWithWrongType
+                .stream()
+                .map(ColumnCheck::getAlterColumnTypeSql)
+            );
+        }
+    }
+
+    private void alterTable(NamespaceCheck ns, TableCheck tableCheck, Stream<String> columnsStream) throws SQLException {
+        if (columnsStream.count() > 0) {
+            Statement alterStatement = connection.createStatement();
+            String alterTableSql = String.format(
+                "ALTER TABLE %s.%s %s",
+                ns.namespace,
+                tableCheck.table.name,
+                columnsStream.collect(Collectors.joining(", "))
+            );
+            alterStatement.execute(alterTableSql);
         }
     }
 
