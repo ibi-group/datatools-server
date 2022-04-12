@@ -28,7 +28,7 @@ import com.conveyal.datatools.manager.extensions.transitland.TransitLandFeedReso
 import com.conveyal.datatools.manager.jobs.FeedUpdater;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.ErrorUtils;
-import com.conveyal.datatools.manager.utils.SqlSchemaUpdater;
+import com.conveyal.datatools.manager.utils.sql.SqlSchemaUpdater;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.GraphQLController;

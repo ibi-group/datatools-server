@@ -1,0 +1,56 @@
+package com.conveyal.datatools.manager.utils.sql;
+
+import com.conveyal.gtfs.loader.Field;
+import com.conveyal.gtfs.loader.Table;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * Contains the outcome of a table check (i.e. whether columns are missing or of the wrong type).
+ */
+public class TableCheck {
+    public final Table table;
+    public final List<ColumnCheck> columns;
+    public final List<ColumnCheck> missingColumns = new ArrayList<>();
+    public final List<ColumnCheck> columnsWithWrongType = new ArrayList<>();
+
+    public TableCheck(Table table, List<ColumnCheck> columns) {
+        this.table = table;
+        this.columns = columns;
+
+        for (Field field : table.fields) {
+            Optional<ColumnCheck> foundColumnForField = columns
+                .stream()
+                .filter(c -> c.columnName.equals(field.name))
+                .findFirst();
+
+            if (foundColumnForField.isPresent()) {
+                ColumnCheck columnForField = foundColumnForField.get();
+                // Are fields that are present of the correct type?
+                if (!columnForField.isSameTypeAs(field)) {
+                    columnForField.setExpectedType(field.getSqlTypeName());
+                    columnsWithWrongType.add(columnForField);
+                }
+                // Only the id column seems to be marked as not nullable, so we won't check that for now.
+            } else {
+                missingColumns.add(new ColumnCheck(field));
+            }
+        }
+    }
+
+    public boolean hasColumnIssues() {
+        return !missingColumns.isEmpty() || !columnsWithWrongType.isEmpty();
+    }
+
+    public void printReport() {
+        if (hasColumnIssues()) {
+            System.out.println("          Issues in table: " + table.name);
+            missingColumns.forEach(c -> System.out.println("            Missing column: " + c.columnName));
+            columnsWithWrongType.forEach(
+                c -> System.out.println("            Incorrect type for column: " + c.columnName + " expected: " + c.getExpectedType() + " actual: " + c.getDataType())
+            );
+        }
+    }
+}

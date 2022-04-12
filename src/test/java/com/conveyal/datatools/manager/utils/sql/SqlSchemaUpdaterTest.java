@@ -1,13 +1,12 @@
-package com.conveyal.datatools.manager;
+package com.conveyal.datatools.manager.utils.sql;
 
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
-import com.conveyal.datatools.manager.controllers.api.UserController;
+import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
-import com.conveyal.datatools.manager.utils.SqlSchemaUpdater;
 import com.conveyal.gtfs.loader.Table;
 import com.google.common.collect.Lists;
 import org.junit.jupiter.api.AfterAll;
@@ -21,14 +20,11 @@ import java.util.ArrayList;
 
 import static com.conveyal.datatools.TestUtils.appendDate;
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
-import static com.conveyal.datatools.manager.auth.Auth0Users.USERS_API_PATH;
-import static com.conveyal.datatools.manager.controllers.api.UserController.TEST_AUTH0_DOMAIN;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.MANUALLY_UPLOADED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-public class TableUpdaterTestE2E extends UnitTest {
+class SqlSchemaUpdaterTest extends UnitTest {
     private static Project project;
     private static FeedSource feedSource;
 
@@ -39,16 +35,11 @@ public class TableUpdaterTestE2E extends UnitTest {
     public static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
-        // No idea why notifications are sent after this test, so
-        // at least prevent notifications from being sent.
-        UserController.setBaseUsersUrl("http://" + TEST_AUTH0_DOMAIN + USERS_API_PATH);
 
-        // Create a project, feed sources, and feed versions to merge.
+        // Create a project and feed sources.
         project = new Project();
         project.name = appendDate("Test");
         Persistence.projects.create(project);
-
-        // Bart
         feedSource = new FeedSource(appendDate("Test Feed"), project.id, MANUALLY_UPLOADED);
         Persistence.feedSources.create(feedSource);
     }
@@ -68,7 +59,7 @@ public class TableUpdaterTestE2E extends UnitTest {
      */
     @Test
     void canCheckAndUpgradeTables() {
-        // Create source version (folder contains stop_attributes file).
+        // Create source version.
         FeedVersion sourceVersion = createFeedVersionFromGtfsZip(
             feedSource,
             "caltrain_gtfs_lite.zip"
@@ -79,14 +70,14 @@ public class TableUpdaterTestE2E extends UnitTest {
         ) {
             SqlSchemaUpdater schemaUpdater = new SqlSchemaUpdater(connection);
             String namespace = sourceVersion.namespace;
-            SqlSchemaUpdater.NamespaceInfo nsInfo = schemaUpdater.checkTablesForNamespace(
+            NamespaceCheck namespaceCheck = schemaUpdater.checkTablesForNamespace(
                 namespace,
                 "test version",
                 "namespace"
             );
 
             // Some tables are missing from the feed and should be flagged.
-            assertTrue(nsInfo.missingTables.containsAll(Lists.newArrayList(
+            assertTrue(namespaceCheck.missingTables.containsAll(Lists.newArrayList(
                 Table.SCHEDULE_EXCEPTIONS,
                 Table.FEED_INFO,
                 Table.TRANSFERS,
@@ -94,12 +85,12 @@ public class TableUpdaterTestE2E extends UnitTest {
                 Table.ATTRIBUTIONS,
                 Table.TRANSLATIONS
             )));
-            for (Table t : nsInfo.validTables) {
-                SqlSchemaUpdater.TableInfo tableInfo = schemaUpdater.checkTableColumns(nsInfo, t);
-                assertNotNull(tableInfo);
 
+            TableCheck checkToRemove = null;
+            TableCheck checkToAdd = null;
+            for (TableCheck tableCheck : namespaceCheck.checkedTables) {
                 // The agency table is missing columns, so they should be flagged.
-                if (t == Table.AGENCY) {
+                if (tableCheck.table == Table.AGENCY) {
                     ArrayList<String> missingColumns = Lists.newArrayList(
                         "agency_lang",
                         "agency_phone",
@@ -108,12 +99,12 @@ public class TableUpdaterTestE2E extends UnitTest {
                         "agency_email"
                     );
 
-                    assertEquals(missingColumns.size(), tableInfo.missingColumns.size());
-                    for (SqlSchemaUpdater.ColumnInfo c : tableInfo.missingColumns) {
+                    assertEquals(missingColumns.size(), tableCheck.missingColumns.size());
+                    for (ColumnCheck c : tableCheck.missingColumns) {
                         assertTrue(missingColumns.contains(c.columnName));
                         assertEquals(
                             String.format(
-                                "ADD COLUMN IF NOT EXISTS %s %s", c.columnName, c.expectedType
+                                "ADD COLUMN IF NOT EXISTS %s %s", c.columnName, c.getExpectedType()
                             ),
                             c.getAddColumnSql()
                         );
@@ -121,8 +112,8 @@ public class TableUpdaterTestE2E extends UnitTest {
                 }
 
                 // Simulate a previously incorrect column type that needs to be updated.
-                if (t == Table.CALENDAR) {
-                    assertTrue(tableInfo.columnsWithWrongType.isEmpty());
+                if (tableCheck.table == Table.CALENDAR) {
+                    assertTrue(tableCheck.columnsWithWrongType.isEmpty());
 
                     PreparedStatement changeStatement = connection.prepareStatement(
                         String.format(
@@ -133,53 +124,52 @@ public class TableUpdaterTestE2E extends UnitTest {
                     changeStatement.execute();
 
                     // Check that the modified column is flagged.
-                    SqlSchemaUpdater.TableInfo changedTableInfo = schemaUpdater.checkTableColumns(nsInfo, t);
-                    assertNotNull(changedTableInfo);
+                    TableCheck changedTableCheck = new TableCheck(tableCheck.table, schemaUpdater.getColumns(namespaceCheck.namespace, tableCheck.table));
+                    checkToRemove = tableCheck;
+                    checkToAdd = changedTableCheck;
 
-                    assertEquals(1, changedTableInfo.columnsWithWrongType.size());
-                    SqlSchemaUpdater.ColumnInfo columnWithWrongType = changedTableInfo.columnsWithWrongType.get(0);
+                    assertEquals(1, changedTableCheck.columnsWithWrongType.size());
+                    ColumnCheck columnWithWrongType = changedTableCheck.columnsWithWrongType.get(0);
                     assertEquals("monday", columnWithWrongType.columnName);
-                    assertEquals("varchar", columnWithWrongType.dataType);
-                    assertEquals("integer", columnWithWrongType.expectedType);
+                    assertEquals("varchar", columnWithWrongType.getDataType());
+                    assertEquals("integer", columnWithWrongType.getExpectedType());
                     assertEquals("ALTER COLUMN monday TYPE integer USING monday::integer", columnWithWrongType.getAlterColumnTypeSql());
                 }
             }
+            // Update namespaceCheck with the table check with the modified column above,
+            // so that the table upgrade can pick it up.
+            namespaceCheck.checkedTables.remove(checkToRemove);
+            namespaceCheck.checkedTables.add(checkToAdd);
 
             // Go ahead and update the tables.
-            schemaUpdater.upgradeNamespace(nsInfo);
+            schemaUpdater.upgradeNamespace(namespaceCheck);
 
             schemaUpdater.resetScannedNamespaces();
-            SqlSchemaUpdater.NamespaceInfo updatedNsInfo = schemaUpdater.checkTablesForNamespace(
+            NamespaceCheck updatedNamespaceCheck = schemaUpdater.checkTablesForNamespace(
                 namespace,
                 "test version",
                 "namespace"
             );
 
             // Check that missing fields were added
-            for (Table t : updatedNsInfo.validTables) {
-                SqlSchemaUpdater.TableInfo tableInfo = schemaUpdater.checkTableColumns(nsInfo, t);
-                assertNotNull(tableInfo);
-
+            for (TableCheck tableCheck : updatedNamespaceCheck.checkedTables) {
                 // The agency table is missing columns, so they should be flagged.
-                if (t == Table.AGENCY) {
-                    assertTrue(tableInfo.missingColumns.isEmpty());
+                if (tableCheck.table == Table.AGENCY) {
+                    assertTrue(tableCheck.missingColumns.isEmpty());
                 }
 
                 // Simulate a previously incorrect column type that needs to be updated.
-                if (t == Table.CALENDAR) {
-                    assertTrue(tableInfo.columnsWithWrongType.isEmpty());
+                if (tableCheck.table == Table.CALENDAR) {
+                    assertTrue(tableCheck.columnsWithWrongType.isEmpty());
                 }
             }
 
 
             // Check that missing tables were added.
-            assertTrue(updatedNsInfo.missingTables.isEmpty());
-            for (Table t : updatedNsInfo.validTables) {
-                SqlSchemaUpdater.TableInfo tableInfo = schemaUpdater.checkTableColumns(updatedNsInfo, t);
-                assertNotNull(tableInfo);
-
-                assertTrue(tableInfo.missingColumns.isEmpty());
-                assertTrue(tableInfo.columnsWithWrongType.isEmpty());
+            assertTrue(updatedNamespaceCheck.missingTables.isEmpty());
+            for (TableCheck tableCheck : updatedNamespaceCheck.checkedTables) {
+                assertTrue(tableCheck.missingColumns.isEmpty());
+                assertTrue(tableCheck.columnsWithWrongType.isEmpty());
             }
         } catch (Exception e) {
             e.printStackTrace();
