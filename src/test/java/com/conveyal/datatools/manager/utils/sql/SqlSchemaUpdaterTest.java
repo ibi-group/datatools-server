@@ -66,7 +66,7 @@ class SqlSchemaUpdaterTest extends UnitTest {
         );
 
         try (
-            Connection connection = DataManager.GTFS_DATA_SOURCE.getConnection();
+            Connection connection = DataManager.GTFS_DATA_SOURCE.getConnection()
         ) {
             SqlSchemaUpdater schemaUpdater = new SqlSchemaUpdater(connection);
             String namespace = sourceVersion.namespace;

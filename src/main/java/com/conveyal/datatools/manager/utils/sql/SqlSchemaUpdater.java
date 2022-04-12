@@ -16,8 +16,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Function;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
@@ -36,7 +36,6 @@ public class SqlSchemaUpdater {
     private final PreparedStatement selectNamespaceTablesStatement;
     private final PreparedStatement selectLoadedDateStatement;
     private final PreparedStatement selectColumnStatement;
-    private final PreparedStatement selectColumnStatement1;
 
     public SqlSchemaUpdater(Connection connection) throws SQLException {
         this.connection = connection;
@@ -55,10 +54,6 @@ public class SqlSchemaUpdater {
         selectLoadedDateStatement = connection.prepareStatement(
             "select loaded_date from feeds where namespace = ?"
         );
-
-        selectColumnStatement1 = connection.prepareStatement(
-            "select column_name, data_type from information_schema.columns where table_schema = ? and table_name = ?"
-        );
     }
 
 
@@ -72,42 +67,39 @@ public class SqlSchemaUpdater {
         Persistence.projects.getAll().forEach(p -> {
             System.out.println("Project " + p.name);
             Persistence.feedSources.getFiltered(eq("projectId", p.id)).forEach(fs -> {
-                // FIXME
-                if (checkedNamespaces.size() < 25) {
-                    System.out.println("- FeedSource " + fs.name + " " + fs.id);
-                    if (!Strings.isNullOrEmpty(fs.editorNamespace)) {
-                        checkTablesForNamespace(fs.editorNamespace, p.name + "/" + fs.name + "/editor", "editor");
-                    }
-
-                    Bson feedSourceIdFilter = eq("feedSourceId", fs.id);
-                    Bson feedSourceIdNamespaceFilter = and(
-                        eq("feedSourceId", fs.id),
-                        not(eq("namespace", null))
-                    );
-
-                    List<FeedVersion> allFeedVersions = Persistence.feedVersions.getFiltered(feedSourceIdFilter);
-                    List<FeedVersion> feedVersions = Persistence.feedVersions.getFiltered(feedSourceIdNamespaceFilter);
-                    System.out.println("  - FeedVersions (" + feedVersions.size() + "/" + allFeedVersions.size() + " with valid namespace)");
-                    feedVersions.forEach(
-                        fv -> {
-                            System.out.print("    - v" + fv.version + ": " + fv.namespace);
-                            checkTablesForNamespace(fv.namespace, fv.name + "/v" + fv.version, "namespace");
-                        }
-                    );
-
-                    List<Snapshot> allSnapshots = Persistence.snapshots.getFiltered(feedSourceIdFilter);
-                    List<Snapshot> snapshots = Persistence.snapshots.getFiltered(feedSourceIdNamespaceFilter);
-                    System.out.println("  - Snapshots (" + snapshots.size() + "/" + allSnapshots.size() + " with valid namespace)");
-                    snapshots.forEach(
-                        sn -> {
-                            System.out.println("    - " + sn.name + " " + sn.id);
-                            checkTablesForNamespace(sn.namespace, p.name + "/snapshot " + sn.name,  "namespace");
-                            if (!Strings.isNullOrEmpty(sn.snapshotOf) && !sn.snapshotOf.equals("mapdb_editor")) {
-                                checkTablesForNamespace(sn.snapshotOf, p.name + "/snapshotOf " + sn.name,  "snapshotOf");
-                            }
-                        }
-                    );}
+                System.out.println("- FeedSource " + fs.name + " " + fs.id);
+                if (!Strings.isNullOrEmpty(fs.editorNamespace)) {
+                    checkTablesForNamespace(fs.editorNamespace, p.name + "/" + fs.name + "/editor", "editor");
                 }
+
+                Bson feedSourceIdFilter = eq("feedSourceId", fs.id);
+                Bson feedSourceIdNamespaceFilter = and(
+                    eq("feedSourceId", fs.id),
+                    not(eq("namespace", null))
+                );
+
+                List<FeedVersion> allFeedVersions = Persistence.feedVersions.getFiltered(feedSourceIdFilter);
+                List<FeedVersion> feedVersions = Persistence.feedVersions.getFiltered(feedSourceIdNamespaceFilter);
+                System.out.println("  - FeedVersions (" + feedVersions.size() + "/" + allFeedVersions.size() + " with valid namespace)");
+                feedVersions.forEach(
+                    fv -> {
+                        System.out.print("    - v" + fv.version + ": " + fv.namespace);
+                        checkTablesForNamespace(fv.namespace, fv.name + "/v" + fv.version, "namespace");
+                    }
+                );
+
+                List<Snapshot> allSnapshots = Persistence.snapshots.getFiltered(feedSourceIdFilter);
+                List<Snapshot> snapshots = Persistence.snapshots.getFiltered(feedSourceIdNamespaceFilter);
+                System.out.println("  - Snapshots (" + snapshots.size() + "/" + allSnapshots.size() + " with valid namespace)");
+                snapshots.forEach(
+                    sn -> {
+                        System.out.println("    - " + sn.name + " " + sn.id);
+                        checkTablesForNamespace(sn.namespace, p.name + "/snapshot " + sn.name,  "namespace");
+                        if (!Strings.isNullOrEmpty(sn.snapshotOf) && !sn.snapshotOf.equals("mapdb_editor")) {
+                            checkTablesForNamespace(sn.snapshotOf, p.name + "/snapshotOf " + sn.name,  "snapshotOf");
+                        }
+                    }
+                );}
             );}
         );
 
@@ -122,20 +114,22 @@ public class SqlSchemaUpdater {
             ns.checkedTables.forEach(t -> {
                 // Add missing columns
                 if (!t.missingColumns.isEmpty()) {
-                    System.out.printf("ALTER TABLE %s.%s %s;\n",
+                    System.out.println(getAlterTableSql(
                         ns.namespace,
                         t.table.name,
-                        t.missingColumns.stream().map(ColumnCheck::getAddColumnSql).collect(Collectors.joining(", "))
-                    );
+                        t.missingColumns,
+                        ColumnCheck::getAddColumnSql
+                    ));
                 }
 
                 // Attempt to fix the columns with wrong types
                 if (!t.columnsWithWrongType.isEmpty()) {
-                    System.out.printf("ALTER TABLE %s.%s %s;\n",
+                    System.out.println(getAlterTableSql(
                         ns.namespace,
                         t.table.name,
-                        t.columnsWithWrongType.stream().map(ColumnCheck::getAlterColumnTypeSql).collect(Collectors.joining(", "))
-                    );
+                        t.columnsWithWrongType,
+                        ColumnCheck::getAlterColumnTypeSql
+                    ));
                 }
             });
         });
@@ -171,38 +165,47 @@ public class SqlSchemaUpdater {
      * Upgrades a namespace by adding missing tables/columns and
      * changing columns with incorrect types.
      */
-    public void upgradeNamespace(NamespaceCheck ns) throws SQLException {
+    public void upgradeNamespace(NamespaceCheck ns) {
         // Add missing tables
+        String namespace = ns.namespace;
+
         for (Table t : ns.missingTables) {
-            t.createSqlTable(connection, ns.namespace, true);
+            t.createSqlTable(connection, namespace, true);
         }
 
         for (TableCheck tableCheck : ns.checkedTables) {
+            String tableName = tableCheck.table.name;
+
             // Add missing columns
-            alterTable(ns, tableCheck, tableCheck.missingColumns
-                .stream()
-                .map(ColumnCheck::getAddColumnSql)
-            );
+            alterTable(namespace, tableName, tableCheck.missingColumns, ColumnCheck::getAddColumnSql);
 
             // Attempt to migrate column types
-            alterTable(ns, tableCheck, tableCheck.columnsWithWrongType
-                .stream()
-                .map(ColumnCheck::getAlterColumnTypeSql)
-            );
+            alterTable(namespace, tableName, tableCheck.columnsWithWrongType, ColumnCheck::getAlterColumnTypeSql);
         }
     }
 
-    private void alterTable(NamespaceCheck ns, TableCheck tableCheck, Stream<String> columnsStream) throws SQLException {
-        if (columnsStream.count() > 0) {
-            Statement alterStatement = connection.createStatement();
-            String alterTableSql = String.format(
-                "ALTER TABLE %s.%s %s",
-                ns.namespace,
-                tableCheck.table.name,
-                columnsStream.collect(Collectors.joining(", "))
-            );
-            alterStatement.execute(alterTableSql);
+    private void alterTable(String namespace, String tableName, List<ColumnCheck> columns, Function<ColumnCheck, String> mapper) {
+        if (!columns.isEmpty()) {
+            try (Statement alterStatement = connection.createStatement()) {
+                alterStatement.execute(getAlterTableSql(namespace, tableName, columns, mapper));
+            } catch (SQLException e) {
+                e.printStackTrace();
+            }
         }
+    }
+
+    private String getAlterTableSql(
+        String namespace,
+        String tableName,
+        List<ColumnCheck> columns,
+        Function<ColumnCheck, String> mapper
+    ) {
+        return String.format(
+            "ALTER TABLE %s.%s %s",
+            namespace,
+            tableName,
+            columns.stream().map(mapper).collect(Collectors.joining(", "))
+        );
     }
 
     /**
