@@ -1,0 +1,6 @@
+route_id,category,subcategory,running_way
+01,3,301,3
+03,2,201,1
+07,2,201,1
+11,2,201,1
+99,2,201,1
