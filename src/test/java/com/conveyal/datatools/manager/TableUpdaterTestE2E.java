@@ -68,7 +68,7 @@ public class TableUpdaterTestE2E extends UnitTest {
      * and to upgrade the tables accordingly.
      */
     @Test
-    void canCheckAndUpgradeTables() throws SQLException, InterruptedException {
+    void canCheckAndUpgradeTables() throws SQLException {
         // Create source version (folder contains stop_attributes file).
         FeedVersion sourceVersion = createFeedVersionFromGtfsZip(
             feedSource,
@@ -147,10 +147,7 @@ public class TableUpdaterTestE2E extends UnitTest {
             // Go ahead and update the tables.
             GtfsUtils.upgradeNamespace(nsInfo, connection);
 
-            // Wait a second for db metadata to refresh?
-            Thread.sleep(1000);
-
-            //
+            GtfsUtils.resetScannedNamespaces();
             GtfsUtils.NamespaceInfo updatedNsInfo = GtfsUtils.checkTablesForNamespace(
                 namespace,
                 "test version",

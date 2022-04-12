@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.utils;
 
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.gtfsplus.tables.GtfsPlusTable;
+import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Snapshot;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.loader.Field;
@@ -56,8 +57,12 @@ public class GtfsUtils {
         return null;
     }
 
+    /**
+     * Checks all namespaces that are referenced from projects
+     * for tables and columns that need to be added or changed.
+     */
     public static void checkReferencedNamespaces() {
-        scannedNamespaces = new HashMap<>();
+        resetScannedNamespaces();
 
         try (Connection connection = DataManager.GTFS_DATA_SOURCE.getConnection()) {
             Persistence.projects.getAll().forEach(
@@ -76,17 +81,17 @@ public class GtfsUtils {
                                     eq("feedSourceId", fs.id),
                                     not(eq("namespace", null))
                                 );
-    /*
-                            List<FeedVersion> allFeedVersions = Persistence.feedVersions.getFiltered(feedSourceIdFilter);
-                            List<FeedVersion> feedVersions = Persistence.feedVersions.getFiltered(feedSourceIdNamespaceFilter);
-                            System.out.println("  - FeedVersions (" + feedVersions.size() + "/" + allFeedVersions.size() + " with valid namespace)");
-                            feedVersions.forEach(
-                                fv -> {
-                                    System.out.print("    - v" + fv.version + ": " + fv.namespace);
-                                    checkTablesForNamespace(fv.namespace);
-                                }
-                            );
-    */
+
+                                List<FeedVersion> allFeedVersions = Persistence.feedVersions.getFiltered(feedSourceIdFilter);
+                                List<FeedVersion> feedVersions = Persistence.feedVersions.getFiltered(feedSourceIdNamespaceFilter);
+                                System.out.println("  - FeedVersions (" + feedVersions.size() + "/" + allFeedVersions.size() + " with valid namespace)");
+                                feedVersions.forEach(
+                                    fv -> {
+                                        System.out.print("    - v" + fv.version + ": " + fv.namespace);
+                                        checkTablesForNamespace(fv.namespace, fv.name + "/v" + fv.version, "namespace", connection);
+                                    }
+                                );
+
                                 List<Snapshot> allSnapshots = Persistence.snapshots.getFiltered(feedSourceIdFilter);
                                 List<Snapshot> snapshots = Persistence.snapshots.getFiltered(feedSourceIdNamespaceFilter);
                                 System.out.println("  - Snapshots (" + snapshots.size() + "/" + allSnapshots.size() + " with valid namespace)");
@@ -137,6 +142,10 @@ public class GtfsUtils {
         } catch (SQLException sqle) {
             sqle.printStackTrace();
         }
+    }
+
+    public static void resetScannedNamespaces() {
+        scannedNamespaces = new HashMap<>();
     }
 
     public static NamespaceInfo checkTablesForNamespace(String namespace, String nickname, String type, Connection connection) {
@@ -206,19 +215,7 @@ public class GtfsUtils {
     public static void upgradeNamespace(NamespaceInfo nsInfo, Connection connection) throws SQLException {
         // Add missing tables
         for (Table t : nsInfo.missingTables) {
-            // Copied from gtfs-lib
-            String tableName = String.join(".", nsInfo.namespace, t.name);
-            String fieldDeclarations = (String)Arrays.stream(t.fields).map(Field::getSqlDeclaration).collect(Collectors.joining(", "));
-            String idFieldType = "serial";
-            String createSql = String.format("create table if not exists %s (id %s not null, %s)", tableName, idFieldType, fieldDeclarations);
-
-            Statement statement = connection.createStatement();
-            System.out.println("create SQL: " + createSql);
-            statement.execute(createSql);
-
-            //t.createSqlTable(connection, nsInfo.namespace, true);
-            //Table newTable = new Table(nsInfo.namespace + "." + t.name, t.getEntityClass(), Requirement.OPTIONAL, t.fields);
-            //newTable.createSqlTable(connection, null, true);
+            t.createSqlTable(connection, nsInfo.namespace, true);
         }
 
         for (Table t : nsInfo.validTables) {
