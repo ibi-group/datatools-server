@@ -13,6 +13,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -138,8 +139,9 @@ public class GtfsUtils {
         }
     }
 
-    public static void checkTablesForNamespace(String namespace, String nickname, String type, Connection connection) {
-        if (scannedNamespaces.get(namespace) == null) {
+    public static NamespaceInfo checkTablesForNamespace(String namespace, String nickname, String type, Connection connection) {
+        NamespaceInfo existingNsInfo = scannedNamespaces.get(namespace);
+        if (existingNsInfo == null) {
             String qualifier = "";
             try {
                 NamespaceInfo nsInfo = new NamespaceInfo(namespace, nickname, connection);
@@ -156,20 +158,21 @@ public class GtfsUtils {
                     nsInfo.validTables.forEach(t -> checkTableColumns(nsInfo, connection, t));
                 }
                 scannedNamespaces.put(namespace, nsInfo);
-
+                return nsInfo;
             } catch (SQLException sqle) {
                 // Do nothing
+                System.out.println("fail");
             }
         }
+        return existingNsInfo;
     }
 
-    private static void checkTableColumns(NamespaceInfo nsInfo, Connection connection, Table table) {
+    public static TableInfo checkTableColumns(NamespaceInfo nsInfo, Connection connection, Table table) {
         // TODO Refactor all prepared statements.
         PreparedStatement selectColumnStatement = null;
         try {
             selectColumnStatement = connection.prepareStatement(
-                //"select column_name, data_type from information_schema.columns where table_schema = ? and table_name = ?"
-                "select column_name, data_type from metacolumns where table_schema = ? and table_name = ?"
+                "select column_name, data_type from information_schema.columns where table_schema = ? and table_name = ?"
             );
             selectColumnStatement.setString(1, nsInfo.namespace);
             selectColumnStatement.setString(2, table.name);
@@ -193,9 +196,63 @@ public class GtfsUtils {
             }
 
             nsInfo.scannedTables.add(tableInfo);
+            return tableInfo;
         } catch (SQLException e) {
             e.printStackTrace();
         }
+        return null;
+    }
+
+    public static void upgradeNamespace(NamespaceInfo nsInfo, Connection connection) throws SQLException {
+        // Add missing tables
+        for (Table t : nsInfo.missingTables) {
+            // Copied from gtfs-lib
+            String tableName = String.join(".", nsInfo.namespace, t.name);
+            String fieldDeclarations = (String)Arrays.stream(t.fields).map(Field::getSqlDeclaration).collect(Collectors.joining(", "));
+            String idFieldType = "serial";
+            String createSql = String.format("create table if not exists %s (id %s not null, %s)", tableName, idFieldType, fieldDeclarations);
+
+            Statement statement = connection.createStatement();
+            System.out.println("create SQL: " + createSql);
+            statement.execute(createSql);
+
+            //t.createSqlTable(connection, nsInfo.namespace, true);
+            //Table newTable = new Table(nsInfo.namespace + "." + t.name, t.getEntityClass(), Requirement.OPTIONAL, t.fields);
+            //newTable.createSqlTable(connection, null, true);
+        }
+
+        for (Table t : nsInfo.validTables) {
+            TableInfo tableInfo = GtfsUtils.checkTableColumns(nsInfo, connection, t);
+            // Add missing columns
+            Statement alterStatement = connection.createStatement();
+            if (!tableInfo.missingColumns.isEmpty()) {
+                String alterTableSql = String.format(
+                    "ALTER TABLE %s.%s %s",
+                    nsInfo.namespace,
+                    t.name,
+                    tableInfo.missingColumns
+                        .stream()
+                        .map(ColumnInfo::getAddColumnSql)
+                        .collect(Collectors.joining(", "))
+                );
+                alterStatement.execute(alterTableSql);
+            }
+
+            // Attempt to migrate column types
+            if (!tableInfo.columnsWithWrongType.isEmpty()) {
+                String alterTableSql = String.format(
+                    "ALTER TABLE %s.%s %s",
+                    nsInfo.namespace,
+                    t.name,
+                    tableInfo.columnsWithWrongType
+                        .stream()
+                        .map(ColumnInfo::getAlterColumnTypeSql)
+                        .collect(Collectors.joining(", "))
+                );
+                alterStatement.execute(alterTableSql);
+            }
+        }
+
     }
 
     public static class ColumnInfo {
@@ -222,7 +279,7 @@ public class GtfsUtils {
         }
 
         public String getAlterColumnTypeSql() {
-            return String.format("ALTER COLUMN %s TYPE %s", columnName, expectedType);
+            return String.format("ALTER COLUMN %s TYPE %s USING %s::%s", columnName, expectedType, columnName, expectedType);
         }
 
         public String getAddColumnSql() {
@@ -256,8 +313,7 @@ public class GtfsUtils {
 
             // Check that all tables for the namespace are present.
             PreparedStatement selectNamespaceTablesStatement = connection.prepareStatement(
-                //"select table_name from information_schema.tables where table_schema = ?"
-                "select table_name from metatables where table_schema = ?"
+                "select table_name from information_schema.tables where table_schema = ?"
             );
             selectNamespaceTablesStatement.setString(1, namespace);
             PreparedStatement selectLoadedDateStatement = connection.prepareStatement(
