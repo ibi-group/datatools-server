@@ -266,4 +266,96 @@ public class GtfsPlusValidation implements Serializable {
     private static String missingIdText(String value, String entity) {
         return String.join(" ", entity, "ID", value, NOT_FOUND);
     }
+
+    /**
+     * Gets the text that is displayed for an option.
+     */
+    static String getOptionText(String value, JsonNode specField) {
+        JsonNode optionNode = findOptionNode(value, specField);
+        if (optionNode != null) {
+            JsonNode textNode = optionNode.get("text");
+            if (textNode != null) {
+                return textNode.asText();
+            }
+        }
+        return value;
+    }
+
+    /**
+     * Determines whether a node has a given key and value.
+     */
+    private static boolean nodeHasKey(JsonNode jsonNode, String key, String keyValue) {
+        // jsonNode can be null if a file contains extra columns.
+        if (jsonNode == null) return false;
+        JsonNode nameField = jsonNode.get(key);
+        return nameField != null && nameField.asText().equals(keyValue);
+    }
+
+    /**
+     * Helper method to extract the route category value when validating a route subcategory.
+     */
+    static int getParentFieldPosition(JsonNode[] specFieldsFound, String parentField) {
+        for (int i = 0; i < specFieldsFound.length; i++) {
+            if (nodeHasKey(specFieldsFound[i], "name", parentField)) {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    /**
+     * Helper method to find a node with a given key and value.
+     */
+    public static JsonNode findNode(JsonNode parentNode, String key, String keyValue) {
+        if (parentNode != null) {
+            for (JsonNode childNode : parentNode) {
+                if (nodeHasKey(childNode, key, keyValue)) {
+                    return childNode;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Determines if a route subcategory is a valid value of (belongs to) a given route category.
+     */
+    public static boolean isValueValidWithParent(String parentValue, String value, JsonNode specField) {
+        // If the provided value is not one of the specField options, then the value is not valid.
+        JsonNode optionNode = findOptionNode(value, specField);
+        if (optionNode == null) return false;
+
+        String optionParentValue = getOptionParentValue(optionNode);
+        // If no parent value is defined, the value is always valid.
+        return optionParentValue == null || optionParentValue.equals(parentValue);
+    }
+
+    /**
+     * Returns the parent value, if any, for an option (used for tests).
+     */
+    public static String getOptionParentValue(String value, JsonNode specField) {
+        JsonNode optionNode = findOptionNode(value, specField);
+        return getOptionParentValue(optionNode);
+    }
+
+    /**
+     * Finds an option node, if any, with the given value under the given specField.
+     */
+    private static JsonNode findOptionNode(String value, JsonNode specField) {
+        return findNode(specField.get("options"), "value", value);
+    }
+
+    /**
+     * Returns the parent value, if any, for an option node.
+     */
+    private static String getOptionParentValue(JsonNode optionNode) {
+        if (optionNode != null) {
+            JsonNode parentValueNode = optionNode.get("parentValue");
+            if (parentValueNode != null) {
+                return parentValueNode.asText();
+            }
+        }
+        return null;
+    }
 }
