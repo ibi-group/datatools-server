@@ -65,7 +65,7 @@ public class NamespaceCheck {
      * @return true if a namespace does not have any reference in the PSQL database.
      */
     public boolean isOrphan() {
-        return tableNames.isEmpty() && Strings.isNullOrEmpty(loadedDate);
+        return tableNames.isEmpty(); // && Strings.isNullOrEmpty(loadedDate);
     }
 
     public void printReport(String type) {

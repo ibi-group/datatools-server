@@ -57,7 +57,7 @@ public class TableCheck {
      */
     public String getAlterTableSql() {
         return String.format(
-            "ALTER TABLE %s.%s %s",
+            "ALTER TABLE %s.%s %s;",
             namespace,
             table.name,
             getColumnSql()

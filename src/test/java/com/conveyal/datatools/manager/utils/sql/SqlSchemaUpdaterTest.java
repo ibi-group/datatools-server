@@ -8,6 +8,7 @@ import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.loader.Table;
+import com.conveyal.gtfs.storage.StorageException;
 import com.google.common.collect.Lists;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
@@ -16,7 +17,6 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
-import java.sql.SQLException;
 import java.util.ArrayList;
 
 import static com.conveyal.datatools.TestUtils.appendDate;
@@ -24,6 +24,7 @@ import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.MANUALLY_UPLOADED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.fail;
 
 class SqlSchemaUpdaterTest extends UnitTest {
     private static Project project;
@@ -59,7 +60,7 @@ class SqlSchemaUpdaterTest extends UnitTest {
      * and to upgrade the tables accordingly.
      */
     @Test
-    void canCheckAndUpgradeTables() throws SQLException {
+    void canCheckAndUpgradeTables() throws Exception {
         // Create source version.
         FeedVersion sourceVersion = createFeedVersionFromGtfsZip(
             feedSource,
@@ -67,9 +68,9 @@ class SqlSchemaUpdaterTest extends UnitTest {
         );
 
         try (
-            Connection connection = DataManager.GTFS_DATA_SOURCE.getConnection()
+            Connection connection = DataManager.GTFS_DATA_SOURCE.getConnection();
+            SqlSchemaUpdater schemaUpdater = new SqlSchemaUpdater(connection)
         ) {
-            SqlSchemaUpdater schemaUpdater = new SqlSchemaUpdater(connection);
             String namespace = sourceVersion.namespace;
             NamespaceCheck namespaceCheck = schemaUpdater.checkTablesForNamespace(
                 namespace,
@@ -143,9 +144,10 @@ class SqlSchemaUpdaterTest extends UnitTest {
             namespaceCheck.checkedTables.add(checkToAdd);
 
             // Go ahead and update the tables.
-            schemaUpdater.upgradeNamespace(namespaceCheck);
+            schemaUpdater.upgradeNamespaceIfNotOrphan(namespaceCheck);
 
-            schemaUpdater.resetScannedNamespaces();
+            // Perform a new check (delete previous ones).
+            schemaUpdater.resetCheckedNamespaces();
             NamespaceCheck updatedNamespaceCheck = schemaUpdater.checkTablesForNamespace(
                 namespace,
                 "test version",
@@ -171,6 +173,30 @@ class SqlSchemaUpdaterTest extends UnitTest {
             for (TableCheck tableCheck : updatedNamespaceCheck.checkedTables) {
                 assertTrue(tableCheck.missingColumns.isEmpty());
                 assertTrue(tableCheck.columnsWithWrongType.isEmpty());
+            }
+        }
+    }
+
+    /**
+     * Orphan namespaces that are not in the database should not be upgraded.
+     */
+    @Test
+    void shouldNotUpgradeOrphanNamespaces() throws Exception {
+        try (
+            Connection connection = DataManager.GTFS_DATA_SOURCE.getConnection();
+            SqlSchemaUpdater schemaUpdater = new SqlSchemaUpdater(connection)
+        ) {
+            NamespaceCheck namespaceCheck = schemaUpdater.checkTablesForNamespace(
+                "random_namespace",
+                "test version",
+                "namespace"
+            );
+
+            // Go ahead and update the tables.
+            try {
+                schemaUpdater.upgradeNamespaceIfNotOrphan(namespaceCheck);
+            } catch (StorageException e) {
+                fail("Orphan namespaces should not be upgraded.");
             }
         }
     }

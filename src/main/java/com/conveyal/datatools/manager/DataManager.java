@@ -28,7 +28,6 @@ import com.conveyal.datatools.manager.extensions.transitland.TransitLandFeedReso
 import com.conveyal.datatools.manager.jobs.FeedUpdater;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.ErrorUtils;
-import com.conveyal.datatools.manager.utils.sql.SqlSchemaUpdater;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.GraphQLController;
@@ -49,8 +48,6 @@ import java.io.FileInputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
-import java.sql.Connection;
-import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
@@ -112,23 +109,8 @@ public class DataManager {
 
         registerExternalResources();
 
-        checkTables();
-
         double startupSeconds = (System.currentTimeMillis() - serverStartTime) / 1000D;
         LOG.info("Data Tools server start up completed in {} seconds.", startupSeconds);
-    }
-
-    /**
-     * Check that tables from namespaces referenced from projects/feed sources
-     * have the columns we need.
-     */
-    private static void checkTables() {
-        try (Connection connection = GTFS_DATA_SOURCE.getConnection()) {
-            SqlSchemaUpdater schemaUpdater = new SqlSchemaUpdater(connection);
-            schemaUpdater.checkReferencedNamespaces();
-        } catch (SQLException sqle) {
-            sqle.printStackTrace();
-        }
     }
 
     static void initializeApplication(String[] args) throws IOException {

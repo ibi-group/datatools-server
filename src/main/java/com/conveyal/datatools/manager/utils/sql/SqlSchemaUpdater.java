@@ -4,6 +4,7 @@ import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Snapshot;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.loader.Table;
+import com.conveyal.gtfs.storage.StorageException;
 import com.google.common.base.Strings;
 import org.bson.conversions.Bson;
 
@@ -13,6 +14,7 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -26,7 +28,7 @@ import static com.mongodb.client.model.Filters.not;
  * are consistent with the gtfs-lib implementation from the project dependencies,
  * and fills out missing tables/columns and changes column types if needed.
  */
-public class SqlSchemaUpdater {
+public class SqlSchemaUpdater implements AutoCloseable {
     /** Maintain a list of scanned namespaces to avoid duplicate work. */
     private Map<String, NamespaceCheck> checkedNamespaces = new HashMap<>();
 
@@ -49,6 +51,7 @@ public class SqlSchemaUpdater {
             "select table_name from information_schema.tables where table_schema = ?"
         );
 
+        // Check there is a loaded date.
         selectLoadedDateStatement = connection.prepareStatement(
             "select loaded_date from feeds where namespace = ?"
         );
@@ -59,8 +62,8 @@ public class SqlSchemaUpdater {
      * Checks all namespaces that are referenced from projects
      * for tables and columns that need to be added or changed.
      */
-    public void checkReferencedNamespaces() {
-        resetScannedNamespaces();
+    public Collection<NamespaceCheck> checkReferencedNamespaces() {
+        resetCheckedNamespaces();
 
         Persistence.projects.getAll().forEach(p -> {
             System.out.println("Project " + p.name);
@@ -104,24 +107,28 @@ public class SqlSchemaUpdater {
         // Once done, print the SQL statements to update the tables
         System.out.println("-- Overview of changes that should be made");
         checkedNamespaces.values().forEach(ns -> {
-            System.out.println("-- " + ns.nickname);
-            // Add missing tables
-            ns.missingTables.forEach(t -> {
-                System.out.println("CREATE TABLE IF NOT EXISTS " + ns.namespace + "." + t.name + " ... (use table.createSqlTable(...))");
-            });
-            // Print alter table statements
-            ns.checkedTables.forEach(t -> {
-                if (t.hasColumnIssues()) {
-                    System.out.println(t.getAlterTableSql());
-                }
-            });
+            if (!ns.isOrphan()) {
+                System.out.println("-- " + ns.nickname);
+                // Add missing tables
+                ns.missingTables.forEach(t -> {
+                    System.out.println("CREATE TABLE IF NOT EXISTS " + ns.namespace + "." + t.name + " ... (use table.createSqlTable(...))");
+                });
+                // Print alter table statements
+                ns.checkedTables.forEach(t -> {
+                    if (t.hasColumnIssues()) {
+                        System.out.println(t.getAlterTableSql());
+                    }
+                });
+            }
         });
+
+        return checkedNamespaces.values();
     }
 
     /**
      * Clears the list of scanned namespaces (used for tests).
      */
-    public void resetScannedNamespaces() {
+    public void resetCheckedNamespaces() {
         checkedNamespaces = new HashMap<>();
     }
 
@@ -137,36 +144,33 @@ public class SqlSchemaUpdater {
                 namespaceCheck.printReport(type);
                 checkedNamespaces.put(namespace, namespaceCheck);
                 return namespaceCheck;
-            } catch (SQLException sqle) {
-                sqle.printStackTrace();
+            } catch (SQLException e) {
+                e.printStackTrace();
             }
         }
         return existingNamespaceCheck;
     }
 
     /**
-     * Upgrades a namespace by adding missing tables/columns and
+     * Upgrades a namespace that is not orphan by adding missing tables/columns and
      * changing columns with incorrect types.
      */
-    public void upgradeNamespace(NamespaceCheck ns) {
-        // Add missing tables
-        String namespace = ns.namespace;
+    public void upgradeNamespaceIfNotOrphan(NamespaceCheck ns) throws SQLException, StorageException {
+        if (!ns.isOrphan()) {
+            String namespace = ns.namespace;
 
-        for (Table t : ns.missingTables) {
-            t.createSqlTable(connection, namespace, true);
-        }
+            // Add missing tables
+            for (Table t : ns.missingTables) {
+                t.createSqlTable(connection, namespace, true);
+            }
 
-        for (TableCheck tableCheck : ns.checkedTables) {
-            alterTable(connection, tableCheck);
-        }
-    }
-
-    public void alterTable(Connection connection, TableCheck tableCheck) {
-        if (tableCheck.hasColumnIssues()) {
-            try (Statement alterStatement = connection.createStatement()) {
-                alterStatement.execute(tableCheck.getAlterTableSql());
-            } catch (SQLException e) {
-                e.printStackTrace();
+            for (TableCheck tableCheck : ns.checkedTables) {
+                // Fix column issues for a table, if any.
+                if (tableCheck.hasColumnIssues()) {
+                    try (Statement alterStatement = connection.createStatement()) {
+                        alterStatement.execute(tableCheck.getAlterTableSql());
+                    }
+                }
             }
         }
     }
@@ -216,4 +220,10 @@ public class SqlSchemaUpdater {
         return columns;
     }
 
+    @Override
+    public void close() throws Exception {
+        selectColumnStatement.close();
+        selectLoadedDateStatement.close();
+        selectNamespaceTablesStatement.close();
+    }
 }
