@@ -12,7 +12,6 @@ import java.util.stream.Collectors;
  * Utility class dealing with GTFS tables.
  */
 public class GtfsUtils {
-
     /**
      * Obtains a GTFS table.
      * @param tableName The name of the table to obtain (e.g. "agency.txt").
@@ -35,5 +34,4 @@ public class GtfsUtils {
 
         return null;
     }
-
 }
