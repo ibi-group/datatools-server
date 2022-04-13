@@ -8,12 +8,12 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Contains the outcome of a namespace check (i.e. whether the type is as expected).
+ * Contains the outcome of a namespace check (e.g. whether tables are missing).
  */
 public class NamespaceCheck {
     public final String nickname;
     public final String namespace;
-    private String loadedDate = "";
+    private final String loadedDate;
     public final List<String> tableNames = new ArrayList<>();
     public final List<Table> missingTables = new ArrayList<>();
     public final List<Table> validTables = new ArrayList<>();
@@ -25,23 +25,24 @@ public class NamespaceCheck {
     public NamespaceCheck(String namespace, List<String> excludedTables) {
         this.namespace = namespace;
         this.nickname = namespace;
+        this.loadedDate = "";
         for (Table table : Table.tablesInOrder) {
             this.tableNames.add(table.name);
         }
         this.tableNames.removeAll(excludedTables);
-        checkTables();
+        checkMissingTables();
     }
 
     public NamespaceCheck(String namespace, String nickName, SqlSchemaUpdater schemaUpdater) throws SQLException {
         this.namespace = namespace;
         this.nickname = nickName;
         this.loadedDate = schemaUpdater.getDateLoaded(namespace);
-        this.tableNames.addAll(schemaUpdater.getTables(namespace));
+        this.tableNames.addAll(schemaUpdater.getTableNames(namespace));
 
-        checkTables();
+        checkMissingTables();
 
         for (Table t : validTables) {
-            TableCheck tableCheck = new TableCheck(t, schemaUpdater.getColumns(namespace, t));
+            TableCheck tableCheck = new TableCheck(t, namespace, schemaUpdater);
             checkedTables.add(tableCheck);
             tableCheck.printReport();
         }
@@ -50,7 +51,7 @@ public class NamespaceCheck {
     /**
      * Establishes, for this namespace, which tables are valid and which are missing.
      */
-    private void checkTables() {
+    private void checkMissingTables() {
         for (Table table : Table.tablesInOrder) {
             if (tableNames.contains(table.name)) {
                 validTables.add(table);

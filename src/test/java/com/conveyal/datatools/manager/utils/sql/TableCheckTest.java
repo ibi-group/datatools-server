@@ -12,6 +12,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class TableCheckTest {
+    private static final String NAMESPACE = "namespace";
+
     @Test
     void shouldDetectMissingTableColumns() {
         List<String> removedColumns = Lists.newArrayList("route_id", "route_short_name");
@@ -21,7 +23,7 @@ class TableCheckTest {
             .map(ColumnCheck::new)
             .collect(Collectors.toList());
 
-        TableCheck tableInfo = new TableCheck(Table.ROUTES, columns);
+        TableCheck tableInfo = new TableCheck(Table.ROUTES, NAMESPACE, columns);
         assertEquals(
             String.join(",", removedColumns),
             tableInfo.missingColumns.stream().map(c -> c.columnName).collect(Collectors.joining(","))
@@ -35,7 +37,7 @@ class TableCheckTest {
             .map(ColumnCheck::new)
             .collect(Collectors.toList());
 
-        TableCheck tableInfo = new TableCheck(Table.ROUTES, columns);
+        TableCheck tableInfo = new TableCheck(Table.ROUTES, NAMESPACE, columns);
         assertTrue(tableInfo.columnsWithWrongType.isEmpty());
 
         // Modify the type of one column
@@ -47,7 +49,7 @@ class TableCheckTest {
         }
 
         // The modified column should be flagged.
-        tableInfo = new TableCheck(Table.ROUTES, columns);
+        tableInfo = new TableCheck(Table.ROUTES, NAMESPACE, columns);
         assertEquals(1, tableInfo.columnsWithWrongType.size());
         ColumnCheck columnWithWrongType = tableInfo.columnsWithWrongType.get(0);
         assertEquals("route_short_name", columnWithWrongType.columnName);

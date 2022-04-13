@@ -16,6 +16,7 @@ import org.junit.jupiter.api.Test;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.SQLException;
 import java.util.ArrayList;
 
 import static com.conveyal.datatools.TestUtils.appendDate;
@@ -58,7 +59,7 @@ class SqlSchemaUpdaterTest extends UnitTest {
      * and to upgrade the tables accordingly.
      */
     @Test
-    void canCheckAndUpgradeTables() {
+    void canCheckAndUpgradeTables() throws SQLException {
         // Create source version.
         FeedVersion sourceVersion = createFeedVersionFromGtfsZip(
             feedSource,
@@ -124,7 +125,7 @@ class SqlSchemaUpdaterTest extends UnitTest {
                     changeStatement.execute();
 
                     // Check that the modified column is flagged.
-                    TableCheck changedTableCheck = new TableCheck(tableCheck.table, schemaUpdater.getColumns(namespaceCheck.namespace, tableCheck.table));
+                    TableCheck changedTableCheck = new TableCheck(tableCheck.table, namespace, schemaUpdater);
                     checkToRemove = tableCheck;
                     checkToAdd = changedTableCheck;
 
@@ -171,8 +172,6 @@ class SqlSchemaUpdaterTest extends UnitTest {
                 assertTrue(tableCheck.missingColumns.isEmpty());
                 assertTrue(tableCheck.columnsWithWrongType.isEmpty());
             }
-        } catch (Exception e) {
-            e.printStackTrace();
         }
     }
 }

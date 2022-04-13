@@ -16,8 +16,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
@@ -111,25 +109,10 @@ public class SqlSchemaUpdater {
             ns.missingTables.forEach(t -> {
                 System.out.println("CREATE TABLE IF NOT EXISTS " + ns.namespace + "." + t.name + " ... (use table.createSqlTable(...))");
             });
+            // Print alter table statements
             ns.checkedTables.forEach(t -> {
-                // Add missing columns
-                if (!t.missingColumns.isEmpty()) {
-                    System.out.println(getAlterTableSql(
-                        ns.namespace,
-                        t.table.name,
-                        t.missingColumns,
-                        ColumnCheck::getAddColumnSql
-                    ));
-                }
-
-                // Attempt to fix the columns with wrong types
-                if (!t.columnsWithWrongType.isEmpty()) {
-                    System.out.println(getAlterTableSql(
-                        ns.namespace,
-                        t.table.name,
-                        t.columnsWithWrongType,
-                        ColumnCheck::getAlterColumnTypeSql
-                    ));
+                if (t.hasColumnIssues()) {
+                    System.out.println(t.getAlterTableSql());
                 }
             });
         });
@@ -174,44 +157,24 @@ public class SqlSchemaUpdater {
         }
 
         for (TableCheck tableCheck : ns.checkedTables) {
-            String tableName = tableCheck.table.name;
-
-            // Add missing columns
-            alterTable(namespace, tableName, tableCheck.missingColumns, ColumnCheck::getAddColumnSql);
-
-            // Attempt to migrate column types
-            alterTable(namespace, tableName, tableCheck.columnsWithWrongType, ColumnCheck::getAlterColumnTypeSql);
+            alterTable(connection, tableCheck);
         }
     }
 
-    private void alterTable(String namespace, String tableName, List<ColumnCheck> columns, Function<ColumnCheck, String> mapper) {
-        if (!columns.isEmpty()) {
+    public void alterTable(Connection connection, TableCheck tableCheck) {
+        if (tableCheck.hasColumnIssues()) {
             try (Statement alterStatement = connection.createStatement()) {
-                alterStatement.execute(getAlterTableSql(namespace, tableName, columns, mapper));
+                alterStatement.execute(tableCheck.getAlterTableSql());
             } catch (SQLException e) {
                 e.printStackTrace();
             }
         }
     }
 
-    private String getAlterTableSql(
-        String namespace,
-        String tableName,
-        List<ColumnCheck> columns,
-        Function<ColumnCheck, String> mapper
-    ) {
-        return String.format(
-            "ALTER TABLE %s.%s %s",
-            namespace,
-            tableName,
-            columns.stream().map(mapper).collect(Collectors.joining(", "))
-        );
-    }
-
     /**
      * Obtains the table names for a given namespace.
      */
-    public List<String> getTables(String namespace) throws SQLException {
+    public List<String> getTableNames(String namespace) throws SQLException {
         List<String> tableNames = new ArrayList<>();
         selectNamespaceTablesStatement.setString(1, namespace);
         ResultSet resultSet = selectNamespaceTablesStatement.executeQuery();
