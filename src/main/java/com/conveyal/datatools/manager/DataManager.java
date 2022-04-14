@@ -108,7 +108,6 @@ public class DataManager {
         registerRoutes();
 
         registerExternalResources();
-
         double startupSeconds = (System.currentTimeMillis() - serverStartTime) / 1000D;
         LOG.info("Data Tools server start up completed in {} seconds.", startupSeconds);
     }
