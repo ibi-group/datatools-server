@@ -91,8 +91,7 @@ public class SqlSchemaUpdater implements AutoCloseable {
                     System.out.printf("  - Snapshots (%d/%d with valid namespace)%n", snapshots.size(), allSnapshots.size());
                     snapshots.forEach(
                         sn -> {
-                            System.out.printf("    - %s %s%n", sn.name, sn.id);
-                            checkTablesForNamespace(sn.namespace, fs, "namespace");
+                            checkTablesForNamespace(sn.namespace, fs, sn.name == null ? "(unnamed)" : sn.name);
 
                             // TODO: Consider scanning/upgrading namespaces referenced by snapshotOf (except "mapdb_editor" references).
                         }

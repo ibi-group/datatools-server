@@ -11,7 +11,7 @@ import java.util.List;
  * Contains the outcome of a namespace check (e.g. whether tables are missing).
  */
 public class NamespaceCheck {
-    private String type;
+    private final String type;
     private final FeedSource feedSource;
     public final String namespace;
     public final List<String> tableNames = new ArrayList<>();
