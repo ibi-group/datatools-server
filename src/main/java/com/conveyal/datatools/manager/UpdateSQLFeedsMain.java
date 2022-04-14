@@ -14,56 +14,33 @@ import static com.conveyal.datatools.manager.DataManager.initializeApplication;
 import static com.conveyal.datatools.manager.DataManager.registerRoutes;
 
 /**
- * Main method that performs batch SQL updates on optionally filtered set of namespaces over the GTFS SQL database
- * connection specified in the configuration files (env.yml).
- *
- * For example, this script can add a column for all `routes` tables for schemas that do not have a null value for
- * the filename field in the feeds table. In effect, this would alter only those feeds that are editor snapshots.
+ * Main method that checks for missing tables and columns
+ * in the SQL database specified in the configuration files (env.yml)
+ * for namespaces referenced in the projects,
+ * and adds/modifies tables according according to the referenced gtfs-lib implementation.
  *
  * Argument descriptions:
  * 1. path to env.yml
  * 2. path to server.yml
- * 3. string update sql statement to apply to optionally filtered feeds (this should contain a namespace wildcard
- *    {@link UpdateSQLFeedsMain#NAMESPACE_WILDCARD} string for the namespace argument substitution).
- * 4. string field to filter feeds on
- * 5. string value (corresponding to field in arg 3) to filter feeds on (omit to use NULL as value or comma separate to
- *    include multiple values)
- * 6. boolean (optional) whether to run SQL as a test run (i.e., rollback changes and do not commit). If missing, this
+ * 3. boolean (optional) whether to run SQL as a test run (i.e., rollback changes and do not commit). If missing, this
  *    defaults to true.
  *
  * Sample arguments:
- *
- * "/path/to/config/env.yml" "/path/to/config/server.yml" "alter table %s.routes add column some_column_name int" filename
- *
- * "/path/to/config/env.yml" "/path/to/config/server.yml" "alter table %s.routes add column some_column_name int" filename /tmp/gtfs.zip
+ *   "/path/to/config/env.yml" "/path/to/config/server.yml" false
  */
 public class UpdateSQLFeedsMain {
-    public static final String NAMESPACE_WILDCARD = "#ns#";
-
     public static void main(String[] args) throws IOException, SQLException {
         // First, set up application.
         initializeApplication(args);
         // Register HTTP endpoints so that the status endpoint is available during migration.
         registerRoutes();
         // Load args (first and second args are used for config files).
-        // Update SQL string should be contained within third argument with %s specifier where namespace should be
-        // substituted.
-        String updateSql = args[2];
-        // The next arguments will apply a where clause to conditionally to apply the updates.
-        String field = args.length > 3 ? args[3] : null;
-        String valuesArg = args.length > 4 ? args[4] : null;
-        String[] values;
-        // Set value to null if the string value = "null".
-        if ("null".equals(valuesArg) || valuesArg == null) values = null;
-        else values = valuesArg.split(",");
 
         // If test run arg is not included, default to true. Else, only set to false if value equals false.
-        boolean testRun = args.length <= 5 || !"false".equals(args[5]);
+        boolean testRun = args.length <= 2 || !"false".equals(args[2]);
 
-        //List<String> failedNamespace = updateFeedsWhere(updateSql, field, values, testRun);
         checkAndUpdateTables(testRun);
         System.out.println("Finished!");
-        //System.out.println("Failed namespaces: " + String.join(", ", failedNamespace));
         System.exit(0);
     }
 
@@ -95,7 +72,7 @@ public class UpdateSQLFeedsMain {
                 try {
                     if (!namespaceCheck.isOrphan()) {
                         schemaUpdater.upgradeNamespaceIfNotOrphan(namespaceCheck);
-                        System.out.println(String.format("Updated namespace %s", namespace));
+                        System.out.printf("Updated namespace %s%n", namespace);
                         successCount++;
                     }
                 } catch (Exception e) {
@@ -105,7 +82,7 @@ public class UpdateSQLFeedsMain {
             }
 
             System.out.println(String.format("Updated %d namespaces.", successCount));
-            System.out.printf("Failed namespaces (%d):\n%s\n", failedNamespaces.size(), String.join("\n", failedNamespaces));
+            System.out.printf("Failed namespaces (%d):%n%s%n", failedNamespaces.size(), String.join("\n", failedNamespaces));
             // No need to commit the transaction because of auto-commit above (in fact, "manually" committing is not
             // permitted with auto-commit enabled.
             if (testRun) {
