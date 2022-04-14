@@ -53,17 +53,17 @@ public class SqlSchemaUpdater implements AutoCloseable {
 
 
     /**
-     * Checks all namespaces that are referenced from projects
-     * for tables and columns that need to be added or changed.
+     * For all namespaces of the specified types (EDITOR, SNAPSHOTS, VERSIONS)
+     * and that are referenced from projects, check for tables and columns that need to be added or changed.
      */
-    public Collection<NamespaceCheck> checkReferencedNamespaces() {
+    public Collection<NamespaceCheck> checkReferencedNamespaces(List<String> namespaceTypesToCheck) {
         resetCheckedNamespaces();
 
         Persistence.projects.getAll().forEach(p -> {
             System.out.println("Project " + p.name);
             Persistence.feedSources.getFiltered(eq("projectId", p.id)).forEach(fs -> {
                 System.out.println("- FeedSource " + fs.name + " " + fs.id);
-                if (!Strings.isNullOrEmpty(fs.editorNamespace)) {
+                if (namespaceTypesToCheck.contains("EDITOR") && !Strings.isNullOrEmpty(fs.editorNamespace)) {
                     checkTablesForNamespace(fs.editorNamespace, p.name + "/" + fs.name + "/editor", "editor");
                 }
 
@@ -73,28 +73,32 @@ public class SqlSchemaUpdater implements AutoCloseable {
                     not(eq("namespace", null))
                 );
 
-                List<FeedVersion> allFeedVersions = Persistence.feedVersions.getFiltered(feedSourceIdFilter);
-                List<FeedVersion> feedVersions = Persistence.feedVersions.getFiltered(feedSourceIdNamespaceFilter);
-                System.out.println("  - FeedVersions (" + feedVersions.size() + "/" + allFeedVersions.size() + " with valid namespace)");
-                feedVersions.forEach(
-                    fv -> {
-                        checkTablesForNamespace(fv.namespace, fv.name + "/v" + fv.version, "v" + fv.version);
-                    }
-                );
-
-                List<Snapshot> allSnapshots = Persistence.snapshots.getFiltered(feedSourceIdFilter);
-                List<Snapshot> snapshots = Persistence.snapshots.getFiltered(feedSourceIdNamespaceFilter);
-                System.out.println("  - Snapshots (" + snapshots.size() + "/" + allSnapshots.size() + " with valid namespace)");
-                snapshots.forEach(
-                    sn -> {
-                        System.out.println("    - " + sn.name + " " + sn.id);
-                        checkTablesForNamespace(sn.namespace, p.name + "/snapshot " + sn.name,  "namespace");
-                        if (!Strings.isNullOrEmpty(sn.snapshotOf) && !sn.snapshotOf.equals("mapdb_editor")) {
-                            checkTablesForNamespace(sn.snapshotOf, p.name + "/snapshotOf " + sn.name,  "snapshotOf");
+                if (namespaceTypesToCheck.contains("VERSIONS")) {
+                    List<FeedVersion> allFeedVersions = Persistence.feedVersions.getFiltered(feedSourceIdFilter);
+                    List<FeedVersion> feedVersions = Persistence.feedVersions.getFiltered(feedSourceIdNamespaceFilter);
+                    System.out.println("  - FeedVersions (" + feedVersions.size() + "/" + allFeedVersions.size() + " with valid namespace)");
+                    feedVersions.forEach(
+                        fv -> {
+                            checkTablesForNamespace(fv.namespace, fv.name + "/v" + fv.version, "v" + fv.version);
                         }
-                    }
-                );}
-            );}
+                    );
+                }
+
+                if (namespaceTypesToCheck.contains("SNAPSHOTS")) {
+                    List<Snapshot> allSnapshots = Persistence.snapshots.getFiltered(feedSourceIdFilter);
+                    List<Snapshot> snapshots = Persistence.snapshots.getFiltered(feedSourceIdNamespaceFilter);
+                    System.out.println("  - Snapshots (" + snapshots.size() + "/" + allSnapshots.size() + " with valid namespace)");
+                    snapshots.forEach(
+                        sn -> {
+                            System.out.println("    - " + sn.name + " " + sn.id);
+                            checkTablesForNamespace(sn.namespace, p.name + "/snapshot " + sn.name, "namespace");
+                            if (!Strings.isNullOrEmpty(sn.snapshotOf) && !sn.snapshotOf.equals("mapdb_editor")) {
+                                checkTablesForNamespace(sn.snapshotOf, p.name + "/snapshotOf " + sn.name, "snapshotOf");
+                            }
+                        }
+                    );
+                }
+            });}
         );
 
         // Once done, print the SQL statements to update the tables

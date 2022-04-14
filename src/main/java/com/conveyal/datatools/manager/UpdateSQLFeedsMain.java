@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager;
 
 import com.conveyal.datatools.manager.utils.sql.NamespaceCheck;
 import com.conveyal.datatools.manager.utils.sql.SqlSchemaUpdater;
+import com.google.common.collect.Lists;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -22,11 +23,12 @@ import static com.conveyal.datatools.manager.DataManager.registerRoutes;
  * Argument descriptions:
  * 1. path to env.yml
  * 2. path to server.yml
- * 3. boolean (optional) whether to run SQL as a test run (i.e., rollback changes and do not commit). If missing, this
+ * 3. Types of namespaces to upgrade, a combination of "EDITOR", "SNAPSHOTS", and "VERSIONS" separated by "-",
+ * 4. boolean (optional) whether to run SQL as a test run (i.e., rollback changes and do not commit). If missing, this
  *    defaults to true.
  *
  * Sample arguments:
- *   "/path/to/config/env.yml" "/path/to/config/server.yml" false
+ *   "/path/to/config/env.yml" "/path/to/config/server.yml" EDITOR-SNAPSHOTS false
  */
 public class UpdateSQLFeedsMain {
     public static void main(String[] args) throws IOException, SQLException {
@@ -36,10 +38,16 @@ public class UpdateSQLFeedsMain {
         registerRoutes();
         // Load args (first and second args are used for config files).
 
-        // If test run arg is not included, default to true. Else, only set to false if value equals false.
-        boolean testRun = args.length <= 2 || !"false".equals(args[2]);
+        // What to upgrade
+        String itemsToUpgrade = args.length > 2 ? args[2] : null;
+        List<String> namespaceTypesToCheck = itemsToUpgrade == null
+            ? new ArrayList<>()
+            : Lists.newArrayList(itemsToUpgrade.split("-"));
 
-        checkAndUpdateTables(testRun);
+        // If test run arg is not included, default to true. Else, only set to false if value equals false.
+        boolean testRun = args.length <= 3 || !"false".equals(args[3]);
+
+        checkAndUpdateTables(testRun, namespaceTypesToCheck);
         System.out.println("Finished!");
         System.exit(0);
     }
@@ -49,7 +57,12 @@ public class UpdateSQLFeedsMain {
      * have all the columns, and upgrades the tables in those namespaces
      * If testRun is true, all changes applied to database will be rolled back at the end of execution.
      */
-    private static void checkAndUpdateTables(boolean testRun) throws SQLException {
+    private static void checkAndUpdateTables(boolean testRun, List<String> namespaceTypesToCheck) throws SQLException {
+        if (namespaceTypesToCheck.isEmpty()) {
+            System.out.println("No namespace types were specified. Exiting.");
+            return;
+        }
+
         try (Connection connection = DataManager.GTFS_DATA_SOURCE.getConnection()) {
             // Keep track of failed namespaces for convenient printing at end of method.
             List<String> failedNamespaces = new ArrayList<>();
@@ -64,8 +77,7 @@ public class UpdateSQLFeedsMain {
             }
 
             SqlSchemaUpdater schemaUpdater = new SqlSchemaUpdater(connection);
-            Collection<NamespaceCheck> checkedNamespaces = schemaUpdater.checkReferencedNamespaces();
-            // schemaUpdater.printReport();
+            Collection<NamespaceCheck> checkedNamespaces = schemaUpdater.checkReferencedNamespaces(namespaceTypesToCheck);
 
             for (NamespaceCheck namespaceCheck : checkedNamespaces) {
                 String namespace = namespaceCheck.namespace;
