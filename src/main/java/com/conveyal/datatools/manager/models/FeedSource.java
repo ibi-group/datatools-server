@@ -544,6 +544,15 @@ public class FeedSource extends Model implements Cloneable {
     }
 
     /**
+     * Get the summary information for all feed versions for this source.
+     * @return collection of feed version summaries.
+     */
+    @JsonIgnore
+    public Collection<FeedVersionSummary> retrieveFeedVersionSummaries() {
+        return Persistence.feedVersionSummaries.getFiltered(eq("feedSourceId", this.id));
+    }
+
+    /**
      * Get all of the snapshots for this source
      * @return collection of snapshots
      */

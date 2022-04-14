@@ -18,7 +18,6 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
-import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 import static com.mongodb.client.model.Filters.in;
 import static com.mongodb.client.model.Updates.pull;
@@ -56,9 +55,12 @@ public class TypedPersistence<T extends Model> {
     private String collectionName;
     private final FindOneAndUpdateOptions findOneAndUpdateOptions = new FindOneAndUpdateOptions();
 
-    public TypedPersistence(MongoDatabase mongoDatabase, Class<T> clazz) {
-        mongoCollection = mongoDatabase.getCollection(clazz.getSimpleName(), clazz);
-        collectionName = clazz.getSimpleName();
+    /**
+     * Maps a persistence class to a Mongo collection.
+     */
+    public TypedPersistence(MongoDatabase mongoDatabase, Class<T> clazz, String collectionName) {
+        mongoCollection = mongoDatabase.getCollection(collectionName, clazz);
+        this.collectionName = collectionName;
         try {
             noArgConstructor = clazz.getConstructor(new Class<?>[0]);
         } catch (NoSuchMethodException ex) {
@@ -69,6 +71,13 @@ public class TypedPersistence<T extends Model> {
 
         // TODO: can we merge update and create into createOrUpdate function using upsert option?
 //        findOneAndUpdateOptions.upsert(true);
+    }
+
+    /**
+     * Shorthand for above constructor using the class name as the collection name.
+     */
+    public TypedPersistence(MongoDatabase mongoDatabase, Class<T> clazz) {
+        this(mongoDatabase, clazz, clazz.getSimpleName());
     }
 
     /**
