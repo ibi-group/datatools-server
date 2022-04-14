@@ -34,7 +34,6 @@ public class SqlSchemaUpdater implements AutoCloseable {
 
     private final Connection connection;
     private final PreparedStatement selectNamespaceTablesStatement;
-    private final PreparedStatement selectLoadedDateStatement;
     private final PreparedStatement selectColumnStatement;
 
     public SqlSchemaUpdater(Connection connection) throws SQLException {
@@ -49,11 +48,6 @@ public class SqlSchemaUpdater implements AutoCloseable {
         // Check that all tables for the namespace are present.
         selectNamespaceTablesStatement = connection.prepareStatement(
             "select table_name from information_schema.tables where table_schema = ?"
-        );
-
-        // Check there is a loaded date.
-        selectLoadedDateStatement = connection.prepareStatement(
-            "select loaded_date from feeds where namespace = ?"
         );
     }
 
@@ -188,18 +182,6 @@ public class SqlSchemaUpdater implements AutoCloseable {
         return tableNames;
     }
 
-    /**
-     * Obtains the loaded date for a given namespace.
-     */
-    public String getDateLoaded(String namespace) throws SQLException {
-        selectLoadedDateStatement.setString(1, namespace);
-        ResultSet loadedDateSet = selectLoadedDateStatement.executeQuery();
-        if (loadedDateSet.next()) {
-            return loadedDateSet.getString(1);
-        }
-        return "";
-    }
-
     public List<ColumnCheck> getColumns(String namespace, Table table) {
         List<ColumnCheck> columns = new ArrayList<>();
         try {
@@ -223,7 +205,6 @@ public class SqlSchemaUpdater implements AutoCloseable {
     @Override
     public void close() throws Exception {
         selectColumnStatement.close();
-        selectLoadedDateStatement.close();
         selectNamespaceTablesStatement.close();
     }
 }
