@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.utils.sql;
 
+import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Snapshot;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -60,11 +61,11 @@ public class SqlSchemaUpdater implements AutoCloseable {
         resetCheckedNamespaces();
 
         Persistence.projects.getAll().forEach(p -> {
-            System.out.println("Project " + p.name);
+            System.out.printf("Project %s%n", p.name);
             Persistence.feedSources.getFiltered(eq("projectId", p.id)).forEach(fs -> {
-                System.out.println("- FeedSource " + fs.name + " " + fs.id);
+                System.out.printf("- FeedSource %s %s%n", fs.name, fs.id);
                 if (namespaceTypesToCheck.contains("EDITOR") && !Strings.isNullOrEmpty(fs.editorNamespace)) {
-                    checkTablesForNamespace(fs.editorNamespace, p.name + "/" + fs.name + "/editor", "editor");
+                    checkTablesForNamespace(fs.editorNamespace, fs, "editor");
                 }
 
                 Bson feedSourceIdFilter = eq("feedSourceId", fs.id);
@@ -76,10 +77,10 @@ public class SqlSchemaUpdater implements AutoCloseable {
                 if (namespaceTypesToCheck.contains("VERSIONS")) {
                     List<FeedVersion> allFeedVersions = Persistence.feedVersions.getFiltered(feedSourceIdFilter);
                     List<FeedVersion> feedVersions = Persistence.feedVersions.getFiltered(feedSourceIdNamespaceFilter);
-                    System.out.println("  - FeedVersions (" + feedVersions.size() + "/" + allFeedVersions.size() + " with valid namespace)");
+                    System.out.printf("  - FeedVersions (%d/%d with valid namespace)%n", feedVersions.size(), allFeedVersions.size());
                     feedVersions.forEach(
                         fv -> {
-                            checkTablesForNamespace(fv.namespace, fv.name + "/v" + fv.version, "v" + fv.version);
+                            checkTablesForNamespace(fv.namespace, fs, "v" + fv.version);
                         }
                     );
                 }
@@ -87,14 +88,13 @@ public class SqlSchemaUpdater implements AutoCloseable {
                 if (namespaceTypesToCheck.contains("SNAPSHOTS")) {
                     List<Snapshot> allSnapshots = Persistence.snapshots.getFiltered(feedSourceIdFilter);
                     List<Snapshot> snapshots = Persistence.snapshots.getFiltered(feedSourceIdNamespaceFilter);
-                    System.out.println("  - Snapshots (" + snapshots.size() + "/" + allSnapshots.size() + " with valid namespace)");
+                    System.out.printf("  - Snapshots (%d/%d with valid namespace)%n", snapshots.size(), allSnapshots.size());
                     snapshots.forEach(
                         sn -> {
-                            System.out.println("    - " + sn.name + " " + sn.id);
-                            checkTablesForNamespace(sn.namespace, p.name + "/snapshot " + sn.name, "namespace");
-                            if (!Strings.isNullOrEmpty(sn.snapshotOf) && !sn.snapshotOf.equals("mapdb_editor")) {
-                                checkTablesForNamespace(sn.snapshotOf, p.name + "/snapshotOf " + sn.name, "snapshotOf");
-                            }
+                            System.out.printf("    - %s %s%n", sn.name, sn.id);
+                            checkTablesForNamespace(sn.namespace, fs, "namespace");
+
+                            // TODO: Consider scanning/upgrading namespaces referenced by snapshotOf (except "mapdb_editor" references).
                         }
                     );
                 }
@@ -111,7 +111,7 @@ public class SqlSchemaUpdater implements AutoCloseable {
         System.out.println("-- Overview of changes that should be performed:");
         checkedNamespaces.values().forEach(ns -> {
             if (!ns.isOrphan()) {
-                System.out.println("-- " + ns.nickname);
+                System.out.println("-- " + ns.getHeaderText());
                 // Add missing tables
                 ns.missingTables.forEach(t -> {
                     System.out.printf("CREATE TABLE %s.%s ... (using Table.createSqlTable)%n", ns.namespace, t.name);
@@ -134,13 +134,14 @@ public class SqlSchemaUpdater implements AutoCloseable {
         checkedNamespaces = new HashMap<>();
     }
 
-    public NamespaceCheck checkTablesForNamespace(String namespace, String nickname, String type) {
+    public NamespaceCheck checkTablesForNamespace(String namespace, FeedSource feedSource, String type) {
         NamespaceCheck existingNamespaceCheck = checkedNamespaces.get(namespace);
         if (existingNamespaceCheck == null) {
             try {
                 NamespaceCheck namespaceCheck = new NamespaceCheck(
                     namespace,
-                    nickname,
+                    feedSource,
+                    type,
                     this
                 );
                 namespaceCheck.printReport(type);

@@ -15,7 +15,7 @@ class NamespaceCheckTest {
     @Test
     void shouldDetectMissingTables() {
         List<String> excludedTables = Lists.newArrayList(Table.ROUTES.name, Table.TRIPS.name);
-        NamespaceCheck nsInfo = new NamespaceCheck("namespace", excludedTables);
+        NamespaceCheck nsInfo = new NamespaceCheck("namespace", null, "type", excludedTables);
         assertEquals(
             String.join(",", excludedTables),
             nsInfo.missingTables.stream().map(t -> t.name).collect(Collectors.joining(","))
@@ -25,7 +25,7 @@ class NamespaceCheckTest {
     @Test
     void shouldDetectOrphanNamespace() {
         List<String> excludedTables = Arrays.stream(Table.tablesInOrder).map(t -> t.name).collect(Collectors.toList());
-        NamespaceCheck nsInfo = new NamespaceCheck("namespace", excludedTables);
+        NamespaceCheck nsInfo = new NamespaceCheck("namespace", null, "type", excludedTables);
         assertTrue(nsInfo.isOrphan());
     }
 }

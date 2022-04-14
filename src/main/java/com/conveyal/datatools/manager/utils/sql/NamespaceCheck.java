@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.utils.sql;
 
+import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.gtfs.loader.Table;
 
 import java.sql.SQLException;
@@ -10,7 +11,8 @@ import java.util.List;
  * Contains the outcome of a namespace check (e.g. whether tables are missing).
  */
 public class NamespaceCheck {
-    public final String nickname;
+    private String type;
+    private final FeedSource feedSource;
     public final String namespace;
     public final List<String> tableNames = new ArrayList<>();
     public final List<Table> missingTables = new ArrayList<>();
@@ -20,9 +22,10 @@ public class NamespaceCheck {
     /**
      * Used for tests only.
      */
-    public NamespaceCheck(String namespace, List<String> excludedTables) {
+    public NamespaceCheck(String namespace, FeedSource feedSource, String type, List<String> excludedTables) {
         this.namespace = namespace;
-        this.nickname = namespace;
+        this.feedSource = feedSource;
+        this.type = type;
         for (Table table : Table.tablesInOrder) {
             this.tableNames.add(table.name);
         }
@@ -30,9 +33,10 @@ public class NamespaceCheck {
         checkMissingTables();
     }
 
-    public NamespaceCheck(String namespace, String nickName, SqlSchemaUpdater schemaUpdater) throws SQLException {
+    public NamespaceCheck(String namespace, FeedSource feedSource, String type, SqlSchemaUpdater schemaUpdater) throws SQLException {
         this.namespace = namespace;
-        this.nickname = nickName;
+        this.feedSource = feedSource;
+        this.type = type;
         this.tableNames.addAll(schemaUpdater.getTableNames(namespace));
 
         checkMissingTables();
@@ -79,5 +83,9 @@ public class NamespaceCheck {
                 tableCheck.printReport();
             }
         }
+    }
+
+    public String getHeaderText() {
+        return String.format("%s/%s/%s", feedSource.retrieveProject().name, feedSource.name, type);
     }
 }

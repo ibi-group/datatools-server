@@ -74,7 +74,7 @@ class SqlSchemaUpdaterTest extends UnitTest {
             String namespace = sourceVersion.namespace;
             NamespaceCheck namespaceCheck = schemaUpdater.checkTablesForNamespace(
                 namespace,
-                "test version",
+                feedSource,
                 "namespace"
             );
 
@@ -150,7 +150,7 @@ class SqlSchemaUpdaterTest extends UnitTest {
             schemaUpdater.resetCheckedNamespaces();
             NamespaceCheck updatedNamespaceCheck = schemaUpdater.checkTablesForNamespace(
                 namespace,
-                "test version",
+                feedSource,
                 "namespace"
             );
 
@@ -188,7 +188,7 @@ class SqlSchemaUpdaterTest extends UnitTest {
         ) {
             NamespaceCheck namespaceCheck = schemaUpdater.checkTablesForNamespace(
                 "random_namespace",
-                "test version",
+                feedSource,
                 "namespace"
             );
 
