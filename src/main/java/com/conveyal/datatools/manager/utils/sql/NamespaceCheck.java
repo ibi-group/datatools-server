@@ -38,9 +38,7 @@ public class NamespaceCheck {
         checkMissingTables();
 
         for (Table t : validTables) {
-            TableCheck tableCheck = new TableCheck(t, namespace, schemaUpdater);
-            checkedTables.add(tableCheck);
-            tableCheck.printReport();
+            checkedTables.add(new TableCheck(t, namespace, schemaUpdater));
         }
     }
 

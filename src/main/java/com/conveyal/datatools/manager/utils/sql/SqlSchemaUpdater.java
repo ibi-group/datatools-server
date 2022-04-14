@@ -78,8 +78,7 @@ public class SqlSchemaUpdater implements AutoCloseable {
                 System.out.println("  - FeedVersions (" + feedVersions.size() + "/" + allFeedVersions.size() + " with valid namespace)");
                 feedVersions.forEach(
                     fv -> {
-                        System.out.print("    - v" + fv.version + ": " + fv.namespace);
-                        checkTablesForNamespace(fv.namespace, fv.name + "/v" + fv.version, "namespace");
+                        checkTablesForNamespace(fv.namespace, fv.name + "/v" + fv.version, "v" + fv.version);
                     }
                 );
 
@@ -99,13 +98,19 @@ public class SqlSchemaUpdater implements AutoCloseable {
         );
 
         // Once done, print the SQL statements to update the tables
-        System.out.println("-- Overview of changes that should be made");
+        printSqlChanges();
+
+        return checkedNamespaces.values();
+    }
+
+    private void printSqlChanges() {
+        System.out.println("-- Overview of changes that should be performed:");
         checkedNamespaces.values().forEach(ns -> {
             if (!ns.isOrphan()) {
                 System.out.println("-- " + ns.nickname);
                 // Add missing tables
                 ns.missingTables.forEach(t -> {
-                    System.out.println("CREATE TABLE IF NOT EXISTS " + ns.namespace + "." + t.name + " ... (use table.createSqlTable(...))");
+                    System.out.printf("CREATE TABLE %s.%s ... (using Table.createSqlTable)%n", ns.namespace, t.name);
                 });
                 // Print alter table statements
                 ns.checkedTables.forEach(t -> {
@@ -115,8 +120,7 @@ public class SqlSchemaUpdater implements AutoCloseable {
                 });
             }
         });
-
-        return checkedNamespaces.values();
+        System.out.println("-- End of changes");
     }
 
     /**
@@ -162,7 +166,9 @@ public class SqlSchemaUpdater implements AutoCloseable {
                 // Fix column issues for a table, if any.
                 if (tableCheck.hasColumnIssues()) {
                     try (Statement alterStatement = connection.createStatement()) {
-                        alterStatement.execute(tableCheck.getAlterTableSql());
+                        String alterTableSql = tableCheck.getAlterTableSql();
+                        System.out.println("Executing " + alterTableSql);
+                        alterStatement.execute(alterTableSql);
                     }
                 }
             }
