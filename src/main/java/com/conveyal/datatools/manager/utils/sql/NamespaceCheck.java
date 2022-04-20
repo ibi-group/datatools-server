@@ -14,6 +14,7 @@ public class NamespaceCheck {
     private final String type;
     private final FeedSource feedSource;
     public final String namespace;
+    public final Boolean isDeleted;
     private final List<String> tableNames = new ArrayList<>();
     public final List<Table> missingTables = new ArrayList<>();
     public final List<Table> validTables = new ArrayList<>();
@@ -26,6 +27,7 @@ public class NamespaceCheck {
         this.namespace = namespace;
         this.feedSource = feedSource;
         this.type = type;
+        this.isDeleted = false;
         for (Table table : Table.tablesInOrder) {
             this.tableNames.add(table.name);
         }
@@ -40,6 +42,7 @@ public class NamespaceCheck {
         this.feedSource = feedSource;
         this.type = type;
         this.tableNames.addAll(schemaUpdater.getTableNames(namespace));
+        this.isDeleted = schemaUpdater.getDeletedStatus(namespace);
 
         checkMissingTables();
 
@@ -70,10 +73,13 @@ public class NamespaceCheck {
 
     public void printReport(String type) {
         String qualifier = "";
+        if (isDeleted != null && isDeleted) {
+            qualifier = "- deleted ";
+        }
         if (isOrphan()) {
-            qualifier = "- orphan";
+            qualifier += "- orphan";
         } else if (tableNames.isEmpty()) {
-            qualifier = "- No tables";
+            qualifier += "- No tables";
         }
         System.out.printf("\t\t- %s: %s %s%n", type, namespace, qualifier);
 

@@ -42,6 +42,8 @@ public class SqlSchemaUpdater implements AutoCloseable {
     private final PreparedStatement selectNamespaceTablesStatement;
     /** Check that columns for a given table are present. */
     private final PreparedStatement selectColumnStatement;
+    /** Check whether a namespace was deleted. */
+    private final PreparedStatement selectFeedStatement;
 
     public SqlSchemaUpdater(Connection connection) throws SQLException {
         this.connection = connection;
@@ -52,6 +54,9 @@ public class SqlSchemaUpdater implements AutoCloseable {
         );
         selectNamespaceTablesStatement = connection.prepareStatement(
             "select table_name from information_schema.tables where table_schema = ?"
+        );
+        selectFeedStatement = connection.prepareStatement(
+            "select deleted from feeds where namespace = ?"
         );
     }
 
@@ -164,8 +169,8 @@ public class SqlSchemaUpdater implements AutoCloseable {
      * Upgrades a namespace that is not orphan by adding missing tables/columns and
      * changing columns with incorrect types.
      */
-    public void upgradeNamespaceIfNotOrphan(NamespaceCheck ns) throws SQLException, StorageException {
-        if (!ns.isOrphan()) {
+    public void upgradeNamespaceIfNotOrphanOrDeleted(NamespaceCheck ns) throws SQLException, StorageException {
+        if (!ns.isOrphan() && (ns.isDeleted != null && !ns.isDeleted)) {
             String namespace = ns.namespace;
 
             // Add missing tables
@@ -199,6 +204,22 @@ public class SqlSchemaUpdater implements AutoCloseable {
         return tableNames;
     }
 
+    /**
+     * Obtains the deleted status of a namespace.
+     * @return a boolean that reflects the deleted status of the namespace, or null if the status cannot be found.
+     */
+    public Boolean getDeletedStatus(String namespace) throws SQLException {
+        selectFeedStatement.setString(1, namespace);
+        ResultSet resultSet = selectFeedStatement.executeQuery();
+        if (resultSet.next()) {
+            return resultSet.getBoolean(1);
+        }
+        return null;
+    }
+
+    /**
+     * Get info about columns for a given table and namespace.
+     */
     public List<ColumnCheck> getColumns(String namespace, Table table) {
         List<ColumnCheck> columns = new ArrayList<>();
         try {

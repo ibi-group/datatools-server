@@ -83,7 +83,7 @@ public class UpdateSQLFeedsMain {
                 String namespace = namespaceCheck.namespace;
                 try {
                     if (!namespaceCheck.isOrphan()) {
-                        schemaUpdater.upgradeNamespaceIfNotOrphan(namespaceCheck);
+                        schemaUpdater.upgradeNamespaceIfNotOrphanOrDeleted(namespaceCheck);
                         System.out.printf("Updated namespace %s%n", namespace);
                         successCount++;
                     }

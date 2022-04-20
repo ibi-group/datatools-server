@@ -144,7 +144,7 @@ class SqlSchemaUpdaterTest extends UnitTest {
             namespaceCheck.checkedTables.add(checkToAdd);
 
             // Go ahead and update the tables.
-            schemaUpdater.upgradeNamespaceIfNotOrphan(namespaceCheck);
+            schemaUpdater.upgradeNamespaceIfNotOrphanOrDeleted(namespaceCheck);
 
             // Perform a new check (delete previous ones).
             schemaUpdater.resetCheckedNamespaces();
@@ -192,7 +192,7 @@ class SqlSchemaUpdaterTest extends UnitTest {
 
             // Go ahead and update the tables.
             try {
-                schemaUpdater.upgradeNamespaceIfNotOrphan(namespaceCheck);
+                schemaUpdater.upgradeNamespaceIfNotOrphanOrDeleted(namespaceCheck);
             } catch (StorageException e) {
                 fail("Orphan namespaces should not be upgraded.");
             }
