@@ -7,6 +7,7 @@ import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.loader.Table;
 import com.conveyal.gtfs.storage.StorageException;
 import com.google.common.base.Strings;
+import com.google.common.collect.Lists;
 import org.bson.conversions.Bson;
 
 import java.sql.Connection;
@@ -25,28 +26,30 @@ import static com.mongodb.client.model.Filters.eq;
 import static com.mongodb.client.model.Filters.not;
 
 /**
- * This class handles operations to detect whether postgresql tables
- * are consistent with the gtfs-lib implementation from the project dependencies,
+ * This class handles operations to detect whether postgresql tables are consistent with the gtfs-lib implementation,
  * and fills out missing tables/columns and changes column types if needed.
  */
 public class SqlSchemaUpdater implements AutoCloseable {
-    /** Maintain a list of scanned namespaces to avoid duplicate work. */
-    private Map<String, NamespaceCheck> checkedNamespaces = new HashMap<>();
+    public static final String VERSIONS = "VERSIONS";
+    public static final String EDITOR = "EDITOR";
+    public static final String SNAPSHOTS = "SNAPSHOTS";
+    public static final List<String> NAMESPACE_TYPES = Lists.newArrayList(VERSIONS, EDITOR, SNAPSHOTS);
 
+    /** Maintain a list of scanned namespaces to avoid duplicate work. */
+    private final Map<String, NamespaceCheck> checkedNamespaces = new HashMap<>();
     private final Connection connection;
+    /** Check that all tables for the namespace are present. */
     private final PreparedStatement selectNamespaceTablesStatement;
+    /** Check that columns for a given table are present. */
     private final PreparedStatement selectColumnStatement;
 
     public SqlSchemaUpdater(Connection connection) throws SQLException {
         this.connection = connection;
 
         // Cache all prepared statements.
-
         selectColumnStatement = connection.prepareStatement(
             "select column_name, data_type from information_schema.columns where table_schema = ? and table_name = ?"
         );
-
-        // Check that all tables for the namespace are present.
         selectNamespaceTablesStatement = connection.prepareStatement(
             "select table_name from information_schema.tables where table_schema = ?"
         );
@@ -64,7 +67,7 @@ public class SqlSchemaUpdater implements AutoCloseable {
             System.out.printf("Project %s%n", p.name);
             Persistence.feedSources.getFiltered(eq("projectId", p.id)).forEach(fs -> {
                 System.out.printf("- FeedSource %s %s%n", fs.name, fs.id);
-                if (namespaceTypesToCheck.contains("EDITOR") && !Strings.isNullOrEmpty(fs.editorNamespace)) {
+                if (namespaceTypesToCheck.contains(EDITOR) && !Strings.isNullOrEmpty(fs.editorNamespace)) {
                     checkTablesForNamespace(fs.editorNamespace, fs, "editor");
                 }
 
@@ -74,7 +77,7 @@ public class SqlSchemaUpdater implements AutoCloseable {
                     not(eq("namespace", null))
                 );
 
-                if (namespaceTypesToCheck.contains("VERSIONS")) {
+                if (namespaceTypesToCheck.contains(VERSIONS)) {
                     List<FeedVersion> allFeedVersions = Persistence.feedVersions.getFiltered(feedSourceIdFilter);
                     List<FeedVersion> feedVersions = Persistence.feedVersions.getFiltered(feedSourceIdNamespaceFilter);
                     System.out.printf("  - FeedVersions (%d/%d with valid namespace)%n", feedVersions.size(), allFeedVersions.size());
@@ -85,7 +88,7 @@ public class SqlSchemaUpdater implements AutoCloseable {
                     );
                 }
 
-                if (namespaceTypesToCheck.contains("SNAPSHOTS")) {
+                if (namespaceTypesToCheck.contains(SNAPSHOTS)) {
                     List<Snapshot> allSnapshots = Persistence.snapshots.getFiltered(feedSourceIdFilter);
                     List<Snapshot> snapshots = Persistence.snapshots.getFiltered(feedSourceIdNamespaceFilter);
                     System.out.printf("  - Snapshots (%d/%d with valid namespace)%n", snapshots.size(), allSnapshots.size());
@@ -100,7 +103,7 @@ public class SqlSchemaUpdater implements AutoCloseable {
             });}
         );
 
-        // Once done, print the SQL statements to update the tables
+        // Once done, print the SQL statements to update the tables.
         printSqlChanges();
 
         return checkedNamespaces.values();
@@ -130,9 +133,13 @@ public class SqlSchemaUpdater implements AutoCloseable {
      * Clears the list of scanned namespaces (used for tests).
      */
     public void resetCheckedNamespaces() {
-        checkedNamespaces = new HashMap<>();
+        checkedNamespaces.clear();
     }
 
+    /**
+     * Checks a namespace for missing tables and retains the outcome of that operation, so that the check is
+     * not performed again if the same namespace is encountered again, unless resetCheckedNamespaces() is called.
+     */
     public NamespaceCheck checkTablesForNamespace(String namespace, FeedSource feedSource, String type) {
         NamespaceCheck existingNamespaceCheck = checkedNamespaces.get(namespace);
         if (existingNamespaceCheck == null) {
@@ -208,7 +215,6 @@ public class SqlSchemaUpdater implements AutoCloseable {
         } catch (SQLException e) {
             e.printStackTrace();
         }
-
         return columns;
     }
 

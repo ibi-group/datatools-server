@@ -14,7 +14,7 @@ public class NamespaceCheck {
     private final String type;
     private final FeedSource feedSource;
     public final String namespace;
-    public final List<String> tableNames = new ArrayList<>();
+    private final List<String> tableNames = new ArrayList<>();
     public final List<Table> missingTables = new ArrayList<>();
     public final List<Table> validTables = new ArrayList<>();
     public final List<TableCheck> checkedTables = new ArrayList<>();
@@ -33,7 +33,9 @@ public class NamespaceCheck {
         checkMissingTables();
     }
 
-    public NamespaceCheck(String namespace, FeedSource feedSource, String type, SqlSchemaUpdater schemaUpdater) throws SQLException {
+    public NamespaceCheck(String namespace, FeedSource feedSource, String type, SqlSchemaUpdater schemaUpdater)
+        throws SQLException
+    {
         this.namespace = namespace;
         this.feedSource = feedSource;
         this.type = type;

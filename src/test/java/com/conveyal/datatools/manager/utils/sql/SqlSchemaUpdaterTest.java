@@ -35,7 +35,7 @@ class SqlSchemaUpdaterTest extends UnitTest {
      */
     @BeforeAll
     public static void setUp() throws IOException {
-        // start server if it isn't already running
+        // start server if it isn't already running.
         DatatoolsTest.setUp();
 
         // Create a project and feed sources.
@@ -154,7 +154,9 @@ class SqlSchemaUpdaterTest extends UnitTest {
                 "namespace"
             );
 
-            // Check that missing fields were added
+            // Check that missing tables were added.
+            assertTrue(updatedNamespaceCheck.missingTables.isEmpty());
+
             for (TableCheck tableCheck : updatedNamespaceCheck.checkedTables) {
                 // The agency table is missing columns, so they should be flagged.
                 if (tableCheck.table == Table.AGENCY) {
@@ -165,12 +167,8 @@ class SqlSchemaUpdaterTest extends UnitTest {
                 if (tableCheck.table == Table.CALENDAR) {
                     assertTrue(tableCheck.columnsWithWrongType.isEmpty());
                 }
-            }
 
-
-            // Check that missing tables were added.
-            assertTrue(updatedNamespaceCheck.missingTables.isEmpty());
-            for (TableCheck tableCheck : updatedNamespaceCheck.checkedTables) {
+                // Check for no missing fields or fields with wrong type.
                 assertTrue(tableCheck.missingColumns.isEmpty());
                 assertTrue(tableCheck.columnsWithWrongType.isEmpty());
             }

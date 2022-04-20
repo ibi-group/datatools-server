@@ -40,7 +40,7 @@ class TableCheckTest {
         TableCheck tableInfo = new TableCheck(Table.ROUTES, NAMESPACE, columns);
         assertTrue(tableInfo.columnsWithWrongType.isEmpty());
 
-        // Modify the type of one column
+        // Modify the type of one column.
         for (ColumnCheck c : columns) {
             if (c.columnName.equals("route_short_name")) {
                 c.setDataType("smallint");

@@ -13,16 +13,14 @@ import java.util.stream.Collectors;
  * Contains the outcome of a table check (i.e. whether columns are missing or of the wrong type).
  */
 public class TableCheck {
-    public final String namespace;
+    private final String namespace;
     public final Table table;
-    public final List<ColumnCheck> columns;
     public final List<ColumnCheck> missingColumns = new ArrayList<>();
     public final List<ColumnCheck> columnsWithWrongType = new ArrayList<>();
 
     public TableCheck(Table table, String namespace, List<ColumnCheck> columns) {
         this.namespace = namespace;
         this.table = table;
-        this.columns = columns;
 
         for (Field field : table.fields) {
             Optional<ColumnCheck> foundColumnForField = columns
@@ -53,7 +51,7 @@ public class TableCheck {
     }
 
     /**
-     * Builds the SQL statement to upgrade the table,
+     * Builds the SQL statement to upgrade the table.
      */
     public String getAlterTableSql() {
         return String.format(

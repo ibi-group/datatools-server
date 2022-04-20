@@ -2,23 +2,22 @@ package com.conveyal.datatools.manager;
 
 import com.conveyal.datatools.manager.utils.sql.NamespaceCheck;
 import com.conveyal.datatools.manager.utils.sql.SqlSchemaUpdater;
-import com.google.common.collect.Lists;
 
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collection;
 import java.util.List;
+import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.manager.DataManager.initializeApplication;
 import static com.conveyal.datatools.manager.DataManager.registerRoutes;
 
 /**
- * Main method that checks for missing tables and columns
- * in the SQL database specified in the configuration files (env.yml)
- * for namespaces referenced in the projects,
- * and adds/modifies tables according according to the referenced gtfs-lib implementation.
+ * This class checks for missing SQL tables/columns and columns of incorrect type in namespaces referenced by projects,
+ * and adds/modifies tables according to the referenced gtfs-lib implementation.
  *
  * Argument descriptions:
  * 1. path to env.yml
@@ -42,13 +41,19 @@ public class UpdateSQLFeedsMain {
         String itemsToUpgrade = args.length > 2 ? args[2] : null;
         List<String> namespaceTypesToCheck = itemsToUpgrade == null
             ? new ArrayList<>()
-            : Lists.newArrayList(itemsToUpgrade.split("-"));
+            : Arrays.stream(itemsToUpgrade.split("-"))
+                .filter(SqlSchemaUpdater.NAMESPACE_TYPES::contains)
+                .collect(Collectors.toList());
 
-        // If test run arg is not included, default to true. Else, only set to false if value equals false.
-        boolean testRun = args.length <= 3 || !"false".equals(args[3]);
+        if (namespaceTypesToCheck.isEmpty()) {
+            System.out.println("No namespace types were specified. Exiting.");
+        } else {
+            // If test run arg is not included, default to true. Else, only set to false if value equals false.
+            boolean testRun = args.length <= 3 || !"false".equals(args[3]);
 
-        checkAndUpdateTables(testRun, namespaceTypesToCheck);
-        System.out.println("Finished!");
+            checkAndUpdateTables(testRun, namespaceTypesToCheck);
+            System.out.println("Finished!");
+        }
         System.exit(0);
     }
 
@@ -58,11 +63,6 @@ public class UpdateSQLFeedsMain {
      * If testRun is true, all changes applied to database will be rolled back at the end of execution.
      */
     private static void checkAndUpdateTables(boolean testRun, List<String> namespaceTypesToCheck) throws SQLException {
-        if (namespaceTypesToCheck.isEmpty()) {
-            System.out.println("No namespace types were specified. Exiting.");
-            return;
-        }
-
         try (Connection connection = DataManager.GTFS_DATA_SOURCE.getConnection()) {
             // Keep track of failed namespaces for convenient printing at end of method.
             List<String> failedNamespaces = new ArrayList<>();
@@ -73,7 +73,7 @@ public class UpdateSQLFeedsMain {
                 // Set auto-commit to true.
                 connection.setAutoCommit(true);
             } else {
-                System.out.println("TEST RUN. Changes will NOT be committed (a rollback occurs at the end of method).");
+                System.out.println("TEST RUN. Changes will NOT be committed.");
             }
 
             SqlSchemaUpdater schemaUpdater = new SqlSchemaUpdater(connection);
@@ -93,7 +93,7 @@ public class UpdateSQLFeedsMain {
                 }
             }
 
-            System.out.println(String.format("Updated %d namespaces.", successCount));
+            System.out.printf("Updated %d namespaces.%n", successCount);
             System.out.printf("Failed namespaces (%d):%n%s%n", failedNamespaces.size(), String.join("\n", failedNamespaces));
             // No need to commit the transaction because of auto-commit above (in fact, "manually" committing is not
             // permitted with auto-commit enabled.
