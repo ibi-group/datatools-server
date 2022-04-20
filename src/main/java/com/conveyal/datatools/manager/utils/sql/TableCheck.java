@@ -87,10 +87,15 @@ public class TableCheck {
 
     public void printReport() {
         if (hasColumnIssues()) {
-            System.out.println("          Issues in table: " + table.name);
-            missingColumns.forEach(c -> System.out.println("            Missing column: " + c.columnName));
+            System.out.printf("\t\t\tIssues in table: %s%n", table.name);
+            missingColumns.forEach(c -> System.out.printf("\t\t\t\tMissing column: %s%n", c.columnName));
             columnsWithWrongType.forEach(
-                c -> System.out.println("            Incorrect type for column: " + c.columnName + " expected: " + c.getExpectedType() + " actual: " + c.getDataType())
+                c -> System.out.printf(
+                    "\t\t\t\tIncorrect type for column: %s - expected: %s - actual: %s%n",
+                    c.columnName,
+                    c.getExpectedType(),
+                    c.getDataType()
+                )
             );
         }
     }

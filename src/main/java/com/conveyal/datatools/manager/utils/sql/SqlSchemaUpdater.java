@@ -80,7 +80,7 @@ public class SqlSchemaUpdater implements AutoCloseable {
                 if (namespaceTypesToCheck.contains(VERSIONS)) {
                     List<FeedVersion> allFeedVersions = Persistence.feedVersions.getFiltered(feedSourceIdFilter);
                     List<FeedVersion> feedVersions = Persistence.feedVersions.getFiltered(feedSourceIdNamespaceFilter);
-                    System.out.printf("  - FeedVersions (%d/%d with valid namespace)%n", feedVersions.size(), allFeedVersions.size());
+                    System.out.printf("\t- FeedVersions (%d/%d with valid namespace)%n", feedVersions.size(), allFeedVersions.size());
                     feedVersions.forEach(
                         fv -> {
                             checkTablesForNamespace(fv.namespace, fs, "v" + fv.version);
@@ -91,7 +91,7 @@ public class SqlSchemaUpdater implements AutoCloseable {
                 if (namespaceTypesToCheck.contains(SNAPSHOTS)) {
                     List<Snapshot> allSnapshots = Persistence.snapshots.getFiltered(feedSourceIdFilter);
                     List<Snapshot> snapshots = Persistence.snapshots.getFiltered(feedSourceIdNamespaceFilter);
-                    System.out.printf("  - Snapshots (%d/%d with valid namespace)%n", snapshots.size(), allSnapshots.size());
+                    System.out.printf("\t- Snapshots (%d/%d with valid namespace)%n", snapshots.size(), allSnapshots.size());
                     snapshots.forEach(
                         sn -> {
                             checkTablesForNamespace(sn.namespace, fs, sn.name == null ? "(unnamed)" : sn.name);

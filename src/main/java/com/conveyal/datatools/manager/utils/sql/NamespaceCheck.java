@@ -75,11 +75,11 @@ public class NamespaceCheck {
         } else if (tableNames.isEmpty()) {
             qualifier = "- No tables";
         }
-        System.out.println("      - " + type + ": " + namespace + " " + qualifier);
+        System.out.printf("\t\t- %s: %s %s%n", type, namespace, qualifier);
 
         if (!tableNames.isEmpty()) {
             for (Table t : missingTables) {
-                System.out.println("          Missing table: " + t.name);
+                System.out.printf("\t\t\tMissing table: %s%n", t.name);
             }
             for (TableCheck tableCheck : checkedTables) {
                 tableCheck.printReport();
