@@ -243,5 +243,6 @@ public class SqlSchemaUpdater implements AutoCloseable {
     public void close() throws Exception {
         selectColumnStatement.close();
         selectNamespaceTablesStatement.close();
+        selectFeedStatement.close();
     }
 }
