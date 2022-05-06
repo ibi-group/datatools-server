@@ -787,5 +787,4 @@ public class FeedSource extends Model implements Cloneable {
             Persistence.feedSources.updateField(this.id, "flex", true);
         }
     }
-
 }
