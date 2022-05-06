@@ -327,7 +327,7 @@
         <dependency>
             <groupId>com.sparkpost</groupId>
             <artifactId>sparkpost-lib</artifactId>
-            <version>0.15</version>
+            <version>0.27</version>
         </dependency>
 
         <!-- Efficient collections for primitive types -->
