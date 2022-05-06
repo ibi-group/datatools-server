@@ -276,11 +276,6 @@ public class FeedVersion extends Model implements Serializable {
             String gtfsFilePath = gtfsFile.getPath();
             this.feedLoadResult = GTFS.load(gtfsFilePath, DataManager.GTFS_DATA_SOURCE);
 
-
-            FeedSource flexSetFeedSource = this.parentFeedSource();
-            if (this.feedLoadResult != null) flexSetFeedSource.flex = this.feedLoadResult.isGTFSFlex();
-            Persistence.feedSources.replace(this.parentFeedSource().id, flexSetFeedSource);
-
             if (this.feedLoadResult.fatalException != null) {
                 status.fail("Could not load feed due to " + feedLoadResult.fatalException);
                 return;

@@ -177,9 +177,8 @@ public class FeedSource extends Model implements Cloneable {
     public String editorNamespace;
 
     /**
-     * If this feed source references a feed version that is GTFS Flex, this value will be true. This is updated every
-     * time a feed version is retrieved as different feed versions may or may not be flex. The process to determine a
-     * flex feed is defined in {@link FeedLoadResult#isGTFSFlex()}.
+     * If this feed source references a feed version that is GTFS Flex, this value will permanently be set to true.
+     * This is evaluated every time a feed version is retrieved as different feed versions may or may not be flex.
      */
     public boolean flex;
 
@@ -775,14 +774,18 @@ public class FeedSource extends Model implements Cloneable {
     }
 
     /**
-     * Set the flex value according to the feed version loaded. If a flex feed is loaded, enable the UI flex features.
+     * If a flex feed version is loaded, set this feed source to permanently be a flex feed source. Subsequent feed
+     * versions which are not flex will have no affected.
      */
     public void presetFlex(FeedVersion feedVersion) {
-        if (feedVersion.feedLoadResult != null) flex = feedVersion.feedLoadResult.isGTFSFlex();
-        if (flex) flexUIFeaturesEnabled = true;
-
-        // Save flex changes after check
-        Persistence.feedSources.updateField(this.id, "flex", flex);
-        Persistence.feedSources.updateField(this.id, "flexUIFeaturesEnabled", flexUIFeaturesEnabled);
+        boolean isFlexFeedVersion = false;
+        if (feedVersion.feedLoadResult != null) isFlexFeedVersion = feedVersion.feedLoadResult.isGTFSFlex();
+        if (!flex && isFlexFeedVersion) {
+            // If the feed version is flex (and the feed source was not flex) permanently enable flex.
+            flex = flexUIFeaturesEnabled = true;
+            Persistence.feedSources.updateField(this.id, "flexUIFeaturesEnabled", true);
+            Persistence.feedSources.updateField(this.id, "flex", true);
+        }
     }
+
 }
