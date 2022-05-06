@@ -789,9 +789,10 @@ public class MergeFeedsJobTest extends UnitTest {
     /**
      * Verify that merging BART feeds that contain "special stops" (i.e., stops with location_type > 0, including
      * entrances, generic nodes, etc.) handles missing stop codes correctly.
+     * This case also handles merging routes.txt and route_attributes.txt.
      */
     @Test
-    void canMergeBARTFeedsWithSpecialStops() throws SQLException, IOException {
+    void canMergeBARTFeedsWithSpecialStopsAndRouteIdChanges() throws SQLException, IOException {
         // Mini BART old/new feeds are pared down versions of the zips (bart_new.zip and bart_old.zip). They each have
         // only one trip and its corresponding stop_times. They do contain a full set of routes and stops. The stops are
         // from a recent (as of August 2021) GTFS file that includes a bunch of new stop records that act as entrances).
@@ -807,6 +808,17 @@ public class MergeFeedsJobTest extends UnitTest {
         // Verify that the stop count is equal to the number of stops found in each of the input stops.txt files.
         SqlAssert sqlAssert = new SqlAssert(mergeFeedsJob.mergedVersion);
         sqlAssert.stops.assertCount(182);
+
+        // Verify number of routes
+        sqlAssert.routes.assertCount(9);
+
+        // The GTFS+ route_attributes table should contain the same number of entries as the routes table
+        // (assuming that the active and future feed combined contain route attributes for all routes and extra rows).
+        assertEquals(
+            9,
+            mergeFeedsJob.mergeFeedsResult.linesPerTable.get("route_attributes").intValue(),
+            "Merged route_attributes table count should be the same as the merged routes table."
+        );
     }
 
     /**
