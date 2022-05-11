@@ -120,7 +120,6 @@ public class FeedVersion extends Model implements Serializable {
     /**
      * The feed source this is associated with
      */
-    @JsonView(JsonViews.DataDump.class)
     public String feedSourceId;
 
     public FeedRetrievalMethod retrievalMethod;
