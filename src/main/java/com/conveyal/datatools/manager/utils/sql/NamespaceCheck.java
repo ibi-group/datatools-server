@@ -11,7 +11,7 @@ import java.util.List;
  * Contains the outcome of a namespace check (e.g. whether tables are missing).
  */
 public class NamespaceCheck {
-    private final String type;
+    public final String type;
     private final FeedSource feedSource;
     public final String namespace;
     public final Boolean isDeleted;
@@ -47,7 +47,7 @@ public class NamespaceCheck {
         checkMissingTables();
 
         for (Table t : validTables) {
-            checkedTables.add(new TableCheck(t, namespace, schemaUpdater));
+            checkedTables.add(new TableCheck(t, namespace, type, schemaUpdater));
         }
     }
 

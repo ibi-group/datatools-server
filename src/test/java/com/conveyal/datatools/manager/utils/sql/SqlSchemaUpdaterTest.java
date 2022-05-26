@@ -16,7 +16,7 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.sql.Connection;
-import java.sql.PreparedStatement;
+import java.sql.Statement;
 import java.util.ArrayList;
 
 import static com.conveyal.datatools.TestUtils.appendDate;
@@ -117,16 +117,16 @@ class SqlSchemaUpdaterTest extends UnitTest {
                 if (tableCheck.table == Table.CALENDAR) {
                     assertTrue(tableCheck.columnsWithWrongType.isEmpty());
 
-                    PreparedStatement changeStatement = connection.prepareStatement(
-                        String.format(
+                    try (Statement changeStatement = connection.createStatement()) {
+                        String changeSql = String.format(
                             "ALTER TABLE %s.calendar ALTER COLUMN monday TYPE VARCHAR",
                             namespace
-                        )
-                    );
-                    changeStatement.execute();
+                        );
+                        changeStatement.execute(changeSql);
+                    }
 
                     // Check that the modified column is flagged.
-                    TableCheck changedTableCheck = new TableCheck(tableCheck.table, namespace, schemaUpdater);
+                    TableCheck changedTableCheck = new TableCheck(tableCheck.table, namespace, namespaceCheck.type, schemaUpdater);
                     checkToRemove = tableCheck;
                     checkToAdd = changedTableCheck;
 
@@ -135,7 +135,10 @@ class SqlSchemaUpdaterTest extends UnitTest {
                     assertEquals("monday", columnWithWrongType.columnName);
                     assertEquals("varchar", columnWithWrongType.getDataType());
                     assertEquals("integer", columnWithWrongType.getExpectedType());
-                    assertEquals("ALTER COLUMN monday TYPE integer USING monday::integer", columnWithWrongType.getAlterColumnTypeSql());
+                    String alterColumnSql = "ALTER COLUMN monday TYPE integer USING monday::integer";
+                    assertEquals(alterColumnSql, columnWithWrongType.getAlterColumnTypeSql());
+                    String tableUpdateSql = String.format("ALTER TABLE %s.calendar %s;", namespace, alterColumnSql);
+                    assertEquals(tableUpdateSql, changedTableCheck.getAlterTableSql());
                 }
             }
             // Update namespaceCheck with the table check with the modified column above,

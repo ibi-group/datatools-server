@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.utils.sql;
 
 import com.conveyal.gtfs.loader.Field;
+import com.conveyal.gtfs.loader.Requirement;
 import com.conveyal.gtfs.loader.Table;
 
 import java.util.ArrayList;
@@ -18,7 +19,7 @@ public class TableCheck {
     public final List<ColumnCheck> missingColumns = new ArrayList<>();
     public final List<ColumnCheck> columnsWithWrongType = new ArrayList<>();
 
-    public TableCheck(Table table, String namespace, List<ColumnCheck> columns) {
+    public TableCheck(Table table, String namespace, String namespaceType, List<ColumnCheck> columns) {
         this.namespace = namespace;
         this.table = table;
 
@@ -36,14 +37,17 @@ public class TableCheck {
                     columnsWithWrongType.add(columnForField);
                 }
                 // Only the id column seems to be marked as not nullable, so we won't check that for now.
-            } else {
+            } else if (
+                (namespaceType.equals("editor") && field.requirement == Requirement.EDITOR) ||
+                (!namespaceType.equals("editor") && field.requirement != Requirement.EDITOR)
+            ) {
                 missingColumns.add(new ColumnCheck(field));
             }
         }
     }
 
-    public TableCheck(Table table, String namespace, SqlSchemaUpdater schemaUpdater) {
-        this(table, namespace, schemaUpdater.getColumns(namespace, table));
+    public TableCheck(Table table, String namespace, String namespaceType, SqlSchemaUpdater schemaUpdater) {
+        this(table, namespace, namespaceType, schemaUpdater.getColumns(namespace, table));
     }
 
     public boolean hasColumnIssues() {
