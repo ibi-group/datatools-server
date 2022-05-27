@@ -16,7 +16,6 @@ import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.sql.Connection;
-import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 
@@ -30,14 +29,12 @@ import static org.junit.jupiter.api.Assertions.fail;
 class SqlSchemaUpdaterTest extends UnitTest {
     private static Project project;
     private static FeedSource feedSource;
-    private static Connection connection;
-    private static SqlSchemaUpdater schemaUpdater;
 
     /**
      * Initialize Data Tools and set up a simple feed source and project.
      */
     @BeforeAll
-    public static void setUp() throws IOException, SQLException {
+    public static void setUp() throws IOException {
         // start server if it isn't already running.
         DatatoolsTest.setUp();
 
@@ -47,20 +44,15 @@ class SqlSchemaUpdaterTest extends UnitTest {
         Persistence.projects.create(project);
         feedSource = new FeedSource(appendDate("Test Feed"), project.id, MANUALLY_UPLOADED);
         Persistence.feedSources.create(feedSource);
-
-        connection = DataManager.GTFS_DATA_SOURCE.getConnection();
-        schemaUpdater = new SqlSchemaUpdater(connection);
     }
 
     /**
      * Clean up test database after tests finish.
      */
     @AfterAll
-    public static void tearDown() throws Exception {
+    public static void tearDown() {
         // Project delete cascades to feed sources.
         project.delete();
-        schemaUpdater.close();
-        connection.close();
     }
 
     /**
@@ -75,109 +67,114 @@ class SqlSchemaUpdaterTest extends UnitTest {
             "caltrain_gtfs_lite.zip"
         );
 
-        String namespace = sourceVersion.namespace;
-        NamespaceCheck namespaceCheck = schemaUpdater.checkTablesForNamespace(
-            namespace,
-            feedSource,
-            "namespace"
-        );
+        try (
+            Connection connection = DataManager.GTFS_DATA_SOURCE.getConnection();
+            SqlSchemaUpdater schemaUpdater = new SqlSchemaUpdater(connection)
+        ) {
+            String namespace = sourceVersion.namespace;
+            NamespaceCheck namespaceCheck = schemaUpdater.checkTablesForNamespace(
+                namespace,
+                feedSource,
+                "namespace"
+            );
 
-        // Some tables are missing from the feed and should be flagged.
-        assertTrue(namespaceCheck.missingTables.containsAll(Lists.newArrayList(
-            Table.SCHEDULE_EXCEPTIONS,
-            Table.FEED_INFO,
-            Table.TRANSFERS,
-            Table.FREQUENCIES,
-            Table.ATTRIBUTIONS,
-            Table.TRANSLATIONS
-        )));
+            // Some tables are missing from the feed and should be flagged.
+            assertTrue(namespaceCheck.missingTables.containsAll(Lists.newArrayList(
+                Table.SCHEDULE_EXCEPTIONS,
+                Table.FEED_INFO,
+                Table.TRANSFERS,
+                Table.FREQUENCIES,
+                Table.ATTRIBUTIONS,
+                Table.TRANSLATIONS
+            )));
 
-        TableCheck checkToRemove = null;
-        TableCheck checkToAdd = null;
-        for (TableCheck tableCheck : namespaceCheck.checkedTables) {
-            // The agency table is missing columns, so they should be flagged.
-            if (tableCheck.table == Table.AGENCY) {
-                ArrayList<String> missingColumns = Lists.newArrayList(
-                    "agency_lang",
-                    "agency_phone",
-                    "agency_branding_url",
-                    "agency_fare_url",
-                    "agency_email"
-                );
-
-                assertEquals(missingColumns.size(), tableCheck.missingColumns.size());
-                for (ColumnCheck c : tableCheck.missingColumns) {
-                    assertTrue(missingColumns.contains(c.columnName));
-                    assertEquals(
-                        String.format(
-                            "ADD COLUMN IF NOT EXISTS %s %s", c.columnName, c.getExpectedType()
-                        ),
-                        c.getAddColumnSql()
+            TableCheck checkToRemove = null;
+            TableCheck checkToAdd = null;
+            for (TableCheck tableCheck : namespaceCheck.checkedTables) {
+                // The agency table is missing columns, so they should be flagged.
+                if (tableCheck.table == Table.AGENCY) {
+                    ArrayList<String> missingColumns = Lists.newArrayList(
+                        "agency_lang",
+                        "agency_phone",
+                        "agency_branding_url",
+                        "agency_fare_url",
+                        "agency_email"
                     );
-                }
-            }
 
-            // Simulate a previously incorrect column type that needs to be updated.
-            if (tableCheck.table == Table.CALENDAR) {
-                assertTrue(tableCheck.columnsWithWrongType.isEmpty());
-
-                try (Statement changeStatement = connection.createStatement()) {
-                    String changeSql = String.format(
-                        "ALTER TABLE %s.calendar ALTER COLUMN monday TYPE VARCHAR",
-                        namespace
-                    );
-                    changeStatement.execute(changeSql);
+                    assertEquals(missingColumns.size(), tableCheck.missingColumns.size());
+                    for (ColumnCheck c : tableCheck.missingColumns) {
+                        assertTrue(missingColumns.contains(c.columnName));
+                        assertEquals(
+                            String.format(
+                                "ADD COLUMN IF NOT EXISTS %s %s", c.columnName, c.getExpectedType()
+                            ),
+                            c.getAddColumnSql()
+                        );
+                    }
                 }
 
-                // Check that the modified column is flagged.
-                TableCheck changedTableCheck = new TableCheck(tableCheck.table, namespace, namespaceCheck.type, schemaUpdater);
-                checkToRemove = tableCheck;
-                checkToAdd = changedTableCheck;
+                // Simulate a previously incorrect column type that needs to be updated.
+                if (tableCheck.table == Table.CALENDAR) {
+                    assertTrue(tableCheck.columnsWithWrongType.isEmpty());
 
-                assertEquals(1, changedTableCheck.columnsWithWrongType.size());
-                ColumnCheck columnWithWrongType = changedTableCheck.columnsWithWrongType.get(0);
-                assertEquals("monday", columnWithWrongType.columnName);
-                assertEquals("varchar", columnWithWrongType.getDataType());
-                assertEquals("integer", columnWithWrongType.getExpectedType());
-                String alterColumnSql = "ALTER COLUMN monday TYPE integer USING monday::integer";
-                assertEquals(alterColumnSql, columnWithWrongType.getAlterColumnTypeSql());
-                String tableUpdateSql = String.format("ALTER TABLE %s.calendar %s;", namespace, alterColumnSql);
-                assertEquals(tableUpdateSql, changedTableCheck.getAlterTableSql());
+                    try (Statement changeStatement = connection.createStatement()) {
+                        String changeSql = String.format(
+                            "ALTER TABLE %s.calendar ALTER COLUMN monday TYPE VARCHAR",
+                            namespace
+                        );
+                        changeStatement.execute(changeSql);
+                    }
+
+                    // Check that the modified column is flagged.
+                    TableCheck changedTableCheck = new TableCheck(tableCheck.table, namespace, namespaceCheck.type, schemaUpdater);
+                    checkToRemove = tableCheck;
+                    checkToAdd = changedTableCheck;
+
+                    assertEquals(1, changedTableCheck.columnsWithWrongType.size());
+                    ColumnCheck columnWithWrongType = changedTableCheck.columnsWithWrongType.get(0);
+                    assertEquals("monday", columnWithWrongType.columnName);
+                    assertEquals("varchar", columnWithWrongType.getDataType());
+                    assertEquals("integer", columnWithWrongType.getExpectedType());
+                    String alterColumnSql = "ALTER COLUMN monday TYPE integer USING monday::integer";
+                    assertEquals(alterColumnSql, columnWithWrongType.getAlterColumnTypeSql());
+                    String tableUpdateSql = String.format("ALTER TABLE %s.calendar %s;", namespace, alterColumnSql);
+                    assertEquals(tableUpdateSql, changedTableCheck.getAlterTableSql());
+                }
             }
-        }
-        // Update namespaceCheck with the table check with the modified column above,
-        // so that the table upgrade can pick it up.
-        namespaceCheck.checkedTables.remove(checkToRemove);
-        namespaceCheck.checkedTables.add(checkToAdd);
+            // Update namespaceCheck with the table check with the modified column above,
+            // so that the table upgrade can pick it up.
+            namespaceCheck.checkedTables.remove(checkToRemove);
+            namespaceCheck.checkedTables.add(checkToAdd);
 
-        // Go ahead and update the tables.
-        schemaUpdater.upgradeNamespaceIfNotOrphanOrDeleted(namespaceCheck);
+            // Go ahead and update the tables.
+            schemaUpdater.upgradeNamespaceIfNotOrphanOrDeleted(namespaceCheck);
 
-        // Perform a new check (delete previous ones).
-        schemaUpdater.resetCheckedNamespaces();
-        NamespaceCheck updatedNamespaceCheck = schemaUpdater.checkTablesForNamespace(
-            namespace,
-            feedSource,
-            "namespace"
-        );
+            // Perform a new check (delete previous ones).
+            schemaUpdater.resetCheckedNamespaces();
+            NamespaceCheck updatedNamespaceCheck = schemaUpdater.checkTablesForNamespace(
+                namespace,
+                feedSource,
+                "namespace"
+            );
 
-        // Check that missing tables were added.
-        assertTrue(updatedNamespaceCheck.missingTables.isEmpty());
+            // Check that missing tables were added.
+            assertTrue(updatedNamespaceCheck.missingTables.isEmpty());
 
-        for (TableCheck tableCheck : updatedNamespaceCheck.checkedTables) {
-            // The agency table is missing columns, so they should be flagged.
-            if (tableCheck.table == Table.AGENCY) {
+            for (TableCheck tableCheck : updatedNamespaceCheck.checkedTables) {
+                // The agency table is missing columns, so they should be flagged.
+                if (tableCheck.table == Table.AGENCY) {
+                    assertTrue(tableCheck.missingColumns.isEmpty());
+                }
+
+                // Simulate a previously incorrect column type that needs to be updated.
+                if (tableCheck.table == Table.CALENDAR) {
+                    assertTrue(tableCheck.columnsWithWrongType.isEmpty());
+                }
+
+                // Check for no missing fields or fields with wrong type.
                 assertTrue(tableCheck.missingColumns.isEmpty());
-            }
-
-            // Simulate a previously incorrect column type that needs to be updated.
-            if (tableCheck.table == Table.CALENDAR) {
                 assertTrue(tableCheck.columnsWithWrongType.isEmpty());
             }
-
-            // Check for no missing fields or fields with wrong type.
-            assertTrue(tableCheck.missingColumns.isEmpty());
-            assertTrue(tableCheck.columnsWithWrongType.isEmpty());
         }
     }
 
@@ -186,17 +183,22 @@ class SqlSchemaUpdaterTest extends UnitTest {
      */
     @Test
     void shouldNotUpgradeOrphanNamespaces() throws Exception {
-        NamespaceCheck namespaceCheck = schemaUpdater.checkTablesForNamespace(
-            "random_namespace",
-            feedSource,
-            "namespace"
-        );
+        try (
+            Connection connection = DataManager.GTFS_DATA_SOURCE.getConnection();
+            SqlSchemaUpdater schemaUpdater = new SqlSchemaUpdater(connection)
+        ) {
+            NamespaceCheck namespaceCheck = schemaUpdater.checkTablesForNamespace(
+                "random_namespace",
+                feedSource,
+                "namespace"
+            );
 
-        // Go ahead and update the tables.
-        try {
-            schemaUpdater.upgradeNamespaceIfNotOrphanOrDeleted(namespaceCheck);
-        } catch (StorageException e) {
-            fail("Orphan namespaces should not be upgraded.");
+            // Go ahead and update the tables.
+            try {
+                schemaUpdater.upgradeNamespaceIfNotOrphanOrDeleted(namespaceCheck);
+            } catch (StorageException e) {
+                fail("Orphan namespaces should not be upgraded.");
+            }
         }
     }
 }
