@@ -157,6 +157,7 @@ public class SqlSchemaUpdater implements AutoCloseable {
                 );
                 namespaceCheck.printReport(type);
                 checkedNamespaces.put(namespace, namespaceCheck);
+                System.out.printf("Namespace check successful for %s.%n");
                 return namespaceCheck;
             } catch (SQLException e) {
                 e.printStackTrace();
