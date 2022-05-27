@@ -29,6 +29,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 class SqlSchemaUpdaterTest extends UnitTest {
     private static Project project;
     private static FeedSource feedSource;
+    private static FeedVersion sourceVersion;
 
     /**
      * Initialize Data Tools and set up a simple feed source and project.
@@ -44,6 +45,12 @@ class SqlSchemaUpdaterTest extends UnitTest {
         Persistence.projects.create(project);
         feedSource = new FeedSource(appendDate("Test Feed"), project.id, MANUALLY_UPLOADED);
         Persistence.feedSources.create(feedSource);
+
+        // Create source version (also creates the feeds table and adds an entry).
+        sourceVersion = createFeedVersionFromGtfsZip(
+            feedSource,
+            "caltrain_gtfs_lite.zip"
+        );
     }
 
     /**
@@ -61,12 +68,6 @@ class SqlSchemaUpdaterTest extends UnitTest {
      */
     @Test
     void canCheckAndUpgradeTables() throws Exception {
-        // Create source version.
-        FeedVersion sourceVersion = createFeedVersionFromGtfsZip(
-            feedSource,
-            "caltrain_gtfs_lite.zip"
-        );
-
         try (
             Connection connection = DataManager.GTFS_DATA_SOURCE.getConnection();
             SqlSchemaUpdater schemaUpdater = new SqlSchemaUpdater(connection)
