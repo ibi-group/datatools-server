@@ -23,6 +23,7 @@ import static com.conveyal.datatools.TestUtils.appendDate;
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.MANUALLY_UPLOADED;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -50,7 +51,7 @@ class SqlSchemaUpdaterTest extends UnitTest {
      * Clean up test database after tests finish.
      */
     @AfterAll
-    public static void tearDown() {
+    static void tearDown() {
         // Project delete cascades to feed sources.
         project.delete();
     }
@@ -195,6 +196,7 @@ class SqlSchemaUpdaterTest extends UnitTest {
 
             // Go ahead and update the tables.
             try {
+                assertNotNull(schemaUpdater);
                 schemaUpdater.upgradeNamespaceIfNotOrphanOrDeleted(namespaceCheck);
             } catch (StorageException e) {
                 fail("Orphan namespaces should not be upgraded.");
