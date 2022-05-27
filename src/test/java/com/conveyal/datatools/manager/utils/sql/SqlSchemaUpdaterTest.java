@@ -13,6 +13,8 @@ import com.google.common.collect.Lists;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.sql.Connection;
@@ -66,8 +68,9 @@ class SqlSchemaUpdaterTest extends UnitTest {
      * Test to check tables for missing tables/fields or incorrect types
      * and to upgrade the tables accordingly.
      */
-    @Test
-    void canCheckAndUpgradeTables() throws Exception {
+    @ParameterizedTest
+    @ValueSource(strings = {"namespace", "editor"})
+    void canCheckAndUpgradeTables(String namespaceType) throws Exception {
         try (
             Connection connection = DataManager.GTFS_DATA_SOURCE.getConnection();
             SqlSchemaUpdater schemaUpdater = new SqlSchemaUpdater(connection)
@@ -76,7 +79,7 @@ class SqlSchemaUpdaterTest extends UnitTest {
             NamespaceCheck namespaceCheck = schemaUpdater.checkTablesForNamespace(
                 namespace,
                 feedSource,
-                "namespace"
+                namespaceType
             );
 
             // Some tables are missing from the feed and should be flagged.
@@ -138,8 +141,14 @@ class SqlSchemaUpdaterTest extends UnitTest {
                     assertEquals("integer", columnWithWrongType.getExpectedType());
                     String alterColumnSql = "ALTER COLUMN monday TYPE integer USING monday::integer";
                     assertEquals(alterColumnSql, columnWithWrongType.getAlterColumnTypeSql());
-                    String tableUpdateSql = String.format("ALTER TABLE %s.calendar %s;", namespace, alterColumnSql);
-                    assertEquals(tableUpdateSql, changedTableCheck.getAlterTableSql());
+
+                    if (namespaceType.equals("editor")) {
+                        String addColumnSql = "ADD COLUMN IF NOT EXISTS description varchar";
+                        String tableAddColumnSql = String.format("ALTER TABLE %s.calendar %s;", namespace, addColumnSql);
+                        assertEquals(tableAddColumnSql, changedTableCheck.getAlterTableAddColumnsSql());
+                    }
+                    String tableAlterColumnSql = String.format("ALTER TABLE %s.calendar %s;", namespace, alterColumnSql);
+                    assertEquals(tableAlterColumnSql, changedTableCheck.getAlterTableAlterColumnsSql());
                 }
             }
             // Update namespaceCheck with the table check with the modified column above,

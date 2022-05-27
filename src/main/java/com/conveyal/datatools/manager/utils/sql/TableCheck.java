@@ -39,8 +39,10 @@ public class TableCheck {
                 // Only the id column seems to be marked as not nullable, so we won't check that for now.
             } else if (
                 (namespaceType.equals("editor") && field.requirement == Requirement.EDITOR) ||
-                (!namespaceType.equals("editor") && field.requirement != Requirement.EDITOR)
+                (field.requirement != Requirement.EDITOR)
             ) {
+                // Report missing editor-only tables only if the namespace is an editor namespace.
+                // Report missing non-editor tables in all other cases.
                 missingColumns.add(new ColumnCheck(field));
             }
         }
@@ -55,19 +57,31 @@ public class TableCheck {
     }
 
     /**
-     * Builds the SQL statement to upgrade the table.
+     * Builds the SQL statement to add columns to the table.
      */
-    public String getAlterTableSql() {
+    public String getAlterTableAddColumnsSql() {
         return String.format(
             "ALTER TABLE %s.%s %s;",
             namespace,
             table.name,
-            getColumnSql()
+            String.join(", ", getColumnSqlParts(missingColumns, ColumnCheck::getAddColumnSql))
         );
     }
 
     /**
-     * Builds the part of an SQL statement that adds or updates columns.
+     * Builds the SQL statement to modify existing columns to the table.
+     */
+    public String getAlterTableAlterColumnsSql() {
+        return String.format(
+            "ALTER TABLE %s.%s %s;",
+            namespace,
+            table.name,
+            String.join(", ", getColumnSqlParts(columnsWithWrongType, ColumnCheck::getAlterColumnTypeSql))
+        );
+    }
+
+    /**
+     * Builds the part of an SQL statement that addscolumns.
      */
     private List<String> getColumnSqlParts(
         List<ColumnCheck> columns,
@@ -77,16 +91,6 @@ public class TableCheck {
             .stream()
             .map(mapper)
             .collect(Collectors.toList());
-    }
-
-    /**
-     * Builds the part of an SQL statement that adds and/or updates columns.
-     */
-    private String getColumnSql() {
-        List<String> columnSqlParts = new ArrayList<>();
-        columnSqlParts.addAll(getColumnSqlParts(missingColumns, ColumnCheck::getAddColumnSql));
-        columnSqlParts.addAll(getColumnSqlParts(columnsWithWrongType, ColumnCheck::getAlterColumnTypeSql));
-        return String.join(", ", columnSqlParts);
     }
 
     public void printReport() {
