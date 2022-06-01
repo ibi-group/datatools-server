@@ -13,10 +13,12 @@ import com.google.common.collect.Lists;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.sql.Connection;
-import java.sql.PreparedStatement;
+import java.sql.Statement;
 import java.util.ArrayList;
 
 import static com.conveyal.datatools.TestUtils.appendDate;
@@ -29,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.fail;
 class SqlSchemaUpdaterTest extends UnitTest {
     private static Project project;
     private static FeedSource feedSource;
+    private static FeedVersion sourceVersion;
 
     /**
      * Initialize Data Tools and set up a simple feed source and project.
@@ -44,6 +47,12 @@ class SqlSchemaUpdaterTest extends UnitTest {
         Persistence.projects.create(project);
         feedSource = new FeedSource(appendDate("Test Feed"), project.id, MANUALLY_UPLOADED);
         Persistence.feedSources.create(feedSource);
+
+        // Create source version (also creates the feeds table and adds an entry).
+        sourceVersion = createFeedVersionFromGtfsZip(
+            feedSource,
+            "caltrain_gtfs_lite.zip"
+        );
     }
 
     /**
@@ -59,14 +68,9 @@ class SqlSchemaUpdaterTest extends UnitTest {
      * Test to check tables for missing tables/fields or incorrect types
      * and to upgrade the tables accordingly.
      */
-    @Test
-    void canCheckAndUpgradeTables() throws Exception {
-        // Create source version.
-        FeedVersion sourceVersion = createFeedVersionFromGtfsZip(
-            feedSource,
-            "caltrain_gtfs_lite.zip"
-        );
-
+    @ParameterizedTest
+    @ValueSource(strings = {"namespace", "editor"})
+    void canCheckAndUpgradeTables(String namespaceType) throws Exception {
         try (
             Connection connection = DataManager.GTFS_DATA_SOURCE.getConnection();
             SqlSchemaUpdater schemaUpdater = new SqlSchemaUpdater(connection)
@@ -75,7 +79,7 @@ class SqlSchemaUpdaterTest extends UnitTest {
             NamespaceCheck namespaceCheck = schemaUpdater.checkTablesForNamespace(
                 namespace,
                 feedSource,
-                "namespace"
+                namespaceType
             );
 
             // Some tables are missing from the feed and should be flagged.
@@ -117,16 +121,16 @@ class SqlSchemaUpdaterTest extends UnitTest {
                 if (tableCheck.table == Table.CALENDAR) {
                     assertTrue(tableCheck.columnsWithWrongType.isEmpty());
 
-                    PreparedStatement changeStatement = connection.prepareStatement(
-                        String.format(
+                    try (Statement changeStatement = connection.createStatement()) {
+                        String changeSql = String.format(
                             "ALTER TABLE %s.calendar ALTER COLUMN monday TYPE VARCHAR",
                             namespace
-                        )
-                    );
-                    changeStatement.execute();
+                        );
+                        changeStatement.execute(changeSql);
+                    }
 
                     // Check that the modified column is flagged.
-                    TableCheck changedTableCheck = new TableCheck(tableCheck.table, namespace, schemaUpdater);
+                    TableCheck changedTableCheck = new TableCheck(tableCheck.table, namespace, namespaceCheck.type, schemaUpdater);
                     checkToRemove = tableCheck;
                     checkToAdd = changedTableCheck;
 
@@ -135,7 +139,16 @@ class SqlSchemaUpdaterTest extends UnitTest {
                     assertEquals("monday", columnWithWrongType.columnName);
                     assertEquals("varchar", columnWithWrongType.getDataType());
                     assertEquals("integer", columnWithWrongType.getExpectedType());
-                    assertEquals("ALTER COLUMN monday TYPE integer USING monday::integer", columnWithWrongType.getAlterColumnTypeSql());
+                    String alterColumnSql = "ALTER COLUMN monday TYPE integer USING monday::integer";
+                    assertEquals(alterColumnSql, columnWithWrongType.getAlterColumnTypeSql());
+
+                    if (namespaceType.equals("editor")) {
+                        String addColumnSql = "ADD COLUMN IF NOT EXISTS description varchar";
+                        String tableAddColumnSql = String.format("ALTER TABLE %s.calendar %s;", namespace, addColumnSql);
+                        assertEquals(tableAddColumnSql, changedTableCheck.getAddColumnsSql());
+                    }
+                    String tableAlterColumnSql = String.format("ALTER TABLE %s.calendar %s;", namespace, alterColumnSql);
+                    assertEquals(tableAlterColumnSql, changedTableCheck.getAlterColumnsSql());
                 }
             }
             // Update namespaceCheck with the table check with the modified column above,
