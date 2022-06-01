@@ -145,10 +145,10 @@ class SqlSchemaUpdaterTest extends UnitTest {
                     if (namespaceType.equals("editor")) {
                         String addColumnSql = "ADD COLUMN IF NOT EXISTS description varchar";
                         String tableAddColumnSql = String.format("ALTER TABLE %s.calendar %s;", namespace, addColumnSql);
-                        assertEquals(tableAddColumnSql, changedTableCheck.getAlterTableAddColumnsSql());
+                        assertEquals(tableAddColumnSql, changedTableCheck.getAddColumnsSql());
                     }
                     String tableAlterColumnSql = String.format("ALTER TABLE %s.calendar %s;", namespace, alterColumnSql);
-                    assertEquals(tableAlterColumnSql, changedTableCheck.getAlterTableAlterColumnsSql());
+                    assertEquals(tableAlterColumnSql, changedTableCheck.getAlterColumnsSql());
                 }
             }
             // Update namespaceCheck with the table check with the modified column above,

@@ -126,10 +126,10 @@ public class SqlSchemaUpdater implements AutoCloseable {
                 // Print alter table statements
                 ns.checkedTables.forEach(t -> {
                     if (!t.missingColumns.isEmpty()) {
-                        System.out.println(t.getAlterTableAddColumnsSql());
+                        System.out.println(t.getAddColumnsSql());
                     }
                     if (!t.columnsWithWrongType.isEmpty()) {
-                        System.out.println(t.getAlterTableAlterColumnsSql());
+                        System.out.println(t.getAlterColumnsSql());
                     }
                 });
             }
@@ -185,14 +185,14 @@ public class SqlSchemaUpdater implements AutoCloseable {
                 // Fix column issues for a table, if any.
                 if (!tableCheck.missingColumns.isEmpty()) {
                     try (Statement alterStatement = connection.createStatement()) {
-                        String alterTableSql = tableCheck.getAlterTableAddColumnsSql();
+                        String alterTableSql = tableCheck.getAddColumnsSql();
                         System.out.println("Executing " + alterTableSql);
                         alterStatement.execute(alterTableSql);
                     }
                 }
                 if (!tableCheck.columnsWithWrongType.isEmpty()) {
                     try (Statement alterStatement = connection.createStatement()) {
-                        String alterTableSql = tableCheck.getAlterTableAlterColumnsSql();
+                        String alterTableSql = tableCheck.getAlterColumnsSql();
                         System.out.println("Executing " + alterTableSql);
                         alterStatement.execute(alterTableSql);
                     }

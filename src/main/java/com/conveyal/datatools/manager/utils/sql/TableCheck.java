@@ -38,8 +38,7 @@ public class TableCheck {
                 }
                 // Only the id column seems to be marked as not nullable, so we won't check that for now.
             } else if (
-                (namespaceType.equals("editor") && field.requirement == Requirement.EDITOR) ||
-                (field.requirement != Requirement.EDITOR)
+                namespaceType.equals("editor") || field.requirement != Requirement.EDITOR
             ) {
                 // Report missing editor-only tables only if the namespace is an editor namespace.
                 // Report missing non-editor tables in all other cases.
@@ -57,9 +56,9 @@ public class TableCheck {
     }
 
     /**
-     * Builds the SQL statement to add columns to the table.
+     * Builds the ALTER TABLE SQL statement to add columns to the table.
      */
-    public String getAlterTableAddColumnsSql() {
+    public String getAddColumnsSql() {
         return String.format(
             "ALTER TABLE %s.%s %s;",
             namespace,
@@ -69,9 +68,9 @@ public class TableCheck {
     }
 
     /**
-     * Builds the SQL statement to modify existing columns to the table.
+     * Builds the ALTER TABLE SQL statement to modify existing columns to the table.
      */
-    public String getAlterTableAlterColumnsSql() {
+    public String getAlterColumnsSql() {
         return String.format(
             "ALTER TABLE %s.%s %s;",
             namespace,
