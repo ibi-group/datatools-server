@@ -12,12 +12,12 @@ import com.conveyal.gtfs.loader.Table;
 import com.conveyal.gtfs.model.Agency;
 import com.conveyal.gtfs.model.Route;
 import com.conveyal.gtfs.model.Stop;
-import com.google.common.io.Files;
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.GeometryFactory;
 import com.vividsolutions.jts.geom.LineString;
 import com.vividsolutions.jts.geom.Point;
 import org.apache.commons.dbutils.DbUtils;
+import org.apache.commons.io.FileUtils;
 import org.geotools.data.DataUtilities;
 import org.geotools.data.DefaultTransaction;
 import org.geotools.data.Transaction;
@@ -34,7 +34,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.Serializable;
+import java.nio.file.Files;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -62,11 +64,9 @@ public class GisExportJob extends MonitorableJob {
         status.update("Beginning export", 5);
     }
 
-    @Override public void jobLogic() {
-        LOG.info("Storing shapefile for feeds {} at {}", feedIds, file.getAbsolutePath());
-        File outDir = Files.createTempDir();
-        LOG.info("Temp directory for shapefile: {}", outDir.getAbsolutePath());
-        File outShp = new File(outDir, file.getName().replaceAll("\\.zip", "") + ".shp");
+    // GIS export behaviour extracted to be shared with DeploymentGISExportJob
+    public void packageShapefiles(File outDir, String outShpName) {
+        File outShp = new File(outDir, outShpName);
         Connection connection = null;
         try {
             GeometryFactory geometryFactory = new GeometryFactory();
@@ -90,7 +90,7 @@ public class GisExportJob extends MonitorableJob {
                         "id:String",
                         "agency:String"
                     )
-                );
+            );
 
             final SimpleFeatureType ROUTE_TYPE = DataUtilities.createType(
                 "Route", // <- the name for our feature type
@@ -179,8 +179,8 @@ public class GisExportJob extends MonitorableJob {
                             PreparedStatement shapeStatement = connection.prepareStatement(
                                 String.format(
                                     "select shape_pt_lon, shape_pt_lat, shape_pt_sequence, "
-                                        + "shape_id from %s.shapes where shape_id = ? "
-                                        + "order by shape_pt_sequence",
+                                            + "shape_id from %s.shapes where shape_id = ? "
+                                            + "order by shape_pt_sequence",
                                     version.namespace
                                 ));
                             shapeStatement.setString(1, shape_id);
@@ -248,9 +248,7 @@ public class GisExportJob extends MonitorableJob {
                 throw new IllegalStateException("Cannot write shapefile with zero features!");
             }
             // Save the file
-
             Transaction transaction = new DefaultTransaction("create");
-
             String typeName = datastore.getTypeNames()[0];
             SimpleFeatureSource featureSource = datastore.getFeatureSource(typeName);
             // Check that we have read-write access to disk:
@@ -276,20 +274,51 @@ public class GisExportJob extends MonitorableJob {
                 throw new Exception(typeName + " does not support read/write access (or other "
                     + "unknown issue).");
             }
-            LOG.info("Zipping shapefile {}", file.getAbsolutePath());
-            // zip the file
-            DirectoryZip.zip(outDir, file);
-
-            // Clean up temporary files.
-            for (File f : outDir.listFiles()) {
-                f.delete();
-            }
-            outDir.delete();
-            status.completeSuccessfully("Export complete!");
-        } catch (Exception e) {
-            status.fail("An exception occurred during the GIS export", e);
+        }
+        catch (Exception e) {
+            status.fail("An exception occurred during the shapefile packaging", e);
         } finally {
             if (connection != null) DbUtils.closeQuietly(connection);
+        }
+    }
+
+    public void zipShapefiles(File outDir) throws IOException {
+        LOG.info("Zipping shapefile {}", file.getAbsolutePath());
+        // zip the file
+        DirectoryZip.zip(outDir, file);
+
+        // Clean up temporary files.
+        for (File f : outDir.listFiles()) {
+            // DeploymentGisExportJob creates subDirectories for each feed
+            // These should be cleaned as well.
+            if (f.isDirectory()){
+                FileUtils.deleteDirectory(f);
+            } else {
+                f.delete();
+            }
+        }
+        outDir.delete();
+        status.completeSuccessfully("Export complete!");
+    }
+
+    public File setupGisExport() throws IOException {
+        LOG.info("Storing shapefile for feeds {} at {}", feedIds, file.getAbsolutePath());
+        File outDir = Files.createTempDirectory("export_" + exportType).toFile();
+        LOG.info("Temp directory for shapefile: {}", outDir.getAbsolutePath());
+        return outDir;
+    }
+
+    @Override public void jobLogic() {
+        // Methods are added to this JobLogic so that the DeploymentGisExportJob can make use of them
+        // The DeploymentGisExportJob zips the shapefiles after repeating the packageShapefiles step,
+        // hence that method is separated out.
+        try {
+            File outDir = setupGisExport();
+            packageShapefiles(outDir, file.getName().replaceAll("\\.zip", "") + ".shp");
+            zipShapefiles(outDir);
+        }
+        catch (Exception e) {
+            status.fail("An error occurred exporting the GIS shapefiles");
         }
     }
 

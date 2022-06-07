@@ -67,6 +67,7 @@ public abstract class MonitorableJob implements Runnable, Serializable {
         VALIDATE_FEED,
         DEPLOY_TO_OTP,
         EXPORT_GIS,
+        EXPORT_DEPLOYMENT_GIS,
         FETCH_PROJECT_FEEDS,
         FETCH_SINGLE_FEED,
         MAKE_PROJECT_PUBLIC,

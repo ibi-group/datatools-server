@@ -10,14 +10,10 @@ import com.conveyal.datatools.common.utils.aws.EC2Utils;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.DeployJob;
+import com.conveyal.datatools.manager.jobs.GisExportJob;
+import com.conveyal.datatools.manager.jobs.DeploymentGisExportJob;
 import com.conveyal.datatools.manager.jobs.PeliasUpdateJob;
-import com.conveyal.datatools.manager.models.Deployment;
-import com.conveyal.datatools.manager.models.EC2InstanceSummary;
-import com.conveyal.datatools.manager.models.FeedSource;
-import com.conveyal.datatools.manager.models.FeedVersion;
-import com.conveyal.datatools.manager.models.JsonViews;
-import com.conveyal.datatools.manager.models.OtpServer;
-import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.models.*;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.JobUtils;
 import com.conveyal.datatools.manager.utils.json.JsonManager;
@@ -171,6 +167,28 @@ public class DeploymentController {
         }
 
         return fis;
+    }
+
+    /**
+     * Export all the GIS shapefiles for the deployment.
+     */
+    private static String downloadGIS (Request req, Response res) throws IOException {
+        String type = req.queryParams("type");
+        Auth0UserProfile userProfile = req.attribute("user");
+        Deployment deployment = getDeploymentWithPermissions(req, res);
+
+        GisExportJob.ExportType exportType = GisExportJob.ExportType.valueOf(type);
+        File temp = File.createTempFile(type + "_" + deployment.name + "_" + type, ".zip");
+
+        DeploymentGisExportJob gisExportJob = new DeploymentGisExportJob(exportType, deployment, temp, userProfile);
+        JobUtils.heavyExecutor.execute(gisExportJob);
+
+        // Do not use S3 to store the file, which should only be stored ephemerally (until requesting
+        // user has downloaded file).
+        FeedDownloadToken token = new FeedDownloadToken(gisExportJob);
+        Persistence.tokens.create(token);
+
+        return SparkUtils.formatJobMessage(gisExportJob.jobId, "Generating shapefile.");
     }
 
     /**
@@ -572,6 +590,7 @@ public class DeploymentController {
         put(apiPrefix + "secure/deployments/:id", DeploymentController::updateDeployment, fullJson::write);
         post(apiPrefix + "secure/deployments/fromfeedsource/:id", DeploymentController::createDeploymentFromFeedSource, fullJson::write);
         post(apiPrefix + "secure/deployments/:id/upload", DeploymentController::uploadToS3, fullJson::write);
+        post(apiPrefix + "secure/deployments/:id/shapes", DeploymentController::downloadGIS, fullJson::write);
 
     }
 }
