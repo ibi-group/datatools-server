@@ -119,9 +119,8 @@ public abstract class EditorController<T extends Entity> {
         // Delete entity request
         delete(ROOT_ROUTE + ID_PARAM, this::deleteOne, json::write);
 
-        // Handle special multiple delete method and multiple update method for trip endpoint
+        // Handle special multiple delete method for trip endpoint
         if ("trip".equals(classToLowercase)) {
-            post(ROOT_ROUTE + "/updatetrips", this::updateMultipleTrips, json::write);
             delete(ROOT_ROUTE, this::deleteMultipleTrips, json::write);
         }
 
@@ -131,49 +130,6 @@ public abstract class EditorController<T extends Entity> {
             put(ROOT_ROUTE + ID_PARAM + "/stop_times", this::updateStopTimesFromPatternStops, json::write);
             delete(ROOT_ROUTE + ID_PARAM + "/trips", this::deleteTripsForPattern, json::write);
         }
-    }
-
-    /**
-     * Endpoint to update multiple trips in a single transaction.
-     * Creation of this endpoint was prompted by the need to allow trip ID "flipping",
-     * where trip IDs may swap values in one request. Previously this case would cause an error
-     * since trips were saved one by one, without knowledge that a target trip ID had been "flipped".
-     */
-    private String updateMultipleTrips(Request req, Response res) {
-        /* TODO: Deleting all trips involved in the update is obviously
-            overkill and will have performance impacts. */
-        // FIXME: how does autoCommit in this method affect performance?
-        String namespace = getNamespaceAndValidateSession(req);
-        try {
-            JsonNode jsonNode = mapper.readTree(req.body());
-            JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
-            JsonNode trips = jsonNode.get("trips");
-            ArrayList<String> returnedJsonStrings = new ArrayList<>();
-
-            if (jsonNode == null) {
-                logMessageAndHalt(req, 400, "JSON body must be provided with trip update request.");
-            }
-            for (final JsonNode trip: trips) {
-                int id = trip.get("id").intValue();
-                // Id == -2 is the front end indication that the trip is being created.
-                if (id != -2){
-                    tableWriter.delete(id, false);
-                }
-            }
-            for (final JsonNode thisTrip: trips) {
-                String jsonBody = thisTrip.toString();
-                JsonNode lastTrip = trips.get(trips.size()-1);
-                Boolean isLastTrip = lastTrip.equals(thisTrip);
-                // Autocommit: true for last trip
-                returnedJsonStrings.add(tableWriter.create(jsonBody, isLastTrip));
-            }
-            return "[" + String.join(",", returnedJsonStrings) + "]";
-        }
-        catch (Exception e) {
-            e.printStackTrace();
-            logMessageAndHalt(req, 500, "Could not save trips", e);
-        }
-        return null;
     }
 
     /**
