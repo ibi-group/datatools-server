@@ -32,7 +32,7 @@ public class DeploymentGisExportJob extends GisExportJob {
             int feedVersionsSize = feedVersions.size();
             int currentFeedVersion = 1;
             for (SummarizedFeedVersion feedVersion: feedVersions) {
-                int percentComplete = (int) (currentFeedVersion * 100.0f) / feedVersionsSize;
+                int percentComplete = (currentFeedVersion * 100) / feedVersionsSize;
 
                 //TODO: update progress bar after each feedVersion?
                 Path outputPath = Paths.get(outDir.getPath() + "/" + feedVersion.feedSource.name);
