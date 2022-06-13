@@ -23,8 +23,9 @@ import static org.hamcrest.Matchers.*;
 public class DeploymentGisExportJobTest extends GisExportJobTest {
     private static final Logger LOG = LoggerFactory.getLogger(DeploymentGisExportJobTest.class);
     private static Deployment deployment;
+    private static Auth0UserProfile user;
 
-    //** Unzip the shapefile into a temp directory and return a list of its files (folders in the Deployment test case). */
+    /** Unzip the shapefile into a temp directory and return a list of its files (folders in the Deployment test case). */
     private File[] getFoldersFromZippedShapefile(File zipFile) throws IOException {
         File destDir = Files.createTempDir();
         ZipFile zippedFolder = new ZipFile(zipFile);
@@ -32,7 +33,7 @@ public class DeploymentGisExportJobTest extends GisExportJobTest {
         while (e.hasMoreElements()) {
             ZipEntry entry = e.nextElement();
             File destinationPath = new File(destDir, entry.getName());
-            //create parent directories
+            // Create parent directories
             destinationPath.getParentFile().mkdirs();
 
             if (!entry.isDirectory()) {
@@ -59,8 +60,9 @@ public class DeploymentGisExportJobTest extends GisExportJobTest {
     @BeforeAll
     public static void setUp() throws IOException {
         DatatoolsTest.setUp();
-        //GisExportJobTest setUp() creates project and feeds
+        // Calling GisExportJobTest.setUp() creates project and feeds
         GisExportJobTest.setUp();
+        user = Auth0UserProfile.createTestAdminUser();
         deployment = new Deployment(project);
         deployment.feedVersionIds.add(calTrainVersion.id);
         deployment.feedVersionIds.add(hawaiiVersion.id);
@@ -71,11 +73,10 @@ public class DeploymentGisExportJobTest extends GisExportJobTest {
      * Ensures that shapefiles containing stop features for a deployment can be exported and
      * contain geometry for each stop.
      */
+    @Override
     @Test
     public void canExportStops() throws IOException, SQLException {
-        // TODO common setup shared with GisExportJobTest?
         File zipFile = File.createTempFile("stops", ".zip");
-        Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
 
         DeploymentGisExportJob gisExportJob = new DeploymentGisExportJob(GisExportJob.ExportType.STOPS, deployment, zipFile, user);
         gisExportJob.run();
@@ -94,11 +95,10 @@ public class DeploymentGisExportJobTest extends GisExportJobTest {
      * exported and contain geometry for each pattern (includes checks for exporting shapes from
      * pattern stops).
      */
+    @Override
     @Test
     public void canExportRoutes() throws IOException, SQLException {
-        // TODO common setup shared with GisExportJobTest?
         File zipFile = File.createTempFile("routes", ".zip");
-        Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
 
         DeploymentGisExportJob gisExportJob = new DeploymentGisExportJob(GisExportJob.ExportType.ROUTES, deployment, zipFile, user);
         gisExportJob.run();
@@ -111,4 +111,13 @@ public class DeploymentGisExportJobTest extends GisExportJobTest {
             validateShapefiles(shapefileFiles, agencyName, GisExportJob.ExportType.ROUTES);
         }
     }
+
+    /**
+     * We override the Pattern Stop export to do nothing since it is implicitly checked within the
+     * canExportRoutes hawaiiVersion checks above.
+     */
+    @Override
+    @Test
+    public void canExportRoutesFromPatternStops() {}
+
 }

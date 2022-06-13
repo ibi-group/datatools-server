@@ -8,6 +8,8 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.SqlAssert;
+import com.google.common.base.Strings;
 import com.google.common.io.Files;
 import com.vividsolutions.jts.geom.Coordinate;
 import com.vividsolutions.jts.geom.MultiLineString;
@@ -42,7 +44,6 @@ import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
-import static com.conveyal.datatools.TestUtils.assertThatSqlCountQueryYieldsExpectedCount;
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
@@ -100,14 +101,12 @@ public class GisExportJobTest extends UnitTest {
                     LOG.info("{}: {}", name, value);
                     if ("the_geom".equals(name)) {
                         if (exportType.equals(GisExportJob.ExportType.STOPS)) {
-                            // Check that the geometry was exported properly.
                             Point point = (Point) value;
                             Coordinate coordinate = point.getCoordinate();
                             // Check that the geometry was exported properly.
                             assertThat(point, notNullValue());
                             // Check that coordinates are in the right spot.
                             assertCoordinateWithinBounds(agencyName, coordinate);
-
                         } else if (exportType.equals(GisExportJob.ExportType.ROUTES)) {
                             MultiLineString shape = (MultiLineString) value;
                             // don't log entire linestring value as it severly clutters up the logs
@@ -130,21 +129,16 @@ public class GisExportJobTest extends UnitTest {
         }
         // Ensure that all stops from feed version are present in shapefile.
         // Check that feature count = pattern count from SQL query.
+        SqlAssert sqlAssert = agencyName.equals("Caltrain") ? new SqlAssert(calTrainVersion) : new SqlAssert(hawaiiVersion);
         if (agencyName.equals("Caltrain")) {
             if (exportType.equals(GisExportJob.ExportType.ROUTES)){
-                assertThatSqlCountQueryYieldsExpectedCount(
-                        String.format("select count(*) from %s" + ".patterns", calTrainVersion.namespace),
-                        featureCount
-                );
+                sqlAssert.patterns.assertCount(featureCount);
             } else if (exportType.equals(GisExportJob.ExportType.STOPS)) {
                 assertThat(featureCount, equalTo(calTrainVersion.feedLoadResult.stops.rowCount));
             }
         } else if (agencyName.equals("Hawaii")) {
             if (exportType.equals(GisExportJob.ExportType.ROUTES)){
-                assertThatSqlCountQueryYieldsExpectedCount(
-                        String.format("select count(*) from %s" + ".patterns", hawaiiVersion.namespace),
-                        featureCount
-                );
+                sqlAssert.patterns.assertCount(featureCount);
             } else if (exportType.equals(GisExportJob.ExportType.STOPS)) {
                 assertThat(featureCount, equalTo(hawaiiVersion.feedLoadResult.stops.rowCount));
             }
@@ -238,7 +232,6 @@ public class GisExportJobTest extends UnitTest {
             while (iterator.hasNext()) {
                 featureCount++;
                 Feature feature = iterator.next();
-                // GeometryAttribute sourceGeometry = feature.getDefaultGeometryProperty();
                 Collection<Property> properties = feature.getProperties();
                 // Iterate over feature properties and verify everything looks OK.
                 for (Property property : properties) {
@@ -260,10 +253,8 @@ public class GisExportJobTest extends UnitTest {
             }
         }
         // Check that feature count = pattern count from SQL query.
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format("select count(*) from %s" + ".patterns", hawaiiVersion.namespace),
-            featureCount
-        );
+        SqlAssert sqlAssert = new SqlAssert(hawaiiVersion);
+        sqlAssert.patterns.assertCount(featureCount);
     }
 
     /** Unzip the shapefile into a temp directory and return a list of its files. */

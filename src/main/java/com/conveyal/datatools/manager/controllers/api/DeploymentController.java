@@ -185,7 +185,8 @@ public class DeploymentController {
         Deployment deployment = getDeploymentWithPermissions(req, res);
 
         GisExportJob.ExportType exportType = GisExportJob.ExportType.valueOf(type);
-        File temp = File.createTempFile(type + "_" + deployment.name + "_" + type, ".zip");
+        String tempFileName = String.format("%s_%s", type, deployment.name); // e.g. ROUTES_DeploymentName
+        File temp = File.createTempFile(tempFileName, ".zip");
 
         DeploymentGisExportJob gisExportJob = new DeploymentGisExportJob(exportType, deployment, temp, userProfile);
         JobUtils.heavyExecutor.execute(gisExportJob);
