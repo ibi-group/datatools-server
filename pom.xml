@@ -188,19 +188,18 @@
             <snapshots><enabled>false</enabled></snapshots>
             <releases><enabled>true</enabled></releases>
         </repository>
+        <repository> <!--Add the snapshot repository here-->
+            <snapshots>
+                <enabled>true</enabled>
+            </snapshots>
+            <id>opengeo</id>
+            <name>OpenGeo Maven Repository</name>
+            <url>https://repo.opengeo.org</url>
+        </repository>
         <repository>
             <id>sonatype</id>
             <name>sonatype snapshots</name>
             <url>https://oss.sonatype.org/content/repositories/snapshots/</url>
-            <snapshots>
-                <enabled>true</enabled>
-                <updatePolicy>always</updatePolicy>
-            </snapshots>
-        </repository>
-        <repository>
-            <id>boundless</id>
-            <name>Boundless Maven Repository</name>
-            <url>https://repo.boundlessgeo.com/main</url>
             <snapshots>
                 <enabled>true</enabled>
                 <updatePolicy>always</updatePolicy>
@@ -270,8 +269,8 @@
         <dependency>
             <groupId>com.github.conveyal</groupId>
             <artifactId>gtfs-lib</artifactId>
-            <!-- gtfs-lib 7.1.0 + fix for trip pattern loading + others before -->
-            <version>3826eeda92f488f9d9ab4022d08be3b1281980de</version>
+            <!-- TODO: merge dev into gtfs-lib dev-flex -->
+            <version>cee9d2ad3f34917d906c0507ef0dd537293470af</version>
             <!-- Exclusions added in order to silence SLF4J warnings about multiple bindings:
                 http://www.slf4j.org/codes.html#multiple_bindings
             -->
@@ -393,9 +392,9 @@
         </dependency>
         <!-- Snapshotting library for testing -->
         <dependency>
-            <groupId>com.github.conveyal</groupId>
+            <groupId>com.github.ibi-group</groupId>
             <artifactId>java-snapshot-matcher</artifactId>
-            <version>3495b32f7b4d3f82590e0a2284029214070b6984</version>
+            <version>master</version>
             <scope>test</scope>
         </dependency>
         <!-- wiremock is used to mock http requests -->
