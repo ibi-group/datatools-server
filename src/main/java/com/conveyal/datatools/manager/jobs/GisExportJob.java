@@ -65,7 +65,7 @@ public class GisExportJob extends MonitorableJob {
     }
 
     // GIS export behaviour extracted to be shared with DeploymentGISExportJob
-    public void packageShapefiles(File outDir, String outShpName) {
+    public void packageShapefiles(File outDir, String outShpName, int percentComplete) {
         File outShp = new File(outDir, outShpName);
         Connection connection = null;
         try {
@@ -131,7 +131,7 @@ public class GisExportJob extends MonitorableJob {
                         "Exporting %s for %s",
                         exportType.toString().toLowerCase(),
                         agencyName),
-                    40
+                    percentComplete
                 );
                 if (exportType.equals(ExportType.STOPS)) {
                     datastore.createSchema(STOP_TYPE);
@@ -280,6 +280,11 @@ public class GisExportJob extends MonitorableJob {
         } finally {
             if (connection != null) DbUtils.closeQuietly(connection);
         }
+    }
+
+    // Overload packageShapefiles for default percentComplete
+    public void packageShapefiles(File outDir, String outShpName) {
+        packageShapefiles(outDir, outShpName, 40);
     }
 
     public void zipShapefiles(File outDir) throws IOException {

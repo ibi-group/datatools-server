@@ -29,7 +29,11 @@ public class DeploymentGisExportJob extends GisExportJob {
         try {
             File outDir = setupGisExport();
 
+            int feedVersionsSize = feedVersions.size();
+            int currentFeedVersion = 1;
             for (SummarizedFeedVersion feedVersion: feedVersions) {
+                int percentComplete = (currentFeedVersion * 100) / feedVersionsSize;
+
                 //TODO: update progress bar after each feedVersion?
                 Path outputPath = Paths.get(outDir.getPath() + "/" + feedVersion.feedSource.name);
                 File feedVersionFolder = Files.createDirectory(outputPath).toFile();
@@ -37,7 +41,9 @@ public class DeploymentGisExportJob extends GisExportJob {
                 feedIds = Collections.singletonList(feedVersion.id);
 
                 // Pass feedVersionFolder as the outDir to write output to a feed-specific folder.
-                packageShapefiles(feedVersionFolder, feedVersion.feedSource.name + ".shp" );
+                packageShapefiles(feedVersionFolder, feedVersion.feedSource.name + ".shp", percentComplete);
+
+                currentFeedVersion++;
             }
             zipShapefiles(outDir);
         }
