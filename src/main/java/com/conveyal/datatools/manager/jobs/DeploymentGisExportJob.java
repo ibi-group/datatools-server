@@ -33,15 +33,15 @@ public class DeploymentGisExportJob extends GisExportJob {
             int currentFeedVersion = 1;
             for (SummarizedFeedVersion feedVersion: feedVersions) {
                 int percentComplete = (currentFeedVersion * 100) / feedVersionsSize;
-
-                //TODO: update progress bar after each feedVersion?
-                Path outputPath = Paths.get(outDir.getPath() + "/" + feedVersion.feedSource.name);
+                // Replace any slashes in the feedsource name, this will cause directory issues if left in.
+                String feedSourceName = feedVersion.feedSource.name.contains("/") ? feedVersion.feedSource.name.replace("/", "") : feedVersion.feedSource.name;
+                Path outputPath = Paths.get(outDir.getPath() + File.separator + feedSourceName);
                 File feedVersionFolder = Files.createDirectory(outputPath).toFile();
                 // feedId needs to be a collection for the base GisExportJob packageShapefiles method.
                 feedIds = Collections.singletonList(feedVersion.id);
 
                 // Pass feedVersionFolder as the outDir to write output to a feed-specific folder.
-                packageShapefiles(feedVersionFolder, feedVersion.feedSource.name + ".shp", percentComplete);
+                packageShapefiles(feedVersionFolder, feedSourceName + ".shp", percentComplete);
 
                 currentFeedVersion++;
             }
