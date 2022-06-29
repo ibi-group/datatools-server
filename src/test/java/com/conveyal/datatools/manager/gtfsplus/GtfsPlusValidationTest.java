@@ -32,6 +32,7 @@ public class GtfsPlusValidationTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(MergeFeedsJobTest.class);
     private static FeedVersion bartVersion1;
     private static FeedVersion bartVersion1WithQuotedValues;
+    private static FeedVersion lavtaVersion1;
     private static Project project;
     private static JsonNode routeAttributesFieldsNode;
 
@@ -55,6 +56,11 @@ public class GtfsPlusValidationTest extends UnitTest {
         routeAttributesFieldsNode = Objects.requireNonNull(
                 GtfsPlusValidation.findNode(DataManager.gtfsPlusConfig, "id", "route_attributes")
             ).get("fields");
+
+        FeedSource lavta = new FeedSource("LAVTA");
+        lavta.projectId = project.id;
+        Persistence.feedSources.create(lavta);
+        lavtaVersion1 = createFeedVersionFromGtfsZip(lavta, "lavta-cal-attributes.zip");
     }
 
     @AfterAll
@@ -137,5 +143,26 @@ public class GtfsPlusValidationTest extends UnitTest {
                     GtfsPlusValidation.findNode(routeAttributesFieldsNode, "name", "subcategory")
                 )
             ), equalTo("3"));
+    }
+
+    @Test
+    void shouldReportEmptyRows() throws Exception {
+        // An empty row should be reported as such (separately from a row with incorrect number of columns).
+
+        LOG.info("Validating GTFS+ with an empty row");
+        GtfsPlusValidation validation = GtfsPlusValidation.validate(lavtaVersion1.id);
+        // Expect one GTFS+ issue of type "empty row".
+        assertThat(
+            "Should have one GTFS+ validation issue on the calendar_attributes table",
+            validation.issues.size(), equalTo(1)
+        );
+        assertThat(
+            "Should have the validation issue on the calendar_attributes table",
+            validation.issues.get(0).tableId, equalTo("calendar_attributes")
+        );
+        assertThat(
+            "Should have the GTFS+ 'empty row' validation issue on the calendar_attributes table",
+            validation.issues.get(0).description, equalTo("1 row(s) are empty. (File may need to be edited manually.)")
+        );
     }
 }

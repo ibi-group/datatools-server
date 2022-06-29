@@ -9,6 +9,7 @@ import com.csvreader.CsvReader;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.apache.commons.io.input.BOMInputStream;
+import org.apache.logging.log4j.util.Strings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -150,33 +151,43 @@ public class GtfsPlusValidation implements Serializable {
         // Iterate over each row and validate each field value.
         int rowIndex = 0;
         int rowsWithWrongNumberOfColumns = 0;
+        int emptyRows = 0;
         while (csvReader.readRecord()) {
             // First, check that row has the correct number of fields.
             int recordColumnCount = csvReader.getColumnCount();
-            if (recordColumnCount != fieldsFound.length) {
-                rowsWithWrongNumberOfColumns++;
-            }
-            // Validate each value in row. Note: we iterate over the fields and not values because a row may be missing
-            // columns, but we still want to validate that missing value (e.g., if it is missing a required field).
             String[] rowValues = csvReader.getValues();
-            for (int f = 0; f < fieldsFound.length; f++) {
-                // If value exists for index, use that. Otherwise, default to null to avoid out of bounds exception.
-                String val = f < recordColumnCount ? rowValues[f] : null;
-                validateTableValue(issues, tableId, rowIndex, rowValues, val, fieldsFound, fieldsFound[f], gtfsFeed);
+            if (recordColumnCount == 1 && Strings.isBlank(rowValues[0])) {
+                // If row is empty (technically, the row has one column with a blank value),
+                // report that as such (and skip validating column values).
+                emptyRows++;
+            } else {
+                if (recordColumnCount != fieldsFound.length) {
+                    rowsWithWrongNumberOfColumns++;
+                }
+                // Validate each value in row. Note: we iterate over the fields and not values because a row may be missing
+                // columns, but we still want to validate that missing value (e.g., if it is missing a required field).
+                for (int f = 0; f < fieldsFound.length; f++) {
+                    // If value exists for index, use that. Otherwise, default to null to avoid out of bounds exception.
+                    String val = f < recordColumnCount ? rowValues[f] : null;
+                    validateTableValue(issues, tableId, rowIndex, rowValues, val, fieldsFound, fieldsFound[f], gtfsFeed);
+                }
             }
             rowIndex++;
         }
         csvReader.close();
 
-        // Add issue for wrong number of columns after processing all rows.
+        // Add issues for wrong number of columns and for empty rows after processing all rows.
         // Note: We considered adding an issue for each row, but opted for the single error approach because there's no
         // concept of a row-level issue in the UI right now. So we would potentially need to add that to the UI
         // somewhere. Also, there's the trouble of reporting the issue at the row level, but not really giving the user
-        // a great way to resolve the issue in the GTFS+ editor. Essentially, all of the rows with the wrong number of
+        // a great way to resolve the issue in the GTFS+ editor. Essentially, all rows with the wrong number of
         // columns can be resolved simply by clicking the "Save and Revalidate" button -- so the resolution is more at
         // the table level than the row level (like, for example, a bad value for a field would be).
         if (rowsWithWrongNumberOfColumns > 0) {
             issues.add(new ValidationIssue(tableId, null, -1, rowsWithWrongNumberOfColumns + " row(s) do not contain the same number of fields as there are headers. (File may need to be edited manually.)"));
+        }
+        if (emptyRows > 0) {
+            issues.add(new ValidationIssue(tableId, null, -1, emptyRows + " row(s) are empty. (File may need to be edited manually.)"));
         }
     }
 
