@@ -107,7 +107,7 @@ public class UserController {
     private static String filterUserSearchQuery(Request req) {
         Auth0UserProfile userProfile = req.attribute("user");
         String queryString = req.queryParams("queryString");
-        if(queryString != null) queryString = "email:" + queryString + "*";
+        if(queryString != null) queryString = makeEmailFilterQuery(queryString);
 
         if (userProfile.canAdministerApplication()) {
             // do not filter further based on permissions, proceed with search
@@ -204,6 +204,20 @@ public class UserController {
         } else {
             return new Auth0UserSearchResult(users.get(0), JsonUtil.parseJsonFromString(req, searchResult));
         }
+    }
+
+    /**
+     * Generates an email search query for the given base query string.
+     */
+    public static String makeEmailFilterQuery(String queryString) {
+        // Don't insert the "begins with" wildcard if the search term is less than 3 characters long.
+        // per https://auth0.com/docs/manage-users/user-search/user-search-query-syntax#wildcards.
+        boolean isAtLeast3Chars = queryString != null && queryString.length() >= 3;
+        return String.format(
+            "email:%s%s*",
+            isAtLeast3Chars ? "*" : "",
+            queryString
+        );
     }
 
     /**
