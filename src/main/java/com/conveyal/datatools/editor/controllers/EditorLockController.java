@@ -137,6 +137,34 @@ public class EditorLockController {
         }
     }
 
+    /**
+     * Simple handler that just deletes the specified session id if it is the active one for a feed,
+     * without checking for a user token.
+     * Intended for use from a browser's Navigator.sendBeacon() method.
+     */
+    private static String deleteFeedLockBeacon(Request req, Response res) {
+        // TODO: Refactor
+        res.type("application/json");
+        String feedId = req.queryParams("feedId");
+        String sessionId = req.params("id");
+        EditorSession currentSession = sessionsForFeedIds.get(feedId);
+        if (currentSession == null) {
+            // If there is no current session to delete/overwrite, request that user reloads browser.
+            LOG.warn("No active session to overwrite/delete.");
+            return SparkUtils.formatJSON("No active session to take over. Please refresh your browser and try editing later.", 202);
+        } else if (!currentSession.sessionId.equals(sessionId)) {
+            // If there is a different active session for some user, don't remove the session.
+            LOG.warn("Not overwriting session {} for user {}.", currentSession.sessionId, currentSession.userEmail);
+            return SparkUtils.formatJSON("Not processing request to delete lock. There is already an active session for user " + currentSession.userEmail, 202);
+        } else {
+            // Otherwise, the current session matches the session from which the delete request came. This indicates that
+            // the user's editing session has been closed (by either exiting the editor or closing the browser tab).
+            LOG.info("Closed session {} for feed {} successfully.", currentSession.sessionId, currentSession.feedId);
+            sessionsForFeedIds.remove(feedId);
+            return formatJSON("Session has been closed successfully.", 200, feedId, sessionId);
+        }
+    }
+
     private static String deleteFeedLock(Request req, Response res) {
         // FIXME: why is content type not being set in before()/after()?
         res.type("application/json");
@@ -178,6 +206,9 @@ public class EditorLockController {
         post(apiPrefix + "secure/lock", EditorLockController::lockFeed, json::write);
         delete(apiPrefix + "secure/lock/:id", EditorLockController::deleteFeedLock, json::write);
         put(apiPrefix + "secure/lock/:id", EditorLockController::maintainLock, json::write);
+        // Extra, unsecure POST method for removing lock via a browser's Navigator.sendBeacon() method.
+        // (Navigator.sendBeacon() sends a POST and does not support authorization headers.)
+        post(apiPrefix + "deletelock/:id", EditorLockController::deleteFeedLockBeacon, json::write);
     }
 
     private static String formatJSON(String message, int code, String feedId, String sessionId) {
