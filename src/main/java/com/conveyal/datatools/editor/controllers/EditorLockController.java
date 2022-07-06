@@ -138,37 +138,23 @@ public class EditorLockController {
     }
 
     /**
-     * Simple handler that just deletes the specified session id if it is the active one for a feed,
-     * without checking for a user token.
-     * Intended for use from a browser's Navigator.sendBeacon() method.
+     * Normal path for deleting a feed lock.
      */
-    private static String deleteFeedLockBeacon(Request req, Response res) {
-        // TODO: Refactor
-        res.type("application/json");
-        String feedId = req.queryParams("feedId");
-        String sessionId = req.params("id");
-        EditorSession currentSession = sessionsForFeedIds.get(feedId);
-        if (currentSession == null) {
-            // If there is no current session to delete/overwrite, request that user reloads browser.
-            LOG.warn("No active session to overwrite/delete.");
-            return SparkUtils.formatJSON("No active session to take over. Please refresh your browser and try editing later.", 202);
-        } else if (!currentSession.sessionId.equals(sessionId)) {
-            // If there is a different active session for some user, don't remove the session.
-            LOG.warn("Not overwriting session {} for user {}.", currentSession.sessionId, currentSession.userEmail);
-            return SparkUtils.formatJSON("Not processing request to delete lock. There is already an active session for user " + currentSession.userEmail, 202);
-        } else {
-            // Otherwise, the current session matches the session from which the delete request came. This indicates that
-            // the user's editing session has been closed (by either exiting the editor or closing the browser tab).
-            LOG.info("Closed session {} for feed {} successfully.", currentSession.sessionId, currentSession.feedId);
-            sessionsForFeedIds.remove(feedId);
-            return formatJSON("Session has been closed successfully.", 200, feedId, sessionId);
-        }
+    private static String deleteFeedLock(Request req, Response res) {
+        return deleteFeedLock(req, res, req.attribute("user"));
     }
 
-    private static String deleteFeedLock(Request req, Response res) {
+    /**
+     * Remove a feed lock when a browser calls sendBeacon() when closing/refreshing/navigating away from editor.
+     */
+    private static String deleteFeedLockBeacon(Request req, Response res) {
+        // The sendBeacon call does not contain any Authorization headers, so we just pass a null userProfile.
+        return deleteFeedLock(req, res, null);
+    }
+
+    private static String deleteFeedLock(Request req, Response res, Auth0UserProfile userProfile) {
         // FIXME: why is content type not being set in before()/after()?
         res.type("application/json");
-        Auth0UserProfile userProfile = req.attribute("user");
         String feedId = req.queryParams("feedId");
         String sessionId = req.params("id");
         EditorSession currentSession = sessionsForFeedIds.get(feedId);
@@ -182,7 +168,7 @@ public class EditorLockController {
             // session; however, this has been removed because in practice it became a nuisance. Respectful users with
             // shared access to a feed can generally be trusted not to boot one another out in a combative manner.
             boolean overwrite = Boolean.valueOf(req.queryParams("overwrite"));
-            if (overwrite) {
+            if (userProfile != null && overwrite) {
                 sessionId = invalidateAndCreateNewSession(req);
                 EditorSession newEditorSession = new EditorSession(feedId, sessionId, userProfile);
                 sessionsForFeedIds.put(feedId, newEditorSession);
@@ -193,7 +179,13 @@ public class EditorLockController {
                 return SparkUtils.formatJSON("Not processing request to delete lock. There is already an active session for user " + currentSession.userEmail, 202);
             }
         } else {
-            LOG.info("Current session: {} {}; User session: {} {}", currentSession.userEmail, currentSession.sessionId, userProfile.getEmail(), sessionId);
+            LOG.info(
+                "Current session: {} {}; User session: {} {}",
+                currentSession.userEmail,
+                currentSession.sessionId,
+                userProfile != null ? userProfile.getEmail() : "(email unavailable)",
+                sessionId
+            );
             // Otherwise, the current session matches the session from which the delete request came. This indicates that
             // the user's editing session has been closed (by either exiting the editor or closing the browser tab).
             LOG.info("Closed session {} for feed {} successfully.", currentSession.sessionId, currentSession.feedId);
