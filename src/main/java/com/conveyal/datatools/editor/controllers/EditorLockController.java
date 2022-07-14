@@ -35,8 +35,6 @@ public class EditorLockController {
 
 
     private static String lockFeed (Request req, Response res) {
-        // FIXME: why is content type not being set in before()/after()?
-        res.type("application/json");
         Auth0UserProfile userProfile = req.attribute("user");
         String feedId = req.queryParams("feedId");
         EditorSession currentSession = sessionsForFeedIds.get(feedId);
@@ -95,13 +93,10 @@ public class EditorLockController {
     private static String invalidateAndCreateNewSession(Request req) {
         req.session().invalidate();
         Session session = req.session(true);
-        String newSessionId = session.id();
-        return newSessionId;
+        return session.id();
     }
 
     private static String maintainLock(Request req, Response res) {
-        // FIXME: why is content type not being set in before()/after()?
-        res.type("application/json");
         String sessionId = req.params("id");
         String feedId = req.queryParams("feedId");
         Auth0UserProfile userProfile = req.attribute("user");
@@ -121,7 +116,7 @@ public class EditorLockController {
             if (currentSession.userEmail.equals(userProfile.getEmail())) {
                 // If the new current session is held by this user, give them the option to evict the current session /
                 // unlock the feed.
-                LOG.warn("User {} already has an active editor session () for feed {}.", userProfile.getEmail(), currentSession.sessionId, currentSession.feedId);
+                LOG.warn("User {} already has an active editor session {} for feed {}.", userProfile.getEmail(), currentSession.sessionId, currentSession.feedId);
                 logMessageAndHalt(req, 400, "Warning! You have an active editing session for this feed underway in a different browser tab.");
             } else {
                 LOG.warn("User {} attempted editor session for feed {} while active session underway for user {}.", userProfile.getEmail(), currentSession.feedId, currentSession.userEmail);
@@ -132,15 +127,26 @@ public class EditorLockController {
             // Otherwise, the current session matches the session the user is attempting to maintain. Update the
             // lastEdited time.
             currentSession.lastCheckIn = System.currentTimeMillis();
-//            LOG.info("Updating session {} check-in time to {} for user {}", currentSession.sessionId, currentSession.lastCheckIn, currentSession.userEmail);
             return formatJSON("Updating time for user " + currentSession.userEmail, 200, feedId, null);
         }
     }
 
+    /**
+     * Normal path for deleting a feed lock.
+     */
     private static String deleteFeedLock(Request req, Response res) {
-        // FIXME: why is content type not being set in before()/after()?
-        res.type("application/json");
-        Auth0UserProfile userProfile = req.attribute("user");
+        return deleteFeedLockCore(req, req.attribute("user"));
+    }
+
+    /**
+     * Remove a feed lock when a browser calls sendBeacon() when closing/refreshing/navigating away from editor.
+     */
+    private static String deleteFeedLockBeacon(Request req, Response res) {
+        // The sendBeacon call does not contain any Authorization headers, so we just pass a null userProfile.
+        return deleteFeedLockCore(req, null);
+    }
+
+    private static String deleteFeedLockCore(Request req, Auth0UserProfile userProfile) {
         String feedId = req.queryParams("feedId");
         String sessionId = req.params("id");
         EditorSession currentSession = sessionsForFeedIds.get(feedId);
@@ -153,8 +159,8 @@ public class EditorLockController {
             // Note: There used to be a check here that the requesting user was the same as the user with an open
             // session; however, this has been removed because in practice it became a nuisance. Respectful users with
             // shared access to a feed can generally be trusted not to boot one another out in a combative manner.
-            boolean overwrite = Boolean.valueOf(req.queryParams("overwrite"));
-            if (overwrite) {
+            boolean overwrite = Boolean.parseBoolean(req.queryParams("overwrite"));
+            if (userProfile != null && overwrite) {
                 sessionId = invalidateAndCreateNewSession(req);
                 EditorSession newEditorSession = new EditorSession(feedId, sessionId, userProfile);
                 sessionsForFeedIds.put(feedId, newEditorSession);
@@ -165,7 +171,13 @@ public class EditorLockController {
                 return SparkUtils.formatJSON("Not processing request to delete lock. There is already an active session for user " + currentSession.userEmail, 202);
             }
         } else {
-            LOG.info("Current session: {} {}; User session: {} {}", currentSession.userEmail, currentSession.sessionId, userProfile.getEmail(), sessionId);
+            LOG.info(
+                "Current session: {} {}; User session: {} {}",
+                currentSession.userEmail,
+                currentSession.sessionId,
+                userProfile != null ? userProfile.getEmail() : "(email unavailable)",
+                sessionId
+            );
             // Otherwise, the current session matches the session from which the delete request came. This indicates that
             // the user's editing session has been closed (by either exiting the editor or closing the browser tab).
             LOG.info("Closed session {} for feed {} successfully.", currentSession.sessionId, currentSession.feedId);
@@ -178,6 +190,9 @@ public class EditorLockController {
         post(apiPrefix + "secure/lock", EditorLockController::lockFeed, json::write);
         delete(apiPrefix + "secure/lock/:id", EditorLockController::deleteFeedLock, json::write);
         put(apiPrefix + "secure/lock/:id", EditorLockController::maintainLock, json::write);
+        // Extra, unsecure POST method for removing lock via a browser's Navigator.sendBeacon() method.
+        // (Navigator.sendBeacon() sends a POST and does not support authorization headers.)
+        post(apiPrefix + "deletelock/:id", EditorLockController::deleteFeedLockBeacon, json::write);
     }
 
     private static String formatJSON(String message, int code, String feedId, String sessionId) {
