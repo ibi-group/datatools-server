@@ -33,51 +33,78 @@ public class EditorLockController {
     public static final Map<String, EditorSession> sessionsForFeedIds = new HashMap<>();
     private static final long SESSION_LENGTH_IN_SECONDS = 10 * 60; // Ten minutes
 
-
     private static String lockFeed (Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
+        String email = userProfile.getEmail();
         String feedId = req.queryParams("feedId");
-        EditorSession currentSession = sessionsForFeedIds.get(feedId);
+        String itemToLock = req.queryParamOrDefault("item", "");
+        EditorSession currentSession = sessionsForFeedIds.get(getSessionKey(feedId, itemToLock));
         if (currentSession == null) {
             // If there is no active session for the feed ID, create a new one, which allows only the current user +
             // session to edit.
-            // Create new session
-            String newSessionId = invalidateAndCreateNewSession(req);
-            EditorSession newEditorSession = new EditorSession(feedId, newSessionId, userProfile);
-            sessionsForFeedIds.put(feedId, newEditorSession);
-            LOG.info("Locking feed {} for editing session {} by user {}", feedId, newSessionId, userProfile.getEmail());
-            return formatJSON("Locking editor feed for user " + newEditorSession.userEmail,
-                    200,
-                    feedId,
-                    newSessionId);
+            return invalidateAndCreateNewSession(
+                req,
+                userProfile,
+                feedId,
+                itemToLock,
+                String.format("Locking feed for user %s on %s", email, itemToLock),
+                String.format("Locking feed %s for user %s on %s", feedId, email, itemToLock)
+            );
         }
 
-        long secondsSinceLastCheckIn = TimeUnit.MILLISECONDS.toSeconds  (System.currentTimeMillis() - currentSession.lastCheckIn);
-        long minutesSinceLastCheckIn = TimeUnit.SECONDS.toMinutes(secondsSinceLastCheckIn);
-        long minutesUntilExpiration = TimeUnit.SECONDS.toMinutes(SESSION_LENGTH_IN_SECONDS - secondsSinceLastCheckIn);
+        long secondsSinceLastCheckIn = currentSession.secondsSinceLastCheckIn();
         if (secondsSinceLastCheckIn > SESSION_LENGTH_IN_SECONDS) {
             // There is an active session, but the user with active session has not checked in for some time. Booting
             // the current session in favor of new session.
-            // Create new session
-            String newSessionId = invalidateAndCreateNewSession(req);
-            LOG.info("User {} (session ID: {}) has not maintained lock for {} minutes. Booting.", currentSession.userEmail, currentSession.sessionId, minutesSinceLastCheckIn);
-            EditorSession newEditorSession = new EditorSession(feedId, newSessionId, userProfile);
-            sessionsForFeedIds.put(feedId, newEditorSession);
-            return formatJSON("Locking editor feed for user " + newEditorSession.userEmail, 200, feedId, newSessionId);
+            long minutesSinceLastCheckIn = TimeUnit.SECONDS.toMinutes(secondsSinceLastCheckIn);
+            return invalidateAndCreateNewSession(
+                req,
+                userProfile,
+                feedId,
+                itemToLock,
+                String.format("Locking feed for user %s on %s", email, itemToLock),
+                String.format("User %s has not maintained lock for %d minutes. Booting", email, minutesSinceLastCheckIn)
+            );
         } else if (!currentSession.userId.equals(userProfile.getUser_id())) {
             // If the session has not expired, and another user has the active session.
-            LOG.warn("Edit session {} for user {} in progress for feed {}. User {} not permitted to lock feed for {} minutes.", currentSession.sessionId, currentSession.userEmail, currentSession.feedId, userProfile.getEmail(), minutesUntilExpiration);
-            logMessageAndHalt(req, 400, getLockedFeedMessage(currentSession, minutesUntilExpiration));
+            LOG.warn(
+                "Edit session {} for user {} in progress for feed {}. User {} not permitted to lock feed for {} minutes.",
+                currentSession.sessionId,
+                currentSession.userEmail,
+                currentSession.feedId,
+                email,
+                currentSession.minutesUntilExpiration());
+            logMessageAndHalt(req, 400, getLockedFeedMessage(currentSession));
             return null;
         } else {
             String sessionId = req.session().id();
-            LOG.warn("User {} is editing feed {} in another session {}. Cannot create lock for session {}", userProfile.getEmail(), feedId, currentSession.sessionId, sessionId);
+            LOG.warn("User {} is editing feed {} in another session {}. Cannot create lock for session {}", email, feedId, currentSession.sessionId, sessionId);
             logMessageAndHalt(req, 400, "Warning! You are editing this feed in another session/browser tab!");
             return null;
         }
     }
 
-    private static String getLockedFeedMessage(EditorSession session, long minutesUntilExpiration) {
+    /**
+     * Returns a composite key made of:
+     * - a feed id that the lock affects,
+     * - an id of the item being locked by that user in a session.
+     */
+    private static String getSessionKey(String feedId, String lockedItem) {
+        return String.format("%s-%s", feedId, lockedItem);
+    }
+
+    private static String invalidateAndCreateNewSession(Request req, Auth0UserProfile userProfile, String feedId, String itemToLock, String message, String logMessage) {
+        req.session().invalidate();
+        Session session = req.session(true);
+        String newSessionId = session.id();
+
+        EditorSession newEditorSession = new EditorSession(feedId, newSessionId, userProfile, itemToLock);
+        sessionsForFeedIds.put(getSessionKey(feedId, itemToLock), newEditorSession);
+        LOG.info("{} (Session ID: {})", logMessage, newSessionId);
+        return formatJSON(message, feedId, newSessionId);
+    }
+
+    private static String getLockedFeedMessage(EditorSession session) {
         String timestamp = session.lastEdit > 0
                 ? SimpleDateFormat.getInstance().format(new Date(session.lastEdit))
                 : null;
@@ -86,48 +113,42 @@ public class EditorLockController {
                 "Warning! There is an editor session already in progress for user %s. " +
                         "Their session will expire after %d minutes of inactivity (%s).",
                 session.userEmail,
-                minutesUntilExpiration,
+                session.minutesUntilExpiration(),
                 lastEditMessage);
-    }
-
-    private static String invalidateAndCreateNewSession(Request req) {
-        req.session().invalidate();
-        Session session = req.session(true);
-        return session.id();
     }
 
     private static String maintainLock(Request req, Response res) {
         String sessionId = req.params("id");
         String feedId = req.queryParams("feedId");
+        String itemToLock = req.queryParamOrDefault("item", "");
         Auth0UserProfile userProfile = req.attribute("user");
-        EditorSession currentSession = sessionsForFeedIds.get(feedId);
+        EditorSession currentSession = sessionsForFeedIds.get(getSessionKey(feedId, itemToLock));
         if (currentSession == null) {
             // If there is no current session to maintain, request that user reloads browser.
             LOG.warn("No active editor session to maintain {}.", sessionId);
             logMessageAndHalt(req, 400, "No active session for feedId. Please refresh your browser and try editing later.");
             return null;
         } else if (!currentSession.sessionId.equals(sessionId)) {
-            long secondsSinceLastCheckIn = TimeUnit.MILLISECONDS.toSeconds  (System.currentTimeMillis() - currentSession.lastCheckIn);
-            long minutesUntilExpiration = TimeUnit.SECONDS.toMinutes(SESSION_LENGTH_IN_SECONDS - secondsSinceLastCheckIn);
             // If there is an active session but it doesn't match the session, someone else (or the current user) is
             // editing elsewhere. A user should only be trying to maintain a lock if it had an active session at one
             // point. If we get to this point, it is because the user's session has expired and some other session took
             // its place.
-            if (currentSession.userEmail.equals(userProfile.getEmail())) {
+            String email = userProfile.getEmail();
+            if (currentSession.userEmail.equals(email)) {
                 // If the new current session is held by this user, give them the option to evict the current session /
                 // unlock the feed.
-                LOG.warn("User {} already has an active editor session {} for feed {}.", userProfile.getEmail(), currentSession.sessionId, currentSession.feedId);
+                LOG.warn("User {} already has an active editor session {} for feed {}.", email, currentSession.sessionId, currentSession.feedId);
                 logMessageAndHalt(req, 400, "Warning! You have an active editing session for this feed underway in a different browser tab.");
             } else {
-                LOG.warn("User {} attempted editor session for feed {} while active session underway for user {}.", userProfile.getEmail(), currentSession.feedId, currentSession.userEmail);
-                logMessageAndHalt(req, 400, getLockedFeedMessage(currentSession, minutesUntilExpiration));
+                LOG.warn("User {} attempted editor session for feed {} while active session underway for user {}.", email, currentSession.feedId, currentSession.userEmail);
+                logMessageAndHalt(req, 400, getLockedFeedMessage(currentSession));
             }
             return null;
         } else {
             // Otherwise, the current session matches the session the user is attempting to maintain. Update the
             // lastEdited time.
             currentSession.lastCheckIn = System.currentTimeMillis();
-            return formatJSON("Updating time for user " + currentSession.userEmail, 200, feedId, null);
+            return formatJSON("Updating time for user " + currentSession.userEmail, feedId, null);
         }
     }
 
@@ -149,7 +170,8 @@ public class EditorLockController {
     private static String deleteFeedLockCore(Request req, Auth0UserProfile userProfile) {
         String feedId = req.queryParams("feedId");
         String sessionId = req.params("id");
-        EditorSession currentSession = sessionsForFeedIds.get(feedId);
+        String itemToLock = req.queryParamOrDefault("item", "");
+        EditorSession currentSession = sessionsForFeedIds.get(getSessionKey(feedId, itemToLock));
         if (currentSession == null) {
             // If there is no current session to delete/overwrite, request that user reloads browser.
             LOG.warn("No active session to overwrite/delete.");
@@ -161,11 +183,14 @@ public class EditorLockController {
             // shared access to a feed can generally be trusted not to boot one another out in a combative manner.
             boolean overwrite = Boolean.parseBoolean(req.queryParams("overwrite"));
             if (userProfile != null && overwrite) {
-                sessionId = invalidateAndCreateNewSession(req);
-                EditorSession newEditorSession = new EditorSession(feedId, sessionId, userProfile);
-                sessionsForFeedIds.put(feedId, newEditorSession);
-                LOG.warn("Previously active session {} has been overwritten with new session {}.", currentSession.sessionId, newEditorSession.sessionId);
-                return formatJSON("Previous session lock has been overwritten with new session.", 200, feedId, sessionId);
+                return invalidateAndCreateNewSession(
+                    req,
+                    userProfile,
+                    feedId,
+                    itemToLock,
+                    "Previous session lock has been overwritten with new session.",
+                    String.format("Previously active session %s has been overwritten with new session.", currentSession.sessionId)
+                );
             } else {
                 LOG.warn("Not overwriting session {} for user {}.", currentSession.sessionId, currentSession.userEmail);
                 return SparkUtils.formatJSON("Not processing request to delete lock. There is already an active session for user " + currentSession.userEmail, 202);
@@ -182,7 +207,7 @@ public class EditorLockController {
             // the user's editing session has been closed (by either exiting the editor or closing the browser tab).
             LOG.info("Closed session {} for feed {} successfully.", currentSession.sessionId, currentSession.feedId);
             sessionsForFeedIds.remove(feedId);
-            return formatJSON("Session has been closed successfully.", 200, feedId, sessionId);
+            return formatJSON("Session has been closed successfully.", feedId, sessionId);
         }
     }
 
@@ -195,11 +220,11 @@ public class EditorLockController {
         post(apiPrefix + "deletelock/:id", EditorLockController::deleteFeedLockBeacon, json::write);
     }
 
-    private static String formatJSON(String message, int code, String feedId, String sessionId) {
+    private static String formatJSON(String message, String feedId, String sessionId) {
         JsonObject object = new JsonObject();
-        object.addProperty("result", code >= 400 ? "ERR" : "OK");
+        object.addProperty("result", "OK");
         object.addProperty("message", message);
-        object.addProperty("code", code);
+        object.addProperty("code", 200);
         if (sessionId != null) {
             object.addProperty("sessionId", sessionId);
         }
@@ -214,13 +239,23 @@ public class EditorLockController {
         public final String userEmail;
         public long lastCheckIn;
         public long lastEdit;
+        public final String lockedItem;
 
-        EditorSession (String feedId, String sessionId, Auth0UserProfile userProfile) {
+        EditorSession (String feedId, String sessionId, Auth0UserProfile userProfile, String itemToLock) {
             this.feedId = feedId;
             this.sessionId = sessionId;
             this.userId = userProfile != null ? userProfile.getUser_id() : "no_user_id";
             this.userEmail = userProfile != null ? userProfile.getEmail() : "no_user_email";
-            lastCheckIn = System.currentTimeMillis();
+            this.lastCheckIn = System.currentTimeMillis();
+            this.lockedItem = itemToLock;
+        }
+
+        public long secondsSinceLastCheckIn() {
+            return TimeUnit.MILLISECONDS.toSeconds(System.currentTimeMillis() - lastCheckIn);
+        }
+
+        public long minutesUntilExpiration() {
+            return TimeUnit.SECONDS.toMinutes(SESSION_LENGTH_IN_SECONDS - secondsSinceLastCheckIn());
         }
     }
 }
