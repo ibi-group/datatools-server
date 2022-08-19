@@ -40,7 +40,6 @@ import java.util.stream.Stream;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJSON;
 import static com.conveyal.datatools.common.utils.SparkUtils.getObjectNode;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
-import static com.conveyal.datatools.editor.controllers.EditorLockController.sessionsForFeedIds;
 import static com.conveyal.datatools.manager.controllers.api.UserController.inTestingEnvironment;
 import static spark.Spark.delete;
 import static spark.Spark.options;
@@ -426,8 +425,7 @@ public abstract class EditorController<T extends Entity> {
         // TODO: Add way to mock session.
         if (!inTestingEnvironment()) {
             // TODO: Refactor, looks like duplicate code
-            EditorLockController.ParsedRequest parsedReq = new EditorLockController.ParsedRequest(req, sessionId, "gtfs-editor");
-            EditorLockController.EditorSession currentSession = EditorLockController.getCurrentSession(parsedReq);
+            EditorLockController.EditorSession currentSession = EditorLockController.getSession(sessionId);
             if (currentSession == null) {
                 logMessageAndHalt(req, 400, "There is no active editing session for user.");
             }

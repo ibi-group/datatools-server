@@ -30,8 +30,8 @@ public class EditorLockController {
 
     private static final JsonManager<EditorLockController> json = new JsonManager<>(EditorLockController.class, JsonViews.UserInterface.class);
     private static final Logger LOG = LoggerFactory.getLogger(EditorLockController.class);
-    public static final Map<String, EditorSession> sessionsForFeedIds = new HashMap<>();
-    private static final long SESSION_LENGTH_IN_SECONDS = 10 * 60; // Ten minutes
+    private static final Map<String, EditorSession> sessionsForFeedIds = new HashMap<>();
+    private static final long SESSION_LENGTH_IN_SECONDS = 10 * 60L; // Ten minutes
 
     /**
      * Holds useful data from an editor lock request.
@@ -43,17 +43,12 @@ public class EditorLockController {
         public final String itemToLock;
         public final String sessionId;
 
-        public ParsedRequest(Request req, String sessionId, String itemToLock) {
+        public ParsedRequest(Request req) {
             this.request = req;
             this.userProfile = req.attribute("user");
             this.feedId = req.queryParams("feedId");
-            this.itemToLock = itemToLock;
-            this.sessionId = sessionId;
-            System.out.println("sessionId: " + sessionId);
-        }
-
-        public ParsedRequest(Request req) {
-            this(req, req.params("id"), req.queryParamOrDefault("item", ""));
+            this.itemToLock = req.queryParamOrDefault("item", "");
+            this.sessionId = req.params("id");
         }
 
         /**
@@ -66,8 +61,21 @@ public class EditorLockController {
         }
     }
 
+    /**
+     * Returns the current session based on the info provided.
+     */
     public static EditorSession getCurrentSession(ParsedRequest req) {
         return sessionsForFeedIds.get(req.getSessionKey());
+    }
+
+    /**
+     * Returns the session based on its id.
+     */
+    public static EditorSession getSession(String sessionId) {
+        return sessionsForFeedIds.values().stream()
+            .filter(s -> s.sessionId.equals(sessionId))
+            .findFirst()
+            .orElse(null);
     }
 
     private static String lockFeed (Request req, Response res) {
