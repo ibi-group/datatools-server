@@ -34,34 +34,6 @@ public class EditorLockController {
     private static final long SESSION_LENGTH_IN_SECONDS = 10 * 60L; // Ten minutes
 
     /**
-     * Holds useful data from an editor lock request.
-     */
-    public static class ParsedRequest {
-        public final Request request;
-        public final Auth0UserProfile userProfile;
-        public final String feedId;
-        public final String itemToLock;
-        public final String sessionId;
-
-        public ParsedRequest(Request req) {
-            this.request = req;
-            this.userProfile = req.attribute("user");
-            this.feedId = req.queryParams("feedId");
-            this.itemToLock = req.queryParamOrDefault("item", "");
-            this.sessionId = req.params("id");
-        }
-
-        /**
-         * Returns a composite key made of:
-         * - a feed id that the lock affects,
-         * - an id of the item being locked by that user in a session.
-         */
-        public String getSessionKey() {
-            return String.format("%s-%s", feedId, itemToLock);
-        }
-    }
-
-    /**
      * Returns the current session based on the info provided.
      */
     public static EditorSession getCurrentSession(ParsedRequest req) {
@@ -69,11 +41,11 @@ public class EditorLockController {
     }
 
     /**
-     * Returns the session based on its id.
+     * Returns a session based on a feed id.
      */
-    public static EditorSession getSession(String sessionId) {
+    public static EditorSession getSession(String feedId) {
         return sessionsForFeedIds.values().stream()
-            .filter(s -> s.sessionId.equals(sessionId))
+            .filter(s -> s.feedId.equals(feedId))
             .findFirst()
             .orElse(null);
     }
@@ -151,20 +123,17 @@ public class EditorLockController {
                 lastEditMessage);
     }
 
-    private static String maintainLock(Request req, Response res) {
-        ParsedRequest parsedReq = new ParsedRequest(req);
-        EditorSession currentSession = getCurrentSession(parsedReq);
+    public static boolean checkUserHasActiveSession(Request req, String sessionId, String email, EditorSession currentSession) {
         if (currentSession == null) {
             // If there is no current session to maintain, request that user reloads browser.
-            LOG.warn("No active editor session to maintain {}.", parsedReq.sessionId);
+            LOG.warn("No active editor session to maintain {}.", sessionId);
             logMessageAndHalt(req, 400, "No active session for feedId. Please refresh your browser and try editing later.");
-            return null;
-        } else if (!currentSession.sessionId.equals(parsedReq.sessionId)) {
+            return false;
+        } else if (!currentSession.sessionId.equals(sessionId)) {
             // If there is an active session but it doesn't match the session, someone else (or the current user) is
             // editing elsewhere. A user should only be trying to maintain a lock if it had an active session at one
             // point. If we get to this point, it is because the user's session has expired and some other session took
             // its place.
-            String email = parsedReq.userProfile.getEmail();
             if (currentSession.userEmail.equals(email)) {
                 // If the new current session is held by this user, give them the option to evict the current session /
                 // unlock the feed.
@@ -174,12 +143,21 @@ public class EditorLockController {
                 LOG.warn("User {} attempted editor session for feed {} while active session underway for user {}.", email, currentSession.feedId, currentSession.userEmail);
                 logMessageAndHalt(req, 400, getLockedFeedMessage(currentSession));
             }
-            return null;
-        } else {
-            // Otherwise, the current session matches the session the user is attempting to maintain. Update the
+            return false;
+        }
+        return true;
+    }
+
+    private static String maintainLock(Request req, Response res) {
+        ParsedRequest parsedReq = new ParsedRequest(req);
+        EditorSession currentSession = getCurrentSession(parsedReq);
+        if (checkUserHasActiveSession(req, parsedReq.sessionId, parsedReq.userProfile.getEmail(), currentSession)) {
+            // If the current session matches the session the user is attempting to maintain. Update the
             // lastEdited time.
             currentSession.lastCheckIn = System.currentTimeMillis();
             return formatJSON("Updating time for user " + currentSession.userEmail, parsedReq.feedId, null);
+        } else {
+            return null;
         }
     }
 
@@ -282,6 +260,34 @@ public class EditorLockController {
 
         public long minutesUntilExpiration() {
             return TimeUnit.SECONDS.toMinutes(SESSION_LENGTH_IN_SECONDS - secondsSinceLastCheckIn());
+        }
+    }
+
+    /**
+     * Holds useful data from an editor lock request.
+     */
+    public static class ParsedRequest {
+        public final Request request;
+        public final Auth0UserProfile userProfile;
+        public final String feedId;
+        public final String itemToLock;
+        public final String sessionId;
+
+        public ParsedRequest(Request req) {
+            this.request = req;
+            this.userProfile = req.attribute("user");
+            this.feedId = req.queryParams("feedId");
+            this.itemToLock = req.queryParamOrDefault("item", "");
+            this.sessionId = req.params("id");
+        }
+
+        /**
+         * Returns a composite key made of:
+         * - a feed id that the lock affects,
+         * - an id of the item being locked by that user in a session.
+         */
+        public String getSessionKey() {
+            return String.format("%s-%s", feedId, itemToLock);
         }
     }
 }
