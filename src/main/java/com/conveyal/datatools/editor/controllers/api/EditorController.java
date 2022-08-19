@@ -425,7 +425,9 @@ public abstract class EditorController<T extends Entity> {
         // Only check for editing session if not in testing environment.
         // TODO: Add way to mock session.
         if (!inTestingEnvironment()) {
-            EditorLockController.EditorSession currentSession = sessionsForFeedIds.get(feedId);
+            // TODO: Refactor, looks like duplicate code
+            EditorLockController.ParsedRequest parsedReq = new EditorLockController.ParsedRequest(req, sessionId, "gtfs-editor");
+            EditorLockController.EditorSession currentSession = EditorLockController.getCurrentSession(parsedReq);
             if (currentSession == null) {
                 logMessageAndHalt(req, 400, "There is no active editing session for user.");
             }
