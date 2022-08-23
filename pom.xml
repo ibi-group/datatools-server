@@ -197,15 +197,6 @@
                 <updatePolicy>always</updatePolicy>
             </snapshots>
         </repository>
-        <repository>
-            <id>boundless</id>
-            <name>Boundless Maven Repository</name>
-            <url>https://repo.boundlessgeo.com/main</url>
-            <snapshots>
-                <enabled>true</enabled>
-                <updatePolicy>always</updatePolicy>
-            </snapshots>
-        </repository>
         <!--  used for importing java projects from github -->
         <repository>
             <id>jitpack.io</id>
@@ -270,8 +261,8 @@
         <dependency>
             <groupId>com.github.conveyal</groupId>
             <artifactId>gtfs-lib</artifactId>
-            <!-- gtfs-lib 7.1.0 + fix for trip pattern loading + others before -->
-            <version>3826eeda92f488f9d9ab4022d08be3b1281980de</version>
+            <!-- Latest dev build on jitpack.io -->
+            <version>ca419a8149</version>
             <!-- Exclusions added in order to silence SLF4J warnings about multiple bindings:
                 http://www.slf4j.org/codes.html#multiple_bindings
             -->
