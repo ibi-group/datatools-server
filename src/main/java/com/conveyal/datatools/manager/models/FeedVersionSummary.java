@@ -56,8 +56,11 @@ public class FeedVersionSummary extends Model implements Serializable {
         public LocalDate endDate;
 
         PartialValidationSummary() {
-            this.startDate = validationResult.firstCalendarDate;
-            this.endDate = validationResult.lastCalendarDate;
+            // Older feeds created in datatools may not have validationResult
+            if (validationResult != null) {
+                this.startDate = validationResult.firstCalendarDate;
+                this.endDate = validationResult.lastCalendarDate;
+            }
         }
     }
 }
