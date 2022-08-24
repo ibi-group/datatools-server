@@ -9,6 +9,7 @@ import com.csvreader.CsvReader;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import org.apache.commons.io.input.BOMInputStream;
+import org.apache.logging.log4j.util.Strings;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -96,16 +97,14 @@ public class GtfsPlusValidation implements Serializable {
         final Enumeration<? extends ZipEntry> entries = zipFile.entries();
         while (entries.hasMoreElements()) {
             final ZipEntry entry = entries.nextElement();
-            for (int i = 0; i < DataManager.gtfsPlusConfig.size(); i++) {
-                JsonNode tableNode = DataManager.gtfsPlusConfig.get(i);
-                if (tableNode.get("name").asText().equals(entry.getName())) {
-                    LOG.info("Validating GTFS+ table: " + entry.getName());
-                    gtfsPlusTableCount++;
-                    // Skip any byte order mark that may be present. Files must be UTF-8,
-                    // but the GTFS spec says that "files that include the UTF byte order mark are acceptable".
-                    InputStream bis = new BOMInputStream(zipFile.getInputStream(entry));
-                    validateTable(validation.issues, tableNode, bis, gtfsFeed);
-                }
+            JsonNode tableNode = findNode(DataManager.gtfsPlusConfig, "name", entry.getName());
+            if (tableNode != null) {
+                LOG.info("Validating GTFS+ table: " + entry.getName());
+                gtfsPlusTableCount++;
+                // Skip any byte order mark that may be present. Files must be UTF-8,
+                // but the GTFS spec says that "files that include the UTF byte order mark are acceptable".
+                InputStream bis = new BOMInputStream(zipFile.getInputStream(entry));
+                validateTable(validation.issues, tableNode, bis, gtfsFeed);
             }
         }
         gtfsFeed.close();
@@ -152,32 +151,43 @@ public class GtfsPlusValidation implements Serializable {
         // Iterate over each row and validate each field value.
         int rowIndex = 0;
         int rowsWithWrongNumberOfColumns = 0;
+        int emptyRows = 0;
         while (csvReader.readRecord()) {
             // First, check that row has the correct number of fields.
             int recordColumnCount = csvReader.getColumnCount();
-            if (recordColumnCount != fieldsFound.length) {
-                rowsWithWrongNumberOfColumns++;
-            }
-            // Validate each value in row. Note: we iterate over the fields and not values because a row may be missing
-            // columns, but we still want to validate that missing value (e.g., if it is missing a required field).
-            for (int f = 0; f < fieldsFound.length; f++) {
-                // If value exists for index, use that. Otherwise, default to null to avoid out of bounds exception.
-                String val = f < recordColumnCount ? csvReader.get(f) : null;
-                validateTableValue(issues, tableId, rowIndex, val, fieldsFound[f], gtfsFeed);
+            String[] rowValues = csvReader.getValues();
+            if (recordColumnCount == 1 && Strings.isBlank(rowValues[0])) {
+                // If row is empty (technically, the row has one column with a blank value),
+                // report that as such (and skip validating column values).
+                emptyRows++;
+            } else {
+                if (recordColumnCount != fieldsFound.length) {
+                    rowsWithWrongNumberOfColumns++;
+                }
+                // Validate each value in row. Note: we iterate over the fields and not values because a row may be missing
+                // columns, but we still want to validate that missing value (e.g., if it is missing a required field).
+                for (int f = 0; f < fieldsFound.length; f++) {
+                    // If value exists for index, use that. Otherwise, default to null to avoid out of bounds exception.
+                    String val = f < recordColumnCount ? rowValues[f] : null;
+                    validateTableValue(issues, tableId, rowIndex, rowValues, val, fieldsFound, fieldsFound[f], gtfsFeed);
+                }
             }
             rowIndex++;
         }
         csvReader.close();
 
-        // Add issue for wrong number of columns after processing all rows.
+        // Add issues for wrong number of columns and for empty rows after processing all rows.
         // Note: We considered adding an issue for each row, but opted for the single error approach because there's no
         // concept of a row-level issue in the UI right now. So we would potentially need to add that to the UI
         // somewhere. Also, there's the trouble of reporting the issue at the row level, but not really giving the user
-        // a great way to resolve the issue in the GTFS+ editor. Essentially, all of the rows with the wrong number of
+        // a great way to resolve the issue in the GTFS+ editor. Essentially, all rows with the wrong number of
         // columns can be resolved simply by clicking the "Save and Revalidate" button -- so the resolution is more at
         // the table level than the row level (like, for example, a bad value for a field would be).
         if (rowsWithWrongNumberOfColumns > 0) {
             issues.add(new ValidationIssue(tableId, null, -1, rowsWithWrongNumberOfColumns + " row(s) do not contain the same number of fields as there are headers. (File may need to be edited manually.)"));
+        }
+        if (emptyRows > 0) {
+            issues.add(new ValidationIssue(tableId, null, -1, emptyRows + " row(s) are empty. (File may need to be edited manually.)"));
         }
     }
 
@@ -191,7 +201,9 @@ public class GtfsPlusValidation implements Serializable {
         Collection<ValidationIssue> issues,
         String tableId,
         int rowIndex,
+        String[] allValues,
         String value,
+        JsonNode[] specFieldsFound,
         JsonNode specField,
         GTFSFeed gtfsFeed
     ) {
@@ -223,6 +235,34 @@ public class GtfsPlusValidation implements Serializable {
                 if (invalid) {
                     issues.add(new ValidationIssue(tableId, fieldName, rowIndex, "Value: " + value + " is not a valid option."));
                 }
+
+                // Perform the parent value check if a parent field is set in the field spec.
+                JsonNode parentFieldNode = specField.get("parent");
+                if (parentFieldNode != null) {
+                    int parentValuePosition = getParentFieldPosition(specFieldsFound, parentFieldNode.asText());
+                    String parentValue = parentValuePosition >= 0
+                        ? allValues[parentValuePosition]
+                        : null;
+                    if (!isValueValidWithParent(parentValue, value, specField)) {
+                        // Generate a message showing the text that corresponds
+                        // to the category and subcategory values.
+                        String textForValue = getOptionText(value, specField);
+                        String textForParent = parentValue;
+                        if (parentValuePosition >= 0) {
+                            textForParent = getOptionText(textForParent, specFieldsFound[parentValuePosition]);
+                        }
+
+                        issues.add(new ValidationIssue(tableId, fieldName, rowIndex,
+                            String.format(
+                                "Value '%s' is not valid field '%s' is '%s'",
+                                textForValue,
+                                parentFieldNode.asText(),
+                                textForParent
+                            )
+                        ));
+                    }
+                }
+
                 break;
             case "TEXT":
                 // check if value exceeds max length requirement
@@ -265,5 +305,97 @@ public class GtfsPlusValidation implements Serializable {
     /** Construct missing ID text for validation issue description. */
     private static String missingIdText(String value, String entity) {
         return String.join(" ", entity, "ID", value, NOT_FOUND);
+    }
+
+    /**
+     * Gets the text that is displayed for an option.
+     */
+    static String getOptionText(String value, JsonNode specField) {
+        JsonNode optionNode = findOptionNode(value, specField);
+        if (optionNode != null) {
+            JsonNode textNode = optionNode.get("text");
+            if (textNode != null) {
+                return textNode.asText();
+            }
+        }
+        return value;
+    }
+
+    /**
+     * Determines whether a node has a given key and value.
+     */
+    private static boolean nodeHasKey(JsonNode jsonNode, String key, String keyValue) {
+        // jsonNode can be null if a file contains extra columns.
+        if (jsonNode == null) return false;
+        JsonNode nameField = jsonNode.get(key);
+        return nameField != null && nameField.asText().equals(keyValue);
+    }
+
+    /**
+     * Helper method to extract the route category value when validating a route subcategory.
+     */
+    static int getParentFieldPosition(JsonNode[] specFieldsFound, String parentField) {
+        for (int i = 0; i < specFieldsFound.length; i++) {
+            if (nodeHasKey(specFieldsFound[i], "name", parentField)) {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    /**
+     * Helper method to find a node with a given key and value.
+     */
+    public static JsonNode findNode(JsonNode parentNode, String key, String keyValue) {
+        if (parentNode != null) {
+            for (JsonNode childNode : parentNode) {
+                if (nodeHasKey(childNode, key, keyValue)) {
+                    return childNode;
+                }
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Determines if a route subcategory is a valid value of (belongs to) a given route category.
+     */
+    public static boolean isValueValidWithParent(String parentValue, String value, JsonNode specField) {
+        // If the provided value is not one of the specField options, then the value is not valid.
+        JsonNode optionNode = findOptionNode(value, specField);
+        if (optionNode == null) return false;
+
+        String optionParentValue = getOptionParentValue(optionNode);
+        // If no parent value is defined, the value is always valid.
+        return optionParentValue == null || optionParentValue.equals(parentValue);
+    }
+
+    /**
+     * Returns the parent value, if any, for an option (used for tests).
+     */
+    public static String getOptionParentValue(String value, JsonNode specField) {
+        JsonNode optionNode = findOptionNode(value, specField);
+        return getOptionParentValue(optionNode);
+    }
+
+    /**
+     * Finds an option node, if any, with the given value under the given specField.
+     */
+    private static JsonNode findOptionNode(String value, JsonNode specField) {
+        return findNode(specField.get("options"), "value", value);
+    }
+
+    /**
+     * Returns the parent value, if any, for an option node.
+     */
+    private static String getOptionParentValue(JsonNode optionNode) {
+        if (optionNode != null) {
+            JsonNode parentValueNode = optionNode.get("parentValue");
+            if (parentValueNode != null) {
+                return parentValueNode.asText();
+            }
+        }
+        return null;
     }
 }

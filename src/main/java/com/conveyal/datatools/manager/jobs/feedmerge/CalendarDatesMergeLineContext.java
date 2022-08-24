@@ -157,10 +157,10 @@ public class CalendarDatesMergeLineContext extends MergeLineContext {
      */
     private String[] getCalendarRowValues(CalendarDate calDate, String newServiceId) {
         String[] rowValues = new String[getOriginalRowValues().length];
-        rowValues[getFieldIndex(SERVICE_ID)] = newServiceId;
-        rowValues[getFieldIndex("date")]
+        rowValues[getFieldIndexFromSharedSpecs(SERVICE_ID)] = newServiceId;
+        rowValues[getFieldIndexFromSharedSpecs("date")]
             = calDate.date.format(GTFS_DATE_FORMATTER);
-        rowValues[getFieldIndex("exception_type")]
+        rowValues[getFieldIndexFromSharedSpecs("exception_type")]
             = String.valueOf(calDate.exception_type);
         return rowValues;
     }

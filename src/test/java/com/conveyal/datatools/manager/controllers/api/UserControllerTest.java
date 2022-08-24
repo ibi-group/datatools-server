@@ -12,9 +12,13 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.IOException;
 import java.net.URLEncoder;
+import java.util.stream.Stream;
 
 import static com.conveyal.datatools.TestUtils.parseJson;
 import static com.conveyal.datatools.manager.auth.Auth0Users.USERS_API_PATH;
@@ -462,6 +466,26 @@ public class UserControllerTest extends UnitTest {
         assertThat(updateUserResponse, matchesSnapshot());
         // Clear API token to avoid interfering with future requests.
         setCachedApiToken(null);
+    }
+
+    /**
+     * Ensures that search wildcards are correctly inserted into search queries.
+     */
+    @ParameterizedTest
+    @MethodSource("createMakeEmailFilterQueryCases")
+    public void shouldMakeEmailFilterQuery(String queryString, String result) {
+        assertThat(
+            "Auth0 email user queries should be valid.",
+            UserController.makeEmailFilterQuery(queryString).equals(result)
+        );
+    }
+
+    private static Stream<Arguments> createMakeEmailFilterQueryCases() {
+        return Stream.of(
+            Arguments.of("Joe", "email:*Joe*"),
+            // Don't insert the "begins with" wildcard if the search term is less than 3 characters long.
+            Arguments.of("Jo", "email:Jo*")
+        );
     }
 
     private static void stubForApiToken(String bodyFile) {

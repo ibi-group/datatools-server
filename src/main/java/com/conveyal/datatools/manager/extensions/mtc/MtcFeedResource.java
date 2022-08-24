@@ -162,8 +162,9 @@ public class MtcFeedResource implements ExternalFeedResource {
         String feedSourceId = updatedProperty.feedSourceId;
         FeedSource source = Persistence.feedSources.getById(feedSourceId);
         RtdCarrier carrier = new RtdCarrier(source);
+        carrier.updateProperty(updatedProperty);
 
-        if(updatedProperty.name.equals(AGENCY_ID_FIELDNAME) && previousValue == null) {
+        if (updatedProperty.name.equals(AGENCY_ID_FIELDNAME) && previousValue == null) {
             // If the property being updated is the agency ID field and it previously was null, this indicates that a
             // new carrier should be written to the RTD.
             writeCarrierToRtd(carrier, true, authHeader);
@@ -221,12 +222,10 @@ public class MtcFeedResource implements ExternalFeedResource {
      */
     private void writeCarrierToRtd(RtdCarrier carrier, boolean createNew, String authHeader) throws IOException {
         try {
-            ObjectMapper mapper = new ObjectMapper();
-
-            String carrierJson = mapper.writeValueAsString(carrier);
+            String carrierJson = carrier.toJson();
 
             URL rtdUrl = new URL(rtdApi + "/Carrier/" + (createNew ? "" : carrier.AgencyId));
-            LOG.info("Writing to RTD URL: {}", rtdUrl);
+            LOG.info("Writing to RTD URL: {} JSON >>>{}", rtdUrl, carrierJson);
             HttpURLConnection connection = (HttpURLConnection) rtdUrl.openConnection();
 
             connection.setRequestMethod(createNew ? "POST" : "PUT");

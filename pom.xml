@@ -197,15 +197,6 @@
                 <updatePolicy>always</updatePolicy>
             </snapshots>
         </repository>
-        <repository>
-            <id>boundless</id>
-            <name>Boundless Maven Repository</name>
-            <url>https://repo.boundlessgeo.com/main</url>
-            <snapshots>
-                <enabled>true</enabled>
-                <updatePolicy>always</updatePolicy>
-            </snapshots>
-        </repository>
         <!--  used for importing java projects from github -->
         <repository>
             <id>jitpack.io</id>
@@ -270,7 +261,8 @@
         <dependency>
             <groupId>com.github.conveyal</groupId>
             <artifactId>gtfs-lib</artifactId>
-            <version>7.1.0</version>
+            <!-- Latest dev build on jitpack.io -->
+            <version>ca419a8149</version>
             <!-- Exclusions added in order to silence SLF4J warnings about multiple bindings:
                 http://www.slf4j.org/codes.html#multiple_bindings
             -->
@@ -327,7 +319,7 @@
         <dependency>
             <groupId>com.sparkpost</groupId>
             <artifactId>sparkpost-lib</artifactId>
-            <version>0.15</version>
+            <version>0.27</version>
         </dependency>
 
         <!-- Efficient collections for primitive types -->
