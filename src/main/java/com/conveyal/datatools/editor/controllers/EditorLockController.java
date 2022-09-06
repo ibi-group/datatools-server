@@ -107,7 +107,7 @@ public class EditorLockController {
         EditorSession newEditorSession = new EditorSession(req.feedId, newSessionId, req.userProfile, req.itemToLock);
         sessionsForFeedIds.put(req.getSessionKey(), newEditorSession);
         LOG.info("{} (Session ID: {})", logMessage, newSessionId);
-        return formatJSON(message, req.feedId, newSessionId);
+        return formatSuccessJSON(message, req.feedId, newSessionId);
     }
 
     private static String getLockedFeedMessage(EditorSession session) {
@@ -155,7 +155,7 @@ public class EditorLockController {
             // If the current session matches the session the user is attempting to maintain. Update the
             // lastEdited time.
             currentSession.lastCheckIn = System.currentTimeMillis();
-            return formatJSON("Updating time for user " + currentSession.userEmail, parsedReq.feedId, null);
+            return formatSuccessJSON("Updating time for user " + currentSession.userEmail, parsedReq.feedId, null);
         } else {
             return null;
         }
@@ -211,7 +211,7 @@ public class EditorLockController {
             // the user's editing session has been closed (by either exiting the editor or closing the browser tab).
             LOG.info("Closed session {} for feed {} successfully.", currentSession.sessionId, currentSession.feedId);
             sessionsForFeedIds.remove(parsedReq.getSessionKey());
-            return formatJSON("Session has been closed successfully.", parsedReq.feedId, parsedReq.sessionId);
+            return formatSuccessJSON("Session has been closed successfully.", parsedReq.feedId, parsedReq.sessionId);
         }
     }
 
@@ -224,7 +224,7 @@ public class EditorLockController {
         post(apiPrefix + "deletelock/:id", EditorLockController::deleteFeedLockBeacon, json::write);
     }
 
-    private static String formatJSON(String message, String feedId, String sessionId) {
+    private static String formatSuccessJSON(String message, String feedId, String sessionId) {
         JsonObject object = new JsonObject();
         object.addProperty("result", "OK");
         object.addProperty("message", message);
