@@ -1,12 +1,17 @@
 # syntax=docker/dockerfile:1
-FROM openjdk:11
+FROM maven:3.8.6-openjdk-11
+
+COPY . /datatools
+
+# Build jar
 WORKDIR /datatools
+RUN mvn package -DskipTests
+RUN cp target/dt*.jar ./datatools-server.jar
 
-# Grab latest dev build
-COPY target/dt*.jar ./datatools-server-3.8.1-SNAPSHOT.jar
+RUN mkdir -p /var/datatools_gtfs/gtfsplus
 
-RUN mkdir -p /var/datatools_gtfs
-# Launch server (relies on env.yml being placed in volume!)
+# Launch server
+# This relies on a configuration volume and aws volume being present. See `docker-compose.yml`, or the example below
 # Try: docker run --publish 4000:4000 -v ~/config/:/config datatools-latest
-CMD ["java", "-jar", "datatools-server-3.8.1-SNAPSHOT.jar", "/config/env.yml", "/config/server.yml"]
+CMD ["java", "-jar", "datatools-server.jar", "/config/env.yml", "/config/server.yml"]
 EXPOSE 4000

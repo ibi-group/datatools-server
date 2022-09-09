@@ -6,7 +6,7 @@ services:
       - "4000:4000"
     volumes:
       - type: bind
-        source: ./configurations/docker/
+        source: ./configurations/default/
         target: /config
       - type: bind
         source: ~/.aws
