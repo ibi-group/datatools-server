@@ -265,6 +265,9 @@ public class GisExportJobTest extends UnitTest {
         ZipEntry zipEntry = zis.getNextEntry();
         while (zipEntry != null) {
             File newFile = new File(destDir, zipEntry.getName());
+            if (!newFile.toPath().normalize().startsWith(destDir.toPath().normalize())) {
+                throw new RuntimeException("Bad zip entry");
+            }
             FileOutputStream fos = new FileOutputStream(newFile);
             int len;
             while ((len = zis.read(buffer)) > 0) {
