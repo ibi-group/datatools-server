@@ -1,16 +1,9 @@
 version: '3.8'
 services:
-  datatools-ui:
-    # Temporary! move to image (?) -- includes config variables
-    build: ../datatools-ui
-    restart: always
-    ports:
-      - "8888:80"
   datatools-server:
-    # Temporary! move to image
     build: ./
     ports:
-      - "9966:4000"
+      - "4000:4000"
     volumes:
       - type: bind
         source: ./configurations/docker/
@@ -21,7 +14,6 @@ services:
     depends_on:
       - mongo
       - postgres
-      - datatools-ui
   mongo:
     image: mongo
     restart: always

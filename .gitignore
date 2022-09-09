@@ -17,7 +17,6 @@ deploy/
 configurations/*.yml
 !configurations/default
 !configurations/test
-!configurations/docker
 
 # Secret config files
 .env
