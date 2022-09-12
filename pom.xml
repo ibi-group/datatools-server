@@ -269,8 +269,7 @@
         <dependency>
             <groupId>com.github.conveyal</groupId>
             <artifactId>gtfs-lib</artifactId>
-            <!-- TODO: merge dev into gtfs-lib dev-flex -->
-            <version>3e727c9479555dfc9ec20a03eb025a7033bf5ece</version>
+            <version>ee5e98fdee55af1efdca83a34991b6ba54c429e9</version>
             <!-- Exclusions added in order to silence SLF4J warnings about multiple bindings:
                 http://www.slf4j.org/codes.html#multiple_bindings
             -->
