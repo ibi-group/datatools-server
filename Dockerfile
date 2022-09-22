@@ -6,7 +6,7 @@ COPY . /datatools
 # Build jar
 WORKDIR /datatools
 RUN mvn package -DskipTests
-RUN cp target/dt*.jar ./datatools-server.jar
+RUN cp target/dt*.jar /datatools/
 
 RUN mkdir -p /var/datatools_gtfs/gtfsplus
 
