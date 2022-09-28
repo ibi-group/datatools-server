@@ -39,7 +39,7 @@
         <url>https://github.com/ibi-group/datatools-server.git</url>
     </scm>
     <properties>
-        <jackson.version>2.12.1</jackson.version>
+        <jackson.version>2.12.6.1</jackson.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <!-- Using the latest version of geotools (e.g, 20) seems to cause issues with the shapefile
         plugin where the_geom for each feature is null. -->
