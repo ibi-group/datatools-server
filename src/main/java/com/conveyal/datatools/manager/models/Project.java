@@ -8,6 +8,7 @@ import org.bson.codecs.pojo.annotations.BsonIgnore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashSet;
@@ -133,6 +134,16 @@ public class Project extends Model {
      */
     public Collection<Deployment> retrieveDeployments() {
         return Persistence.deployments.getFiltered(eq("projectId", this.id));
+    }
+
+    /**
+     * Get all deployment summaries for this project.
+     */
+    public Collection<DeploymentSummary> retrieveDeploymentSummaries() {
+        List<DeploymentSummary> deploymentSummaries = new ArrayList<>();
+        Collection<Deployment> deployments = retrieveDeployments();
+        deployments.forEach(deployment -> deploymentSummaries.add(new DeploymentSummary(deployment, this)));
+        return deploymentSummaries;
     }
 
     // TODO: Does this need to be returned with JSON API response
