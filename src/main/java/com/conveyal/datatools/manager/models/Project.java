@@ -14,6 +14,7 @@ import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
@@ -142,9 +143,10 @@ public class Project extends Model {
     public Collection<DeploymentSummary> retrieveDeploymentSummaries() {
         Collection<Deployment> deployments = retrieveDeployments();
         List<OtpServer> otpServers = availableOtpServers();
-        List<DeploymentSummary> deploymentSummaries = new ArrayList<>();
-        deployments.forEach(deployment -> deploymentSummaries.add(new DeploymentSummary(deployment, this, otpServers)));
-        return deploymentSummaries;
+        return deployments
+            .stream()
+            .map(deployment -> new DeploymentSummary(deployment, this, otpServers))
+            .collect(Collectors.toList());
     }
 
     // TODO: Does this need to be returned with JSON API response
