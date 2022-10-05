@@ -88,7 +88,7 @@ public class DeploymentControllerTest extends DatatoolsTest {
     @Test
     void canRetrieveDeploymentSummaries() throws IOException {
         SimpleHttpResponse response = TestUtils.makeRequest(
-            "/api/manager/secure/deploymentSummaries" + String.format("?projectId=%s", project.id),
+            String.format("/api/manager/secure/deploymentSummaries?projectId=%s", project.id),
             null,
             HttpUtils.REQUEST_METHOD.GET
         );
@@ -99,7 +99,7 @@ public class DeploymentControllerTest extends DatatoolsTest {
             );
         assertEquals(deployment.id, deploymentSummaries.get(0).id);
         assertEquals(deployment.name, deploymentSummaries.get(0).name);
-        assertEquals(deployment.dateCreated, deploymentSummaries.get(0).created);
+        assertEquals(deployment.dateCreated, deploymentSummaries.get(0).dateCreated);
         assertEquals(new Date(deploySummary.finishTime), deploymentSummaries.get(0).lastDeployed);
         assertEquals(server.id, deploymentSummaries.get(0).deployedTo);
         assertEquals(deployment.feedVersionIds.size(), deploymentSummaries.get(0).numberOfFeedVersions);

@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.models;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import java.util.Date;
+import java.util.List;
 
 /**
  * A summary of deployment items used to list available deployments without the need to return all deployment information.
@@ -24,7 +25,7 @@ public class DeploymentSummary {
     /**
      * Date when the deployment was created.
      */
-    public Date created;
+    public Date dateCreated;
 
     /**
      * Date when the deployment was last deployed to a server.
@@ -65,16 +66,16 @@ public class DeploymentSummary {
     /**
      * Extract from a deployment and parent project, deployment summary values.
      */
-    public DeploymentSummary(Deployment deployment, Project project) {
+    public DeploymentSummary(Deployment deployment, Project project, List<OtpServer> otpServers) {
         this.id = deployment.id;
         this.name = deployment.name;
-        this.created = deployment.dateCreated;
+        this.dateCreated = deployment.dateCreated;
         this.lastDeployed = deployment.retrieveLastDeployed();
         this.deployedTo = deployment.deployedTo;
         this.numberOfFeedVersions = deployment.feedVersionIds.size();
         this.test = deployment.routerId != null;
         this.isPinned = project.pinnedDeploymentId != null && project.pinnedDeploymentId.equals(deployment.id);
-        OtpServer server = project.availableOtpServers()
+        OtpServer server = otpServers
             .stream()
             .filter(s -> s.id.equals(deployedTo))
             .findFirst()

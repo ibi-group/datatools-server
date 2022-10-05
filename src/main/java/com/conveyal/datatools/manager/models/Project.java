@@ -140,9 +140,10 @@ public class Project extends Model {
      * Get all deployment summaries for this project.
      */
     public Collection<DeploymentSummary> retrieveDeploymentSummaries() {
-        List<DeploymentSummary> deploymentSummaries = new ArrayList<>();
         Collection<Deployment> deployments = retrieveDeployments();
-        deployments.forEach(deployment -> deploymentSummaries.add(new DeploymentSummary(deployment, this)));
+        List<OtpServer> otpServers = availableOtpServers();
+        List<DeploymentSummary> deploymentSummaries = new ArrayList<>();
+        deployments.forEach(deployment -> deploymentSummaries.add(new DeploymentSummary(deployment, this, otpServers)));
         return deploymentSummaries;
     }
 

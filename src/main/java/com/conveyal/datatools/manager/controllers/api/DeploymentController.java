@@ -239,7 +239,6 @@ public class DeploymentController {
         Project project = Persistence.projects.getById(projectId);
         if (project == null) {
             logMessageAndHalt(req, 400, "Must provide valid projectId value.");
-            return new ArrayList<>();
         }
         if (!userProfile.canAdministerProject(project)) {
             logMessageAndHalt(req, 401, "User not authorized to view project deployments.");
