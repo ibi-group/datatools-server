@@ -8,11 +8,13 @@ import org.bson.codecs.pojo.annotations.BsonIgnore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
@@ -133,6 +135,18 @@ public class Project extends Model {
      */
     public Collection<Deployment> retrieveDeployments() {
         return Persistence.deployments.getFiltered(eq("projectId", this.id));
+    }
+
+    /**
+     * Get all deployment summaries for this project.
+     */
+    public Collection<DeploymentSummary> retrieveDeploymentSummaries() {
+        Collection<Deployment> deployments = retrieveDeployments();
+        List<OtpServer> otpServers = availableOtpServers();
+        return deployments
+            .stream()
+            .map(deployment -> new DeploymentSummary(deployment, this, otpServers))
+            .collect(Collectors.toList());
     }
 
     // TODO: Does this need to be returned with JSON API response
