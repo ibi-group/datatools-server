@@ -464,6 +464,13 @@ public class FeedSource extends Model implements Cloneable {
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
+    @JsonProperty("latestPublishedVersionId")
+    public String latestPublishedVersionId() {
+        return this.publishedVersionId != null ? this.publishedVersionId : null;
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("latestVersionEndDate")
     public LocalDate latestVersionEndDate() {
         FeedVersion latest = retrieveLatest();
