@@ -38,6 +38,7 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
@@ -459,6 +460,14 @@ public class FeedSource extends Model implements Cloneable {
     public String latestVersionId() {
         FeedVersion latest = retrieveLatest();
         return latest != null ? latest.id : null;
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonView(JsonViews.UserInterface.class)
+    @JsonProperty("latestVersionEndDate")
+    public LocalDate latestVersionEndDate() {
+        FeedVersion latest = retrieveLatest();
+        return latest != null ? latest.validationSummary().endDate : null;
     }
 
     /**
