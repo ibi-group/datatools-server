@@ -462,27 +462,59 @@ public class FeedSource extends Model implements Cloneable {
         return latest != null ? latest.id : null;
     }
 
+    /**
+     * The feed version used in the latest deployment.
+     * This cannot be returned because of a circular reference between feed source and feed version. Instead, individual
+     * parameters (version id and end date) are returned.
+     */
+    @JsonIgnore
+    @BsonIgnore
+    private FeedVersion deployedFeedVersion = null;
+
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
-    @JsonProperty("latestVersionEndDate")
-    public LocalDate latestVersionEndDate() {
-        FeedVersion latest = retrieveLatest();
-        return latest != null ? latest.validationSummary().endDate : null;
+    @JsonProperty("deployedFeedVersionId")
+    public String getDeployedFeedVersionId() {
+        FeedVersion feedVersion = getDeployedFeedVersion();
+        return feedVersion != null ? feedVersion.id : null;
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
-    @JsonProperty("latestPublishedVersionId")
-    public String latestPublishedVersionId() {
-        return this.publishedVersionId != null ? this.publishedVersionId : null;
+    @JsonProperty("deployedFeedVersionEndDate")
+    public LocalDate getDeployedFeedVersionEndDate() {
+        FeedVersion feedVersion = getDeployedFeedVersion();
+        return feedVersion != null ? feedVersion.validationSummary().endDate : null;
     }
 
-    @JsonInclude(JsonInclude.Include.NON_NULL)
-    @JsonView(JsonViews.UserInterface.class)
-    @JsonProperty("latestPublishedEndDate")
-    public LocalDate latestPublishedEndDate() {
-        FeedVersion publishedVersion = retrievePublishedVersion();
-        return publishedVersion != null ? publishedVersion.validationSummary().endDate : null;
+    /**
+     * Find the latest deployment containing a feed version for a feed source.
+     */
+    private FeedVersion getDeployedFeedVersion() {
+        if (deployedFeedVersion != null) {
+            // If the deployed feed version is already defined use this instead of recreating.
+            return deployedFeedVersion;
+        }
+        Collection<Deployment> deployments = Persistence.deployments.getFiltered(
+            eq("projectId", this.projectId),
+            Sorts.descending("dateCreated")
+        );
+        Collection<FeedVersion> feedVersions = Persistence.feedVersions.getFiltered(eq("feedSourceId", this.id));
+        if (deployments.isEmpty() || feedVersions.isEmpty()) {
+            return null;
+        }
+        for (Deployment deployment : deployments) {
+            // Iterate through deployments newest to oldest.
+            deployedFeedVersion = feedVersions.stream()
+                .filter(feedVersion -> deployment.feedVersionIds.contains(feedVersion.id))
+                .findAny()
+                .orElse(null);
+            if (deployedFeedVersion != null) {
+                // Found deployment containing feed version.
+                break;
+            }
+        }
+        return deployedFeedVersion;
     }
 
     /**
