@@ -481,6 +481,14 @@ public class FeedSource extends Model implements Cloneable {
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
+    @JsonProperty("deployedFeedVersionStartDate")
+    public LocalDate getDeployedFeedVersionStartDate() {
+        FeedVersion feedVersion = getDeployedFeedVersion();
+        return feedVersion != null ? feedVersion.validationSummary().startDate : null;
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("deployedFeedVersionEndDate")
     public LocalDate getDeployedFeedVersionEndDate() {
         FeedVersion feedVersion = getDeployedFeedVersion();
@@ -491,27 +499,25 @@ public class FeedSource extends Model implements Cloneable {
      * Find the latest deployment containing a feed version for a feed source.
      */
     private FeedVersion getDeployedFeedVersion() {
-        if (deployedFeedVersion != null) {
-            // If the deployed feed version is already defined use this instead of recreating.
-            return deployedFeedVersion;
-        }
-        Collection<Deployment> deployments = Persistence.deployments.getFiltered(
-            eq("projectId", this.projectId),
-            Sorts.descending("dateCreated")
-        );
-        Collection<FeedVersion> feedVersions = Persistence.feedVersions.getFiltered(eq("feedSourceId", this.id));
-        if (deployments.isEmpty() || feedVersions.isEmpty()) {
-            return null;
-        }
-        for (Deployment deployment : deployments) {
-            // Iterate through deployments newest to oldest.
-            deployedFeedVersion = feedVersions.stream()
-                .filter(feedVersion -> deployment.feedVersionIds.contains(feedVersion.id))
-                .findAny()
-                .orElse(null);
-            if (deployedFeedVersion != null) {
-                // Found deployment containing feed version.
-                break;
+        if (deployedFeedVersion == null) {
+            Collection<Deployment> deployments = Persistence.deployments.getFiltered(
+                eq("projectId", this.projectId),
+                Sorts.descending("dateCreated")
+            );
+            Collection<FeedVersion> feedVersions = Persistence.feedVersions.getFiltered(eq("feedSourceId", this.id));
+            if (deployments.isEmpty() || feedVersions.isEmpty()) {
+                return null;
+            }
+            for (Deployment deployment : deployments) {
+                // Iterate through deployments newest to oldest.
+                deployedFeedVersion = feedVersions.stream()
+                    .filter(feedVersion -> deployment.feedVersionIds.contains(feedVersion.id))
+                    .findAny()
+                    .orElse(null);
+                if (deployedFeedVersion != null) {
+                    // Found deployment containing feed version.
+                    break;
+                }
             }
         }
         return deployedFeedVersion;

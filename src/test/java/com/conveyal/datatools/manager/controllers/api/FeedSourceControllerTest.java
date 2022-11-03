@@ -77,13 +77,14 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         feedSourceWithDeployedFeedVersion = createFeedSource("FeedSource", null, project, true);
 
         LocalDate supersededDate = LocalDate.of(2020, Month.DECEMBER, 25);
-        LocalDate deployedDate = LocalDate.of(2021, Month.MARCH, 12);
+        LocalDate deployedEndDate = LocalDate.of(2021, Month.MARCH, 12);
+        LocalDate deployedStartDate = LocalDate.of(2021, Month.MARCH, 1);
         feedVersionSuperseded = createFeedVersion("superseded", feedSourceWithDeployedFeedVersion.id, supersededDate);
-        feedVersionDeployed = createFeedVersion("deployed", feedSourceWithDeployedFeedVersion.id, deployedDate);
+        feedVersionDeployed = createFeedVersion("deployed", feedSourceWithDeployedFeedVersion.id, deployedStartDate, deployedEndDate);
         feedVersionLatest = createFeedVersion("latest", feedSourceWithDeployedFeedVersion.id, LocalDate.of(2022, Month.NOVEMBER, 2));
 
         deploymentSuperseded = createDeployment("superseded", project, feedVersionSuperseded.id, supersededDate);
-        deploymentDeployed = createDeployment("deployed", project, feedVersionDeployed.id, deployedDate);
+        deploymentDeployed = createDeployment("deployed", project, feedVersionDeployed.id, deployedEndDate);
 
     }
 
@@ -267,6 +268,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(1, feedSources.size());
         assertEquals(feedVersionDeployed.id, feedSources.get(0).getDeployedFeedVersionId());
         assertEquals(feedVersionDeployed.validationSummary().endDate, feedSources.get(0).getDeployedFeedVersionEndDate());
+        assertEquals(feedVersionDeployed.validationSummary().startDate, feedSources.get(0).getDeployedFeedVersionStartDate());
     }
 
 
@@ -307,10 +309,15 @@ public class FeedSourceControllerTest extends DatatoolsTest {
      * Helper method to create a feed version.
      */
     private static FeedVersion createFeedVersion(String name, String feedSourceId, LocalDate endDate) {
+        return createFeedVersion(name, feedSourceId, null, endDate);
+    }
+
+    private static FeedVersion createFeedVersion(String name, String feedSourceId, LocalDate startDate, LocalDate endDate) {
         FeedVersion feedVersion = new FeedVersion();
         feedVersion.name = name;
         feedVersion.feedSourceId = feedSourceId;
         ValidationResult validationResult = new ValidationResult();
+        validationResult.firstCalendarDate = startDate;
         validationResult.lastCalendarDate = endDate;
         feedVersion.validationResult = validationResult;
         Persistence.feedVersions.create(feedVersion);
