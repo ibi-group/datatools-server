@@ -169,7 +169,18 @@ public class TypedPersistence<T extends Model> {
      * We should really have a bit more abstraction here.
      */
     public List<T> getFiltered (Bson filter) {
-        return mongoCollection.find(filter).into(new ArrayList<>());
+        return getFiltered(filter, null);
+    }
+
+    /**
+     * Get all objects satisfying the supplied Mongo filter and sort by.
+     */
+    public List<T> getFiltered (Bson filter, Bson sortBy) {
+        if (sortBy != null) {
+            return mongoCollection.find(filter).sort(sortBy).into(new ArrayList<>());
+        } else {
+            return mongoCollection.find(filter).into(new ArrayList<>());
+        }
     }
 
     /**
