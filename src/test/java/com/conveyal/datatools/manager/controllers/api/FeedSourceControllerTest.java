@@ -4,8 +4,10 @@ import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.TestUtils;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
+import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
+import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.FetchFrequency;
 import com.conveyal.datatools.manager.models.Label;
 import com.conveyal.datatools.manager.models.Project;
@@ -13,12 +15,18 @@ import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HttpUtils;
 import com.conveyal.datatools.manager.utils.SimpleHttpResponse;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
+import com.conveyal.gtfs.validator.ValidationResult;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
 import java.net.URL;
+import java.time.LocalDate;
+import java.time.Month;
+import java.time.ZoneId;
+import java.util.Collections;
+import java.util.Date;
 import java.util.List;
 
 import static com.mongodb.client.model.Filters.eq;
@@ -27,7 +35,6 @@ import static org.eclipse.jetty.http.HttpStatus.OK_200;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
-
 public class FeedSourceControllerTest extends DatatoolsTest {
     private static Project project = null;
     private static Project projectToBeDeleted = null;
@@ -35,8 +42,14 @@ public class FeedSourceControllerTest extends DatatoolsTest {
     private static FeedSource feedSourceWithNoUrl = null;
     private static FeedSource feedSourceWithLabels = null;
     private static FeedSource feedSourceWithInvalidLabels = null;
+    private static FeedSource feedSourceWithDeployedFeedVersion = null;
     private static Label publicLabel = null;
     private static Label adminOnlyLabel = null;
+    private static FeedVersion feedVersionSuperseded = null;
+    private static FeedVersion feedVersionDeployed = null;
+    private static FeedVersion feedVersionLatest = null;
+    private static Deployment deploymentSuperseded = null;
+    private static Deployment deploymentDeployed = null;
 
     @BeforeAll
     public static void setUp() throws IOException {
@@ -60,6 +73,19 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         adminOnlyLabel = createLabel("Admin Only Label");
         adminOnlyLabel.adminOnly = true;
         publicLabel = createLabel("Public Label");
+
+        feedSourceWithDeployedFeedVersion = createFeedSource("FeedSource", null, project, true);
+
+        LocalDate supersededDate = LocalDate.of(2020, Month.DECEMBER, 25);
+        LocalDate deployedEndDate = LocalDate.of(2021, Month.MARCH, 12);
+        LocalDate deployedStartDate = LocalDate.of(2021, Month.MARCH, 1);
+        feedVersionSuperseded = createFeedVersion("superseded", feedSourceWithDeployedFeedVersion.id, supersededDate);
+        feedVersionDeployed = createFeedVersion("deployed", feedSourceWithDeployedFeedVersion.id, deployedStartDate, deployedEndDate);
+        feedVersionLatest = createFeedVersion("latest", feedSourceWithDeployedFeedVersion.id, LocalDate.of(2022, Month.NOVEMBER, 2));
+
+        deploymentSuperseded = createDeployment("superseded", project, feedVersionSuperseded.id, supersededDate);
+        deploymentDeployed = createDeployment("deployed", project, feedVersionDeployed.id, deployedEndDate);
+
     }
 
     @AfterAll
@@ -82,6 +108,24 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         }
         if (adminOnlyLabel != null) {
             Persistence.labels.removeById(adminOnlyLabel.id);
+        }
+        if (feedSourceWithDeployedFeedVersion != null) {
+            Persistence.feedSources.removeById(feedSourceWithDeployedFeedVersion.id);
+        }
+        if (feedVersionSuperseded != null) {
+            Persistence.feedVersions.removeById(feedVersionSuperseded.id);
+        }
+        if (feedVersionDeployed != null) {
+            Persistence.feedVersions.removeById(feedVersionDeployed.id);
+        }
+        if (feedVersionLatest != null) {
+            Persistence.feedVersions.removeById(feedVersionLatest.id);
+        }
+        if (deploymentSuperseded != null) {
+            Persistence.deployments.removeById(deploymentSuperseded.id);
+        }
+        if (deploymentDeployed != null) {
+            Persistence.deployments.removeById(deploymentDeployed.id);
         }
     }
 
@@ -206,9 +250,36 @@ public class FeedSourceControllerTest extends DatatoolsTest {
     }
 
     /**
+     * Retrieve a feed source containing the deployed feed version.
+     */
+    @Test
+    void canRetrieveFeedSourceWithDeployedFeedVersion() throws IOException {
+        SimpleHttpResponse response = TestUtils.makeRequest(
+            String.format("/api/manager/secure/feedsource?projectId=%s", project.id),
+            null,
+            HttpUtils.REQUEST_METHOD.GET
+        );
+        assertEquals(OK_200, response.status);
+        List<FeedSource> feedSources =
+            JsonUtil.getPOJOFromJSONAsList(
+                JsonUtil.getJsonNodeFromResponse(response),
+                FeedSource.class
+            );
+        assertEquals(1, feedSources.size());
+        assertEquals(feedVersionDeployed.id, feedSources.get(0).getDeployedFeedVersionId());
+        assertEquals(feedVersionDeployed.validationSummary().endDate, feedSources.get(0).getDeployedFeedVersionEndDate());
+        assertEquals(feedVersionDeployed.validationSummary().startDate, feedSources.get(0).getDeployedFeedVersionStartDate());
+    }
+
+
+    private static FeedSource createFeedSource(String name, URL url, Project project) {
+        return createFeedSource(name, url, project, false);
+    }
+
+    /**
      * Helper method to create feed source.
      */
-    private static FeedSource createFeedSource(String name, URL url, Project project) {
+    private static FeedSource createFeedSource(String name, URL url, Project project, boolean persist) {
         FeedSource feedSource = new FeedSource();
         feedSource.fetchFrequency = FetchFrequency.MINUTES;
         feedSource.fetchInterval = 1;
@@ -217,7 +288,40 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         feedSource.projectId = project.id;
         feedSource.retrievalMethod = FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
         feedSource.url = url;
+        if (persist) Persistence.feedSources.create(feedSource);
         return feedSource;
+    }
+
+    /**
+     * Helper method to create a deployment.
+     */
+    private static Deployment createDeployment(String name, Project project, String feedVersionId, LocalDate dateCreated) {
+        Deployment deployment = new Deployment();
+        deployment.dateCreated = Date.from(dateCreated.atStartOfDay(ZoneId.systemDefault()).toInstant());
+        deployment.feedVersionIds = Collections.singletonList(feedVersionId);
+        deployment.projectId = project.id;
+        deployment.name = name;
+        Persistence.deployments.create(deployment);
+        return deployment;
+    }
+
+    /**
+     * Helper method to create a feed version.
+     */
+    private static FeedVersion createFeedVersion(String name, String feedSourceId, LocalDate endDate) {
+        return createFeedVersion(name, feedSourceId, null, endDate);
+    }
+
+    private static FeedVersion createFeedVersion(String name, String feedSourceId, LocalDate startDate, LocalDate endDate) {
+        FeedVersion feedVersion = new FeedVersion();
+        feedVersion.name = name;
+        feedVersion.feedSourceId = feedSourceId;
+        ValidationResult validationResult = new ValidationResult();
+        validationResult.firstCalendarDate = startDate;
+        validationResult.lastCalendarDate = endDate;
+        feedVersion.validationResult = validationResult;
+        Persistence.feedVersions.create(feedVersion);
+        return feedVersion;
     }
 
     /**
