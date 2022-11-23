@@ -516,7 +516,7 @@ public class FeedSource extends Model implements Cloneable {
                 eq("projectId", this.projectId),
                 Sorts.descending("dateCreated")
             );
-            Collection<FeedVersion> feedVersions = Persistence.feedVersions.getFiltered(eq("feedSourceId", this.id));
+            Collection<FeedVersion> feedVersions = Persistence.feedVersions.getFiltered(eq("feedSourceId", this.id), Sorts.descending("lastDeployed"));
             if (deployments.isEmpty() || feedVersions.isEmpty()) {
                 return null;
             }
