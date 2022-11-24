@@ -63,7 +63,8 @@ public class Deployment extends Model implements Serializable {
 
     public String name;
 
-    public static final String DEFAULT_OTP_VERSION = getConfigPropertyAsText("application.default_otp_version");
+    //OTP v1.4 is a historical version that was previously used as a fallback. Only use if application default not configured.
+    public static final String DEFAULT_OTP_VERSION = getConfigPropertyAsText("application.default_otp_version", "otp-v1.4.0");
 
     /** What server is this currently deployed to? */
     public String deployedTo;
