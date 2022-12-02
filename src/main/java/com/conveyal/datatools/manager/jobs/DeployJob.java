@@ -30,13 +30,7 @@ import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.OtpRunnerManifest.OtpRunnerBaseFolderDownload;
-import com.conveyal.datatools.manager.models.CustomFile;
-import com.conveyal.datatools.manager.models.Deployment;
-import com.conveyal.datatools.manager.models.EC2Info;
-import com.conveyal.datatools.manager.models.EC2InstanceSummary;
-import com.conveyal.datatools.manager.models.FeedVersion;
-import com.conveyal.datatools.manager.models.OtpServer;
-import com.conveyal.datatools.manager.models.Project;
+import com.conveyal.datatools.manager.models.*;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.JobUtils;
 import com.conveyal.datatools.manager.utils.StringUtils;
@@ -651,6 +645,13 @@ public class DeployJob extends MonitorableJob {
         // Unconditionally add deploy summary. If the job fails, we should still record the summary.
         latestDeployment.deployJobSummaries.add(0, new DeploySummary(this));
         Persistence.deployments.replace(deployment.id, latestDeployment);
+
+        // FIXME: we're assuming deployment.feedVersionIds is sorted properly. If things stop working... this is probably the issue ✨
+        FeedVersion deployedFeedVersion = Persistence.feedVersions.getById(deployment.feedVersionIds.stream().findFirst().get());
+        FeedSource deployedFeedSource = Persistence.feedSources.getById(deployedFeedVersion.feedSourceId);
+
+        deployedFeedSource.setDeploymentInfo(deployedFeedVersion.id, deployedFeedVersion.validationSummary().startDate, deployedFeedVersion.validationSummary().endDate);
+
         // Send notification to those subscribed to updates for the deployment.
         NotifyUsersForSubscriptionJob.createNotification("deployment-updated", deployment.id, message);
         startAnotherAutoDeploymentIfNeeded();

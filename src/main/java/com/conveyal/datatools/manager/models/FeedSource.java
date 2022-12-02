@@ -29,6 +29,7 @@ import com.fasterxml.jackson.annotation.JsonView;
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.model.Sorts;
 import org.bson.codecs.pojo.annotations.BsonIgnore;
+import org.bson.codecs.pojo.annotations.BsonProperty;
 import org.bson.conversions.Bson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,6 +63,8 @@ import static com.mongodb.client.model.Updates.pull;
 public class FeedSource extends Model implements Cloneable {
 
     private static final long serialVersionUID = 1L;
+
+
 
     public static final Logger LOG = LoggerFactory.getLogger(FeedSource.class);
 
@@ -145,6 +148,12 @@ public class FeedSource extends Model implements Cloneable {
      * From whence is this feed fetched?
      */
     public URL url;
+
+    public String deployedFeedVersionId = "Dummy";
+    @BsonProperty
+    public LocalDate deployedFeedVersionStartDate;
+    @BsonProperty
+    public LocalDate deployedFeedVersionEndDate;
 
     /**
      * Where the feed exists on s3
@@ -471,28 +480,31 @@ public class FeedSource extends Model implements Cloneable {
     @BsonIgnore
     private FeedVersion deployedFeedVersion = null;
 
+    public void setDeploymentInfo(String versionId, LocalDate startDate, LocalDate endDate) {
+        this.deployedFeedVersionId = versionId;
+        this.deployedFeedVersionStartDate = startDate;
+        this.deployedFeedVersionEndDate = endDate;
+    }
+
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("deployedFeedVersionId")
     public String getDeployedFeedVersionId() {
-        FeedVersion feedVersion = getDeployedFeedVersion();
-        return feedVersion != null ? feedVersion.id : null;
+        return this.deployedFeedVersionId;
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("deployedFeedVersionStartDate")
     public LocalDate getDeployedFeedVersionStartDate() {
-        FeedVersion feedVersion = getDeployedFeedVersion();
-        return feedVersion != null ? feedVersion.validationSummary().startDate : null;
+        return this.deployedFeedVersionStartDate;
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("deployedFeedVersionEndDate")
     public LocalDate getDeployedFeedVersionEndDate() {
-        FeedVersion feedVersion = getDeployedFeedVersion();
-        return feedVersion != null ? feedVersion.validationSummary().endDate : null;
+        return this.deployedFeedVersionEndDate;
     }
 
     /**
