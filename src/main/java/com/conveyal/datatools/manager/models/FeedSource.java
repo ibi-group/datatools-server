@@ -149,11 +149,14 @@ public class FeedSource extends Model implements Cloneable {
      */
     public URL url;
 
-    public String deployedFeedVersionId = "Dummy";
+    public String deployedFeedVersionId = "🤌";
     @BsonProperty
     public LocalDate deployedFeedVersionStartDate;
     @BsonProperty
     public LocalDate deployedFeedVersionEndDate;
+
+    @BsonIgnore
+    private FeedVersion latestFeedVersion;
 
     /**
      * Where the feed exists on s3
@@ -430,13 +433,16 @@ public class FeedSource extends Model implements Cloneable {
      */
     @JsonIgnore
     public FeedVersion retrieveLatest() {
-        FeedVersion newestVersion = Persistence.feedVersions
-                .getOneFiltered(eq("feedSourceId", this.id), Sorts.descending("version"));
-        if (newestVersion == null) {
+        if (this.latestFeedVersion == null) {
+            this.latestFeedVersion = Persistence.feedVersions
+                    .getOneFiltered(eq("feedSourceId", this.id), Sorts.descending("version"));
+        }
+        
+        if (this.latestFeedVersion == null) {
             // Is this what happens if there are none?
             return null;
         }
-        return newestVersion;
+        return this.latestFeedVersion;
     }
 
     /**
@@ -505,34 +511,6 @@ public class FeedSource extends Model implements Cloneable {
     @JsonProperty("deployedFeedVersionEndDate")
     public LocalDate getDeployedFeedVersionEndDate() {
         return this.deployedFeedVersionEndDate;
-    }
-
-    /**
-     * Find the latest deployment containing a feed version for a feed source.
-     */
-    private FeedVersion getDeployedFeedVersion() {
-        if (deployedFeedVersion == null) {
-            Collection<Deployment> deployments = Persistence.deployments.getFiltered(
-                eq("projectId", this.projectId),
-                Sorts.descending("lastUpdated")
-            );
-            Collection<FeedVersion> feedVersions = Persistence.feedVersions.getFiltered(eq("feedSourceId", this.id), Sorts.descending("updated"));
-            if (deployments.isEmpty() || feedVersions.isEmpty()) {
-                return null;
-            }
-            for (Deployment deployment : deployments) {
-                // Iterate through deployments newest to oldest.
-                deployedFeedVersion = feedVersions.stream()
-                    .filter(feedVersion -> deployment.feedVersionIds.contains(feedVersion.id))
-                    .findAny()
-                    .orElse(null);
-                if (deployedFeedVersion != null) {
-                    // Found deployment containing feed version.
-                    break;
-                }
-            }
-        }
-        return deployedFeedVersion;
     }
 
     /**
