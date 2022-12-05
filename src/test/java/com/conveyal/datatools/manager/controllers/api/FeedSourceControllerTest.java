@@ -258,11 +258,13 @@ public class FeedSourceControllerTest extends DatatoolsTest {
     @Test
     void canRetrieveFeedSourceWithDeployedFeedVersion() throws IOException {
         DeployJob deployJob = new DeployJob(
+            "Deploying " + deploymentDeployed.name,
             deploymentDeployed,
             Auth0UserProfile.createTestAdminUser(),
             new OtpServer(),
             "test-deploy",
-            DeployJob.DeployType.USE_PRELOADED_BUNDLE
+            DeployJob.DeployType.USE_PRELOADED_BUNDLE,
+            true
         );
         deployJob.run();
         SimpleHttpResponse response = TestUtils.makeRequest(
