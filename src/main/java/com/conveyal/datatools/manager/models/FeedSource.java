@@ -9,6 +9,7 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
+import com.conveyal.datatools.editor.utils.JacksonSerializers;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.jobs.CreateFeedVersionFromSnapshotJob;
 import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
@@ -26,6 +27,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.model.Sorts;
 import org.bson.codecs.pojo.annotations.BsonIgnore;
@@ -151,8 +154,12 @@ public class FeedSource extends Model implements Cloneable {
 
     public String deployedFeedVersionId = "🤌";
     @BsonProperty
+    @JsonSerialize(using = JacksonSerializers.LocalDateIsoSerializer.class)
+    @JsonDeserialize(using = JacksonSerializers.LocalDateIsoDeserializer.class)
     public LocalDate deployedFeedVersionStartDate;
     @BsonProperty
+    @JsonSerialize(using = JacksonSerializers.LocalDateIsoSerializer.class)
+    @JsonDeserialize(using = JacksonSerializers.LocalDateIsoDeserializer.class)
     public LocalDate deployedFeedVersionEndDate;
 
     @BsonIgnore
@@ -476,15 +483,6 @@ public class FeedSource extends Model implements Cloneable {
         FeedVersion latest = retrieveLatest();
         return latest != null ? latest.id : null;
     }
-
-    /**
-     * The feed version used in the latest deployment.
-     * This cannot be returned because of a circular reference between feed source and feed version. Instead, individual
-     * parameters (version id and end date) are returned.
-     */
-    @JsonIgnore
-    @BsonIgnore
-    private FeedVersion deployedFeedVersion = null;
 
     public void setDeploymentInfo(String versionId, LocalDate startDate, LocalDate endDate) {
         this.deployedFeedVersionId = versionId;

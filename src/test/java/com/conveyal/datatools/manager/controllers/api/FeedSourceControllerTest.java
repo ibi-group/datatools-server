@@ -4,12 +4,15 @@ import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.TestUtils;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
+import com.conveyal.datatools.manager.auth.Auth0UserProfile;
+import com.conveyal.datatools.manager.jobs.DeployJob;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.FetchFrequency;
 import com.conveyal.datatools.manager.models.Label;
+import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HttpUtils;
@@ -254,6 +257,14 @@ public class FeedSourceControllerTest extends DatatoolsTest {
      */
     @Test
     void canRetrieveFeedSourceWithDeployedFeedVersion() throws IOException {
+        DeployJob deployJob = new DeployJob(
+            deploymentDeployed,
+            Auth0UserProfile.createTestAdminUser(),
+            new OtpServer(),
+            "test-deploy",
+            DeployJob.DeployType.USE_PRELOADED_BUNDLE
+        );
+        deployJob.run();
         SimpleHttpResponse response = TestUtils.makeRequest(
             String.format("/api/manager/secure/feedsource?projectId=%s", project.id),
             null,
