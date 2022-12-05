@@ -9,7 +9,6 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
-import com.conveyal.datatools.editor.utils.JacksonSerializers;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.jobs.CreateFeedVersionFromSnapshotJob;
 import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
@@ -27,12 +26,9 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
-import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
-import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.model.Sorts;
 import org.bson.codecs.pojo.annotations.BsonIgnore;
-import org.bson.codecs.pojo.annotations.BsonProperty;
 import org.bson.conversions.Bson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -153,15 +149,13 @@ public class FeedSource extends Model implements Cloneable {
     public URL url;
 
     public String deployedFeedVersionId = "🤌";
-    @BsonProperty
-    @JsonSerialize(using = JacksonSerializers.LocalDateIsoSerializer.class)
-    @JsonDeserialize(using = JacksonSerializers.LocalDateIsoDeserializer.class)
+
     public LocalDate deployedFeedVersionStartDate;
-    @BsonProperty
-    @JsonSerialize(using = JacksonSerializers.LocalDateIsoSerializer.class)
-    @JsonDeserialize(using = JacksonSerializers.LocalDateIsoDeserializer.class)
+
     public LocalDate deployedFeedVersionEndDate;
 
+    @BsonIgnore
+    private FeedVersion deployedFeedVersion;
     @BsonIgnore
     private FeedVersion latestFeedVersion;
 
@@ -494,6 +488,9 @@ public class FeedSource extends Model implements Cloneable {
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("deployedFeedVersionId")
     public String getDeployedFeedVersionId() {
+        if (this.deployedFeedVersionId == null) {
+            return this.getDeployedFeedVersionViaExpensiveQuery().id;
+        }
         return this.deployedFeedVersionId;
     }
 
@@ -501,6 +498,12 @@ public class FeedSource extends Model implements Cloneable {
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("deployedFeedVersionStartDate")
     public LocalDate getDeployedFeedVersionStartDate() {
+        if (this.deployedFeedVersionStartDate == null) {
+            FeedVersion feedVersion = this.getDeployedFeedVersionViaExpensiveQuery();
+            if (feedVersion != null) {
+                return feedVersion.validationSummary().startDate;
+            }
+        }
         return this.deployedFeedVersionStartDate;
     }
 
@@ -508,8 +511,48 @@ public class FeedSource extends Model implements Cloneable {
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("deployedFeedVersionEndDate")
     public LocalDate getDeployedFeedVersionEndDate() {
+        if (this.deployedFeedVersionStartDate == null) {
+            FeedVersion feedVersion = this.getDeployedFeedVersionViaExpensiveQuery();
+            if (feedVersion != null) {
+                return feedVersion.validationSummary().startDate;
+            }
+        }
         return this.deployedFeedVersionEndDate;
     }
+
+    /**
+     * Find the latest deployment containing a feed version for a feed source. This method uses expensive mongo queries instead
+     * of relying on the deployment job to update the static fields. However, it must be kept around to accurately
+     * display feeds that haven't been deployed via the new deploy job.
+     *
+     * When the static fields are present this is not needed.
+     */
+    private FeedVersion getDeployedFeedVersionViaExpensiveQuery() {
+        if (deployedFeedVersion == null) {
+            Collection<Deployment> deployments = Persistence.deployments.getFiltered(
+                    eq("projectId", this.projectId),
+                    Sorts.descending("lastUpdated")
+            );
+            Collection<FeedVersion> feedVersions = Persistence.feedVersions.getFiltered(eq("feedSourceId", this.id), Sorts.descending("updated"));
+            if (deployments.isEmpty() || feedVersions.isEmpty()) {
+                return null;
+            }
+            for (Deployment deployment : deployments) {
+                // Iterate through deployments newest to oldest.
+                deployedFeedVersion = feedVersions.stream()
+                        .filter(feedVersion -> deployment.feedVersionIds.contains(feedVersion.id))
+                        .findAny()
+                        .orElse(null);
+                if (deployedFeedVersion != null) {
+                    // Found deployment containing feed version.
+                    break;
+                }
+            }
+        }
+        return deployedFeedVersion;
+    }
+
+
 
     /**
      * Number of {@link FeedVersion}s that exist for the feed source.
