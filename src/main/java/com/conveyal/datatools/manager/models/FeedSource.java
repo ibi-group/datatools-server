@@ -9,6 +9,7 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.S3Utils;
+import com.conveyal.datatools.editor.utils.JacksonSerializers;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.jobs.CreateFeedVersionFromSnapshotJob;
 import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
@@ -26,6 +27,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
+import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
+import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.model.Sorts;
 import org.bson.codecs.pojo.annotations.BsonIgnore;
@@ -62,8 +65,6 @@ import static com.mongodb.client.model.Updates.pull;
 public class FeedSource extends Model implements Cloneable {
 
     private static final long serialVersionUID = 1L;
-
-
 
     public static final Logger LOG = LoggerFactory.getLogger(FeedSource.class);
 
@@ -148,11 +149,14 @@ public class FeedSource extends Model implements Cloneable {
      */
     public URL url;
 
-    public String deployedFeedVersionId = "🤌";
+    public String deployedFeedVersionId = "";
+    @JsonSerialize(using = JacksonSerializers.LocalDateIsoSerializer.class)
+    @JsonDeserialize(using = JacksonSerializers.LocalDateIsoDeserializer.class)
+    public LocalDate deployedFeedVersionStartDate = null;
 
-    public LocalDate deployedFeedVersionStartDate;
-
-    public LocalDate deployedFeedVersionEndDate;
+    @JsonSerialize(using = JacksonSerializers.LocalDateIsoSerializer.class)
+    @JsonDeserialize(using = JacksonSerializers.LocalDateIsoDeserializer.class)
+    public LocalDate deployedFeedVersionEndDate = null;
 
     @BsonIgnore
     private FeedVersion deployedFeedVersion;
@@ -434,16 +438,16 @@ public class FeedSource extends Model implements Cloneable {
      */
     @JsonIgnore
     public FeedVersion retrieveLatest() {
-        if (this.latestFeedVersion == null) {
-            this.latestFeedVersion = Persistence.feedVersions
+        if (latestFeedVersion == null) {
+            latestFeedVersion = Persistence.feedVersions
                     .getOneFiltered(eq("feedSourceId", this.id), Sorts.descending("version"));
         }
         
-        if (this.latestFeedVersion == null) {
+        if (latestFeedVersion == null) {
             // Is this what happens if there are none?
             return null;
         }
-        return this.latestFeedVersion;
+        return latestFeedVersion;
     }
 
     /**
@@ -479,45 +483,48 @@ public class FeedSource extends Model implements Cloneable {
     }
 
     public void setDeploymentInfo(String versionId, LocalDate startDate, LocalDate endDate) {
-        this.deployedFeedVersionId = versionId;
-        this.deployedFeedVersionStartDate = startDate;
-        this.deployedFeedVersionEndDate = endDate;
+        deployedFeedVersionId = versionId;
+        deployedFeedVersionStartDate = startDate;
+        deployedFeedVersionEndDate = endDate;
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("deployedFeedVersionId")
     public String getDeployedFeedVersionId() {
-        if (this.deployedFeedVersionId == null) {
-            return this.getDeployedFeedVersionViaExpensiveQuery().id;
+        if (deployedFeedVersionId == null) {
+            FeedVersion feedVersion = getDeployedFeedVersionViaExpensiveQuery();
+            if (feedVersion != null) {
+                return feedVersion.id;
+            }
         }
-        return this.deployedFeedVersionId;
+        return deployedFeedVersionId;
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("deployedFeedVersionStartDate")
     public LocalDate getDeployedFeedVersionStartDate() {
-        if (this.deployedFeedVersionStartDate == null) {
-            FeedVersion feedVersion = this.getDeployedFeedVersionViaExpensiveQuery();
+        if (deployedFeedVersionStartDate == null) {
+            FeedVersion feedVersion = getDeployedFeedVersionViaExpensiveQuery();
             if (feedVersion != null) {
                 return feedVersion.validationSummary().startDate;
             }
         }
-        return this.deployedFeedVersionStartDate;
+        return deployedFeedVersionStartDate;
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("deployedFeedVersionEndDate")
     public LocalDate getDeployedFeedVersionEndDate() {
-        if (this.deployedFeedVersionStartDate == null) {
-            FeedVersion feedVersion = this.getDeployedFeedVersionViaExpensiveQuery();
+        if (deployedFeedVersionStartDate == null) {
+            FeedVersion feedVersion = getDeployedFeedVersionViaExpensiveQuery();
             if (feedVersion != null) {
                 return feedVersion.validationSummary().startDate;
             }
         }
-        return this.deployedFeedVersionEndDate;
+        return deployedFeedVersionEndDate;
     }
 
     /**
@@ -529,20 +536,14 @@ public class FeedSource extends Model implements Cloneable {
      */
     private FeedVersion getDeployedFeedVersionViaExpensiveQuery() {
         if (deployedFeedVersion == null) {
-            Collection<Deployment> deployments = Persistence.deployments.getFiltered(
-                    eq("projectId", this.projectId),
-                    Sorts.descending("lastUpdated")
-            );
+            Collection<Deployment> deployments = Persistence.deployments.getFiltered(eq("projectId", this.projectId), Sorts.descending("lastUpdated"));
             Collection<FeedVersion> feedVersions = Persistence.feedVersions.getFiltered(eq("feedSourceId", this.id), Sorts.descending("updated"));
             if (deployments.isEmpty() || feedVersions.isEmpty()) {
                 return null;
             }
             for (Deployment deployment : deployments) {
                 // Iterate through deployments newest to oldest.
-                deployedFeedVersion = feedVersions.stream()
-                        .filter(feedVersion -> deployment.feedVersionIds.contains(feedVersion.id))
-                        .findAny()
-                        .orElse(null);
+                deployedFeedVersion = feedVersions.stream().filter(feedVersion -> deployment.feedVersionIds.contains(feedVersion.id)).findAny().orElse(null);
                 if (deployedFeedVersion != null) {
                     // Found deployment containing feed version.
                     break;
@@ -551,8 +552,6 @@ public class FeedSource extends Model implements Cloneable {
         }
         return deployedFeedVersion;
     }
-
-
 
     /**
      * Number of {@link FeedVersion}s that exist for the feed source.
