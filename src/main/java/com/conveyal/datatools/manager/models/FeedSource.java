@@ -160,8 +160,6 @@ public class FeedSource extends Model implements Cloneable {
 
     @BsonIgnore
     private FeedVersion deployedFeedVersion;
-    @BsonIgnore
-    private FeedVersion latestFeedVersion;
 
     /**
      * Where the feed exists on s3
@@ -435,19 +433,18 @@ public class FeedSource extends Model implements Cloneable {
     /**
      * Get the latest version of this feed
      * @return the latest version of this feed
+     *
+     * TODO: somehow cache the response to improve response time
      */
     @JsonIgnore
     public FeedVersion retrieveLatest() {
-        if (latestFeedVersion == null) {
-            latestFeedVersion = Persistence.feedVersions
+        FeedVersion newestVersion = Persistence.feedVersions
                     .getOneFiltered(eq("feedSourceId", this.id), Sorts.descending("version"));
-        }
-        
-        if (latestFeedVersion == null) {
+        if (newestVersion == null) {
             // Is this what happens if there are none?
             return null;
         }
-        return latestFeedVersion;
+        return newestVersion;
     }
 
     /**
