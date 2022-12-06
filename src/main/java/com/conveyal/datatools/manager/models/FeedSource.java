@@ -578,7 +578,7 @@ public class FeedSource extends Model implements Cloneable {
         for(String resourceType : DataManager.feedResources.keySet()) {
             Map<String, String> propTable = new HashMap<>();
 
-            // Get all external properties for the feed source/resource type and fill prop table.
+            // Get all external properties for the feed source/resource type and fill prop table
             Persistence.externalFeedSourceProperties
                 .getFiltered(and(eq("feedSourceId", this.id), eq("resourceType", resourceType)))
                 .forEach(prop -> propTable.put(prop.name, prop.value));
