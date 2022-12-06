@@ -54,6 +54,8 @@ public class FeedSourceControllerTest extends DatatoolsTest {
     private static Deployment deploymentSuperseded = null;
     private static Deployment deploymentDeployed = null;
 
+    private static final Auth0UserProfile user = Auth0UserProfile.createTestAdminUser();
+
     @BeforeAll
     public static void setUp() throws IOException {
         DatatoolsTest.setUp();
@@ -260,7 +262,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         DeployJob deployJob = new DeployJob(
             "Deploying " + deploymentDeployed.name,
             deploymentDeployed,
-            Auth0UserProfile.createTestAdminUser(),
+            user,
             new OtpServer(),
             "test-deploy",
             DeployJob.DeployType.USE_PRELOADED_BUNDLE,
