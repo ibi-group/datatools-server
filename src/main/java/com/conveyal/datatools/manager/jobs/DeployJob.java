@@ -653,19 +653,19 @@ public class DeployJob extends MonitorableJob {
         latestDeployment.deployJobSummaries.add(0, new DeploySummary(this));
         Persistence.deployments.replace(deployment.id, latestDeployment);
 
-        // FIXME: we're assuming deployment.feedVersionIds is sorted properly. If things stop working... this is probably the issue ✨
-        if (deployment.feedVersionIds.stream().findFirst().isPresent()) {
-            FeedVersion deployedFeedVersion = Persistence.feedVersions.getById(deployment.feedVersionIds.stream().findFirst().get());
+        deployment.feedVersionIds.forEach(feedVersionId -> {
+            FeedVersion deployedFeedVersion = Persistence.feedVersions.getById(feedVersionId);
             FeedSource deployedFeedSource = Persistence.feedSources.getById(deployedFeedVersion.feedSourceId);
-
-            // Define and save deployed feed version.
-            deployedFeedSource.setDeploymentInfo(
-                    deployedFeedVersion.id,
-                    deployedFeedVersion.validationSummary().startDate,
-                    deployedFeedVersion.validationSummary().endDate
-            );
-            Persistence.feedSources.replace(deployedFeedSource.id, deployedFeedSource);
-        }
+            if (deployedFeedSource != null) {
+                // Define and save deployed feed version.
+                deployedFeedSource.setDeploymentInfo(
+                        deployedFeedVersion.id,
+                        deployedFeedVersion.validationSummary().startDate,
+                        deployedFeedVersion.validationSummary().endDate
+                );
+                Persistence.feedSources.replace(deployedFeedSource.id, deployedFeedSource);
+            }
+        });
 
         // Send notification to those subscribed to updates for the deployment.
         NotifyUsersForSubscriptionJob.createNotification("deployment-updated", deployment.id, message);
