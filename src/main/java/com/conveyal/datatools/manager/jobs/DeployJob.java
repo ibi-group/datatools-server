@@ -654,16 +654,18 @@ public class DeployJob extends MonitorableJob {
         Persistence.deployments.replace(deployment.id, latestDeployment);
 
         // FIXME: we're assuming deployment.feedVersionIds is sorted properly. If things stop working... this is probably the issue ✨
-        FeedVersion deployedFeedVersion = Persistence.feedVersions.getById(deployment.feedVersionIds.stream().findFirst().get());
-        FeedSource deployedFeedSource = Persistence.feedSources.getById(deployedFeedVersion.feedSourceId);
+        if (deployment.feedVersionIds.stream().findFirst().isPresent()) {
+            FeedVersion deployedFeedVersion = Persistence.feedVersions.getById(deployment.feedVersionIds.stream().findFirst().get());
+            FeedSource deployedFeedSource = Persistence.feedSources.getById(deployedFeedVersion.feedSourceId);
 
-        // Define and save deployed feed version.
-        deployedFeedSource.setDeploymentInfo(
-            deployedFeedVersion.id,
-            deployedFeedVersion.validationSummary().startDate,
-            deployedFeedVersion.validationSummary().endDate
-        );
-        Persistence.feedSources.replace(deployedFeedSource.id, deployedFeedSource);
+            // Define and save deployed feed version.
+            deployedFeedSource.setDeploymentInfo(
+                    deployedFeedVersion.id,
+                    deployedFeedVersion.validationSummary().startDate,
+                    deployedFeedVersion.validationSummary().endDate
+            );
+            Persistence.feedSources.replace(deployedFeedSource.id, deployedFeedSource);
+        }
 
         // Send notification to those subscribed to updates for the deployment.
         NotifyUsersForSubscriptionJob.createNotification("deployment-updated", deployment.id, message);
