@@ -124,6 +124,8 @@ jobs:
           FIRST_JAR="${ALL_JARS[0]}"
           cp "$FIRST_JAR" "deploy/dt-latest-$BRANCH_CLEAN.jar"
       - name: Deploy to S3
-        if: github.event_name == 'push'
+        # To make the datastools-builds bucket more manageable,
+        # upload to S3 only on pushes to dev, master, or for other branches, if "[save-jar]" is in the commit message.
+        if: "github.event_name == 'push' && (github.ref_name == 'dev' || github.ref_name == 'master' || contains(github.event.head_commit.message, '[save-jar]'))"
         run: |
           aws s3 cp ./deploy s3://datatools-builds --recursive --acl public-read
