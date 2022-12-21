@@ -101,8 +101,9 @@ jobs:
           semantic-release --prepare @conveyal/maven-semantic-release --publish @semantic-release/github,@conveyal/maven-semantic-release --verify-conditions @semantic-release/github,@conveyal/maven-semantic-release --verify-release @conveyal/maven-semantic-release --use-conveyal-workflow --dev-branch=dev --skip-maven-deploy
       # The git commands get the commit hash of the HEAD commit and the commit just before HEAD.
       - name: Prepare deploy artifacts
-        # Only deploy on push (pull_request will deploy a temp. merge commit. See #400.)
-        if: github.event_name == 'push'
+        # Only deploy on push to dev or master, or if commit message includes "[build]".
+        # (pull_request will deploy a temp. merge commit. See #400.)
+        if: ${{ github.event_name == 'push' && (github.ref_name == 'dev' || github.ref_name == 'master' || contains(github.event.head_commit.message, '[build]')) }}
         run: |
           # get branch name of current branch for use in jar name
           export BRANCH=$GITHUB_REF_SLUG
@@ -122,6 +123,6 @@ jobs:
           FIRST_JAR="${ALL_JARS[0]}"
           cp "$FIRST_JAR" "deploy/dt-latest-$BRANCH_CLEAN.jar"
       - name: Deploy to S3
-        if: github.event_name == 'push'
+        if: ${{ github.event_name == 'push' && (github.ref_name == 'dev' || github.ref_name == 'master' || contains(github.event.head_commit.message, '[build]')) }}
         run: |
           aws s3 cp ./deploy s3://datatools-builds --recursive --acl public-read
