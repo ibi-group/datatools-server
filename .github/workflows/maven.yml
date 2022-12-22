@@ -46,7 +46,7 @@ jobs:
         with:
           path: |
             ~/.m2
-            !~/.m2/repository/com/conveyal/gtfs-lib
+            !~/.m2/repository/com/github/conveyal/gtfs-lib
           key: maven-local-repo
       - name: Inject slug/short variables # so that we can reference $GITHUB_HEAD_REF_SLUG for branch name
         uses: rlespinasse/github-slug-action@v3.x
