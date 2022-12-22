@@ -97,6 +97,7 @@ jobs:
       # Run maven-semantic-release to potentially create a new release of datatools-server. The flag --skip-maven-deploy is
       # used to avoid deploying to maven central. So essentially, this just creates a release with a changelog on github.
       - name: Run maven-semantic-release
+        if: env.SAVE_JAR_TO_S3 == 'true'
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
         run: |
