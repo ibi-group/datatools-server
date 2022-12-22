@@ -5,7 +5,8 @@ on: [push, pull_request]
 jobs:
   build:
     env:
-      # Only deploy JARs to S3 on push to dev or master, or if the commit message includes the specified "label".
+      # Only deploy JARs to S3 (and run semantic release) on push to dev or master,
+      # or if the commit message includes the specified "label".
       SAVE_JAR_TO_S3: ${{ github.event_name == 'push' && (github.ref_name == 'dev' || github.ref_name == 'master' || contains(github.event.head_commit.message, '[save-jar]')) }}
     runs-on: ubuntu-latest
     services:
