@@ -104,7 +104,7 @@ jobs:
       # The git commands get the commit hash of the HEAD commit and the commit just before HEAD.
       - name: Prepare deploy artifacts
         # (pull_request will deploy a temp. merge commit. See #400.)
-        if: SAVE_JAR_TO_S3 == 'true'
+        if: env.SAVE_JAR_TO_S3 == 'true'
         run: |
           # get branch name of current branch for use in jar name
           export BRANCH=$GITHUB_REF_SLUG
@@ -124,6 +124,6 @@ jobs:
           FIRST_JAR="${ALL_JARS[0]}"
           cp "$FIRST_JAR" "deploy/dt-latest-$BRANCH_CLEAN.jar"
       - name: Deploy to S3
-        if: SAVE_JAR_TO_S3 == 'true'
+        if: env.SAVE_JAR_TO_S3 == 'true'
         run: |
           aws s3 cp ./deploy s3://datatools-builds --recursive --acl public-read
