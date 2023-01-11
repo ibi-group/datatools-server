@@ -127,11 +127,11 @@ public class Project extends Model {
     public Collection<Label> labels;
 
     @JsonProperty
-    public int feedSourceCount() {
+    public long feedSourceCount() {
         if (retrieveProjectFeedSources() == null) {
             return -1;
         }
-        return retrieveProjectFeedSources().size();
+        return Persistence.feedSources.count(eq("projectId", this.id));
     }
 
 
