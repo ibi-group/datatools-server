@@ -203,8 +203,8 @@ public class FeedSourceController {
         }
         Persistence.feedSources.replace(feedSourceId, updatedFeedSource);
 
-        // If feed just changed from public to private, delete feed from public repo if it's present there
-        if(formerFeedSource.isPublic && !updatedFeedSource.isPublic) {
+        // If feed just changed from public to private, delete feed from public repo if it's present there.
+        if (formerFeedSource.isPublic && !updatedFeedSource.isPublic) {
             LOG.info("Deleting {} as feed is being adjusted from public to private.", updatedFeedSource.toPublicKey());
             S3Utils.getDefaultS3Client().deleteObject(S3Utils.DEFAULT_BUCKET, updatedFeedSource.toPublicKey());
         }
