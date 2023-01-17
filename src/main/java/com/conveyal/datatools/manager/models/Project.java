@@ -126,6 +126,14 @@ public class Project extends Model {
     @BsonIgnore
     public Collection<Label> labels;
 
+    @JsonProperty
+    public long feedSourceCount() {
+        if (retrieveProjectFeedSources() == null) {
+            return -1;
+        }
+        return Persistence.feedSources.count(eq("projectId", this.id));
+    }
+
 
     // Note: Previously a numberOfFeeds() dynamic Jackson JsonProperty was in place here. But when the number of projects
     // in the database grows large, the efficient calculation of this field does not scale.
