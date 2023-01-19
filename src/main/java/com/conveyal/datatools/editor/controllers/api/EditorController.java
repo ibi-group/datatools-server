@@ -393,7 +393,7 @@ public abstract class EditorController<T extends Entity> {
             if (isCreating) {
                 return tableWriter.create(jsonBody, true);
             } else {
-                return tableWriter.update(id, jsonBody, true);
+                return update(tableWriter, id, jsonBody);
             }
         } catch (InvalidNamespaceException e) {
             logMessageAndHalt(req, 400, "Invalid namespace");
@@ -406,6 +406,30 @@ public abstract class EditorController<T extends Entity> {
             LOG.info("{} operation took {} msec", operation, System.currentTimeMillis() - startTime);
         }
         return null;
+    }
+
+    /**
+     * Handle specific entity updates.
+     */
+    private String update(JdbcTableWriter tableWriter, Integer id, String jsonBody) throws IOException, SQLException {
+        try {
+            return tableWriter.update(id, jsonBody, true);
+        } catch (SQLException e) {
+            if (table.name.equals(Table.TRIPS.name)) {
+                // If an exception is thrown updating a trip, provide additional information to help rectify the
+                // issue.
+                JsonNode trip = mapper.readTree(jsonBody);
+                throw new SQLException(
+                    String.format(
+                        "Trip id %s conflicts with an existing trip id.",
+                        trip.get("trip_id").asText()
+                    )
+                );
+            } else {
+                // Continue to pass the exception to the frontend.
+                throw e;
+            }
+        }
     }
 
     /**
