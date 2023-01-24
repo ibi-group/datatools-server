@@ -176,11 +176,9 @@ public class TypedPersistence<T extends Model> {
      * Get all objects satisfying the supplied Mongo filter and sort by.
      */
     public List<T> getFiltered (Bson filter, Bson sortBy) {
-        if (sortBy != null) {
-            return mongoCollection.find(filter).sort(sortBy).into(new ArrayList<>());
-        } else {
-            return mongoCollection.find(filter).into(new ArrayList<>());
-        }
+        return (sortBy != null)
+        ? mongoCollection.find(filter).sort(sortBy).into(new ArrayList<>())
+        : mongoCollection.find(filter).into(new ArrayList<>());
     }
 
     /**
