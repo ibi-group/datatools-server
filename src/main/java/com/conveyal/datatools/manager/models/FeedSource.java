@@ -484,7 +484,7 @@ public class FeedSource extends Model implements Cloneable {
     }
 
     /**
-     * The feed version used in the latest or "pinned" deployment.
+     * The deployed feed version.
      * This cannot be returned because of a circular reference between feed source and feed version. Instead, individual
      * parameters (version id, start date and end date) are returned.
      */
@@ -493,8 +493,9 @@ public class FeedSource extends Model implements Cloneable {
     private FeedVersion deployedFeedVersion = null;
 
     /**
-     * If a project has a "pinned" deployment the latest "pinned" feed version (within that deployment) for this feed
-     * source takes precedence and is returned, if available.
+     * If a project has a "pinned" deployment it's feed versions take precedence over the latest feed version for this
+     * feed source. In this case, return either the latest "pinned" feed version or just the feed version, which ever
+     * is available.
      *
      * If a project does not have a "pinned" deployment (or the above is not available), return the latest feed version
      * for this feed source from the newest deployment.
@@ -505,11 +506,19 @@ public class FeedSource extends Model implements Cloneable {
             if (project.pinnedDeploymentId != null) {
                 Deployment deployment = Persistence.deployments.getById(project.pinnedDeploymentId);
                 Collection<FeedVersion> feedVersions = getDeploymentFeedVersionsForFeedSource(deployment.pinnedfeedVersionIds);
-                // The first feed version will be the latest pinned version for this feed source, if available.
-                deployedFeedVersion = feedVersions.iterator().next();
+                if (!feedVersions.isEmpty()) {
+                    // The first feed version will be the latest pinned version for this feed source, if available.
+                    deployedFeedVersion = feedVersions.iterator().next();
+                } else {
+                    feedVersions = getDeploymentFeedVersionsForFeedSource(deployment.feedVersionIds);
+                    if (!feedVersions.isEmpty()) {
+                        // The first feed version will be the latest version for this feed source, if available.
+                        deployedFeedVersion = feedVersions.iterator().next();
+                    }
+                }
             }
 
-            // If there is no pinned deployment or none of the pinned feed versions are related to this feed source,
+            // If there is no pinned deployment or none of the deployment's feed versions are related to this feed source,
             // find the latest feed version for this feed source.
             if (deployedFeedVersion == null) {
                 // Get all deployments for this project.
