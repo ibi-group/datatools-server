@@ -20,6 +20,8 @@ import java.util.List;
 
 import static com.mongodb.client.model.Filters.eq;
 import static com.mongodb.client.model.Filters.in;
+import static com.mongodb.client.model.Projections.fields;
+import static com.mongodb.client.model.Projections.include;
 import static com.mongodb.client.model.Updates.pull;
 
 /**
@@ -179,6 +181,17 @@ public class TypedPersistence<T extends Model> {
         return (sortBy != null)
         ? mongoCollection.find(filter).sort(sortBy).into(new ArrayList<>())
         : mongoCollection.find(filter).into(new ArrayList<>());
+    }
+
+    /**
+     * Get all objects populating only the included fields satisfying the supplied Mongo filter and sort by.
+     */
+    public List<T> getFilteredLimitedFields(Bson filter, Bson sortBy, String... includedFields) {
+        return mongoCollection
+            .find(filter)
+            .projection(fields(include(includedFields)))
+            .sort(sortBy)
+            .into(new ArrayList<>());
     }
 
     /**

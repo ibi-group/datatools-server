@@ -505,15 +505,15 @@ public class FeedSource extends Model implements Cloneable {
             Project project = Persistence.projects.getById(this.projectId);
             if (project.pinnedDeploymentId != null) {
                 Deployment deployment = Persistence.deployments.getById(project.pinnedDeploymentId);
-                Collection<FeedVersion> feedVersions = getDeploymentFeedVersionsForFeedSource(deployment.pinnedfeedVersionIds);
-                if (!feedVersions.isEmpty()) {
-                    // The first feed version will be the latest pinned version for this feed source, if available.
-                    deployedFeedVersion = feedVersions.iterator().next();
+                FeedVersion feedVersion = getLatestDeployedFeedVersionForFeedSource(deployment.pinnedfeedVersionIds);
+                if (feedVersion != null) {
+                    // This feed version will be the latest pinned version for this feed source, if available.
+                    deployedFeedVersion = feedVersion;
                 } else {
-                    feedVersions = getDeploymentFeedVersionsForFeedSource(deployment.feedVersionIds);
-                    if (!feedVersions.isEmpty()) {
-                        // The first feed version will be the latest version for this feed source, if available.
-                        deployedFeedVersion = feedVersions.iterator().next();
+                    feedVersion = getLatestDeployedFeedVersionForFeedSource(deployment.feedVersionIds);
+                    if (feedVersion != null) {
+                        // This feed version will be the latest version for this feed source, if available.
+                        deployedFeedVersion = feedVersion;
                     }
                 }
             }
@@ -522,17 +522,18 @@ public class FeedSource extends Model implements Cloneable {
             // find the latest feed version for this feed source.
             if (deployedFeedVersion == null) {
                 // Get all deployments for this project.
-                Collection<Deployment> deployments = Persistence.deployments.getFiltered(
+                List<Deployment> deployments = Persistence.deployments.getFilteredLimitedFields(
                     eq("projectId", this.projectId),
-                    Sorts.descending("lastUpdated")
+                    Sorts.descending("lastUpdated"),
+                    "feedVersionIds"
                 );
                 // Iterate through deployments newest to oldest.
                 for (Deployment deployment : deployments) {
-                    Collection<FeedVersion> feedVersions = getDeploymentFeedVersionsForFeedSource(deployment.feedVersionIds);
-                    if (!feedVersions.isEmpty()) {
-                        // The first feed version will be the latest feed version for this feed source from the newest
+                    FeedVersion feedVersion = getLatestDeployedFeedVersionForFeedSource(deployment.feedVersionIds);
+                    if (feedVersion != null) {
+                        // This feed version will be the latest feed version for this feed source from the newest
                         // deployment.
-                        deployedFeedVersion = feedVersions.iterator().next();
+                        deployedFeedVersion = feedVersion;
                         break;
                     }
                 }
@@ -542,10 +543,10 @@ public class FeedSource extends Model implements Cloneable {
     }
 
     /**
-     * Get a deployment's feed versions for this feed source (if any) and order by last updated.
+     * Get the latest deployed feed version for this feed source, if available.
      */
-    private Collection<FeedVersion> getDeploymentFeedVersionsForFeedSource(Collection<String> feedVersionIds) {
-        return Persistence.feedVersions.getFiltered(
+    private FeedVersion getLatestDeployedFeedVersionForFeedSource(Collection<String> feedVersionIds) {
+        return Persistence.feedVersions.getOneFiltered(
             and(
                 eq("feedSourceId", this.id),
                 in("_id", feedVersionIds)
