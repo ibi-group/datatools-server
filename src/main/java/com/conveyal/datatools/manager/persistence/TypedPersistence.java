@@ -149,6 +149,16 @@ public class TypedPersistence<T extends Model> {
     }
 
     /**
+     * Get first matching object populating only the included fields.
+     */
+    public T getByIdLimitedFields (String id, String... includedFields) {
+        return mongoCollection
+            .find(eq(id))
+            .projection(fields(include(includedFields)))
+            .first();
+    }
+
+    /**
      * This is not memory efficient.
      * TODO: Always use iterators / streams, always perform selection of subsets on the Mongo server side ("where clause").
      */

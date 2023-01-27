@@ -504,7 +504,10 @@ public class FeedSource extends Model implements Cloneable {
         if (deployedFeedVersion == null) {
             Project project = Persistence.projects.getById(this.projectId);
             if (project.pinnedDeploymentId != null) {
-                Deployment deployment = Persistence.deployments.getById(project.pinnedDeploymentId);
+                Deployment deployment = Persistence.deployments.getByIdLimitedFields(
+                    project.pinnedDeploymentId,
+                    "pinnedfeedVersionIds", "feedVersionIds"
+                );
                 FeedVersion feedVersion = getLatestDeployedFeedVersionForFeedSource(deployment.pinnedfeedVersionIds);
                 if (feedVersion != null) {
                     // This feed version will be the latest pinned version for this feed source, if available.
