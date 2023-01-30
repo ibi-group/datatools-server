@@ -462,6 +462,7 @@ public class FeedSource extends Model implements Cloneable {
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("deployedFeedVersionId")
+    @BsonIgnore
     public String getDeployedFeedVersionId() {
         FeedVersion feedVersion = getDeployedFeedVersion();
         return feedVersion != null ? feedVersion.id : null;
@@ -470,6 +471,7 @@ public class FeedSource extends Model implements Cloneable {
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("deployedFeedVersionStartDate")
+    @BsonIgnore
     public LocalDate getDeployedFeedVersionStartDate() {
         FeedVersion feedVersion = getDeployedFeedVersion();
         return feedVersion != null ? feedVersion.validationSummary().startDate : null;
@@ -478,6 +480,7 @@ public class FeedSource extends Model implements Cloneable {
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("deployedFeedVersionEndDate")
+    @BsonIgnore
     public LocalDate getDeployedFeedVersionEndDate() {
         FeedVersion feedVersion = getDeployedFeedVersion();
         return feedVersion != null ? feedVersion.validationSummary().endDate : null;
