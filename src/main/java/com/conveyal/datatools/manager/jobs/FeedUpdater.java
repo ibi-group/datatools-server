@@ -12,6 +12,7 @@ import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
+import com.google.common.collect.Lists;
 import com.google.common.io.ByteStreams;
 import org.bson.conversions.Bson;
 import org.slf4j.Logger;
@@ -30,12 +31,14 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource.AGENCY_ID_FIELDNAME;
 import static com.conveyal.datatools.common.utils.Scheduler.schedulerService;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Filters.in;
 import static com.mongodb.client.model.Filters.lt;
 import static com.mongodb.client.model.Filters.ne;
 import static com.mongodb.client.model.Filters.or;
@@ -101,8 +104,29 @@ public class FeedUpdater {
         return new FeedUpdater(completedFeedRetriever);
     }
 
+    private static String getFeedId(S3ObjectSummary objSummary) {
+        String[] parts = objSummary.getKey().split("/");
+        return parts.length > 1 ? parts[1].replace(".zip", "") : "";
+    }
+
+    public static List<String> getFeedIds(List<S3ObjectSummary> s3objects) {
+        return s3objects.stream()
+            .map(FeedUpdater::getFeedId)
+            .filter(id -> id.length() != 0)
+            .collect(Collectors.toList());
+    }
+
+    /**
+     * @return The property objects for the specified feed id.
+     */
+    public static List<ExternalFeedSourceProperty> getPropertiesForFeedId(List<ExternalFeedSourceProperty> properties, String value) {
+        return properties.stream().filter(prop -> value.equals(prop.value)).collect(Collectors.toList());
+    }
+
     private class UpdateFeedsTask implements Runnable {
         public void run() {
+            LOG.info("Starting UpdateFeedsTask");
+            long startMillis = System.currentTimeMillis();
             Map<String, String> updatedTags;
             try {
                 LOG.debug("Checking MTC feeds for newly processed versions");
@@ -113,6 +137,8 @@ public class FeedUpdater {
             } catch (Exception e) {
                 LOG.error("Error updating feeds {}", e);
             }
+
+            LOG.info("Completed UpdateFeedsTask in {} ms", System.currentTimeMillis() - startMillis);
         }
     }
 
@@ -152,23 +178,55 @@ public class FeedUpdater {
             return newTags;
         }
 
+        List<String> allFeedIds = getFeedIds(objectSummaries);
+
+        // Single Mongo query to get external properties for all feeds reported in S3.
+        List<ExternalFeedSourceProperty> allProperties = Persistence.externalFeedSourceProperties.getFiltered(
+            and(eq("name", AGENCY_ID_FIELDNAME), in("value", allFeedIds))
+        );
+
+        Map<String, String> feedToFeedSourceId = new HashMap<>();
+        for (ExternalFeedSourceProperty prop : allProperties) {
+            String feedId = prop.value;
+            if (feedToFeedSourceId.get(feedId) != null) {
+                // TODO: this log is a regression from original code.
+                LOG.warn("Found multiple feed sources for {}: {}. The published status on some feed versions will be incorrect.",
+                    feedId,
+                    allProperties
+                        .stream().filter(p -> feedId.equals(p.value))
+                        .map(p -> p.feedSourceId)
+                        .collect(Collectors.toList())
+                );
+            }
+            feedToFeedSourceId.put(feedId, prop.feedSourceId);
+        }
+
+        // Single Mongo query to get the various feed source objects.
+        Map<String, FeedSource> allFeedSourcesById = Persistence.feedSources
+            .getByIds(Lists.newArrayList(feedToFeedSourceId.values()))
+            .stream()
+            .collect(Collectors.toMap(src -> src.id, Function.identity()));
+
         LOG.debug(eTagForFeed.toString());
         for (S3ObjectSummary objSummary : objectSummaries) {
             String eTag = objSummary.getETag();
             String keyName = objSummary.getKey();
+
             LOG.debug("{} etag = {}", keyName, eTag);
 
             // Don't add object if it is a dir
             if (keyName.equals(bucketFolder)) continue;
-            String filename = keyName.split("/")[1];
-            String feedId = filename.replace(".zip", "");
-            FeedSource feedSource = getFeedSource(feedId);
+
+            String feedId = getFeedId(objSummary);
+
+            // Skip object if the filename is null
+            if ("null".equals(feedId)) continue;
+
+            FeedSource feedSource = allFeedSourcesById.get(feedId);
             if (feedSource == null) {
                 LOG.error("No feed source found for feed ID {}", feedId);
                 continue;
             }
-            // Skip object if the filename is null
-            if ("null".equals(feedId)) continue;
 
             FeedVersion latestVersionSentForPublishing = getLatestVersionSentForPublishing(feedId, feedSource);
             if (shouldMarkFeedAsProcessed(eTag, latestVersionSentForPublishing)) {
@@ -194,28 +252,6 @@ public class FeedUpdater {
             }
         }
         return newTags;
-    }
-
-    /**
-     * Obtains the {@link FeedSource} for the given feed id (for MTC, that's the 2-letter agency code).
-     */
-    private FeedSource getFeedSource(String feedId) {
-        FeedSource feedSource = null;
-        List<ExternalFeedSourceProperty> properties = Persistence.externalFeedSourceProperties.getFiltered(
-            and(eq("value", feedId), eq("name", AGENCY_ID_FIELDNAME))
-        );
-        if (properties.size() > 1) {
-            LOG.warn("Found multiple feed sources for {}: {}. The published status on some feed versions will be incorrect.",
-                feedId,
-                    properties.stream().map(p -> p.feedSourceId).collect(Collectors.joining(",")));
-        }
-        for (ExternalFeedSourceProperty prop : properties) {
-            // FIXME: What if there are multiple props found for different feed sources. This could happen if
-            // multiple projects have been synced with MTC or if the ExternalFeedSourceProperty for a feed
-            // source is not deleted properly when the feed source is deleted.
-            feedSource = Persistence.feedSources.getById(prop.feedSourceId);
-        }
-        return feedSource;
     }
 
     /**
@@ -265,6 +301,7 @@ public class FeedUpdater {
      * feed that failed processing by RTD.
      */
     private static FeedVersion getLatestVersionSentForPublishing(String feedId, FeedSource feedSource) {
+        LOG.info("Calling getLatestVersionSentForPublishing");
         try {
             // Collect the feed versions for the feed source.
             Collection<FeedVersion> versions = feedSource.retrieveFeedVersions();
