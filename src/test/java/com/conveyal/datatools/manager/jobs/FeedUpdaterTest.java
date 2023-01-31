@@ -2,10 +2,12 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
+import com.conveyal.datatools.manager.models.FeedSource;
 import com.google.common.collect.Lists;
 import org.junit.jupiter.api.Test;
 
 import java.util.List;
+import java.util.Map;
 
 import static com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource.AGENCY_ID_FIELDNAME;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -32,7 +34,7 @@ class FeedUpdaterTest {
     }
 
     @Test
-    void shouldFilterPropertiesForFeedId() {
+    void shouldGetFeedSourceIdForFeedId() {
         ExternalFeedSourceProperty prop1 = new ExternalFeedSourceProperty();
         prop1.name = AGENCY_ID_FIELDNAME;
         prop1.value = "firstFeed";
@@ -54,7 +56,38 @@ class FeedUpdaterTest {
             prop3
         );
 
-        assertEquals(Lists.newArrayList(prop1), FeedUpdater.getPropertiesForFeedId(properties, "firstFeed"));
-        assertEquals(Lists.newArrayList(prop2, prop3), FeedUpdater.getPropertiesForFeedId(properties, "otherFeed"));
+        Map<String, String> feedIdsToFeedSourceIds = FeedUpdater.mapFeedIdsToFeedSourceIds(properties);
+
+        assertEquals("id-for-first-feed", feedIdsToFeedSourceIds.get("firstFeed"));
+        assertEquals("id2-for-other-feed", feedIdsToFeedSourceIds.get("otherFeed"));
+        assertEquals(null, feedIdsToFeedSourceIds.get("unknownFeed"));
+    }
+
+    @Test
+    void shouldBuildFeedIDToFeedSourceMap() {
+        FeedSource fs1 = new FeedSource();
+        fs1.id = "id-for-first-feed";
+        FeedSource fs2 = new FeedSource();
+        fs2.id = "id-for-other-feed";
+
+        List<FeedSource> feedSources = Lists.newArrayList(fs1, fs2);
+
+        ExternalFeedSourceProperty prop1 = new ExternalFeedSourceProperty();
+        prop1.name = AGENCY_ID_FIELDNAME;
+        prop1.value = "firstFeed";
+        prop1.feedSourceId = "id-for-first-feed";
+
+        ExternalFeedSourceProperty prop2 = new ExternalFeedSourceProperty();
+        prop2.name = AGENCY_ID_FIELDNAME;
+        prop2.value = "otherFeed";
+        prop2.feedSourceId = "id-for-other-feed";
+
+        List<ExternalFeedSourceProperty> properties = Lists.newArrayList(prop1, prop2);
+
+        Map<String, String> feedIdsToFeedSourceIds = FeedUpdater.mapFeedIdsToFeedSourceIds(properties);
+
+        Map<String, FeedSource> feedIdToFeedSource = FeedUpdater.mapFeedIdsToFeedSources(feedIdsToFeedSourceIds, feedSources);
+        assertEquals(fs1, feedIdToFeedSource.get("firstFeed"));
+        assertEquals(fs2, feedIdToFeedSource.get("otherFeed"));
     }
 }

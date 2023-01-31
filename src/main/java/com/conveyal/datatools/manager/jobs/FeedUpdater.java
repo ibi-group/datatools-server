@@ -116,11 +116,34 @@ public class FeedUpdater {
             .collect(Collectors.toList());
     }
 
-    /**
-     * @return The property objects for the specified feed id.
-     */
-    public static List<ExternalFeedSourceProperty> getPropertiesForFeedId(List<ExternalFeedSourceProperty> properties, String value) {
-        return properties.stream().filter(prop -> value.equals(prop.value)).collect(Collectors.toList());
+    public static Map<String, String> mapFeedIdsToFeedSourceIds(List<ExternalFeedSourceProperty> properties) {
+        Map<String, String> feedToFeedSourceId = new HashMap<>();
+        for (ExternalFeedSourceProperty prop : properties) {
+            String feedId = prop.value;
+            if (feedToFeedSourceId.get(feedId) != null) {
+                // TODO: this log is a regression from original code.
+                LOG.warn("Found multiple feed sources for {}: {}. The published status on some feed versions will be incorrect.",
+                    feedId,
+                    properties
+                        .stream().filter(p -> feedId.equals(p.value))
+                        .map(p -> p.feedSourceId)
+                        .collect(Collectors.toList())
+                );
+            }
+            feedToFeedSourceId.put(feedId, prop.feedSourceId);
+        }
+        return feedToFeedSourceId;
+    }
+
+    public static Map<String, FeedSource> mapFeedIdsToFeedSources(
+        Map<String, String> feedIdsToFeedSourceIds,
+        List<FeedSource> feedSources
+    ) {
+        Map<String, FeedSource> feedSourceIdToFeedSource = feedSources.stream()
+            .collect(Collectors.toMap(src -> src.id, Function.identity()));
+
+        return feedIdsToFeedSourceIds.entrySet().stream()
+            .collect(Collectors.toMap(e -> e.getKey(), e -> feedSourceIdToFeedSource.get(e.getValue())));
     }
 
     private class UpdateFeedsTask implements Runnable {
@@ -185,27 +208,13 @@ public class FeedUpdater {
             and(eq("name", AGENCY_ID_FIELDNAME), in("value", allFeedIds))
         );
 
-        Map<String, String> feedToFeedSourceId = new HashMap<>();
-        for (ExternalFeedSourceProperty prop : allProperties) {
-            String feedId = prop.value;
-            if (feedToFeedSourceId.get(feedId) != null) {
-                // TODO: this log is a regression from original code.
-                LOG.warn("Found multiple feed sources for {}: {}. The published status on some feed versions will be incorrect.",
-                    feedId,
-                    allProperties
-                        .stream().filter(p -> feedId.equals(p.value))
-                        .map(p -> p.feedSourceId)
-                        .collect(Collectors.toList())
-                );
-            }
-            feedToFeedSourceId.put(feedId, prop.feedSourceId);
-        }
+        Map<String, String> feedIdToFeedSourceId = mapFeedIdsToFeedSourceIds(allProperties);
 
         // Single Mongo query to get the various feed source objects.
-        Map<String, FeedSource> allFeedSourcesById = Persistence.feedSources
-            .getByIds(Lists.newArrayList(feedToFeedSourceId.values()))
-            .stream()
-            .collect(Collectors.toMap(src -> src.id, Function.identity()));
+        List<FeedSource> feedSources = Persistence.feedSources
+            .getByIds(Lists.newArrayList(feedIdToFeedSourceId.values()));
+
+        Map<String, FeedSource> allFeedSourcesById = mapFeedIdsToFeedSources(feedIdToFeedSourceId, feedSources);
 
         LOG.debug(eTagForFeed.toString());
         for (S3ObjectSummary objSummary : objectSummaries) {
