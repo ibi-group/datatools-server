@@ -188,7 +188,7 @@ public class FeedUpdater {
                 lt(PROCESSED_BY_EXTERNAL_PUBLISHER_FIELD, SENT_TO_EXTERNAL_PUBLISHER_FIELD)
             )
         );
-        versionsToMarkAsProcessed = Persistence.feedVersions.getFiltered(query)
+        versionsToMarkAsProcessed = Persistence.feedVersionSummaries.getFiltered(query)
             .stream()
             .map(v -> v.id)
             .collect(Collectors.toList());
