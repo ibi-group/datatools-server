@@ -118,10 +118,11 @@ public class FeedUpdater {
 
     public static Map<String, String> mapFeedIdsToFeedSourceIds(List<ExternalFeedSourceProperty> properties) {
         Map<String, String> feedToFeedSourceId = new HashMap<>();
+        Map<String, Boolean> multipleSourceWarning = new HashMap<>();
         for (ExternalFeedSourceProperty prop : properties) {
             String feedId = prop.value;
-            if (feedToFeedSourceId.get(feedId) != null) {
-                // TODO: this log is a regression from original code.
+            if (feedToFeedSourceId.get(feedId) != null && !multipleSourceWarning.getOrDefault(feedId, false)) {
+                multipleSourceWarning.put(feedId, true);
                 LOG.warn("Found multiple feed sources for {}: {}. The published status on some feed versions will be incorrect.",
                     feedId,
                     properties
