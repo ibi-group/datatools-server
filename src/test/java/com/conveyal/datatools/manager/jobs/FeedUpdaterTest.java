@@ -14,9 +14,9 @@ class FeedUpdaterTest {
     @Test
     void shouldGetFeedIdsFromS3ObjectSummaries() {
         S3ObjectSummary s3Obj1 = new S3ObjectSummary();
-        s3Obj1.setKey("s3bucket/firstFeed");
+        s3Obj1.setKey("s3bucket/firstFeed.zip");
         S3ObjectSummary s3Obj2 = new S3ObjectSummary();
-        s3Obj2.setKey("s3bucket/otherFeed");
+        s3Obj2.setKey("s3bucket/otherFeed.zip");
         S3ObjectSummary s3Obj3 = new S3ObjectSummary();
         s3Obj3.setKey("s3bucket/"); // format for S3 bucket top-level folders.
         List<S3ObjectSummary> s3objects = Lists.newArrayList(
