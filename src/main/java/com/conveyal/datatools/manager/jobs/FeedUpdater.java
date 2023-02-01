@@ -181,41 +181,22 @@ public class FeedUpdater {
         LOG.debug("Checking for feeds on S3.");
         Map<String, String> newTags = new HashMap<>();
         // iterate over feeds in download_prefix folder and register to (MTC project)
-        List<S3ObjectSummary> objectSummaries = completedFeedRetriever.retrieveCompletedFeeds();
-        if (objectSummaries == null) {
-            return newTags;
-        }
+        // Note: objectSummaries is at least an empty list (not null).
+        List<S3ObjectSummary> filteredObjectSummaries = completedFeedRetriever
+            .retrieveCompletedFeeds()
+            // Skip directory objects and empty/null/invalid feed ids
+            .stream().filter(s -> !bucketFolder.equals(s.getKey()) && !"null".equals(getFeedId(s)))
+            .collect(Collectors.toList());
 
-        List<String> allFeedIds = getFeedIds(objectSummaries);
-
-        // Single Mongo query to get external properties for all feeds reported in S3.
-        List<ExternalFeedSourceProperty> allProperties = Persistence.externalFeedSourceProperties.getFiltered(
-            and(eq("name", AGENCY_ID_FIELDNAME), in("value", allFeedIds))
-        );
-
-        Map<String, String> feedIdToFeedSourceId = mapFeedIdsToFeedSourceIds(allProperties);
-
-        // Single Mongo query to get the various feed source objects.
-        List<FeedSource> feedSources = Persistence.feedSources
-            .getByIds(Lists.newArrayList(feedIdToFeedSourceId.values()));
-
-        Map<String, FeedSource> allFeedSourcesById = mapFeedIdsToFeedSources(feedIdToFeedSourceId, feedSources);
+        Map<String, FeedSource> allFeedSourcesById = getFeedSourcesByFeedId(filteredObjectSummaries);
 
         LOG.debug(eTagForFeed.toString());
-        for (S3ObjectSummary objSummary : objectSummaries) {
+        for (S3ObjectSummary objSummary : filteredObjectSummaries) {
             String eTag = objSummary.getETag();
             String keyName = objSummary.getKey();
-
             LOG.debug("{} etag = {}", keyName, eTag);
 
-            // Don't add object if it is a dir
-            if (keyName.equals(bucketFolder)) continue;
-
             String feedId = getFeedId(objSummary);
-
-            // Skip object if the filename is null
-            if ("null".equals(feedId)) continue;
-
             FeedSource feedSource = allFeedSourcesById.get(feedId);
             if (feedSource == null) {
                 LOG.error("No feed source found for feed ID {}", feedId);
@@ -246,6 +227,21 @@ public class FeedUpdater {
             }
         }
         return newTags;
+    }
+
+    private static Map<String, FeedSource> getFeedSourcesByFeedId(List<S3ObjectSummary> objectSummaries) {
+        // Single Mongo query to get external properties for all feeds reported in S3.
+        List<ExternalFeedSourceProperty> allProperties = Persistence.externalFeedSourceProperties.getFiltered(
+            and(eq("name", AGENCY_ID_FIELDNAME), in("value", getFeedIds(objectSummaries)))
+        );
+
+        Map<String, String> feedIdToFeedSourceId = mapFeedIdsToFeedSourceIds(allProperties);
+
+        // Single Mongo query to get the various feed source objects.
+        List<FeedSource> feedSources = Persistence.feedSources
+            .getByIds(Lists.newArrayList(feedIdToFeedSourceId.values()));
+
+        return mapFeedIdsToFeedSources(feedIdToFeedSourceId, feedSources);
     }
 
     private static List<String> getFeedVersionsToMarkAsProcessed() {
