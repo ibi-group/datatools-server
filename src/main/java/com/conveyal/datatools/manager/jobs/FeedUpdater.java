@@ -151,10 +151,10 @@ public class FeedUpdater {
         public void run() {
             LOG.info("Starting UpdateFeedsTask");
             long startMillis = System.currentTimeMillis();
-            Map<String, String> updatedTags;
             try {
                 LOG.debug("Checking MTC feeds for newly processed versions");
-                updatedTags = checkForUpdatedFeeds();
+                versionsToMarkAsProcessed = getFeedVersionsToMarkAsProcessed();
+                Map<String, String> updatedTags = checkForUpdatedFeeds();
                 eTagForFeed.putAll(updatedTags);
                 if (!updatedTags.isEmpty()) LOG.info("New eTag list: {}", eTagForFeed);
                 else LOG.debug("No feeds updated (eTags on S3 match current list).");
@@ -177,22 +177,6 @@ public class FeedUpdater {
             LOG.info("Running initial check for feeds on S3.");
             eTagForFeed = new HashMap<>();
         }
-
-        // The feed versions corresponding to entries in objectSummaries
-        // that need to be marked as processed should meet all conditions below:
-        // - sentToExternalPublisher is not null,
-        // - processedByExternalPublisher is null or before sentToExternalPublisher.
-        Bson query = and(
-            ne(SENT_TO_EXTERNAL_PUBLISHER_FIELD, null),
-            or(
-                eq(PROCESSED_BY_EXTERNAL_PUBLISHER_FIELD, null),
-                lt(PROCESSED_BY_EXTERNAL_PUBLISHER_FIELD, SENT_TO_EXTERNAL_PUBLISHER_FIELD)
-            )
-        );
-        versionsToMarkAsProcessed = Persistence.feedVersionSummaries.getFiltered(query)
-            .stream()
-            .map(v -> v.id)
-            .collect(Collectors.toList());
 
         LOG.debug("Checking for feeds on S3.");
         Map<String, String> newTags = new HashMap<>();
@@ -262,6 +246,24 @@ public class FeedUpdater {
             }
         }
         return newTags;
+    }
+
+    private static List<String> getFeedVersionsToMarkAsProcessed() {
+        // The feed versions corresponding to entries in objectSummaries
+        // that need to be marked as processed should meet all conditions below:
+        // - sentToExternalPublisher is not null,
+        // - processedByExternalPublisher is null or before sentToExternalPublisher.
+        Bson query = and(
+            ne(SENT_TO_EXTERNAL_PUBLISHER_FIELD, null),
+            or(
+                eq(PROCESSED_BY_EXTERNAL_PUBLISHER_FIELD, null),
+                lt(PROCESSED_BY_EXTERNAL_PUBLISHER_FIELD, SENT_TO_EXTERNAL_PUBLISHER_FIELD)
+            )
+        );
+        return Persistence.feedVersionSummaries.getFiltered(query)
+            .stream()
+            .map(v -> v.id)
+            .collect(Collectors.toList());
     }
 
     /**
