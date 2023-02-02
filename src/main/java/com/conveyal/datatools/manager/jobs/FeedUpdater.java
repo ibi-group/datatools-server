@@ -47,7 +47,6 @@ import static com.mongodb.client.model.Filters.eq;
 import static com.mongodb.client.model.Filters.exists;
 import static com.mongodb.client.model.Filters.expr;
 import static com.mongodb.client.model.Filters.in;
-import static com.mongodb.client.model.Filters.lt;
 import static com.mongodb.client.model.Filters.ne;
 import static com.mongodb.client.model.Filters.or;
 
@@ -254,7 +253,7 @@ public class FeedUpdater {
         return mapFeedIdsToFeedSources(feedIdToFeedSourceId, feedSources);
     }
 
-    private static List<String> getFeedVersionsToMarkAsProcessed() {
+    static List<String> getFeedVersionsToMarkAsProcessed() {
         // The feed versions corresponding to entries in objectSummaries
         // that need to be marked as processed should meet all conditions below:
         // - sentToExternalPublisher is not null,
@@ -263,7 +262,11 @@ public class FeedUpdater {
             ne(SENT_TO_EXTERNAL_PUBLISHER_FIELD, null),
             or(
                 eq(PROCESSED_BY_EXTERNAL_PUBLISHER_FIELD, null),
-                lt(PROCESSED_BY_EXTERNAL_PUBLISHER_FIELD, SENT_TO_EXTERNAL_PUBLISHER_FIELD)
+                // To compare two fields within the same record, expr() must be used.
+                expr(new BasicDBObject().append(
+                    "$lt",
+                    new String[] {"$" + PROCESSED_BY_EXTERNAL_PUBLISHER_FIELD, "$" + SENT_TO_EXTERNAL_PUBLISHER_FIELD}
+                ))
             )
         );
         List<FeedVersionSummary> filtered = Persistence.feedVersionSummaries.getMongoCollection()
@@ -322,7 +325,7 @@ public class FeedUpdater {
      * could be that more than one versions were recently "published" and the latest published version was a bad
      * feed that failed processing by RTD.
      */
-    public static Map<String, FeedVersion> getLatestVersionsSentForPublishing(Collection<FeedSource> feedSources) {
+    static Map<String, FeedVersion> getLatestVersionsSentForPublishing(Collection<FeedSource> feedSources) {
         /* Corresponding mongoshell query:
         db.getCollection('FeedVersion').aggregate([
         {
@@ -370,6 +373,7 @@ public class FeedUpdater {
             ),
             unwind("$items"),
             match(
+                // To compare two fields within the same record, expr() must be used.
                 expr(new BasicDBObject().append(
                     "$eq",
                     new String[] {"$items." + SENT_TO_EXTERNAL_PUBLISHER_FIELD, "$latestSentToExternalPublisher"}
