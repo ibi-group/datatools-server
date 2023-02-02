@@ -15,6 +15,7 @@ import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
 import com.google.common.collect.Lists;
 import com.google.common.io.ByteStreams;
+import com.mongodb.BasicDBObject;
 import com.mongodb.client.model.Accumulators;
 import org.bson.conversions.Bson;
 import org.slf4j.Logger;
@@ -44,11 +45,11 @@ import static com.mongodb.client.model.Aggregates.unwind;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 import static com.mongodb.client.model.Filters.exists;
+import static com.mongodb.client.model.Filters.expr;
 import static com.mongodb.client.model.Filters.in;
 import static com.mongodb.client.model.Filters.lt;
 import static com.mongodb.client.model.Filters.ne;
 import static com.mongodb.client.model.Filters.or;
-import static com.mongodb.client.model.Projections.elemMatch;
 
 /**
  * This class is used to schedule an {@link UpdateFeedsTask}, which will check the specified S3 bucket (and prefix) for
@@ -321,7 +322,7 @@ public class FeedUpdater {
      * could be that more than one versions were recently "published" and the latest published version was a bad
      * feed that failed processing by RTD.
      */
-    private static Map<String, FeedVersion> getLatestVersionsSentForPublishing(Collection<FeedSource> feedSources) {
+    public static Map<String, FeedVersion> getLatestVersionsSentForPublishing(Collection<FeedSource> feedSources) {
         /* Corresponding mongoshell query:
         db.getCollection('FeedVersion').aggregate([
         {
@@ -351,7 +352,6 @@ public class FeedUpdater {
             }
         }
         ])
-        ])
         */
 
         List<String> feedSourceIds = feedSources.stream().map(fs -> fs.id).collect(Collectors.toList());
@@ -370,7 +370,10 @@ public class FeedUpdater {
             ),
             unwind("$items"),
             match(
-                elemMatch("items",eq(SENT_TO_EXTERNAL_PUBLISHER_FIELD, "$latestSentToExternalPublisher"))
+                expr(new BasicDBObject().append(
+                    "$eq",
+                    new String[] {"$items." + SENT_TO_EXTERNAL_PUBLISHER_FIELD, "$latestSentToExternalPublisher"}
+                ))
             ),
             replaceRoot("$items")
         );
