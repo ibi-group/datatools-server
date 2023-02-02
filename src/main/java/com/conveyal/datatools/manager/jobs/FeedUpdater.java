@@ -156,11 +156,8 @@ public class FeedUpdater {
 
     private class UpdateFeedsTask implements Runnable {
         public void run() {
-            LOG.info("Starting UpdateFeedsTask");
-            long startMillis = System.currentTimeMillis();
             try {
                 LOG.debug("Checking MTC feeds for newly processed versions");
-                versionsToMarkAsProcessed = getFeedVersionsToMarkAsProcessed();
                 Map<String, String> updatedTags = checkForUpdatedFeeds();
                 eTagForFeed.putAll(updatedTags);
                 if (!updatedTags.isEmpty()) LOG.info("New eTag list: {}", eTagForFeed);
@@ -168,8 +165,6 @@ public class FeedUpdater {
             } catch (Exception e) {
                 LOG.error("Error updating feeds {}", e);
             }
-
-            LOG.info("Completed UpdateFeedsTask in {} ms", System.currentTimeMillis() - startMillis);
         }
     }
 
@@ -184,6 +179,8 @@ public class FeedUpdater {
             LOG.info("Running initial check for feeds on S3.");
             eTagForFeed = new HashMap<>();
         }
+
+        versionsToMarkAsProcessed = getFeedVersionsToMarkAsProcessed();
 
         LOG.debug("Checking for feeds on S3.");
         Map<String, String> newTags = new HashMap<>();
