@@ -66,6 +66,7 @@ jobs:
       - name: Build with Maven (run unit tests)
         run: mvn --no-transfer-progress package
       - name: Restart MongoDB with fresh database (for e2e tests)
+        if: env.SHOULD_RUN_E2E == 'true'
         run: ./scripts/restart-mongo-with-fresh-db.sh
       - name: Run e2e tests
         if: env.SHOULD_RUN_E2E == 'true'
