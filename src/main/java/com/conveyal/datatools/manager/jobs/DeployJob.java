@@ -34,7 +34,6 @@ import com.conveyal.datatools.manager.models.CustomFile;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.EC2Info;
 import com.conveyal.datatools.manager.models.EC2InstanceSummary;
-import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
@@ -652,20 +651,6 @@ public class DeployJob extends MonitorableJob {
         // Unconditionally add deploy summary. If the job fails, we should still record the summary.
         latestDeployment.deployJobSummaries.add(0, new DeploySummary(this));
         Persistence.deployments.replace(deployment.id, latestDeployment);
-
-        deployment.feedVersionIds.forEach(feedVersionId -> {
-            FeedVersion deployedFeedVersion = Persistence.feedVersions.getById(feedVersionId);
-            FeedSource deployedFeedSource = Persistence.feedSources.getById(deployedFeedVersion.feedSourceId);
-            if (deployedFeedSource != null) {
-                // Define and save deployed feed version.
-                deployedFeedSource.setDeploymentInfo(
-                        deployedFeedVersion.id,
-                        deployedFeedVersion.validationSummary().startDate,
-                        deployedFeedVersion.validationSummary().endDate
-                );
-                Persistence.feedSources.replace(deployedFeedSource.id, deployedFeedSource);
-            }
-        });
 
         // Send notification to those subscribed to updates for the deployment.
         NotifyUsersForSubscriptionJob.createNotification("deployment-updated", deployment.id, message);
