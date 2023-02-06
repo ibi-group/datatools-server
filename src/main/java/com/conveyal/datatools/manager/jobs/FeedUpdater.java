@@ -151,7 +151,7 @@ public class FeedUpdater {
             .collect(Collectors.toMap(src -> src.id, Function.identity()));
 
         return feedIdsToFeedSourceIds.entrySet().stream()
-            .collect(Collectors.toMap(e -> e.getKey(), e -> feedSourceIdToFeedSource.get(e.getValue())));
+            .collect(Collectors.toMap(Map.Entry::getKey, e -> feedSourceIdToFeedSource.get(e.getValue())));
     }
 
     private class UpdateFeedsTask implements Runnable {
