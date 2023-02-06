@@ -74,7 +74,7 @@ class FeedUpdaterTest {
             .stream()
             .map(k -> {
                 S3ObjectSummary s3Obj = new S3ObjectSummary();
-                s3Obj.setKey("s3bucket/firstFeed.zip");
+                s3Obj.setKey(k);
                 return s3Obj;
             })
             .collect(Collectors.toList());
