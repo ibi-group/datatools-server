@@ -269,7 +269,7 @@
         <dependency>
             <groupId>com.github.conveyal</groupId>
             <artifactId>gtfs-lib</artifactId>
-            <version>fca4bbaa2a4fda800d22a668c236e308fbf60f5b</version>
+            <version>50cd60b</version>
             <!-- Exclusions added in order to silence SLF4J warnings about multiple bindings:
                 http://www.slf4j.org/codes.html#multiple_bindings
             -->
