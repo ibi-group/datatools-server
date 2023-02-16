@@ -20,14 +20,21 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
+import org.bson.Document;
 import org.bson.codecs.pojo.annotations.BsonProperty;
+import org.mobilitydata.gtfsvalidator.runner.ValidationRunner;
+import org.mobilitydata.gtfsvalidator.util.VersionResolver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.mobilitydata.gtfsvalidator.runner.ValidationRunnerConfig;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -253,6 +260,8 @@ public class FeedVersion extends Model implements Serializable {
      * */
     public Date processedByExternalPublisher;
 
+    public Document mobilityDataResult;
+
     public String formattedTimestamp() {
         SimpleDateFormat format = new SimpleDateFormat(HUMAN_READABLE_TIMESTAMP_FORMAT);
         return format.format(this.updated);
@@ -345,8 +354,35 @@ public class FeedVersion extends Model implements Serializable {
         if (status == null) status = new MonitorableJob.Status();
 
         // VALIDATE GTFS feed
+        FileReader fr = null;
         try {
             LOG.info("Beginning validation...");
+            status.update("MobilityData Analysis...", 11);
+
+            File gtfsZip = this.retrieveGtfsFile();
+            // Namespace based folders avoid clash for validation being run on multiple versions of a feed
+            // TODO: do we know that there will always be a namespace?
+            String validatorOutputDirectory = "/tmp/datatools_gtfs/" + this.namespace + "/";
+
+            // Set up MobilityData validator
+            ValidationRunnerConfig.Builder builder = ValidationRunnerConfig.builder();
+            builder.setGtfsSource(gtfsZip.toURI());
+            builder.setOutputDirectory(Path.of(validatorOutputDirectory));
+            ValidationRunnerConfig mbValidatorConfig = builder.build();
+
+            // Run MobilityData validator
+            ValidationRunner runner = new ValidationRunner(new VersionResolver());
+            runner.run(mbValidatorConfig);
+
+            // Read generated report and save to Mongo
+            fr = new FileReader(validatorOutputDirectory + "report.json");
+            BufferedReader in = new BufferedReader(fr);
+            String json = in.lines().collect(Collectors.joining(System.lineSeparator()));
+            fr.close();
+
+            // This will persist the document to Mongo
+            this.mobilityDataResult = Document.parse(json);
+
             // FIXME: pass status to validate? Or somehow listen to events?
             status.update("Validating feed...", 33);
 
