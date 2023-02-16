@@ -42,7 +42,7 @@ public class ReplaceFileFromStringTransformation extends ZipTransformation {
         String tableName = table + ".txt";
         // Run the replace transformation
         Path targetZipPath = Paths.get(zipTarget.gtfsFile.getAbsolutePath());
-        try( FileSystem targetZipFs = FileSystems.newFileSystem(targetZipPath, null) ){
+        try( FileSystem targetZipFs = FileSystems.newFileSystem(targetZipPath, (ClassLoader) null) ){
             // Convert csv data to input stream.
             InputStream inputStream = new ByteArrayInputStream(csvData.getBytes(StandardCharsets.UTF_8));
             Path targetTxtFilePath = getTablePathInZip(tableName, targetZipFs);
