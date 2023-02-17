@@ -352,7 +352,7 @@ public class ProjectController {
         fullJson.addMixin(OtpServer.class, OtpServer.OtpServerWithoutEc2Instances.class);
 
         get(apiPrefix + "secure/project/:id", ProjectController::getProject, fullJson::write);
-        get(apiPrefix + "secure/project", ProjectController::getAllProjects, slimJson::write);
+        get(apiPrefix + "secure/project", ProjectController::getAllProjects, fullJson::write);
         post(apiPrefix + "secure/project", ProjectController::createProject, fullJson::write);
         put(apiPrefix + "secure/project/:id", ProjectController::updateProject, fullJson::write);
         delete(apiPrefix + "secure/project/:id", ProjectController::deleteProject, fullJson::write);
