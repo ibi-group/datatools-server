@@ -354,9 +354,41 @@ public class FeedVersion extends Model implements Serializable {
         if (status == null) status = new MonitorableJob.Status();
 
         // VALIDATE GTFS feed
-        FileReader fr = null;
         try {
             LOG.info("Beginning validation...");
+
+            // FIXME: pass status to validate? Or somehow listen to events?
+            status.update("Validating feed...", 33);
+
+            // Validate the feed version.
+            // Certain extensions, if enabled, have extra validators
+            if (isExtensionEnabled("mtc")) {
+                validationResult = GTFS.validate(feedLoadResult.uniqueIdentifier, DataManager.GTFS_DATA_SOURCE,
+                    RouteTypeValidatorBuilder::buildRouteValidator,
+                    MTCValidator::new
+                );
+            } else {
+                validationResult = GTFS.validate(feedLoadResult.uniqueIdentifier, DataManager.GTFS_DATA_SOURCE,
+                    RouteTypeValidatorBuilder::buildRouteValidator
+                );
+            }
+        } catch (Exception e) {
+            status.fail(String.format("Unable to validate feed %s", this.id), e);
+            // FIXME create validation result with new constructor?
+            validationResult = new ValidationResult();
+            validationResult.fatalException = "failure!";
+        }
+    }
+
+    public void validateMobility(MonitorableJob.Status status) {
+
+        // Sometimes this method is called when no status object is available.
+        if (status == null) status = new MonitorableJob.Status();
+
+        // VALIDATE GTFS feed
+        FileReader fr = null;
+        try {
+            LOG.info("Beginning MobilityData validation...");
             status.update("MobilityData Analysis...", 11);
 
             File gtfsZip = this.retrieveGtfsFile();
@@ -382,22 +414,6 @@ public class FeedVersion extends Model implements Serializable {
 
             // This will persist the document to Mongo
             this.mobilityDataResult = Document.parse(json);
-
-            // FIXME: pass status to validate? Or somehow listen to events?
-            status.update("Validating feed...", 33);
-
-            // Validate the feed version.
-            // Certain extensions, if enabled, have extra validators
-            if (isExtensionEnabled("mtc")) {
-                validationResult = GTFS.validate(feedLoadResult.uniqueIdentifier, DataManager.GTFS_DATA_SOURCE,
-                    RouteTypeValidatorBuilder::buildRouteValidator,
-                    MTCValidator::new
-                );
-            } else {
-                validationResult = GTFS.validate(feedLoadResult.uniqueIdentifier, DataManager.GTFS_DATA_SOURCE,
-                    RouteTypeValidatorBuilder::buildRouteValidator
-                );
-            }
         } catch (Exception e) {
             status.fail(String.format("Unable to validate feed %s", this.id), e);
             // FIXME create validation result with new constructor?
