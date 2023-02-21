@@ -8,6 +8,7 @@ import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.models.FeedVersionDeployed;
 import com.conveyal.datatools.manager.models.FetchFrequency;
 import com.conveyal.datatools.manager.models.Label;
 import com.conveyal.datatools.manager.models.Project;
@@ -33,6 +34,7 @@ import static com.mongodb.client.model.Filters.eq;
 import static org.eclipse.jetty.http.HttpStatus.BAD_REQUEST_400;
 import static org.eclipse.jetty.http.HttpStatus.OK_200;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 public class FeedSourceControllerTest extends DatatoolsTest {
@@ -281,20 +283,24 @@ public class FeedSourceControllerTest extends DatatoolsTest {
     @Test
     void canRetrieveFeedSourceWithDeployedFeedVersion() throws IOException {
         SimpleHttpResponse response = TestUtils.makeRequest(
-            String.format("/api/manager/secure/feedsource?projectId=%s", project.id),
+            String.format(
+                "/api/manager/secure/feedsourcedeployedfeedversion?projectId=%s&feedSourceId=%s",
+                project.id,
+                feedSourceWithDeployedFeedVersion.id
+            ),
             null,
             HttpUtils.REQUEST_METHOD.GET
         );
         assertEquals(OK_200, response.status);
-        List<FeedSource> feedSources =
-            JsonUtil.getPOJOFromJSONAsList(
-                JsonUtil.getJsonNodeFromResponse(response),
-                FeedSource.class
+        FeedVersionDeployed feedVersion =
+            JsonUtil.getPOJOFromResponse(
+                response,
+                FeedVersionDeployed.class
             );
-        assertEquals(1, feedSources.size());
-        assertEquals(feedVersionDeployed.id, feedSources.get(0).getDeployedFeedVersionId());
-        assertEquals(feedVersionDeployed.validationSummary().endDate, feedSources.get(0).getDeployedFeedVersionEndDate());
-        assertEquals(feedVersionDeployed.validationSummary().startDate, feedSources.get(0).getDeployedFeedVersionStartDate());
+        assertNotNull(feedVersion);
+        assertEquals(feedVersionDeployed.id, feedVersion.id);
+        assertEquals(feedVersionDeployed.validationSummary().endDate, feedVersion.endDate);
+        assertEquals(feedVersionDeployed.validationSummary().startDate, feedVersion.startDate);
     }
 
     /**
@@ -303,21 +309,21 @@ public class FeedSourceControllerTest extends DatatoolsTest {
     @Test
     void canRetrieveFeedSourceWithPinnedFeedVersion() throws IOException {
         SimpleHttpResponse response = TestUtils.makeRequest(
-            String.format("/api/manager/secure/feedsource?projectId=%s", projectWithPinnedDeployment.id),
+            String.format("/api/manager/secure/feedsourcedeployedfeedversion?projectId=%s&feedSourceId=%s", projectWithPinnedDeployment.id, feedSourceWithPinnedFeedVersion.id),
             null,
             HttpUtils.REQUEST_METHOD.GET
         );
         assertEquals(OK_200, response.status);
-        List<FeedSource> feedSources =
-            JsonUtil.getPOJOFromJSONAsList(
-                JsonUtil.getJsonNodeFromResponse(response),
-                FeedSource.class
+        FeedVersionDeployed feedVersion =
+            JsonUtil.getPOJOFromResponse(
+                response,
+                FeedVersionDeployed.class
             );
-        assertEquals(1, feedSources.size());
-        assertEquals(feedVersionPinned.id, feedSources.get(0).getDeployedFeedVersionId());
-        assertEquals(feedVersionPinned.validationSummary().endDate, feedSources.get(0).getDeployedFeedVersionEndDate());
-        assertEquals(feedVersionPinned.validationSummary().startDate, feedSources.get(0).getDeployedFeedVersionStartDate());
-    }
+        assertNotNull(feedVersion);
+        assertEquals(feedVersionPinned.id, feedVersion.id);
+        assertEquals(feedVersionPinned.validationSummary().endDate, feedVersion.endDate);
+        assertEquals(feedVersionPinned.validationSummary().startDate, feedVersion.startDate);
+     }
 
 
     private static FeedSource createFeedSource(String name, URL url, Project project) {
