@@ -43,7 +43,7 @@
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
         <!-- Using the latest version of geotools (e.g, 20) seems to cause issues with the shapefile
         plugin where the_geom for each feature is null. -->
-        <geotools.version>17.5</geotools.version>
+        <geotools.version>20.1</geotools.version>
         <awsjavasdk.version>1.11.625</awsjavasdk.version>
     </properties>
     <build>
