@@ -44,13 +44,7 @@ public class ValidateFeedJob extends FeedVersionJob {
                 // such as BuildTransportNetwork, to finish. If those subsequent jobs fail,
                 // the version won't get loaded into MongoDB (even though it exists in postgres).
                 feedVersion.storeUser(owner);
-                if (isNewVersion) {
-                    int count = feedVersion.parentFeedSource().feedVersionCount();
-                    feedVersion.version = count + 1;
-                    Persistence.feedVersions.create(feedVersion);
-                } else {
-                    Persistence.feedVersions.replace(feedVersion.id, feedVersion);
-                }
+                feedVersion.persistFeedVersionAfterValidation(isNewVersion);
                 // Schedule expiration notification jobs.
                 Scheduler.scheduleExpirationNotifications(feedVersion.parentFeedSource());
             }

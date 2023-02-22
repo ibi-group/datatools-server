@@ -3,6 +3,8 @@ package com.conveyal.datatools.manager.models;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.jobs.ValidateFeedJob;
+import com.conveyal.datatools.manager.jobs.ValidateMobilityDataFeedJob;
 import com.conveyal.datatools.manager.jobs.validation.RouteTypeValidatorBuilder;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -597,5 +599,20 @@ public class FeedVersion extends Model implements Serializable {
      */
     public boolean isSameAs(FeedVersion otherVersion) {
         return otherVersion != null && this.hash.equals(otherVersion.hash);
+    }
+
+    /**
+     * {@link ValidateFeedJob} and {@link ValidateMobilityDataFeedJob} both require to save a feed version after their
+     * subsequent validation checks have completed. Either could finish first, therefore this method makes sure that
+     * only one instance is saved (the last to finish updates).
+     */
+    public void persistFeedVersionAfterValidation(boolean isNewVersion) {
+        if (isNewVersion && Persistence.feedVersions.getById(id) == null) {
+            int count = parentFeedSource().feedVersionCount();
+            version = count + 1;
+            Persistence.feedVersions.create(this);
+        } else {
+            Persistence.feedVersions.replace(id, this);
+        }
     }
 }

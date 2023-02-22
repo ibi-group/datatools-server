@@ -364,7 +364,7 @@ public class DumpController {
                 JobUtils.heavyExecutor.execute(new ProcessSingleFeedJob(version, systemUser, false));
             } else {
                 JobUtils.heavyExecutor.execute(new ValidateFeedJob(version, systemUser, false));
-                JobUtils.heavyExecutor.execute(new ValidateMobilityDataFeedJob(version, systemUser));
+                JobUtils.heavyExecutor.execute(new ValidateMobilityDataFeedJob(version, systemUser, false));
             }
         }
         // ValidateAllFeedsJob validateAllFeedsJob = new ValidateAllFeedsJob("system", force, load);
