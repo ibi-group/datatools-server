@@ -43,6 +43,11 @@ public class ValidateMobilityDataFeedJob extends FeedVersionJob {
                 feedVersion.persistFeedVersionAfterValidation(isNewVersion);
             }
             status.completeSuccessfully("MobilityData validation finished!");
+        } else {
+            // If the version was not stored successfully, call FeedVersion#delete to reset things to before the version
+            // was uploaded/fetched. Note: delete calls made to MongoDB on the version ID will not succeed, but that is
+            // expected.
+            feedVersion.delete();
         }
     }
 
