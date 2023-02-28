@@ -12,7 +12,6 @@ import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
-import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.FeedVersionDeployed;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Project;
@@ -398,21 +397,16 @@ public class FeedSourceController {
     }
 
     private static FeedVersionDeployed getDeployedFeedVersion(Request req, Response res) {
+        FeedSource feedSource = requestFeedSourceById(req, Actions.MANAGE);
         Auth0UserProfile userProfile = req.attribute("user");
-        String projectId = req.queryParams("projectId");
-        Project project = Persistence.projects.getById(projectId);
-        String feedSourceId = req.queryParams("feedSourceId");
-        FeedSource feedSource = Persistence.feedSources.getById(feedSourceId);
+        Project project = Persistence.projects.getById(feedSource.projectId);
         if (project == null) {
             logMessageAndHalt(req, 400, "Must provide valid projectId value.");
-        }
-        if (feedSource == null) {
-            logMessageAndHalt(req, 400, "Must provide valid feedSourceId value.");
         }
         if (!userProfile.canAdministerProject(project)) {
             logMessageAndHalt(req, 401, "User not authorized to view deployed feed version.");
         }
-        return feedSource.retrieveDeployedFeedVersion(project);
+        return feedSource.retrieveDeployedFeedVersion(project.id);
     }
 
 
@@ -420,7 +414,7 @@ public class FeedSourceController {
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/feedsource/:id", FeedSourceController::getFeedSource, json::write);
         get(apiPrefix + "secure/feedsource", FeedSourceController::getProjectFeedSources, json::write);
-        get(apiPrefix + "secure/feedsourcedeployedfeedversion", FeedSourceController::getDeployedFeedVersion, json::write);
+        get(apiPrefix + "secure/feedsource/:id/deployedfeedversion", FeedSourceController::getDeployedFeedVersion, json::write);
         post(apiPrefix + "secure/feedsource", FeedSourceController::createFeedSource, json::write);
         put(apiPrefix + "secure/feedsource/:id", FeedSourceController::updateFeedSource, json::write);
         put(apiPrefix + "secure/feedsource/:id/updateExternal", FeedSourceController::updateExternalFeedResource, json::write);

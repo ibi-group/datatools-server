@@ -45,16 +45,14 @@ public class FeedSourceControllerTest extends DatatoolsTest {
     private static FeedSource feedSourceWithNoUrl = null;
     private static FeedSource feedSourceWithLabels = null;
     private static FeedSource feedSourceWithInvalidLabels = null;
-    private static FeedSource feedSourceWithDeployedFeedVersion = null;
+    private static FeedSource feedSourceWithLatestFeedVersion = null;
     private static FeedSource feedSourceWithPinnedFeedVersion = null;
     private static Label publicLabel = null;
     private static Label adminOnlyLabel = null;
     private static FeedVersion feedVersionSuperseded = null;
     private static FeedVersion feedVersionDeployed = null;
     private static FeedVersion feedVersionLatest = null;
-    private static FeedVersion feedVersionPinned = null;
-    private static Deployment deploymentSuperseded = null;
-    private static Deployment deploymentDeployed = null;
+    private static FeedVersion feedVersionFromPinnedDeployment = null;
     private static Deployment deploymentPinned = null;
 
     @BeforeAll
@@ -71,9 +69,6 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         projectToBeDeleted.autoFetchFeeds = false;
         Persistence.projects.create(projectToBeDeleted);
 
-        projectWithPinnedDeployment = new Project();
-        projectWithPinnedDeployment.name = "ProjectThree";
-        Persistence.projects.create(projectWithPinnedDeployment);
 
         feedSourceWithUrl = createFeedSource("FeedSourceOne", new URL("http://www.feedsource.com"), project);
         feedSourceWithNoUrl = createFeedSource("FeedSourceTwo", null, project);
@@ -84,24 +79,24 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         adminOnlyLabel.adminOnly = true;
         publicLabel = createLabel("Public Label");
 
-        feedSourceWithDeployedFeedVersion = createFeedSource("FeedSource", null, project, true);
-        feedSourceWithPinnedFeedVersion = createFeedSource("FeedSourceWithPinnedFeedVersion", null, projectWithPinnedDeployment, true);
-
+        // Latest feed version of feed source.
+        feedSourceWithLatestFeedVersion = createFeedSource("FeedSource", null, project, true);
         LocalDate supersededDate = LocalDate.of(2020, Month.DECEMBER, 25);
         LocalDate deployedEndDate = LocalDate.of(2021, Month.MARCH, 12);
         LocalDate deployedStartDate = LocalDate.of(2021, Month.MARCH, 1);
-        feedVersionSuperseded = createFeedVersion("superseded", feedSourceWithDeployedFeedVersion.id, supersededDate);
-        feedVersionDeployed = createFeedVersion("deployed", feedSourceWithDeployedFeedVersion.id, deployedStartDate, deployedEndDate);
-        feedVersionLatest = createFeedVersion("latest", feedSourceWithDeployedFeedVersion.id, LocalDate.of(2022, Month.NOVEMBER, 2));
-        feedVersionPinned = createFeedVersion("pinned", feedSourceWithPinnedFeedVersion.id, LocalDate.of(2022, Month.NOVEMBER, 2));
+        feedVersionSuperseded = createFeedVersion("superseded", feedSourceWithLatestFeedVersion.id, supersededDate);
+        feedVersionDeployed = createFeedVersion("deployed", feedSourceWithLatestFeedVersion.id, deployedStartDate, deployedEndDate);
+        feedVersionLatest = createFeedVersion("latest", feedSourceWithLatestFeedVersion.id, LocalDate.of(2022, Month.NOVEMBER, 2));
 
-        deploymentSuperseded = createDeployment("superseded", project, feedVersionSuperseded.id, null, supersededDate);
-        deploymentDeployed = createDeployment("deployed", project, feedVersionDeployed.id, null, deployedEndDate);
-        deploymentPinned = createDeployment("pinned", projectWithPinnedDeployment, null, feedVersionPinned.id, deployedEndDate);
-
+        // Feed version from pinned deployment.
+        projectWithPinnedDeployment = new Project();
+        projectWithPinnedDeployment.name = "ProjectThree";
+        Persistence.projects.create(projectWithPinnedDeployment);
+        feedSourceWithPinnedFeedVersion = createFeedSource("FeedSourceWithPinnedFeedVersion", null, projectWithPinnedDeployment, true);
+        feedVersionFromPinnedDeployment = createFeedVersion("pinned", feedSourceWithPinnedFeedVersion.id, LocalDate.of(2022, Month.NOVEMBER, 2));
+        deploymentPinned = createDeployment("pinned", projectWithPinnedDeployment, feedVersionFromPinnedDeployment.id, deployedEndDate);
         projectWithPinnedDeployment.pinnedDeploymentId = deploymentPinned.id;
         Persistence.projects.replace(projectWithPinnedDeployment.id, projectWithPinnedDeployment);
-
     }
 
     @AfterAll
@@ -128,8 +123,8 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         if (adminOnlyLabel != null) {
             Persistence.labels.removeById(adminOnlyLabel.id);
         }
-        if (feedSourceWithDeployedFeedVersion != null) {
-            Persistence.feedSources.removeById(feedSourceWithDeployedFeedVersion.id);
+        if (feedSourceWithLatestFeedVersion != null) {
+            Persistence.feedSources.removeById(feedSourceWithLatestFeedVersion.id);
         }
         if (feedSourceWithPinnedFeedVersion != null) {
             Persistence.feedSources.removeById(feedSourceWithPinnedFeedVersion.id);
@@ -143,14 +138,8 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         if (feedVersionLatest != null) {
             Persistence.feedVersions.removeById(feedVersionLatest.id);
         }
-        if (feedVersionPinned != null) {
-            Persistence.feedVersions.removeById(feedVersionPinned.id);
-        }
-        if (deploymentSuperseded != null) {
-            Persistence.deployments.removeById(deploymentSuperseded.id);
-        }
-        if (deploymentDeployed != null) {
-            Persistence.deployments.removeById(deploymentDeployed.id);
+        if (feedVersionFromPinnedDeployment != null) {
+            Persistence.feedVersions.removeById(feedVersionFromPinnedDeployment.id);
         }
         if (deploymentPinned != null) {
             Persistence.deployments.removeById(deploymentPinned.id);
@@ -277,16 +266,12 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(0, Persistence.labels.getFiltered(eq("projectId", projectToBeDeleted.id)).size());
     }
 
-    /**
-     * Retrieve the latest feed version for a feed source.
-     */
     @Test
-    void canRetrieveFeedSourceWithDeployedFeedVersion() throws IOException {
+    void canRetrieveLatestFeedVersionForFeedSource() throws IOException {
         SimpleHttpResponse response = TestUtils.makeRequest(
             String.format(
-                "/api/manager/secure/feedsourcedeployedfeedversion?projectId=%s&feedSourceId=%s",
-                project.id,
-                feedSourceWithDeployedFeedVersion.id
+                "/api/manager/secure/feedsource/%s/deployedfeedversion",
+                feedSourceWithLatestFeedVersion.id
             ),
             null,
             HttpUtils.REQUEST_METHOD.GET
@@ -298,18 +283,18 @@ public class FeedSourceControllerTest extends DatatoolsTest {
                 FeedVersionDeployed.class
             );
         assertNotNull(feedVersion);
-        assertEquals(feedVersionDeployed.id, feedVersion.id);
-        assertEquals(feedVersionDeployed.validationSummary().endDate, feedVersion.endDate);
-        assertEquals(feedVersionDeployed.validationSummary().startDate, feedVersion.startDate);
+        assertEquals(feedVersionLatest.id, feedVersion.id);
+        assertEquals(feedVersionLatest.validationSummary().endDate, feedVersion.endDate);
+        assertEquals(feedVersionLatest.validationSummary().startDate, feedVersion.startDate);
     }
 
-    /**
-     * Retrieve the latest pinned feed version for a feed source.
-     */
     @Test
-    void canRetrieveFeedSourceWithPinnedFeedVersion() throws IOException {
+    void canRetrieveDeployedFeedVersionFromPinnedDeployment() throws IOException {
         SimpleHttpResponse response = TestUtils.makeRequest(
-            String.format("/api/manager/secure/feedsourcedeployedfeedversion?projectId=%s&feedSourceId=%s", projectWithPinnedDeployment.id, feedSourceWithPinnedFeedVersion.id),
+            String.format(
+                "/api/manager/secure/feedsource/%s/deployedfeedversion",
+                feedSourceWithPinnedFeedVersion.id
+            ),
             null,
             HttpUtils.REQUEST_METHOD.GET
         );
@@ -320,9 +305,9 @@ public class FeedSourceControllerTest extends DatatoolsTest {
                 FeedVersionDeployed.class
             );
         assertNotNull(feedVersion);
-        assertEquals(feedVersionPinned.id, feedVersion.id);
-        assertEquals(feedVersionPinned.validationSummary().endDate, feedVersion.endDate);
-        assertEquals(feedVersionPinned.validationSummary().startDate, feedVersion.startDate);
+        assertEquals(feedVersionFromPinnedDeployment.id, feedVersion.id);
+        assertEquals(feedVersionFromPinnedDeployment.validationSummary().endDate, feedVersion.endDate);
+        assertEquals(feedVersionFromPinnedDeployment.validationSummary().startDate, feedVersion.startDate);
      }
 
 
@@ -353,13 +338,11 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         String name,
         Project project,
         String feedVersionId,
-        String pinnedFeedVersionId,
         LocalDate dateCreated
     ) {
         Deployment deployment = new Deployment();
         deployment.dateCreated = Date.from(dateCreated.atStartOfDay(ZoneId.systemDefault()).toInstant());
         deployment.feedVersionIds = Collections.singletonList(feedVersionId);
-        deployment.pinnedfeedVersionIds = Collections.singletonList(pinnedFeedVersionId);
         deployment.projectId = project.id;
         deployment.name = name;
         Persistence.deployments.create(deployment);
