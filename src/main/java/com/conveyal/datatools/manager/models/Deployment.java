@@ -4,6 +4,7 @@ import com.amazonaws.services.ec2.model.Filter;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.EC2Utils;
 import com.conveyal.datatools.manager.DataManager;
+import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
 import com.conveyal.datatools.manager.jobs.DeployJob;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.StringUtils;
@@ -62,7 +63,8 @@ public class Deployment extends Model implements Serializable {
 
     public String name;
 
-    public static final String DEFAULT_OTP_VERSION = "otp-v1.4.0";
+    //OTP v1.4 is a historical version that was previously used as a fallback. Only use if application default not configured.
+    public static final String DEFAULT_OTP_VERSION = getConfigPropertyAsText("application.default_otp_version", "otp-v1.4.0");
 
     /** What server is this currently deployed to? */
     public String deployedTo;
@@ -181,7 +183,7 @@ public class Deployment extends Model implements Serializable {
      * {@link Deployment#DEFAULT_OTP_VERSION}. This is used to determine what jar file to download and does not have an
      * exact match to actual numbered/tagged releases.
      */
-    public String otpVersion;
+    public String otpVersion = DEFAULT_OTP_VERSION;
 
     public boolean buildGraphOnly;
 

@@ -651,6 +651,7 @@ public class DeployJob extends MonitorableJob {
         // Unconditionally add deploy summary. If the job fails, we should still record the summary.
         latestDeployment.deployJobSummaries.add(0, new DeploySummary(this));
         Persistence.deployments.replace(deployment.id, latestDeployment);
+
         // Send notification to those subscribed to updates for the deployment.
         NotifyUsersForSubscriptionJob.createNotification("deployment-updated", deployment.id, message);
         startAnotherAutoDeploymentIfNeeded();

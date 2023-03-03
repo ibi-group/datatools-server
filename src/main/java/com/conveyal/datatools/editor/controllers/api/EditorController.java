@@ -40,7 +40,6 @@ import java.util.stream.Stream;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJSON;
 import static com.conveyal.datatools.common.utils.SparkUtils.getObjectNode;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
-import static com.conveyal.datatools.editor.controllers.EditorLockController.sessionsForFeedIds;
 import static com.conveyal.datatools.manager.controllers.api.UserController.inTestingEnvironment;
 import static spark.Spark.delete;
 import static spark.Spark.options;
@@ -394,7 +393,7 @@ public abstract class EditorController<T extends Entity> {
             if (isCreating) {
                 return tableWriter.create(jsonBody, true);
             } else {
-                return tableWriter.update(id, jsonBody, true);
+                return update(tableWriter, id, jsonBody);
             }
         } catch (InvalidNamespaceException e) {
             logMessageAndHalt(req, 400, "Invalid namespace");
@@ -407,6 +406,30 @@ public abstract class EditorController<T extends Entity> {
             LOG.info("{} operation took {} msec", operation, System.currentTimeMillis() - startTime);
         }
         return null;
+    }
+
+    /**
+     * Handle specific entity updates.
+     */
+    private String update(JdbcTableWriter tableWriter, Integer id, String jsonBody) throws IOException, SQLException {
+        try {
+            return tableWriter.update(id, jsonBody, true);
+        } catch (SQLException e) {
+            if (table.name.equals(Table.TRIPS.name)) {
+                // If an exception is thrown updating a trip, provide additional information to help rectify the
+                // issue.
+                JsonNode trip = mapper.readTree(jsonBody);
+                throw new SQLException(
+                    String.format(
+                        "Trip id %s conflicts with an existing trip id.",
+                        trip.get("trip_id").asText()
+                    )
+                );
+            } else {
+                // Continue to pass the exception to the frontend.
+                throw e;
+            }
+        }
     }
 
     /**
@@ -425,21 +448,9 @@ public abstract class EditorController<T extends Entity> {
         // Only check for editing session if not in testing environment.
         // TODO: Add way to mock session.
         if (!inTestingEnvironment()) {
-            EditorLockController.EditorSession currentSession = sessionsForFeedIds.get(feedId);
-            if (currentSession == null) {
-                logMessageAndHalt(req, 400, "There is no active editing session for user.");
-            }
-            if (!currentSession.sessionId.equals(sessionId)) {
-                // This session does not match the current active session for the feed.
-                Auth0UserProfile userProfile = req.attribute("user");
-                if (currentSession.userEmail.equals(userProfile.getEmail())) {
-                    LOG.warn("User {} already has editor session {} for feed {}. Same user cannot make edits on session {}.", currentSession.userEmail, currentSession.sessionId, feedId, req.session().id());
-                    logMessageAndHalt(req, 400, "You have another editing session open for " + feedSource.name);
-                } else {
-                    LOG.warn("User {} already has editor session {} for feed {}. User {} cannot make edits on session {}.", currentSession.userEmail, currentSession.sessionId, feedId, userProfile.getEmail(), req.session().id());
-                    logMessageAndHalt(req, 400, "Somebody else is editing the " + feedSource.name + " feed.");
-                }
-            } else {
+            Auth0UserProfile userProfile = req.attribute("user");
+            EditorLockController.EditorSession currentSession = EditorLockController.getSession(feedId);
+            if (EditorLockController.checkUserHasActiveSession(req, sessionId, userProfile.getEmail(), currentSession)) {
                 currentSession.lastEdit = System.currentTimeMillis();
                 LOG.info("Updating session {} last edit time to {}", sessionId, currentSession.lastEdit);
             }

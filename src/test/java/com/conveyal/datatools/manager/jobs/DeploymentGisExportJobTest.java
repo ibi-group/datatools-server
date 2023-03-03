@@ -33,6 +33,9 @@ public class DeploymentGisExportJobTest extends GisExportJobTest {
         while (e.hasMoreElements()) {
             ZipEntry entry = e.nextElement();
             File destinationPath = new File(destDir, entry.getName());
+            if (!destinationPath.toPath().normalize().startsWith(destDir.toPath().normalize())) {
+                throw new RuntimeException("Bad zip entry");
+            }
             // Create parent directories
             destinationPath.getParentFile().mkdirs();
 

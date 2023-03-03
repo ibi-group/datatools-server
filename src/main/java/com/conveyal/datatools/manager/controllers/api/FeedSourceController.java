@@ -1,6 +1,8 @@
 package com.conveyal.datatools.manager.controllers.api;
 
 import com.conveyal.datatools.common.utils.Scheduler;
+import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
+import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Actions;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
@@ -189,7 +191,7 @@ public class FeedSourceController {
      * fields the updated feed source should contain. This change allows us to parse the JSON into a POJO, which
      * essentially does type checking for us and prevents issues with deserialization from MongoDB into POJOs.
      */
-    private static FeedSource updateFeedSource(Request req, Response res) throws IOException {
+    private static FeedSource updateFeedSource(Request req, Response res) throws IOException, CheckedAWSException {
         String feedSourceId = req.params("id");
         FeedSource formerFeedSource = requestFeedSourceById(req, Actions.MANAGE);
         FeedSource updatedFeedSource = getPOJOFromRequestBody(req, FeedSource.class);
@@ -200,6 +202,12 @@ public class FeedSourceController {
             updatedFeedSource.lastFetched = null;
         }
         Persistence.feedSources.replace(feedSourceId, updatedFeedSource);
+
+        // If feed just changed from public to private, delete feed from public repo if it's present there.
+        if (formerFeedSource.isPublic && !updatedFeedSource.isPublic) {
+            LOG.info("Deleting {} as feed is being adjusted from public to private.", updatedFeedSource.toPublicKey());
+            S3Utils.getDefaultS3Client().deleteObject(S3Utils.DEFAULT_BUCKET, updatedFeedSource.toPublicKey());
+        }
 
         if (shouldNotifyUsersOnFeedUpdated(formerFeedSource, updatedFeedSource)) {
             return updatedFeedSource;

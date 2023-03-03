@@ -38,6 +38,7 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
@@ -420,13 +421,10 @@ public class FeedSource extends Model implements Cloneable {
      */
     @JsonIgnore
     public FeedVersion retrieveLatest() {
-        FeedVersion newestVersion = Persistence.feedVersions
-                .getOneFiltered(eq("feedSourceId", this.id), Sorts.descending("version"));
-        if (newestVersion == null) {
-            // Is this what happens if there are none?
-            return null;
-        }
-        return newestVersion;
+        return Persistence.feedVersions.getOneFiltered(
+            eq("feedSourceId", this.id),
+            Sorts.descending("version")
+        );
     }
 
     /**
@@ -459,6 +457,108 @@ public class FeedSource extends Model implements Cloneable {
     public String latestVersionId() {
         FeedVersion latest = retrieveLatest();
         return latest != null ? latest.id : null;
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonView(JsonViews.UserInterface.class)
+    @JsonProperty("deployedFeedVersionId")
+    @BsonIgnore
+    public String getDeployedFeedVersionId() {
+        FeedVersion feedVersion = getDeployedFeedVersion();
+        return feedVersion != null ? feedVersion.id : null;
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonView(JsonViews.UserInterface.class)
+    @JsonProperty("deployedFeedVersionStartDate")
+    @BsonIgnore
+    public LocalDate getDeployedFeedVersionStartDate() {
+        FeedVersion feedVersion = getDeployedFeedVersion();
+        return feedVersion != null ? feedVersion.validationSummary().startDate : null;
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonView(JsonViews.UserInterface.class)
+    @JsonProperty("deployedFeedVersionEndDate")
+    @BsonIgnore
+    public LocalDate getDeployedFeedVersionEndDate() {
+        FeedVersion feedVersion = getDeployedFeedVersion();
+        return feedVersion != null ? feedVersion.validationSummary().endDate : null;
+    }
+
+    /**
+     * The deployed feed version.
+     * This cannot be returned because of a circular reference between feed source and feed version. Instead, individual
+     * parameters (version id, start date and end date) are returned.
+     */
+    @JsonIgnore
+    @BsonIgnore
+    private FeedVersion deployedFeedVersion = null;
+
+    /**
+     * If a project has a "pinned" deployment it's feed versions take precedence over the latest feed version for this
+     * feed source. In this case, return either the latest "pinned" feed version or just the feed version, which ever
+     * is available.
+     *
+     * If a project does not have a "pinned" deployment (or the above is not available), return the latest feed version
+     * for this feed source from the newest deployment.
+     */
+    private FeedVersion getDeployedFeedVersion() {
+        if (deployedFeedVersion == null) {
+            Project project = Persistence.projects.getById(this.projectId);
+            if (project.pinnedDeploymentId != null) {
+                Deployment deployment = Persistence.deployments.getByIdLimitedFields(
+                    project.pinnedDeploymentId,
+                    "pinnedfeedVersionIds", "feedVersionIds"
+                );
+                FeedVersion feedVersion = getLatestDeployedFeedVersionForFeedSource(deployment.pinnedfeedVersionIds);
+                if (feedVersion != null) {
+                    // This feed version will be the latest pinned version for this feed source, if available.
+                    deployedFeedVersion = feedVersion;
+                } else {
+                    feedVersion = getLatestDeployedFeedVersionForFeedSource(deployment.feedVersionIds);
+                    if (feedVersion != null) {
+                        // This feed version will be the latest version for this feed source, if available.
+                        deployedFeedVersion = feedVersion;
+                    }
+                }
+            }
+
+            // If there is no pinned deployment or none of the deployment's feed versions are related to this feed source,
+            // find the latest feed version for this feed source.
+            if (deployedFeedVersion == null) {
+                // Get all deployments for this project.
+                List<Deployment> deployments = Persistence.deployments.getFilteredLimitedFields(
+                    eq("projectId", this.projectId),
+                    Sorts.descending("lastUpdated"),
+                    "feedVersionIds"
+                );
+                // Iterate through deployments newest to oldest.
+                for (Deployment deployment : deployments) {
+                    FeedVersion feedVersion = getLatestDeployedFeedVersionForFeedSource(deployment.feedVersionIds);
+                    if (feedVersion != null) {
+                        // This feed version will be the latest feed version for this feed source from the newest
+                        // deployment.
+                        deployedFeedVersion = feedVersion;
+                        break;
+                    }
+                }
+            }
+        }
+        return deployedFeedVersion;
+    }
+
+    /**
+     * Get the latest deployed feed version for this feed source, if available.
+     */
+    private FeedVersion getLatestDeployedFeedVersionForFeedSource(Collection<String> feedVersionIds) {
+        return Persistence.feedVersions.getOneFiltered(
+            and(
+                eq("feedSourceId", this.id),
+                in("_id", feedVersionIds)
+            ),
+            Sorts.descending("updated")
+        );
     }
 
     /**

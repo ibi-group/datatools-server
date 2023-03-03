@@ -53,9 +53,9 @@ public class SparkUtils {
         if (file == null) logMessageAndHalt(req, 404, "File is null");
         HttpServletResponse raw = res.raw();
         raw.setContentType("application/octet-stream");
-        raw.setHeader("Content-Disposition", "attachment; filename=" + filename);
         // Override the gzip content encoding applied to standard API responses.
-        res.header("Content-Encoding", "identity");
+        raw.setHeader("Content-Encoding", "identity");
+        raw.setHeader("Content-Disposition", "attachment; filename=" + filename);
         try (
             FileInputStream fileInputStream = new FileInputStream(file);
             ServletOutputStream outputStream = raw.getOutputStream()
