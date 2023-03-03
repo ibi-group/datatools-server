@@ -3,6 +3,8 @@ package com.conveyal.datatools.manager.models;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.jobs.ValidateFeedJob;
+import com.conveyal.datatools.manager.jobs.ValidateMobilityDataFeedJob;
 import com.conveyal.datatools.manager.jobs.validation.RouteTypeValidatorBuilder;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -354,9 +356,41 @@ public class FeedVersion extends Model implements Serializable {
         if (status == null) status = new MonitorableJob.Status();
 
         // VALIDATE GTFS feed
-        FileReader fr = null;
         try {
             LOG.info("Beginning validation...");
+
+            // FIXME: pass status to validate? Or somehow listen to events?
+            status.update("Validating feed...", 33);
+
+            // Validate the feed version.
+            // Certain extensions, if enabled, have extra validators
+            if (isExtensionEnabled("mtc")) {
+                validationResult = GTFS.validate(feedLoadResult.uniqueIdentifier, DataManager.GTFS_DATA_SOURCE,
+                    RouteTypeValidatorBuilder::buildRouteValidator,
+                    MTCValidator::new
+                );
+            } else {
+                validationResult = GTFS.validate(feedLoadResult.uniqueIdentifier, DataManager.GTFS_DATA_SOURCE,
+                    RouteTypeValidatorBuilder::buildRouteValidator
+                );
+            }
+        } catch (Exception e) {
+            status.fail(String.format("Unable to validate feed %s", this.id), e);
+            // FIXME create validation result with new constructor?
+            validationResult = new ValidationResult();
+            validationResult.fatalException = "failure!";
+        }
+    }
+
+    public void validateMobility(MonitorableJob.Status status) {
+
+        // Sometimes this method is called when no status object is available.
+        if (status == null) status = new MonitorableJob.Status();
+
+        // VALIDATE GTFS feed
+        FileReader fr = null;
+        try {
+            LOG.info("Beginning MobilityData validation...");
             status.update("MobilityData Analysis...", 11);
 
             File gtfsZip = this.retrieveGtfsFile();
@@ -382,22 +416,6 @@ public class FeedVersion extends Model implements Serializable {
 
             // This will persist the document to Mongo
             this.mobilityDataResult = Document.parse(json);
-
-            // FIXME: pass status to validate? Or somehow listen to events?
-            status.update("Validating feed...", 33);
-
-            // Validate the feed version.
-            // Certain extensions, if enabled, have extra validators
-            if (isExtensionEnabled("mtc")) {
-                validationResult = GTFS.validate(feedLoadResult.uniqueIdentifier, DataManager.GTFS_DATA_SOURCE,
-                    RouteTypeValidatorBuilder::buildRouteValidator,
-                    MTCValidator::new
-                );
-            } else {
-                validationResult = GTFS.validate(feedLoadResult.uniqueIdentifier, DataManager.GTFS_DATA_SOURCE,
-                    RouteTypeValidatorBuilder::buildRouteValidator
-                );
-            }
         } catch (Exception e) {
             status.fail(String.format("Unable to validate feed %s", this.id), e);
             // FIXME create validation result with new constructor?
@@ -581,5 +599,20 @@ public class FeedVersion extends Model implements Serializable {
      */
     public boolean isSameAs(FeedVersion otherVersion) {
         return otherVersion != null && this.hash.equals(otherVersion.hash);
+    }
+
+    /**
+     * {@link ValidateFeedJob} and {@link ValidateMobilityDataFeedJob} both require to save a feed version after their
+     * subsequent validation checks have completed. Either could finish first, therefore this method makes sure that
+     * only one instance is saved (the last to finish updates).
+     */
+    public void persistFeedVersionAfterValidation(boolean isNewVersion) {
+        if (isNewVersion && Persistence.feedVersions.getById(id) == null) {
+            int count = parentFeedSource().feedVersionCount();
+            version = count + 1;
+            Persistence.feedVersions.create(this);
+        } else {
+            Persistence.feedVersions.replace(id, this);
+        }
     }
 }

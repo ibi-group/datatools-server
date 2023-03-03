@@ -108,6 +108,7 @@ public class ProcessSingleFeedJob extends FeedVersionJob {
 
         // Next, validate the feed.
         addNextJob(new ValidateFeedJob(feedVersion, owner, isNewVersion));
+        addNextJob(new ValidateMobilityDataFeedJob(feedVersion, owner, isNewVersion));
 
         // We only need to snapshot the feed if there are transformations at the database level. In the case that there
         // are, the snapshot namespace will be the target of these modifications. If we were to apply the modifications
