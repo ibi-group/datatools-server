@@ -9,10 +9,14 @@ import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.models.FeedVersionSummary;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
+import com.google.common.collect.Lists;
 import com.google.common.io.ByteStreams;
+import com.mongodb.BasicDBObject;
+import com.mongodb.client.model.Accumulators;
 import org.bson.conversions.Bson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -22,21 +26,27 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
 import java.util.Collection;
-import java.util.Comparator;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Function;
 import java.util.stream.Collectors;
 
-import static com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource.AGENCY_ID_FIELDNAME;
 import static com.conveyal.datatools.common.utils.Scheduler.schedulerService;
+import static com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource.AGENCY_ID_FIELDNAME;
+import static com.mongodb.client.model.Aggregates.group;
+import static com.mongodb.client.model.Aggregates.match;
+import static com.mongodb.client.model.Aggregates.replaceRoot;
+import static com.mongodb.client.model.Aggregates.unwind;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
-import static com.mongodb.client.model.Filters.lt;
+import static com.mongodb.client.model.Filters.exists;
+import static com.mongodb.client.model.Filters.expr;
+import static com.mongodb.client.model.Filters.in;
 import static com.mongodb.client.model.Filters.ne;
 import static com.mongodb.client.model.Filters.or;
 
@@ -101,12 +111,54 @@ public class FeedUpdater {
         return new FeedUpdater(completedFeedRetriever);
     }
 
+    private static String getFeedId(S3ObjectSummary objSummary) {
+        String[] parts = objSummary.getKey().split("/");
+        return parts.length > 1 ? parts[1].replace(".zip", "") : "";
+    }
+
+    public static List<String> getFeedIds(List<S3ObjectSummary> s3objects) {
+        return s3objects.stream()
+            .map(FeedUpdater::getFeedId)
+            .filter(id -> id.length() != 0)
+            .collect(Collectors.toList());
+    }
+
+    public static Map<String, String> mapFeedIdsToFeedSourceIds(List<ExternalFeedSourceProperty> properties) {
+        Map<String, String> feedToFeedSourceId = new HashMap<>();
+        Map<String, Boolean> multipleSourceWarning = new HashMap<>();
+        for (ExternalFeedSourceProperty prop : properties) {
+            String feedId = prop.value;
+            if (feedToFeedSourceId.get(feedId) != null && !multipleSourceWarning.getOrDefault(feedId, false)) {
+                multipleSourceWarning.put(feedId, true);
+                LOG.warn("Found multiple feed sources for {}: {}. The published status on some feed versions will be incorrect.",
+                    feedId,
+                    properties
+                        .stream().filter(p -> feedId.equals(p.value))
+                        .map(p -> p.feedSourceId)
+                        .collect(Collectors.toList())
+                );
+            }
+            feedToFeedSourceId.put(feedId, prop.feedSourceId);
+        }
+        return feedToFeedSourceId;
+    }
+
+    public static Map<String, FeedSource> mapFeedIdsToFeedSources(
+        Map<String, String> feedIdsToFeedSourceIds,
+        List<FeedSource> feedSources
+    ) {
+        Map<String, FeedSource> feedSourceIdToFeedSource = feedSources.stream()
+            .collect(Collectors.toMap(src -> src.id, Function.identity()));
+
+        return feedIdsToFeedSourceIds.entrySet().stream()
+            .collect(Collectors.toMap(Map.Entry::getKey, e -> feedSourceIdToFeedSource.get(e.getValue())));
+    }
+
     private class UpdateFeedsTask implements Runnable {
         public void run() {
-            Map<String, String> updatedTags;
             try {
                 LOG.debug("Checking MTC feeds for newly processed versions");
-                updatedTags = checkForUpdatedFeeds();
+                Map<String, String> updatedTags = checkForUpdatedFeeds();
                 eTagForFeed.putAll(updatedTags);
                 if (!updatedTags.isEmpty()) LOG.info("New eTag list: {}", eTagForFeed);
                 else LOG.debug("No feeds updated (eTags on S3 match current list).");
@@ -128,49 +180,36 @@ public class FeedUpdater {
             eTagForFeed = new HashMap<>();
         }
 
-        // The feed versions corresponding to entries in objectSummaries
-        // that need to be marked as processed should meet all conditions below:
-        // - sentToExternalPublisher is not null,
-        // - processedByExternalPublisher is null or before sentToExternalPublisher.
-        Bson query = and(
-            ne(SENT_TO_EXTERNAL_PUBLISHER_FIELD, null),
-            or(
-                eq(PROCESSED_BY_EXTERNAL_PUBLISHER_FIELD, null),
-                lt(PROCESSED_BY_EXTERNAL_PUBLISHER_FIELD, SENT_TO_EXTERNAL_PUBLISHER_FIELD)
-            )
-        );
-        versionsToMarkAsProcessed = Persistence.feedVersions.getFiltered(query)
-            .stream()
-            .map(v -> v.id)
-            .collect(Collectors.toList());
+        versionsToMarkAsProcessed = getFeedVersionsToMarkAsProcessed();
 
         LOG.debug("Checking for feeds on S3.");
         Map<String, String> newTags = new HashMap<>();
         // iterate over feeds in download_prefix folder and register to (MTC project)
-        List<S3ObjectSummary> objectSummaries = completedFeedRetriever.retrieveCompletedFeeds();
-        if (objectSummaries == null) {
-            return newTags;
-        }
+        // Note: objectSummaries is at least an empty list (not null).
+        List<S3ObjectSummary> filteredObjectSummaries = completedFeedRetriever
+            .retrieveCompletedFeeds()
+            // Skip directory objects and empty/null/invalid feed ids
+            .stream().filter(s -> !bucketFolder.equals(s.getKey()) && !"null".equals(getFeedId(s)))
+            .collect(Collectors.toList());
+
+        Map<String, FeedSource> allFeedSourcesById = getFeedSourcesByFeedId(filteredObjectSummaries);
+
+        Map<String, FeedVersion> latestSentVersionsByFeedSourceId = getLatestVersionsSentForPublishing(allFeedSourcesById.values());
 
         LOG.debug(eTagForFeed.toString());
-        for (S3ObjectSummary objSummary : objectSummaries) {
+        for (S3ObjectSummary objSummary : filteredObjectSummaries) {
             String eTag = objSummary.getETag();
             String keyName = objSummary.getKey();
             LOG.debug("{} etag = {}", keyName, eTag);
 
-            // Don't add object if it is a dir
-            if (keyName.equals(bucketFolder)) continue;
-            String filename = keyName.split("/")[1];
-            String feedId = filename.replace(".zip", "");
-            FeedSource feedSource = getFeedSource(feedId);
+            String feedId = getFeedId(objSummary);
+            FeedSource feedSource = allFeedSourcesById.get(feedId);
             if (feedSource == null) {
                 LOG.error("No feed source found for feed ID {}", feedId);
                 continue;
             }
-            // Skip object if the filename is null
-            if ("null".equals(feedId)) continue;
 
-            FeedVersion latestVersionSentForPublishing = getLatestVersionSentForPublishing(feedId, feedSource);
+            FeedVersion latestVersionSentForPublishing = latestSentVersionsByFeedSourceId.get(feedSource.id);
             if (shouldMarkFeedAsProcessed(eTag, latestVersionSentForPublishing)) {
                 try {
                     // Don't mark a feed version as published if previous published version is before sentToExternalPublisher.
@@ -196,26 +235,45 @@ public class FeedUpdater {
         return newTags;
     }
 
-    /**
-     * Obtains the {@link FeedSource} for the given feed id (for MTC, that's the 2-letter agency code).
-     */
-    private FeedSource getFeedSource(String feedId) {
-        FeedSource feedSource = null;
-        List<ExternalFeedSourceProperty> properties = Persistence.externalFeedSourceProperties.getFiltered(
-            and(eq("value", feedId), eq("name", AGENCY_ID_FIELDNAME))
+    private static Map<String, FeedSource> getFeedSourcesByFeedId(List<S3ObjectSummary> objectSummaries) {
+        // Single Mongo query to get external properties for all feeds reported in S3.
+        List<ExternalFeedSourceProperty> allProperties = Persistence.externalFeedSourceProperties.getFiltered(
+            and(eq("name", AGENCY_ID_FIELDNAME), in("value", getFeedIds(objectSummaries)))
         );
-        if (properties.size() > 1) {
-            LOG.warn("Found multiple feed sources for {}: {}. The published status on some feed versions will be incorrect.",
-                feedId,
-                    properties.stream().map(p -> p.feedSourceId).collect(Collectors.joining(",")));
-        }
-        for (ExternalFeedSourceProperty prop : properties) {
-            // FIXME: What if there are multiple props found for different feed sources. This could happen if
-            // multiple projects have been synced with MTC or if the ExternalFeedSourceProperty for a feed
-            // source is not deleted properly when the feed source is deleted.
-            feedSource = Persistence.feedSources.getById(prop.feedSourceId);
-        }
-        return feedSource;
+
+        Map<String, String> feedIdToFeedSourceId = mapFeedIdsToFeedSourceIds(allProperties);
+
+        // Single Mongo query to get the various feed source objects.
+        List<FeedSource> feedSources = Persistence.feedSources
+            .getByIds(Lists.newArrayList(feedIdToFeedSourceId.values()));
+
+        return mapFeedIdsToFeedSources(feedIdToFeedSourceId, feedSources);
+    }
+
+    static List<String> getFeedVersionsToMarkAsProcessed() {
+        // The feed versions corresponding to entries in objectSummaries
+        // that need to be marked as processed should meet all conditions below:
+        // - sentToExternalPublisher is not null,
+        // - processedByExternalPublisher is null or before sentToExternalPublisher.
+        Bson query = and(
+            ne(SENT_TO_EXTERNAL_PUBLISHER_FIELD, null),
+            or(
+                eq(PROCESSED_BY_EXTERNAL_PUBLISHER_FIELD, null),
+                // To compare two fields within the same record, expr() must be used.
+                expr(new BasicDBObject().append(
+                    "$lt",
+                    new String[] {"$" + PROCESSED_BY_EXTERNAL_PUBLISHER_FIELD, "$" + SENT_TO_EXTERNAL_PUBLISHER_FIELD}
+                ))
+            )
+        );
+        List<FeedVersionSummary> filtered = Persistence.feedVersionSummaries.getMongoCollection()
+            .find(query)
+            .projection(eq("_id", 1))
+            .into(new ArrayList<>());
+        return filtered
+            .stream()
+            .map(v -> v.id)
+            .collect(Collectors.toList());
     }
 
     /**
@@ -264,18 +322,75 @@ public class FeedUpdater {
      * could be that more than one versions were recently "published" and the latest published version was a bad
      * feed that failed processing by RTD.
      */
-    private static FeedVersion getLatestVersionSentForPublishing(String feedId, FeedSource feedSource) {
+    static Map<String, FeedVersion> getLatestVersionsSentForPublishing(Collection<FeedSource> feedSources) {
+        /* Corresponding mongoshell query:
+        db.getCollection('FeedVersion').aggregate([
+        {
+            $match: {
+                sentToExternalPublisher: { $exists: 1 },
+                //feedSourceId: {$in: <array>}
+            }
+        },
+        {
+            $group: {
+                _id: "$feedSourceId",
+                latestSentToExternalPublisher: { $max: "$sentToExternalPublisher" },
+                items: { $push: "$$ROOT" }
+            }
+        },
+        {
+            $unwind: "$items"
+        },
+        {
+            $match: {
+                $expr: { $eq: ["$items.sentToExternalPublisher", "$latestSentToExternalPublisher"] }
+            }
+        },
+        {
+            "$replaceRoot": {
+                "newRoot": "$items"
+            }
+        }
+        ])
+        */
+
+        List<String> feedSourceIds = feedSources.stream().map(fs -> fs.id).collect(Collectors.toList());
+
+        List<Bson> stages = Lists.newArrayList(
+            match(
+                and(
+                    exists(SENT_TO_EXTERNAL_PUBLISHER_FIELD),
+                    in("feedSourceId", feedSourceIds)
+                )
+            ),
+            group(
+                "$feedSourceId",
+                Accumulators.max("latestSentToExternalPublisher", "$" + SENT_TO_EXTERNAL_PUBLISHER_FIELD),
+                Accumulators.push("items", "$$ROOT")
+            ),
+            unwind("$items"),
+            match(
+                // To compare two fields within the same record, expr() must be used.
+                expr(new BasicDBObject().append(
+                    "$eq",
+                    new String[] {"$items." + SENT_TO_EXTERNAL_PUBLISHER_FIELD, "$latestSentToExternalPublisher"}
+                ))
+            ),
+            replaceRoot("$items")
+        );
+
         try {
             // Collect the feed versions for the feed source.
-            Collection<FeedVersion> versions = feedSource.retrieveFeedVersions();
-            Optional<FeedVersion> lastPublishedVersionCandidate = versions
+            return Persistence.feedVersions
+                .getMongoCollection()
+                .aggregate(stages)
+                .into(new ArrayList<>())
                 .stream()
-                .min(Comparator.comparing(v -> v.sentToExternalPublisher, Comparator.nullsLast(Comparator.reverseOrder())));
-            return lastPublishedVersionCandidate.orElse(null);
+                .collect(Collectors.toMap(v -> v.feedSourceId, Function.identity()));
         } catch (Exception e) {
             e.printStackTrace();
-            LOG.error("Error encountered while checking for latest published version for {}", feedId);
-            return null;
+            LOG.error("Error encountered while checking for latest published versions.");
+            return new HashMap<>();
         }
     }
 
