@@ -25,10 +25,10 @@ import com.fasterxml.jackson.annotation.JsonView;
 import org.bson.Document;
 import org.bson.codecs.pojo.annotations.BsonProperty;
 import org.mobilitydata.gtfsvalidator.runner.ValidationRunner;
+import org.mobilitydata.gtfsvalidator.runner.ValidationRunnerConfig;
 import org.mobilitydata.gtfsvalidator.util.VersionResolver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.mobilitydata.gtfsvalidator.runner.ValidationRunnerConfig;
 
 import java.io.BufferedReader;
 import java.io.File;
@@ -355,7 +355,7 @@ public class FeedVersion extends Model implements Serializable {
         // Sometimes this method is called when no status object is available.
         if (status == null) status = new MonitorableJob.Status();
 
-        // VALIDATE GTFS feed
+        // VALIDATE GTFS feed.
         try {
             LOG.info("Beginning validation...");
 
@@ -396,12 +396,12 @@ public class FeedVersion extends Model implements Serializable {
             // TODO: base this on the file being completely saved rather than a fixed amount of time.
             Thread.sleep(5000);
             File gtfsZip = this.retrieveGtfsFile();
-            // Namespace based folders avoid clash for validation being run on multiple versions of a feed
+            // Namespace based folders avoid clash for validation being run on multiple versions of a feed.
             // TODO: do we know that there will always be a namespace?
             String validatorOutputDirectory = "/tmp/datatools_gtfs/" + this.namespace + "/";
 
             status.update("MobilityData Analysis...", 20);
-            // Set up MobilityData validator
+            // Set up MobilityData validator.
             ValidationRunnerConfig.Builder builder = ValidationRunnerConfig.builder();
             builder.setGtfsSource(gtfsZip.toURI());
             builder.setOutputDirectory(Path.of(validatorOutputDirectory));
@@ -413,14 +413,14 @@ public class FeedVersion extends Model implements Serializable {
             runner.run(mbValidatorConfig);
 
             status.update("MobilityData Analysis...", 80);
-            // Read generated report and save to Mongo
+            // Read generated report and save to Mongo.
             String json;
             try (FileReader fr = new FileReader(validatorOutputDirectory + "report.json")) {
                 BufferedReader in = new BufferedReader(fr);
                 json = in.lines().collect(Collectors.joining(System.lineSeparator()));
             }
 
-            // This will persist the document to Mongo
+            // This will persist the document to Mongo.
             this.mobilityDataResult = Document.parse(json);
         } catch (Exception e) {
             status.fail(String.format("Unable to validate feed %s", this.id), e);
