@@ -459,6 +459,11 @@ public class FeedSource extends Model implements Cloneable {
         return latest != null ? latest.id : null;
     }
 
+    /**
+     * The deployed feed version.
+     * This cannot be returned because of a circular reference between feed source and feed version. Instead, individual
+     * parameters (version id, start date and end date) are returned.
+     */
     @JsonIgnore
     @BsonIgnore
     private FeedVersionDeployed deployedFeedVersion;
