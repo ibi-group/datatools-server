@@ -26,10 +26,8 @@ import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
-import com.google.common.collect.Lists;
 import com.mongodb.client.FindIterable;
 import com.mongodb.client.model.Sorts;
-import org.bson.Document;
 import org.bson.codecs.pojo.annotations.BsonIgnore;
 import org.bson.conversions.Bson;
 import org.slf4j.Logger;
@@ -40,6 +38,7 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
@@ -51,12 +50,6 @@ import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
-import static com.mongodb.client.model.Aggregates.limit;
-import static com.mongodb.client.model.Aggregates.lookup;
-import static com.mongodb.client.model.Aggregates.match;
-import static com.mongodb.client.model.Aggregates.replaceRoot;
-import static com.mongodb.client.model.Aggregates.sort;
-import static com.mongodb.client.model.Aggregates.unwind;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 import static com.mongodb.client.model.Filters.in;
@@ -466,127 +459,54 @@ public class FeedSource extends Model implements Cloneable {
         return latest != null ? latest.id : null;
     }
 
+    @JsonIgnore
+    @BsonIgnore
+    private FeedVersionDeployed deployedFeedVersion;
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonView(JsonViews.UserInterface.class)
+    @JsonProperty("deployedFeedVersionId")
+    @BsonIgnore
+    public String getDeployedFeedVersionId() {
+        deployedFeedVersion = retrieveDeployedFeedVersion();
+        return deployedFeedVersion != null ? deployedFeedVersion.id : null;
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonView(JsonViews.UserInterface.class)
+    @JsonProperty("deployedFeedVersionStartDate")
+    @BsonIgnore
+    public LocalDate getDeployedFeedVersionStartDate() {
+        deployedFeedVersion = retrieveDeployedFeedVersion();
+        return deployedFeedVersion != null ? deployedFeedVersion.startDate : null;
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonView(JsonViews.UserInterface.class)
+    @JsonProperty("deployedFeedVersionEndDate")
+    @BsonIgnore
+    public LocalDate getDeployedFeedVersionEndDate() {
+        deployedFeedVersion = retrieveDeployedFeedVersion();
+        return deployedFeedVersion != null ? deployedFeedVersion.endDate : null;
+    }
+
     /**
      * Get deployed feed version for this feed source.
      *
-     * If a project has a "pinned" deployment, the deployment's feed versions take precedence over the latest feed
-     * version for this feed source. In this case, return the feed version from the pinned deployment.
+     * If a project has a "pinned" deployment, that deployment's feed versions take precedence over the latest
+     * deployment's feed versions for this feed source. In this case, return the feed version from the pinned deployment.
      *
-     * If a project does not have a "pinned" deployment (or the above is not available), return the latest feed version
-     * for this feed source.
+     * If a project does not have a "pinned" deployment, return the latest deployment's feed versions for this feed
+     * source.
      */
-    public FeedVersionDeployed retrieveDeployedFeedVersion(String projectId) {
-        FeedVersionDeployed deployedFeedVersion = getFeedVersionFromPinnedDeployment(projectId);
-        return (deployedFeedVersion != null) ? deployedFeedVersion : getLatestFeedVersionForFeedSource();
-    }
-
-    /**
-     * Get the deployed feed version from the pinned deployment for this feed source.
-     */
-    private FeedVersionDeployed getFeedVersionFromPinnedDeployment(String projectId) {
-    /*
-        db.getCollection('Project').aggregate([
-        {
-            $match: {
-                _id: "6f5a3785-68ee-4820-8828-fc8f7f0f4d33"
-            }
-        },
-        {
-            $lookup:{
-                from:"Deployment",
-                localField:"pinnedDeploymentId",
-                foreignField:"_id",
-                as:"deployment"
-            }
-        },
-        {
-            $lookup:{
-                from:"FeedVersion",
-                localField:"deployment.feedVersionIds",
-                foreignField:"_id",
-                as:"feedVersions"
-            }
-        },
-        {
-            $unwind: "$feedVersions"
-        },
-        {
-            "$replaceRoot": {
-                "newRoot": "$feedVersions"
-            }
-        },
-        {
-            $match: {
-                feedSourceId: "78adb78e-7273-41a8-9267-9a9796279894"
-            }
-        },
-        {
-            $sort: {
-                lastUpdated : -1
-            }
-        },
-        {
-           $limit: 1
+    public FeedVersionDeployed retrieveDeployedFeedVersion() {
+        if (deployedFeedVersion != null) {
+            return deployedFeedVersion;
         }
-        ])
-     */
-        List<Bson> stages = Lists.newArrayList(
-            match(
-                in("_id", projectId)
-            ),
-            lookup("Deployment", "pinnedDeploymentId", "_id", "deployment"),
-            lookup("FeedVersion", "deployment.feedVersionIds", "_id", "feedVersions"),
-            unwind("$feedVersions"),
-            replaceRoot("$feedVersions"),
-            match(
-                in("feedSourceId", this.id)
-            ),
-            // If more than one feed version for a feed source is held against a deployment the latest is used.
-            sort(Sorts.descending("lastUpdated")),
-            limit(1)
-        );
-        Document feedVersionDocument = Persistence
-            .getMongoDatabase()
-            .getCollection("Project")
-            .aggregate(stages)
-            .first();
-        return (feedVersionDocument == null) ? null : new FeedVersionDeployed(feedVersionDocument);
-    }
-
-    /**
-     * Get the latest feed version for this feed source as the deployed feed version.
-     */
-    private FeedVersionDeployed getLatestFeedVersionForFeedSource() {
-        /*
-            db.getCollection('FeedVersion').aggregate([
-            {
-                $match: {
-                    feedSourceId: "78adb78e-7273-41a8-9267-9a9796279894"
-                }
-            },
-            {
-                $sort: {
-                    lastUpdated : -1
-                }
-            },
-            {
-               $limit: 1
-            }
-            ])
-         */
-        List<Bson> stages = Lists.newArrayList(
-            match(
-                in("feedSourceId", this.id)
-            ),
-            sort(Sorts.descending("lastUpdated")),
-            limit(1)
-        );
-        FeedVersion feedVersion = Persistence
-            .feedVersions
-            .getMongoCollection()
-            .aggregate(stages)
-            .first();
-        return (feedVersion == null) ? null : new FeedVersionDeployed(feedVersion);
+        deployedFeedVersion = FeedVersionDeployed.getFeedVersionFromPinnedDeployment(projectId, id);
+        return (deployedFeedVersion != null)
+            ? deployedFeedVersion
+            : FeedVersionDeployed.getFeedVersionFromLatestDeployment(projectId, id);
     }
 
     /**
