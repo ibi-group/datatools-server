@@ -13,12 +13,16 @@ public class ExternalFeedSourceProperty extends Model {
     // constructor for data dump load
     public ExternalFeedSourceProperty() {}
 
-    public ExternalFeedSourceProperty(FeedSource feedSource, String resourceType, String name, String value) {
-        this.id = constructId(feedSource, resourceType, name);
-        this.feedSourceId = feedSource.id;
+    public ExternalFeedSourceProperty(String feedSourceId, String resourceType, String name, String value) {
+        this.feedSourceId = feedSourceId;
         this.resourceType = resourceType;
         this.name = name;
         this.value = value;
+    }
+
+    public ExternalFeedSourceProperty(FeedSource feedSource, String resourceType, String name, String value) {
+        this(feedSource.id, resourceType, name, value);
+        this.id = constructId(feedSource, resourceType, name);
     }
 
     public static String constructId(FeedSource feedSource, String resourceType, String name) {

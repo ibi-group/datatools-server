@@ -45,12 +45,12 @@ public class ReplaceFileFromVersionTransformation extends ZipTransformation {
         String tableName = table + ".txt";
         // Run the replace transformation
         Path sourceZipPath = Paths.get(sourceVersion.retrieveGtfsFile().getAbsolutePath());
-        try (FileSystem sourceZipFs = FileSystems.newFileSystem(sourceZipPath, null)) {
+        try (FileSystem sourceZipFs = FileSystems.newFileSystem(sourceZipPath, (ClassLoader) null)) {
             // If the source txt file does not exist, NoSuchFileException will be thrown and caught below.
             Path sourceTxtFilePath = getTablePathInZip(tableName, sourceZipFs);
             Path targetZipPath = Paths.get(zipTarget.gtfsFile.getAbsolutePath());
             LOG.info("Replacing file {} in zip file {} with source {}", tableName, targetZipPath.getFileName(), sourceVersion.id);
-            try (FileSystem targetZipFs = FileSystems.newFileSystem(targetZipPath, null)) {
+            try (FileSystem targetZipFs = FileSystems.newFileSystem(targetZipPath, (ClassLoader) null)) {
                 Path targetTxtFilePath = getTablePathInZip(tableName, targetZipFs);
                 // Set transform type according to whether target file exists.
                 TransformType type = Files.exists(targetTxtFilePath)
