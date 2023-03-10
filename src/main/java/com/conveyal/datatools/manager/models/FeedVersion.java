@@ -3,6 +3,8 @@ package com.conveyal.datatools.manager.models;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.jobs.ValidateFeedJob;
+import com.conveyal.datatools.manager.jobs.ValidateMobilityDataFeedJob;
 import com.conveyal.datatools.manager.jobs.validation.RouteTypeValidatorBuilder;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -20,14 +22,21 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
+import org.bson.Document;
 import org.bson.codecs.pojo.annotations.BsonProperty;
+import org.mobilitydata.gtfsvalidator.runner.ValidationRunner;
+import org.mobilitydata.gtfsvalidator.runner.ValidationRunnerConfig;
+import org.mobilitydata.gtfsvalidator.util.VersionResolver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -253,6 +262,8 @@ public class FeedVersion extends Model implements Serializable {
      * */
     public Date processedByExternalPublisher;
 
+    public Document mobilityDataResult;
+
     public String formattedTimestamp() {
         SimpleDateFormat format = new SimpleDateFormat(HUMAN_READABLE_TIMESTAMP_FORMAT);
         return format.format(this.updated);
@@ -344,9 +355,10 @@ public class FeedVersion extends Model implements Serializable {
         // Sometimes this method is called when no status object is available.
         if (status == null) status = new MonitorableJob.Status();
 
-        // VALIDATE GTFS feed
+        // VALIDATE GTFS feed.
         try {
             LOG.info("Beginning validation...");
+
             // FIXME: pass status to validate? Or somehow listen to events?
             status.update("Validating feed...", 33);
 
@@ -362,6 +374,54 @@ public class FeedVersion extends Model implements Serializable {
                     RouteTypeValidatorBuilder::buildRouteValidator
                 );
             }
+        } catch (Exception e) {
+            status.fail(String.format("Unable to validate feed %s", this.id), e);
+            // FIXME create validation result with new constructor?
+            validationResult = new ValidationResult();
+            validationResult.fatalException = "failure!";
+        }
+    }
+
+    public void validateMobility(MonitorableJob.Status status) {
+
+        // Sometimes this method is called when no status object is available.
+        if (status == null) status = new MonitorableJob.Status();
+
+        // VALIDATE GTFS feed
+        try {
+            LOG.info("Beginning MobilityData validation...");
+            status.update("MobilityData Analysis...", 11);
+
+            // Wait for the file to be entirely copied into the directory.
+            // TODO: base this on the file being completely saved rather than a fixed amount of time.
+            Thread.sleep(5000);
+            File gtfsZip = this.retrieveGtfsFile();
+            // Namespace based folders avoid clash for validation being run on multiple versions of a feed.
+            // TODO: do we know that there will always be a namespace?
+            String validatorOutputDirectory = "/tmp/datatools_gtfs/" + this.namespace + "/";
+
+            status.update("MobilityData Analysis...", 20);
+            // Set up MobilityData validator.
+            ValidationRunnerConfig.Builder builder = ValidationRunnerConfig.builder();
+            builder.setGtfsSource(gtfsZip.toURI());
+            builder.setOutputDirectory(Path.of(validatorOutputDirectory));
+            ValidationRunnerConfig mbValidatorConfig = builder.build();
+
+            status.update("MobilityData Analysis...", 40);
+            // Run MobilityData validator
+            ValidationRunner runner = new ValidationRunner(new VersionResolver());
+            runner.run(mbValidatorConfig);
+
+            status.update("MobilityData Analysis...", 80);
+            // Read generated report and save to Mongo.
+            String json;
+            try (FileReader fr = new FileReader(validatorOutputDirectory + "report.json")) {
+                BufferedReader in = new BufferedReader(fr);
+                json = in.lines().collect(Collectors.joining(System.lineSeparator()));
+            }
+
+            // This will persist the document to Mongo.
+            this.mobilityDataResult = Document.parse(json);
         } catch (Exception e) {
             status.fail(String.format("Unable to validate feed %s", this.id), e);
             // FIXME create validation result with new constructor?
@@ -545,5 +605,20 @@ public class FeedVersion extends Model implements Serializable {
      */
     public boolean isSameAs(FeedVersion otherVersion) {
         return otherVersion != null && this.hash.equals(otherVersion.hash);
+    }
+
+    /**
+     * {@link ValidateFeedJob} and {@link ValidateMobilityDataFeedJob} both require to save a feed version after their
+     * subsequent validation checks have completed. Either could finish first, therefore this method makes sure that
+     * only one instance is saved (the last to finish updates).
+     */
+    public void persistFeedVersionAfterValidation(boolean isNewVersion) {
+        if (isNewVersion && Persistence.feedVersions.getById(id) == null) {
+            int count = parentFeedSource().feedVersionCount();
+            version = count + 1;
+            Persistence.feedVersions.create(this);
+        } else {
+            Persistence.feedVersions.replace(id, this);
+        }
     }
 }
