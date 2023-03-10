@@ -468,6 +468,14 @@ public class FeedSource extends Model implements Cloneable {
     @BsonIgnore
     private FeedVersionDeployed deployedFeedVersion;
 
+    /**
+     * This value is set to true once an attempt has been made to get the deployed feed version. This prevents subsequent
+     * attempts where the deployed feed version is not available.
+     */
+    @JsonIgnore
+    @BsonIgnore
+    private boolean deployedFeedVersionDefined;
+
     @JsonInclude(JsonInclude.Include.NON_NULL)
     @JsonView(JsonViews.UserInterface.class)
     @JsonProperty("deployedFeedVersionId")
@@ -498,20 +506,24 @@ public class FeedSource extends Model implements Cloneable {
     /**
      * Get deployed feed version for this feed source.
      *
-     * If a project has a "pinned" deployment, that deployment's feed versions take precedence over the latest
-     * deployment's feed versions for this feed source. In this case, return the feed version from the pinned deployment.
+     * If a project has a "pinned" deployment, return the feed version from this pinned deployment. If it is not
+     * available return null and don't attempt to get the feed version from the latest deployment.
      *
      * If a project does not have a "pinned" deployment, return the latest deployment's feed versions for this feed
-     * source.
+     * source, if available.
      */
     public FeedVersionDeployed retrieveDeployedFeedVersion() {
-        if (deployedFeedVersion != null) {
+        if (deployedFeedVersionDefined) {
             return deployedFeedVersion;
         }
-        deployedFeedVersion = FeedVersionDeployed.getFeedVersionFromPinnedDeployment(projectId, id);
-        return (deployedFeedVersion != null)
-            ? deployedFeedVersion
-            : FeedVersionDeployed.getFeedVersionFromLatestDeployment(projectId, id);
+        Project project = Persistence.projects.getById(projectId);
+        if (project.pinnedDeploymentId != null && !project.pinnedDeploymentId.isEmpty()) {
+            deployedFeedVersion = FeedVersionDeployed.getFeedVersionFromPinnedDeployment(projectId, id);
+        } else {
+            deployedFeedVersion = FeedVersionDeployed.getFeedVersionFromLatestDeployment(projectId, id);
+        }
+        deployedFeedVersionDefined = true;
+        return deployedFeedVersion;
     }
 
     /**
