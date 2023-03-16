@@ -470,7 +470,7 @@ public class FeedSource extends Model implements Cloneable {
 
     /**
      * This value is set to true once an attempt has been made to get the deployed feed version. This prevents subsequent
-     * attempts where the deployed feed version is not available.
+     * attempts by Json annotated properties to get a deployed feed version that is not available.
      */
     @JsonIgnore
     @BsonIgnore
@@ -517,11 +517,9 @@ public class FeedSource extends Model implements Cloneable {
             return deployedFeedVersion;
         }
         Project project = Persistence.projects.getById(projectId);
-        if (project.pinnedDeploymentId != null && !project.pinnedDeploymentId.isEmpty()) {
-            deployedFeedVersion = FeedVersionDeployed.getFeedVersionFromPinnedDeployment(projectId, id);
-        } else {
-            deployedFeedVersion = FeedVersionDeployed.getFeedVersionFromLatestDeployment(projectId, id);
-        }
+        deployedFeedVersion = (project.pinnedDeploymentId != null && !project.pinnedDeploymentId.isEmpty())
+            ? FeedVersionDeployed.getFeedVersionFromPinnedDeployment(projectId, id)
+            : FeedVersionDeployed.getFeedVersionFromLatestDeployment(projectId, id);
         deployedFeedVersionDefined = true;
         return deployedFeedVersion;
     }
