@@ -459,33 +459,6 @@ public class FeedSource extends Model implements Cloneable {
         return latest != null ? latest.id : null;
     }
 
-    @JsonInclude(JsonInclude.Include.NON_NULL)
-    @JsonView(JsonViews.UserInterface.class)
-    @JsonProperty("deployedFeedVersionId")
-    @BsonIgnore
-    public String getDeployedFeedVersionId() {
-        FeedVersion feedVersion = getDeployedFeedVersion();
-        return feedVersion != null ? feedVersion.id : null;
-    }
-
-    @JsonInclude(JsonInclude.Include.NON_NULL)
-    @JsonView(JsonViews.UserInterface.class)
-    @JsonProperty("deployedFeedVersionStartDate")
-    @BsonIgnore
-    public LocalDate getDeployedFeedVersionStartDate() {
-        FeedVersion feedVersion = getDeployedFeedVersion();
-        return feedVersion != null ? feedVersion.validationSummary().startDate : null;
-    }
-
-    @JsonInclude(JsonInclude.Include.NON_NULL)
-    @JsonView(JsonViews.UserInterface.class)
-    @JsonProperty("deployedFeedVersionEndDate")
-    @BsonIgnore
-    public LocalDate getDeployedFeedVersionEndDate() {
-        FeedVersion feedVersion = getDeployedFeedVersion();
-        return feedVersion != null ? feedVersion.validationSummary().endDate : null;
-    }
-
     /**
      * The deployed feed version.
      * This cannot be returned because of a circular reference between feed source and feed version. Instead, individual
@@ -493,72 +466,62 @@ public class FeedSource extends Model implements Cloneable {
      */
     @JsonIgnore
     @BsonIgnore
-    private FeedVersion deployedFeedVersion = null;
+    private FeedVersionDeployed deployedFeedVersion;
 
     /**
-     * If a project has a "pinned" deployment it's feed versions take precedence over the latest feed version for this
-     * feed source. In this case, return either the latest "pinned" feed version or just the feed version, which ever
-     * is available.
-     *
-     * If a project does not have a "pinned" deployment (or the above is not available), return the latest feed version
-     * for this feed source from the newest deployment.
+     * This value is set to true once an attempt has been made to get the deployed feed version. This prevents subsequent
+     * attempts by Json annotated properties to get a deployed feed version that is not available.
      */
-    private FeedVersion getDeployedFeedVersion() {
-        if (deployedFeedVersion == null) {
-            Project project = Persistence.projects.getById(this.projectId);
-            if (project.pinnedDeploymentId != null) {
-                Deployment deployment = Persistence.deployments.getByIdLimitedFields(
-                    project.pinnedDeploymentId,
-                    "pinnedfeedVersionIds", "feedVersionIds"
-                );
-                FeedVersion feedVersion = getLatestDeployedFeedVersionForFeedSource(deployment.pinnedfeedVersionIds);
-                if (feedVersion != null) {
-                    // This feed version will be the latest pinned version for this feed source, if available.
-                    deployedFeedVersion = feedVersion;
-                } else {
-                    feedVersion = getLatestDeployedFeedVersionForFeedSource(deployment.feedVersionIds);
-                    if (feedVersion != null) {
-                        // This feed version will be the latest version for this feed source, if available.
-                        deployedFeedVersion = feedVersion;
-                    }
-                }
-            }
+    @JsonIgnore
+    @BsonIgnore
+    private boolean deployedFeedVersionDefined;
 
-            // If there is no pinned deployment or none of the deployment's feed versions are related to this feed source,
-            // find the latest feed version for this feed source.
-            if (deployedFeedVersion == null) {
-                // Get all deployments for this project.
-                List<Deployment> deployments = Persistence.deployments.getFilteredLimitedFields(
-                    eq("projectId", this.projectId),
-                    Sorts.descending("lastUpdated"),
-                    "feedVersionIds"
-                );
-                // Iterate through deployments newest to oldest.
-                for (Deployment deployment : deployments) {
-                    FeedVersion feedVersion = getLatestDeployedFeedVersionForFeedSource(deployment.feedVersionIds);
-                    if (feedVersion != null) {
-                        // This feed version will be the latest feed version for this feed source from the newest
-                        // deployment.
-                        deployedFeedVersion = feedVersion;
-                        break;
-                    }
-                }
-            }
-        }
-        return deployedFeedVersion;
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonView(JsonViews.UserInterface.class)
+    @JsonProperty("deployedFeedVersionId")
+    @BsonIgnore
+    public String getDeployedFeedVersionId() {
+        deployedFeedVersion = retrieveDeployedFeedVersion();
+        return deployedFeedVersion != null ? deployedFeedVersion.id : null;
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonView(JsonViews.UserInterface.class)
+    @JsonProperty("deployedFeedVersionStartDate")
+    @BsonIgnore
+    public LocalDate getDeployedFeedVersionStartDate() {
+        deployedFeedVersion = retrieveDeployedFeedVersion();
+        return deployedFeedVersion != null ? deployedFeedVersion.startDate : null;
+    }
+
+    @JsonInclude(JsonInclude.Include.NON_NULL)
+    @JsonView(JsonViews.UserInterface.class)
+    @JsonProperty("deployedFeedVersionEndDate")
+    @BsonIgnore
+    public LocalDate getDeployedFeedVersionEndDate() {
+        deployedFeedVersion = retrieveDeployedFeedVersion();
+        return deployedFeedVersion != null ? deployedFeedVersion.endDate : null;
     }
 
     /**
-     * Get the latest deployed feed version for this feed source, if available.
+     * Get deployed feed version for this feed source.
+     *
+     * If a project has a "pinned" deployment, return the feed version from this pinned deployment. If it is not
+     * available return null and don't attempt to get the feed version from the latest deployment.
+     *
+     * If a project does not have a "pinned" deployment, return the latest deployment's feed versions for this feed
+     * source, if available.
      */
-    private FeedVersion getLatestDeployedFeedVersionForFeedSource(Collection<String> feedVersionIds) {
-        return Persistence.feedVersions.getOneFiltered(
-            and(
-                eq("feedSourceId", this.id),
-                in("_id", feedVersionIds)
-            ),
-            Sorts.descending("updated")
-        );
+    public FeedVersionDeployed retrieveDeployedFeedVersion() {
+        if (deployedFeedVersionDefined) {
+            return deployedFeedVersion;
+        }
+        Project project = Persistence.projects.getById(projectId);
+        deployedFeedVersion = (project.pinnedDeploymentId != null && !project.pinnedDeploymentId.isEmpty())
+            ? FeedVersionDeployed.getFeedVersionFromPinnedDeployment(projectId, id)
+            : FeedVersionDeployed.getFeedVersionFromLatestDeployment(projectId, id);
+        deployedFeedVersionDefined = true;
+        return deployedFeedVersion;
     }
 
     /**

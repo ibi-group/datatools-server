@@ -33,26 +33,28 @@ import static com.mongodb.client.model.Filters.eq;
 import static org.eclipse.jetty.http.HttpStatus.BAD_REQUEST_400;
 import static org.eclipse.jetty.http.HttpStatus.OK_200;
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 
 public class FeedSourceControllerTest extends DatatoolsTest {
     private static Project project = null;
     private static Project projectToBeDeleted = null;
-    private static Project projectWithPinnedDeployment = null;
     private static FeedSource feedSourceWithUrl = null;
     private static FeedSource feedSourceWithNoUrl = null;
     private static FeedSource feedSourceWithLabels = null;
     private static FeedSource feedSourceWithInvalidLabels = null;
-    private static FeedSource feedSourceWithDeployedFeedVersion = null;
-    private static FeedSource feedSourceWithPinnedFeedVersion = null;
     private static Label publicLabel = null;
     private static Label adminOnlyLabel = null;
-    private static FeedVersion feedVersionSuperseded = null;
-    private static FeedVersion feedVersionDeployed = null;
-    private static FeedVersion feedVersionLatest = null;
-    private static FeedVersion feedVersionPinned = null;
+
+    private static Project projectWithLatestDeployment = null;
+    private static FeedSource feedSourceWithLatestDeploymentFeedVersion = null;
+    private static FeedVersion feedVersionFromLatestDeployment = null;
+    private static Deployment deploymentLatest = null;
     private static Deployment deploymentSuperseded = null;
-    private static Deployment deploymentDeployed = null;
+
+    private static Project projectWithPinnedDeployment = null;
+    private static FeedSource feedSourceWithPinnedDeploymentFeedVersion = null;
+    private static FeedVersion feedVersionFromPinnedDeployment = null;
     private static Deployment deploymentPinned = null;
 
     @BeforeAll
@@ -69,9 +71,6 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         projectToBeDeleted.autoFetchFeeds = false;
         Persistence.projects.create(projectToBeDeleted);
 
-        projectWithPinnedDeployment = new Project();
-        projectWithPinnedDeployment.name = "ProjectThree";
-        Persistence.projects.create(projectWithPinnedDeployment);
 
         feedSourceWithUrl = createFeedSource("FeedSourceOne", new URL("http://www.feedsource.com"), project);
         feedSourceWithNoUrl = createFeedSource("FeedSourceTwo", null, project);
@@ -82,24 +81,63 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         adminOnlyLabel.adminOnly = true;
         publicLabel = createLabel("Public Label");
 
-        feedSourceWithDeployedFeedVersion = createFeedSource("FeedSource", null, project, true);
-        feedSourceWithPinnedFeedVersion = createFeedSource("FeedSourceWithPinnedFeedVersion", null, projectWithPinnedDeployment, true);
-
-        LocalDate supersededDate = LocalDate.of(2020, Month.DECEMBER, 25);
+        // Feed version from latest deployment.
+        projectWithLatestDeployment = new Project();
+        projectWithLatestDeployment.id = "project-with-latest-deployment";
+        Persistence.projects.create(projectWithLatestDeployment);
+        feedSourceWithLatestDeploymentFeedVersion = createFeedSource(
+            "feed-source-with-latest-deployment-feed-version",
+            "FeedSource",
+            null,
+            projectWithLatestDeployment,
+            true
+        );
+        LocalDate deployedSuperseded = LocalDate.of(2020, Month.MARCH, 12);
         LocalDate deployedEndDate = LocalDate.of(2021, Month.MARCH, 12);
         LocalDate deployedStartDate = LocalDate.of(2021, Month.MARCH, 1);
-        feedVersionSuperseded = createFeedVersion("superseded", feedSourceWithDeployedFeedVersion.id, supersededDate);
-        feedVersionDeployed = createFeedVersion("deployed", feedSourceWithDeployedFeedVersion.id, deployedStartDate, deployedEndDate);
-        feedVersionLatest = createFeedVersion("latest", feedSourceWithDeployedFeedVersion.id, LocalDate.of(2022, Month.NOVEMBER, 2));
-        feedVersionPinned = createFeedVersion("pinned", feedSourceWithPinnedFeedVersion.id, LocalDate.of(2022, Month.NOVEMBER, 2));
+        feedVersionFromLatestDeployment = createFeedVersion(
+            "feed-version-from-latest-deployment",
+            feedSourceWithLatestDeploymentFeedVersion.id,
+            deployedStartDate,
+            deployedEndDate
+        );
+        deploymentSuperseded = createDeployment(
+            "deployment-superseded",
+            projectWithLatestDeployment,
+            feedVersionFromLatestDeployment.id,
+            deployedSuperseded
+        );
+        deploymentLatest = createDeployment(
+            "deployment-latest",
+            projectWithLatestDeployment,
+            feedVersionFromLatestDeployment.id,
+            deployedEndDate
+        );
 
-        deploymentSuperseded = createDeployment("superseded", project, feedVersionSuperseded.id, null, supersededDate);
-        deploymentDeployed = createDeployment("deployed", project, feedVersionDeployed.id, null, deployedEndDate);
-        deploymentPinned = createDeployment("pinned", projectWithPinnedDeployment, null, feedVersionPinned.id, deployedEndDate);
-
+        // Feed version from pinned deployment.
+        projectWithPinnedDeployment = new Project();
+        projectWithPinnedDeployment.id = "project-with-pinned-deployment";
+        Persistence.projects.create(projectWithPinnedDeployment);
+        feedSourceWithPinnedDeploymentFeedVersion = createFeedSource(
+            "feed-source-with-pinned-deployment-feed-version",
+            "FeedSourceWithPinnedFeedVersion",
+            null,
+            projectWithPinnedDeployment,
+            true
+        );
+        feedVersionFromPinnedDeployment = createFeedVersion(
+            "feed-version-from-pinned-deployment",
+            feedSourceWithPinnedDeploymentFeedVersion.id,
+            LocalDate.of(2022, Month.NOVEMBER, 2)
+        );
+        deploymentPinned = createDeployment(
+            "deployment-pinned",
+            projectWithPinnedDeployment,
+            feedVersionFromPinnedDeployment.id,
+            deployedEndDate
+        );
         projectWithPinnedDeployment.pinnedDeploymentId = deploymentPinned.id;
         Persistence.projects.replace(projectWithPinnedDeployment.id, projectWithPinnedDeployment);
-
     }
 
     @AfterAll
@@ -110,9 +148,6 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         }
         if (projectToBeDeleted != null) {
             Persistence.projects.removeById(projectToBeDeleted.id);
-        }
-        if (projectWithPinnedDeployment != null) {
-            Persistence.projects.removeById(projectWithPinnedDeployment.id);
         }
         if (feedSourceWithUrl != null) {
             Persistence.feedSources.removeById(feedSourceWithUrl.id);
@@ -126,32 +161,41 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         if (adminOnlyLabel != null) {
             Persistence.labels.removeById(adminOnlyLabel.id);
         }
-        if (feedSourceWithDeployedFeedVersion != null) {
-            Persistence.feedSources.removeById(feedSourceWithDeployedFeedVersion.id);
+        tearDownDeployedFeedVersion();
+    }
+
+    /**
+     * These entities are removed separately so that if the need arises they can be kept.
+     * This would then allow the Mongo queries defined in FeedSource#getFeedVersionFromLatestDeployment and
+     * FeedSource#getFeedVersionFromPinnedDeployment to be tested.
+     */
+    private static void tearDownDeployedFeedVersion() {
+        if (projectWithPinnedDeployment != null) {
+            Persistence.projects.removeById(projectWithPinnedDeployment.id);
         }
-        if (feedSourceWithPinnedFeedVersion != null) {
-            Persistence.feedSources.removeById(feedSourceWithPinnedFeedVersion.id);
+        if (projectWithLatestDeployment != null) {
+            Persistence.projects.removeById(projectWithLatestDeployment.id);
         }
-        if (feedVersionSuperseded != null) {
-            Persistence.feedVersions.removeById(feedVersionSuperseded.id);
+        if (feedSourceWithLatestDeploymentFeedVersion != null) {
+            Persistence.feedSources.removeById(feedSourceWithLatestDeploymentFeedVersion.id);
         }
-        if (feedVersionDeployed != null) {
-            Persistence.feedVersions.removeById(feedVersionDeployed.id);
+        if (feedSourceWithPinnedDeploymentFeedVersion != null) {
+            Persistence.feedSources.removeById(feedSourceWithPinnedDeploymentFeedVersion.id);
         }
-        if (feedVersionLatest != null) {
-            Persistence.feedVersions.removeById(feedVersionLatest.id);
+        if (feedVersionFromLatestDeployment != null) {
+            Persistence.feedVersions.removeById(feedVersionFromLatestDeployment.id);
         }
-        if (feedVersionPinned != null) {
-            Persistence.feedVersions.removeById(feedVersionPinned.id);
-        }
-        if (deploymentSuperseded != null) {
-            Persistence.deployments.removeById(deploymentSuperseded.id);
-        }
-        if (deploymentDeployed != null) {
-            Persistence.deployments.removeById(deploymentDeployed.id);
+        if (feedVersionFromPinnedDeployment != null) {
+            Persistence.feedVersions.removeById(feedVersionFromPinnedDeployment.id);
         }
         if (deploymentPinned != null) {
             Persistence.deployments.removeById(deploymentPinned.id);
+        }
+        if (deploymentLatest != null) {
+            Persistence.deployments.removeById(deploymentLatest.id);
+        }
+        if (deploymentSuperseded != null) {
+            Persistence.deployments.removeById(deploymentSuperseded.id);
         }
     }
 
@@ -275,60 +319,62 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(0, Persistence.labels.getFiltered(eq("projectId", projectToBeDeleted.id)).size());
     }
 
-    /**
-     * Retrieve the latest feed version for a feed source.
-     */
     @Test
-    void canRetrieveFeedSourceWithDeployedFeedVersion() throws IOException {
+    void canRetrieveDeployedFeedVersionFromLatestDeployment() throws IOException {
         SimpleHttpResponse response = TestUtils.makeRequest(
-            String.format("/api/manager/secure/feedsource?projectId=%s", project.id),
+            String.format(
+                "/api/manager/secure/feedsource/%s",
+                feedSourceWithLatestDeploymentFeedVersion.id
+            ),
             null,
             HttpUtils.REQUEST_METHOD.GET
         );
         assertEquals(OK_200, response.status);
-        List<FeedSource> feedSources =
-            JsonUtil.getPOJOFromJSONAsList(
-                JsonUtil.getJsonNodeFromResponse(response),
+        FeedSource feedSource =
+            JsonUtil.getPOJOFromResponse(
+                response,
                 FeedSource.class
             );
-        assertEquals(1, feedSources.size());
-        assertEquals(feedVersionDeployed.id, feedSources.get(0).getDeployedFeedVersionId());
-        assertEquals(feedVersionDeployed.validationSummary().endDate, feedSources.get(0).getDeployedFeedVersionEndDate());
-        assertEquals(feedVersionDeployed.validationSummary().startDate, feedSources.get(0).getDeployedFeedVersionStartDate());
+        assertNotNull(feedSource);
+        assertEquals(feedSourceWithLatestDeploymentFeedVersion.id, feedSource.id);
+        assertEquals(feedVersionFromLatestDeployment.id, feedSource.getDeployedFeedVersionId());
+        assertEquals(feedVersionFromLatestDeployment.validationSummary().startDate, feedSource.getDeployedFeedVersionStartDate());
+        assertEquals(feedVersionFromLatestDeployment.validationSummary().endDate, feedSource.getDeployedFeedVersionEndDate());
     }
 
-    /**
-     * Retrieve the latest pinned feed version for a feed source.
-     */
     @Test
-    void canRetrieveFeedSourceWithPinnedFeedVersion() throws IOException {
+    void canRetrieveDeployedFeedVersionFromPinnedDeployment() throws IOException {
         SimpleHttpResponse response = TestUtils.makeRequest(
-            String.format("/api/manager/secure/feedsource?projectId=%s", projectWithPinnedDeployment.id),
+            String.format(
+                "/api/manager/secure/feedsource/%s",
+                feedSourceWithPinnedDeploymentFeedVersion.id
+            ),
             null,
             HttpUtils.REQUEST_METHOD.GET
         );
         assertEquals(OK_200, response.status);
-        List<FeedSource> feedSources =
-            JsonUtil.getPOJOFromJSONAsList(
-                JsonUtil.getJsonNodeFromResponse(response),
+        FeedSource feedSource =
+            JsonUtil.getPOJOFromResponse(
+                response,
                 FeedSource.class
             );
-        assertEquals(1, feedSources.size());
-        assertEquals(feedVersionPinned.id, feedSources.get(0).getDeployedFeedVersionId());
-        assertEquals(feedVersionPinned.validationSummary().endDate, feedSources.get(0).getDeployedFeedVersionEndDate());
-        assertEquals(feedVersionPinned.validationSummary().startDate, feedSources.get(0).getDeployedFeedVersionStartDate());
+        assertNotNull(feedSource);
+        assertEquals(feedSourceWithPinnedDeploymentFeedVersion.id, feedSource.id);
+        assertEquals(feedVersionFromPinnedDeployment.id, feedSource.getDeployedFeedVersionId());
+        assertEquals(feedVersionFromPinnedDeployment.validationSummary().endDate, feedSource.getDeployedFeedVersionEndDate());
+        assertEquals(feedVersionFromPinnedDeployment.validationSummary().startDate, feedSource.getDeployedFeedVersionStartDate());
     }
-
 
     private static FeedSource createFeedSource(String name, URL url, Project project) {
-        return createFeedSource(name, url, project, false);
+        return createFeedSource(null, name, url, project, false);
     }
 
     /**
      * Helper method to create feed source.
      */
-    private static FeedSource createFeedSource(String name, URL url, Project project, boolean persist) {
+    private static FeedSource createFeedSource(String id, String name, URL url, Project project, boolean persist) {
         FeedSource feedSource = new FeedSource();
+        if (id != null) feedSource.id = id;
         feedSource.fetchFrequency = FetchFrequency.MINUTES;
         feedSource.fetchInterval = 1;
         feedSource.deployable = false;
@@ -344,18 +390,16 @@ public class FeedSourceControllerTest extends DatatoolsTest {
      * Helper method to create a deployment.
      */
     private static Deployment createDeployment(
-        String name,
+        String id,
         Project project,
         String feedVersionId,
-        String pinnedFeedVersionId,
         LocalDate dateCreated
     ) {
         Deployment deployment = new Deployment();
         deployment.dateCreated = Date.from(dateCreated.atStartOfDay(ZoneId.systemDefault()).toInstant());
         deployment.feedVersionIds = Collections.singletonList(feedVersionId);
-        deployment.pinnedfeedVersionIds = Collections.singletonList(pinnedFeedVersionId);
         deployment.projectId = project.id;
-        deployment.name = name;
+        deployment.id = id;
         Persistence.deployments.create(deployment);
         return deployment;
     }
@@ -363,16 +407,16 @@ public class FeedSourceControllerTest extends DatatoolsTest {
     /**
      * Helper method to create a feed version with no start date.
      */
-    private static FeedVersion createFeedVersion(String name, String feedSourceId, LocalDate endDate) {
-        return createFeedVersion(name, feedSourceId, null, endDate);
+    private static FeedVersion createFeedVersion(String id, String feedSourceId, LocalDate endDate) {
+        return createFeedVersion(id, feedSourceId, null, endDate);
     }
 
     /**
      * Helper method to create a feed version.
      */
-    private static FeedVersion createFeedVersion(String name, String feedSourceId, LocalDate startDate, LocalDate endDate) {
+    private static FeedVersion createFeedVersion(String id, String feedSourceId, LocalDate startDate, LocalDate endDate) {
         FeedVersion feedVersion = new FeedVersion();
-        feedVersion.name = name;
+        feedVersion.id = id;
         feedVersion.feedSourceId = feedSourceId;
         ValidationResult validationResult = new ValidationResult();
         validationResult.firstCalendarDate = startDate;
