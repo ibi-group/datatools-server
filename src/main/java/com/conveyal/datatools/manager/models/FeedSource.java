@@ -49,6 +49,7 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
+import static com.conveyal.datatools.manager.models.Project.hasPinnedDeployment;
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
@@ -516,8 +517,7 @@ public class FeedSource extends Model implements Cloneable {
         if (deployedFeedVersionDefined) {
             return deployedFeedVersion;
         }
-        Project project = Persistence.projects.getById(projectId);
-        deployedFeedVersion = (project.pinnedDeploymentId != null && !project.pinnedDeploymentId.isEmpty())
+        deployedFeedVersion = hasPinnedDeployment(projectId)
             ? FeedVersionDeployed.getFeedVersionFromPinnedDeployment(projectId, id)
             : FeedVersionDeployed.getFeedVersionFromLatestDeployment(projectId, id);
         deployedFeedVersionDefined = true;
