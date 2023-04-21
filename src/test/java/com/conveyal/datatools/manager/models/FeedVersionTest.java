@@ -120,7 +120,7 @@ public class FeedVersionTest extends UnitTest {
         feedVersion1.feedSourceId = feedSourceId;
         Persistence.feedVersions.create(feedVersion1);
 
-        // Other a feed version linked to the feed source.
+        // Other feed version linked to the feed source, without effect to the published version.
         FeedVersion feedVersion2 = new FeedVersion(feedSource);
         feedVersion2.namespace = "other_namespace";
         feedVersion2.feedSourceId = feedSourceId;
