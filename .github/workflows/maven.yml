@@ -31,7 +31,7 @@ jobs:
         uses: actions/setup-java@v3
         with:
           java-version: 19
-          distribution: 'oracle'
+          distribution: 'temurin'
       # Install node 14 for running e2e tests (and for maven-semantic-release).
       - name: Use Node.js 18.x
         uses: actions/setup-node@v1
