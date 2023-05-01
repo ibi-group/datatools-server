@@ -31,7 +31,7 @@ public class OtpRouterConfig implements Serializable {
 
         public String url;
 
-        public String defaultAgencyId;
+        public String feedId;
     }
     
     public String requestLogFile;
