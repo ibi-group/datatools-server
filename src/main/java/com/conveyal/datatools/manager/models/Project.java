@@ -17,6 +17,7 @@ import java.util.Collection;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -162,6 +163,24 @@ public class Project extends Model {
             .stream()
             .map(deployment -> new DeploymentSummary(deployment, this, otpServers))
             .collect(Collectors.toList());
+    }
+
+    /**
+     * Get all feed source summaries for this project.
+     */
+    public Collection<FeedSourceSummary> retrieveFeedSourceSummaries() {
+        List<FeedSourceSummary> feedSourceSummaries = FeedSourceSummary.getFeedSourceSummaries(id);
+        Map<String, FeedVersionSummary> latestFeedVersionForFeedSources = FeedSourceSummary.getLatestFeedVersionForFeedSources(id);
+        Map<String, FeedVersionSummary> deployedFeedVersions = FeedSourceSummary.getFeedVersionsFromPinnedDeployment(id);
+        if (deployedFeedVersions.isEmpty()) {
+            // No pinned deployments, instead, get the deployed feed versions from the latest deployment.
+            deployedFeedVersions = FeedSourceSummary.getFeedVersionsFromLatestDeployment(id);
+        }
+        for (FeedSourceSummary feedSourceSummary : feedSourceSummaries) {
+            feedSourceSummary.setFeedVersion(latestFeedVersionForFeedSources.get(feedSourceSummary.id), false);
+            feedSourceSummary.setFeedVersion(deployedFeedVersions.get(feedSourceSummary.id), true);
+        }
+        return feedSourceSummaries;
     }
 
     // TODO: Does this need to be returned with JSON API response

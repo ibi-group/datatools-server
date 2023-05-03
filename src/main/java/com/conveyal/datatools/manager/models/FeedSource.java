@@ -38,7 +38,6 @@ import java.io.IOException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
@@ -49,7 +48,6 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
-import static com.conveyal.datatools.manager.models.Project.hasPinnedDeployment;
 import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
@@ -458,70 +456,6 @@ public class FeedSource extends Model implements Cloneable {
     public String latestVersionId() {
         FeedVersion latest = retrieveLatest();
         return latest != null ? latest.id : null;
-    }
-
-    /**
-     * The deployed feed version.
-     * This cannot be returned because of a circular reference between feed source and feed version. Instead, individual
-     * parameters (version id, start date and end date) are returned.
-     */
-    @JsonIgnore
-    @BsonIgnore
-    private FeedVersionDeployed deployedFeedVersion;
-
-    /**
-     * This value is set to true once an attempt has been made to get the deployed feed version. This prevents subsequent
-     * attempts by Json annotated properties to get a deployed feed version that is not available.
-     */
-    @JsonIgnore
-    @BsonIgnore
-    private boolean deployedFeedVersionDefined;
-
-    @JsonInclude(JsonInclude.Include.NON_NULL)
-    @JsonView(JsonViews.UserInterface.class)
-    @JsonProperty("deployedFeedVersionId")
-    @BsonIgnore
-    public String getDeployedFeedVersionId() {
-        deployedFeedVersion = retrieveDeployedFeedVersion();
-        return deployedFeedVersion != null ? deployedFeedVersion.id : null;
-    }
-
-    @JsonInclude(JsonInclude.Include.NON_NULL)
-    @JsonView(JsonViews.UserInterface.class)
-    @JsonProperty("deployedFeedVersionStartDate")
-    @BsonIgnore
-    public LocalDate getDeployedFeedVersionStartDate() {
-        deployedFeedVersion = retrieveDeployedFeedVersion();
-        return deployedFeedVersion != null ? deployedFeedVersion.startDate : null;
-    }
-
-    @JsonInclude(JsonInclude.Include.NON_NULL)
-    @JsonView(JsonViews.UserInterface.class)
-    @JsonProperty("deployedFeedVersionEndDate")
-    @BsonIgnore
-    public LocalDate getDeployedFeedVersionEndDate() {
-        deployedFeedVersion = retrieveDeployedFeedVersion();
-        return deployedFeedVersion != null ? deployedFeedVersion.endDate : null;
-    }
-
-    /**
-     * Get deployed feed version for this feed source.
-     *
-     * If a project has a "pinned" deployment, return the feed version from this pinned deployment. If it is not
-     * available return null and don't attempt to get the feed version from the latest deployment.
-     *
-     * If a project does not have a "pinned" deployment, return the latest deployment's feed versions for this feed
-     * source, if available.
-     */
-    public FeedVersionDeployed retrieveDeployedFeedVersion() {
-        if (deployedFeedVersionDefined) {
-            return deployedFeedVersion;
-        }
-        deployedFeedVersion = hasPinnedDeployment(projectId)
-            ? FeedVersionDeployed.getFeedVersionFromPinnedDeployment(projectId, id)
-            : FeedVersionDeployed.getFeedVersionFromLatestDeployment(projectId, id);
-        deployedFeedVersionDefined = true;
-        return deployedFeedVersion;
     }
 
     /**
