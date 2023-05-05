@@ -12,21 +12,19 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.EnumSource;
-import org.junit.jupiter.params.provider.MethodSource;
-import org.junit.jupiter.params.provider.ValueSource;
 
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.Date;
-import java.util.stream.Stream;
 
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static com.conveyal.datatools.manager.DataManager.GTFS_DATA_SOURCE;
+import static com.mongodb.client.model.Filters.eq;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.notNullValue;
 
 public class FeedVersionTest extends UnitTest {
     private static Project project;
@@ -105,5 +103,54 @@ public class FeedVersionTest extends UnitTest {
         }
 
         assertThat(feedVersion1.hasBlockingIssuesForPublishing(), equalTo(true));
+    }
+
+    /**
+     * {@link FeedSource::publishedVersionId} should be unset if it references a feed version being deleted.
+     */
+    @Test
+    void shouldDeletePublishedVersionIdWhenDeletingVersion() {
+        final String NAMESPACE = "published_namespace";
+
+        FeedSource storedFeedSource = Persistence.feedSources.getOneFiltered(eq("projectId", project.id));
+        String feedSourceId = storedFeedSource.id;
+
+        // Create a feed version linked to the feed source.
+        FeedVersion feedVersion1 = new FeedVersion(feedSource);
+        feedVersion1.namespace = NAMESPACE;
+        feedVersion1.feedSourceId = feedSourceId;
+        Persistence.feedVersions.create(feedVersion1);
+
+        // Other feed version linked to the feed source, without effect to the published version.
+        FeedVersion feedVersion2 = new FeedVersion(feedSource);
+        feedVersion2.namespace = "other_namespace";
+        feedVersion2.feedSourceId = feedSourceId;
+        Persistence.feedVersions.create(feedVersion2);
+
+        // Set publishedVersionId of FeedSource as the namespace of the feed version, per FeedVersionController logic.
+        Persistence.feedSources.updateField(feedSourceId, "publishedVersionId", NAMESPACE);
+
+        // publishedVersionId should be set at this point.
+        assertThat(getPubVersionId(feedSourceId), equalTo(NAMESPACE));
+
+        // Deleting feedVersion2 should not touch publishedVersionId.
+        feedVersion2.delete();
+        assertThat(getPubVersionId(feedSourceId), equalTo(NAMESPACE));
+
+        // Deleting feedVersion1 should unset publishedVersionId.
+        feedVersion1.delete();
+        assertThat(getPubVersionId(feedSourceId), equalTo(null));
+
+        // The delete statements above will not remove the feed versions from Mongo.
+        // This is because of expected caught exceptions about deleting the non-existent namespaces in this test.
+        assertThat(Persistence.feedVersions.getById(feedVersion1.id), notNullValue());
+        assertThat(Persistence.feedVersions.getById(feedVersion2.id), notNullValue());
+        // Delete the feed versions manually as a result.
+        Persistence.feedVersions.removeById(feedVersion1.id);
+        Persistence.feedVersions.removeById(feedVersion2.id);
+    }
+
+    String getPubVersionId(String feedSourceId) {
+        return Persistence.feedSources.getById(feedSourceId).publishedVersionId;
     }
 }
