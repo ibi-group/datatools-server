@@ -549,6 +549,8 @@ public class FeedVersion extends Model implements Serializable {
                 fs.lastFetched = null;
                 Persistence.feedSources.replace(fs.id, fs);
             }
+            ensurePublishedVersionIdIsUnset(fs);
+
             feedStore.deleteFeed(id);
             // Delete feed version tables in GTFS database
             GTFS.delete(this.namespace, DataManager.GTFS_DATA_SOURCE);
@@ -559,7 +561,7 @@ public class FeedVersion extends Model implements Serializable {
             Persistence.deployments.getMongoCollection().updateMany(eq("projectId", this.parentFeedSource().projectId),
                     pull("feedVersionIds", this.id));
             Persistence.feedVersions.removeById(this.id);
-            this.parentFeedSource().renumberFeedVersions();
+            fs.renumberFeedVersions();
 
             // recalculate feed expiration notifications in case the latest version has changed
             Scheduler.scheduleExpirationNotifications(fs);
@@ -567,6 +569,16 @@ public class FeedVersion extends Model implements Serializable {
             LOG.info("Version {} deleted", id);
         } catch (Exception e) {
             LOG.warn("Error deleting version", e);
+        }
+    }
+
+    /**
+     * If this feed version is referenced in the parent feed source by publishedVersionId,
+     * ensure that the field is set to null.
+     */
+    private void ensurePublishedVersionIdIsUnset(FeedSource fs) {
+        if (this.namespace != null && this.namespace.equals(fs.publishedVersionId)) {
+            Persistence.feedSources.updateField(fs.id, "publishedVersionId", null);
         }
     }
 
