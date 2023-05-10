@@ -268,7 +268,7 @@
             <groupId>com.github.conveyal</groupId>
             <artifactId>gtfs-lib</artifactId>
             <!-- Latest dev build on jitpack.io -->
-            <version>3d79493</version>
+            <version>41a6503</version>
             <!-- Exclusions added in order to silence SLF4J warnings about multiple bindings:
                 http://www.slf4j.org/codes.html#multiple_bindings
             -->
@@ -414,6 +414,14 @@
             <artifactId>snakeyaml</artifactId>
             <version>1.26</version>
         </dependency>
+
+        <!-- CSV library for reading / writing in custom fields transformation -->
+        <dependency>
+            <groupId>com.opencsv</groupId>
+            <artifactId>opencsv</artifactId>
+            <version>5.7.1</version>
+        </dependency>
+
         <!-- Used for writing csv for merged feeds. Note: this appears to be one of the only
           CSV libraries that will only quote values when necessary (e.g., there is a comma character
           contained within the value) and that will work with an output stream writer when writing
