@@ -442,7 +442,8 @@ public class Deployment extends Model implements Serializable {
         Project project = this.parentProject();
 
         byte[] customRouterConfigString = customRouterConfig != null
-                ? customRouterConfig.getBytes(StandardCharsets.UTF_8) : null;
+                ? customRouterConfig.getBytes(StandardCharsets.UTF_8)
+                : null;
 
         byte[] routerConfigString = project.routerConfig != null
                 ? writeToBytes(project.routerConfig)
@@ -455,7 +456,7 @@ public class Deployment extends Model implements Serializable {
             Map<String, Object> map1 = mapper.readValue(customRouterConfigString, Map.class);
             Map<String, Object> map2 = mapper.readValue(routerConfigString, Map.class);
             Map<String, Object> merged = new HashMap<String, Object>(map2);
-            merged.putAll(map1);
+            new HashMap<String, Object>(map2).putAll(map1);
             return mapper.writeValueAsString(merged).getBytes();
         }
 
@@ -469,10 +470,9 @@ public class Deployment extends Model implements Serializable {
     /** Generate router config for deployment as byte array (for writing to file output stream). */
     public String generateRouterConfigAsString() {
             try {
-                return new String(this.generateRouterConfig(), "UTF-8");
+                return new String(generateRouterConfig(), StandardCharsets.UTF_8);
             } catch (IOException e) {
-                LOG.error("Failed to generate router config:");
-                LOG.error(e.toString());
+                LOG.error("Failed to generate router config: ", e);
                 return "";
         }
     }
