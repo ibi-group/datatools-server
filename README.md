@@ -2,7 +2,7 @@
 
 [![Join the chat at https://gitter.im/transit-data-tools/datatools-server](https://badges.gitter.im/repo.png)](https://gitter.im/transit-data-tools/datatools-server)
 
-The core application for IBI Group's transit data tools suite.
+The core application for IBI Group's TRANSIT-Data-Tools suite.
 
 ## Documentation
 
