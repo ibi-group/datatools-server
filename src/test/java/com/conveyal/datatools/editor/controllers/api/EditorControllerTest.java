@@ -151,22 +151,35 @@ public class EditorControllerTest extends UnitTest {
      * Test the removal of a stop from stop patterns.
      */
     @Test
-    void canRemoveStopFromPatternStops() throws IOException, SQLException {
+    void canRemoveStopFromStopTimesAndPatternStops() throws IOException, SQLException {
         // Get a fresh feed source so that the editor namespace was updated after snapshot.
         FeedSource freshFeedSource = Persistence.feedSources.getById(feedVersion.feedSourceId);
         String stopId = "WARM";
-        // Check for presence of stopId in pattern stops.
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.pattern_stops WHERE stop_id = '%s'",
-                freshFeedSource.editorNamespace,
-                stopId
-            ),
-            4
+        String stopCountSql = String.format(
+            "SELECT count(*) FROM %s.stops WHERE stop_id = '%s'",
+            freshFeedSource.editorNamespace,
+            stopId
+        );
+        String stopTimesCountSql = String.format(
+            "SELECT count(*) FROM %s.stop_times WHERE stop_id = '%s'",
+            freshFeedSource.editorNamespace,
+            stopId
+        );
+        String patternStopsCountSql = String.format(
+            "SELECT count(*) FROM %s.pattern_stops WHERE stop_id = '%s'",
+            freshFeedSource.editorNamespace,
+            stopId
         );
 
+        // Check for presence of stopId in stops.
+        assertThatSqlCountQueryYieldsExpectedCount(stopCountSql ,1);
+        // Check for presence of stopId in stop times.
+        assertThatSqlCountQueryYieldsExpectedCount(stopTimesCountSql ,522);
+        // Check for presence of stopId in pattern stops.
+        assertThatSqlCountQueryYieldsExpectedCount(patternStopsCountSql, 4);
+
         String path = String.format(
-            "/api/editor/secure/stop/deletefrompatternstops?stopId=%s&feedId=%s&sessionId=test",
+            "/api/editor/secure/stop/cascadeDeleteStop?stopId=%s&feedId=%s&sessionId=test",
             stopId,
             feedVersion.feedSourceId
         );
@@ -180,15 +193,12 @@ public class EditorControllerTest extends UnitTest {
         JsonNode json = mapper.readTree(response);
         assertEquals(OK_200, json.get("code").asInt());
 
+        // Check for removal of stopId in stops.
+        assertThatSqlCountQueryYieldsExpectedCount(stopCountSql ,0);
+        // Check for removal of stopId in stop times.
+        assertThatSqlCountQueryYieldsExpectedCount(stopTimesCountSql ,0);
         // Check for removal of stopId in pattern stops.
-        assertThatSqlCountQueryYieldsExpectedCount(
-            String.format(
-                "SELECT count(*) FROM %s.pattern_stops WHERE stop_id = '%s'",
-                freshFeedSource.editorNamespace,
-                stopId
-            ),
-            0
-        );
+        assertThatSqlCountQueryYieldsExpectedCount(patternStopsCountSql, 0);
     }
 
     /**
