@@ -25,16 +25,20 @@ import org.slf4j.LoggerFactory;
 import spark.utils.IOUtils;
 
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.Date;
 import java.util.stream.Stream;
 
+import static com.conveyal.datatools.TestUtils.assertThatSqlCountQueryYieldsExpectedCount;
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static com.conveyal.datatools.manager.auth.Auth0Users.USERS_API_PATH;
 import static com.conveyal.datatools.manager.controllers.api.UserController.TEST_AUTH0_DOMAIN;
 import static io.restassured.RestAssured.given;
+import static org.eclipse.jetty.http.HttpStatus.OK_200;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class EditorControllerTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(EditorControllerTest.class);
@@ -141,6 +145,50 @@ public class EditorControllerTest extends UnitTest {
             // stop_desc should be null if it does not meet query condition.
             else assertThat(patchedValue.isNull(), is(true));
         }
+    }
+
+    /**
+     * Test the removal of a stop from stop patterns.
+     */
+    @Test
+    void canRemoveStopFromPatternStops() throws IOException, SQLException {
+        // Get a fresh feed source so that the editor namespace was updated after snapshot.
+        FeedSource freshFeedSource = Persistence.feedSources.getById(feedVersion.feedSourceId);
+        String stopId = "WARM";
+        // Check for presence of stopId in pattern stops.
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format(
+                "SELECT count(*) FROM %s.pattern_stops WHERE stop_id = '%s'",
+                freshFeedSource.editorNamespace,
+                stopId
+            ),
+            4
+        );
+
+        String path = String.format(
+            "/api/editor/secure/stop/deletefrompatternstops?stopId=%s&feedId=%s&sessionId=test",
+            stopId,
+            feedVersion.feedSourceId
+        );
+        String response = given()
+            .port(DataManager.PORT)
+            .patch(path)
+            .then()
+            .extract()
+            .response()
+            .asString();
+        JsonNode json = mapper.readTree(response);
+        assertEquals(OK_200, json.get("code").asInt());
+
+        // Check for removal of stopId in pattern stops.
+        assertThatSqlCountQueryYieldsExpectedCount(
+            String.format(
+                "SELECT count(*) FROM %s.pattern_stops WHERE stop_id = '%s'",
+                freshFeedSource.editorNamespace,
+                stopId
+            ),
+            0
+        );
     }
 
     /**
