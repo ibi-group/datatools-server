@@ -198,10 +198,18 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             Field[] fieldsFoundInZip = gtfsTable.getFieldsFromFieldHeaders(headers, null);
             int transformFieldIndex = getFieldIndex(fieldsFoundInZip, fieldName);
 
+            // If the index is -1, this is a new column, and we need to add it accordingly
+            if (transformFieldIndex == -1) {
+                String[] expandedHeaders = new String[headers.length + 1];
+                System.arraycopy(headers, 0, expandedHeaders, 0, headers.length);
+                expandedHeaders[headers.length] = fieldName;
+                writer.write(expandedHeaders);
+            } else {
+                writer.write(headers);
+            }
+
             int modifiedRowCount = 0;
 
-            // Write headers and processed CSV rows.
-            writer.write(headers);
             while (csvReader.readRecord()) {
                 String originalValue = csvReader.get(transformFieldIndex);
                 String transformedValue = originalValue;
@@ -219,10 +227,19 @@ public class NormalizeFieldTransformation extends ZipTransformation {
 
                 // Re-assemble the CSV line and place in buffer.
                 String[] csvValues = csvReader.getValues();
-                csvValues[transformFieldIndex] = transformedValue;
 
-                // Write line to table (plus new line char).
-                writer.write(csvValues);
+                // If the index is -1, this is a new column, and we need to add it accordingly
+                if (transformFieldIndex == -1) {
+                    String[] expandedCsvValues = new String[headers.length + 1];
+                    System.arraycopy(csvValues, 0, expandedCsvValues, 0, csvValues.length);
+                    expandedCsvValues[csvValues.length] = transformedValue;
+                    writer.write(expandedCsvValues);
+                } else {
+                    csvValues[transformFieldIndex] = transformedValue;
+
+                    // Write line to table (plus new line char).
+                    writer.write(csvValues);
+                }
 
                 // Count number of CSV rows changed.
                 if (!originalValue.equals(transformedValue)) {
