@@ -186,14 +186,6 @@
                 <updatePolicy>always</updatePolicy>
             </snapshots>
         </repository>
-        <!--  Repository for geotools (as of April 2020)  -->
-        <repository>
-            <id>osgeo</id>
-            <name>OSGeo Release Repository</name>
-            <url>https://repo.osgeo.org/repository/release/</url>
-            <snapshots><enabled>false</enabled></snapshots>
-            <releases><enabled>true</enabled></releases>
-        </repository>
         <repository>
             <id>sonatype</id>
             <name>sonatype snapshots</name>
