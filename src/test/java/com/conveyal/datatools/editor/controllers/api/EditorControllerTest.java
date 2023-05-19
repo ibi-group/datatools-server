@@ -160,8 +160,8 @@ public class EditorControllerTest extends UnitTest {
         String patternStopsCountSql = getCountSql(freshFeedSource.editorNamespace, "pattern_stops", stopId);
 
         // Check for presence of stopId in stops, stop times and pattern stops.
-        assertThatSqlCountQueryYieldsExpectedCount(stopCountSql ,1);
-        assertThatSqlCountQueryYieldsExpectedCount(stopTimesCountSql ,522);
+        assertThatSqlCountQueryYieldsExpectedCount(stopCountSql, 1);
+        assertThatSqlCountQueryYieldsExpectedCount(stopTimesCountSql, 522);
         assertThatSqlCountQueryYieldsExpectedCount(patternStopsCountSql, 4);
 
         String path = String.format(
@@ -180,8 +180,8 @@ public class EditorControllerTest extends UnitTest {
         assertEquals(OK_200, json.get("code").asInt());
 
         // Check for removal of stopId in stops, stop times and pattern stops.
-        assertThatSqlCountQueryYieldsExpectedCount(stopCountSql ,0);
-        assertThatSqlCountQueryYieldsExpectedCount(stopTimesCountSql ,0);
+        assertThatSqlCountQueryYieldsExpectedCount(stopCountSql, 0);
+        assertThatSqlCountQueryYieldsExpectedCount(stopTimesCountSql, 0);
         assertThatSqlCountQueryYieldsExpectedCount(patternStopsCountSql, 0);
     }
 
