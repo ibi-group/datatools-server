@@ -187,6 +187,10 @@
             </snapshots>
         </repository>
         <repository>
+            <id>osgeo-fallback</id>
+            <url>file:///${project.basedir}/src/resources/osgeo-fallback</url>
+        </repository>
+        <repository>
             <id>sonatype</id>
             <name>sonatype snapshots</name>
             <url>https://oss.sonatype.org/content/repositories/snapshots/</url>
