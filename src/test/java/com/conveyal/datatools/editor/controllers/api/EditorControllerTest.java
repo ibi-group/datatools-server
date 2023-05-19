@@ -44,7 +44,9 @@ public class EditorControllerTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(EditorControllerTest.class);
     private static Project project;
     private static FeedSource feedSource;
+    private static FeedSource feedSourceCascadeDelete;
     private static FeedVersion feedVersion;
+    private static FeedVersion feedVersionCascadeDelete;
     private static final ObjectMapper mapper = new ObjectMapper();
 
     /**
@@ -59,18 +61,23 @@ public class EditorControllerTest extends UnitTest {
         UserController.setBaseUsersUrl("http://" + TEST_AUTH0_DOMAIN + USERS_API_PATH);
         // Create a project, feed sources, and feed versions to merge.
         project = new Project();
-        project.name = String.format("Test %s", new Date().toString());
+        project.name = String.format("Test %s", new Date());
         Persistence.projects.create(project);
+
         feedSource = new FeedSource("BART");
         feedSource.projectId = project.id;
         Persistence.feedSources.create(feedSource);
+
+        feedSourceCascadeDelete = new FeedSource("CASCADE_DELETE");
+        feedSourceCascadeDelete.projectId = project.id;
+        Persistence.feedSources.create(feedSourceCascadeDelete);
+
         feedVersion = createFeedVersionFromGtfsZip(feedSource, "bart_old.zip");
-        // Create and run snapshot job
-        Snapshot snapshot = new Snapshot("Snapshot of " + feedVersion.name, feedSource.id, feedVersion.namespace);
-        CreateSnapshotJob createSnapshotJob =
-            new CreateSnapshotJob(Auth0UserProfile.createTestAdminUser(), snapshot, true, false, false);
-        // Run in current thread so tests do not run until this is complete.
-        createSnapshotJob.run();
+        feedVersionCascadeDelete = createFeedVersionFromGtfsZip(feedSourceCascadeDelete, "bart_old.zip");
+
+        // Create and run snapshot jobs
+        crateAndRunSnapshotJob(feedVersion.name, feedSource.id, feedVersion.namespace);
+        crateAndRunSnapshotJob(feedVersionCascadeDelete.name, feedSourceCascadeDelete.id, feedVersionCascadeDelete.namespace);
         LOG.info("{} setup completed in {} ms", EditorControllerTest.class.getSimpleName(), System.currentTimeMillis() - startTime);
     }
 
@@ -78,6 +85,17 @@ public class EditorControllerTest extends UnitTest {
     public static void tearDown() {
         project.delete();
         feedSource.delete();
+        feedSourceCascadeDelete.delete();
+    }
+
+    /**
+     * Create and run a snapshot job in the current thread (so tests do not run until this is complete).
+     */
+    private static void crateAndRunSnapshotJob(String feedVersionName, String feedSourceId, String namespace) {
+        Snapshot snapshot = new Snapshot("Snapshot of " + feedVersionName, feedSourceId, namespace);
+        CreateSnapshotJob createSnapshotJob =
+            new CreateSnapshotJob(Auth0UserProfile.createTestAdminUser(), snapshot, true, false, false);
+        createSnapshotJob.run();
     }
 
     private static Stream<Arguments> createPatchTableTests() {
@@ -153,7 +171,7 @@ public class EditorControllerTest extends UnitTest {
     @Test
     void canCascadeDeleteStop() throws IOException, SQLException {
         // Get a fresh feed source so that the editor namespace was updated after snapshot.
-        FeedSource freshFeedSource = Persistence.feedSources.getById(feedVersion.feedSourceId);
+        FeedSource freshFeedSource = Persistence.feedSources.getById(feedVersionCascadeDelete.feedSourceId);
         String stopId = "WARM";
         String stopCountSql = getCountSql(freshFeedSource.editorNamespace, "stops", stopId);
         String stopTimesCountSql = getCountSql(freshFeedSource.editorNamespace, "stop_times", stopId);
@@ -167,7 +185,7 @@ public class EditorControllerTest extends UnitTest {
         String path = String.format(
             "/api/editor/secure/stop/%s/cascadeDeleteStop?feedId=%s&sessionId=test",
             stopId,
-            feedVersion.feedSourceId
+            feedVersionCascadeDelete.feedSourceId
         );
         String response = given()
             .port(DataManager.PORT)
