@@ -148,44 +148,30 @@ public class EditorControllerTest extends UnitTest {
     }
 
     /**
-     * Test the removal of a stop from stop patterns.
+     * Test the removal of a stop and all references in stop times and pattern stops.
      */
     @Test
-    void canRemoveStopFromStopTimesAndPatternStops() throws IOException, SQLException {
+    void canCascadeDeleteStop() throws IOException, SQLException {
         // Get a fresh feed source so that the editor namespace was updated after snapshot.
         FeedSource freshFeedSource = Persistence.feedSources.getById(feedVersion.feedSourceId);
         String stopId = "WARM";
-        String stopCountSql = String.format(
-            "SELECT count(*) FROM %s.stops WHERE stop_id = '%s'",
-            freshFeedSource.editorNamespace,
-            stopId
-        );
-        String stopTimesCountSql = String.format(
-            "SELECT count(*) FROM %s.stop_times WHERE stop_id = '%s'",
-            freshFeedSource.editorNamespace,
-            stopId
-        );
-        String patternStopsCountSql = String.format(
-            "SELECT count(*) FROM %s.pattern_stops WHERE stop_id = '%s'",
-            freshFeedSource.editorNamespace,
-            stopId
-        );
+        String stopCountSql = getCountSql(freshFeedSource.editorNamespace, "stops", stopId);
+        String stopTimesCountSql = getCountSql(freshFeedSource.editorNamespace, "stop_times", stopId);
+        String patternStopsCountSql = getCountSql(freshFeedSource.editorNamespace, "pattern_stops", stopId);
 
-        // Check for presence of stopId in stops.
+        // Check for presence of stopId in stops, stop times and pattern stops.
         assertThatSqlCountQueryYieldsExpectedCount(stopCountSql ,1);
-        // Check for presence of stopId in stop times.
         assertThatSqlCountQueryYieldsExpectedCount(stopTimesCountSql ,522);
-        // Check for presence of stopId in pattern stops.
         assertThatSqlCountQueryYieldsExpectedCount(patternStopsCountSql, 4);
 
         String path = String.format(
-            "/api/editor/secure/stop/cascadeDeleteStop?stopId=%s&feedId=%s&sessionId=test",
+            "/api/editor/secure/stop/%s/cascadeDeleteStop?feedId=%s&sessionId=test",
             stopId,
             feedVersion.feedSourceId
         );
         String response = given()
             .port(DataManager.PORT)
-            .patch(path)
+            .delete(path)
             .then()
             .extract()
             .response()
@@ -193,11 +179,9 @@ public class EditorControllerTest extends UnitTest {
         JsonNode json = mapper.readTree(response);
         assertEquals(OK_200, json.get("code").asInt());
 
-        // Check for removal of stopId in stops.
+        // Check for removal of stopId in stops, stop times and pattern stops.
         assertThatSqlCountQueryYieldsExpectedCount(stopCountSql ,0);
-        // Check for removal of stopId in stop times.
         assertThatSqlCountQueryYieldsExpectedCount(stopTimesCountSql ,0);
-        // Check for removal of stopId in pattern stops.
         assertThatSqlCountQueryYieldsExpectedCount(patternStopsCountSql, 0);
     }
 
@@ -239,5 +223,17 @@ public class EditorControllerTest extends UnitTest {
             .response()
             .asString();
         return mapper.readTree(graphQLString);
+    }
+
+    /**
+     * Build a sql statement to provide a count on the number of rows matching the stop id.
+     */
+    private static String getCountSql(String namespace, String tableName, String stopId) {
+        return String.format(
+            "SELECT count(*) FROM %s.%s WHERE stop_id = '%s'",
+            namespace,
+            tableName,
+            stopId
+        );
     }
 }

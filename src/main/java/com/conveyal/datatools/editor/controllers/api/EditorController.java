@@ -134,7 +134,7 @@ public abstract class EditorController<T extends Entity> {
         }
 
         if ("stop".equals(classToLowercase)) {
-            patch(ROOT_ROUTE + "/cascadeDeleteStop", this::cascadeDeleteStop, json::write);
+            delete(ROOT_ROUTE + ID_PARAM + "/cascadeDeleteStop", this::cascadeDeleteStop, json::write);
         }
     }
 
@@ -266,7 +266,7 @@ public abstract class EditorController<T extends Entity> {
     }
 
     /**
-     * HTTP endpoint to delete a stop and all references in stop times and pattern stops given a string stopId (i.e. not
+     * HTTP endpoint to delete a stop and all references in stop times and pattern stops given a string stop_id (i.e. not
      * the integer ID field). Then normalize the stop times for all updated patterns (i.e. the ones where the stop has
      * been deleted).
      */
@@ -277,8 +277,8 @@ public abstract class EditorController<T extends Entity> {
         String namespace = getNamespaceAndValidateSession(req);
         String stopIdColumnName = "stop_id";
 
-        // NOTE: This is a string stop ID, not the integer ID that all other HTTP endpoints use.
-        String stopId = req.queryParams("stopId");
+        // NOTE: This is a string stop ID, not the integer ID that other HTTP endpoints use.
+        String stopId = req.params("id");
         if (stopId == null) {
             logMessageAndHalt(req, 400, "Must provide a valid stopId.");
         }
