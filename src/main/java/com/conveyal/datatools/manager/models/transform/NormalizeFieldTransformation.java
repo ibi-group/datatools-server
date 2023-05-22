@@ -198,7 +198,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             Field[] fieldsFoundInZip = gtfsTable.getFieldsFromFieldHeaders(headers, null);
             int transformFieldIndex = getFieldIndex(fieldsFoundInZip, fieldName);
 
-            // If the index is -1, this is a new column, and we need to add it accordingly
+            // If the index is -1, this is a new column, and we need to add it accordingly.
             if (transformFieldIndex == -1) {
                 String[] expandedHeaders = new String[headers.length + 1];
                 System.arraycopy(headers, 0, expandedHeaders, 0, headers.length);
@@ -228,7 +228,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
                 // Re-assemble the CSV line and place in buffer.
                 String[] csvValues = csvReader.getValues();
 
-                // If the index is -1, this is a new column, and we need to add it accordingly
+                // If the index is -1, this is a new column, and we need to add it accordingly.
                 if (transformFieldIndex == -1) {
                     String[] expandedCsvValues = new String[headers.length + 1];
                     System.arraycopy(csvValues, 0, expandedCsvValues, 0, csvValues.length);
