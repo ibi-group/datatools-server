@@ -29,8 +29,10 @@ import javax.sql.DataSource;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -41,6 +43,7 @@ import static com.conveyal.datatools.common.utils.SparkUtils.formatJSON;
 import static com.conveyal.datatools.common.utils.SparkUtils.getObjectNode;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.controllers.api.UserController.inTestingEnvironment;
+import static org.eclipse.jetty.http.HttpStatus.OK_200;
 import static spark.Spark.delete;
 import static spark.Spark.options;
 import static spark.Spark.patch;
@@ -128,6 +131,10 @@ public abstract class EditorController<T extends Entity> {
         if ("pattern".equals(classToLowercase)) {
             put(ROOT_ROUTE + ID_PARAM + "/stop_times", this::updateStopTimesFromPatternStops, json::write);
             delete(ROOT_ROUTE + ID_PARAM + "/trips", this::deleteTripsForPattern, json::write);
+        }
+
+        if ("stop".equals(classToLowercase)) {
+            delete(ROOT_ROUTE + ID_PARAM + "/cascadeDeleteStop", this::cascadeDeleteStop, json::write);
         }
     }
 
@@ -255,6 +262,81 @@ public abstract class EditorController<T extends Entity> {
             return null;
         } finally {
             LOG.info("Delete trips for pattern operation took {} msec", System.currentTimeMillis() - startTime);
+        }
+    }
+
+    /**
+     * HTTP endpoint to delete a stop and all references in stop times and pattern stops given a string stop_id (i.e. not
+     * the integer ID field). Then normalize the stop times for all updated patterns (i.e. the ones where the stop has
+     * been deleted).
+     */
+    private String cascadeDeleteStop(Request req, Response res) {
+        // Table writer closes the database connection after use, so a new one is required for each task.
+        JdbcTableWriter tableWriter;
+        long startTime = System.currentTimeMillis();
+        String namespace = getNamespaceAndValidateSession(req);
+        String stopIdColumnName = "stop_id";
+
+        // NOTE: This is a string stop ID, not the integer ID that other HTTP endpoints use.
+        String stopId = req.params("id");
+        if (stopId == null) {
+            logMessageAndHalt(req, 400, "Must provide a valid stopId.");
+        }
+
+        try (
+            Connection connection = datasource.getConnection();
+            PreparedStatement statement = connection.prepareStatement(
+                String.format("select id, stop_sequence from %s.pattern_stops where %s = ?", namespace, stopIdColumnName)
+            )
+        ) {
+            // Get the patterns to be normalized before the related stop is deleted.
+            statement.setString(1, stopId);
+            ResultSet resultSet = statement.executeQuery();
+            Map<Integer, Integer> patternsToBeNormalized = new HashMap<>();
+            while (resultSet.next()) {
+                patternsToBeNormalized.put(
+                    resultSet.getInt("id"),
+                    resultSet.getInt("stop_sequence")
+                );
+            }
+
+            tableWriter = new JdbcTableWriter(Table.STOP_TIMES, datasource, namespace);
+            int deletedCountStopTimes = tableWriter.deleteWhere(stopIdColumnName, stopId, true);
+
+            int deletedCountPatternStops = 0;
+            if (!patternsToBeNormalized.isEmpty()) {
+                tableWriter = new JdbcTableWriter(Table.PATTERN_STOP, datasource, namespace);
+                deletedCountPatternStops = tableWriter.deleteWhere(stopIdColumnName, stopId, true);
+                if (deletedCountPatternStops > 0) {
+                    for (Map.Entry<Integer, Integer> patternStop : patternsToBeNormalized.entrySet()) {
+                        tableWriter = new JdbcTableWriter(Table.PATTERN_STOP, datasource, namespace);
+                        int stopSequence = patternStop.getValue();
+                        // Begin with the stop prior to the one deleted, unless at the beginning.
+                        int beginWithSequence = (stopSequence != 0) ? stopSequence - 1 : stopSequence;
+                        tableWriter.normalizeStopTimesForPattern(patternStop.getKey(), beginWithSequence);
+                    }
+                }
+            }
+
+            tableWriter = new JdbcTableWriter(Table.STOPS, datasource, namespace);
+            int deletedCountStop = tableWriter.deleteWhere(stopIdColumnName, stopId, true);
+
+            return formatJSON(
+                String.format(
+                    "Deleted %d stop, %d pattern stops and %d stop times.",
+                    deletedCountStop,
+                    deletedCountPatternStops,
+                    deletedCountStopTimes),
+                OK_200
+            );
+        } catch (InvalidNamespaceException e) {
+            logMessageAndHalt(req, 400, "Invalid namespace.", e);
+            return null;
+        } catch (Exception e) {
+            logMessageAndHalt(req, 500, "Error deleting entity.", e);
+            return null;
+        } finally {
+            LOG.info("Cascade delete of stop operation took {} msec.", System.currentTimeMillis() - startTime);
         }
     }
 

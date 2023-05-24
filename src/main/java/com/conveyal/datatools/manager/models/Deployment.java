@@ -4,7 +4,6 @@ import com.amazonaws.services.ec2.model.Filter;
 import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.common.utils.aws.EC2Utils;
 import com.conveyal.datatools.manager.DataManager;
-import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
 import com.conveyal.datatools.manager.jobs.DeployJob;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.StringUtils;
@@ -42,11 +41,14 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 
@@ -436,19 +438,43 @@ public class Deployment extends Model implements Serializable {
     }
 
     /** Generate router config for deployment as string. */
-    public byte[] generateRouterConfig() {
+    public byte[] generateRouterConfig() throws IOException {
         Project project = this.parentProject();
-        return customRouterConfig != null
-            ? customRouterConfig.getBytes(StandardCharsets.UTF_8)
-            : project.routerConfig != null
+
+        byte[] customRouterConfigString = customRouterConfig != null
+                ? customRouterConfig.getBytes(StandardCharsets.UTF_8)
+                : null;
+
+        byte[] routerConfigString = project.routerConfig != null
                 ? writeToBytes(project.routerConfig)
+                : null;
+
+        // If both router configs are present, merge the JSON before returning
+        // Merger code from: https://stackoverflow.com/questions/35747813/how-to-merge-two-json-strings-into-one-in-java
+        if (customRouterConfigString != null && routerConfigString != null) {
+            ObjectMapper mapper = new ObjectMapper();
+            Map<String, Object> map1 = mapper.readValue(customRouterConfigString, Map.class);
+            Map<String, Object> map2 = mapper.readValue(routerConfigString, Map.class);
+            Map<String, Object> merged = new HashMap<String, Object>(map2);
+            new HashMap<String, Object>(map2).putAll(map1);
+            return mapper.writeValueAsString(merged).getBytes();
+        }
+
+        return customRouterConfigString != null
+            ? customRouterConfigString
+            : routerConfigString != null
+                ? routerConfigString
                 : null;
     }
 
     /** Generate router config for deployment as byte array (for writing to file output stream). */
     public String generateRouterConfigAsString() {
-        if (customRouterConfig != null) return customRouterConfig;
-        return writeToString(this.parentProject().routerConfig);
+            try {
+                return new String(generateRouterConfig(), StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                LOG.error("Failed to generate router config: ", e);
+                return "";
+        }
     }
 
     /**
