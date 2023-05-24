@@ -393,7 +393,7 @@ public class FeedVersion extends Model implements Serializable {
             status.update("MobilityData Analysis...", 11);
 
             // Wait for the file to be entirely copied into the directory.
-            // 5 seconds + ~1 second per 10mb
+            // 5 seconds + ~1 second per 100kb
             Thread.sleep(5000 + (this.fileSize / 10000));
             File gtfsZip = this.retrieveGtfsFile();
             // Namespace based folders avoid clash for validation being run on multiple versions of a feed.
