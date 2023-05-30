@@ -456,7 +456,7 @@ public class Deployment extends Model implements Serializable {
             Map<String, Object> map1 = mapper.readValue(customRouterConfigString, Map.class);
             Map<String, Object> map2 = mapper.readValue(routerConfigString, Map.class);
             Map<String, Object> merged = new HashMap<String, Object>(map2);
-            new HashMap<String, Object>(map2).putAll(map1);
+            merged.putAll(map1);
             return mapper.writeValueAsString(merged).getBytes();
         }
 
