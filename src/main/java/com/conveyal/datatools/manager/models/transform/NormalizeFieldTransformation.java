@@ -200,10 +200,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
 
             // If the index is -1, this is a new column, and we need to add it accordingly.
             if (transformFieldIndex == -1) {
-                String[] expandedHeaders = new String[headers.length + 1];
-                System.arraycopy(headers, 0, expandedHeaders, 0, headers.length);
-                expandedHeaders[headers.length] = fieldName;
-                writer.write(expandedHeaders);
+                writer.write(expandArray(headers, fieldName));
             } else {
                 writer.write(headers);
             }
@@ -230,10 +227,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
 
                 // If the index is -1, this is a new column, and we need to add it accordingly.
                 if (transformFieldIndex == -1) {
-                    String[] expandedCsvValues = new String[headers.length + 1];
-                    System.arraycopy(csvValues, 0, expandedCsvValues, 0, csvValues.length);
-                    expandedCsvValues[csvValues.length] = transformedValue;
-                    writer.write(expandedCsvValues);
+                    writer.write(expandArray(csvValues, transformedValue));
                 } else {
                     csvValues[transformFieldIndex] = transformedValue;
 
@@ -303,5 +297,15 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             result = substitution.replaceAll(result);
         }
         return result;
+    }
+
+    /**
+     * Copies a fixed length array, and appends a new element at the end
+     */
+    private String[] expandArray(String[] array, String value) {
+        String[] expanded = new String[array.length + 1];
+        System.arraycopy(array, 0, expanded, 0, array.length);
+        expanded[array.length] = value;
+        return expanded;
     }
 }

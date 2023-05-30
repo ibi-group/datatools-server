@@ -109,7 +109,7 @@ public class NormalizeFieldTransformationTest extends UnitTest {
 
     @ParameterizedTest
     @MethodSource("createCreateNewField")
-    public void testCreateNewField(String input, String expected) {
+    void testCreateNewField(String input, String expected) {
         NormalizeFieldTransformation transform = createTransformation(
                 "table", "new_field",  null, Lists.newArrayList(
                         new Substitution("", "new_value")
