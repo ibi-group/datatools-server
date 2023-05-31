@@ -300,7 +300,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
     }
 
     /**
-     * Copies a fixed length array, and appends a new element at the end
+     * Copies a fixed length array, and appends a new element at the end.
      */
     private String[] expandArray(String[] array, String value) {
         String[] expanded = new String[array.length + 1];
