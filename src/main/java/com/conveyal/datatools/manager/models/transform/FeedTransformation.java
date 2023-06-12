@@ -27,12 +27,12 @@ import java.io.Serializable;
 @JsonIgnoreProperties(ignoreUnknown = true)
 @JsonTypeInfo(use = JsonTypeInfo.Id.NAME)
 @JsonSubTypes({
-        @JsonSubTypes.Type(value = DeleteRecordsTransformation.class, name = "DeleteRecordsTransformation"),
-        @JsonSubTypes.Type(value = NormalizeFieldTransformation.class, name = "NormalizeFieldTransformation"),
-        @JsonSubTypes.Type(value = ReplaceFileFromVersionTransformation.class, name = "ReplaceFileFromVersionTransformation"),
-        @JsonSubTypes.Type(value = ReplaceFileFromStringTransformation.class, name = "ReplaceFileFromStringTransformation"),
-        @JsonSubTypes.Type(value = PreserveCustomFieldsTransformation.class, name = "PreserveCustomFieldsTransformation"),
-        @JsonSubTypes.Type(value = AddCustomFileFromStringTransformation.class, name = "AddCustomFileTransformation")
+    @JsonSubTypes.Type(value = DeleteRecordsTransformation.class, name = "DeleteRecordsTransformation"),
+    @JsonSubTypes.Type(value = NormalizeFieldTransformation.class, name = "NormalizeFieldTransformation"),
+    @JsonSubTypes.Type(value = ReplaceFileFromVersionTransformation.class, name = "ReplaceFileFromVersionTransformation"),
+    @JsonSubTypes.Type(value = ReplaceFileFromStringTransformation.class, name = "ReplaceFileFromStringTransformation"),
+    @JsonSubTypes.Type(value = PreserveCustomFieldsTransformation.class, name = "PreserveCustomFieldsTransformation"),
+    @JsonSubTypes.Type(value = AddCustomFileFromStringTransformation.class, name = "AddCustomFileTransformation")
 })
 public abstract class FeedTransformation<Target extends FeedTransformTarget> implements Serializable {
     private static final long serialVersionUID = 1L;
