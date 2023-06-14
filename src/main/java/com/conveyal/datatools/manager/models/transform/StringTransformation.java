@@ -44,7 +44,12 @@ public class StringTransformation extends ZipTransformation {
                     : TransformType.TABLE_ADDED;
             // Copy csv input stream into the zip file, replacing it if it already exists.
             Files.copy(inputStream, targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
-            zipTarget.feedTransformResult.tableTransformResults.add(new TableTransformResult(tableName, type));
+            // Added or updated Count is the number of lines in the CSV.
+            int NEW_LINE_CHARACTER_CODE = 10;
+            int lineCount = (int) csvData.chars().filter(c -> c == NEW_LINE_CHARACTER_CODE).count();
+            int addedCount = type == TransformType.TABLE_ADDED ? lineCount : 0;
+            int updatedCount = type == TransformType.TABLE_MODIFIED ? lineCount : 0;
+            zipTarget.feedTransformResult.tableTransformResults.add(new TableTransformResult(tableName, type, 0,updatedCount,addedCount, 0));
         } catch (Exception e) {
             status.fail("Unknown error encountered while transforming zip file", e);
         }

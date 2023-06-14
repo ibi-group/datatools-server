@@ -29,9 +29,9 @@ public class PreserveCustomFieldsTransformation extends ZipTransformation {
     /** no-arg constructor for de/serialization */
     public PreserveCustomFieldsTransformation() {}
 
-    public static PreserveCustomFieldsTransformation create(String sourceVersionId, String table) {
+    public static PreserveCustomFieldsTransformation create(String csvData, String table) {
         PreserveCustomFieldsTransformation transformation = new PreserveCustomFieldsTransformation();
-        transformation.sourceVersionId = sourceVersionId;
+        transformation.csvData = csvData;
         transformation.table = table;
         return transformation;
     }
@@ -95,6 +95,7 @@ public class PreserveCustomFieldsTransformation extends ZipTransformation {
                 writer.writeHeader(fullHeaders);
 
                 Map<String, String> row;
+                int rowsModified = 0;
                 while ((row = editorFileReader.read(editorHeaders)) != null) {
                     List<String> editorCsvPrimaryKeyValues = tablePrimaryKeys.stream()
                             .map(row::get)
@@ -107,6 +108,7 @@ public class PreserveCustomFieldsTransformation extends ZipTransformation {
                         String value = customCsvValues == null ? null : customCsvValues.get(customField);
                         finalRow.put(customField, value);
                     });
+                    if (customCsvValues != null) rowsModified++;
                     writer.write(finalRow, fullHeaders);
                 }
                 writer.close();
@@ -114,7 +116,14 @@ public class PreserveCustomFieldsTransformation extends ZipTransformation {
                 Files.copy(output.toPath(), targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
                 tempFile.deleteOnExit();
                 output.deleteOnExit();
-                zipTarget.feedTransformResult.tableTransformResults.add(new TableTransformResult(tableName, TransformType.TABLE_MODIFIED));
+                zipTarget.feedTransformResult.tableTransformResults.add(new TableTransformResult(
+                    tableName,
+                    TransformType.TABLE_MODIFIED,
+                    0,
+                    rowsModified,
+                    0,
+                    customFields.size()
+                ));
             }
         } catch (NoSuchFileException e) {
             status.fail("Source version does not contain table: " + tableName, e);

@@ -8,9 +8,11 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.models.Snapshot;
+import com.conveyal.datatools.manager.models.transform.AddCustomFileFromStringTransformation;
 import com.conveyal.datatools.manager.models.transform.DeleteRecordsTransformation;
 import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
 import com.conveyal.datatools.manager.models.transform.FeedTransformation;
+import com.conveyal.datatools.manager.models.transform.PreserveCustomFieldsTransformation;
 import com.conveyal.datatools.manager.models.transform.ReplaceFileFromStringTransformation;
 import com.conveyal.datatools.manager.models.transform.ReplaceFileFromVersionTransformation;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -215,11 +217,77 @@ public class ArbitraryTransformJobTest extends UnitTest {
         );
     }
 
+    @Test
+    public void canPreserveCustomFieldsInStops() throws IOException {
+        // Generate random UUID for feedId, which gets placed into the csv data.
+        String stops = generateStopsWithCustomFields();
+        sourceVersion = createFeedVersion(
+                feedSource,
+                zipFolderFiles("fake-agency-with-only-calendar")
+        );
+        FeedTransformation transformation = PreserveCustomFieldsTransformation.create(stops, "stops");
+        FeedTransformRules transformRules = new FeedTransformRules(transformation);
+        feedSource.transformRules.add(transformRules);
+        Persistence.feedSources.replace(feedSource.id, feedSource);
+        targetVersion = createFeedVersion(
+                feedSource,
+                zipFolderFiles("fake-agency-with-only-calendar-dates")
+        );
+        LOG.info("Checking assertions.");
+        assertEquals(
+                2,
+                targetVersion.feedTransformResult.tableTransformResults.get(0).customColumnsAdded,
+                "stops.txt custom column count should equal input csv data # of custom columns"
+        );
+
+        assertEquals(
+                2,
+                targetVersion.feedTransformResult.tableTransformResults.get(0).updatedCount,
+                "stops.txt row count modified with custom content should equal input csv data # of custom columns"
+        );
+    }
+
+    @Test
+    public void canAddCustomFile() throws IOException {
+        String customCsv = generateCustomCsvData();
+        sourceVersion = createFeedVersion(
+                feedSource,
+                zipFolderFiles("fake-agency-with-only-calendar")
+        );
+        FeedTransformation transformation = AddCustomFileFromStringTransformation.create(customCsv, "custom-file");
+        FeedTransformRules transformRules = new FeedTransformRules(transformation);
+        feedSource.transformRules.add(transformRules);
+        Persistence.feedSources.replace(feedSource.id, feedSource);
+        targetVersion = createFeedVersion(
+                feedSource,
+                zipFolderFiles("fake-agency-with-only-calendar-dates")
+        );
+
+        LOG.info("Checking assertions.");
+        assertEquals(
+                2,
+                targetVersion.feedTransformResult.tableTransformResults.get(0).addedCount,
+                "custom-file.txt custom row count should equal input csv data # of rows"
+        );
+
+    }
+
     private static String generateFeedInfo(String feedId) {
         // Add feed_info csv data (purposefully with two rows, even though this is not valid GTFS).
         return String.format(
             "feed_id,feed_publisher_name,feed_publisher_url,feed_lang\n%s,BART,https://www.bart.gov/,en\n2,abc,https://example.com",
             feedId
         );
+    }
+    private static String generateStopsWithCustomFields() {
+        return "stop_id, custom_column1, custom_column2"
+            + "\n4u6g, customValue1, customValue2"
+            + "\n1234567, customValue1, customValue2";
+    }
+
+    private static String generateCustomCsvData() {
+        return "custom_column1, custom_column2, custom_column3"
+            + "customValue1, customValue2, customValue3"
+            + "customValue1, customValue2, customValue3";
     }
 }
