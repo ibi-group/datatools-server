@@ -7,7 +7,12 @@ import com.conveyal.datatools.manager.models.TransformType;
 import java.io.ByteArrayInputStream;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.*;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.FileSystem;
+import java.nio.file.FileSystems;
+import java.nio.file.Files;
+import java.nio.file.StandardCopyOption;
 
 public class StringTransformation extends ZipTransformation {
 
@@ -27,14 +32,9 @@ public class StringTransformation extends ZipTransformation {
 
     @Override
     public void transform(FeedTransformZipTarget zipTarget, MonitorableJob.Status status) {
-        // if (csvData == null) {
-        //     TODO: If this is a null value, delete the table (not yet supported).
-        // }
-
         String tableName = table + ".txt";
-        // Run the replace transformation
         Path targetZipPath = Paths.get(zipTarget.gtfsFile.getAbsolutePath());
-        try( FileSystem targetZipFs = FileSystems.newFileSystem(targetZipPath, (ClassLoader) null) ){
+        try ( FileSystem targetZipFs = FileSystems.newFileSystem(targetZipPath, (ClassLoader) null) ){
             // Convert csv data to input stream.
             InputStream inputStream = new ByteArrayInputStream(csvData.getBytes(StandardCharsets.UTF_8));
             Path targetTxtFilePath = getTablePathInZip(tableName, targetZipFs);

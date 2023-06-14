@@ -6,12 +6,15 @@ import com.conveyal.datatools.manager.models.TransformType;
 import org.supercsv.io.CsvMapReader;
 import com.conveyal.gtfs.loader.Table;
 
-import java.io.*;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.File;
+import java.io.FileWriter;
+import java.io.StringReader;
+import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
-import java.util.stream.Collector;
 import java.util.stream.Collectors;
-import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.lang3.ArrayUtils;
 import org.supercsv.io.CsvMapWriter;
@@ -23,7 +26,6 @@ import org.supercsv.prefs.CsvPreference;
  */
 public class PreserveCustomFieldsTransformation extends ZipTransformation {
     private static List<String> tablePrimaryKeys = new ArrayList<>();
-    private static Table specTable;
     /** no-arg constructor for de/serialization */
     public PreserveCustomFieldsTransformation() {}
 
@@ -44,7 +46,7 @@ public class PreserveCustomFieldsTransformation extends ZipTransformation {
     /**
      * This method creates a hash map of the GTFS table keys to the custom CSV values for efficient lookup of custom values.
      * The hash map key is the key values of the GTFS table (e.g. stop_id for stops) concatenated by an underscore.
-     * The hash map value is the CsvMapReader (mapping of column to row value)
+     * The hash map value is the CsvMapReader (mapping of column to row value).
      */
     private static HashMap<String, Map<String, String>> createCsvHashMap(CsvMapReader reader, String[] headers) throws IOException {
         HashMap<String, Map<String, String>> lookup = new HashMap<>();
@@ -62,21 +64,21 @@ public class PreserveCustomFieldsTransformation extends ZipTransformation {
         String tableName = table + ".txt";
         Path targetZipPath = Paths.get(zipTarget.gtfsFile.getAbsolutePath());
 
-        specTable = Arrays.stream(Table.tablesInOrder)
+        Table specTable = Arrays.stream(Table.tablesInOrder)
             .filter(t -> t.name.equals(table))
             .findFirst()
             .get();
         List<String> specTableFields = specTable.specFields().stream().map(f -> f.name).collect(Collectors.toList());
         tablePrimaryKeys = specTable.getPrimaryKeyNames();
 
-        try(FileSystem targetZipFs = FileSystems.newFileSystem( targetZipPath,(ClassLoader) null)){
+        try (FileSystem targetZipFs = FileSystems.newFileSystem( targetZipPath, (ClassLoader) null )){
             Path targetTxtFilePath = getTablePathInZip(tableName, targetZipFs);
 
-            InputStream is = Files.newInputStream(targetTxtFilePath);
             final File tempFile = File.createTempFile(tableName + "-temp", ".txt");
             File output = File.createTempFile(tableName + "-output-temp", ".txt");
 
             try (
+                InputStream is = Files.newInputStream(targetTxtFilePath);
                 CsvMapReader customFileReader = new CsvMapReader(new StringReader(csvData), CsvPreference.STANDARD_PREFERENCE);
                 CsvMapReader editorFileReader = new CsvMapReader(new InputStreamReader(is), CsvPreference.STANDARD_PREFERENCE);
                 CsvMapWriter writer = new CsvMapWriter(new FileWriter(output), CsvPreference.STANDARD_PREFERENCE);
@@ -86,7 +88,7 @@ public class PreserveCustomFieldsTransformation extends ZipTransformation {
                 final String[] editorHeaders = editorFileReader.getHeader(true);
 
                 List<String> customFields = Arrays.stream(customHeaders).filter(h -> !specTableFields.contains(h)).collect(Collectors.toList());
-                if (customFields.size() == 0) return;
+                if (customFields.isEmpty()) return;
                 String[] fullHeaders = ArrayUtils.addAll(editorHeaders, customFields.toArray(new String[0]));
 
                 HashMap<String, Map<String, String>> customFieldsLookup = createCsvHashMap(customFileReader, customHeaders);

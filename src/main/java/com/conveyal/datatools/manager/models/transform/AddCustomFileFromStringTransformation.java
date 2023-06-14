@@ -1,4 +1,5 @@
 package com.conveyal.datatools.manager.models.transform;
+
 import com.conveyal.datatools.common.status.MonitorableJob;
 
 public class AddCustomFileFromStringTransformation extends StringTransformation {
