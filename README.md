@@ -1,6 +1,6 @@
 # Transit Data Manager
 
-[![Join the chat at https://gitter.im/transit-data-tools/datatools-server](https://badges.gitter.im/repo.png)](https://gitter.im/transit-data-tools/datatools-server)
+[![Join the chat at https://matrix.to/#/#transit-data-tools:gitter.im](https://badges.gitter.im/repo.png)](https://matrix.to/#/#transit-data-tools:gitter.im)
 
 The core application for IBI Group's TRANSIT-Data-Tools suite.
 
