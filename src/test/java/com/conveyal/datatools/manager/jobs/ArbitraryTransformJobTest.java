@@ -219,12 +219,7 @@ public class ArbitraryTransformJobTest extends UnitTest {
 
     @Test
     public void canPreserveCustomFieldsInStops() throws IOException {
-        // Generate random UUID for feedId, which gets placed into the csv data.
         String stops = generateStopsWithCustomFields();
-        sourceVersion = createFeedVersion(
-                feedSource,
-                zipFolderFiles("fake-agency-with-only-calendar")
-        );
         FeedTransformation transformation = PreserveCustomFieldsTransformation.create(stops, "stops");
         FeedTransformRules transformRules = new FeedTransformRules(transformation);
         feedSource.transformRules.add(transformRules);
@@ -250,10 +245,6 @@ public class ArbitraryTransformJobTest extends UnitTest {
     @Test
     public void canAddCustomFile() throws IOException {
         String customCsv = generateCustomCsvData();
-        sourceVersion = createFeedVersion(
-                feedSource,
-                zipFolderFiles("fake-agency-with-only-calendar")
-        );
         FeedTransformation transformation = AddCustomFileFromStringTransformation.create(customCsv, "custom-file");
         FeedTransformRules transformRules = new FeedTransformRules(transformation);
         feedSource.transformRules.add(transformRules);
@@ -287,7 +278,7 @@ public class ArbitraryTransformJobTest extends UnitTest {
 
     private static String generateCustomCsvData() {
         return "custom_column1, custom_column2, custom_column3"
-            + "customValue1, customValue2, customValue3"
-            + "customValue1, customValue2, customValue3";
+            + "\ncustomValue1, customValue2, customValue3"
+            + "\ncustomValue1, customValue2, customValue3";
     }
 }

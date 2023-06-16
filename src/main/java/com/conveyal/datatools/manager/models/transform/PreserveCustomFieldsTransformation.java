@@ -25,7 +25,6 @@ import org.supercsv.prefs.CsvPreference;
  * This feed transformation will attempt to preserve any custom fields from an entered csv in the final GTFS output.
  */
 public class PreserveCustomFieldsTransformation extends ZipTransformation {
-    private static List<String> tablePrimaryKeys = new ArrayList<>();
     /** no-arg constructor for de/serialization */
     public PreserveCustomFieldsTransformation() {}
 
@@ -48,7 +47,7 @@ public class PreserveCustomFieldsTransformation extends ZipTransformation {
      * The hash map key is the key values of the GTFS table (e.g. stop_id for stops) concatenated by an underscore.
      * The hash map value is the CsvMapReader (mapping of column to row value).
      */
-    private static HashMap<String, Map<String, String>> createCsvHashMap(CsvMapReader reader, String[] headers) throws IOException {
+    private static HashMap<String, Map<String, String>> createCsvHashMap(CsvMapReader reader, String[] headers, List<String> tablePrimaryKeys) throws IOException {
         HashMap<String, Map<String, String>> lookup = new HashMap<>();
         Map<String, String> nextLine;
         while ((nextLine = reader.read(headers)) != null) {
@@ -69,13 +68,15 @@ public class PreserveCustomFieldsTransformation extends ZipTransformation {
             .findFirst()
             .get();
         List<String> specTableFields = specTable.specFields().stream().map(f -> f.name).collect(Collectors.toList());
-        tablePrimaryKeys = specTable.getPrimaryKeyNames();
+        List<String> tablePrimaryKeys = specTable.getPrimaryKeyNames();
 
         try (FileSystem targetZipFs = FileSystems.newFileSystem( targetZipPath, (ClassLoader) null )){
             Path targetTxtFilePath = getTablePathInZip(tableName, targetZipFs);
 
             final File tempFile = File.createTempFile(tableName + "-temp", ".txt");
             File output = File.createTempFile(tableName + "-output-temp", ".txt");
+            int rowsModified = 0;
+            List<String> customFields;
 
             try (
                 InputStream is = Files.newInputStream(targetTxtFilePath);
@@ -87,15 +88,14 @@ public class PreserveCustomFieldsTransformation extends ZipTransformation {
                 String[] customHeaders = customFileReader.getHeader(true);
                 final String[] editorHeaders = editorFileReader.getHeader(true);
 
-                List<String> customFields = Arrays.stream(customHeaders).filter(h -> !specTableFields.contains(h)).collect(Collectors.toList());
+                customFields = Arrays.stream(customHeaders).filter(h -> !specTableFields.contains(h)).collect(Collectors.toList());
                 if (customFields.isEmpty()) return;
                 String[] fullHeaders = ArrayUtils.addAll(editorHeaders, customFields.toArray(new String[0]));
 
-                HashMap<String, Map<String, String>> customFieldsLookup = createCsvHashMap(customFileReader, customHeaders);
+                HashMap<String, Map<String, String>> customFieldsLookup = createCsvHashMap(customFileReader, customHeaders, tablePrimaryKeys);
                 writer.writeHeader(fullHeaders);
 
                 Map<String, String> row;
-                int rowsModified = 0;
                 while ((row = editorFileReader.read(editorHeaders)) != null) {
                     List<String> editorCsvPrimaryKeyValues = tablePrimaryKeys.stream()
                             .map(row::get)
@@ -111,20 +111,18 @@ public class PreserveCustomFieldsTransformation extends ZipTransformation {
                     if (customCsvValues != null) rowsModified++;
                     writer.write(finalRow, fullHeaders);
                 }
-                writer.close();
-
-                Files.copy(output.toPath(), targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
-                tempFile.deleteOnExit();
-                output.deleteOnExit();
-                zipTarget.feedTransformResult.tableTransformResults.add(new TableTransformResult(
-                    tableName,
-                    TransformType.TABLE_MODIFIED,
-                    0,
-                    rowsModified,
-                    0,
-                    customFields.size()
-                ));
             }
+            Files.copy(output.toPath(), targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
+            tempFile.deleteOnExit();
+            output.deleteOnExit();
+            zipTarget.feedTransformResult.tableTransformResults.add(new TableTransformResult(
+                tableName,
+                TransformType.TABLE_MODIFIED,
+                0,
+                rowsModified,
+                0,
+                customFields.size()
+            ));
         } catch (NoSuchFileException e) {
             status.fail("Source version does not contain table: " + tableName, e);
         } catch (IOException e) {
