@@ -43,6 +43,8 @@ public class FeedSourceSummary {
     @JsonDeserialize(using = JacksonSerializers.LocalDateIsoDeserializer.class)
     public LocalDate lastUpdated;
 
+    public List<String> labelIds = new ArrayList<>();
+
     public String deployedFeedVersionId;
 
     @JsonSerialize(using = JacksonSerializers.LocalDateIsoSerializer.class)
@@ -75,6 +77,7 @@ public class FeedSourceSummary {
         this.name = feedSourceDocument.getString("name");
         this.deployable = feedSourceDocument.getBoolean("deployable");
         this.isPublic = feedSourceDocument.getBoolean("isPublic");
+        this.labelIds = feedSourceDocument.getList("labelIds", String.class);
         // Convert to local date type for consistency.
         this.lastUpdated = getLocalDateFromDate(feedSourceDocument.getDate("lastUpdated"));
     }
@@ -121,7 +124,8 @@ public class FeedSourceSummary {
                         "name": 1,
                         "deployable": 1,
                         "isPublic": 1,
-                        "lastUpdated": 1
+                        "lastUpdated": 1,
+                        "labelIds": 1
                     }
                 },
                 {
@@ -141,7 +145,8 @@ public class FeedSourceSummary {
                     "name",
                     "deployable",
                     "isPublic",
-                    "lastUpdated")
+                    "lastUpdated",
+                    "labelIds")
                 )
             ),
             sort(Sorts.ascending("name"))

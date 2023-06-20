@@ -91,7 +91,8 @@ public class FeedSourceControllerTest extends DatatoolsTest {
             "FeedSource",
             null,
             projectWithLatestDeployment,
-            true
+            true,
+            List.of("labelOne", "labelTwo")
         );
         LocalDate deployedSuperseded = LocalDate.of(2020, Month.MARCH, 12);
         LocalDate deployedEndDate = LocalDate.of(2021, Month.MARCH, 12);
@@ -124,7 +125,8 @@ public class FeedSourceControllerTest extends DatatoolsTest {
             "FeedSourceWithPinnedFeedVersion",
             null,
             projectWithPinnedDeployment,
-            true
+            true,
+            List.of("labelOne", "labelTwo")
         );
         feedVersionFromPinnedDeployment = createFeedVersion(
             "feed-version-from-pinned-deployment",
@@ -340,10 +342,15 @@ public class FeedSourceControllerTest extends DatatoolsTest {
 
         assertNotNull(feedSourceSummaries);
         assertEquals(feedSourceWithLatestDeploymentFeedVersion.id, feedSourceSummaries.get(0).id);
+        assertEquals(feedSourceWithLatestDeploymentFeedVersion.labelIds, feedSourceSummaries.get(0).labelIds);
         assertEquals(feedVersionFromLatestDeployment.id, feedSourceSummaries.get(0).deployedFeedVersionId);
         assertEquals(feedVersionFromLatestDeployment.validationSummary().startDate, feedSourceSummaries.get(0).deployedFeedVersionStartDate);
         assertEquals(feedVersionFromLatestDeployment.validationSummary().endDate, feedSourceSummaries.get(0).deployedFeedVersionEndDate);
         assertEquals(feedVersionFromLatestDeployment.validationSummary().errorCount, feedSourceSummaries.get(0).deployedFeedVersionIssues);
+        assertEquals(feedVersionFromLatestDeployment.id, feedSourceSummaries.get(0).latestFeedVersionId);
+        assertEquals(feedVersionFromLatestDeployment.validationSummary().startDate, feedSourceSummaries.get(0).latestFeedVersionStartDate);
+        assertEquals(feedVersionFromLatestDeployment.validationSummary().endDate, feedSourceSummaries.get(0).latestFeedVersionEndDate);
+        assertEquals(feedVersionFromLatestDeployment.validationSummary().errorCount, feedSourceSummaries.get(0).latestFeedVersionIssues);
     }
 
     @Test
@@ -365,10 +372,15 @@ public class FeedSourceControllerTest extends DatatoolsTest {
             );
         assertNotNull(feedSourceSummaries);
         assertEquals(feedSourceWithPinnedDeploymentFeedVersion.id, feedSourceSummaries.get(0).id);
+        assertEquals(feedSourceWithPinnedDeploymentFeedVersion.labelIds, feedSourceSummaries.get(0).labelIds);
         assertEquals(feedVersionFromPinnedDeployment.id, feedSourceSummaries.get(0).deployedFeedVersionId);
         assertEquals(feedVersionFromPinnedDeployment.validationSummary().startDate, feedSourceSummaries.get(0).deployedFeedVersionStartDate);
         assertEquals(feedVersionFromPinnedDeployment.validationSummary().endDate, feedSourceSummaries.get(0).deployedFeedVersionEndDate);
         assertEquals(feedVersionFromPinnedDeployment.validationSummary().errorCount, feedSourceSummaries.get(0).deployedFeedVersionIssues);
+        assertEquals(feedVersionFromPinnedDeployment.id, feedSourceSummaries.get(0).latestFeedVersionId);
+        assertEquals(feedVersionFromPinnedDeployment.validationSummary().startDate, feedSourceSummaries.get(0).latestFeedVersionStartDate);
+        assertEquals(feedVersionFromPinnedDeployment.validationSummary().endDate, feedSourceSummaries.get(0).latestFeedVersionEndDate);
+        assertEquals(feedVersionFromPinnedDeployment.validationSummary().errorCount, feedSourceSummaries.get(0).latestFeedVersionIssues);
     }
 
     private static FeedSource createFeedSource(String name, URL url, Project project) {
@@ -379,6 +391,16 @@ public class FeedSourceControllerTest extends DatatoolsTest {
      * Helper method to create feed source.
      */
     private static FeedSource createFeedSource(String id, String name, URL url, Project project, boolean persist) {
+        return createFeedSource(id, name, url, project, persist, null);
+    }
+    private static FeedSource createFeedSource(
+        String id,
+        String name,
+        URL url,
+        Project project,
+        boolean persist,
+        List<String> labels
+    ) {
         FeedSource feedSource = new FeedSource();
         if (id != null) feedSource.id = id;
         feedSource.fetchFrequency = FetchFrequency.MINUTES;
@@ -388,6 +410,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         feedSource.projectId = project.id;
         feedSource.retrievalMethod = FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
         feedSource.url = url;
+        if (labels != null) feedSource.labelIds = labels;
         if (persist) Persistence.feedSources.create(feedSource);
         return feedSource;
     }
