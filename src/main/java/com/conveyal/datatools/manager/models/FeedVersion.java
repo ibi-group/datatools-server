@@ -393,8 +393,8 @@ public class FeedVersion extends Model implements Serializable {
             status.update("MobilityData Analysis...", 11);
 
             // Wait for the file to be entirely copied into the directory.
-            // TODO: base this on the file being completely saved rather than a fixed amount of time.
-            Thread.sleep(5000);
+            // 5 seconds + ~1 second per 10mb
+            Thread.sleep(5000 + (this.fileSize / 10000));
             File gtfsZip = this.retrieveGtfsFile();
             // Namespace based folders avoid clash for validation being run on multiple versions of a feed.
             // TODO: do we know that there will always be a namespace?
@@ -549,6 +549,8 @@ public class FeedVersion extends Model implements Serializable {
                 fs.lastFetched = null;
                 Persistence.feedSources.replace(fs.id, fs);
             }
+            ensurePublishedVersionIdIsUnset(fs);
+
             feedStore.deleteFeed(id);
             // Delete feed version tables in GTFS database
             GTFS.delete(this.namespace, DataManager.GTFS_DATA_SOURCE);
@@ -559,7 +561,7 @@ public class FeedVersion extends Model implements Serializable {
             Persistence.deployments.getMongoCollection().updateMany(eq("projectId", this.parentFeedSource().projectId),
                     pull("feedVersionIds", this.id));
             Persistence.feedVersions.removeById(this.id);
-            this.parentFeedSource().renumberFeedVersions();
+            fs.renumberFeedVersions();
 
             // recalculate feed expiration notifications in case the latest version has changed
             Scheduler.scheduleExpirationNotifications(fs);
@@ -567,6 +569,16 @@ public class FeedVersion extends Model implements Serializable {
             LOG.info("Version {} deleted", id);
         } catch (Exception e) {
             LOG.warn("Error deleting version", e);
+        }
+    }
+
+    /**
+     * If this feed version is referenced in the parent feed source by publishedVersionId,
+     * ensure that the field is set to null.
+     */
+    private void ensurePublishedVersionIdIsUnset(FeedSource fs) {
+        if (this.namespace != null && this.namespace.equals(fs.publishedVersionId)) {
+            Persistence.feedSources.updateField(fs.id, "publishedVersionId", null);
         }
     }
 

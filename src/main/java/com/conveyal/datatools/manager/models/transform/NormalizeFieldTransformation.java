@@ -198,10 +198,15 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             Field[] fieldsFoundInZip = gtfsTable.getFieldsFromFieldHeaders(headers, null);
             int transformFieldIndex = getFieldIndex(fieldsFoundInZip, fieldName);
 
+            // If the index is -1, this is a new column, and we need to add it accordingly.
+            if (transformFieldIndex == -1) {
+                writer.write(expandArray(headers, fieldName));
+            } else {
+                writer.write(headers);
+            }
+
             int modifiedRowCount = 0;
 
-            // Write headers and processed CSV rows.
-            writer.write(headers);
             while (csvReader.readRecord()) {
                 String originalValue = csvReader.get(transformFieldIndex);
                 String transformedValue = originalValue;
@@ -219,10 +224,16 @@ public class NormalizeFieldTransformation extends ZipTransformation {
 
                 // Re-assemble the CSV line and place in buffer.
                 String[] csvValues = csvReader.getValues();
-                csvValues[transformFieldIndex] = transformedValue;
 
-                // Write line to table (plus new line char).
-                writer.write(csvValues);
+                // If the index is -1, this is a new column, and we need to add it accordingly.
+                if (transformFieldIndex == -1) {
+                    writer.write(expandArray(csvValues, transformedValue));
+                } else {
+                    csvValues[transformFieldIndex] = transformedValue;
+
+                    // Write line to table (plus new line char).
+                    writer.write(csvValues);
+                }
 
                 // Count number of CSV rows changed.
                 if (!originalValue.equals(transformedValue)) {
@@ -286,5 +297,15 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             result = substitution.replaceAll(result);
         }
         return result;
+    }
+
+    /**
+     * Copies a fixed length array, and appends a new element at the end.
+     */
+    private String[] expandArray(String[] array, String value) {
+        String[] expanded = new String[array.length + 1];
+        System.arraycopy(array, 0, expanded, 0, array.length);
+        expanded[array.length] = value;
+        return expanded;
     }
 }
