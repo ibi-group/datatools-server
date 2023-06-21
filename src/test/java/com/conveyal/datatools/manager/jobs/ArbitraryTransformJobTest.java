@@ -103,7 +103,7 @@ public class ArbitraryTransformJobTest extends UnitTest {
      * into the target version's GTFS file.
      */
     @Test
-    public void canReplaceGtfsPlusFileFromVersion() throws IOException {
+    void canReplaceGtfsPlusFileFromVersion() throws IOException {
         final String table = "stop_attributes";
         // Create source version (folder contains stop_attributes file).
         sourceVersion = createFeedVersion(
@@ -128,7 +128,7 @@ public class ArbitraryTransformJobTest extends UnitTest {
     }
 
     @Test
-    public void canDeleteTrips() throws IOException {
+    void canDeleteTrips() throws IOException {
         // Add delete trips transformation.
         List<String> routeIds = new ArrayList<>();
         // Collect route_id values.
@@ -162,7 +162,7 @@ public class ArbitraryTransformJobTest extends UnitTest {
     }
 
     @Test
-    public void replaceGtfsPlusFileFailsIfSourceIsMissing() throws IOException {
+    void replaceGtfsPlusFileFailsIfSourceIsMissing() throws IOException {
         sourceVersion = createFeedVersion(
             feedSource,
             zipFolderFiles("fake-agency-with-only-calendar")
@@ -183,7 +183,7 @@ public class ArbitraryTransformJobTest extends UnitTest {
     }
 
     @Test
-    public void canReplaceFeedInfo() throws SQLException, IOException {
+    void canReplaceFeedInfo() throws SQLException, IOException {
         // Generate random UUID for feedId, which gets placed into the csv data.
         final String feedId = UUID.randomUUID().toString();
         final String feedInfoContent = generateFeedInfo(feedId);
@@ -218,47 +218,47 @@ public class ArbitraryTransformJobTest extends UnitTest {
     }
 
     @Test
-    public void canPreserveCustomFieldsInStops() throws IOException {
+    void canPreserveCustomFieldsInStops() throws IOException {
         String stops = generateStopsWithCustomFields();
         FeedTransformation transformation = PreserveCustomFieldsTransformation.create(stops, "stops");
         FeedTransformRules transformRules = new FeedTransformRules(transformation);
         feedSource.transformRules.add(transformRules);
         Persistence.feedSources.replace(feedSource.id, feedSource);
         targetVersion = createFeedVersion(
-                feedSource,
-                zipFolderFiles("fake-agency-with-only-calendar-dates")
+            feedSource,
+            zipFolderFiles("fake-agency-with-only-calendar-dates")
         );
         LOG.info("Checking assertions.");
         assertEquals(
-                2,
-                targetVersion.feedTransformResult.tableTransformResults.get(0).customColumnsAdded,
-                "stops.txt custom column count should equal input csv data # of custom columns"
+            2,
+            targetVersion.feedTransformResult.tableTransformResults.get(0).customColumnsAdded,
+            "stops.txt custom column count should equal input csv data # of custom columns"
         );
 
         assertEquals(
-                2,
-                targetVersion.feedTransformResult.tableTransformResults.get(0).updatedCount,
-                "stops.txt row count modified with custom content should equal input csv data # of custom columns"
+            2,
+            targetVersion.feedTransformResult.tableTransformResults.get(0).updatedCount,
+            "stops.txt row count modified with custom content should equal input csv data # of custom columns"
         );
     }
 
     @Test
-    public void canAddCustomFile() throws IOException {
+    void canAddCustomFile() throws IOException {
         String customCsv = generateCustomCsvData();
         FeedTransformation transformation = AddCustomFileFromStringTransformation.create(customCsv, "custom-file");
         FeedTransformRules transformRules = new FeedTransformRules(transformation);
         feedSource.transformRules.add(transformRules);
         Persistence.feedSources.replace(feedSource.id, feedSource);
         targetVersion = createFeedVersion(
-                feedSource,
-                zipFolderFiles("fake-agency-with-only-calendar-dates")
+            feedSource,
+            zipFolderFiles("fake-agency-with-only-calendar-dates")
         );
 
         LOG.info("Checking assertions.");
         assertEquals(
-                2,
-                targetVersion.feedTransformResult.tableTransformResults.get(0).addedCount,
-                "custom-file.txt custom row count should equal input csv data # of rows"
+            2,
+            targetVersion.feedTransformResult.tableTransformResults.get(0).addedCount,
+            "custom-file.txt custom row count should equal input csv data # of rows"
         );
 
     }
@@ -273,12 +273,12 @@ public class ArbitraryTransformJobTest extends UnitTest {
     private static String generateStopsWithCustomFields() {
         return "stop_id, custom_column1, custom_column2"
             + "\n4u6g, customValue1, customValue2"
-            + "\n1234567, customValue1, customValue2";
+            + "\n1234567, customValue3, customValue4";
     }
 
     private static String generateCustomCsvData() {
         return "custom_column1, custom_column2, custom_column3"
             + "\ncustomValue1, customValue2, customValue3"
-            + "\ncustomValue1, customValue2, customValue3";
+            + "\ncustomValue4, customValue5, customValue6";
     }
 }

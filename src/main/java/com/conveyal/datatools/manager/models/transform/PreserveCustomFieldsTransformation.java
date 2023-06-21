@@ -98,8 +98,8 @@ public class PreserveCustomFieldsTransformation extends ZipTransformation {
                 Map<String, String> row;
                 while ((row = editorFileReader.read(editorHeaders)) != null) {
                     List<String> editorCsvPrimaryKeyValues = tablePrimaryKeys.stream()
-                            .map(row::get)
-                            .collect(Collectors.toList());
+                        .map(row::get)
+                        .collect(Collectors.toList());
 
                     String hashKey = StringUtils.join(editorCsvPrimaryKeyValues, "_");
                     Map<String, String> customCsvValues = customFieldsLookup.get(hashKey);
