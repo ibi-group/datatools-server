@@ -70,7 +70,7 @@ public class PreserveCustomFieldsTransformation extends ZipTransformation {
         List<String> specTableFields = specTable.specFields().stream().map(f -> f.name).collect(Collectors.toList());
         List<String> tablePrimaryKeys = specTable.getPrimaryKeyNames();
 
-        try (FileSystem targetZipFs = FileSystems.newFileSystem( targetZipPath, (ClassLoader) null )){
+        try (FileSystem targetZipFs = FileSystems.newFileSystem( targetZipPath, (ClassLoader) null )) {
             Path targetTxtFilePath = getTablePathInZip(tableName, targetZipFs);
 
             final File tempFile = File.createTempFile(tableName + "-temp", ".txt");
