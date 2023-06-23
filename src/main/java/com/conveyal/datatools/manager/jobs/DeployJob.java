@@ -16,6 +16,7 @@ import com.amazonaws.services.ec2.model.Tag;
 import com.amazonaws.services.ec2.model.TagSpecification;
 import com.amazonaws.services.ec2.model.TerminateInstancesResult;
 import com.amazonaws.services.elasticloadbalancingv2.AmazonElasticLoadBalancing;
+import com.amazonaws.services.identitymanagement.model.TagUserRequest;
 import com.amazonaws.services.s3.AmazonS3;
 import com.amazonaws.services.s3.AmazonS3URI;
 import com.amazonaws.services.s3.model.CopyObjectRequest;
@@ -997,28 +998,6 @@ public class DeployJob extends MonitorableJob {
         }
         status.message = String.format("Starting up %d new instance(s) to run OTP", count);
 
-        // If a tag is set in the server.yml, add the tag to the instance
-        TagSpecification ts = new TagSpecification();
-        ts.setResourceType(ResourceType.Instance);
-        Collection<Tag> tags = new ArrayList<Tag>();
-
-        String tagKey = DataManager.getConfigPropertyAsText("modules.deployment.ec2.tag_key");
-        String tagValue = DataManager.getConfigPropertyAsText("modules.deployment.ec2.tag_value");
-
-        Tag t = new Tag();
-        t.setKey("datatools-job-id");
-        t.setValue(this.jobId);
-        tags.add(t);
-
-        if (tagValue != null && tagKey != null) {
-            Tag customTag = new Tag();
-            customTag.setKey(tagKey);
-            customTag.setValue(tagValue);
-            tags.add(customTag);
-        }
-        ts.withTags(tags);
-
-
         RunInstancesRequest runInstancesRequest = new RunInstancesRequest()
                 .withNetworkInterfaces(interfaceSpecification)
                 .withInstanceType(instanceType)
@@ -1032,7 +1011,6 @@ public class DeployJob extends MonitorableJob {
                 .withIamInstanceProfile(new IamInstanceProfileSpecification().withArn(otpServer.ec2Info.iamInstanceProfileArn))
                 .withImageId(amiId)
                 .withKeyName(otpServer.ec2Info.keyName)
-                .withTagSpecifications(ts)
                 // This will have the instance terminate when it is shut down.
                 .withInstanceInitiatedShutdownBehavior("terminate")
                 .withUserData(Base64.encodeBase64String(userData.getBytes()));
@@ -1065,7 +1043,7 @@ public class DeployJob extends MonitorableJob {
             String serverName = String.format("%s %s (%s) %d %s", deployment.tripPlannerVersion, deployment.name, dateString, serverCounter++, graphAlreadyBuilt ? "clone" : "builder");
             LOG.info("Creating tags for new EC2 instance {}", serverName);
             try {
-                getEC2ClientForDeployJob().createTags(new CreateTagsRequest()
+                CreateTagsRequest createTagsRequest = new CreateTagsRequest()
                         .withTags(new Tag("Name", serverName))
                         .withTags(new Tag("projectId", deployment.projectId))
                         .withTags(new Tag("deploymentId", deployment.id))
@@ -1073,9 +1051,17 @@ public class DeployJob extends MonitorableJob {
                         .withTags(new Tag("serverId", otpServer.id))
                         .withTags(new Tag("routerId", getRouterId()))
                         .withTags(new Tag("user", retrieveEmail()))
-                        
-                        .withResources(instance.getInstanceId())
-                );
+                        .withResources(instance.getInstanceId());
+
+                String tagKey = DataManager.getConfigPropertyAsText("modules.deployment.ec2.tag_key");
+                String tagValue = DataManager.getConfigPropertyAsText("modules.deployment.ec2.tag_value");
+
+                Tag customTag = new Tag();
+                customTag.setKey(tagKey);
+                customTag.setValue(tagValue);
+
+                createTagsRequest = createTagsRequest.withTags(customTag);
+                getEC2ClientForDeployJob().createTags(createTagsRequest);
             } catch (Exception e) {
                 status.fail("Failed to create tags for instances.", e);
                 return instances;
