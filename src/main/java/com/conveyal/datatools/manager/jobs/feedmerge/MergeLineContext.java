@@ -240,7 +240,9 @@ public class MergeLineContext {
     public boolean checkForeignReferences(FieldContext fieldContext) throws IOException {
         Field field = fieldContext.getField();
         if (field.isForeignReference()) {
-            String key = getTableScopedValue(field.referenceTable, fieldContext.getValue());
+            // FIXME: GTFS-lib is now able to define multiple table references! This is only expecting one, so this update
+            //   will definitely break this part of the code.
+            String key = getTableScopedValue(field.referenceTables.iterator().next(), fieldContext.getValue());
             // Check if we're performing a service period merge, this ref field is a service_id, and it
             // is not found in the list of service_ids (e.g., it was removed).
             boolean isValidServiceId = mergeFeedsResult.serviceIds.contains(fieldContext.getValueToWrite());
