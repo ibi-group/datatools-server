@@ -86,7 +86,7 @@ public class PreserveCustomFieldsTransformation extends ZipTransformation {
             ){
 
                 String[] customHeaders = customFileReader.getHeader(true);
-                final String[] editorHeaders = editorFileReader.getHeader(true);
+                String[] editorHeaders = editorFileReader.getHeader(true);
 
                 customFields = Arrays.stream(customHeaders).filter(h -> !specTableFields.contains(h)).collect(Collectors.toList());
                 if (customFields.isEmpty()) return;
