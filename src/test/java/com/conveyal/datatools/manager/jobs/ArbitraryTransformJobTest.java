@@ -24,11 +24,17 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.supercsv.io.CsvMapReader;
+import org.supercsv.prefs.CsvPreference;
 
+import java.io.File;
+import java.io.InputStream;
 import java.io.IOException;
+import java.io.InputStreamReader;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -220,6 +226,10 @@ public class ArbitraryTransformJobTest extends UnitTest {
     @Test
     void canPreserveCustomFieldsInStops() throws IOException {
         String stops = generateStopsWithCustomFields();
+        sourceVersion = createFeedVersion(
+                feedSource,
+                zipFolderFiles("fake-agency-with-only-calendar")
+        );
         FeedTransformation transformation = PreserveCustomFieldsTransformation.create(stops, "stops");
         FeedTransformRules transformRules = new FeedTransformRules(transformation);
         feedSource.transformRules.add(transformRules);
@@ -229,15 +239,29 @@ public class ArbitraryTransformJobTest extends UnitTest {
             zipFolderFiles("fake-agency-with-only-calendar-dates")
         );
         LOG.info("Checking assertions.");
+        CsvMapReader finalStopsReader = getCsvMapReaderFromZip(targetVersion.retrieveGtfsFile(), "stops.txt");
+        CsvMapReader originalStopsReader = getCsvMapReaderFromZip(sourceVersion.retrieveGtfsFile(), "stops.txt");
+        String[] finalHeaders = finalStopsReader.getHeader(true);
+        String[] originalHeaders = originalStopsReader.getHeader(true);
+        int columnsAdded = finalHeaders.length - originalHeaders.length;
+
+        // Get the number of rows that have been modified with custom fields
+        Map<String, String> row;
+        int updatedRowCount = 0;
+        while ((row = finalStopsReader.read(finalHeaders)) != null) {
+            // Count the number of cases where the custom column is not null, that's the number modified.
+            // *** Assumes that our sample data below includes values for every customColumn for every row.
+            if (row.get("custom_column1") != null) updatedRowCount++;
+        }
         assertEquals(
             2,
-            targetVersion.feedTransformResult.tableTransformResults.get(0).customColumnsAdded,
+            columnsAdded,
             "stops.txt custom column count should equal input csv data # of custom columns"
         );
 
         assertEquals(
             2,
-            targetVersion.feedTransformResult.tableTransformResults.get(0).updatedCount,
+            updatedRowCount,
             "stops.txt row count modified with custom content should equal input csv data # of custom columns"
         );
     }
@@ -254,13 +278,24 @@ public class ArbitraryTransformJobTest extends UnitTest {
             zipFolderFiles("fake-agency-with-only-calendar-dates")
         );
 
+        CsvMapReader customCsvReader = getCsvMapReaderFromZip(targetVersion.retrieveGtfsFile(), "custom-file.txt");
+        String[] customHeaders = customCsvReader.getHeader(true);
+        int rowCount = 0;
+        while(customCsvReader.read(customHeaders) != null) rowCount++;
+
         LOG.info("Checking assertions.");
         assertEquals(
             2,
-            targetVersion.feedTransformResult.tableTransformResults.get(0).addedCount,
+            rowCount,
             "custom-file.txt custom row count should equal input csv data # of rows"
         );
 
+    }
+    private static CsvMapReader getCsvMapReaderFromZip(File gtfsFile, String table) throws IOException {
+        ZipFile zipFile = new ZipFile(gtfsFile);
+        ZipEntry entry = zipFile.getEntry(table);
+        InputStream is = zipFile.getInputStream(entry);
+        return new CsvMapReader(new InputStreamReader(is), CsvPreference.STANDARD_PREFERENCE);
     }
 
     private static String generateFeedInfo(String feedId) {
@@ -271,14 +306,14 @@ public class ArbitraryTransformJobTest extends UnitTest {
         );
     }
     private static String generateStopsWithCustomFields() {
-        return "stop_id, custom_column1, custom_column2"
-            + "\n4u6g, customValue1, customValue2"
-            + "\n1234567, customValue3, customValue4";
+        return "stop_id,custom_column1,custom_column2"
+            + "\n4u6g,customValue1,customValue2"
+            + "\n1234567,customValue3,customValue4";
     }
 
     private static String generateCustomCsvData() {
-        return "custom_column1, custom_column2, custom_column3"
-            + "\ncustomValue1, customValue2, customValue3"
-            + "\ncustomValue4, customValue5, customValue6";
+        return "custom_column1,custom_column2,custom_column3"
+            + "\ncustomValue1,customValue2,customValue3"
+            + "\ncustomValue4,customValue5,customValue6";
     }
 }

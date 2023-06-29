@@ -62,15 +62,17 @@ public class PreserveCustomFieldsTransformation extends ZipTransformation {
     public void transform(FeedTransformZipTarget zipTarget, MonitorableJob.Status status) {
         String tableName = table + ".txt";
         Path targetZipPath = Paths.get(zipTarget.gtfsFile.getAbsolutePath());
-
         Table specTable = Arrays.stream(Table.tablesInOrder)
-            .filter(t -> t.name.equals(table))
-            .findFirst()
-            .get();
-        List<String> specTableFields = specTable.specFields().stream().map(f -> f.name).collect(Collectors.toList());
-        List<String> tablePrimaryKeys = specTable.getPrimaryKeyNames();
+                .filter(t -> t.name.equals(table))
+                .findFirst()
+                .get();
 
-        try (FileSystem targetZipFs = FileSystems.newFileSystem( targetZipPath, (ClassLoader) null )) {
+        try (FileSystem targetZipFs = FileSystems.newFileSystem(targetZipPath, (ClassLoader) null)) {
+            if (specTable == null) throw new Exception(String.format("could not find specTable for table %s", table));
+
+            List<String> specTableFields = specTable.specFields().stream().map(f -> f.name).collect(Collectors.toList());
+            List<String> tablePrimaryKeys = specTable.getPrimaryKeyNames();
+
             Path targetTxtFilePath = getTablePathInZip(tableName, targetZipFs);
 
             final File tempFile = File.createTempFile(tableName + "-temp", ".txt");
@@ -115,14 +117,7 @@ public class PreserveCustomFieldsTransformation extends ZipTransformation {
             Files.copy(output.toPath(), targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
             tempFile.deleteOnExit();
             output.deleteOnExit();
-            zipTarget.feedTransformResult.tableTransformResults.add(new TableTransformResult(
-                tableName,
-                TransformType.TABLE_MODIFIED,
-                0,
-                rowsModified,
-                0,
-                customFields.size()
-            ));
+            zipTarget.feedTransformResult.tableTransformResults.add(new TableTransformResult(tableName, TransformType.TABLE_MODIFIED));
         } catch (NoSuchFileException e) {
             status.fail("Source version does not contain table: " + tableName, e);
         } catch (IOException e) {
