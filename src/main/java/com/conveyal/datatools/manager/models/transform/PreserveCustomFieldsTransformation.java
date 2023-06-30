@@ -77,6 +77,7 @@ public class PreserveCustomFieldsTransformation extends ZipTransformation {
 
             final File tempFile = File.createTempFile(tableName + "-temp", ".txt");
             File output = File.createTempFile(tableName + "-output-temp", ".txt");
+            int rowsModified = 0;
             List<String> customFields;
 
             try (
@@ -109,13 +110,21 @@ public class PreserveCustomFieldsTransformation extends ZipTransformation {
                         String value = customCsvValues == null ? null : customCsvValues.get(customField);
                         finalRow.put(customField, value);
                     });
+                    if (customCsvValues != null) rowsModified++;
                     writer.write(finalRow, fullHeaders);
                 }
             }
             Files.copy(output.toPath(), targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
             tempFile.deleteOnExit();
             output.deleteOnExit();
-            zipTarget.feedTransformResult.tableTransformResults.add(new TableTransformResult(tableName, TransformType.TABLE_MODIFIED));
+            zipTarget.feedTransformResult.tableTransformResults.add(new TableTransformResult(
+                    tableName,
+                    TransformType.TABLE_MODIFIED,
+                    0,
+                    rowsModified,
+                    0,
+                    customFields.size()
+            ));
         } catch (NoSuchFileException e) {
             status.fail("Source version does not contain table: " + tableName, e);
         } catch (IOException e) {
