@@ -81,6 +81,8 @@ public class Deployment extends Model implements Serializable {
     public boolean peliasResetDb;
     public List<String> peliasCsvFiles = new ArrayList<>();
 
+    public String peliasSynonymsBase64;
+
     /**
      * Get parent project for deployment. Note: at one point this was a JSON property of this class, but severe
      * performance issues prevent this field from scaling to be fetched/assigned to a large collection of deployments.
