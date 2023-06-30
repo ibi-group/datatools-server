@@ -237,42 +237,102 @@ public class MergeLineContext {
             .collect(Collectors.toList());
     }
 
+    public enum ReferenceTableLookup {
+        TRIP_SERVICE_ID_KEY(
+            String.join(":", Table.TRIPS.name, SERVICE_ID, Table.CALENDAR.name, Table.CALENDAR_DATES.name)
+        );
+        private final String value;
+        ReferenceTableLookup(String value) {
+            this.value = value;
+        }
+        public String getValue() {
+            return value;
+        }
+
+        public static ReferenceTableLookup fromValue(String key) {
+            for (ReferenceTableLookup ref: ReferenceTableLookup.values()) {
+                if (ref.getValue().equals(key)) {
+                    return ref;
+                }
+            }
+            throw new UnsupportedOperationException(String.format("Unsupported reference table combination: %s.", key));
+        }
+    }
+
+    /**
+     * Determine which reference table to use. If there is only one reference use this. If there are multiple references
+     * determine the context and then the correct reference table to use.
+     */
+    private Table getReferenceTable(FieldContext fieldContext, Field field) {
+        if (field.referenceTables.size() == 1) {
+            return field.referenceTables.iterator().next();
+        }
+        Table defaultTable = null;
+        switch (ReferenceTableLookup.fromValue(createKey(field))) {
+            case TRIP_SERVICE_ID_KEY:
+                boolean isCalendarServiceId = mergeFeedsResult.calendarServiceIds.contains(fieldContext.getValueToWrite());
+                boolean isCalendarDatesServiceId = mergeFeedsResult.calendarDatesServiceIds.contains(fieldContext.getValueToWrite());
+                if (isCalendarServiceId && !isCalendarDatesServiceId) {
+                    return Table.CALENDAR;
+                } else if (!isCalendarServiceId && isCalendarDatesServiceId) {
+                    return Table.CALENDAR_DATES;
+                } else {
+                    // A table is still required if the service id is not present in either look-up. For this case it
+                    // doesn't seem to matter which is returned so going with calendar.
+                    defaultTable = Table.CALENDAR;
+                }
+            // Add other cases as multiple references are added e.g. flex!.
+        }
+        return defaultTable;
+    }
+
+    /**
+     * Create a unique key for this table, field and reference tables.
+     */
+    private String createKey(Field field) {
+        return String.format(
+            "%s:%s:%s",
+            table.name,
+            field.name,
+            field.referenceTables.stream().map(r -> r.name).collect(Collectors.joining(":"))
+        );
+    }
+
+
+
     public boolean checkForeignReferences(FieldContext fieldContext) throws IOException {
         Field field = fieldContext.getField();
         if (field.isForeignReference()) {
-            // FIXME: GTFS-lib is now able to define multiple table references! This update will most likely break this part of the code.
-            for (Table referenceTable : field.referenceTables) {
-                String key = getTableScopedValue(referenceTable, fieldContext.getValue());
-                // Check if we're performing a service period merge, this ref field is a service_id, and it
-                // is not found in the list of service_ids (e.g., it was removed).
-                boolean isValidServiceId = mergeFeedsResult.serviceIds.contains(fieldContext.getValueToWrite());
+            String key = getTableScopedValue(getReferenceTable(fieldContext, field), fieldContext.getValue());
+            // Check if we're performing a service period merge, this ref field is a service_id, and it
+            // is not found in the list of service_ids (e.g., it was removed).
+            boolean isValidServiceId = mergeFeedsResult.serviceIds.contains(fieldContext.getValueToWrite());
 
-                // If the current foreign ref points to another record that has
-                // been skipped or is a ref to a non-existent service_id during a service period merge, skip
-                // this record and add its primary key to the list of skipped IDs (so that other references
-                // can be properly omitted).
-                if (serviceIdHasKeyOrShouldBeSkipped(fieldContext, key, isValidServiceId)) {
-                    // If a calendar#service_id has been skipped (it's listed in skippedIds), but there were
-                    // valid service_ids found in calendar_dates, do not skip that record for both the
-                    // calendar_date and any related trips.
-                    if (fieldContext.nameEquals(SERVICE_ID) && isValidServiceId) {
-                        LOG.warn("Not skipping valid service_id {} for {} {}", fieldContext.getValueToWrite(), table.name, keyValue);
-                    } else {
-                        String skippedKey = getTableScopedValue(keyValue);
-                        if (orderField != null) {
-                            skippedKey = String.join(":", skippedKey, getCsvValue(orderField));
-                        }
-                        mergeFeedsResult.skippedIds.add(skippedKey);
-                        return false;
+            // If the current foreign ref points to another record that has
+            // been skipped or is a ref to a non-existent service_id during a service period merge, skip
+            // this record and add its primary key to the list of skipped IDs (so that other references
+            // can be properly omitted).
+            if (serviceIdHasKeyOrShouldBeSkipped(fieldContext, key, isValidServiceId)) {
+                // If a calendar#service_id has been skipped (it's listed in skippedIds), but there were
+                // valid service_ids found in calendar_dates, do not skip that record for both the
+                // calendar_date and any related trips.
+                if (fieldContext.nameEquals(SERVICE_ID) && isValidServiceId) {
+                    LOG.warn("Not skipping valid service_id {} for {} {}", fieldContext.getValueToWrite(), table.name, keyValue);
+                } else {
+                    String skippedKey = getTableScopedValue(keyValue);
+                    if (orderField != null) {
+                        skippedKey = String.join(":", skippedKey, getCsvValue(orderField));
                     }
+                    mergeFeedsResult.skippedIds.add(skippedKey);
+                    return false;
                 }
-                // If the field is a foreign reference, check to see whether the reference has been
-                // remapped due to a conflicting ID from another feed (e.g., calendar#service_id).
-                if (mergeFeedsResult.remappedIds.containsKey(key)) {
-                    mergeFeedsResult.remappedReferences++;
-                    // If the value has been remapped update the value to write.
-                    fieldContext.setValueToWrite(mergeFeedsResult.remappedIds.get(key));
-                }
+            }
+            // If the field is a foreign reference, check to see whether the reference has been
+            // remapped due to a conflicting ID from another feed (e.g., calendar#service_id).
+            if (mergeFeedsResult.remappedIds.containsKey(key)) {
+                mergeFeedsResult.remappedReferences++;
+                // If the value has been remapped update the value to write.
+                fieldContext.setValueToWrite(mergeFeedsResult.remappedIds.get(key));
             }
         }
         return true;
