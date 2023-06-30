@@ -241,10 +241,13 @@ public class MergeLineContext {
         TRIP_SERVICE_ID_KEY(
             String.join(":", Table.TRIPS.name, SERVICE_ID, Table.CALENDAR.name, Table.CALENDAR_DATES.name)
         );
+
         private final String value;
+
         ReferenceTableLookup(String value) {
             this.value = value;
         }
+
         public String getValue() {
             return value;
         }
@@ -267,6 +270,8 @@ public class MergeLineContext {
         if (field.referenceTables.size() == 1) {
             return field.referenceTables.iterator().next();
         }
+
+        // A table reference is still required even if no match is found.
         Table defaultTable = null;
         switch (ReferenceTableLookup.fromValue(createKey(field))) {
             case TRIP_SERVICE_ID_KEY:
@@ -277,8 +282,7 @@ public class MergeLineContext {
                 } else if (!isCalendarServiceId && isCalendarDatesServiceId) {
                     return Table.CALENDAR_DATES;
                 } else {
-                    // A table is still required if the service id is not present in either look-up. For this case it
-                    // doesn't seem to matter which is returned so going with calendar.
+                    // For this case it doesn't seem to matter which is returned so going with calendar.
                     defaultTable = Table.CALENDAR;
                 }
             // Add other cases as multiple references are added e.g. flex!.
@@ -297,8 +301,6 @@ public class MergeLineContext {
             field.referenceTables.stream().map(r -> r.name).collect(Collectors.joining(":"))
         );
     }
-
-
 
     public boolean checkForeignReferences(FieldContext fieldContext) throws IOException {
         Field field = fieldContext.getField();

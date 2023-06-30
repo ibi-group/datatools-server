@@ -30,6 +30,7 @@ public class MergeFeedsResult implements Serializable {
      * Track the set of service IDs obtained from calendar records.
      */
     public Set<String> calendarServiceIds = new HashSet<>();
+
     /**
      * Track the set of service IDs obtained from calendar date records.
      */
