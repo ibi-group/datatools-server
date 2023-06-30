@@ -59,17 +59,17 @@ public class PreserveCustomFieldsTransformation extends ZipTransformation {
     }
 
     @Override
-    public void transform(FeedTransformZipTarget zipTarget, MonitorableJob.Status status) {
+    public void transform(FeedTransformZipTarget zipTarget, MonitorableJob.Status status) throws Exception{
         String tableName = table + ".txt";
         Path targetZipPath = Paths.get(zipTarget.gtfsFile.getAbsolutePath());
-        Table specTable = Arrays.stream(Table.tablesInOrder)
+        Optional<Table> streamResult = Arrays.stream(Table.tablesInOrder)
                 .filter(t -> t.name.equals(table))
-                .findFirst()
-                .get();
+                .findFirst();
+
+        if (!streamResult.isPresent()) {throw new Exception(String.format("could not find specTable for table %s", table));}
+        Table specTable = streamResult.get();
 
         try (FileSystem targetZipFs = FileSystems.newFileSystem(targetZipPath, (ClassLoader) null)) {
-            if (specTable == null) throw new Exception(String.format("could not find specTable for table %s", table));
-
             List<String> specTableFields = specTable.specFields().stream().map(f -> f.name).collect(Collectors.toList());
             List<String> tablePrimaryKeys = specTable.getPrimaryKeyNames();
 
@@ -77,7 +77,6 @@ public class PreserveCustomFieldsTransformation extends ZipTransformation {
 
             final File tempFile = File.createTempFile(tableName + "-temp", ".txt");
             File output = File.createTempFile(tableName + "-output-temp", ".txt");
-            int rowsModified = 0;
             List<String> customFields;
 
             try (
@@ -106,11 +105,10 @@ public class PreserveCustomFieldsTransformation extends ZipTransformation {
                     String hashKey = StringUtils.join(editorCsvPrimaryKeyValues, "_");
                     Map<String, String> customCsvValues = customFieldsLookup.get(hashKey);
                     Map<String, String> finalRow = row;
-                    customFields.stream().forEach(customField -> {
+                    customFields.forEach(customField -> {
                         String value = customCsvValues == null ? null : customCsvValues.get(customField);
                         finalRow.put(customField, value);
                     });
-                    if (customCsvValues != null) rowsModified++;
                     writer.write(finalRow, fullHeaders);
                 }
             }
