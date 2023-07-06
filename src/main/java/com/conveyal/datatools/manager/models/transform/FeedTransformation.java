@@ -30,7 +30,9 @@ import java.io.Serializable;
     @JsonSubTypes.Type(value = DeleteRecordsTransformation.class, name = "DeleteRecordsTransformation"),
     @JsonSubTypes.Type(value = NormalizeFieldTransformation.class, name = "NormalizeFieldTransformation"),
     @JsonSubTypes.Type(value = ReplaceFileFromVersionTransformation.class, name = "ReplaceFileFromVersionTransformation"),
-    @JsonSubTypes.Type(value = ReplaceFileFromStringTransformation.class, name = "ReplaceFileFromStringTransformation")
+    @JsonSubTypes.Type(value = ReplaceFileFromStringTransformation.class, name = "ReplaceFileFromStringTransformation"),
+    @JsonSubTypes.Type(value = PreserveCustomFieldsTransformation.class, name = "PreserveCustomFieldsTransformation"),
+    @JsonSubTypes.Type(value = AddCustomFileFromStringTransformation.class, name = "AddCustomFileTransformation")
 })
 public abstract class FeedTransformation<Target extends FeedTransformTarget> implements Serializable {
     private static final long serialVersionUID = 1L;
@@ -68,6 +70,8 @@ public abstract class FeedTransformation<Target extends FeedTransformTarget> imp
             status.fail(
                 String.format("Transformation must be of type '%s'.", getTransformationTypeName())
             );
+        } catch (Exception e) {
+            status.fail(e.toString());
         }
     }
 
@@ -78,7 +82,7 @@ public abstract class FeedTransformation<Target extends FeedTransformTarget> imp
      * @param target The database-bound or ZIP-file-bound target the transformation will operate on.
      * @param status Used to report success or failure status and details.
      */
-    public abstract void transform(Target target, MonitorableJob.Status status);
+    public abstract void transform(Target target, MonitorableJob.Status status) throws Exception;
 
     /**
      * At the moment, used by DbTransformation to validate field names.
@@ -98,7 +102,6 @@ public abstract class FeedTransformation<Target extends FeedTransformTarget> imp
         // Validate fields before running transform.
         if (GtfsUtils.getGtfsTable(table) == null) {
             status.fail("Table must be valid GTFS spec table name (without .txt).");
-            return;
         }
     }
 }
