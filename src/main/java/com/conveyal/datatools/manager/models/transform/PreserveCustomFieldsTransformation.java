@@ -66,7 +66,9 @@ public class PreserveCustomFieldsTransformation extends ZipTransformation {
                 .filter(t -> t.name.equals(table))
                 .findFirst();
 
-        if (!streamResult.isPresent()) {throw new Exception(String.format("could not find specTable for table %s", table));}
+        if (!streamResult.isPresent()) {
+            throw new Exception(String.format("could not find specTable for table %s", table));
+        }
         Table specTable = streamResult.get();
 
         try (FileSystem targetZipFs = FileSystems.newFileSystem(targetZipPath, (ClassLoader) null)) {

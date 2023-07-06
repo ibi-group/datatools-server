@@ -48,7 +48,14 @@ public class StringTransformation extends ZipTransformation {
             int lineCount = (int) csvData.chars().filter(c -> c == NEW_LINE_CHARACTER_CODE).count();
             int addedCount = type == TransformType.TABLE_ADDED ? lineCount : 0;
             int updatedCount = type == TransformType.TABLE_MODIFIED ? lineCount : 0;
-            zipTarget.feedTransformResult.tableTransformResults.add(new TableTransformResult(tableName, type, 0, updatedCount, addedCount, 0));
+            zipTarget.feedTransformResult.tableTransformResults.add(new TableTransformResult(
+                tableName,
+                type,
+                0,
+                updatedCount,
+                addedCount,
+                0
+            ));
         } catch (Exception e) {
             status.fail("Unknown error encountered while transforming zip file", e);
         }

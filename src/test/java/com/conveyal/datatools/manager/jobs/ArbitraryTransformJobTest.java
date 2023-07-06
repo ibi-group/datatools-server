@@ -8,6 +8,7 @@ import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.models.Snapshot;
+import com.conveyal.datatools.manager.models.TableTransformResult;
 import com.conveyal.datatools.manager.models.transform.AddCustomFileFromStringTransformation;
 import com.conveyal.datatools.manager.models.transform.DeleteRecordsTransformation;
 import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
@@ -234,17 +235,15 @@ public class ArbitraryTransformJobTest extends UnitTest {
             feedSource,
             zipFolderFiles("fake-agency-with-only-calendar-dates")
         );
-        LOG.info("Checking assertions.");
-
+        TableTransformResult transformResult = targetVersion.feedTransformResult.tableTransformResults.get(0);
         assertEquals(
                 2,
-                targetVersion.feedTransformResult.tableTransformResults.get(0).customColumnsAdded,
+                transformResult.customColumnsAdded,
                 "stops.txt custom column count should equal input csv data # of custom columns"
         );
-
         assertEquals(
                 2,
-                targetVersion.feedTransformResult.tableTransformResults.get(0).updatedCount,
+                transformResult.updatedCount,
                 "stops.txt row count modified with custom content should equal input csv data # of custom columns"
         );
     }
@@ -260,8 +259,6 @@ public class ArbitraryTransformJobTest extends UnitTest {
             feedSource,
             zipFolderFiles("fake-agency-with-only-calendar-dates")
         );
-
-        LOG.info("Checking assertions.");
         assertEquals(
                 2,
                 targetVersion.feedTransformResult.tableTransformResults.get(0).addedCount,
