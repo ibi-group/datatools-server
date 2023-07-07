@@ -237,31 +237,6 @@ public class MergeLineContext {
             .collect(Collectors.toList());
     }
 
-    public enum ReferenceTableLookup {
-        TRIP_SERVICE_ID_KEY(
-            String.join(":", Table.TRIPS.name, SERVICE_ID, Table.CALENDAR.name, Table.CALENDAR_DATES.name)
-        );
-
-        private final String value;
-
-        ReferenceTableLookup(String value) {
-            this.value = value;
-        }
-
-        public String getValue() {
-            return value;
-        }
-
-        public static ReferenceTableLookup fromValue(String key) {
-            for (ReferenceTableLookup ref: ReferenceTableLookup.values()) {
-                if (ref.getValue().equals(key)) {
-                    return ref;
-                }
-            }
-            throw new UnsupportedOperationException(String.format("Unsupported reference table combination: %s.", key));
-        }
-    }
-
     /**
      * Determine which reference table to use. If there is only one reference use this. If there are multiple references
      * determine the context and then the correct reference table to use.
@@ -271,41 +246,27 @@ public class MergeLineContext {
             return field.referenceTables.iterator().next();
         }
 
-        // A table reference is still required even if no match is found.
-        Table defaultTable = null;
-        switch (ReferenceTableLookup.fromValue(createKey(field))) {
+        switch (ReferenceTableDiscovery.getReferenceTableKey(field, table)) {
             case TRIP_SERVICE_ID_KEY:
-                boolean isCalendarServiceId = mergeFeedsResult.calendarServiceIds.contains(fieldContext.getValueToWrite());
-                boolean isCalendarDatesServiceId = mergeFeedsResult.calendarDatesServiceIds.contains(fieldContext.getValueToWrite());
-                if (isCalendarServiceId && !isCalendarDatesServiceId) {
-                    return Table.CALENDAR;
-                } else if (!isCalendarServiceId && isCalendarDatesServiceId) {
-                    return Table.CALENDAR_DATES;
-                } else {
-                    // For this case it doesn't seem to matter which is returned so going with calendar.
-                    defaultTable = Table.CALENDAR;
-                }
-            // Add other cases as multiple references are added e.g. flex!.
+                return ReferenceTableDiscovery.getTripServiceIdReferenceTable(
+                    fieldContext,
+                    mergeFeedsResult,
+                    getTableScopedValue(Table.CALENDAR, fieldContext.getValue()),
+                    getTableScopedValue(Table.CALENDAR_DATES, fieldContext.getValue())
+                );
+            // Include other cases as multiple references are added e.g. flex!.
+            default:
+                return null;
         }
-        return defaultTable;
-    }
-
-    /**
-     * Create a unique key for this table, field and reference tables.
-     */
-    private String createKey(Field field) {
-        return String.format(
-            "%s:%s:%s",
-            table.name,
-            field.name,
-            field.referenceTables.stream().map(r -> r.name).collect(Collectors.joining(":"))
-        );
     }
 
     public boolean checkForeignReferences(FieldContext fieldContext) throws IOException {
         Field field = fieldContext.getField();
         if (field.isForeignReference()) {
-            String key = getTableScopedValue(getReferenceTable(fieldContext, field), fieldContext.getValue());
+            Table refTable = getReferenceTable(fieldContext, field);
+            String key = (refTable != null)
+                ? getTableScopedValue(refTable, fieldContext.getValue())
+                : "unknown";
             // Check if we're performing a service period merge, this ref field is a service_id, and it
             // is not found in the list of service_ids (e.g., it was removed).
             boolean isValidServiceId = mergeFeedsResult.serviceIds.contains(fieldContext.getValueToWrite());
