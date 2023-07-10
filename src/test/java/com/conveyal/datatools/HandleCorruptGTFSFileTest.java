@@ -56,7 +56,7 @@ public class HandleCorruptGTFSFileTest {
             assertTrue(subJob.status.error);
             if (subJob instanceof LoadFeedJob) {
                 assertEquals(
-                    "Could not load feed due to java.util.zip.ZipException: error in opening zip file",
+                    "Could not load feed due to java.util.zip.ZipException: zip END header not found",
                     subJob.status.message
                 );
             }

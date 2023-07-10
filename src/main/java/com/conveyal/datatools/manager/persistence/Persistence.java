@@ -128,5 +128,12 @@ public class Persistence {
 //        feedVersions.getMongoCollection().createIndex(Indexes.descending("feedSourceId", "version"));
 //        snapshots.getMongoCollection().createIndex(Indexes.descending("feedSourceId", "version"));
     }
+
+    /**
+     * Provide a direct link to the Mongo database which is not tied to a specific entity type.
+     */
+    public static MongoDatabase getMongoDatabase() {
+        return mongoDatabase;
+    }
     
 }

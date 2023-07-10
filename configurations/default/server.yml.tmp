@@ -24,6 +24,8 @@ modules:
     ec2:
       enabled: false
       default_ami: ami-your-ami-id
+      tag_key: a-tag-key-to-add-to-all-instances
+      tag_value: a-tag-value-to-add-to-all-instances
     # Note: using a cloudfront URL for these download URLs will greatly
     # increase download/deploy speed.
     otp_download_url: https://optional-otp-repo.com
