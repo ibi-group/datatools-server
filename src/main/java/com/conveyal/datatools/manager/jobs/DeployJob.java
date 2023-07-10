@@ -993,6 +993,7 @@ public class DeployJob extends MonitorableJob {
             return Collections.EMPTY_LIST;
         }
         status.message = String.format("Starting up %d new instance(s) to run OTP", count);
+
         RunInstancesRequest runInstancesRequest = new RunInstancesRequest()
                 .withNetworkInterfaces(interfaceSpecification)
                 .withInstanceType(instanceType)
@@ -1038,7 +1039,7 @@ public class DeployJob extends MonitorableJob {
             String serverName = String.format("%s %s (%s) %d %s", deployment.tripPlannerVersion, deployment.name, dateString, serverCounter++, graphAlreadyBuilt ? "clone" : "builder");
             LOG.info("Creating tags for new EC2 instance {}", serverName);
             try {
-                getEC2ClientForDeployJob().createTags(new CreateTagsRequest()
+                CreateTagsRequest createTagsRequest = new CreateTagsRequest()
                         .withTags(new Tag("Name", serverName))
                         .withTags(new Tag("projectId", deployment.projectId))
                         .withTags(new Tag("deploymentId", deployment.id))
@@ -1046,8 +1047,17 @@ public class DeployJob extends MonitorableJob {
                         .withTags(new Tag("serverId", otpServer.id))
                         .withTags(new Tag("routerId", getRouterId()))
                         .withTags(new Tag("user", retrieveEmail()))
-                        .withResources(instance.getInstanceId())
-                );
+                        .withResources(instance.getInstanceId());
+
+                String tagKey = DataManager.getConfigPropertyAsText("modules.deployment.ec2.tag_key");
+                String tagValue = DataManager.getConfigPropertyAsText("modules.deployment.ec2.tag_value");
+
+                Tag customTag = new Tag();
+                customTag.setKey(tagKey);
+                customTag.setValue(tagValue);
+
+                createTagsRequest = createTagsRequest.withTags(customTag);
+                getEC2ClientForDeployJob().createTags(createTagsRequest);
             } catch (Exception e) {
                 status.fail("Failed to create tags for instances.", e);
                 return instances;

@@ -25,22 +25,28 @@ import org.slf4j.LoggerFactory;
 import spark.utils.IOUtils;
 
 import java.io.IOException;
+import java.sql.SQLException;
 import java.util.Date;
 import java.util.stream.Stream;
 
+import static com.conveyal.datatools.TestUtils.assertThatSqlCountQueryYieldsExpectedCount;
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
 import static com.conveyal.datatools.manager.auth.Auth0Users.USERS_API_PATH;
 import static com.conveyal.datatools.manager.controllers.api.UserController.TEST_AUTH0_DOMAIN;
 import static io.restassured.RestAssured.given;
+import static org.eclipse.jetty.http.HttpStatus.OK_200;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 
 public class EditorControllerTest extends UnitTest {
     private static final Logger LOG = LoggerFactory.getLogger(EditorControllerTest.class);
     private static Project project;
     private static FeedSource feedSource;
+    private static FeedSource feedSourceCascadeDelete;
     private static FeedVersion feedVersion;
+    private static FeedVersion feedVersionCascadeDelete;
     private static final ObjectMapper mapper = new ObjectMapper();
 
     /**
@@ -55,18 +61,23 @@ public class EditorControllerTest extends UnitTest {
         UserController.setBaseUsersUrl("http://" + TEST_AUTH0_DOMAIN + USERS_API_PATH);
         // Create a project, feed sources, and feed versions to merge.
         project = new Project();
-        project.name = String.format("Test %s", new Date().toString());
+        project.name = String.format("Test %s", new Date());
         Persistence.projects.create(project);
+
         feedSource = new FeedSource("BART");
         feedSource.projectId = project.id;
         Persistence.feedSources.create(feedSource);
+
+        feedSourceCascadeDelete = new FeedSource("CASCADE_DELETE");
+        feedSourceCascadeDelete.projectId = project.id;
+        Persistence.feedSources.create(feedSourceCascadeDelete);
+
         feedVersion = createFeedVersionFromGtfsZip(feedSource, "bart_old.zip");
-        // Create and run snapshot job
-        Snapshot snapshot = new Snapshot("Snapshot of " + feedVersion.name, feedSource.id, feedVersion.namespace);
-        CreateSnapshotJob createSnapshotJob =
-            new CreateSnapshotJob(Auth0UserProfile.createTestAdminUser(), snapshot, true, false, false);
-        // Run in current thread so tests do not run until this is complete.
-        createSnapshotJob.run();
+        feedVersionCascadeDelete = createFeedVersionFromGtfsZip(feedSourceCascadeDelete, "bart_old.zip");
+
+        // Create and run snapshot jobs
+        crateAndRunSnapshotJob(feedVersion.name, feedSource.id, feedVersion.namespace);
+        crateAndRunSnapshotJob(feedVersionCascadeDelete.name, feedSourceCascadeDelete.id, feedVersionCascadeDelete.namespace);
         LOG.info("{} setup completed in {} ms", EditorControllerTest.class.getSimpleName(), System.currentTimeMillis() - startTime);
     }
 
@@ -74,6 +85,17 @@ public class EditorControllerTest extends UnitTest {
     public static void tearDown() {
         project.delete();
         feedSource.delete();
+        feedSourceCascadeDelete.delete();
+    }
+
+    /**
+     * Create and run a snapshot job in the current thread (so tests do not run until this is complete).
+     */
+    private static void crateAndRunSnapshotJob(String feedVersionName, String feedSourceId, String namespace) {
+        Snapshot snapshot = new Snapshot("Snapshot of " + feedVersionName, feedSourceId, namespace);
+        CreateSnapshotJob createSnapshotJob =
+            new CreateSnapshotJob(Auth0UserProfile.createTestAdminUser(), snapshot, true, false, false);
+        createSnapshotJob.run();
     }
 
     private static Stream<Arguments> createPatchTableTests() {
@@ -144,6 +166,44 @@ public class EditorControllerTest extends UnitTest {
     }
 
     /**
+     * Test the removal of a stop and all references in stop times and pattern stops.
+     */
+    @Test
+    void canCascadeDeleteStop() throws IOException, SQLException {
+        // Get a fresh feed source so that the editor namespace was updated after snapshot.
+        FeedSource freshFeedSource = Persistence.feedSources.getById(feedVersionCascadeDelete.feedSourceId);
+        String stopId = "WARM";
+        String stopCountSql = getCountSql(freshFeedSource.editorNamespace, "stops", stopId);
+        String stopTimesCountSql = getCountSql(freshFeedSource.editorNamespace, "stop_times", stopId);
+        String patternStopsCountSql = getCountSql(freshFeedSource.editorNamespace, "pattern_stops", stopId);
+
+        // Check for presence of stopId in stops, stop times and pattern stops.
+        assertThatSqlCountQueryYieldsExpectedCount(stopCountSql, 1);
+        assertThatSqlCountQueryYieldsExpectedCount(stopTimesCountSql, 522);
+        assertThatSqlCountQueryYieldsExpectedCount(patternStopsCountSql, 4);
+
+        String path = String.format(
+            "/api/editor/secure/stop/%s/cascadeDeleteStop?feedId=%s&sessionId=test",
+            stopId,
+            feedVersionCascadeDelete.feedSourceId
+        );
+        String response = given()
+            .port(DataManager.PORT)
+            .delete(path)
+            .then()
+            .extract()
+            .response()
+            .asString();
+        JsonNode json = mapper.readTree(response);
+        assertEquals(OK_200, json.get("code").asInt());
+
+        // Check for removal of stopId in stops, stop times and pattern stops.
+        assertThatSqlCountQueryYieldsExpectedCount(stopCountSql, 0);
+        assertThatSqlCountQueryYieldsExpectedCount(stopTimesCountSql, 0);
+        assertThatSqlCountQueryYieldsExpectedCount(patternStopsCountSql, 0);
+    }
+
+    /**
      * Perform patch table request on the feed source ID with the requested query and patch JSON. A null query will
      * apply the patch JSON to the entire table.
      */
@@ -181,5 +241,17 @@ public class EditorControllerTest extends UnitTest {
             .response()
             .asString();
         return mapper.readTree(graphQLString);
+    }
+
+    /**
+     * Build a sql statement to provide a count on the number of rows matching the stop id.
+     */
+    private static String getCountSql(String namespace, String tableName, String stopId) {
+        return String.format(
+            "SELECT count(*) FROM %s.%s WHERE stop_id = '%s'",
+            namespace,
+            tableName,
+            stopId
+        );
     }
 }

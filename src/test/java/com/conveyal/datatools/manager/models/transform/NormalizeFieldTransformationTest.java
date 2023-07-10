@@ -106,6 +106,24 @@ public class NormalizeFieldTransformationTest extends UnitTest {
         );
     }
 
+
+    @ParameterizedTest
+    @MethodSource("createCreateNewField")
+    void testCreateNewField(String input, String expected) {
+        NormalizeFieldTransformation transform = createTransformation(
+                "table", "new_field",  null, Lists.newArrayList(
+                        new Substitution("", "new_value")
+                ));
+        assertEquals(expected, transform.performSubstitutions(input));
+    }
+
+    private static Stream<Arguments> createCreateNewField() {
+        return Stream.of(
+                Arguments.of("", "new_value")
+        );
+    }
+
+
     /**
      * Proxy to create a transformation
      * (called by {@link com.conveyal.datatools.manager.jobs.NormalizeFieldTransformJobTest}).

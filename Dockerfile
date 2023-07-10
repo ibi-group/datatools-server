@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM maven:3.8.6-openjdk-11
+FROM maven:3.8.7-openjdk-18-slim
 
 COPY . /datatools
 
