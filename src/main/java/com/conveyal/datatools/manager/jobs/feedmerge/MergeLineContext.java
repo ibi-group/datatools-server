@@ -249,7 +249,7 @@ public class MergeLineContext {
         switch (ReferenceTableDiscovery.getReferenceTableKey(field, table)) {
             case TRIP_SERVICE_ID_KEY:
                 return ReferenceTableDiscovery.getTripServiceIdReferenceTable(
-                    fieldContext,
+                    fieldContext.getValueToWrite(),
                     mergeFeedsResult,
                     getTableScopedValue(Table.CALENDAR, fieldContext.getValue()),
                     getTableScopedValue(Table.CALENDAR_DATES, fieldContext.getValue())

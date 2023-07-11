@@ -62,18 +62,18 @@ public class ReferenceTableDiscovery {
      * Define the reference table for a trip service id.
      */
     public static Table getTripServiceIdReferenceTable(
-        FieldContext fieldContext,
+        String fieldValue,
         MergeFeedsResult mergeFeedsResult,
         String calendarKey,
         String calendarDatesKey
     ) {
         if (
-            mergeFeedsResult.calendarServiceIds.contains(fieldContext.getValueToWrite()) ||
+            mergeFeedsResult.calendarServiceIds.contains(fieldValue) ||
             mergeFeedsResult.skippedIds.contains(calendarKey)
         ) {
             return Table.CALENDAR;
         } else if (
-            mergeFeedsResult.calendarDatesServiceIds.contains(fieldContext.getValueToWrite()) ||
+            mergeFeedsResult.calendarDatesServiceIds.contains(fieldValue) ||
             mergeFeedsResult.skippedIds.contains(calendarDatesKey)
         ) {
             return Table.CALENDAR_DATES;
