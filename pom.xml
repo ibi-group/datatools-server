@@ -259,7 +259,11 @@
             <version>5.5.2</version>
             <scope>test</scope>
         </dependency>
-
+        <dependency>
+            <groupId>com.github.mobilitydata</groupId>
+            <artifactId>gtfs-validator</artifactId>
+            <version>4.1.0</version>
+        </dependency>
         <!-- Used for loading/fetching/validating/writing GTFS entities. gtfs-lib also provides access to:
          - commons-io - generic utilities
          - AWS S3 SDK - putting/getting objects into/out of S3.
@@ -445,11 +449,6 @@
             <groupId>com.amazonaws</groupId>
             <artifactId>aws-java-sdk-sts</artifactId>
             <version>${awsjavasdk.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.github.MobilityData.gtfs-validator</groupId>
-            <artifactId>gtfs-validator-main</artifactId>
-            <version>4.0.0</version>
         </dependency>
         <dependency>
             <groupId>com.google.code.gson</groupId>
