@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.models.transform;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.utils.GtfsUtils;
+import com.conveyal.gtfs.loader.Table;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonSubTypes;
 import com.fasterxml.jackson.annotation.JsonTypeInfo;
@@ -100,8 +101,16 @@ public abstract class FeedTransformation<Target extends FeedTransformTarget> imp
      */
     protected void validateTableName(MonitorableJob.Status status) {
         // Validate fields before running transform.
-        if (GtfsUtils.getGtfsTable(table) == null) {
-            status.fail("Table must be valid GTFS spec table name (without .txt).");
+        if (GtfsUtils.getGtfsTable(table) == null && !Table.LOCATION_GEO_JSON_FILE_NAME.equals(table)) {
+            status.fail(String.format("Table must be valid GTFS spec table name (without .txt) or %s.", Table.LOCATION_GEO_JSON_FILE_NAME));
         }
+    }
+
+    protected String getTableName() {
+        return Table.LOCATION_GEO_JSON_FILE_NAME.equals(table) ? table : table + ".txt";
+    }
+
+    protected String getTableSuffix() {
+        return Table.LOCATION_GEO_JSON_FILE_NAME.equals(table) ? ".geojson" : ".txt";
     }
 }

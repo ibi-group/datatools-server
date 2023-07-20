@@ -12,18 +12,25 @@ import com.conveyal.datatools.manager.models.transform.NormalizeFieldTransformat
 import com.conveyal.datatools.manager.models.transform.NormalizeFieldTransformationTest;
 import com.conveyal.datatools.manager.models.transform.Substitution;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.gtfs.loader.JdbcTableWriter;
+import com.conveyal.gtfs.loader.Table;
 import com.google.common.collect.Lists;
 import org.apache.commons.lang3.ArrayUtils;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Assertions;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.Date;
+import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -71,17 +78,27 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
         if (targetVersion != null) targetVersion.delete();
     }
 
+    private static Stream<Arguments> createNormalizeFieldReplacements() {
+        return Stream.of(
+            Arguments.of("route", "route_long_name", "Route", "Rte"),
+            Arguments.of("booking_rules", "booking_rule_id", "Booking", "Bkg"),
+            Arguments.of("stop_areas", "area_id", "Area", "StopArea"),
+            Arguments.of("areas", "area_id", "Area", "Loc")
+        );
+    }
+
     /**
      * Test that a {@link NormalizeFieldTransformation} will successfully complete.
      * FIXME: On certain Windows machines, this test fails.
      */
-    @Test
-    public void canNormalizeField() throws IOException {
+    @ParameterizedTest
+    @MethodSource("createNormalizeFieldReplacements")
+    void canNormalizeField(String tableName, String fieldName, String pattern, String replacement) throws IOException {
         // Create transform.
         // In this test, as an illustration, replace "Route" with the "Rte" abbreviation in routes.txt.
         FeedTransformation<FeedTransformZipTarget> transformation = NormalizeFieldTransformationTest.createTransformation(
-            TABLE_NAME, FIELD_NAME, null, Lists.newArrayList(
-                new Substitution("Route", "Rte")
+            tableName, fieldName, null, Lists.newArrayList(
+                new Substitution(pattern, replacement)
             )
         );
         initializeFeedSource(transformation);
@@ -94,7 +111,7 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
 
         try (ZipFile zip = new ZipFile(targetVersion.retrieveGtfsFile())) {
             // Check that new version has routes table modified.
-            ZipEntry entry = zip.getEntry(TABLE_NAME + ".txt");
+            ZipEntry entry = zip.getEntry(tableName + ".txt");
             assertNotNull(entry);
 
             // Scan the first data row in routes.txt and check that the substitution
@@ -105,11 +122,11 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
                 BufferedReader reader = new BufferedReader(streamReader)
             ) {
                 String[] columns = reader.readLine().split(",");
-                int fieldIndex = ArrayUtils.indexOf(columns, FIELD_NAME);
+                int fieldIndex = ArrayUtils.indexOf(columns, fieldName);
 
                 String row1 = reader.readLine();
                 String[] row1Fields = row1.split(",");
-                assertTrue(row1Fields[fieldIndex].startsWith("Rte "), row1);
+                assertTrue(row1Fields[fieldIndex].startsWith(replacement), row1);
             }
         }
     }
@@ -138,6 +155,14 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
         // Errors in the substitution definitions should result in an error.
         // (There is no visibility to the underlying ZIP transform job.)
         assertTrue(targetVersion.hasCriticalErrors());
+    }
+
+    @Test
+    void canHandleUnsupportedLocationsGeoJsonFile() {
+        FeedTransformation<FeedTransformZipTarget> transformation = NormalizeFieldTransformationTest.createTransformation(
+            Table.LOCATION_GEO_JSON_FILE_NAME, "", null, null
+        );
+        Assertions.assertThrows(UnsupportedOperationException.class, () -> transformation.transform(null, null));
     }
 
     /**

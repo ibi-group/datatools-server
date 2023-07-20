@@ -179,6 +179,11 @@ public class NormalizeFieldTransformation extends ZipTransformation {
 
     @Override
     public void transform(FeedTransformZipTarget zipTarget, MonitorableJob.Status status) {
+        if (Table.LOCATION_GEO_JSON_FILE_NAME.equals(table)) {
+            // It's not possible to select the locations.geojson file from the normalize field transformation list. This
+            // is here in case that changes.
+            throw new UnsupportedOperationException("It is not possible to normalize geo json fields.");
+        }
         String tableName = table + ".txt";
         try(
             // Hold output before writing to ZIP
