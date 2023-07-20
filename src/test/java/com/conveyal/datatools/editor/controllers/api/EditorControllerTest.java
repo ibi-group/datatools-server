@@ -73,7 +73,7 @@ public class EditorControllerTest extends UnitTest {
         Persistence.feedSources.create(feedSourceCascadeDelete);
 
         feedVersion = createFeedVersionFromGtfsZip(feedSource, "bart_old.zip");
-        feedVersionCascadeDelete = createFeedVersionFromGtfsZip(feedSourceCascadeDelete, "bart_old.zip");
+        feedVersionCascadeDelete = createFeedVersionFromGtfsZip(feedSourceCascadeDelete, "caltrain_gtfs_lite.zip");
 
         // Create and run snapshot jobs
         crateAndRunSnapshotJob(feedVersion.name, feedSource.id, feedVersion.namespace);
@@ -172,15 +172,15 @@ public class EditorControllerTest extends UnitTest {
     void canCascadeDeleteStop() throws IOException, SQLException {
         // Get a fresh feed source so that the editor namespace was updated after snapshot.
         FeedSource freshFeedSource = Persistence.feedSources.getById(feedVersionCascadeDelete.feedSourceId);
-        String stopId = "WARM";
+        String stopId = "Bayshore Caltrain";
         String stopCountSql = getCountSql(freshFeedSource.editorNamespace, "stops", stopId);
         String stopTimesCountSql = getCountSql(freshFeedSource.editorNamespace, "stop_times", stopId);
         String patternStopsCountSql = getCountSql(freshFeedSource.editorNamespace, "pattern_stops", stopId);
 
         // Check for presence of stopId in stops, stop times and pattern stops.
         assertThatSqlCountQueryYieldsExpectedCount(stopCountSql, 1);
-        assertThatSqlCountQueryYieldsExpectedCount(stopTimesCountSql, 522);
-        assertThatSqlCountQueryYieldsExpectedCount(patternStopsCountSql, 4);
+        assertThatSqlCountQueryYieldsExpectedCount(stopTimesCountSql, 1);
+        assertThatSqlCountQueryYieldsExpectedCount(patternStopsCountSql, 1);
 
         String path = String.format(
             "/api/editor/secure/stop/%s/cascadeDeleteStop?feedId=%s&sessionId=test",
