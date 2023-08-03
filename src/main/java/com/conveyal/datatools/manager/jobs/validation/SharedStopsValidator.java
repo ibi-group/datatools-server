@@ -95,7 +95,7 @@ public class SharedStopsValidator extends FeedValidator {
                 }
 
                 // Check for SS_03 (stop_id referenced doesn't exist)
-                // TODO: CHECK FEED ID
+                // TODO: CHECK FEED ID (adjust the pre-build constructor to include feed_id)
                 if (!stopIds.contains(stopId)) {
                     registerError(NewGTFSError.forFeed(NewGTFSErrorType.SHARED_STOP_GROUP_ENTITY_DOES_NOT_EXIST, stopId));
                 }
