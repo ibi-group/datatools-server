@@ -1,2 +1,0 @@
-area_id,stop_id
-Area One,tc6v,
