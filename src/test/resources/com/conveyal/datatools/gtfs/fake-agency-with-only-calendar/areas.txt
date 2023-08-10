@@ -1,2 +1,0 @@
-area_id,name
-Area One,This is area one

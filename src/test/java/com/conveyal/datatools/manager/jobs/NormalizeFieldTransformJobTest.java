@@ -80,7 +80,7 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
 
     private static Stream<Arguments> createNormalizeFieldReplacements() {
         return Stream.of(
-            Arguments.of("route", "route_long_name", "Route", "Rte"),
+            Arguments.of("routes", "route_long_name", "Route", "Rte"),
             Arguments.of("booking_rules", "booking_rule_id", "Booking", "Bkg"),
             Arguments.of("stop_areas", "area_id", "Area", "StopArea"),
             Arguments.of("areas", "area_id", "Area", "Loc")
@@ -106,7 +106,7 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
         // Create target version that the transform will operate on.
         targetVersion = createFeedVersion(
             feedSource,
-            zipFolderFiles("fake-agency-with-only-calendar")
+            zipFolderFiles("fake-agency-for-field-normalizing")
         );
 
         try (ZipFile zip = new ZipFile(targetVersion.retrieveGtfsFile())) {
