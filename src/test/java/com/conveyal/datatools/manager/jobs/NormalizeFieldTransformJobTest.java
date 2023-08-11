@@ -96,7 +96,7 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
             zipFolderFiles("fake-agency-for-field-normalizing")
         );
 
-        try (ZipFile zip = new ZipFile(targetVersion.retrieveGtfsFile())) {
+            try (ZipFile zip = new ZipFile(targetVersion.retrieveGtfsFile())) {
             // Check that new version has expected modifications.
             checkTableForModification(zip, route);
             checkTableForModification(zip, bookingRules);
