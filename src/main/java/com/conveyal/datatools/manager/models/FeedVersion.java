@@ -374,8 +374,11 @@ public class FeedVersion extends Model implements Serializable {
                 FeedSource fs = Persistence.feedSources.getById(this.feedSourceId);
                 SharedStopsValidator ssv = new SharedStopsValidator(fs.retrieveProject());
 
-                validationResult = GTFS.validate(feedLoadResult.uniqueIdentifier, DataManager.GTFS_DATA_SOURCE,
-                    RouteTypeValidatorBuilder::buildRouteValidator, ssv::buildSharedStopsValidator
+                validationResult = GTFS.validate(
+                        feedLoadResult.uniqueIdentifier,
+                        DataManager.GTFS_DATA_SOURCE,
+                        RouteTypeValidatorBuilder::buildRouteValidator,
+                        ssv::buildSharedStopsValidator
                 );
             }
         } catch (Exception e) {

@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.jobs.validation;
 
+import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.gtfs.error.NewGTFSError;
 import com.conveyal.gtfs.error.NewGTFSErrorType;
@@ -8,6 +9,8 @@ import com.conveyal.gtfs.loader.Feed;
 import com.conveyal.gtfs.model.Stop;
 import com.conveyal.gtfs.validator.FeedValidator;
 import com.csvreader.CsvReader;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -18,6 +21,8 @@ import java.util.Set;
 
 
 public class SharedStopsValidator extends FeedValidator {
+    private static final Logger LOG = LoggerFactory.getLogger(S3Utils.class);
+
     Feed feed;
     Project project;
 
@@ -29,7 +34,7 @@ public class SharedStopsValidator extends FeedValidator {
     // This method can only be run on a SharedStopsValidator that has been set up with a project only
     public SharedStopsValidator buildSharedStopsValidator(Feed feed, SQLErrorStorage errorStorage) {
         if (this.project == null) {
-            throw new RuntimeException("buildSharedStopsValidator can only be called with a project already set!");
+            throw new RuntimeException("Shared stops validator can not be called because no project has been set!");
         }
         return new SharedStopsValidator(feed, errorStorage, this.project);
     }
@@ -48,9 +53,9 @@ public class SharedStopsValidator extends FeedValidator {
 
         CsvReader configReader = CsvReader.parse(config);
 
-        int STOP_GROUP_ID_INDEX = 0;
-        int STOP_ID_INDEX = 2;
-        int IS_PRIMARY_INDEX = 3;
+        final int STOP_GROUP_ID_INDEX = 0;
+        final int STOP_ID_INDEX = 2;
+        final int IS_PRIMARY_INDEX = 3;
 
         // Build list of stop Ids.
         List<String> stopIds = new ArrayList<>();
@@ -75,14 +80,17 @@ public class SharedStopsValidator extends FeedValidator {
                     continue;
                 }
 
-                if (!stopGroupStops.containsKey(stopGroupId)) {
-                    stopGroupStops.put(stopGroupId, new HashSet<>());
-                }
+                stopGroupStops.putIfAbsent(stopGroupId, new HashSet<>());
                 Set<String> seenStopIds = stopGroupStops.get(stopGroupId);
 
                 // Check for SS_01 (stop id appearing in multiple stop groups)
                 if (seenStopIds.contains(stopId)) {
-                    registerError(stops.stream().filter(stop -> stop.stop_id.equals(stopId)).findFirst().orElse(stops.get(0)), NewGTFSErrorType.MULTIPLE_SHARED_STOPS_GROUPS);
+                    registerError(stops
+                            .stream()
+                            .filter(stop -> stop.stop_id.equals(stopId))
+                            .findFirst()
+                            .orElse(stops.get(0)), NewGTFSErrorType.MULTIPLE_SHARED_STOPS_GROUPS
+                    );
                 } else {
                     seenStopIds.add(stopId);
                 }
@@ -101,8 +109,10 @@ public class SharedStopsValidator extends FeedValidator {
                 }
             }
         } catch (IOException e) {
-            // TODO Fail gracefully
-            throw new RuntimeException(e);
+            LOG.error(e.toString());
+        }
+        finally {
+            configReader.close();
         }
 
 
