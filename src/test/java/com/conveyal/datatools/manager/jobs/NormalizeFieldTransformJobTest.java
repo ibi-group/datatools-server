@@ -80,14 +80,14 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
     void canNormalizeField() throws IOException {
         TransformationCase route = new TransformationCase("routes", "route_long_name", "Route", "Rte");
 //        TransformationCase bookingRules = new TransformationCase("booking_rules", "booking_rule_id", "Booking", "Bkg");
-//        TransformationCase stopAreas = new TransformationCase("stop_areas", "area_id", "Area", "StopArea");
-//        TransformationCase areas = new TransformationCase("areas", "area_id", "Area", "Location");
+        TransformationCase stopAreas = new TransformationCase("stop_areas", "area_id", "Area", "StopArea");
+        TransformationCase areas = new TransformationCase("areas", "area_id", "Area", "Location");
         // Create transformations.
         initializeFeedSource(List.of(
-            createTransformation(route)
+            createTransformation(route),
 //            createTransformation(bookingRules),
-//            createTransformation(stopAreas),
-//            createTransformation(areas)
+            createTransformation(stopAreas),
+            createTransformation(areas)
         ));
 
         // Create target version that the transform will operate on.
@@ -100,8 +100,8 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
             // Check that new version has expected modifications.
             checkTableForModification(zip, route);
 //            checkTableForModification(zip, bookingRules);
-//            checkTableForModification(zip, stopAreas);
-//            checkTableForModification(zip, areas);
+            checkTableForModification(zip, stopAreas);
+            checkTableForModification(zip, areas);
         }
     }
 
