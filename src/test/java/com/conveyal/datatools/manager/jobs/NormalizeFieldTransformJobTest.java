@@ -38,7 +38,6 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
     private static final String TABLE_NAME = "routes";
     private static final String FIELD_NAME = "route_long_name";
     private static Project project;
-    private static FeedSource feedSource;
     private FeedVersion targetVersion;
 
 
@@ -82,19 +81,19 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
         TransformationCase bookingRules = new TransformationCase("booking_rules", "pickup_message", "message", "msg");
         TransformationCase areas = new TransformationCase("areas", "area_name", "area", "location");
         // Create transformations.
-        initializeFeedSource(List.of(
-            createTransformation(bookingRules),
+        FeedSource feedSourceNormalize = initializeFeedSource(List.of(
             createTransformation(route),
+            createTransformation(bookingRules),
             createTransformation(areas)
         ));
 
         // Create target version that the transform will operate on.
         targetVersion = createFeedVersion(
-            feedSource,
+            feedSourceNormalize,
             zipFolderFiles("fake-agency-for-field-normalizing")
         );
 
-            try (ZipFile zip = new ZipFile(targetVersion.retrieveGtfsFile())) {
+        try (ZipFile zip = new ZipFile(targetVersion.retrieveGtfsFile())) {
             // Check that new version has expected modifications.
             checkTableForModification(zip, route);
             checkTableForModification(zip, bookingRules);
@@ -136,7 +135,7 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
                 new Substitution("\\Cir\\b", "Circle")
             )
         );
-        initializeFeedSource(List.of(transformation));
+        FeedSource feedSource = initializeFeedSource(List.of(transformation));
 
         // Create target version that the transform will operate on.
         targetVersion = createFeedVersion(
@@ -164,15 +163,16 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
     /**
      * Create and persist a feed source using the given transformation.
      */
-    private static void initializeFeedSource(List<FeedTransformation<FeedTransformZipTarget>> transformations) {
+    private FeedSource initializeFeedSource(List<FeedTransformation<FeedTransformZipTarget>> transformations) {
 
         // Create feed source with above transform.
-        feedSource = new FeedSource("Normalize Field Test Feed", project.id, FeedRetrievalMethod.MANUALLY_UPLOADED);
+        FeedSource feedSource = new FeedSource("Normalize Field Test Feed", project.id, FeedRetrievalMethod.MANUALLY_UPLOADED);
         feedSource.deployable = false;
         for (FeedTransformation<FeedTransformZipTarget> transformation : transformations) {
             feedSource.transformRules.add(new FeedTransformRules(transformation));
         }
         Persistence.feedSources.create(feedSource);
+        return feedSource;
     }
 
     // FIXME: Refactor (almost same code as AutoDeployJobTest in PR #361,
