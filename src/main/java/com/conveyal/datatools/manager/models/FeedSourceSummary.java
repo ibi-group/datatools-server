@@ -34,7 +34,10 @@ import static com.mongodb.client.model.Filters.in;
 public class FeedSourceSummary {
     private static final DateTimeFormatter formatter = DateTimeFormatter.ofPattern("yyyyMMdd");
 
+    public String projectId;
+
     public String id;
+
     public String name;
     public boolean deployable;
     public boolean isPublic;
@@ -72,7 +75,8 @@ public class FeedSourceSummary {
     public FeedSourceSummary() {
     }
 
-    public FeedSourceSummary(Document feedSourceDocument) {
+    public FeedSourceSummary(String projectId, Document feedSourceDocument) {
+        this.projectId = projectId;
         this.id = feedSourceDocument.getString("_id");
         this.name = feedSourceDocument.getString("name");
         this.deployable = feedSourceDocument.getBoolean("deployable");
@@ -151,7 +155,7 @@ public class FeedSourceSummary {
             ),
             sort(Sorts.ascending("name"))
         );
-        return extractFeedSourceSummaries(stages);
+        return extractFeedSourceSummaries(projectId, stages);
     }
 
     /**
@@ -426,10 +430,10 @@ public class FeedSourceSummary {
     /**
      * Produce a list of all feed source summaries for a project.
      */
-    private static List<FeedSourceSummary> extractFeedSourceSummaries(List<Bson> stages) {
+    private static List<FeedSourceSummary> extractFeedSourceSummaries(String projectId, List<Bson> stages) {
         List<FeedSourceSummary> feedSourceSummaries = new ArrayList<>();
         for (Document feedSourceDocument : Persistence.getDocuments("FeedSource", stages)) {
-            feedSourceSummaries.add(new FeedSourceSummary(feedSourceDocument));
+            feedSourceSummaries.add(new FeedSourceSummary(projectId, feedSourceDocument));
         }
         return feedSourceSummaries;
     }

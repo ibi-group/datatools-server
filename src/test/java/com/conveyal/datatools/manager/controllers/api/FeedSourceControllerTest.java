@@ -342,6 +342,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
 
         assertNotNull(feedSourceSummaries);
         assertEquals(feedSourceWithLatestDeploymentFeedVersion.id, feedSourceSummaries.get(0).id);
+        assertEquals(feedSourceWithLatestDeploymentFeedVersion.projectId, feedSourceSummaries.get(0).projectId);
         assertEquals(feedSourceWithLatestDeploymentFeedVersion.labelIds, feedSourceSummaries.get(0).labelIds);
         assertEquals(feedVersionFromLatestDeployment.id, feedSourceSummaries.get(0).deployedFeedVersionId);
         assertEquals(feedVersionFromLatestDeployment.validationSummary().startDate, feedSourceSummaries.get(0).deployedFeedVersionStartDate);
@@ -372,6 +373,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
             );
         assertNotNull(feedSourceSummaries);
         assertEquals(feedSourceWithPinnedDeploymentFeedVersion.id, feedSourceSummaries.get(0).id);
+        assertEquals(feedSourceWithPinnedDeploymentFeedVersion.projectId, feedSourceSummaries.get(0).projectId);
         assertEquals(feedSourceWithPinnedDeploymentFeedVersion.labelIds, feedSourceSummaries.get(0).labelIds);
         assertEquals(feedVersionFromPinnedDeployment.id, feedSourceSummaries.get(0).deployedFeedVersionId);
         assertEquals(feedVersionFromPinnedDeployment.validationSummary().startDate, feedSourceSummaries.get(0).deployedFeedVersionStartDate);
