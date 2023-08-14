@@ -18,13 +18,16 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.Date;
-import java.util.List;
+import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -75,17 +78,10 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
      * Test that a {@link NormalizeFieldTransformation} will successfully complete.
      * FIXME: On certain Windows machines, this test fails.
      */
-    @Test
-    void canNormalizeField() throws IOException {
-        TransformationCase route = new TransformationCase("routes", "route_long_name", "Route", "Rte");
-        TransformationCase bookingRules = new TransformationCase("booking_rules", "pickup_message", "message", "msg");
-        TransformationCase areas = new TransformationCase("areas", "area_name", "area", "location");
-        // Create transformations.
-        FeedSource feedSourceNormalize = initializeFeedSource(List.of(
-            createTransformation(route),
-            createTransformation(bookingRules),
-            createTransformation(areas)
-        ));
+    @ParameterizedTest
+    @MethodSource("createNormalizedFieldCases")
+    void canNormalizeField(TransformationCase transformationCase) throws IOException {
+        FeedSource feedSourceNormalize = initializeFeedSource(createTransformation(transformationCase));
 
         // Create target version that the transform will operate on.
         targetVersion = createFeedVersion(
@@ -95,10 +91,16 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
 
         try (ZipFile zip = new ZipFile(targetVersion.retrieveGtfsFile())) {
             // Check that new version has expected modifications.
-            checkTableForModification(zip, route);
-            checkTableForModification(zip, bookingRules);
-            checkTableForModification(zip, areas);
+            checkTableForModification(zip, transformationCase);
         }
+    }
+
+    private static Stream<Arguments> createNormalizedFieldCases() {
+        return Stream.of(
+            Arguments.of(new TransformationCase("routes", "route_long_name", "Route", "Rte")),
+            Arguments.of(new TransformationCase("booking_rules", "pickup_message", "message", "msg")),
+            Arguments.of(new TransformationCase("areas", "area_name", "area", "location"))
+        );
     }
 
     private void checkTableForModification(ZipFile zip, TransformationCase transformationCase) throws IOException {
@@ -135,7 +137,7 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
                 new Substitution("\\Cir\\b", "Circle")
             )
         );
-        FeedSource feedSource = initializeFeedSource(List.of(transformation));
+        FeedSource feedSource = initializeFeedSource(transformation);
 
         // Create target version that the transform will operate on.
         targetVersion = createFeedVersion(
@@ -163,14 +165,12 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
     /**
      * Create and persist a feed source using the given transformation.
      */
-    private FeedSource initializeFeedSource(List<FeedTransformation<FeedTransformZipTarget>> transformations) {
+    private FeedSource initializeFeedSource(FeedTransformation<FeedTransformZipTarget> transformation) {
 
         // Create feed source with above transform.
         FeedSource feedSource = new FeedSource("Normalize Field Test Feed", project.id, FeedRetrievalMethod.MANUALLY_UPLOADED);
         feedSource.deployable = false;
-        for (FeedTransformation<FeedTransformZipTarget> transformation : transformations) {
-            feedSource.transformRules.add(new FeedTransformRules(transformation));
-        }
+        feedSource.transformRules.add(new FeedTransformRules(transformation));
         Persistence.feedSources.create(feedSource);
         return feedSource;
     }

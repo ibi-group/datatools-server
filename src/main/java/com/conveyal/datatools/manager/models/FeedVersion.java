@@ -554,7 +554,9 @@ public class FeedVersion extends Model implements Serializable {
 
             feedStore.deleteFeed(id);
             // Delete feed version tables in GTFS database
-            GTFS.delete(this.namespace, DataManager.GTFS_DATA_SOURCE);
+            if (this.namespace != null) {
+                GTFS.delete(this.namespace, DataManager.GTFS_DATA_SOURCE);
+            }
             LOG.info("Dropped version's GTFS tables from Postgres.");
             // Remove this FeedVersion from all Deployments associated with this FeedVersion's FeedSource's Project
             // TODO TEST THOROUGHLY THAT THIS UPDATE EXPRESSION IS CORRECT
