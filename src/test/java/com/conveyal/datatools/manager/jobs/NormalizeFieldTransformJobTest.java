@@ -104,8 +104,8 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
     private static Stream<Arguments> createNormalizedFieldCases() {
         return Stream.of(
             Arguments.of(new TransformationCase("routes", "route_long_name", "Route", "Rte")),
-            Arguments.of(new TransformationCase("booking_rules", "pickup_message", "message", "msg")),
-            Arguments.of(new TransformationCase("areas", "area_name", "area", "place"))
+            Arguments.of(new TransformationCase("booking_rules", "pickup_message", "Message", "Msg")),
+            Arguments.of(new TransformationCase("areas", "area_name", "Area", "Place"))
         );
     }
 
