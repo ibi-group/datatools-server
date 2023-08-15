@@ -22,6 +22,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -39,6 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 
 public class NormalizeFieldTransformJobTest extends DatatoolsTest {
+    private static final Logger LOG = LoggerFactory.getLogger(NormalizeFieldTransformJobTest.class);
     private static final String TABLE_NAME = "routes";
     private static final String FIELD_NAME = "route_long_name";
     private static Project project;
@@ -84,7 +87,7 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
     @ParameterizedTest
     @MethodSource("createNormalizedFieldCases")
     void canNormalizeField(TransformationCase transformationCase) throws IOException {
-        initializeFeedSource(createTransformation(transformationCase));
+        initializeFeedSource(transformationCase.table, createTransformation(transformationCase));
 
         // Create target version that the transform will operate on.
         targetVersion = createFeedVersion(
@@ -107,8 +110,10 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
     }
 
     private void checkTableForModification(ZipFile zip, TransformationCase transformationCase) throws IOException {
+        String tableName = transformationCase.table + ".txt";
+        LOG.info("Getting table {} from zip {}", tableName, zip.getName());
         // Check that the new version has been modified.
-        ZipEntry entry = zip.getEntry(transformationCase.table + ".txt");
+        ZipEntry entry = zip.getEntry(tableName);
         assertNotNull(entry);
 
         // Scan the first data row and check that the substitution that was defined in the set-up was done.
@@ -140,7 +145,7 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
                 new Substitution("\\Cir\\b", "Circle")
             )
         );
-        initializeFeedSource(transformation);
+        initializeFeedSource(TABLE_NAME, transformation);
 
         // Create target version that the transform will operate on.
         targetVersion = createFeedVersion(
@@ -168,10 +173,10 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
     /**
      * Create and persist a feed source using the given transformation.
      */
-    private void initializeFeedSource(FeedTransformation<FeedTransformZipTarget> transformation) {
+    private void initializeFeedSource(String table, FeedTransformation<FeedTransformZipTarget> transformation) {
 
         // Create feed source with above transform.
-        feedSource = new FeedSource("Normalize Field Test Feed", project.id, FeedRetrievalMethod.MANUALLY_UPLOADED);
+        feedSource = new FeedSource(table + " Normalize Field Test Feed", project.id, FeedRetrievalMethod.MANUALLY_UPLOADED);
         feedSource.deployable = false;
         feedSource.transformRules.add(new FeedTransformRules(transformation));
         Persistence.feedSources.create(feedSource);
