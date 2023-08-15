@@ -42,7 +42,7 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
     private static final String FIELD_NAME = "route_long_name";
     private static Project project;
     private FeedVersion targetVersion;
-
+    FeedSource feedSource;
 
     /**
      * Initialize Data Tools and set up a simple feed source and project.
@@ -81,11 +81,11 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
     @ParameterizedTest
     @MethodSource("createNormalizedFieldCases")
     void canNormalizeField(TransformationCase transformationCase) throws IOException {
-        FeedSource feedSourceNormalize = initializeFeedSource(createTransformation(transformationCase));
+        initializeFeedSource(createTransformation(transformationCase));
 
         // Create target version that the transform will operate on.
         targetVersion = createFeedVersion(
-            feedSourceNormalize,
+            feedSource,
             zipFolderFiles("fake-agency-for-field-normalizing")
         );
 
@@ -137,7 +137,7 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
                 new Substitution("\\Cir\\b", "Circle")
             )
         );
-        FeedSource feedSource = initializeFeedSource(transformation);
+        initializeFeedSource(transformation);
 
         // Create target version that the transform will operate on.
         targetVersion = createFeedVersion(
@@ -165,14 +165,13 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
     /**
      * Create and persist a feed source using the given transformation.
      */
-    private FeedSource initializeFeedSource(FeedTransformation<FeedTransformZipTarget> transformation) {
+    private void initializeFeedSource(FeedTransformation<FeedTransformZipTarget> transformation) {
 
         // Create feed source with above transform.
-        FeedSource feedSource = new FeedSource("Normalize Field Test Feed", project.id, FeedRetrievalMethod.MANUALLY_UPLOADED);
+        feedSource = new FeedSource("Normalize Field Test Feed", project.id, FeedRetrievalMethod.MANUALLY_UPLOADED);
         feedSource.deployable = false;
         feedSource.transformRules.add(new FeedTransformRules(transformation));
         Persistence.feedSources.create(feedSource);
-        return feedSource;
     }
 
     // FIXME: Refactor (almost same code as AutoDeployJobTest in PR #361,
