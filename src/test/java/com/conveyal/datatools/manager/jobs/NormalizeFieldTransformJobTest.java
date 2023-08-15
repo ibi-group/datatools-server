@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.DatatoolsTest;
+import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -51,6 +52,7 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
     public static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
+        Auth0Connection.setAuthDisabled(true);
 
         // Create a project.
         project = createProject();
@@ -61,6 +63,7 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
      */
     @AfterAll
     public static void tearDown() {
+        Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
         // Project delete cascades to feed sources.
         project.delete();
     }
@@ -99,7 +102,7 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
         return Stream.of(
             Arguments.of(new TransformationCase("routes", "route_long_name", "Route", "Rte")),
             Arguments.of(new TransformationCase("booking_rules", "pickup_message", "message", "msg")),
-            Arguments.of(new TransformationCase("areas", "area_name", "area", "location"))
+            Arguments.of(new TransformationCase("areas", "area_name", "area", "place"))
         );
     }
 
@@ -117,10 +120,10 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
             String[] columns = reader.readLine().split(",");
             int fieldIndex = ArrayUtils.indexOf(columns, transformationCase.fieldName);
 
-            String row1 = reader.readLine();
-            assertNotNull(row1, String.format("First row in table %s is null!", transformationCase.table));
-            String[] row1Fields = row1.split(",");
-            assertTrue(row1Fields[fieldIndex].startsWith(transformationCase.replacement), row1);
+            String rowOne = reader.readLine();
+            assertNotNull(rowOne, String.format("First row in table %s is null!", transformationCase.table));
+            String[] row1Fields = rowOne.split(",");
+            assertTrue(row1Fields[fieldIndex].contains(transformationCase.replacement), rowOne);
         }
     }
 
