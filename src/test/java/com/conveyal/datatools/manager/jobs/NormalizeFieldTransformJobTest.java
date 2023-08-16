@@ -45,8 +45,8 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
     private static final String TABLE_NAME = "routes";
     private static final String FIELD_NAME = "route_long_name";
     private static Project project;
+    private static FeedSource feedSource;
     private FeedVersion targetVersion;
-    FeedSource feedSource;
 
     /**
      * Initialize Data Tools and set up a simple feed source and project.
