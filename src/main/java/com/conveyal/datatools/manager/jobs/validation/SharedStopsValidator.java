@@ -108,9 +108,7 @@ public class SharedStopsValidator extends FeedValidator {
                     registerError(NewGTFSError.forFeed(NewGTFSErrorType.SHARED_STOP_GROUP_ENTITY_DOES_NOT_EXIST, stopId));
                 }
             }
-        } catch (IOException e) {
-            LOG.error(e.toString());
-        }
+        } catch (IOException e) { LOG.error(e.toString()); }
         finally {
             configReader.close();
         }
