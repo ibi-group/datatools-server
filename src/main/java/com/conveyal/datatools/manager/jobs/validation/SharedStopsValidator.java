@@ -21,7 +21,7 @@ import java.util.Set;
 
 
 public class SharedStopsValidator extends FeedValidator {
-    private static final Logger LOG = LoggerFactory.getLogger(S3Utils.class);
+    private static final Logger LOG = LoggerFactory.getLogger(SharedStopsValidator.class);
 
     Feed feed;
     Project project;
