@@ -348,10 +348,10 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(feedVersionFromLatestDeployment.validationSummary().startDate, feedSourceSummaries.get(0).deployedFeedVersionStartDate);
         assertEquals(feedVersionFromLatestDeployment.validationSummary().endDate, feedSourceSummaries.get(0).deployedFeedVersionEndDate);
         assertEquals(feedVersionFromLatestDeployment.validationSummary().errorCount, feedSourceSummaries.get(0).deployedFeedVersionIssues);
-        assertEquals(feedVersionFromLatestDeployment.id, feedSourceSummaries.get(0).latestFeedVersionId);
-        assertEquals(feedVersionFromLatestDeployment.validationSummary().startDate, feedSourceSummaries.get(0).latestFeedVersionStartDate);
-        assertEquals(feedVersionFromLatestDeployment.validationSummary().endDate, feedSourceSummaries.get(0).latestFeedVersionEndDate);
-        assertEquals(feedVersionFromLatestDeployment.validationSummary().errorCount, feedSourceSummaries.get(0).latestFeedVersionIssues);
+        assertEquals(feedVersionFromLatestDeployment.id, feedSourceSummaries.get(0).latestValidation.feedVersionId);
+        assertEquals(feedVersionFromLatestDeployment.validationSummary().startDate, feedSourceSummaries.get(0).latestValidation.feedVersionStartDate);
+        assertEquals(feedVersionFromLatestDeployment.validationSummary().endDate, feedSourceSummaries.get(0).latestValidation.feedVersionEndDate);
+        assertEquals(feedVersionFromLatestDeployment.validationSummary().errorCount, feedSourceSummaries.get(0).latestValidation.feedVersionIssues);
     }
 
     @Test
@@ -379,10 +379,10 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(feedVersionFromPinnedDeployment.validationSummary().startDate, feedSourceSummaries.get(0).deployedFeedVersionStartDate);
         assertEquals(feedVersionFromPinnedDeployment.validationSummary().endDate, feedSourceSummaries.get(0).deployedFeedVersionEndDate);
         assertEquals(feedVersionFromPinnedDeployment.validationSummary().errorCount, feedSourceSummaries.get(0).deployedFeedVersionIssues);
-        assertEquals(feedVersionFromPinnedDeployment.id, feedSourceSummaries.get(0).latestFeedVersionId);
-        assertEquals(feedVersionFromPinnedDeployment.validationSummary().startDate, feedSourceSummaries.get(0).latestFeedVersionStartDate);
-        assertEquals(feedVersionFromPinnedDeployment.validationSummary().endDate, feedSourceSummaries.get(0).latestFeedVersionEndDate);
-        assertEquals(feedVersionFromPinnedDeployment.validationSummary().errorCount, feedSourceSummaries.get(0).latestFeedVersionIssues);
+        assertEquals(feedVersionFromPinnedDeployment.id, feedSourceSummaries.get(0).latestValidation.feedVersionId);
+        assertEquals(feedVersionFromPinnedDeployment.validationSummary().startDate, feedSourceSummaries.get(0).latestValidation.feedVersionStartDate);
+        assertEquals(feedVersionFromPinnedDeployment.validationSummary().endDate, feedSourceSummaries.get(0).latestValidation.feedVersionEndDate);
+        assertEquals(feedVersionFromPinnedDeployment.validationSummary().errorCount, feedSourceSummaries.get(0).latestValidation.feedVersionIssues);
     }
 
     private static FeedSource createFeedSource(String name, URL url, Project project) {

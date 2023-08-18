@@ -60,17 +60,7 @@ public class FeedSourceSummary {
 
     public Integer deployedFeedVersionIssues;
 
-    public String latestFeedVersionId;
-
-    @JsonSerialize(using = JacksonSerializers.LocalDateIsoSerializer.class)
-    @JsonDeserialize(using = JacksonSerializers.LocalDateIsoDeserializer.class)
-    public LocalDate latestFeedVersionStartDate;
-
-    @JsonSerialize(using = JacksonSerializers.LocalDateIsoSerializer.class)
-    @JsonDeserialize(using = JacksonSerializers.LocalDateIsoDeserializer.class)
-    public LocalDate latestFeedVersionEndDate;
-
-    public Integer latestFeedVersionIssues;
+    public LatestValidationResult latestValidation;
 
     public FeedSourceSummary() {
     }
@@ -100,12 +90,7 @@ public class FeedSourceSummary {
                     ? null
                     : feedVersionSummary.validationResult.errorCount;
             } else {
-                this.latestFeedVersionId = feedVersionSummary.id;
-                this.latestFeedVersionStartDate = feedVersionSummary.validationResult.firstCalendarDate;
-                this.latestFeedVersionEndDate = feedVersionSummary.validationResult.lastCalendarDate;
-                this.latestFeedVersionIssues = (feedVersionSummary.validationResult.errorCount == -1)
-                    ? null
-                    : feedVersionSummary.validationResult.errorCount;
+                this.latestValidation = new LatestValidationResult(feedVersionSummary);
             }
         }
     }
@@ -533,4 +518,31 @@ public class FeedSourceSummary {
     private static LocalDate getLocalDateFromDate(Date date) {
         return date.toInstant().atZone(ZoneId.systemDefault()).toLocalDate();
     }
+
+    public static class LatestValidationResult {
+
+        public String feedVersionId;
+        @JsonSerialize(using = JacksonSerializers.LocalDateIsoSerializer.class)
+        @JsonDeserialize(using = JacksonSerializers.LocalDateIsoDeserializer.class)
+        public LocalDate feedVersionStartDate;
+
+        @JsonSerialize(using = JacksonSerializers.LocalDateIsoSerializer.class)
+        @JsonDeserialize(using = JacksonSerializers.LocalDateIsoDeserializer.class)
+        public LocalDate feedVersionEndDate;
+
+        public Integer feedVersionIssues;
+
+        /** Required for JSON de/serializing. **/
+        public LatestValidationResult() {}
+
+        LatestValidationResult(FeedVersionSummary feedVersionSummary) {
+            this.feedVersionId = feedVersionSummary.id;
+            this.feedVersionStartDate = feedVersionSummary.validationResult.firstCalendarDate;
+            this.feedVersionEndDate = feedVersionSummary.validationResult.lastCalendarDate;
+            this.feedVersionIssues = (feedVersionSummary.validationResult.errorCount == -1)
+                ? null
+                : feedVersionSummary.validationResult.errorCount;
+        }
+    }
+
 }
