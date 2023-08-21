@@ -524,22 +524,22 @@ public class FeedSourceSummary {
         public String feedVersionId;
         @JsonSerialize(using = JacksonSerializers.LocalDateIsoSerializer.class)
         @JsonDeserialize(using = JacksonSerializers.LocalDateIsoDeserializer.class)
-        public LocalDate feedVersionStartDate;
+        public LocalDate startDate;
 
         @JsonSerialize(using = JacksonSerializers.LocalDateIsoSerializer.class)
         @JsonDeserialize(using = JacksonSerializers.LocalDateIsoDeserializer.class)
-        public LocalDate feedVersionEndDate;
+        public LocalDate endDate;
 
-        public Integer feedVersionIssues;
+        public Integer errorCount;
 
         /** Required for JSON de/serializing. **/
         public LatestValidationResult() {}
 
         LatestValidationResult(FeedVersionSummary feedVersionSummary) {
             this.feedVersionId = feedVersionSummary.id;
-            this.feedVersionStartDate = feedVersionSummary.validationResult.firstCalendarDate;
-            this.feedVersionEndDate = feedVersionSummary.validationResult.lastCalendarDate;
-            this.feedVersionIssues = (feedVersionSummary.validationResult.errorCount == -1)
+            this.startDate = feedVersionSummary.validationResult.firstCalendarDate;
+            this.endDate = feedVersionSummary.validationResult.lastCalendarDate;
+            this.errorCount = (feedVersionSummary.validationResult.errorCount == -1)
                 ? null
                 : feedVersionSummary.validationResult.errorCount;
         }
