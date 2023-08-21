@@ -412,7 +412,7 @@
         <dependency>
             <groupId>org.yaml</groupId>
             <artifactId>snakeyaml</artifactId>
-            <version>1.26</version>
+            <version>2.0</version>
         </dependency>
         <!-- Used for writing csv for merged feeds. Note: this appears to be one of the only
           CSV libraries that will only quote values when necessary (e.g., there is a comma character
