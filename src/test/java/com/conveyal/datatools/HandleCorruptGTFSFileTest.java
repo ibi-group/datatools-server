@@ -1,6 +1,7 @@
 package com.conveyal.datatools;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.jobs.LoadFeedJob;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.jobs.ValidateFeedJob;
@@ -30,10 +31,12 @@ public class HandleCorruptGTFSFileTest {
     public static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
+        Auth0Connection.setAuthDisabled(true);
     }
 
     @AfterAll
     public static void tearDown() {
+        Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
         mockProject.delete();
     }
 
