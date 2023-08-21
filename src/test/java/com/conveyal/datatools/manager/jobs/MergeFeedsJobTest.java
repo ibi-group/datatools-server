@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
+import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.gtfsplus.GtfsPlusValidation;
 import com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType;
@@ -86,6 +87,7 @@ public class MergeFeedsJobTest extends UnitTest {
     public static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
+        Auth0Connection.setAuthDisabled(true);
 
         // Create a project, feed sources, and feed versions to merge.
         project = new Project();
@@ -157,6 +159,7 @@ public class MergeFeedsJobTest extends UnitTest {
      */
     @AfterAll
     public static void tearDown() {
+        Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
         if (project != null) {
             project.delete();
         }
