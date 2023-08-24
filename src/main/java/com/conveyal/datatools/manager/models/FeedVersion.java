@@ -13,6 +13,7 @@ import com.conveyal.datatools.manager.utils.HashUtils;
 import com.conveyal.gtfs.BaseGTFSCache;
 import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.error.NewGTFSErrorType;
+import com.conveyal.gtfs.graphql.fetchers.JDBCFetcher;
 import com.conveyal.gtfs.loader.Feed;
 import com.conveyal.gtfs.loader.FeedLoadResult;
 import com.conveyal.gtfs.validator.MTCValidator;
@@ -372,7 +373,14 @@ public class FeedVersion extends Model implements Serializable {
                 );
             } else {
                 FeedSource fs = Persistence.feedSources.getById(this.feedSourceId);
-                SharedStopsValidator ssv = new SharedStopsValidator(fs.retrieveProject());
+
+                // Get feed_id from feed version... Really awful hack!
+                JDBCFetcher feedFetcher = new JDBCFetcher("feed_info", null);
+                Object gtfsFeedId = feedFetcher.getResults(this.namespace, null, null).get(0).get("feed_id");
+
+
+                String feedId = gtfsFeedId == null ? "" : gtfsFeedId.toString();
+                SharedStopsValidator ssv = new SharedStopsValidator(fs.retrieveProject(), feedId);
 
                 validationResult = GTFS.validate(
                         feedLoadResult.uniqueIdentifier,
