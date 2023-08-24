@@ -9,9 +9,11 @@ import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
 import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
+import com.conveyal.datatools.manager.models.DeploymentSummary;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
+import com.conveyal.datatools.manager.models.FeedSourceSummary;
 import com.conveyal.datatools.manager.models.JsonViews;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.models.transform.NormalizeFieldTransformation;
@@ -395,6 +397,20 @@ public class FeedSourceController {
         return feedSource;
     }
 
+    private static Collection<FeedSourceSummary> getAllFeedSourceSummaries(Request req, Response res) {
+        Auth0UserProfile userProfile = req.attribute("user");
+        String projectId = req.queryParams("projectId");
+        Project project = Persistence.projects.getById(projectId);
+        if (project == null) {
+            logMessageAndHalt(req, 400, "Must provide valid projectId value.");
+        }
+        if (!userProfile.canAdministerProject(project)) {
+            logMessageAndHalt(req, 401, "User not authorized to view project feed sources.");
+        }
+        return project.retrieveFeedSourceSummaries();
+    }
+
+
     // FIXME: use generic API controller and return JSON documents via BSON/Mongo
     public static void register (String apiPrefix) {
         get(apiPrefix + "secure/feedsource/:id", FeedSourceController::getFeedSource, json::write);
@@ -404,5 +420,6 @@ public class FeedSourceController {
         put(apiPrefix + "secure/feedsource/:id/updateExternal", FeedSourceController::updateExternalFeedResource, json::write);
         delete(apiPrefix + "secure/feedsource/:id", FeedSourceController::deleteFeedSource, json::write);
         post(apiPrefix + "secure/feedsource/:id/fetch", FeedSourceController::fetch, json::write);
+        get(apiPrefix + "secure/feedsourceSummaries", FeedSourceController::getAllFeedSourceSummaries, json::write);
     }
 }

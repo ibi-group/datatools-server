@@ -2,22 +2,30 @@ package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.manager.jobs.AutoDeployType;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.google.common.collect.Lists;
+import com.mongodb.client.model.Projections;
+import org.bson.Document;
 import org.bson.codecs.pojo.annotations.BsonIgnore;
+import org.bson.conversions.Bson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Date;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
 
+import static com.mongodb.client.model.Aggregates.match;
+import static com.mongodb.client.model.Aggregates.project;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
+import static com.mongodb.client.model.Filters.in;
 import static com.mongodb.client.model.Filters.or;
 
 /**
@@ -157,6 +165,24 @@ public class Project extends Model {
             .collect(Collectors.toList());
     }
 
+    /**
+     * Get all feed source summaries for this project.
+     */
+    public Collection<FeedSourceSummary> retrieveFeedSourceSummaries() {
+        List<FeedSourceSummary> feedSourceSummaries = FeedSourceSummary.getFeedSourceSummaries(id);
+        Map<String, FeedVersionSummary> latestFeedVersionForFeedSources = FeedSourceSummary.getLatestFeedVersionForFeedSources(id);
+        Map<String, FeedVersionSummary> deployedFeedVersions = FeedSourceSummary.getFeedVersionsFromPinnedDeployment(id);
+        if (deployedFeedVersions.isEmpty()) {
+            // No pinned deployments, instead, get the deployed feed versions from the latest deployment.
+            deployedFeedVersions = FeedSourceSummary.getFeedVersionsFromLatestDeployment(id);
+        }
+        for (FeedSourceSummary feedSourceSummary : feedSourceSummaries) {
+            feedSourceSummary.setFeedVersion(latestFeedVersionForFeedSources.get(feedSourceSummary.id), false);
+            feedSourceSummary.setFeedVersion(deployedFeedVersions.get(feedSourceSummary.id), true);
+        }
+        return feedSourceSummaries;
+    }
+
     // TODO: Does this need to be returned with JSON API response
     public Organization retrieveOrganization() {
         if (organizationId != null) {
@@ -190,5 +216,39 @@ public class Project extends Model {
 
         @JsonProperty("otpServers")
         public abstract Collection<OtpServer> availableOtpServers ();
+    }
+
+    @BsonIgnore
+    @JsonIgnore
+    public static boolean hasPinnedDeployment(String projectId) {
+        /*
+            db.getCollection('Project').aggregate([
+                {
+                    // Match provided project id.
+                    $match: {
+                        _id: "project-with-latest-deployment"
+                    }
+                },
+                {
+                    $project: {
+                        _id: 0,
+                        pinnedDeploymentId: 1
+                    }
+                }
+            ])
+        */
+        List<Bson> stages = Lists.newArrayList(
+            match(
+                in("_id", projectId)
+            ),
+            project(Projections.excludeId()),
+            project(Projections.include("pinnedDeploymentId"))
+        );
+        Document project = Persistence
+            .getMongoDatabase()
+            .getCollection("Project")
+            .aggregate(stages)
+            .first();
+        return !project.isEmpty();
     }
 }
