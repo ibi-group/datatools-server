@@ -71,7 +71,10 @@ public class FeedSourceSummary {
         this.name = feedSourceDocument.getString("name");
         this.deployable = feedSourceDocument.getBoolean("deployable");
         this.isPublic = feedSourceDocument.getBoolean("isPublic");
-        this.labelIds = feedSourceDocument.getList("labelIds", String.class);
+        List<String> documentLabelIds = feedSourceDocument.getList("labelIds", String.class);
+        if (documentLabelIds != null) {
+            this.labelIds = documentLabelIds;
+        }
         // Convert to local date type for consistency.
         this.lastUpdated = getLocalDateFromDate(feedSourceDocument.getDate("lastUpdated"));
     }
@@ -87,7 +90,7 @@ public class FeedSourceSummary {
                 this.deployedFeedVersionStartDate = feedVersionSummary.validationResult.firstCalendarDate;
                 this.deployedFeedVersionEndDate = feedVersionSummary.validationResult.lastCalendarDate;
                 this.deployedFeedVersionIssues = (feedVersionSummary.validationResult.errorCount == -1)
-                    ? null
+                    ? 0
                     : feedVersionSummary.validationResult.errorCount;
             } else {
                 this.latestValidation = new LatestValidationResult(feedVersionSummary);
@@ -341,25 +344,25 @@ public class FeedSourceSummary {
                         pinnedDeploymentId: 1
                     }
                 },
-				{
+                {
                     $lookup:{
                         from:"Deployment",
                         localField:"pinnedDeploymentId",
                         foreignField:"_id",
                         as:"deployment"
                     }
-				},
-				{
-					$unwind: "$deployment"
-				},
-				{
+                },
+                {
+                    $unwind: "$deployment"
+                },
+                {
                     $lookup:{
                         from:"FeedVersion",
                         localField:"deployment.feedVersionIds",
                         foreignField:"_id",
                         as:"feedVersions"
                     }
-				},
+                },
                 {
                     // Deconstruct feedVersions array to a document for each element.
                     $unwind: "$feedVersions"
