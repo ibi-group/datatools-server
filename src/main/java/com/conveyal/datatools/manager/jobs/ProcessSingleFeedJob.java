@@ -203,8 +203,8 @@ public class ProcessSingleFeedJob extends FeedVersionJob {
             if (validationResult != null) {
                 message.append(String.format("New feed version created for %s (valid from %s - %s). ",
                     feedSource.name,
-                    feedVersion.validationResult.firstCalendarDate,
-                    feedVersion.validationResult.lastCalendarDate
+                    validationResult.firstCalendarDate,
+                    validationResult.lastCalendarDate
                 ));
             } else {
                 message.append(String.format("New feed version created for %s.", feedSource.name));
