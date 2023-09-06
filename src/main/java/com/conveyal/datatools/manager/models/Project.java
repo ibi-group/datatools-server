@@ -56,6 +56,10 @@ public class Project extends Model {
     /** Last successful auto deploy. **/
     public Date lastAutoDeploy;
 
+    /** CSV formatted shared stops config. **/
+    public String sharedStopsConfig;
+
+
     /**
      * A list of servers that are available to deploy project feeds/OSM to. This includes servers assigned to this
      * project as well as those that belong to no project.

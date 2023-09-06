@@ -6,6 +6,7 @@ import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.jobs.ValidateFeedJob;
 import com.conveyal.datatools.manager.jobs.ValidateMobilityDataFeedJob;
 import com.conveyal.datatools.manager.jobs.validation.RouteTypeValidatorBuilder;
+import com.conveyal.datatools.manager.jobs.validation.SharedStopsValidator;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
@@ -370,8 +371,14 @@ public class FeedVersion extends Model implements Serializable {
                     MTCValidator::new
                 );
             } else {
-                validationResult = GTFS.validate(feedLoadResult.uniqueIdentifier, DataManager.GTFS_DATA_SOURCE,
-                    RouteTypeValidatorBuilder::buildRouteValidator
+                FeedSource fs = Persistence.feedSources.getById(this.feedSourceId);
+                SharedStopsValidator ssv = new SharedStopsValidator(fs.retrieveProject());
+
+                validationResult = GTFS.validate(
+                        feedLoadResult.uniqueIdentifier,
+                        DataManager.GTFS_DATA_SOURCE,
+                        RouteTypeValidatorBuilder::buildRouteValidator,
+                        ssv::buildSharedStopsValidator
                 );
             }
         } catch (Exception e) {
@@ -489,7 +496,9 @@ public class FeedVersion extends Model implements Serializable {
             NewGTFSErrorType.SERVICE_WITHOUT_DAYS_OF_WEEK,
             NewGTFSErrorType.TABLE_MISSING_COLUMN_HEADERS,
             NewGTFSErrorType.TABLE_IN_SUBDIRECTORY,
-            NewGTFSErrorType.WRONG_NUMBER_OF_FIELDS
+            NewGTFSErrorType.WRONG_NUMBER_OF_FIELDS,
+            NewGTFSErrorType.MULTIPLE_SHARED_STOPS_GROUPS,
+            NewGTFSErrorType.SHARED_STOP_GROUP_MUTLIPLE_PRIMARY_STOPS
         ));
     }
 
