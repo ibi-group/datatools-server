@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
+import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.error.NewGTFSError;
 import com.conveyal.gtfs.error.NewGTFSErrorType;
@@ -35,6 +36,7 @@ public class FeedVersionTest extends UnitTest {
     public static void setUp() throws Exception {
         // start server if it isn't already running
         DatatoolsTest.setUp();
+        Auth0Connection.setAuthDisabled(true);
 
         // set up project
         project = new Project();
@@ -48,6 +50,7 @@ public class FeedVersionTest extends UnitTest {
 
     @AfterAll
     public static void tearDown() {
+        Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
         if (project != null) {
             project.delete();
         }
