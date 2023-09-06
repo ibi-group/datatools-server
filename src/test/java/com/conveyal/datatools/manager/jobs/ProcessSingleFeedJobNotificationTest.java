@@ -60,7 +60,7 @@ public class ProcessSingleFeedJobNotificationTest extends DatatoolsTest {
         validationResult.errorCount = 100;
         f.validationResult = validationResult;
         ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(f, user, true);
-        String expectedResult = String.format("New feed version created for Mock Feed Source (valid from %s - %s). During validation, we found 100 issue(s)",
+        String expectedResult = String.format("New feed version created for Mock Feed Source (valid from %s - %s).During validation, we found 100 issue(s)",
             validationResult.firstCalendarDate,
             validationResult.lastCalendarDate);
         assertThat(
@@ -75,7 +75,7 @@ public class ProcessSingleFeedJobNotificationTest extends DatatoolsTest {
         validationResult.errorCount = 0;
         f.validationResult = validationResult;
         ProcessSingleFeedJob processSingleFeedJob = new ProcessSingleFeedJob(f, user, true);
-        String expectedResult = String.format("New feed version created for Mock Feed Source (valid from %s - %s). The validation check found no issues with this new dataset!",
+        String expectedResult = String.format("New feed version created for Mock Feed Source (valid from %s - %s).The validation check found no issues with this new dataset!",
             validationResult.firstCalendarDate,
             validationResult.lastCalendarDate);
         assertThat(
