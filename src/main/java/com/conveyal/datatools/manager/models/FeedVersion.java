@@ -375,7 +375,7 @@ public class FeedVersion extends Model implements Serializable {
                 FeedSource fs = Persistence.feedSources.getById(this.feedSourceId);
 
                 // Get feed_id from feed version... Really awful hack!
-                JDBCFetcher feedFetcher = new JDBCFetcher("feed_info", null);
+                JDBCFetcher feedFetcher = new JDBCFetcher("feed_info");
                 Object gtfsFeedId = feedFetcher.getResults(this.namespace, null, null).get(0).get("feed_id");
 
 
