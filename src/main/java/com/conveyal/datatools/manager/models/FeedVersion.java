@@ -374,7 +374,15 @@ public class FeedVersion extends Model implements Serializable {
             } else {
                 FeedSource fs = Persistence.feedSources.getById(this.feedSourceId);
 
-                // Get feed_id from feed version... Really awful hack!
+                /*
+                  Get feed_id from feed version
+
+                  This could potentially happen inside gtfs-lib, however
+                  because this functionality is specific to datatools and the
+                  shared stops feature, it lives only here instead. Changes to
+                  gtfs-lib have been avoided, so that gtfs-lib isn't being modified
+                  to support proprietary features.
+                 */
                 JDBCFetcher feedFetcher = new JDBCFetcher("feed_info");
                 Object gtfsFeedId = feedFetcher.getResults(this.namespace, null, null).get(0).get("feed_id");
 
