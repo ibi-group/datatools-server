@@ -58,6 +58,7 @@ public class SharedStopsValidator extends FeedValidator {
 
         CsvReader configReader = CsvReader.parse(config);
 
+        // TODO: pull indicies from the CSV header
         final int STOP_GROUP_ID_INDEX = 0;
         final int STOP_ID_INDEX = 2;
         final int IS_PRIMARY_INDEX = 3;
