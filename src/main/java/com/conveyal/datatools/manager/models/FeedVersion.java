@@ -13,6 +13,7 @@ import com.conveyal.datatools.manager.utils.HashUtils;
 import com.conveyal.gtfs.BaseGTFSCache;
 import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.error.NewGTFSErrorType;
+import com.conveyal.gtfs.graphql.fetchers.JDBCFetcher;
 import com.conveyal.gtfs.loader.Feed;
 import com.conveyal.gtfs.loader.FeedLoadResult;
 import com.conveyal.gtfs.validator.MTCValidator;
@@ -372,7 +373,22 @@ public class FeedVersion extends Model implements Serializable {
                 );
             } else {
                 FeedSource fs = Persistence.feedSources.getById(this.feedSourceId);
-                SharedStopsValidator ssv = new SharedStopsValidator(fs.retrieveProject());
+
+                /*
+                  Get feed_id from feed version
+
+                  This could potentially happen inside gtfs-lib, however
+                  because this functionality is specific to datatools and the
+                  shared stops feature, it lives only here instead. Changes to
+                  gtfs-lib have been avoided, so that gtfs-lib isn't being modified
+                  to support proprietary features.
+                 */
+                JDBCFetcher feedFetcher = new JDBCFetcher("feed_info");
+                Object gtfsFeedId = feedFetcher.getResults(this.namespace, null, null).get(0).get("feed_id");
+
+
+                String feedId = gtfsFeedId == null ? "" : gtfsFeedId.toString();
+                SharedStopsValidator ssv = new SharedStopsValidator(fs.retrieveProject(), feedId);
 
                 validationResult = GTFS.validate(
                         feedLoadResult.uniqueIdentifier,
