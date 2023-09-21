@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
+import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -11,6 +12,7 @@ import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.SqlAssert;
 import com.google.common.base.Strings;
 import com.google.common.io.Files;
+import org.junit.jupiter.api.AfterAll;
 import org.locationtech.jts.geom.Coordinate;
 import org.locationtech.jts.geom.MultiLineString;
 import org.locationtech.jts.geom.Point;
@@ -149,6 +151,7 @@ public class GisExportJobTest extends UnitTest {
     @BeforeAll
     public static void setUp() throws IOException {
         DatatoolsTest.setUp();
+        Auth0Connection.setAuthDisabled(true);
         LOG.info("{} setup", GisExportJobTest.class.getSimpleName());
 
         // Create a project, feed sources, and feed versions to merge.
@@ -163,6 +166,11 @@ public class GisExportJobTest extends UnitTest {
         hawaii.deployable = true; //Set feedsources to be deployable for DeploymentGisExportJobTest
         Persistence.feedSources.create(hawaii);
         hawaiiVersion = createFeedVersionFromGtfsZip(hawaii, "hawaii_fake_no_shapes.zip");
+    }
+
+    @AfterAll
+    public static void tearDown() {
+        Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
     }
 
     /**
