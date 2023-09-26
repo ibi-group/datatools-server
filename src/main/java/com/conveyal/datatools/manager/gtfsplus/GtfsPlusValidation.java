@@ -5,6 +5,7 @@ import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.gtfs.GTFSFeed;
+import com.conveyal.gtfs.model.Route;
 import com.csvreader.CsvReader;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
@@ -21,8 +22,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -122,6 +125,13 @@ public class GtfsPlusValidation implements Serializable {
         GTFSFeed gtfsFeed
     ) throws IOException {
         String tableId = specTable.get("id").asText();
+        Boolean tableIsDirections = tableId.equals("directions");
+
+        Map<String, Route> gtfsRoutes = new HashMap<>();
+        if (tableIsDirections) {
+            // Copy the gtfs routes into a map we can "check them off" in (remove them)
+            gtfsRoutes.putAll(gtfsFeed.routes);
+        }
 
         // Read in table data from input stream.
         CsvReader csvReader = new CsvReader(inputStreamToValidate, ',', StandardCharsets.UTF_8);
@@ -167,15 +177,24 @@ public class GtfsPlusValidation implements Serializable {
                 // Validate each value in row. Note: we iterate over the fields and not values because a row may be missing
                 // columns, but we still want to validate that missing value (e.g., if it is missing a required field).
                 for (int f = 0; f < fieldsFound.length; f++) {
+                    JsonNode specField = fieldsFound[f];
                     // If value exists for index, use that. Otherwise, default to null to avoid out of bounds exception.
                     String val = f < recordColumnCount ? rowValues[f] : null;
-                    validateTableValue(issues, tableId, rowIndex, rowValues, val, fieldsFound, fieldsFound[f], gtfsFeed);
+                    if (tableIsDirections && specField.get("name").asText().equals("route_id")) {
+                        validateTableValue(issues, tableId, rowIndex, rowValues, val, fieldsFound, specField, gtfsFeed, gtfsRoutes);
+                    } else {
+                        validateTableValue(issues, tableId, rowIndex, rowValues, val, fieldsFound, specField, gtfsFeed);
+                    }
                 }
+                // After we're done validating all the table values, check if every route was checked off in directions.txt
             }
             rowIndex++;
         }
         csvReader.close();
 
+        if (tableIsDirections && !gtfsRoutes.isEmpty()) {
+            issues.add(new ValidationIssue(tableId, "route_id", -1, "Directions table does not define direction names for all routes."));
+        }
         // Add issues for wrong number of columns and for empty rows after processing all rows.
         // Note: We considered adding an issue for each row, but opted for the single error approach because there's no
         // concept of a row-level issue in the UI right now. So we would potentially need to add that to the UI
@@ -299,7 +318,32 @@ public class GtfsPlusValidation implements Serializable {
                 }
                 break;
         }
+    }
 
+    /** Validate a single route_id value for the directions.txt GTFS+ table. */
+    private static void validateTableValue(
+            Collection<ValidationIssue> issues,
+            String tableId,
+            int rowIndex,
+            String[] allValues,
+            String value,
+            JsonNode[] specFieldsFound,
+            JsonNode specField,
+            GTFSFeed gtfsFeed,
+            Map<String, Route> gtfsRoutes
+    ) {
+        if (specField == null) return;
+        validateTableValue(issues, tableId, rowIndex, allValues, value, specFieldsFound, specField, gtfsFeed);
+
+        if (!gtfsRoutes.containsKey(value)) {
+            if (!gtfsFeed.routes.containsKey(value)) {
+                issues.add(new ValidationIssue(tableId, specField.get("name").asText(), rowIndex, "Duplicate route entry in directions table."));
+            } else {
+                return;
+            }
+        }
+        // "Check off" the route_id from the list to verify every route id has a direction
+        gtfsRoutes.remove(value);
     }
 
     /** Construct missing ID text for validation issue description. */
