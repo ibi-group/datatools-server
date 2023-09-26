@@ -335,13 +335,7 @@ public class GtfsPlusValidation implements Serializable {
         if (specField == null) return;
         validateTableValue(issues, tableId, rowIndex, allValues, value, specFieldsFound, specField, gtfsFeed);
 
-        if (!gtfsRoutes.containsKey(value)) {
-            if (!gtfsFeed.routes.containsKey(value)) {
-                issues.add(new ValidationIssue(tableId, specField.get("name").asText(), rowIndex, "Duplicate route entry in directions table."));
-            } else {
-                return;
-            }
-        }
+        if (!gtfsRoutes.containsKey(value)) return;
         // "Check off" the route_id from the list to verify every route id has a direction
         gtfsRoutes.remove(value);
     }
