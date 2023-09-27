@@ -449,7 +449,7 @@
         <dependency>
             <groupId>com.github.MobilityData.gtfs-validator</groupId>
             <artifactId>gtfs-validator-main</artifactId>
-            <version>4.0.0</version>
+            <version>v4.1.0</version>
         </dependency>
         <dependency>
             <groupId>com.google.code.gson</groupId>
