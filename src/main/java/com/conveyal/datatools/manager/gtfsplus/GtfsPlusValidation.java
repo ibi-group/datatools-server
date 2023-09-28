@@ -25,7 +25,6 @@ import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -129,7 +128,7 @@ public class GtfsPlusValidation implements Serializable {
 
         Set<String> gtfsRoutes = new HashSet<>();
         if (tableIsDirections) {
-            // Copy the gtfs routes into a map we can "check them off" in (remove them). Stream is required in order to copy keys.
+            // Copy the gtfs routes into a set so that we can "check them off" (remove them).
             gtfsRoutes.addAll(gtfsFeed.routes.keySet());
         }
 
