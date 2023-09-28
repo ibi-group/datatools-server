@@ -1,5 +1,6 @@
 package com.conveyal.datatools.manager.jobs.validation;
 
+import com.conveyal.datatools.common.utils.aws.S3Utils;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.gtfs.error.NewGTFSError;
 import com.conveyal.gtfs.error.NewGTFSErrorType;
@@ -23,13 +24,11 @@ public class SharedStopsValidator extends FeedValidator {
     private static final Logger LOG = LoggerFactory.getLogger(SharedStopsValidator.class);
 
     Feed feed;
-    String feedId;
     Project project;
 
-    public SharedStopsValidator(Project project, String feedId) {
+    public SharedStopsValidator(Project project) {
         super(null, null);
         this.project = project;
-        this.feedId = feedId;
     }
 
     // This method can only be run on a SharedStopsValidator that has been set up with a project only
@@ -37,16 +36,12 @@ public class SharedStopsValidator extends FeedValidator {
         if (this.project == null) {
             throw new RuntimeException("Shared stops validator can not be called because no project has been set!");
         }
-        if (this.feedId == null) {
-            throw new RuntimeException("Shared stops validator can not be called because no feed ID has been set!");
-        }
-        return new SharedStopsValidator(feed, errorStorage, this.project, this.feedId);
+        return new SharedStopsValidator(feed, errorStorage, this.project);
     }
-    public SharedStopsValidator(Feed feed, SQLErrorStorage errorStorage, Project project, String feedId) {
+    public SharedStopsValidator(Feed feed, SQLErrorStorage errorStorage, Project project) {
         super(feed, errorStorage);
         this.feed = feed;
         this.project = project;
-        this.feedId = feedId;
     }
 
     @Override
@@ -58,11 +53,9 @@ public class SharedStopsValidator extends FeedValidator {
 
         CsvReader configReader = CsvReader.parse(config);
 
-        // TODO: pull indicies from the CSV header
         final int STOP_GROUP_ID_INDEX = 0;
         final int STOP_ID_INDEX = 2;
         final int IS_PRIMARY_INDEX = 3;
-        final int FEED_ID_INDEX = 1;
 
         // Build list of stop Ids.
         List<String> stopIds = new ArrayList<>();
@@ -81,7 +74,6 @@ public class SharedStopsValidator extends FeedValidator {
             while (configReader.readRecord()) {
                 String stopGroupId = configReader.get(STOP_GROUP_ID_INDEX);
                 String stopId = configReader.get(STOP_ID_INDEX);
-                String sharedStopFeedId = configReader.get(FEED_ID_INDEX);
 
                 if (stopId.equals("stop_id")) {
                     // Swallow header row
@@ -111,8 +103,8 @@ public class SharedStopsValidator extends FeedValidator {
                 }
 
                 // Check for SS_03 (stop_id referenced doesn't exist)
-                // Make sure this error is only returned if we are inside the feed that is being checked
-                if (feedId.equals(sharedStopFeedId) && !stopIds.contains(stopId)) {
+                // TODO: CHECK FEED ID (adjust the pre-build constructor to include feed_id)
+                if (!stopIds.contains(stopId)) {
                     registerError(NewGTFSError.forFeed(NewGTFSErrorType.SHARED_STOP_GROUP_ENTITY_DOES_NOT_EXIST, stopId));
                 }
             }
