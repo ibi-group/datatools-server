@@ -200,10 +200,10 @@ public class FeedSourceSummary {
             unwind("$feedVersions"),
             group(
                 "$_id",
-                Accumulators.first("feedVersionId", "$feedVersions._id"),
-                Accumulators.first("firstCalendarDate", "$feedVersions.validationResult.firstCalendarDate"),
-                Accumulators.first("lastCalendarDate", "$feedVersions.validationResult.lastCalendarDate"),
-                Accumulators.first("errorCount", "$feedVersions.validationResult.errorCount")
+                Accumulators.last("feedVersionId", "$feedVersions._id"),
+                Accumulators.last("firstCalendarDate", "$feedVersions.validationResult.firstCalendarDate"),
+                Accumulators.last("lastCalendarDate", "$feedVersions.validationResult.lastCalendarDate"),
+                Accumulators.last("errorCount", "$feedVersions.validationResult.errorCount")
             )
         );
         return extractFeedVersionSummaries(

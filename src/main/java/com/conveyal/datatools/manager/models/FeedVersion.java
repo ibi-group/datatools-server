@@ -365,7 +365,7 @@ public class FeedVersion extends Model implements Serializable {
             status.update("Validating feed...", 33);
 
             // Validate the feed version.
-            // Certain extensions, if enabled, have extra validators
+            // Certain extensions, if enabled, have extra validators.
             if (isExtensionEnabled("mtc")) {
                 validationResult = GTFS.validate(feedLoadResult.uniqueIdentifier, DataManager.GTFS_DATA_SOURCE,
                     RouteTypeValidatorBuilder::buildRouteValidator,
@@ -384,9 +384,12 @@ public class FeedVersion extends Model implements Serializable {
                   to support proprietary features.
                  */
                 JDBCFetcher feedFetcher = new JDBCFetcher("feed_info");
-                Object gtfsFeedId = feedFetcher.getResults(this.namespace, null, null).get(0).get("feed_id");
-
-
+                Object gtfsFeedId = new Object();
+                try {
+                    gtfsFeedId = feedFetcher.getResults(this.namespace, null, null).get(0).get("feed_id");
+                } catch (RuntimeException e) {
+                    LOG.warn("RuntimeException occurred while fetching feedId");
+                }
                 String feedId = gtfsFeedId == null ? "" : gtfsFeedId.toString();
                 SharedStopsValidator ssv = new SharedStopsValidator(fs.retrieveProject(), feedId);
 
