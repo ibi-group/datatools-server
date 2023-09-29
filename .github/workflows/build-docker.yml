@@ -3,7 +3,7 @@ name: Create and publish a Docker image
 
 on:
   push:
-    branches: ['dev', 'master', 'dev-flex']
+    branches: ['dev', 'master', 'dev-flex', 'revert-shared-stops-bug']
 
 env:
   REGISTRY: ghcr.io
