@@ -364,7 +364,7 @@ public class FeedVersion extends Model implements Serializable {
             status.update("Validating feed...", 33);
 
             // Validate the feed version.
-            // Certain extensions, if enabled, have extra validators
+            // Certain extensions, if enabled, have extra validators.
             if (isExtensionEnabled("mtc")) {
                 validationResult = GTFS.validate(feedLoadResult.uniqueIdentifier, DataManager.GTFS_DATA_SOURCE,
                     RouteTypeValidatorBuilder::buildRouteValidator,
