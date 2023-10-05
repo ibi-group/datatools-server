@@ -84,6 +84,9 @@ public class SnapshotController {
         boolean publishNewVersion = Boolean.parseBoolean(
             req.queryParamOrDefault("publishNewVersion", Boolean.FALSE.toString())
         );
+        boolean publishProprietaryFiles = Boolean.parseBoolean(
+            req.queryParamOrDefault("publishProprietaryFiles", Boolean.FALSE.toString())
+        );
         FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, Actions.EDIT, "feedId");
         // Take fields from request body for creating snapshot (i.e., feedId/feedSourceId, name, comment).
         Snapshot snapshot = json.read(req.body());
@@ -99,7 +102,7 @@ public class SnapshotController {
                 new CreateSnapshotJob(userProfile, snapshot, bufferIsEmpty, !bufferIsEmpty, false);
         // Add publish feed version job if specified by request.
         if (publishNewVersion) {
-            createSnapshotJob.addNextJob(new CreateFeedVersionFromSnapshotJob(feedSource, snapshot, userProfile));
+            createSnapshotJob.addNextJob(new CreateFeedVersionFromSnapshotJob(feedSource, snapshot, userProfile, publishProprietaryFiles));
         }
         // Begin asynchronous execution.
         JobUtils.heavyExecutor.execute(createSnapshotJob);

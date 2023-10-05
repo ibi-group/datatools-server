@@ -265,10 +265,10 @@
          - AWS S3 SDK - putting/getting objects into/out of S3.
          -->
         <dependency>
-            <groupId>com.github.conveyal</groupId>
+            <groupId>com.conveyal</groupId>
             <artifactId>gtfs-lib</artifactId>
             <!-- Latest dev build on jitpack.io -->
-            <version>80a968cd3a071aa46a994ce2632535303a6e4384</version>
+            <version>7.0.2</version>
             <!-- Exclusions added in order to silence SLF4J warnings about multiple bindings:
                 http://www.slf4j.org/codes.html#multiple_bindings
             -->

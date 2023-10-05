@@ -179,7 +179,7 @@ public class FeedVersionController  {
             logMessageAndHalt(req, 400, "Must provide valid snapshot ID");
         }
         CreateFeedVersionFromSnapshotJob createFromSnapshotJob =
-            new CreateFeedVersionFromSnapshotJob(feedSource, snapshot, userProfile);
+            new CreateFeedVersionFromSnapshotJob(feedSource, snapshot, userProfile, false);
         JobUtils.heavyExecutor.execute(createFromSnapshotJob);
 
         return true;
