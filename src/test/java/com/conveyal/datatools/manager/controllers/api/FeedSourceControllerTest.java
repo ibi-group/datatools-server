@@ -75,8 +75,8 @@ public class FeedSourceControllerTest extends DatatoolsTest {
 
         feedSourceWithUrl = createFeedSource("FeedSourceOne", new URL("http://www.feedsource.com"), project);
         feedSourceWithNoUrl = createFeedSource("FeedSourceTwo", null, project);
-        feedSourceWithLabels = createFeedSource("FeedSourceThree", null, projectToBeDeleted);
-        feedSourceWithInvalidLabels = createFeedSource("FeedSourceFour", null, project);
+        feedSourceWithLabels = createFeedSource("FeedSourceThree", new URL("http://www.feedsource.com"), projectToBeDeleted);
+        feedSourceWithInvalidLabels = createFeedSource("FeedSourceFour", new URL("http://www.feedsource.com"), project);
 
         adminOnlyLabel = createLabel("Admin Only Label");
         adminOnlyLabel.adminOnly = true;
@@ -89,7 +89,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         feedSourceWithLatestDeploymentFeedVersion = createFeedSource(
             "feed-source-with-latest-deployment-feed-version",
             "FeedSource",
-            null,
+            new URL("http://www.feedsource.com"),
             projectWithLatestDeployment,
             true,
             List.of("labelOne", "labelTwo")
@@ -123,7 +123,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         feedSourceWithPinnedDeploymentFeedVersion = createFeedSource(
             "feed-source-with-pinned-deployment-feed-version",
             "FeedSourceWithPinnedFeedVersion",
-            null,
+            new URL("http://www.feedsource.com"),
             projectWithPinnedDeployment,
             true,
             List.of("labelOne", "labelTwo")
@@ -344,6 +344,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(feedSourceWithLatestDeploymentFeedVersion.id, feedSourceSummaries.get(0).id);
         assertEquals(feedSourceWithLatestDeploymentFeedVersion.projectId, feedSourceSummaries.get(0).projectId);
         assertEquals(feedSourceWithLatestDeploymentFeedVersion.labelIds, feedSourceSummaries.get(0).labelIds);
+        assertEquals(feedSourceWithLatestDeploymentFeedVersion.url.toString(), feedSourceSummaries.get(0).url);
         assertEquals(feedVersionFromLatestDeployment.id, feedSourceSummaries.get(0).deployedFeedVersionId);
         assertEquals(feedVersionFromLatestDeployment.validationSummary().startDate, feedSourceSummaries.get(0).deployedFeedVersionStartDate);
         assertEquals(feedVersionFromLatestDeployment.validationSummary().endDate, feedSourceSummaries.get(0).deployedFeedVersionEndDate);
@@ -375,6 +376,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(feedSourceWithPinnedDeploymentFeedVersion.id, feedSourceSummaries.get(0).id);
         assertEquals(feedSourceWithPinnedDeploymentFeedVersion.projectId, feedSourceSummaries.get(0).projectId);
         assertEquals(feedSourceWithPinnedDeploymentFeedVersion.labelIds, feedSourceSummaries.get(0).labelIds);
+        assertEquals(feedSourceWithPinnedDeploymentFeedVersion.url.toString(), feedSourceSummaries.get(0).url);
         assertEquals(feedVersionFromPinnedDeployment.id, feedSourceSummaries.get(0).deployedFeedVersionId);
         assertEquals(feedVersionFromPinnedDeployment.validationSummary().startDate, feedSourceSummaries.get(0).deployedFeedVersionStartDate);
         assertEquals(feedVersionFromPinnedDeployment.validationSummary().endDate, feedSourceSummaries.get(0).deployedFeedVersionEndDate);
