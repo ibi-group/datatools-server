@@ -62,6 +62,8 @@ public class FeedSourceSummary {
 
     public LatestValidationResult latestValidation;
 
+    public String url;
+
     public FeedSourceSummary() {
     }
 
@@ -77,6 +79,7 @@ public class FeedSourceSummary {
         }
         // Convert to local date type for consistency.
         this.lastUpdated = getLocalDateFromDate(feedSourceDocument.getDate("lastUpdated"));
+        this.url = feedSourceDocument.getString("url");
     }
 
     /**
@@ -117,7 +120,8 @@ public class FeedSourceSummary {
                         "deployable": 1,
                         "isPublic": 1,
                         "lastUpdated": 1,
-                        "labelIds": 1
+                        "labelIds": 1,
+                        "url": 1
                     }
                 },
                 {
@@ -138,7 +142,8 @@ public class FeedSourceSummary {
                     "deployable",
                     "isPublic",
                     "lastUpdated",
-                    "labelIds")
+                    "labelIds",
+                    "url")
                 )
             ),
             sort(Sorts.ascending("name"))
