@@ -178,6 +178,7 @@ public class FeedVersionController  {
         if (snapshot == null) {
             logMessageAndHalt(req, 400, "Must provide valid snapshot ID");
         }
+        // TODO: Allow publishing with proprietary files from this endpoint?
         CreateFeedVersionFromSnapshotJob createFromSnapshotJob =
             new CreateFeedVersionFromSnapshotJob(feedSource, snapshot, userProfile, false);
         JobUtils.heavyExecutor.execute(createFromSnapshotJob);
