@@ -30,14 +30,6 @@ public class ExportSnapshotToGTFSJob extends MonitorableJob {
     private File tempFile;
     private final boolean publishProprietaryFiles;
 
-    public ExportSnapshotToGTFSJob(Auth0UserProfile owner, Snapshot snapshot, FeedVersion feedVersion) {
-        super(owner, "Exporting snapshot " + snapshot.name, JobType.EXPORT_SNAPSHOT_TO_GTFS);
-        this.snapshot = snapshot;
-        this.feedVersion = feedVersion;
-        this.publishProprietaryFiles = false; // DEFAULT. TODO: don't hide this here.
-        status.update("Starting database snapshot...", 10);
-    }
-
     public ExportSnapshotToGTFSJob(Auth0UserProfile owner, Snapshot snapshot, FeedVersion feedVersion, boolean publishProprietaryFiles) {
         super(owner, "Exporting snapshot " + snapshot.name, JobType.EXPORT_SNAPSHOT_TO_GTFS);
         this.snapshot = snapshot;
@@ -46,8 +38,8 @@ public class ExportSnapshotToGTFSJob extends MonitorableJob {
         status.update("Starting database snapshot...", 10);
     }
 
-    public ExportSnapshotToGTFSJob(Auth0UserProfile owner, Snapshot snapshot) {
-        this(owner, snapshot, null);
+    public ExportSnapshotToGTFSJob(Auth0UserProfile owner, Snapshot snapshot, boolean publishProprietaryFiles) {
+        this(owner, snapshot, null, publishProprietaryFiles);
     }
 
     @JsonProperty

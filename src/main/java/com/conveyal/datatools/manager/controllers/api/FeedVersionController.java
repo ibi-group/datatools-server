@@ -178,9 +178,9 @@ public class FeedVersionController  {
         if (snapshot == null) {
             logMessageAndHalt(req, 400, "Must provide valid snapshot ID");
         }
-        // TODO: Allow publishing with proprietary files from this endpoint?
+        // Publishing the proprietary files will preserve the pattern names in the newly published feed version.
         CreateFeedVersionFromSnapshotJob createFromSnapshotJob =
-            new CreateFeedVersionFromSnapshotJob(feedSource, snapshot, userProfile, false);
+            new CreateFeedVersionFromSnapshotJob(feedSource, snapshot, userProfile, true);
         JobUtils.heavyExecutor.execute(createFromSnapshotJob);
 
         return true;
