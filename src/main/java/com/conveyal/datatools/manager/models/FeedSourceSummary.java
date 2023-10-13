@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.editor.utils.JacksonSerializers;
 import com.conveyal.datatools.manager.persistence.Persistence;
+import com.conveyal.datatools.manager.utils.PersistenceUtils;
 import com.conveyal.gtfs.validator.ValidationResult;
 import com.fasterxml.jackson.databind.annotation.JsonDeserialize;
 import com.fasterxml.jackson.databind.annotation.JsonSerialize;
@@ -20,6 +21,7 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 import static com.mongodb.client.model.Aggregates.group;
 import static com.mongodb.client.model.Aggregates.limit;
@@ -64,11 +66,16 @@ public class FeedSourceSummary {
 
     public String url;
 
+    public List<String> noteIds = new ArrayList<>();
+
+    public String organizationId;
+
     public FeedSourceSummary() {
     }
 
-    public FeedSourceSummary(String projectId, Document feedSourceDocument) {
+    public FeedSourceSummary(String projectId, String organizationId, Document feedSourceDocument) {
         this.projectId = projectId;
+        this.organizationId = organizationId;
         this.id = feedSourceDocument.getString("_id");
         this.name = feedSourceDocument.getString("name");
         this.deployable = feedSourceDocument.getBoolean("deployable");
@@ -77,10 +84,34 @@ public class FeedSourceSummary {
         if (documentLabelIds != null) {
             this.labelIds = documentLabelIds;
         }
+        List<String> documentNoteIds = feedSourceDocument.getList("noteIds", String.class);
+        if (documentNoteIds != null) {
+            this.noteIds = documentNoteIds;
+        }
         // Convert to local date type for consistency.
         this.lastUpdated = getLocalDateFromDate(feedSourceDocument.getDate("lastUpdated"));
         this.url = feedSourceDocument.getString("url");
     }
+
+    /**
+     * Removes labels and notes from a feed that a user is not allowed to view. Returns cleaned feed source.
+     * @param feedSourceSummary    The feed source to clean
+     * @param isAdmin       Is the user an admin? Changes what is returned.
+     * @return              A feed source containing only labels/notes the user is allowed to see
+     */
+    public static FeedSourceSummary cleanFeedSourceSummaryForNonAdmins(FeedSourceSummary feedSourceSummary, boolean isAdmin) {
+        // Admin can view all feed labels, but a non-admin should only see those with adminOnly=false
+        feedSourceSummary.labelIds = Persistence.labels
+            .getFiltered(PersistenceUtils.applyAdminFilter(in("_id", feedSourceSummary.labelIds), isAdmin)).stream()
+            .map(label -> label.id)
+            .collect(Collectors.toList());
+        feedSourceSummary.noteIds = Persistence.notes
+            .getFiltered(PersistenceUtils.applyAdminFilter(in("_id", feedSourceSummary.noteIds), isAdmin)).stream()
+            .map(note -> note.id)
+            .collect(Collectors.toList());
+        return feedSourceSummary;
+    }
+
 
     /**
      * Set the appropriate feed version. For consistency, if no error count is available set the related number of
@@ -104,7 +135,7 @@ public class FeedSourceSummary {
     /**
      * Get all feed source summaries matching the project id.
      */
-    public static List<FeedSourceSummary> getFeedSourceSummaries(String projectId) {
+    public static List<FeedSourceSummary> getFeedSourceSummaries(String projectId, String organizationId) {
         /*
             db.getCollection('FeedSource').aggregate([
                 {
@@ -121,7 +152,8 @@ public class FeedSourceSummary {
                         "isPublic": 1,
                         "lastUpdated": 1,
                         "labelIds": 1,
-                        "url": 1
+                        "url": 1,
+                        "noteIds": 1
                     }
                 },
                 {
@@ -143,12 +175,13 @@ public class FeedSourceSummary {
                     "isPublic",
                     "lastUpdated",
                     "labelIds",
-                    "url")
+                    "url",
+                    "noteIds")
                 )
             ),
             sort(Sorts.ascending("name"))
         );
-        return extractFeedSourceSummaries(projectId, stages);
+        return extractFeedSourceSummaries(projectId, organizationId, stages);
     }
 
     /**
@@ -423,10 +456,10 @@ public class FeedSourceSummary {
     /**
      * Produce a list of all feed source summaries for a project.
      */
-    private static List<FeedSourceSummary> extractFeedSourceSummaries(String projectId, List<Bson> stages) {
+    private static List<FeedSourceSummary> extractFeedSourceSummaries(String projectId, String organizationId, List<Bson> stages) {
         List<FeedSourceSummary> feedSourceSummaries = new ArrayList<>();
         for (Document feedSourceDocument : Persistence.getDocuments("FeedSource", stages)) {
-            feedSourceSummaries.add(new FeedSourceSummary(projectId, feedSourceDocument));
+            feedSourceSummaries.add(new FeedSourceSummary(projectId, organizationId, feedSourceDocument));
         }
         return feedSourceSummaries;
     }

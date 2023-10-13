@@ -45,6 +45,7 @@ import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.getPOJOFromRequestBody;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.models.ExternalFeedSourceProperty.constructId;
+import static com.conveyal.datatools.manager.models.FeedSourceSummary.cleanFeedSourceSummaryForNonAdmins;
 import static com.conveyal.datatools.manager.models.transform.NormalizeFieldTransformation.getInvalidSubstitutionMessage;
 import static com.conveyal.datatools.manager.models.transform.NormalizeFieldTransformation.getInvalidSubstitutionPatterns;
 import static com.mongodb.client.model.Filters.in;
@@ -98,6 +99,31 @@ public class FeedSourceController {
             ) {
                 // Remove labels user can't view, then add to list of feeds to return
                 feedSourcesToReturn.add(cleanFeedSourceForNonAdmins(source, isAdmin));
+            }
+        }
+        return feedSourcesToReturn;
+    }
+
+    private static Collection<FeedSourceSummary> getAllFeedSourceSummaries(Request req, Response res) {
+        Collection<FeedSourceSummary> feedSourcesToReturn = new ArrayList<>();
+        Auth0UserProfile user = req.attribute("user");
+        String projectId = req.queryParams("projectId");
+
+        Project project = Persistence.projects.getById(projectId);
+
+        if (project == null) {
+            logMessageAndHalt(req, 400, "Must provide valid projectId value.");
+        } else {
+            boolean isAdmin = user.canAdministerProject(project);
+            Collection<FeedSourceSummary> feedSourceSummaries = project.retrieveFeedSourceSummaries();
+            for (FeedSourceSummary feedSourceSummary : feedSourceSummaries) {
+                // If user can view or manage feed, add to list of feeds to return. NOTE: By default most users with access
+                // to a project should be able to view all feed sources. Custom privileges would need to be provided to
+                // override this behavior.
+                if (user.canManageOrViewFeed(project.organizationId, feedSourceSummary.projectId, feedSourceSummary.id)) {
+                    // Remove labels user can't view, then add to list of feeds to return.
+                    feedSourcesToReturn.add(cleanFeedSourceSummaryForNonAdmins(feedSourceSummary, isAdmin));
+                }
             }
         }
         return feedSourcesToReturn;
@@ -396,20 +422,6 @@ public class FeedSourceController {
             .collect(Collectors.toList());
         return feedSource;
     }
-
-    private static Collection<FeedSourceSummary> getAllFeedSourceSummaries(Request req, Response res) {
-        Auth0UserProfile userProfile = req.attribute("user");
-        String projectId = req.queryParams("projectId");
-        Project project = Persistence.projects.getById(projectId);
-        if (project == null) {
-            logMessageAndHalt(req, 400, "Must provide valid projectId value.");
-        }
-        if (!userProfile.canAdministerProject(project)) {
-            logMessageAndHalt(req, 401, "User not authorized to view project feed sources.");
-        }
-        return project.retrieveFeedSourceSummaries();
-    }
-
 
     // FIXME: use generic API controller and return JSON documents via BSON/Mongo
     public static void register (String apiPrefix) {

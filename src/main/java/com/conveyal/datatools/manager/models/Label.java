@@ -39,15 +39,24 @@ public class Label extends Model implements Cloneable{
     public Auth0UserProfile user;
 
     /**
-     * Create a new label
+     * Create a new label with auto-gen id.
      */
     public Label (String name, String description, String color, boolean adminOnly, String projectId) {
+        this(null, name, description, color, adminOnly, projectId);
+    }
+
+    /**
+     * Create a new label with provided id.
+     */
+    public Label (String id, String name, String description, String color, boolean adminOnly, String projectId) {
         super();
+        if (id != null) {
+            this.id = id;
+        }
         this.name = name;
         this.description = description != null ? description : "";
         this.color = color != null ? color : "#000000";
         this.adminOnly = adminOnly;
-
         this.projectId = projectId;
     }
 
