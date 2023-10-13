@@ -188,7 +188,7 @@ public class GtfsPlusValidation implements Serializable {
 
         if (tableIsDirections && !gtfsRoutes.isEmpty()) {
             // After we're done validating all the table values, check if every route was checked off in directions.txt
-            issues.add(new ValidationIssue(tableId, null, -1, "Directions file doesn't define directions for all routes listed in routes file"));
+            issues.add(new ValidationIssue(tableId, null, -1, "Directions file doesn't define directions for all routes listed in routes.txt"));
         }
         // Add issues for wrong number of columns and for empty rows after processing all rows.
         // Note: We considered adding an issue for each row, but opted for the single error approach because there's no
