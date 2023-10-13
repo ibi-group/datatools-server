@@ -384,6 +384,7 @@ public class FeedUpdater {
             return Persistence.feedVersions
                 .getMongoCollection()
                 .aggregate(stages)
+                .allowDiskUse(true)
                 .into(new ArrayList<>())
                 .stream()
                 .collect(Collectors.toMap(v -> v.feedSourceId, Function.identity()));
