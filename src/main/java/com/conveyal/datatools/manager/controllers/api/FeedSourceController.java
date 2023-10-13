@@ -9,7 +9,6 @@ import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.extensions.ExternalFeedResource;
 import com.conveyal.datatools.manager.jobs.FetchSingleFeedJob;
 import com.conveyal.datatools.manager.jobs.NotifyUsersForSubscriptionJob;
-import com.conveyal.datatools.manager.models.DeploymentSummary;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -45,7 +44,6 @@ import static com.conveyal.datatools.common.utils.SparkUtils.formatJobMessage;
 import static com.conveyal.datatools.common.utils.SparkUtils.getPOJOFromRequestBody;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
 import static com.conveyal.datatools.manager.models.ExternalFeedSourceProperty.constructId;
-import static com.conveyal.datatools.manager.models.FeedSourceSummary.cleanFeedSourceSummaryForNonAdmins;
 import static com.conveyal.datatools.manager.models.transform.NormalizeFieldTransformation.getInvalidSubstitutionMessage;
 import static com.conveyal.datatools.manager.models.transform.NormalizeFieldTransformation.getInvalidSubstitutionPatterns;
 import static com.mongodb.client.model.Filters.in;
@@ -88,7 +86,7 @@ public class FeedSourceController {
         boolean isAdmin = user.canAdministerProject(project);
 
         Collection<FeedSource> projectFeedSources = project.retrieveProjectFeedSources();
-        for (FeedSource source: projectFeedSources) {
+        for (FeedSource source : projectFeedSources) {
             String orgId = source.organizationId();
             // If user can view or manage feed, add to list of feeds to return. NOTE: By default most users with access
             // to a project should be able to view all feed sources. Custom privileges would need to be provided to
@@ -323,7 +321,7 @@ public class FeedSourceController {
     /**
      * Re-fetch this feed from the feed source URL.
      */
-    private static String fetch (Request req, Response res) {
+    private static String fetch(Request req, Response res) {
         FeedSource s = requestFeedSourceById(req, Actions.MANAGE);
         if (s.url == null) {
             logMessageAndHalt(req, HttpStatus.BAD_REQUEST_400, "Cannot fetch feed source with null URL.");
@@ -341,7 +339,8 @@ public class FeedSourceController {
 
     /**
      * Helper function returns feed source if user has permission for specified action.
-     * @param req spark Request object from API request
+     *
+     * @param req    spark Request object from API request
      * @param action action type (either "view" or Permission.MANAGE)
      * @return feedsource object for ID
      */
@@ -392,39 +391,79 @@ public class FeedSourceController {
         return cleanFeedSourceForNonAdmins(feedSource, isProjectAdmin);
     }
 
-    /** Determines whether a change to a feed source is significant enough that it warrants sending a notification
+    /**
+     * Determines whether a change to a feed source is significant enough that it warrants sending a notification
      *
      * @param formerFeedSource  A feed source object, without new changes
      * @param updatedFeedSource A feed source object, with new changes
-     * @return                  A boolean value indicating if the updated feed source is changed enough to warrant sending a notification.
+     * @return A boolean value indicating if the updated feed source is changed enough to warrant sending a notification.
      */
     private static boolean shouldNotifyUsersOnFeedUpdated(FeedSource formerFeedSource, FeedSource updatedFeedSource) {
-        return
-                // If only labels have changed, don't send out an email
-                formerFeedSource.equalsExceptLabels(updatedFeedSource);
+        // If only labels have changed, don't send out an email.
+        return formerFeedSource.equalsExceptLabels(updatedFeedSource);
     }
 
     /**
      * Removes labels and notes from a feed that a user is not allowed to view. Returns cleaned feed source.
-     * @param feedSource    The feed source to clean
-     * @param isAdmin       Is the user an admin? Changes what is returned.
-     * @return              A feed source containing only labels/notes the user is allowed to see
+     *
+     * @param feedSource The feed source to clean.
+     * @param isAdmin    Is the user an admin? Changes what is returned.
+     * @return A feed source containing only labels/notes the user is allowed to see.
      */
     protected static FeedSource cleanFeedSourceForNonAdmins(FeedSource feedSource, boolean isAdmin) {
         // Admin can view all feed labels, but a non-admin should only see those with adminOnly=false
-        feedSource.labelIds = Persistence.labels
-            .getFiltered(PersistenceUtils.applyAdminFilter(in("_id", feedSource.labelIds), isAdmin)).stream()
-            .map(label -> label.id)
-            .collect(Collectors.toList());
-        feedSource.noteIds = Persistence.notes
-            .getFiltered(PersistenceUtils.applyAdminFilter(in("_id", feedSource.noteIds), isAdmin)).stream()
-            .map(note -> note.id)
-            .collect(Collectors.toList());
+        feedSource.labelIds = cleanFeedSourceLabelIdsForNonAdmins(feedSource.labelIds, isAdmin);
+        feedSource.noteIds = cleanFeedSourceNotesForNonAdmins(feedSource.noteIds, isAdmin);
         return feedSource;
     }
 
+    /**
+     * Removes labels and notes from a feed that a user is not allowed to view. Returns cleaned feed source summary.
+     *
+     * @param feedSourceSummary The feed source to clean.
+     * @param isAdmin           Is the user an admin? Changes what is returned.
+     * @return A feed source summary containing only labels/notes the user is allowed to see.
+     */
+    protected static FeedSourceSummary cleanFeedSourceSummaryForNonAdmins(FeedSourceSummary feedSourceSummary, boolean isAdmin) {
+        // Admin can view all feed labels, but a non-admin should only see those with adminOnly=false
+        feedSourceSummary.labelIds = cleanFeedSourceLabelIdsForNonAdmins(feedSourceSummary.labelIds, isAdmin);
+        feedSourceSummary.noteIds = cleanFeedSourceNotesForNonAdmins(feedSourceSummary.noteIds, isAdmin);
+        return feedSourceSummary;
+    }
+
+    /**
+     * Removes labels from a feed that a user is not allowed to view. Returns cleaned notes.
+     *
+     * @param labelIds The labels to clean.
+     * @param isAdmin  Is the user an admin? Changes what is returned.
+     * @return Labels the user is allowed to see.
+     */
+    protected static List<String> cleanFeedSourceLabelIdsForNonAdmins(List<String> labelIds, boolean isAdmin) {
+        // Admin can view all feed labels, but a non-admin should only see those with adminOnly=false.
+        return Persistence.labels
+            .getFiltered(PersistenceUtils.applyAdminFilter(in("_id", labelIds), isAdmin)).stream()
+            .map(label -> label.id)
+            .collect(Collectors.toList());
+    }
+
+    /**
+     * Removes notes from a feed that a user is not allowed to view. Returns cleaned notes.
+     *
+     * @param noteIds The notes to clean.
+     * @param isAdmin Is the user an admin? Changes what is returned.
+     * @return Notes the user is allowed to see.
+     */
+    protected static List<String> cleanFeedSourceNotesForNonAdmins(List<String> noteIds, boolean isAdmin) {
+        // Admin can view all feed notes, but a non-admin should only see those with adminOnly=false.
+        return Persistence.notes
+            .getFiltered(PersistenceUtils.applyAdminFilter(in("_id", noteIds), isAdmin)).stream()
+            .map(note -> note.id)
+            .collect(Collectors.toList());
+    }
+
+
     // FIXME: use generic API controller and return JSON documents via BSON/Mongo
-    public static void register (String apiPrefix) {
+    public static void register(String apiPrefix) {
         get(apiPrefix + "secure/feedsource/:id", FeedSourceController::getFeedSource, json::write);
         get(apiPrefix + "secure/feedsource", FeedSourceController::getProjectFeedSources, json::write);
         post(apiPrefix + "secure/feedsource", FeedSourceController::createFeedSource, json::write);
