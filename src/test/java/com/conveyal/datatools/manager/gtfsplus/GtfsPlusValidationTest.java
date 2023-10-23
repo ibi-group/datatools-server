@@ -75,8 +75,8 @@ public class GtfsPlusValidationTest extends UnitTest {
     void canValidateCleanGtfsPlus() throws Exception {
         LOG.info("Validation BART GTFS+");
         GtfsPlusValidation validation = GtfsPlusValidation.validate(bartVersion1.id);
-        // Expect issues to be zero.
-        assertThat("Issues count for clean BART feed is zero", validation.issues.size(), equalTo(0));
+        // Expect issues to be only one with directions.txt file
+        assertThat("Clean BART feed and incomplete directions.txt results in one issue", validation.issues.size(), equalTo(1));
     }
 
     @Test
@@ -85,8 +85,8 @@ public class GtfsPlusValidationTest extends UnitTest {
         GtfsPlusValidation validation = GtfsPlusValidation.validate(bartVersion1WithQuotedValues.id);
         // Expect issues to be zero.
         assertThat(
-            "Issues count for clean BART feed (quoted values) is zero",
-            validation.issues.size(), equalTo(0)
+            "Issues count for clean BART feed (quoted values) is equal to 1 (as above)",
+            validation.issues.size(), equalTo(1)
         );
     }
 
