@@ -273,9 +273,9 @@
          - AWS S3 SDK - putting/getting objects into/out of S3.
          -->
         <dependency>
-            <groupId>com.github.conveyal</groupId>
+            <groupId>com.conveyal</groupId>
             <artifactId>gtfs-lib</artifactId>
-            <version>5c383ab</version>
+            <version>7.0.2</version>
             <!-- Exclusions added in order to silence SLF4J warnings about multiple bindings:
                 http://www.slf4j.org/codes.html#multiple_bindings
             -->
@@ -286,6 +286,20 @@
                 </exclusion>
             </exclusions>
         </dependency>
+<!--        <dependency>-->
+<!--            <groupId>com.github.conveyal</groupId>-->
+<!--            <artifactId>gtfs-lib</artifactId>-->
+<!--            <version>5c383ab</version>-->
+<!--            &lt;!&ndash; Exclusions added in order to silence SLF4J warnings about multiple bindings:-->
+<!--                http://www.slf4j.org/codes.html#multiple_bindings-->
+<!--            &ndash;&gt;-->
+<!--            <exclusions>-->
+<!--                <exclusion>-->
+<!--                    <groupId>org.slf4j</groupId>-->
+<!--                    <artifactId>slf4j-simple</artifactId>-->
+<!--                </exclusion>-->
+<!--            </exclusions>-->
+<!--        </dependency>-->
 
         <!-- Used for application database -->
         <dependency>
