@@ -518,7 +518,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
     }
 
     /**
-     * Helper method to create label. If the id is provided save the label now if not deffer to test to save.
+     * Helper method to create label. If the id is provided save the label now if not defer to test to save.
      */
     private static Label createLabel(String id, String name, String projectId) {
         Label label;

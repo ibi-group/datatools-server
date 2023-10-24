@@ -37,9 +37,7 @@ public class Note extends Model implements Serializable {
      */
     public Note(String id, String body, boolean adminOnly) {
         super();
-        if (id != null) {
-            this.id = id;
-        }
+        this.id = id;
         this.body = body;
         this.adminOnly = adminOnly;
     }

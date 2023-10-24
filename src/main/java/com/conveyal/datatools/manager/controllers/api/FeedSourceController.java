@@ -441,7 +441,8 @@ public class FeedSourceController {
     protected static List<String> cleanFeedSourceLabelIdsForNonAdmins(List<String> labelIds, boolean isAdmin) {
         // Admin can view all feed labels, but a non-admin should only see those with adminOnly=false.
         return Persistence.labels
-            .getFiltered(PersistenceUtils.applyAdminFilter(in("_id", labelIds), isAdmin)).stream()
+            .getFiltered(PersistenceUtils.applyAdminFilter(in("_id", labelIds), isAdmin))
+            .stream()
             .map(label -> label.id)
             .collect(Collectors.toList());
     }
@@ -456,7 +457,8 @@ public class FeedSourceController {
     protected static List<String> cleanFeedSourceNotesForNonAdmins(List<String> noteIds, boolean isAdmin) {
         // Admin can view all feed notes, but a non-admin should only see those with adminOnly=false.
         return Persistence.notes
-            .getFiltered(PersistenceUtils.applyAdminFilter(in("_id", noteIds), isAdmin)).stream()
+            .getFiltered(PersistenceUtils.applyAdminFilter(in("_id", noteIds), isAdmin))
+            .stream()
             .map(note -> note.id)
             .collect(Collectors.toList());
     }
