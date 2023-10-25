@@ -13,6 +13,7 @@ import com.conveyal.datatools.manager.models.transform.FeedTransformDbTarget;
 import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
 import com.conveyal.datatools.manager.models.transform.FeedTransformZipTarget;
 import com.conveyal.datatools.manager.models.transform.ZipTransformation;
+import com.conveyal.gtfs.validator.ValidationResult;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
@@ -198,15 +199,20 @@ public class ProcessSingleFeedJob extends FeedVersionJob {
     public String getNotificationMessage() {
         StringBuilder message = new StringBuilder();
         if (!status.error) {
-            message.append(String.format("New feed version created for %s (valid from %s - %s). ",
-                feedSource.name,
-                feedVersion.validationResult.firstCalendarDate,
-                feedVersion.validationResult.lastCalendarDate));
-            if (feedVersion.validationResult.errorCount > 0) {
-                message.append(String.format("During validation, we found %s issue(s)",
-                    feedVersion.validationResult.errorCount));
+            ValidationResult validationResult = feedVersion.validationResult;
+            if (validationResult != null) {
+                message.append(String.format("New feed version created for %s (valid from %s - %s).",
+                    feedSource.name,
+                    validationResult.firstCalendarDate,
+                    validationResult.lastCalendarDate
+                ));
+                if (validationResult.errorCount > 0) {
+                    message.append(String.format(" During validation, we found %s issue(s)", validationResult.errorCount));
+                } else {
+                    message.append(" The validation check found no issues with this new dataset!");
+                }
             } else {
-                message.append("The validation check found no issues with this new dataset!");
+                message.append(String.format("New feed version created for %s.", feedSource.name));
             }
         } else {
             // Processing did not complete. Depending on which sub-task this occurred in,
