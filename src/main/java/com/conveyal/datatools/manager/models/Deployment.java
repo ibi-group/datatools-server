@@ -400,6 +400,16 @@ public class Deployment extends Model implements Serializable {
                 out.closeEntry();
             }
         }
+
+        // Include shared_stops.csv, if present
+        if (parentProject().sharedStopsConfig != null) {
+            byte[] sharedStopsConfigAsBytes = parentProject().sharedStopsConfig.getBytes(StandardCharsets.UTF_8);
+            ZipEntry sharedStopsEntry = new ZipEntry("shared_stops.csv");
+            out.putNextEntry(sharedStopsEntry);
+            out.write(sharedStopsConfigAsBytes);
+            out.closeEntry();
+        }
+
         // Finally close the zip output stream. The dump file is now complete.
         out.close();
     }

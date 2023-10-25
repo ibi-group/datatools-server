@@ -21,8 +21,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Enumeration;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Set;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -122,6 +124,13 @@ public class GtfsPlusValidation implements Serializable {
         GTFSFeed gtfsFeed
     ) throws IOException {
         String tableId = specTable.get("id").asText();
+        boolean tableIsDirections = tableId.equals("directions");
+
+        Set<String> gtfsRoutes = new HashSet<>();
+        if (tableIsDirections) {
+            // Copy the gtfs routes into a set so that we can "check them off" (remove them).
+            gtfsRoutes.addAll(gtfsFeed.routes.keySet());
+        }
 
         // Read in table data from input stream.
         CsvReader csvReader = new CsvReader(inputStreamToValidate, ',', StandardCharsets.UTF_8);
@@ -167,15 +176,20 @@ public class GtfsPlusValidation implements Serializable {
                 // Validate each value in row. Note: we iterate over the fields and not values because a row may be missing
                 // columns, but we still want to validate that missing value (e.g., if it is missing a required field).
                 for (int f = 0; f < fieldsFound.length; f++) {
+                    JsonNode specField = fieldsFound[f];
                     // If value exists for index, use that. Otherwise, default to null to avoid out of bounds exception.
                     String val = f < recordColumnCount ? rowValues[f] : null;
-                    validateTableValue(issues, tableId, rowIndex, rowValues, val, fieldsFound, fieldsFound[f], gtfsFeed);
+                    validateTableValue(issues, tableId, rowIndex, rowValues, val, fieldsFound, specField, gtfsFeed, gtfsRoutes, tableIsDirections);
                 }
             }
             rowIndex++;
         }
         csvReader.close();
 
+        if (tableIsDirections && !gtfsRoutes.isEmpty()) {
+            // After we're done validating all the table values, check if every route was checked off in directions.txt
+            issues.add(new ValidationIssue(tableId, null, -1, "Directions file doesn't define directions for all routes listed in routes.txt"));
+        }
         // Add issues for wrong number of columns and for empty rows after processing all rows.
         // Note: We considered adding an issue for each row, but opted for the single error approach because there's no
         // concept of a row-level issue in the UI right now. So we would potentially need to add that to the UI
@@ -205,7 +219,9 @@ public class GtfsPlusValidation implements Serializable {
         String value,
         JsonNode[] specFieldsFound,
         JsonNode specField,
-        GTFSFeed gtfsFeed
+        GTFSFeed gtfsFeed,
+        Set<String> gtfsRoutes,
+        boolean tableIsDirections
     ) {
         if (specField == null) return;
         String fieldName = specField.get("name").asText();
@@ -300,6 +316,8 @@ public class GtfsPlusValidation implements Serializable {
                 break;
         }
 
+        // "Check off" the route_id in directions.txt from the list to verify every route id has a direction
+        if (tableIsDirections && fieldName.equals("route_id")) gtfsRoutes.remove(value);
     }
 
     /** Construct missing ID text for validation issue description. */
