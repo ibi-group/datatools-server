@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.DatatoolsTest;
+import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -18,12 +19,18 @@ import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.util.Date;
+import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
@@ -34,12 +41,10 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 
 public class NormalizeFieldTransformJobTest extends DatatoolsTest {
-    private static final String TABLE_NAME = "routes";
-    private static final String FIELD_NAME = "route_long_name";
+    private static final Logger LOG = LoggerFactory.getLogger(NormalizeFieldTransformJobTest.class);
     private static Project project;
     private static FeedSource feedSource;
     private FeedVersion targetVersion;
-
 
     /**
      * Initialize Data Tools and set up a simple feed source and project.
@@ -48,6 +53,7 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
     public static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
+        Auth0Connection.setAuthDisabled(true);
 
         // Create a project.
         project = createProject();
@@ -58,6 +64,7 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
      */
     @AfterAll
     public static void tearDown() {
+        Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
         // Project delete cascades to feed sources.
         project.delete();
     }
@@ -75,42 +82,51 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
      * Test that a {@link NormalizeFieldTransformation} will successfully complete.
      * FIXME: On certain Windows machines, this test fails.
      */
-    @Test
-    public void canNormalizeField() throws IOException {
-        // Create transform.
-        // In this test, as an illustration, replace "Route" with the "Rte" abbreviation in routes.txt.
-        FeedTransformation<FeedTransformZipTarget> transformation = NormalizeFieldTransformationTest.createTransformation(
-            TABLE_NAME, FIELD_NAME, null, Lists.newArrayList(
-                new Substitution("Route", "Rte")
-            )
-        );
-        initializeFeedSource(transformation);
+    @ParameterizedTest
+    @MethodSource("createNormalizedFieldCases")
+    void canNormalizeField(TransformationCase transformationCase) throws IOException {
+        initializeFeedSource(transformationCase.table, createTransformation(transformationCase));
 
         // Create target version that the transform will operate on.
         targetVersion = createFeedVersion(
             feedSource,
-            zipFolderFiles("fake-agency-with-only-calendar")
+            zipFolderFiles("fake-agency-for-field-normalizing")
         );
 
         try (ZipFile zip = new ZipFile(targetVersion.retrieveGtfsFile())) {
-            // Check that new version has routes table modified.
-            ZipEntry entry = zip.getEntry(TABLE_NAME + ".txt");
-            assertNotNull(entry);
+            // Check that new version has expected modifications.
+            checkTableForModification(zip, transformationCase);
+        }
+    }
 
-            // Scan the first data row in routes.txt and check that the substitution
-            // that was defined in setUp was done.
-            try (
-                InputStream stream = zip.getInputStream(entry);
-                InputStreamReader streamReader = new InputStreamReader(stream);
-                BufferedReader reader = new BufferedReader(streamReader)
-            ) {
-                String[] columns = reader.readLine().split(",");
-                int fieldIndex = ArrayUtils.indexOf(columns, FIELD_NAME);
+    private static Stream<Arguments> createNormalizedFieldCases() {
+        return Stream.of(
+            Arguments.of(new TransformationCase("routes", "route_long_name", "Route", "Rte")),
+            Arguments.of(new TransformationCase("booking_rules", "pickup_message", "Message", "Msg")),
+            Arguments.of(new TransformationCase("areas", "area_name", "Area", "Place"))
+        );
+    }
 
-                String row1 = reader.readLine();
-                String[] row1Fields = row1.split(",");
-                assertTrue(row1Fields[fieldIndex].startsWith("Rte "), row1);
-            }
+    private void checkTableForModification(ZipFile zip, TransformationCase transformationCase) throws IOException {
+        String tableName = transformationCase.table + ".txt";
+        LOG.info("Getting table {} from zip {}", tableName, zip.getName());
+        // Check that the new version has been modified.
+        ZipEntry entry = zip.getEntry(tableName);
+        assertNotNull(entry);
+
+        // Scan the first data row and check that the substitution that was defined in the set-up was done.
+        try (
+            InputStream stream = zip.getInputStream(entry);
+            InputStreamReader streamReader = new InputStreamReader(stream);
+            BufferedReader reader = new BufferedReader(streamReader)
+        ) {
+            String[] columns = reader.readLine().split(",");
+            int fieldIndex = ArrayUtils.indexOf(columns, transformationCase.fieldName);
+
+            String rowOne = reader.readLine();
+            assertNotNull(rowOne, String.format("First row in table %s is null!", transformationCase.table));
+            String[] row1Fields = rowOne.split(",");
+            assertTrue(row1Fields[fieldIndex].contains(transformationCase.replacement), rowOne);
         }
     }
 
@@ -118,16 +134,16 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
      * Test that a {@link NormalizeFieldTransformation} will fail if invalid substitution patterns are provided.
      */
     @Test
-    public void canHandleInvalidSubstitutionPatterns() throws IOException {
+    void canHandleInvalidSubstitutionPatterns() throws IOException {
         // Create transform.
         // In this test, we provide an invalid pattern '\Cir\b' (instead of '\bCir\b'),
         // when trying to replace e.g. 'Piedmont Cir' with 'Piedmont Circle'.
         FeedTransformation<FeedTransformZipTarget> transformation = NormalizeFieldTransformationTest.createTransformation(
-            TABLE_NAME, FIELD_NAME, null, Lists.newArrayList(
+            "routes", "route_long_name", null, Lists.newArrayList(
                 new Substitution("\\Cir\\b", "Circle")
             )
         );
-        initializeFeedSource(transformation);
+        initializeFeedSource("routes", transformation);
 
         // Create target version that the transform will operate on.
         targetVersion = createFeedVersion(
@@ -140,16 +156,27 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
         assertTrue(targetVersion.hasCriticalErrors());
     }
 
+    private FeedTransformation<FeedTransformZipTarget> createTransformation(TransformationCase transformationCase) {
+        return NormalizeFieldTransformationTest
+            .createTransformation(
+                transformationCase.table,
+                transformationCase.fieldName,
+                null,
+                Lists.newArrayList(
+                    new Substitution(transformationCase.pattern, transformationCase.replacement)
+                )
+            );
+    }
+
     /**
      * Create and persist a feed source using the given transformation.
      */
-    private static void initializeFeedSource(FeedTransformation<FeedTransformZipTarget> transformation) {
-        FeedTransformRules transformRules = new FeedTransformRules(transformation);
+    private void initializeFeedSource(String table, FeedTransformation<FeedTransformZipTarget> transformation) {
 
         // Create feed source with above transform.
-        feedSource = new FeedSource("Normalize Field Test Feed", project.id, FeedRetrievalMethod.MANUALLY_UPLOADED);
+        feedSource = new FeedSource(table + " Normalize Field Test Feed", project.id, FeedRetrievalMethod.MANUALLY_UPLOADED);
         feedSource.deployable = false;
-        feedSource.transformRules.add(transformRules);
+        feedSource.transformRules.add(new FeedTransformRules(transformation));
         Persistence.feedSources.create(feedSource);
     }
 
@@ -157,8 +184,22 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
     //        and some common code with PersistenceTest#createProject).
     private static Project createProject() {
         Project project = new Project();
-        project.name = String.format("Test Project %s", new Date().toString());
+        project.name = String.format("Test Project %s", new Date());
         Persistence.projects.create(project);
         return project;
+    }
+
+    private static class TransformationCase {
+        public String table;
+        public String fieldName;
+        public String pattern;
+        public String replacement;
+
+        public TransformationCase(String table, String fieldName, String pattern, String replacement) {
+            this.table = table;
+            this.fieldName = fieldName;
+            this.pattern = pattern;
+            this.replacement = replacement;
+        }
     }
 }

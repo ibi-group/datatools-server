@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.utils.sql;
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
@@ -40,6 +41,7 @@ class SqlSchemaUpdaterTest extends UnitTest {
     public static void setUp() throws IOException {
         // start server if it isn't already running.
         DatatoolsTest.setUp();
+        Auth0Connection.setAuthDisabled(true);
 
         // Create a project and feed sources.
         project = new Project();
@@ -60,6 +62,7 @@ class SqlSchemaUpdaterTest extends UnitTest {
      */
     @AfterAll
     public static void tearDown() {
+        Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
         // Project delete cascades to feed sources.
         project.delete();
     }

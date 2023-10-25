@@ -6,12 +6,14 @@ import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.jobs.ValidateFeedJob;
 import com.conveyal.datatools.manager.jobs.ValidateMobilityDataFeedJob;
 import com.conveyal.datatools.manager.jobs.validation.RouteTypeValidatorBuilder;
+import com.conveyal.datatools.manager.jobs.validation.SharedStopsValidator;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
 import com.conveyal.gtfs.BaseGTFSCache;
 import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.error.NewGTFSErrorType;
+import com.conveyal.gtfs.graphql.fetchers.JDBCFetcher;
 import com.conveyal.gtfs.loader.Feed;
 import com.conveyal.gtfs.loader.FeedLoadResult;
 import com.conveyal.gtfs.validator.MTCValidator;
@@ -364,15 +366,39 @@ public class FeedVersion extends Model implements Serializable {
             status.update("Validating feed...", 33);
 
             // Validate the feed version.
-            // Certain extensions, if enabled, have extra validators
+            // Certain extensions, if enabled, have extra validators.
             if (isExtensionEnabled("mtc")) {
                 validationResult = GTFS.validate(feedLoadResult.uniqueIdentifier, DataManager.GTFS_DATA_SOURCE,
                     RouteTypeValidatorBuilder::buildRouteValidator,
                     MTCValidator::new
                 );
             } else {
-                validationResult = GTFS.validate(feedLoadResult.uniqueIdentifier, DataManager.GTFS_DATA_SOURCE,
-                    RouteTypeValidatorBuilder::buildRouteValidator
+                FeedSource fs = Persistence.feedSources.getById(this.feedSourceId);
+
+                /*
+                  Get feed_id from feed version
+
+                  This could potentially happen inside gtfs-lib, however
+                  because this functionality is specific to datatools and the
+                  shared stops feature, it lives only here instead. Changes to
+                  gtfs-lib have been avoided, so that gtfs-lib isn't being modified
+                  to support proprietary features.
+                 */
+                JDBCFetcher feedFetcher = new JDBCFetcher("feed_info");
+                Object gtfsFeedId = new Object();
+                try {
+                    gtfsFeedId = feedFetcher.getResults(this.namespace, null, null).get(0).get("feed_id");
+                } catch (RuntimeException e) {
+                    LOG.warn("RuntimeException occurred while fetching feedId");
+                }
+                String feedId = gtfsFeedId == null ? "" : gtfsFeedId.toString();
+                SharedStopsValidator ssv = new SharedStopsValidator(fs.retrieveProject(), feedId);
+
+                validationResult = GTFS.validate(
+                        feedLoadResult.uniqueIdentifier,
+                        DataManager.GTFS_DATA_SOURCE,
+                        RouteTypeValidatorBuilder::buildRouteValidator,
+                        ssv::buildSharedStopsValidator
                 );
             }
         } catch (Exception e) {
@@ -490,7 +516,9 @@ public class FeedVersion extends Model implements Serializable {
             NewGTFSErrorType.SERVICE_WITHOUT_DAYS_OF_WEEK,
             NewGTFSErrorType.TABLE_MISSING_COLUMN_HEADERS,
             NewGTFSErrorType.TABLE_IN_SUBDIRECTORY,
-            NewGTFSErrorType.WRONG_NUMBER_OF_FIELDS
+            NewGTFSErrorType.WRONG_NUMBER_OF_FIELDS,
+            NewGTFSErrorType.MULTIPLE_SHARED_STOPS_GROUPS,
+            NewGTFSErrorType.SHARED_STOP_GROUP_MUTLIPLE_PRIMARY_STOPS
         ));
     }
 
@@ -554,7 +582,9 @@ public class FeedVersion extends Model implements Serializable {
 
             feedStore.deleteFeed(id);
             // Delete feed version tables in GTFS database
-            GTFS.delete(this.namespace, DataManager.GTFS_DATA_SOURCE);
+            if (this.namespace != null) {
+                GTFS.delete(this.namespace, DataManager.GTFS_DATA_SOURCE);
+            }
             LOG.info("Dropped version's GTFS tables from Postgres.");
             // Remove this FeedVersion from all Deployments associated with this FeedVersion's FeedSource's Project
             // TODO TEST THOROUGHLY THAT THIS UPDATE EXPRESSION IS CORRECT
