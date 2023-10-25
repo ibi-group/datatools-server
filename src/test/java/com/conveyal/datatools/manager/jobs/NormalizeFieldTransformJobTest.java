@@ -1,6 +1,7 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.DatatoolsTest;
+import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -48,6 +49,7 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
     public static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
+        Auth0Connection.setAuthDisabled(true);
 
         // Create a project.
         project = createProject();
@@ -58,6 +60,7 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
      */
     @AfterAll
     public static void tearDown() {
+        Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
         // Project delete cascades to feed sources.
         project.delete();
     }
