@@ -64,11 +64,16 @@ public class FeedSourceSummary {
 
     public String url;
 
+    public List<String> noteIds = new ArrayList<>();
+
+    public String organizationId;
+
     public FeedSourceSummary() {
     }
 
-    public FeedSourceSummary(String projectId, Document feedSourceDocument) {
+    public FeedSourceSummary(String projectId, String organizationId, Document feedSourceDocument) {
         this.projectId = projectId;
+        this.organizationId = organizationId;
         this.id = feedSourceDocument.getString("_id");
         this.name = feedSourceDocument.getString("name");
         this.deployable = feedSourceDocument.getBoolean("deployable");
@@ -76,6 +81,10 @@ public class FeedSourceSummary {
         List<String> documentLabelIds = feedSourceDocument.getList("labelIds", String.class);
         if (documentLabelIds != null) {
             this.labelIds = documentLabelIds;
+        }
+        List<String> documentNoteIds = feedSourceDocument.getList("noteIds", String.class);
+        if (documentNoteIds != null) {
+            this.noteIds = documentNoteIds;
         }
         // Convert to local date type for consistency.
         this.lastUpdated = getLocalDateFromDate(feedSourceDocument.getDate("lastUpdated"));
@@ -104,7 +113,7 @@ public class FeedSourceSummary {
     /**
      * Get all feed source summaries matching the project id.
      */
-    public static List<FeedSourceSummary> getFeedSourceSummaries(String projectId) {
+    public static List<FeedSourceSummary> getFeedSourceSummaries(String projectId, String organizationId) {
         /*
             db.getCollection('FeedSource').aggregate([
                 {
@@ -121,7 +130,8 @@ public class FeedSourceSummary {
                         "isPublic": 1,
                         "lastUpdated": 1,
                         "labelIds": 1,
-                        "url": 1
+                        "url": 1,
+                        "noteIds": 1
                     }
                 },
                 {
@@ -143,12 +153,13 @@ public class FeedSourceSummary {
                     "isPublic",
                     "lastUpdated",
                     "labelIds",
-                    "url")
+                    "url",
+                    "noteIds")
                 )
             ),
             sort(Sorts.ascending("name"))
         );
-        return extractFeedSourceSummaries(projectId, stages);
+        return extractFeedSourceSummaries(projectId, organizationId, stages);
     }
 
     /**
@@ -423,10 +434,10 @@ public class FeedSourceSummary {
     /**
      * Produce a list of all feed source summaries for a project.
      */
-    private static List<FeedSourceSummary> extractFeedSourceSummaries(String projectId, List<Bson> stages) {
+    private static List<FeedSourceSummary> extractFeedSourceSummaries(String projectId, String organizationId, List<Bson> stages) {
         List<FeedSourceSummary> feedSourceSummaries = new ArrayList<>();
         for (Document feedSourceDocument : Persistence.getDocuments("FeedSource", stages)) {
-            feedSourceSummaries.add(new FeedSourceSummary(projectId, feedSourceDocument));
+            feedSourceSummaries.add(new FeedSourceSummary(projectId, organizationId, feedSourceDocument));
         }
         return feedSourceSummaries;
     }
@@ -540,8 +551,11 @@ public class FeedSourceSummary {
 
         public Integer errorCount;
 
-        /** Required for JSON de/serializing. **/
-        public LatestValidationResult() {}
+        /**
+         * Required for JSON de/serializing.
+         **/
+        public LatestValidationResult() {
+        }
 
         LatestValidationResult(FeedVersionSummary feedVersionSummary) {
             this.feedVersionId = feedVersionSummary.id;

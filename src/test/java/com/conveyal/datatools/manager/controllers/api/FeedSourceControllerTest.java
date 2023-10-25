@@ -11,6 +11,7 @@ import com.conveyal.datatools.manager.models.FeedSourceSummary;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.FetchFrequency;
 import com.conveyal.datatools.manager.models.Label;
+import com.conveyal.datatools.manager.models.Note;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HttpUtils;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.net.URL;
 import java.time.LocalDate;
 import java.time.Month;
@@ -46,7 +48,10 @@ public class FeedSourceControllerTest extends DatatoolsTest {
     private static FeedSource feedSourceWithInvalidLabels = null;
     private static Label publicLabel = null;
     private static Label adminOnlyLabel = null;
-
+    private static Label feedSourceWithLatestDeploymentAdminOnlyLabel = null;
+    private static Label feedSourceWithPinnedDeploymentAdminOnlyLabel = null;
+    private static Note feedSourceWithLatestDeploymentAdminOnlyNote = null;
+    private static Note feedSourceWithPinnedDeploymentAdminOnlyNote = null;
     private static Project projectWithLatestDeployment = null;
     private static FeedSource feedSourceWithLatestDeploymentFeedVersion = null;
     private static FeedVersion feedVersionFromLatestDeployment = null;
@@ -78,22 +83,37 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         feedSourceWithLabels = createFeedSource("FeedSourceThree", new URL("http://www.feedsource.com"), projectToBeDeleted);
         feedSourceWithInvalidLabels = createFeedSource("FeedSourceFour", new URL("http://www.feedsource.com"), project);
 
-        adminOnlyLabel = createLabel("Admin Only Label");
+        adminOnlyLabel = createLabel("Admin Only Label", projectToBeDeleted.id);
         adminOnlyLabel.adminOnly = true;
-        publicLabel = createLabel("Public Label");
+        publicLabel = createLabel("Public Label", projectToBeDeleted.id);
 
-        // Feed version from latest deployment.
+        setUpFeedVersionFromLatestDeployment();
+        setUpFeedVersionFromPinnedDeployment();
+
+    }
+
+    /**
+     * Create all the required objects to test a feed version from the latest deployment.
+     */
+    private static void setUpFeedVersionFromLatestDeployment() throws MalformedURLException {
         projectWithLatestDeployment = new Project();
         projectWithLatestDeployment.id = "project-with-latest-deployment";
+        projectWithLatestDeployment.organizationId = "project-with-latest-deployment-org-id";
         Persistence.projects.create(projectWithLatestDeployment);
+
+        feedSourceWithLatestDeploymentAdminOnlyLabel = createLabel("label-id-latest-deployment", "Admin Only Label", projectWithLatestDeployment.id);
+        feedSourceWithLatestDeploymentAdminOnlyNote = createNote("note-id-latest-deployment", "A test note");
+
         feedSourceWithLatestDeploymentFeedVersion = createFeedSource(
             "feed-source-with-latest-deployment-feed-version",
             "FeedSource",
             new URL("http://www.feedsource.com"),
             projectWithLatestDeployment,
             true,
-            List.of("labelOne", "labelTwo")
+            List.of(feedSourceWithLatestDeploymentAdminOnlyLabel.id),
+            List.of(feedSourceWithLatestDeploymentAdminOnlyNote.id)
         );
+
         LocalDate deployedSuperseded = LocalDate.of(2020, Month.MARCH, 12);
         LocalDate deployedEndDate = LocalDate.of(2021, Month.MARCH, 12);
         LocalDate deployedStartDate = LocalDate.of(2021, Month.MARCH, 1);
@@ -115,18 +135,28 @@ public class FeedSourceControllerTest extends DatatoolsTest {
             feedVersionFromLatestDeployment.id,
             deployedEndDate
         );
+    }
 
-        // Feed version from pinned deployment.
+    /**
+     * Create all the required objects to test a feed version from a pinned deployment.
+     */
+    private static void setUpFeedVersionFromPinnedDeployment() throws MalformedURLException {
         projectWithPinnedDeployment = new Project();
         projectWithPinnedDeployment.id = "project-with-pinned-deployment";
+        projectWithPinnedDeployment.organizationId = "project-with-pinned-deployment-org-id";
         Persistence.projects.create(projectWithPinnedDeployment);
+
+        feedSourceWithPinnedDeploymentAdminOnlyLabel = createLabel("label-id-pinned-deployment", "Admin Only Label", projectWithPinnedDeployment.id);
+        feedSourceWithPinnedDeploymentAdminOnlyNote = createNote("note-id-pinned-deployment", "A test note");
+
         feedSourceWithPinnedDeploymentFeedVersion = createFeedSource(
             "feed-source-with-pinned-deployment-feed-version",
             "FeedSourceWithPinnedFeedVersion",
             new URL("http://www.feedsource.com"),
             projectWithPinnedDeployment,
             true,
-            List.of("labelOne", "labelTwo")
+            List.of(feedSourceWithPinnedDeploymentAdminOnlyLabel.id),
+            List.of(feedSourceWithPinnedDeploymentAdminOnlyNote.id)
         );
         feedVersionFromPinnedDeployment = createFeedVersion(
             "feed-version-from-pinned-deployment",
@@ -137,7 +167,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
             "deployment-pinned",
             projectWithPinnedDeployment,
             feedVersionFromPinnedDeployment.id,
-            deployedEndDate
+            LocalDate.of(2021, Month.MARCH, 12)
         );
         projectWithPinnedDeployment.pinnedDeploymentId = deploymentPinned.id;
         Persistence.projects.replace(projectWithPinnedDeployment.id, projectWithPinnedDeployment);
@@ -199,6 +229,18 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         }
         if (deploymentSuperseded != null) {
             Persistence.deployments.removeById(deploymentSuperseded.id);
+        }
+        if (feedSourceWithPinnedDeploymentAdminOnlyLabel != null) {
+            Persistence.labels.removeById(feedSourceWithPinnedDeploymentAdminOnlyLabel.id);
+        }
+        if (feedSourceWithLatestDeploymentAdminOnlyLabel != null) {
+            Persistence.labels.removeById(feedSourceWithLatestDeploymentAdminOnlyLabel.id);
+        }
+        if (feedSourceWithPinnedDeploymentAdminOnlyNote != null) {
+            Persistence.notes.removeById(feedSourceWithPinnedDeploymentAdminOnlyNote.id);
+        }
+        if (feedSourceWithLatestDeploymentAdminOnlyNote != null) {
+            Persistence.notes.removeById(feedSourceWithLatestDeploymentAdminOnlyNote.id);
         }
     }
 
@@ -345,6 +387,8 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(feedSourceWithLatestDeploymentFeedVersion.projectId, feedSourceSummaries.get(0).projectId);
         assertEquals(feedSourceWithLatestDeploymentFeedVersion.labelIds, feedSourceSummaries.get(0).labelIds);
         assertEquals(feedSourceWithLatestDeploymentFeedVersion.url.toString(), feedSourceSummaries.get(0).url);
+        assertEquals(feedSourceWithLatestDeploymentFeedVersion.noteIds, feedSourceSummaries.get(0).noteIds);
+        assertEquals(feedSourceWithLatestDeploymentFeedVersion.organizationId(), feedSourceSummaries.get(0).organizationId);
         assertEquals(feedVersionFromLatestDeployment.id, feedSourceSummaries.get(0).deployedFeedVersionId);
         assertEquals(feedVersionFromLatestDeployment.validationSummary().startDate, feedSourceSummaries.get(0).deployedFeedVersionStartDate);
         assertEquals(feedVersionFromLatestDeployment.validationSummary().endDate, feedSourceSummaries.get(0).deployedFeedVersionEndDate);
@@ -377,6 +421,8 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         assertEquals(feedSourceWithPinnedDeploymentFeedVersion.projectId, feedSourceSummaries.get(0).projectId);
         assertEquals(feedSourceWithPinnedDeploymentFeedVersion.labelIds, feedSourceSummaries.get(0).labelIds);
         assertEquals(feedSourceWithPinnedDeploymentFeedVersion.url.toString(), feedSourceSummaries.get(0).url);
+        assertEquals(feedSourceWithPinnedDeploymentFeedVersion.noteIds, feedSourceSummaries.get(0).noteIds);
+        assertEquals(feedSourceWithPinnedDeploymentFeedVersion.organizationId(), feedSourceSummaries.get(0).organizationId);
         assertEquals(feedVersionFromPinnedDeployment.id, feedSourceSummaries.get(0).deployedFeedVersionId);
         assertEquals(feedVersionFromPinnedDeployment.validationSummary().startDate, feedSourceSummaries.get(0).deployedFeedVersionStartDate);
         assertEquals(feedVersionFromPinnedDeployment.validationSummary().endDate, feedSourceSummaries.get(0).deployedFeedVersionEndDate);
@@ -395,7 +441,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
      * Helper method to create feed source.
      */
     private static FeedSource createFeedSource(String id, String name, URL url, Project project, boolean persist) {
-        return createFeedSource(id, name, url, project, persist, null);
+        return createFeedSource(id, name, url, project, persist, null, null);
     }
     private static FeedSource createFeedSource(
         String id,
@@ -403,7 +449,8 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         URL url,
         Project project,
         boolean persist,
-        List<String> labels
+        List<String> labels,
+        List<String> notes
     ) {
         FeedSource feedSource = new FeedSource();
         if (id != null) feedSource.id = id;
@@ -415,6 +462,7 @@ public class FeedSourceControllerTest extends DatatoolsTest {
         feedSource.retrievalMethod = FeedRetrievalMethod.FETCHED_AUTOMATICALLY;
         feedSource.url = url;
         if (labels != null) feedSource.labelIds = labels;
+        if (notes != null) feedSource.noteIds = notes;
         if (persist) Persistence.feedSources.create(feedSource);
         return feedSource;
     }
@@ -461,10 +509,33 @@ public class FeedSourceControllerTest extends DatatoolsTest {
     }
 
     /**
-     * Helper method to create label
+     * Helper method to create note.
      */
-    private static Label createLabel(String name) {
-        return new Label(name, "A label used during testing", "#123", false, projectToBeDeleted.id);
+    private static Note createNote(String id, String body) {
+        Note note = new Note(id, body, false);
+        Persistence.notes.create(note);
+        return note;
+    }
+
+    /**
+     * Helper method to create label. If the id is provided save the label now if not defer to test to save.
+     */
+    private static Label createLabel(String id, String name, String projectId) {
+        Label label;
+        if (id != null) {
+            label = new Label(id, name, "A label used during testing", "#123", false, projectId);
+            Persistence.labels.create(label);
+        } else {
+            label = new Label(name, "A label used during testing", "#123", false, projectId);
+        }
+        return label;
+    }
+
+    /**
+     * Helper method to create label.
+     */
+    private static Label createLabel(String name, String projectId) {
+        return createLabel(null, name, projectId);
     }
 
     /**
