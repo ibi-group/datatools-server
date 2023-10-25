@@ -42,8 +42,6 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 
 public class NormalizeFieldTransformJobTest extends DatatoolsTest {
     private static final Logger LOG = LoggerFactory.getLogger(NormalizeFieldTransformJobTest.class);
-    private static final String TABLE_NAME = "routes";
-    private static final String FIELD_NAME = "route_long_name";
     private static Project project;
     private static FeedSource feedSource;
     private FeedVersion targetVersion;
@@ -141,11 +139,11 @@ public class NormalizeFieldTransformJobTest extends DatatoolsTest {
         // In this test, we provide an invalid pattern '\Cir\b' (instead of '\bCir\b'),
         // when trying to replace e.g. 'Piedmont Cir' with 'Piedmont Circle'.
         FeedTransformation<FeedTransformZipTarget> transformation = NormalizeFieldTransformationTest.createTransformation(
-            TABLE_NAME, FIELD_NAME, null, Lists.newArrayList(
+            "routes", "route_long_name", null, Lists.newArrayList(
                 new Substitution("\\Cir\\b", "Circle")
             )
         );
-        initializeFeedSource(TABLE_NAME, transformation);
+        initializeFeedSource("routes", transformation);
 
         // Create target version that the transform will operate on.
         targetVersion = createFeedVersion(

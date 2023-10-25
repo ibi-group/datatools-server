@@ -184,7 +184,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             // is here in case that changes.
             throw new UnsupportedOperationException("It is not possible to normalize geo json fields.");
         }
-        String tableName = table + ".txt";
+        String tableName = getTableName();
         try(
             // Hold output before writing to ZIP
             StringWriter stringWriter = new StringWriter();

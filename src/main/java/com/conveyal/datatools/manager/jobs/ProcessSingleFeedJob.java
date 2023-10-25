@@ -206,15 +206,13 @@ public class ProcessSingleFeedJob extends FeedVersionJob {
                     validationResult.firstCalendarDate,
                     validationResult.lastCalendarDate
                 ));
+                if (validationResult.errorCount > 0) {
+                    message.append(String.format(" During validation, we found %s issue(s)", validationResult.errorCount));
+                } else {
+                    message.append(" The validation check found no issues with this new dataset!");
+                }
             } else {
                 message.append(String.format("New feed version created for %s.", feedSource.name));
-            }
-            if (validationResult != null) {
-                if (validationResult.errorCount > 0) {
-                    message.append(String.format("During validation, we found %s issue(s)", validationResult.errorCount));
-                } else {
-                    message.append("The validation check found no issues with this new dataset!");
-                }
             }
         } else {
             // Processing did not complete. Depending on which sub-task this occurred in,
