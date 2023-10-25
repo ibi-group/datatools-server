@@ -208,11 +208,6 @@
                 <updatePolicy>always</updatePolicy>
             </snapshots>
         </repository>
-        <repository>
-            <id>sonatype-staging</id>
-            <url>https://s01.oss.sonatype.org/content/repositories/orgmobilitydata-1029/</url>
-        </repository>
-
     </repositories>
 
     <dependencies>
@@ -267,7 +262,7 @@
         <dependency>
             <groupId>org.mobilitydata.gtfs-validator</groupId>
             <artifactId>gtfs-validator-main</artifactId>
-            <version>4.0.0</version>
+            <version>4.1.0</version>
         </dependency>
         <!-- Used for loading/fetching/validating/writing GTFS entities. gtfs-lib also provides access to:
          - commons-io - generic utilities
