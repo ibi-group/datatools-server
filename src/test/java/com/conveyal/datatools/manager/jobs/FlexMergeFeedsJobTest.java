@@ -71,10 +71,10 @@ public class FlexMergeFeedsJobTest extends UnitTest {
      */
     @AfterAll
     public static void tearDown() {
-        Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
         if (project != null) {
             project.delete();
         }
+        Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
     }
 
     /**
@@ -139,7 +139,16 @@ public class FlexMergeFeedsJobTest extends UnitTest {
             fakeAgencyWithFlexVersion1.feedLoadResult.stopAreas.rowCount + fakeAgencyWithFlexVersion2.feedLoadResult.stopAreas.rowCount,
             "stopAreas count for merged feed should equal sum of area for versions merged."
         );
-        // TODO: locations.geojson.
+        assertEquals(
+            mergedVersion.feedLoadResult.locations.rowCount,
+            fakeAgencyWithFlexVersion1.feedLoadResult.locations.rowCount,
+            "Merged versions contain the same locations, only one set of locations should remain after merge."
+        );
+        assertEquals(
+            mergedVersion.feedLoadResult.locationShapes.rowCount,
+            fakeAgencyWithFlexVersion1.feedLoadResult.locationShapes.rowCount,
+            "Merged versions contain the same location shapes, only one set of location shapes should remain after merge."
+        );
         // Ensure there are no referential integrity errors, duplicate ID, or wrong number of
         // fields errors.
         assertThatFeedHasNoErrorsOfType(
