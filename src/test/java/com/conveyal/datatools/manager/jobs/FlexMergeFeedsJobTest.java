@@ -132,22 +132,22 @@ public class FlexMergeFeedsJobTest extends UnitTest {
         assertEquals(
             mergedVersion.feedLoadResult.bookingRules.rowCount,
             fakeAgencyWithFlexVersion1.feedLoadResult.bookingRules.rowCount + fakeAgencyWithFlexVersion2.feedLoadResult.bookingRules.rowCount,
-            "bookingRules count for merged feed should equal sum of area for versions merged."
+            "Booking rules count for merged feed should equal sum of booking rules for versions merged."
         );
         assertEquals(
             mergedVersion.feedLoadResult.stopAreas.rowCount,
             fakeAgencyWithFlexVersion1.feedLoadResult.stopAreas.rowCount + fakeAgencyWithFlexVersion2.feedLoadResult.stopAreas.rowCount,
-            "stopAreas count for merged feed should equal sum of area for versions merged."
+            "Stop areas count for merged feed should equal sum of stop areas for versions merged."
         );
         assertEquals(
             mergedVersion.feedLoadResult.locations.rowCount,
-            fakeAgencyWithFlexVersion1.feedLoadResult.locations.rowCount,
-            "Merged versions contain the same locations, only one set of locations should remain after merge."
+            fakeAgencyWithFlexVersion1.feedLoadResult.locations.rowCount + fakeAgencyWithFlexVersion2.feedLoadResult.locations.rowCount,
+            "Locations count for merged feed should equal sum of locations for versions merged."
         );
         assertEquals(
             mergedVersion.feedLoadResult.locationShapes.rowCount,
-            fakeAgencyWithFlexVersion1.feedLoadResult.locationShapes.rowCount,
-            "Merged versions contain the same location shapes, only one set of location shapes should remain after merge."
+            fakeAgencyWithFlexVersion1.feedLoadResult.locationShapes.rowCount + fakeAgencyWithFlexVersion2.feedLoadResult.locationShapes.rowCount,
+            "Location shapes count for merged feed should equal sum of location shapes for versions merged."
         );
         // Ensure there are no referential integrity errors, duplicate ID, or wrong number of
         // fields errors.

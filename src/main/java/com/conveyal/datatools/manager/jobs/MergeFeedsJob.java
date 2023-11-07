@@ -51,6 +51,7 @@ import static com.conveyal.datatools.manager.jobs.feedmerge.MergeStrategy.CHECK_
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.REGIONAL_MERGE;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.getMergedVersion;
 import static com.conveyal.datatools.manager.utils.MergeFeedUtils.stopTimesMatchSimplified;
+import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
 import static com.conveyal.gtfs.loader.Table.LOCATION_GEO_JSON_FILE_NAME;
 
 /**
@@ -255,21 +256,30 @@ public class MergeFeedsJob extends FeedSourceJob {
 
     /**
      * Merge locations.geojson files. These files are not compatible with the CSV merging strategy. Instead, the
-     * location.geojson file is flattened into locations and locations shapes. These are then 'merged' based on the
-     * equal/hash values of each object, converted back into geojson and written to the zip file.
+     * location.geojson file is flattened into locations and locations shapes. The location id is then updated with the
+     * scope id to keep feed locations unique, converted back into geojson and written to the zip file.
      */
     void mergeLocations(ZipOutputStream out, List<FeedToMerge> feedsToMerge) throws IOException {
-        Set<Location> locations = new HashSet<>();
-        Set<LocationShape> locationShapes = new HashSet<>();
+        Set<Location> mergedLocations = new HashSet<>();
+        Set<LocationShape> mergedLocationShapes = new HashSet<>();
         for (FeedToMerge feed : feedsToMerge) {
             ZipEntry locationGeoJsonFile = feed.zipFile.getEntry(LOCATION_GEO_JSON_FILE_NAME);
             if (locationGeoJsonFile != null) {
-                locations.addAll(GeoJsonUtil.getLocationsFromGeoJson(feed.zipFile, locationGeoJsonFile, null));
-                locationShapes.addAll(GeoJsonUtil.getLocationShapesFromGeoJson(feed.zipFile, locationGeoJsonFile, null));
+                String idScope = getCleanName(feed.version.parentFeedSource().name) + feed.version.version;
+                List<Location> locations = GeoJsonUtil.getLocationsFromGeoJson(feed.zipFile, locationGeoJsonFile, null);
+                for (Location location : locations) {
+                    location.location_id = String.join(":", idScope, location.location_id);
+                    mergedLocations.add(location);
+                }
+                List<LocationShape> locationShapes = GeoJsonUtil.getLocationShapesFromGeoJson(feed.zipFile, locationGeoJsonFile, null);
+                for (LocationShape locationShape : locationShapes) {
+                    locationShape.location_id = String.join(":", idScope, locationShape.location_id);
+                    mergedLocationShapes.add(locationShape);
+                }
             }
         }
-        if (!locations.isEmpty()) {
-            JdbcGtfsExporter.writeLocationsToFile(out, new ArrayList<>(locations), new ArrayList<>(locationShapes));
+        if (!mergedLocations.isEmpty()) {
+            JdbcGtfsExporter.writeLocationsToFile(out, new ArrayList<>(mergedLocations), new ArrayList<>(mergedLocationShapes));
         }
     }
 
