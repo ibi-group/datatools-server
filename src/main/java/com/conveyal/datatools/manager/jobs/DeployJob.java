@@ -1292,6 +1292,10 @@ public class DeployJob extends MonitorableJob {
             }
         }
 
+        // upload shared stops file
+        String sharedStopsConfig = this.deployment.parentProject().sharedStopsConfig;
+        if (sharedStopsConfig != null) addStringContentsAsBaseFolderDownload(manifest, "shared_stops.csv", sharedStopsConfig);
+
         // upload otp-runner manifest to s3
         try {
             ObjectMapper mapper = new ObjectMapper();
