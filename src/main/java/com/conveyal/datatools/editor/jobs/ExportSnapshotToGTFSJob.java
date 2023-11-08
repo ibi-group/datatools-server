@@ -57,7 +57,7 @@ public class ExportSnapshotToGTFSJob extends MonitorableJob {
             status.fail("Error creating local file for snapshot.", e);
             return;
         }
-        JdbcGtfsExporter exporter = new JdbcGtfsExporter(snapshot.namespace, tempFile.getAbsolutePath(), DataManager.GTFS_DATA_SOURCE, true);
+        JdbcGtfsExporter exporter = new JdbcGtfsExporter(snapshot.namespace, tempFile.getAbsolutePath(), DataManager.GTFS_DATA_SOURCE, true, true);
         FeedLoadResult result = exporter.exportTables();
         if (result.fatalException != null) {
             status.fail(String.format("Error (%s) encountered while exporting database tables.", result.fatalException));
