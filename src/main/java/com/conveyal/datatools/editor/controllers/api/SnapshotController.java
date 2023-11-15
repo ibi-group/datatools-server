@@ -65,7 +65,7 @@ public class SnapshotController {
 
     private static boolean getPublishProprietaryFiles(Request req) {
         return Boolean.parseBoolean(
-            req.queryParamOrDefault("publishProprietaryFiles",Boolean.FALSE.toString())
+            req.queryParamOrDefault("publishProprietaryFiles", Boolean.FALSE.toString())
         );
     }
 
