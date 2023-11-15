@@ -160,7 +160,7 @@ public class ArbitraryTransformJobTest extends UnitTest {
         );
         // Fetch snapshot where modifications were made and create new version from it.
         Snapshot snapshotWithModifications = feedSource.retrieveSnapshots().iterator().next();
-        CreateFeedVersionFromSnapshotJob newVersionJob = new CreateFeedVersionFromSnapshotJob(feedSource, snapshotWithModifications, user);
+        CreateFeedVersionFromSnapshotJob newVersionJob = new CreateFeedVersionFromSnapshotJob(feedSource, snapshotWithModifications, user, false);
         newVersionJob.run();
         // Grab the modified version and check that the trips count matches expectation.
         FeedVersion newVersion = feedSource.retrieveLatest();

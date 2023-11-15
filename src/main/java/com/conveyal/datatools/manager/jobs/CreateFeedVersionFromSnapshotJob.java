@@ -22,11 +22,13 @@ public class CreateFeedVersionFromSnapshotJob extends FeedSourceJob {
 
     private final FeedVersion feedVersion;
     private final Snapshot snapshot;
+    private final boolean publishProprietaryFiles;
 
-    public CreateFeedVersionFromSnapshotJob(FeedSource feedSource, Snapshot snapshot, Auth0UserProfile owner) {
+    public CreateFeedVersionFromSnapshotJob(FeedSource feedSource, Snapshot snapshot, Auth0UserProfile owner, boolean publishProprietaryFiles) {
         super(owner, "Creating Feed Version from Snapshot for " + feedSource.name, JobType.CREATE_FEEDVERSION_FROM_SNAPSHOT);
         this.feedVersion = new FeedVersion(feedSource, snapshot);
         this.snapshot = snapshot;
+        this.publishProprietaryFiles = publishProprietaryFiles;
     }
 
     @Override
@@ -35,7 +37,7 @@ public class CreateFeedVersionFromSnapshotJob extends FeedSourceJob {
         // Add the jobs to handle this operation in order.
         addNextJob(
             // First export the snapshot to GTFS.
-            new ExportSnapshotToGTFSJob(owner, snapshot, feedVersion),
+            new ExportSnapshotToGTFSJob(owner, snapshot, feedVersion, publishProprietaryFiles),
             // Then, process feed version once GTFS file written.
             new ProcessSingleFeedJob(feedVersion, owner, true)
         );

@@ -63,6 +63,12 @@ public class SnapshotController {
         return Persistence.snapshots.getById(id);
     }
 
+    private static boolean getPublishProprietaryFiles(Request req) {
+        return Boolean.parseBoolean(
+            req.queryParamOrDefault("publishProprietaryFiles", Boolean.FALSE.toString())
+        );
+    }
+
     /**
      * HTTP endpoint that returns the list of snapshots for a given feed source.
      */
@@ -84,6 +90,7 @@ public class SnapshotController {
         boolean publishNewVersion = Boolean.parseBoolean(
             req.queryParamOrDefault("publishNewVersion", Boolean.FALSE.toString())
         );
+        boolean publishProprietaryFiles = getPublishProprietaryFiles(req);
         FeedSource feedSource = FeedVersionController.requestFeedSourceById(req, Actions.EDIT, "feedId");
         // Take fields from request body for creating snapshot (i.e., feedId/feedSourceId, name, comment).
         Snapshot snapshot = json.read(req.body());
@@ -99,7 +106,7 @@ public class SnapshotController {
                 new CreateSnapshotJob(userProfile, snapshot, bufferIsEmpty, !bufferIsEmpty, false);
         // Add publish feed version job if specified by request.
         if (publishNewVersion) {
-            createSnapshotJob.addNextJob(new CreateFeedVersionFromSnapshotJob(feedSource, snapshot, userProfile));
+            createSnapshotJob.addNextJob(new CreateFeedVersionFromSnapshotJob(feedSource, snapshot, userProfile, publishProprietaryFiles));
         }
         // Begin asynchronous execution.
         JobUtils.heavyExecutor.execute(createSnapshotJob);
@@ -173,9 +180,10 @@ public class SnapshotController {
     private static String downloadSnapshotAsGTFS(Request req, Response res) {
         Auth0UserProfile userProfile = req.attribute("user");
         Snapshot snapshot = getSnapshotFromRequest(req);
+        boolean publishProprietaryFiles = getPublishProprietaryFiles(req);
         // Create and kick off export job.
         // FIXME: what if a snapshot is already written to S3?
-        ExportSnapshotToGTFSJob exportSnapshotToGTFSJob = new ExportSnapshotToGTFSJob(userProfile,  snapshot);
+        ExportSnapshotToGTFSJob exportSnapshotToGTFSJob = new ExportSnapshotToGTFSJob(userProfile, snapshot, publishProprietaryFiles);
         JobUtils.heavyExecutor.execute(exportSnapshotToGTFSJob);
         return formatJobMessage(exportSnapshotToGTFSJob.jobId, "Exporting snapshot to GTFS.");
     }

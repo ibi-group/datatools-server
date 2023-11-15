@@ -28,16 +28,18 @@ public class ExportSnapshotToGTFSJob extends MonitorableJob {
     private final Snapshot snapshot;
     private final FeedVersion feedVersion;
     private File tempFile;
+    private final boolean publishProprietaryFiles;
 
-    public ExportSnapshotToGTFSJob(Auth0UserProfile owner, Snapshot snapshot, FeedVersion feedVersion) {
+    public ExportSnapshotToGTFSJob(Auth0UserProfile owner, Snapshot snapshot, FeedVersion feedVersion, boolean publishProprietaryFiles) {
         super(owner, "Exporting snapshot " + snapshot.name, JobType.EXPORT_SNAPSHOT_TO_GTFS);
         this.snapshot = snapshot;
         this.feedVersion = feedVersion;
+        this.publishProprietaryFiles = publishProprietaryFiles;
         status.update("Starting database snapshot...", 10);
     }
 
-    public ExportSnapshotToGTFSJob(Auth0UserProfile owner, Snapshot snapshot) {
-        this(owner, snapshot, null);
+    public ExportSnapshotToGTFSJob(Auth0UserProfile owner, Snapshot snapshot, boolean publishProprietaryFiles) {
+        this(owner, snapshot, null, publishProprietaryFiles);
     }
 
     @JsonProperty
@@ -57,7 +59,7 @@ public class ExportSnapshotToGTFSJob extends MonitorableJob {
             status.fail("Error creating local file for snapshot.", e);
             return;
         }
-        JdbcGtfsExporter exporter = new JdbcGtfsExporter(snapshot.namespace, tempFile.getAbsolutePath(), DataManager.GTFS_DATA_SOURCE, true);
+        JdbcGtfsExporter exporter = new JdbcGtfsExporter(snapshot.namespace, tempFile.getAbsolutePath(), DataManager.GTFS_DATA_SOURCE, true, publishProprietaryFiles);
         FeedLoadResult result = exporter.exportTables();
         if (result.fatalException != null) {
             status.fail(String.format("Error (%s) encountered while exporting database tables.", result.fatalException));
