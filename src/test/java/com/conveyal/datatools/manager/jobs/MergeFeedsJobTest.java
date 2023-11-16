@@ -768,7 +768,7 @@ public class MergeFeedsJobTest extends UnitTest {
         mergeFeedsJob.run();
         assertFeedMergeSucceeded(mergeFeedsJob);
         SqlAssert sqlAssert = new SqlAssert(mergeFeedsJob.mergedVersion);
-        // FIXME: "version3" contains ref integrity errors... was hat intentional?
+        // FIXME: "version3" contains ref integrity errors... was that intentional?
         // sqlAssert.assertNoRefIntegrityErrors();
 
         // - calendar table should have 3 records.
@@ -778,11 +778,17 @@ public class MergeFeedsJobTest extends UnitTest {
         // all records from future feed and keep_one from the active feed.
         sqlAssert.calendarDates.assertCount(3);
 
+        // Calendar dates service exception should still be available.
+        sqlAssert.calendarDates.assertCount(1, "service_id='Fake_Agency5:keep_one'");
+
         // - trips table should have 3 records.
         sqlAssert.trips.assertCount(3);
 
         // common_id service_id should be scoped for earlier feed version.
         sqlAssert.trips.assertCount(1, "service_id='Fake_Agency5:common_id'");
+
+        // service_id should still reference calendar dates service exception.
+        sqlAssert.trips.assertCount(1, "service_id='Fake_Agency5:keep_one'");
 
         // Amended calendar record from earlier feed version should also have a modified end date (one day before the
         // earliest start_date from the future feed).
