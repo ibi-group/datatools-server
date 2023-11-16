@@ -14,7 +14,14 @@ public class ReferenceTableDiscovery {
     public enum ReferenceTableKey {
 
         TRIP_SERVICE_ID_KEY(
-            String.join(REF_TABLE_SEPARATOR, Table.TRIPS.name, SERVICE_ID, Table.CALENDAR.name, Table.CALENDAR_DATES.name)
+            String.join(
+                REF_TABLE_SEPARATOR,
+                Table.TRIPS.name,
+                SERVICE_ID,
+                Table.CALENDAR.name,
+                Table.CALENDAR_DATES.name,
+                Table.SCHEDULE_EXCEPTIONS.name
+            )
         );
 
         private final String value;
