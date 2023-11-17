@@ -87,6 +87,7 @@ public class CalendarDatesMergeLineContext extends MergeLineContext {
         // the valid date range, i.e., before the future feed's first date.
         if (!shouldSkipRecord && fieldContext.nameEquals(SERVICE_ID)) {
             mergeFeedsResult.serviceIds.add(fieldContext.getValueToWrite());
+            mergeFeedsResult.calendarDatesServiceIds.add(fieldContext.getValueToWrite());
         }
 
         return !shouldSkipRecord;
