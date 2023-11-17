@@ -1,0 +1,26 @@
+version: '3.8'
+services:
+  datatools-server:
+    build: ./
+    ports:
+      - "4000:4000"
+    volumes:
+      - type: bind
+        source: ./configurations/default/
+        target: /config
+      - type: bind
+        source: ~/.aws
+        target: /root/.aws
+    depends_on:
+      - mongo
+      - postgres
+  mongo:
+    image: mongo
+    restart: always
+  postgres:
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_USER: root
+      POSTGRES_DB: dmtest
+    image: postgres
+    restart: always
