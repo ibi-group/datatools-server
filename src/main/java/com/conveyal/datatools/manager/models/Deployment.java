@@ -24,6 +24,8 @@ import org.slf4j.LoggerFactory;
 
 import java.awt.geom.Point2D;
 import java.awt.geom.Rectangle2D;
+import java.io.BufferedInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -209,7 +211,9 @@ public class Deployment extends Model implements Serializable {
     public String routerId;
 
     public String customBuildConfig;
+    public String customBuildConfigUrl;
     public String customRouterConfig;
+    public String customRouterConfigUrl;
 
     public List<CustomFile> customFiles = new ArrayList<>();
 
@@ -414,9 +418,44 @@ public class Deployment extends Model implements Serializable {
         out.close();
     }
 
+    private byte[] downloadFileFromURL(URL url) throws IOException {
+        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+
+        InputStream stream = null;
+        try {
+            byte[] chunk = new byte[4096];
+            int bytesRead;
+            stream = url.openStream();
+
+            while ((bytesRead = stream.read(chunk)) > 0) {
+                outputStream.write(chunk, 0, bytesRead);
+            }
+
+        } catch (IOException e) {
+            e.printStackTrace();
+            return new byte[0];
+        } finally {
+            outputStream.close();
+            if (stream != null) stream.close();
+        }
+
+        return outputStream.toByteArray();
+    }
+
     /** Generate build config for deployment as byte array (for writing to file output stream). */
     public byte[] generateBuildConfig() {
         Project project = this.parentProject();
+
+        // If there is a custombuildconfigUrl, set the customBuildConfig based on the URL
+        if (this.customBuildConfigUrl != null) {
+            try {
+                this.customBuildConfig = new String(downloadFileFromURL(new URL(customBuildConfigUrl)), StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                LOG.error("Could not download file from {}", customBuildConfigUrl);
+                throw new RuntimeException(customBuildConfigUrl);
+            }
+        }
+
         return customBuildConfig != null
             ? customBuildConfig.getBytes(StandardCharsets.UTF_8)
             : project.buildConfig != null
@@ -452,6 +491,16 @@ public class Deployment extends Model implements Serializable {
     /** Generate router config for deployment as string. */
     public byte[] generateRouterConfig() throws IOException {
         Project project = this.parentProject();
+
+        if (this.customRouterConfigUrl != null) {
+            try {
+                // TODO: should Mongo be updated here?
+                this.customRouterConfig = new String(downloadFileFromURL(new URL(customRouterConfigUrl)), StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                LOG.error("Could not download file from {}", customRouterConfigUrl);
+                throw new RuntimeException(e);
+            }
+        }
 
         byte[] customRouterConfigString = customRouterConfig != null
                 ? customRouterConfig.getBytes(StandardCharsets.UTF_8)
