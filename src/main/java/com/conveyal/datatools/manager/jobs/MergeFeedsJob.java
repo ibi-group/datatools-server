@@ -212,6 +212,8 @@ public class MergeFeedsJob extends FeedSourceJob {
                 }
             }
 
+            mergeLocations(out);
+
             // Loop over GTFS tables and merge each feed one table at a time.
             for (int i = 0; i < numberOfTables; i++) {
                 Table table = tablesToMerge.get(i);
@@ -227,7 +229,6 @@ public class MergeFeedsJob extends FeedSourceJob {
                     LOG.error("Merge {} table failed!", table.name);
                 }
             }
-            mergeLocations(out, feedMergeContext.feedsToMerge);
         } catch (IOException e) {
             String message = "Error creating output stream for feed merge.";
             logAndReportToBugsnag(e, message);
@@ -258,11 +259,14 @@ public class MergeFeedsJob extends FeedSourceJob {
      * Merge locations.geojson files. These files are not compatible with the CSV merging strategy. Instead, the
      * location.geojson file is flattened into locations and locations shapes. The location id is then updated with the
      * scope id to keep feed locations unique, converted back into geojson and written to the zip file.
+     *
+     * Locations must be processed prior to other CSV files so the location ids are available for foreign reference
+     * checks.
      */
-    void mergeLocations(ZipOutputStream out, List<FeedToMerge> feedsToMerge) throws IOException {
+    void mergeLocations(ZipOutputStream out) throws IOException {
         Set<Location> mergedLocations = new HashSet<>();
         Set<LocationShape> mergedLocationShapes = new HashSet<>();
-        for (FeedToMerge feed : feedsToMerge) {
+        for (FeedToMerge feed : feedMergeContext.feedsToMerge) {
             ZipEntry locationGeoJsonFile = feed.zipFile.getEntry(LOCATION_GEO_JSON_FILE_NAME);
             if (locationGeoJsonFile != null) {
                 String idScope = getCleanName(feed.version.parentFeedSource().name) + feed.version.version;
@@ -270,6 +274,7 @@ public class MergeFeedsJob extends FeedSourceJob {
                 for (Location location : locations) {
                     location.location_id = String.join(":", idScope, location.location_id);
                     mergedLocations.add(location);
+                    feedMergeContext.locationIds.add(location.location_id);
                 }
                 List<LocationShape> locationShapes = GeoJsonUtil.getLocationShapesFromGeoJson(feed.zipFile, locationGeoJsonFile, null);
                 for (LocationShape locationShape : locationShapes) {

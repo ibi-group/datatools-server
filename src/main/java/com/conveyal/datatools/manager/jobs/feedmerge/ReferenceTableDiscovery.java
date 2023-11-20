@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.jobs.feedmerge;
 import com.conveyal.gtfs.loader.Field;
 import com.conveyal.gtfs.loader.Table;
 
+import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.manager.jobs.feedmerge.MergeLineContext.SERVICE_ID;
@@ -11,6 +12,9 @@ public class ReferenceTableDiscovery {
 
     public static final String REF_TABLE_SEPARATOR = "#~#";
 
+    /**
+     * Tables that have two or more foreign references.
+     */
     public enum ReferenceTableKey {
 
         TRIP_SERVICE_ID_KEY(
@@ -103,6 +107,40 @@ public class ReferenceTableDiscovery {
             mergeFeedsResult.skippedIds.contains(calendarDatesKey)
         ) {
             return Table.CALENDAR_DATES;
+        }
+        return null;
+    }
+
+    /**
+     * Define the reference table for a stop area's area id. This will either be a stop or location.
+     */
+    public static Table getStopAreaAreaIdReferenceTable(
+        String fieldValue,
+        MergeFeedsResult mergeFeedsResult,
+        Set<String> locationIds
+    ) {
+        if (mergeFeedsResult.stopIds.contains(fieldValue)) {
+            return Table.STOPS;
+        } else if (locationIds.contains(fieldValue)) {
+            return Table.LOCATIONS;
+        }
+        return null;
+    }
+
+    /**
+     * Define the reference table for a stop time's stop id. This will either be a stop, location or stop area.
+     */
+    public static Table getStopTimeStopIdReferenceTable(
+        String fieldValue,
+        MergeFeedsResult mergeFeedsResult,
+        Set<String> locationIds
+    ) {
+        if (mergeFeedsResult.stopIds.contains(fieldValue)) {
+            return Table.STOPS;
+        } else if (locationIds.contains(fieldValue)) {
+            return Table.LOCATIONS;
+        } else if (mergeFeedsResult.stopAreaIds.contains(fieldValue)) {
+            return Table.STOP_AREAS;
         }
         return null;
     }
