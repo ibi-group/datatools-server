@@ -173,7 +173,7 @@ public class Project extends Model {
      * Get all feed source summaries for this project.
      */
     public Collection<FeedSourceSummary> retrieveFeedSourceSummaries() {
-        List<FeedSourceSummary> feedSourceSummaries = FeedSourceSummary.getFeedSourceSummaries(id);
+        List<FeedSourceSummary> feedSourceSummaries = FeedSourceSummary.getFeedSourceSummaries(id, organizationId);
         Map<String, FeedVersionSummary> latestFeedVersionForFeedSources = FeedSourceSummary.getLatestFeedVersionForFeedSources(id);
         Map<String, FeedVersionSummary> deployedFeedVersions = FeedSourceSummary.getFeedVersionsFromPinnedDeployment(id);
         if (deployedFeedVersions.isEmpty()) {
