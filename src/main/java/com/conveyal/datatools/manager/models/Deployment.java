@@ -51,6 +51,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
+import static com.conveyal.datatools.manager.utils.HttpUtils.downloadFileFromURL;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 
@@ -418,49 +419,36 @@ public class Deployment extends Model implements Serializable {
         out.close();
     }
 
-    private byte[] downloadFileFromURL(URL url) throws IOException {
-        ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
-
-        InputStream stream = null;
-        try {
-            byte[] chunk = new byte[4096];
-            int bytesRead;
-            stream = url.openStream();
-
-            while ((bytesRead = stream.read(chunk)) > 0) {
-                outputStream.write(chunk, 0, bytesRead);
+    /** Download config from provided URL. */
+    public String downloadConfig(String configUrl) throws IOException {
+        if (configUrl != null) {
+            try {
+                return new String(downloadFileFromURL(new URL(configUrl)), StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                String message = String.format("Could not download file from %s.", configUrl);
+                LOG.error(message);
+                throw new IOException(message, e);
             }
-
-        } catch (IOException e) {
-            e.printStackTrace();
-            return new byte[0];
-        } finally {
-            outputStream.close();
-            if (stream != null) stream.close();
         }
-
-        return outputStream.toByteArray();
+        return null;
     }
 
     /** Generate build config for deployment as byte array (for writing to file output stream). */
-    public byte[] generateBuildConfig() {
-        Project project = this.parentProject();
-
-        // If there is a custombuildconfigUrl, set the customBuildConfig based on the URL
-        if (this.customBuildConfigUrl != null) {
-            try {
-                this.customBuildConfig = new String(downloadFileFromURL(new URL(customBuildConfigUrl)), StandardCharsets.UTF_8);
-            } catch (IOException e) {
-                LOG.error("Could not download file from {}", customBuildConfigUrl);
-                throw new RuntimeException(customBuildConfigUrl);
-            }
-        }
-
+    public byte[] generateBuildConfig() throws IOException {
+        customBuildConfig = downloadConfig(customBuildConfigUrl);
         return customBuildConfig != null
             ? customBuildConfig.getBytes(StandardCharsets.UTF_8)
-            : project.buildConfig != null
-                ? writeToBytes(project.buildConfig)
-                : null;
+            : getProjectBuildConfig();
+    }
+
+    /**
+     * If a project build config exists, return this as a byte array, or null if not available.
+     */
+    private byte[] getProjectBuildConfig() {
+        Project project = parentProject();
+        return project.buildConfig != null
+            ? writeToBytes(project.buildConfig)
+            : null;
     }
 
     public String generateBuildConfigAsString() {
@@ -490,25 +478,15 @@ public class Deployment extends Model implements Serializable {
 
     /** Generate router config for deployment as string. */
     public byte[] generateRouterConfig() throws IOException {
-        Project project = this.parentProject();
-
-        if (this.customRouterConfigUrl != null) {
-            try {
-                // TODO: should Mongo be updated here?
-                this.customRouterConfig = new String(downloadFileFromURL(new URL(customRouterConfigUrl)), StandardCharsets.UTF_8);
-            } catch (IOException e) {
-                LOG.error("Could not download file from {}", customRouterConfigUrl);
-                throw new RuntimeException(e);
-            }
-        }
+        customRouterConfig = downloadConfig(customRouterConfigUrl);
 
         byte[] customRouterConfigString = customRouterConfig != null
-                ? customRouterConfig.getBytes(StandardCharsets.UTF_8)
-                : null;
+            ? customRouterConfig.getBytes(StandardCharsets.UTF_8)
+            : null;
 
-        byte[] routerConfigString = project.routerConfig != null
-                ? writeToBytes(project.routerConfig)
-                : null;
+        byte[] routerConfigString = parentProject().routerConfig != null
+            ? writeToBytes(parentProject().routerConfig)
+            : null;
 
         // If both router configs are present, merge the JSON before returning
         // Merger code from: https://stackoverflow.com/questions/35747813/how-to-merge-two-json-strings-into-one-in-java
