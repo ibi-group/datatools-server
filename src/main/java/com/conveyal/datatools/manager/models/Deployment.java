@@ -433,9 +433,14 @@ public class Deployment extends Model implements Serializable {
         return null;
     }
 
-    /** Generate build config for deployment as byte array (for writing to file output stream). */
+    /** Generate build config for deployment as byte array (for writing to file output stream). If an external build
+     * config is available and is successfully downloaded, use this instead of the deployment build config. If there is
+     * no deployment build config, use the project build config. */
     public byte[] generateBuildConfig() throws IOException {
-        customBuildConfig = downloadConfig(customBuildConfigUrl);
+        String downloadedConfig = downloadConfig(customBuildConfigUrl);
+        if (downloadedConfig != null) {
+            customBuildConfig = downloadedConfig;
+        }
         return customBuildConfig != null
             ? customBuildConfig.getBytes(StandardCharsets.UTF_8)
             : getProjectBuildConfig();
@@ -478,7 +483,10 @@ public class Deployment extends Model implements Serializable {
 
     /** Generate router config for deployment as string. */
     public byte[] generateRouterConfig() throws IOException {
-        customRouterConfig = downloadConfig(customRouterConfigUrl);
+        String downloadedConfig = downloadConfig(customRouterConfigUrl);
+        if (downloadedConfig != null) {
+            customRouterConfig = downloadedConfig;
+        }
 
         byte[] customRouterConfigString = customRouterConfig != null
             ? customRouterConfig.getBytes(StandardCharsets.UTF_8)
