@@ -235,7 +235,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             // Copy csv input stream into the zip file, replacing the existing file.
             try (
                 // Modify target zip file that we just read.
-                FileSystem targetZipFs = FileSystems.newFileSystem(tempZipPath, null);
+                FileSystem targetZipFs = FileSystems.newFileSystem(tempZipPath, (ClassLoader) null);
                 // Stream for file copy operation.
                 InputStream inputStream =  new ByteArrayInputStream(stringWriter.toString().getBytes(StandardCharsets.UTF_8))
             ) {
