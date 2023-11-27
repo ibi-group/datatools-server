@@ -421,9 +421,10 @@ public class Deployment extends Model implements Serializable {
     public String downloadConfig(String configUrl) throws IOException {
         if (configUrl != null) {
             try {
+                // TODO: validate JSON?
                 return new String(downloadFileFromURL(new URL(configUrl)), StandardCharsets.UTF_8);
             } catch (IOException e) {
-                String message = String.format("Could not download file from %s.", configUrl);
+                String message = String.format("Could not download config file from %s.", configUrl);
                 LOG.error(message);
                 throw new IOException(message, e);
             }
