@@ -14,9 +14,12 @@ import org.apache.http.impl.client.HttpClients;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.UnsupportedEncodingException;
 import java.net.URI;
+import java.net.URL;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -111,6 +114,23 @@ public class HttpUtils {
         } catch (IOException e) {
             LOG.error("An exception occurred while making a request to {}", uri, e);
             return null;
+        }
+    }
+
+    /**
+     * Download a file from a URL and return as a byte array.
+     */
+    public static byte[] downloadFileFromURL(URL url) throws IOException {
+        try (
+            InputStream inputStream = url.openStream();
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream()
+        ) {
+            byte[] chunk = new byte[4096];
+            int bytesRead;
+            while ((bytesRead = inputStream.read(chunk)) >= 0) {
+                outputStream.write(chunk, 0, bytesRead);
+            }
+            return outputStream.toByteArray();
         }
     }
 }
