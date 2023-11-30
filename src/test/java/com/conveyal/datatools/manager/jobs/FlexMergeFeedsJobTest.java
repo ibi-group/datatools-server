@@ -96,24 +96,24 @@ public class FlexMergeFeedsJobTest extends UnitTest {
         FeedLoadResult merged = mergedVersion.feedLoadResult;
 
         // Ensure the feed has the row counts we expect.
-        assertRowCount(r1.agency, r2.agency, merged.agency, "Agency count for merged feed should equal sum of agency for versions merged.");
-        assertRowCount(r1.area, r2.area, merged.area, "Area count for merged feed should equal sum of area for versions merged.");
-        assertRowCount(r1.attributions, r2.attributions, merged.attributions, "Attributions count for merged feed should equal sum of attributions for versions merged.");
-        assertRowCount(r1.bookingRules, r2.bookingRules, merged.bookingRules, "Booking rules count for merged feed should equal sum of booking rules for versions merged.");
-        assertRowCount(r1.calendar, r2.calendar, merged.calendar, "Calendar count for merged feed should equal sum of calendar for versions merged.");
-        assertRowCount(r1.calendarDates, r2.calendarDates, merged.calendarDates, "Calendar dates count for merged feed should equal sum of calendar dates for versions merged.");
-        assertRowCount(r1.fareAttributes, r2.fareAttributes, merged.fareAttributes, "Fare attributes count for merged feed should equal sum of fare attributes for versions merged.");
-        assertRowCount(r1.fareRules, r2.fareRules, merged.fareRules, "Fare rules count for merged feed should equal sum of fare rules for versions merged.");
-        assertRowCount(r1.frequencies, r2.frequencies, merged.frequencies, "Frequencies count for merged feed should equal sum of frequencies for versions merged.");
-        assertRowCount(r1.locations, r2.locations, merged.locations, "Locations count for merged feed should equal sum of locations for versions merged.");
-        assertRowCount(r1.locationShapes, r2.locationShapes, merged.locationShapes, "Location shapes count for merged feed should equal sum of location shapes for versions merged.");
-        assertRowCount(r1.routes, r2.routes, merged.routes, "Routes count for merged feed should equal sum of routes for versions merged.");
-        assertRowCount(r1.shapes, r2.shapes, merged.shapes, "Shapes count for merged feed should equal sum of shapes for versions merged.");
-        assertRowCount(r1.stops, r2.stops, merged.stops, "Stops count for merged feed should equal sum of stops for versions merged.");
-        assertRowCount(r1.stopAreas, r2.stopAreas, merged.stopAreas, "Stop areas count for merged feed should equal sum of stop areas for versions merged.");
-        assertRowCount(r1.stopTimes, r2.stopTimes, merged.stopTimes, "Stop times count for merged feed should equal sum of stopTimes for versions merged.");
-        assertRowCount(r1.trips, r2.trips, merged.trips, "Trips count for merged feed should equal sum of trips for versions merged.");
-        assertRowCount(r1.translations, r2.translations, merged.translations, "Translations count for merged feed should equal sum of translations for versions merged.");
+        assertRowCount(r1.agency, r2.agency, merged.agency, "Agency");
+        assertRowCount(r1.area, r2.area, merged.area, "Area");
+        assertRowCount(r1.attributions, r2.attributions, merged.attributions, "Attributions");
+        assertRowCount(r1.bookingRules, r2.bookingRules, merged.bookingRules, "Booking rules");
+        assertRowCount(r1.calendar, r2.calendar, merged.calendar, "Calendar");
+        assertRowCount(r1.calendarDates, r2.calendarDates, merged.calendarDates, "Calendar dates");
+        assertRowCount(r1.fareAttributes, r2.fareAttributes, merged.fareAttributes, "Fare attributes");
+        assertRowCount(r1.fareRules, r2.fareRules, merged.fareRules, "Fare rules");
+        assertRowCount(r1.frequencies, r2.frequencies, merged.frequencies, "Frequencies");
+        assertRowCount(r1.locations, r2.locations, merged.locations, "Locations");
+        assertRowCount(r1.locationShapes, r2.locationShapes, merged.locationShapes, "Location shapes");
+        assertRowCount(r1.routes, r2.routes, merged.routes, "Routes");
+        assertRowCount(r1.shapes, r2.shapes, merged.shapes, "Shapes");
+        assertRowCount(r1.stops, r2.stops, merged.stops, "Stops");
+        assertRowCount(r1.stopAreas, r2.stopAreas, merged.stopAreas, "Stop areas");
+        assertRowCount(r1.stopTimes, r2.stopTimes, merged.stopTimes, "Stop times");
+        assertRowCount(r1.trips, r2.trips, merged.trips, "Trips");
+        assertRowCount(r1.translations, r2.translations, merged.translations, "Translations");
 
         // Ensure there are no referential integrity errors, duplicate ID, or wrong number of fields errors.
         assertThatFeedHasNoErrorsOfType(
@@ -138,7 +138,11 @@ public class FlexMergeFeedsJobTest extends UnitTest {
     /**
      * Helper method to confirm that the sum of the two feed table rows match the merged feed table rows.
      */
-    private void assertRowCount(TableLoadResult feedOne, TableLoadResult feedTwo, TableLoadResult feedMerged, String message) {
-        assertEquals(feedOne.rowCount + feedTwo.rowCount, feedMerged.rowCount, message);
+    private void assertRowCount(TableLoadResult feedOne, TableLoadResult feedTwo, TableLoadResult feedMerged, String entity) {
+        assertEquals(
+            feedOne.rowCount + feedTwo.rowCount,
+            feedMerged.rowCount,
+            String.format("%s count for merged feed should equal the sum for the versions merged.", entity)
+        );
     }
 }
