@@ -8,6 +8,7 @@ application:
   notifications_enabled: false
   docs_url: http://conveyal-data-tools.readthedocs.org
   support_email: support@ibigroup.com
+  public_gtfs_contact_email: public-gtfs-support-email@yourdomain.com
   port: 4000
   data:
     gtfs: /tmp
