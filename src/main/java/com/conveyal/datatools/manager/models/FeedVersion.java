@@ -26,6 +26,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
 import org.bson.Document;
 import org.bson.codecs.pojo.annotations.BsonProperty;
+import org.mobilitydata.gtfsvalidator.runner.ApplicationType;
 import org.mobilitydata.gtfsvalidator.runner.ValidationRunner;
 import org.mobilitydata.gtfsvalidator.runner.ValidationRunnerConfig;
 import org.mobilitydata.gtfsvalidator.util.VersionResolver;
@@ -435,7 +436,7 @@ public class FeedVersion extends Model implements Serializable {
 
             status.update("MobilityData Analysis...", 40);
             // Run MobilityData validator
-            ValidationRunner runner = new ValidationRunner(new VersionResolver());
+            ValidationRunner runner = new ValidationRunner(new VersionResolver(ApplicationType.CLI));
             runner.run(mbValidatorConfig);
 
             status.update("MobilityData Analysis...", 80);
