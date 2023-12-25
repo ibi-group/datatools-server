@@ -84,7 +84,7 @@ public class SharedStopsValidator extends FeedValidator {
                 }
             }
 
-            if (STOP_GROUP_ID_INDEX==-1 || FEED_ID_INDEX==-1 || STOP_ID_INDEX==-1 || IS_PRIMARY_INDEX==-1) {
+            if (STOP_GROUP_ID_INDEX == -1 || FEED_ID_INDEX == -1 || STOP_ID_INDEX == -1 || IS_PRIMARY_INDEX == -1) {
                 throw new RuntimeException("shared_stops.csv is missing headers!");
             }
         } catch (IOException e) {
