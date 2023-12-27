@@ -1,0 +1,35 @@
+version: '3.8'
+services:
+  download-bundle:
+    image: amazon/aws-cli
+    command: "s3 cp ${S3_URI} /var/opentripplanner/ --recursive" 
+    volumes:
+      - type: bind
+        source: ./otp
+        target: /var/opentripplanner
+      - type: bind
+        source: ~/.aws
+        target: /root/.aws
+  # TODO: update status file when OTP is launched
+  otp:
+    depends_on:
+      download-bundle:
+        condition: service_completed_successfully
+    image: opentripplanner/opentripplanner:latest
+    ports: 
+      - "8080:8080"
+    command: "--load --serve"
+    volumes:
+      - type: bind
+        source: ./otp
+        target: /var/opentripplanner
+  caddy:
+    image: caddy:latest
+    restart: unless-stopped
+    volumes:
+      - type: bind
+        source: ./caddy
+        target: /etc/caddy/
+    ports:
+      - "80:80"
+      - "443:443"

@@ -1,0 +1,12 @@
+*:80, *:443 {
+    	handle /status.json {
+    		root * /etc/caddy/static/
+    		file_server {
+    			status 200
+    		}
+    	}
+    	handle {
+    		reverse_proxy otp:8080
+    	}
+
+}
