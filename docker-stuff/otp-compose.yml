@@ -7,9 +7,9 @@ services:
       - type: bind
         source: ./otp
         target: /var/opentripplanner
-      - type: bind
-        source: ~/.aws
-        target: /root/.aws
+#      - type: bind
+#        source: ~/.aws
+#        target: /root/.aws
   # TODO: update status file when OTP is launched
   otp:
     depends_on:
