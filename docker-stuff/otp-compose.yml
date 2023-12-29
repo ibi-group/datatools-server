@@ -13,7 +13,7 @@ services:
   # TODO: update status file when OTP is launched
   mark-status-json-as-complete:
     image: docwhat/jq
-    command: "jq '.serverStarted = \"true\"' /etc/caddy/static/status.json > /etc/caddy/static/status.json"
+    command: jq '.serverStarted = "true"' /etc/caddy/static/status.json > /etc/caddy/static/status.json
     depends_on:
       otp:
         condition: service_healthy
@@ -30,7 +30,7 @@ services:
       - "8080:8080"
     command: "--load --serve"
     healthcheck:
-      test: [ "CMD", "curl", "localhost/otp" ]
+      test: [ "CMD", "curl", "localhost:8080/otp" ]
       interval: 10s
       timeout: 3s
       retries: 300
