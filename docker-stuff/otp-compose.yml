@@ -12,8 +12,8 @@ services:
 #        target: /root/.aws
   # TODO: update status file when OTP is launched
   mark-status-json-as-complete:
-    image: apteno/alpine-jq
-    command: touch /etc/caddy/static/status-new.json && jq '.serverStarted = "true"' /etc/caddy/static/status.json > /etc/caddy/static/status-new.json && rm /etc/caddy/static/status.json && mv /etc/caddy/static/status-new.json /etc/caddy/static/status.json
+    image: alpine
+    command: /bin/sh -c "apk add jq && touch /etc/caddy/static/status-new.json && jq '.serverStarted = \"true\"' /etc/caddy/static/status.json > /etc/caddy/static/status-new.json && rm /etc/caddy/static/status.json && mv /etc/caddy/static/status-new.json /etc/caddy/static/status.json"
     depends_on:
       otp:
         condition: service_healthy
