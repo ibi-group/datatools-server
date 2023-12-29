@@ -16,7 +16,7 @@ services:
     command: "export tmp=$(mktemp) && jq '.serverStarted = \"true\"' /etc/caddy/static/status.json > \"$tmp\" && yes | mv \"$tmp\" /etc/caddy/static/status.json"
     depends_on:
       otp:
-        condition: service_started
+        condition: service_healthy
     volumes:
       - type: bind
         source: ./caddy
@@ -29,6 +29,11 @@ services:
     ports: 
       - "8080:8080"
     command: "--load --serve"
+    healthcheck:
+      test: [ "CMD", "curl", "localhost/otp" ]
+      interval: 10s
+      timeout: 3s
+      retries: 300
     volumes:
       - type: bind
         source: ./otp
