@@ -13,7 +13,7 @@ services:
   # TODO: update status file when OTP is launched
   mark-status-json-as-complete:
     image: docwhat/jq
-    command: "export tmp=$(mktemp) && jq '.serverStarted = \"true\"' /etc/caddy/static/status.json > \"$tmp\" && yes | mv \"$tmp\" /etc/caddy/static/status.json"
+    command: "jq '.serverStarted = \"true\"' /etc/caddy/static/status.json > /etc/caddy/static/status.json"
     depends_on:
       otp:
         condition: service_healthy
