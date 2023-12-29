@@ -1,4 +1,4 @@
-*:80, *:443 {
+*:80 {
     	handle /status.json {
     		root * /etc/caddy/static/
     		file_server {
