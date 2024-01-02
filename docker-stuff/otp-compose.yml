@@ -10,7 +10,6 @@ services:
 #      - type: bind
 #        source: ~/.aws
 #        target: /root/.aws
-  # TODO: update status file when OTP is launched
   mark-status-json-as-complete:
     image: alpine
     command: /bin/sh -c "apk add jq && touch /etc/caddy/static/status-new.json && jq '.serverStarted = \"true\"' /etc/caddy/static/status.json > /etc/caddy/static/status-new.json && rm /etc/caddy/static/status.json && mv /etc/caddy/static/status-new.json /etc/caddy/static/status.json"
@@ -21,9 +20,19 @@ services:
       - type: bind
         source: ./caddy
         target: /etc/caddy/
-  otp:
+  add-status-json-nonce:
+    image: alpine
+    command: /bin/sh -c "apk add jq && touch /etc/caddy/static/status-new.json && jq '.nonce = $(cat /var/opentripplanner/otp-runner-server-only-manifest.json | jq '.nonce')' /etc/caddy/static/status.json > /etc/caddy/static/status-new.json && rm /etc/caddy/static/status.json && mv /etc/caddy/static/status-new.json /etc/caddy/static/status.json"
     depends_on:
       download-bundle:
+        condition: service_completed_successfully
+    volumes:
+      - type: bind
+        source: ./caddy
+        target: /etc/caddy/
+  otp:
+    depends_on:
+      add-status-json-nonce:
         condition: service_completed_successfully
     image: opentripplanner/opentripplanner:latest
     ports: 
