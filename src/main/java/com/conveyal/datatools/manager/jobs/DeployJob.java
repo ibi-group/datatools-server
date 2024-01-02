@@ -940,7 +940,8 @@ public class DeployJob extends MonitorableJob {
     private List<Instance> startEC2Instances(int count, boolean graphAlreadyBuilt) {
         // Create user data to instruct the ec2 instance to do stuff at startup.
         createAndUploadManifestAndConfigs(graphAlreadyBuilt);
-        String userData = constructUserData(graphAlreadyBuilt);
+        // TODO: DOCKER: different user data if instance is docker
+        String userData = constructUserData(graphAlreadyBuilt, true);
         // Failure was encountered while constructing user data.
         if (userData == null) {
             // Fail job if it is not already failed.
@@ -1374,7 +1375,7 @@ public class DeployJob extends MonitorableJob {
      * Construct the user data script (as string) that should be provided to the AMI and executed upon EC2 instance
      * startup.
      */
-    public String constructUserData(boolean graphAlreadyBuilt) {
+    public String constructUserData(boolean graphAlreadyBuilt, boolean docker) {
         String otpRunnerManifestS3FilePath = joinToS3FolderUri(getOtpRunnerManifestS3Filename(graphAlreadyBuilt));
         String otpRunnerManifestFileOnInstance = String.format(
             "/var/%s/otp-runner-manifest.json",
@@ -1382,29 +1383,53 @@ public class DeployJob extends MonitorableJob {
         );
 
         List<String> lines = new ArrayList<>();
-        lines.add("#!/bin/bash");
-        // NOTE: user data output is logged to `/var/log/cloud-init-output.log` automatically with ec2 instances
-        // Add some items to the $PATH as the $PATH with user-data scripts differs from the ssh $PATH.
-        lines.add("export PATH=\"$PATH:/home/ubuntu/.yarn/bin\"");
-        lines.add(String.format("export PATH=\"$PATH:/home/ubuntu/.nvm/versions/node/%s/bin\"", NODE_VERSION));
-        // Remove previous files that might have been created during an Image creation
-        Arrays.asList(
-            String.join("/", EC2_WEB_DIR, OTP_RUNNER_STATUS_FILE),
-            otpRunnerManifestFileOnInstance,
-            getJarFileOnInstance(),
-            OTP_RUNNER_LOG_FILE,
-            "/var/log/otp-build.log",
-            "/var/log/otp-server.log"
-        ).forEach(file -> lines.add(String.format("rm %s || echo '' > /dev/null", file)));
+        if (graphAlreadyBuilt && docker) {
+          lines.add("#!/bin/sh");
+          lines.add("yum update -y");
+          lines.add("yum install git -y");
 
-        // download otp-runner manifest
-        lines.add(String.format("aws s3 cp %s %s", otpRunnerManifestS3FilePath, otpRunnerManifestFileOnInstance));
-        // install otp-runner as a global package thus enabling use of the otp-runner command
-        // This will install that latest version of otp-runner from the configured github branch. otp-runner is not yet
-        // published as an npm package.
-        lines.add(String.format("yarn global add https://github.com/ibi-group/otp-runner.git#%s", OTP_RUNNER_BRANCH));
-        // execute otp-runner
-        lines.add(String.format("otp-runner %s", otpRunnerManifestFileOnInstance));
+          lines.add("yum -y install docker");
+          lines.add("service docker start");
+
+          lines.add("curl -L https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m) -o /usr/local/bin/docker-compose");
+          lines.add("chmod +x /usr/local/bin/docker-compose");
+          lines.add("ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose");
+
+          lines.add("cd /root/");
+          lines.add("git clone https://github.com/ibi-group/datatools-server");
+          lines.add("cd datatools-server/");
+          lines.add("git checkout otp-docker"); // TEMp
+          lines.add("cd docker-stuff/"); // TEMP
+          lines.add("mkdir /root/.aws");
+
+          lines.add(String.format("echo S3_URI=%s >> /root/datatools-server/docker-stuff/.env", joinToS3FolderUri()));
+          lines.add("docker-compose -f ./otp-compose.yml up");
+        } else {
+            lines.add("#!/bin/bash");
+
+            // NOTE: user data output is logged to `/var/log/cloud-init-output.log` automatically with ec2 instances
+            // Add some items to the $PATH as the $PATH with user-data scripts differs from the ssh $PATH.
+            lines.add("export PATH=\"$PATH:/home/ubuntu/.yarn/bin\"");
+            lines.add(String.format("export PATH=\"$PATH:/home/ubuntu/.nvm/versions/node/%s/bin\"", NODE_VERSION));
+            // Remove previous files that might have been created during an Image creation
+            Arrays.asList(
+                    String.join("/", EC2_WEB_DIR, OTP_RUNNER_STATUS_FILE),
+                    otpRunnerManifestFileOnInstance,
+                    getJarFileOnInstance(),
+                    OTP_RUNNER_LOG_FILE,
+                    "/var/log/otp-build.log",
+                    "/var/log/otp-server.log"
+            ).forEach(file -> lines.add(String.format("rm %s || echo '' > /dev/null", file)));
+
+            // download otp-runner manifest
+            lines.add(String.format("aws s3 cp %s %s", otpRunnerManifestS3FilePath, otpRunnerManifestFileOnInstance));
+            // install otp-runner as a global package thus enabling use of the otp-runner command
+            // This will install that latest version of otp-runner from the configured github branch. otp-runner is not yet
+            // published as an npm package.
+            lines.add(String.format("yarn global add https://github.com/ibi-group/otp-runner.git#%s", OTP_RUNNER_BRANCH));
+            // execute otp-runner
+            lines.add(String.format("otp-runner %s", otpRunnerManifestFileOnInstance));
+        }
         // Return the entire user data script as a single string.
         return String.join("\n", lines);
     }

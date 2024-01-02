@@ -40,6 +40,7 @@ services:
     depends_on:
       add-status-json-nonce:
         condition: service_completed_successfully
+        # TO do it dynamically: https://stackoverflow.com/a/50201232
     image: opentripplanner/opentripplanner:latest
     ports: 
       - "8080:8080"
