@@ -22,7 +22,7 @@ services:
         target: /etc/caddy/
   add-status-json-nonce:
     image: alpine
-    command: /bin/sh -c "apk add jq && cat /var/opentripplanner/otp-runner-server-only-manifest.json | jq '.nonce' > /var/opentripplanner/nonce.txt && touch /etc/caddy/static/status-new.json && jq '.nonce = $(cat /var/opentripplanner/nonce.txt)' /etc/caddy/static/status.json > /etc/caddy/static/status-new.json && rm /etc/caddy/static/status.json && mv /etc/caddy/static/status-new.json /etc/caddy/static/status.json"
+    command: /bin/sh -c "apk add jq && export nonce=$(cat /var/opentripplanner/otp-runner-server-only-manifest.json | jq '.nonce') && touch /etc/caddy/static/status-new.json && jq '.nonce = $nonce' /etc/caddy/static/status.json > /etc/caddy/static/status-new.json && rm /etc/caddy/static/status.json && mv /etc/caddy/static/status-new.json /etc/caddy/static/status.json"
     depends_on:
       download-bundle:
         condition: service_completed_successfully
