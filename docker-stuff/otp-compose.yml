@@ -28,6 +28,9 @@ services:
         condition: service_completed_successfully
     volumes:
       - type: bind
+        source: ./otp
+        target: /var/opentripplanner
+      - type: bind
         source: ./caddy
         target: /etc/caddy/
   otp:
