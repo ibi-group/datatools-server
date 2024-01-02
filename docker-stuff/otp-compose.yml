@@ -2,7 +2,7 @@ version: '3.8'
 services:
   download-bundle:
     image: amazon/aws-cli
-    command: "s3 cp ${S3_URI} /var/opentripplanner/ --recursive" 
+    command: "s3 cp ${S3_URI} /var/opentripplanner/ --recursive"
     volumes:
       - type: bind
         source: ./otp
@@ -22,7 +22,7 @@ services:
         target: /etc/caddy/
   add-status-json-nonce:
     image: alpine
-    command: /bin/sh -c "apk add jq && sleep 5 && export nonce=$(jq '.nonce' /var/opentripplanner/otp-runner-server-only-manifest.json) && touch /etc/caddy/static/status-new.json && jq '.nonce = \"$nonce\"' /etc/caddy/static/status.json > /etc/caddy/static/status-new.json && rm /etc/caddy/static/status.json && mv /etc/caddy/static/status-new.json /etc/caddy/static/status.json"
+    command: "/bin/sh -e ./add-nonce.sh"
     depends_on:
       download-bundle:
         condition: service_completed_successfully
@@ -33,6 +33,9 @@ services:
       - type: bind
         source: ./caddy
         target: /etc/caddy/
+      - type: bind
+        source: ./add-nonce.sh
+        target: /add-nonce.sh
   otp:
     depends_on:
       add-status-json-nonce:
