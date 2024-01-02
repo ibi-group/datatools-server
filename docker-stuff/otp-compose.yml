@@ -34,6 +34,7 @@ services:
       interval: 10s
       timeout: 3s
       retries: 300
+    restart: on-failure
     volumes:
       - type: bind
         source: ./otp
