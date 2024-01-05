@@ -62,11 +62,13 @@ public class SharedStopsValidator extends FeedValidator {
         int FEED_ID_INDEX = -1;
 
         try {
-            configReader.setHeaders(new String[]{"stop_group_id", "feed_id", "stop_id", "is_primary"});
+            configReader.readRecord();
+
+            configReader.setHeaders(configReader.getRawRecord().split(","));
             String[] headers = configReader.getHeaders();
             for (int i = 0; i < headers.length; i++) {
                 String header = headers[i];
-                switch(header) {
+                switch (header) {
                     case "stop_group_id":
                         STOP_GROUP_ID_INDEX = i;
                         break;
@@ -88,7 +90,7 @@ public class SharedStopsValidator extends FeedValidator {
                 throw new RuntimeException("shared_stops.csv is missing headers!");
             }
         } catch (IOException e) {
-            throw new RuntimeException("shared_stops.csv was invalid! " + e.toString());
+            throw new RuntimeException("shared_stops.csv was invalid!", e);
         }
 
         // Build list of stop Ids.
@@ -118,7 +120,7 @@ public class SharedStopsValidator extends FeedValidator {
                 // Check for SS_01 (stop id appearing in multiple stop groups)
                 // Make sure this error is only returned if we are inside the feed that is being checked
                 if (seenStopIds.contains(stopId)) {
-                    if (this.feedId.equals(sharedStopFeedId)) {
+                    if (feedId.equals(sharedStopFeedId)) {
                         registerError(stops
                                 .stream()
                                 .filter(stop -> stop.stop_id.equals(stopId))
