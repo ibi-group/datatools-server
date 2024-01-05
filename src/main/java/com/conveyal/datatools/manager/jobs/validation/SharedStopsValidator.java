@@ -135,7 +135,7 @@ public class SharedStopsValidator extends FeedValidator {
                 // Check for SS_02 (multiple primary stops per stop group)
                 if (configReader.get(IS_PRIMARY_INDEX).equals("1") || configReader.get(IS_PRIMARY_INDEX).equals("true")) {
                     if (stopGroupsWithPrimaryStops.contains(stopGroupId)) {
-                        registerError(NewGTFSError.forFeed(NewGTFSErrorType.SHARED_STOP_GROUP_MUTLIPLE_PRIMARY_STOPS, stopGroupId));
+                        registerError(NewGTFSError.forFeed(NewGTFSErrorType.SHARED_STOP_GROUP_MULTIPLE_PRIMARY_STOPS, stopGroupId));
                     } else {
                         stopGroupsWithPrimaryStops.add(stopGroupId);
                     }
