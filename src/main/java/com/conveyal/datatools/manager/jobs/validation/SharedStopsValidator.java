@@ -13,9 +13,17 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 
+enum SharedStopsHeader {
+    STOP_GROUP_ID_INDEX,
+    STOP_ID_INDEX,
+    IS_PRIMARY_INDEX,
+    FEED_ID_INDEX
+}
 
 public class SharedStopsValidator extends FeedValidator {
     private static final Logger LOG = LoggerFactory.getLogger(SharedStopsValidator.class);
@@ -47,6 +55,52 @@ public class SharedStopsValidator extends FeedValidator {
         this.feedId = feedId;
     }
 
+    public static String[] getHeaders(CsvReader configReader) throws IOException {
+        configReader.setHeaders(configReader.getRawRecord().split(","));
+        return configReader.getHeaders();
+    }
+
+    public static Map<SharedStopsHeader, Integer> getHeaderIncedes(CsvReader configReader) {
+        HashMap map = new HashMap();
+
+        try {
+            configReader.readRecord();
+            String[] headers = getHeaders(configReader);
+
+            for (int i = 0; i < headers.length; i++) {
+                String header = headers[i];
+                switch (header) {
+                    case "stop_group_id":
+                        map.put(SharedStopsHeader.STOP_GROUP_ID_INDEX, i);
+                        break;
+                    case "feed_id":
+                        map.put(SharedStopsHeader.FEED_ID_INDEX, i);
+                        break;
+                    case "stop_id":
+                        map.put(SharedStopsHeader.STOP_ID_INDEX, i);
+                        break;
+                    case "is_primary":
+                        map.put(SharedStopsHeader.IS_PRIMARY_INDEX, i);
+                        break;
+                    default:
+                        throw new RuntimeException("shared_stops.csv contained invalid headers!");
+                }
+            }
+
+            // TODO: some way to generate this from the enum?
+            if (!map.containsKey(SharedStopsHeader.STOP_GROUP_ID_INDEX) ||
+                    !map.containsKey(SharedStopsHeader.FEED_ID_INDEX) ||
+                    !map.containsKey(SharedStopsHeader.STOP_ID_INDEX) ||
+                    !map.containsKey(SharedStopsHeader.IS_PRIMARY_INDEX)) {
+                throw new RuntimeException("shared_stops.csv is missing headers!");
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("shared_stops.csv was invalid!", e);
+        }
+
+        return map;
+    }
+
     @Override
     public void validate() {
         String config = project.sharedStopsConfig;
@@ -56,42 +110,6 @@ public class SharedStopsValidator extends FeedValidator {
 
         CsvReader configReader = CsvReader.parse(config);
 
-        int STOP_GROUP_ID_INDEX = -1;
-        int STOP_ID_INDEX = -1;
-        int IS_PRIMARY_INDEX = -1;
-        int FEED_ID_INDEX = -1;
-
-        try {
-            configReader.readRecord();
-
-            configReader.setHeaders(configReader.getRawRecord().split(","));
-            String[] headers = configReader.getHeaders();
-            for (int i = 0; i < headers.length; i++) {
-                String header = headers[i];
-                switch (header) {
-                    case "stop_group_id":
-                        STOP_GROUP_ID_INDEX = i;
-                        break;
-                    case "feed_id":
-                        FEED_ID_INDEX = i;
-                        break;
-                    case "stop_id":
-                        STOP_ID_INDEX = i;
-                        break;
-                    case "is_primary":
-                        IS_PRIMARY_INDEX = i;
-                        break;
-                    default:
-                        throw new RuntimeException("shared_stops.csv contained invalid headers!");
-                }
-            }
-
-            if (STOP_GROUP_ID_INDEX == -1 || FEED_ID_INDEX == -1 || STOP_ID_INDEX == -1 || IS_PRIMARY_INDEX == -1) {
-                throw new RuntimeException("shared_stops.csv is missing headers!");
-            }
-        } catch (IOException e) {
-            throw new RuntimeException("shared_stops.csv was invalid!", e);
-        }
 
         // Build list of stop Ids.
         List<String> stopIds = new ArrayList<>();
@@ -102,15 +120,18 @@ public class SharedStopsValidator extends FeedValidator {
             stopIds.add(stop.stop_id);
         }
 
+        Map indeces = getHeaderIncedes(configReader);
+
         // Initialize hashmaps to hold duplication info
         HashSet<String> seenStopIds = new HashSet<>();
         HashSet<String> stopGroupsWithPrimaryStops = new HashSet<>();
 
         try {
             while (configReader.readRecord()) {
-                String stopGroupId = configReader.get(STOP_GROUP_ID_INDEX);
-                String stopId = configReader.get(STOP_ID_INDEX);
-                String sharedStopFeedId = configReader.get(FEED_ID_INDEX);
+                // TODO: Avoid casting here? It must be possible with the enums
+                String stopGroupId = configReader.get((Integer) indeces.get(SharedStopsHeader.STOP_GROUP_ID_INDEX));
+                String stopId = configReader.get((Integer) indeces.get(SharedStopsHeader.STOP_ID_INDEX));
+                String sharedStopFeedId = configReader.get((Integer) indeces.get(SharedStopsHeader.FEED_ID_INDEX));
 
                 if (stopId.equals("stop_id")) {
                     // Swallow header row
@@ -133,7 +154,7 @@ public class SharedStopsValidator extends FeedValidator {
                 }
 
                 // Check for SS_02 (multiple primary stops per stop group)
-                if (configReader.get(IS_PRIMARY_INDEX).equals("1") || configReader.get(IS_PRIMARY_INDEX).equals("true")) {
+                if (configReader.get((Integer) indeces.get(SharedStopsHeader.IS_PRIMARY_INDEX)).equals("1") || configReader.get((Integer) indeces.get(SharedStopsHeader.IS_PRIMARY_INDEX)).equals("true")) {
                     if (stopGroupsWithPrimaryStops.contains(stopGroupId)) {
                         registerError(NewGTFSError.forFeed(NewGTFSErrorType.SHARED_STOP_GROUP_MULTIPLE_PRIMARY_STOPS, stopGroupId));
                     } else {
