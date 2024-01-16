@@ -518,7 +518,7 @@ public class FeedVersion extends Model implements Serializable {
             NewGTFSErrorType.TABLE_IN_SUBDIRECTORY,
             NewGTFSErrorType.WRONG_NUMBER_OF_FIELDS,
             NewGTFSErrorType.MULTIPLE_SHARED_STOPS_GROUPS,
-            NewGTFSErrorType.SHARED_STOP_GROUP_MUTLIPLE_PRIMARY_STOPS
+            NewGTFSErrorType.SHARED_STOP_GROUP_MULTIPLE_PRIMARY_STOPS
         ));
     }
 

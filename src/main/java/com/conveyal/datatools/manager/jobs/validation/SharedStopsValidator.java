@@ -13,11 +13,13 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.EnumMap;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Set;
+import java.util.Map;
 
+import static com.conveyal.datatools.manager.jobs.validation.SharedStopsHeader.STOP_GROUP_ID_INDEX;
+import static com.conveyal.datatools.manager.jobs.validation.SharedStopsHeader.STOP_ID_INDEX;
 
 public class SharedStopsValidator extends FeedValidator {
     private static final Logger LOG = LoggerFactory.getLogger(SharedStopsValidator.class);
@@ -42,11 +44,51 @@ public class SharedStopsValidator extends FeedValidator {
         }
         return new SharedStopsValidator(feed, errorStorage, this.project, this.feedId);
     }
+
     public SharedStopsValidator(Feed feed, SQLErrorStorage errorStorage, Project project, String feedId) {
         super(feed, errorStorage);
         this.feed = feed;
         this.project = project;
         this.feedId = feedId;
+    }
+
+    public static String[] getHeaders(CsvReader configReader) throws IOException {
+        configReader.setHeaders(configReader.getRawRecord().split(","));
+        return configReader.getHeaders();
+    }
+
+    public static Map<SharedStopsHeader, Integer> getHeaderIndices(CsvReader configReader) {
+        Map<SharedStopsHeader, Integer> headerIndices = new EnumMap<>(SharedStopsHeader.class);
+
+        try {
+            configReader.readRecord();
+            String[] headers = getHeaders(configReader);
+
+            for (int i = 0; i < headers.length; i++) {
+                String header = headers[i];
+                switch (SharedStopsHeader.fromValue(header)) {
+                    case STOP_GROUP_ID_INDEX:
+                        headerIndices.put(STOP_GROUP_ID_INDEX, i);
+                        break;
+                    case FEED_ID_INDEX:
+                        headerIndices.put(SharedStopsHeader.FEED_ID_INDEX, i);
+                        break;
+                    case STOP_ID_INDEX:
+                        headerIndices.put(STOP_ID_INDEX, i);
+                        break;
+                    case IS_PRIMARY_INDEX:
+                        headerIndices.put(SharedStopsHeader.IS_PRIMARY_INDEX, i);
+                        break;
+                }
+            }
+
+            if (!SharedStopsHeader.hasRequiredHeaders(headerIndices)) {
+                throw new RuntimeException("shared_stops.csv is missing headers!");
+            }
+        } catch (IOException e) {
+            throw new RuntimeException("shared_stops.csv was invalid!", e);
+        }
+        return headerIndices;
     }
 
     @Override
@@ -58,12 +100,6 @@ public class SharedStopsValidator extends FeedValidator {
 
         CsvReader configReader = CsvReader.parse(config);
 
-        // TODO: pull indicies from the CSV header
-        final int STOP_GROUP_ID_INDEX = 0;
-        final int STOP_ID_INDEX = 2;
-        final int IS_PRIMARY_INDEX = 3;
-        final int FEED_ID_INDEX = 1;
-
         // Build list of stop Ids.
         List<String> stopIds = new ArrayList<>();
         List<Stop> stops = new ArrayList<>();
@@ -73,54 +109,59 @@ public class SharedStopsValidator extends FeedValidator {
             stopIds.add(stop.stop_id);
         }
 
-        // Initialize hashmaps to hold duplication info
-        HashMap<String, Set<String>> stopGroupStops = new HashMap<>();
+        // Initialize hashmaps to hold duplication info.
+        HashSet<String> seenStopIds = new HashSet<>();
         HashSet<String> stopGroupsWithPrimaryStops = new HashSet<>();
 
         try {
+            Map<SharedStopsHeader, Integer> headerIndices = getHeaderIndices(configReader);
             while (configReader.readRecord()) {
-                String stopGroupId = configReader.get(STOP_GROUP_ID_INDEX);
-                String stopId = configReader.get(STOP_ID_INDEX);
-                String sharedStopFeedId = configReader.get(FEED_ID_INDEX);
+                String stopGroupId = configReader.get(headerIndices.get(STOP_GROUP_ID_INDEX));
+                String stopId = configReader.get(headerIndices.get(STOP_ID_INDEX));
+                String sharedStopFeedId = configReader.get(headerIndices.get(SharedStopsHeader.FEED_ID_INDEX));
 
-                if (stopId.equals("stop_id")) {
-                    // Swallow header row
+                if (stopId.equals(STOP_ID_INDEX.headerName)) {
+                    // Swallow header row.
                     continue;
                 }
 
-                stopGroupStops.putIfAbsent(stopGroupId, new HashSet<>());
-                Set<String> seenStopIds = stopGroupStops.get(stopGroupId);
-
-                // Check for SS_01 (stop id appearing in multiple stop groups)
+                // Check for SS_01 (stop id appearing in multiple stop groups).
+                // Make sure this error is only returned if we are inside the feed that is being checked.
                 if (seenStopIds.contains(stopId)) {
-                    registerError(stops
+                    if (feedId.equals(sharedStopFeedId)) {
+                        registerError(stops
                             .stream()
                             .filter(stop -> stop.stop_id.equals(stopId))
                             .findFirst()
-                            .orElse(stops.get(0)), NewGTFSErrorType.MULTIPLE_SHARED_STOPS_GROUPS
-                    );
+                            .orElse(new Stop()), NewGTFSErrorType.MULTIPLE_SHARED_STOPS_GROUPS
+                        );
+                    }
                 } else {
                     seenStopIds.add(stopId);
                 }
 
-                // Check for SS_02 (multiple primary stops per stop group)
-                if (stopGroupsWithPrimaryStops.contains(stopGroupId)) {
-                    registerError(NewGTFSError.forFeed(NewGTFSErrorType.SHARED_STOP_GROUP_MUTLIPLE_PRIMARY_STOPS, stopGroupId));
-                } else if (configReader.get(IS_PRIMARY_INDEX).equals("true")) {
-                    stopGroupsWithPrimaryStops.add(stopGroupId);
+                // Check for SS_02 (multiple primary stops per stop group).
+                if (
+                    configReader.get(headerIndices.get(SharedStopsHeader.IS_PRIMARY_INDEX)).equals("1") ||
+                    configReader.get(headerIndices.get(SharedStopsHeader.IS_PRIMARY_INDEX)).equals("true")
+                ) {
+                    if (stopGroupsWithPrimaryStops.contains(stopGroupId)) {
+                        registerError(NewGTFSError.forFeed(NewGTFSErrorType.SHARED_STOP_GROUP_MULTIPLE_PRIMARY_STOPS, stopGroupId));
+                    } else {
+                        stopGroupsWithPrimaryStops.add(stopGroupId);
+                    }
                 }
 
-                // Check for SS_03 (stop_id referenced doesn't exist)
-                // Make sure this error is only returned if we are inside the feed that is being checked
+                // Check for SS_03 (stop_id referenced doesn't exist).
+                // Make sure this error is only returned if we are inside the feed that is being checked.
                 if (feedId.equals(sharedStopFeedId) && !stopIds.contains(stopId)) {
                     registerError(NewGTFSError.forFeed(NewGTFSErrorType.SHARED_STOP_GROUP_ENTITY_DOES_NOT_EXIST, stopId));
                 }
             }
-        } catch (IOException e) { LOG.error(e.toString()); }
-        finally {
+        } catch (IOException e) {
+            LOG.error("Unable to validate shared stops.", e);
+        } finally {
             configReader.close();
         }
-
-
     }
 }
