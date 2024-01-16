@@ -2,50 +2,60 @@ package com.conveyal.datatools.manager.jobs.validation;
 
 import com.conveyal.datatools.UnitTest;
 import com.csvreader.CsvReader;
-import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.MethodSource;
 
-import java.util.Map;
+import java.util.stream.Stream;
 
 import static com.zenika.snapshotmatcher.SnapshotMatcher.matchesSnapshot;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 
-public class SharedStopsValidatorTest extends UnitTest {
-    private void attemptToParseInvalidCSV(String csv, String expectedError) {
-        CsvReader configReader = CsvReader.parse(csv);
-        Exception exception = assertThrows(RuntimeException.class, () -> {
-            SharedStopsValidator.getHeaderIncedes(configReader);
-        });
+class SharedStopsValidatorTest extends UnitTest {
 
-        String error = exception.getMessage();
-        assertEquals(expectedError, error);
+    @ParameterizedTest
+    @MethodSource("createCSVHeaders")
+    void canHandleVariousCorrectCSV(String headers) {
+        assertThat(SharedStopsValidator.getHeaderIndices(CsvReader.parse(headers)), matchesSnapshot());
     }
 
-    private Map parseValidCSV(String csv) {
-        CsvReader configReader = CsvReader.parse(csv);
-        return SharedStopsValidator.getHeaderIncedes(configReader);
+    private static Stream<String> createCSVHeaders() {
+        return Stream.of(
+            "is_primary,feed_id,stop_id,stop_group_id",
+            "feed_id,stop_id,stop_group_id,is_primary",
+            "feed_id,is_primary,stop_group_id,stop_id,feed_id"
+        );
     }
 
-    @Test
-    void canHandleIncorrectCsv() {
-        String invalid = "shared_stops.csv contained invalid headers!";
+    @ParameterizedTest
+    @MethodSource("createInvalidCSVArguments")
+    void attemptToParseInvalidCSV(InvalidCSVArgument invalidCSVArgument) {
+        CsvReader configReader = CsvReader.parse(invalidCSVArgument.csv);
+        Exception exception = assertThrows(RuntimeException.class, () -> SharedStopsValidator.getHeaderIndices(configReader));
+        assertEquals(invalidCSVArgument.expectedError, exception.getMessage());
+    }
+
+    private static Stream<InvalidCSVArgument> createInvalidCSVArguments() {
+        String invalid = "Unknown shared stops header: ";
         String missing = "shared_stops.csv is missing headers!";
-
-        attemptToParseInvalidCSV("this is a great string, but it's not a shared_stops csv!", invalid);
-        attemptToParseInvalidCSV("", invalid);
-        attemptToParseInvalidCSV("is_primary,stop_id", missing);
-        attemptToParseInvalidCSV("is_primary,feed_id,,stop_group_id", invalid);
-        attemptToParseInvalidCSV("is_primary,feed_id,stop_group_id", missing);
-        attemptToParseInvalidCSV("feed_id,   is_primary,    stop_group_id,stop_id", invalid);
+        return Stream.of(
+            new InvalidCSVArgument("this is a great string, but it's not a shared_stops csv!", invalid + "this is a great string"),
+            new InvalidCSVArgument("", invalid),
+            new InvalidCSVArgument("is_primary,stop_id", missing),
+            new InvalidCSVArgument("is_primary,feed_id,,stop_group_id", invalid),
+            new InvalidCSVArgument("is_primary,feed_id,stop_group_id", missing),
+            new InvalidCSVArgument("feed_id,   is_primary,    stop_group_id,stop_id", invalid + "   is_primary")
+        );
     }
 
-    @Test
-    void canHandleVariousCorrectCSV() {
-        assertThat(parseValidCSV("is_primary,feed_id,stop_id,stop_group_id"), matchesSnapshot());
-        assertThat(parseValidCSV("feed_id,stop_id,stop_group_id,is_primary"), matchesSnapshot());
+    private static class InvalidCSVArgument {
+        public String csv;
+        public String expectedError;
 
-        // Only last is handled
-        assertThat(parseValidCSV("feed_id,is_primary,stop_group_id,stop_id,feed_id"), matchesSnapshot());
+        public InvalidCSVArgument(String csv, String expectedError) {
+            this.csv = csv;
+            this.expectedError = expectedError;
+        }
     }
 }
