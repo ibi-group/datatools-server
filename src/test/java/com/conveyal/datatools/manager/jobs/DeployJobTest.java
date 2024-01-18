@@ -27,6 +27,7 @@ import static com.conveyal.datatools.TestUtils.getBooleanEnvVar;
 import static com.zenika.snapshotmatcher.SnapshotMatcher.matchesSnapshot;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 /**
@@ -78,6 +79,15 @@ public class DeployJobTest extends UnitTest {
         deployment.customRouterConfig = "{ \"hi\": \"th\ne'r\te\" }";
         deployment.customBuildConfig = "{ \"hello\": \"th\ne'r\te\" }";
         Persistence.deployments.create(deployment);
+    }
+
+    @Test
+    void canDownloadConfigs() throws IOException {
+        deployment.customBuildConfigUrl = "http://www.google.com";
+        assertNotNull(deployment.downloadConfig(deployment.customBuildConfigUrl));
+
+        deployment.customRouterConfigUrl = "http://www.google.com";
+        assertNotNull(deployment.downloadConfig(deployment.customRouterConfigUrl));
     }
 
     /**
