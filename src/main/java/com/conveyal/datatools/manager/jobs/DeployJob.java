@@ -198,14 +198,15 @@ public class DeployJob extends MonitorableJob {
     /**
      * Primary constructor for kicking off a deployment of transit/OSM/config data to OpenTripPlanner.
      *
-     * FIXME: It appears that DeployType#Replace is the only type used in the non-test code. Should the others be
-     *  removed?
      * @param deployment the deployment (set of feed versions and configurations) to deploy
      * @param owner the requesting user
      * @param otpServer the server/ELB target for the deployment
      */
     public DeployJob(Deployment deployment, Auth0UserProfile owner, OtpServer otpServer) {
         this(deployment, owner, otpServer, null, DeployType.REPLACE);
+    }
+    public DeployJob(Deployment deployment, Auth0UserProfile owner, OtpServer otpServer, DeployType deployType) {
+        this(deployment, owner, otpServer, null, deployType);
     }
 
     public DeployJob(
@@ -739,7 +740,8 @@ public class DeployJob extends MonitorableJob {
             // First start graph-building instance and wait for graph to successfully build.
             if (!deployType.equals(DeployType.USE_PREBUILT_GRAPH)) {
                 status.message = "Starting up graph building EC2 instance";
-                List<Instance> graphBuildingInstances = startEC2Instances(1, false);
+                // TODO: enable docker graph builds in future
+                List<Instance> graphBuildingInstances = startEC2Instances(1, false, false);
                 // Exit if an error was encountered.
                 if (status.error || graphBuildingInstances.size() == 0) {
                     terminateInstances(graphBuildingInstances);
@@ -818,7 +820,7 @@ public class DeployJob extends MonitorableJob {
             if (status.numServersRemaining > 0) {
                 // Spin up remaining EC2 instances.
                 status.message = String.format("Spinning up remaining %d instance(s).", status.numServersRemaining);
-                remainingInstances.addAll(startEC2Instances(status.numServersRemaining, true));
+                remainingInstances.addAll(startEC2Instances(status.numServersRemaining, true, deployment.deploymentMode.equals(Deployment.DeploymentMode.DOCKER)));
                 if (remainingInstances.size() == 0 || status.error) {
                     terminateInstances(remainingInstances);
                     return;
@@ -937,7 +939,7 @@ public class DeployJob extends MonitorableJob {
      * @param count number of EC2 instances to start
      * @return a list of the instances is returned once the public IP addresses have been assigned
      */
-    private List<Instance> startEC2Instances(int count, boolean graphAlreadyBuilt) {
+    private List<Instance> startEC2Instances(int count, boolean graphAlreadyBuilt, boolean docker) {
         // Create user data to instruct the ec2 instance to do stuff at startup.
         createAndUploadManifestAndConfigs(graphAlreadyBuilt);
         // TODO: DOCKER: different user data if instance is docker

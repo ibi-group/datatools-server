@@ -184,6 +184,12 @@ public class Deployment extends Model implements Serializable {
     public TripPlannerVersion tripPlannerVersion = TripPlannerVersion.OTP_1;
 
     /**
+     * Which deployment "script" to use. Docker will install docker into the new instance and launch
+     * OTP in a container. "RUNNER" is the default and uses otp-runner
+     */
+    public DeploymentMode deploymentMode = DeploymentMode.RUNNER;
+
+    /**
      * The version (according to git describe) of OTP being used on this deployment. This should default to
      * {@link Deployment#DEFAULT_OTP_VERSION}. This is used to determine what jar file to download and does not have an
      * exact match to actual numbered/tagged releases.
@@ -702,6 +708,10 @@ public class Deployment extends Model implements Serializable {
 
     public enum TripPlannerVersion {
         OTP_1, OTP_2
+    }
+
+    public enum DeploymentMode {
+        RUNNER, DOCKER
     }
 
     /**
