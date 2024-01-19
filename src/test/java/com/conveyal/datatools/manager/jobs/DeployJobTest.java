@@ -108,7 +108,7 @@ public class DeployJobTest extends UnitTest {
         OtpRunnerManifest buildAndServeManifest = deployJob.createAndUploadManifestAndConfigs(false);
         buildAndServeManifest.nonce = "canMakeGraphBuildUserDataScript";
         assertThat(buildAndServeManifest, matchesSnapshot());
-        assertThat(deployJob.constructUserData(false), matchesSnapshot());
+        assertThat(deployJob.constructUserData(false, false), matchesSnapshot());
     }
 
     /**
@@ -142,7 +142,7 @@ public class DeployJobTest extends UnitTest {
         OtpRunnerManifest buildAndServeManifest = deployJob.createAndUploadManifestAndConfigs(false);
         buildAndServeManifest.nonce = "canMakeOtp2GraphBuildUserDataScript";
         assertThat(buildAndServeManifest, matchesSnapshot());
-        assertThat(deployJob.constructUserData(false), matchesSnapshot());
+        assertThat(deployJob.constructUserData(false, false), matchesSnapshot());
     }
 
     /**
@@ -162,7 +162,7 @@ public class DeployJobTest extends UnitTest {
         OtpRunnerManifest serverOnlyManifest = deployJob.createAndUploadManifestAndConfigs(true);
         serverOnlyManifest.nonce = "canMakeServerOnlyUserDataScript";
         assertThat(serverOnlyManifest, matchesSnapshot());
-        assertThat(deployJob.constructUserData(true), matchesSnapshot());
+        assertThat(deployJob.constructUserData(true, false), matchesSnapshot());
     }
 
     /**
