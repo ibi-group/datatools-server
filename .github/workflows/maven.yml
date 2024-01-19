@@ -33,10 +33,10 @@ jobs:
           java-version: 19
           distribution: 'temurin'
       # Install node 14 for running e2e tests (and for maven-semantic-release).
-      - name: Use Node.js 18.x
+      - name: Use Node.js 20.x
         uses: actions/setup-node@v1
         with:
-          node-version: 18.x
+          node-version: 20.x
       - name: Start MongoDB
         uses: supercharge/mongodb-github-action@1.3.0
         with:
@@ -98,10 +98,10 @@ jobs:
 
       # Run maven-semantic-release to potentially create a new release of datatools-server. The flag --skip-maven-deploy is
       # used to avoid deploying to maven central. So essentially, this just creates a release with a changelog on github.
-      - name: Use Node.js 18.x
+      - name: Use Node.js 20.x
         uses: actions/setup-node@v1
         with:
-          node-version: 18.x
+          node-version: 20.x
       - name: Run maven-semantic-release
         if: env.SAVE_JAR_TO_S3 == 'true'
         env:
