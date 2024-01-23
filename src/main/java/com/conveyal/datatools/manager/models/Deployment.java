@@ -190,6 +190,12 @@ public class Deployment extends Model implements Serializable {
     public DeploymentMode deploymentMode = DeploymentMode.RUNNER;
 
     /**
+     * Which deploymentType this deployment will use. The long-standing default is "REPLACE",
+     * but USE_PREBUILT_GRAPH allows for re-deploying an existing graph.
+     */
+    public DeployJob.DeployType deployType = DeployJob.DeployType.REPLACE;
+
+    /**
      * The version (according to git describe) of OTP being used on this deployment. This should default to
      * {@link Deployment#DEFAULT_OTP_VERSION}. This is used to determine what jar file to download and does not have an
      * exact match to actual numbered/tagged releases.

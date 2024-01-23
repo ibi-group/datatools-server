@@ -203,10 +203,7 @@ public class DeployJob extends MonitorableJob {
      * @param otpServer the server/ELB target for the deployment
      */
     public DeployJob(Deployment deployment, Auth0UserProfile owner, OtpServer otpServer) {
-        this(deployment, owner, otpServer, null, DeployType.REPLACE);
-    }
-    public DeployJob(Deployment deployment, Auth0UserProfile owner, OtpServer otpServer, DeployType deployType) {
-        this(deployment, owner, otpServer, null, deployType);
+        this(deployment, owner, otpServer, null, deployment.deployType);
     }
 
     public DeployJob(
