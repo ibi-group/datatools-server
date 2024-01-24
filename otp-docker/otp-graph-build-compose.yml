@@ -15,7 +15,7 @@ services:
       download-bundle:
         condition: service_completed_successfully
     image: alpine:latest
-    command: "apk add --no-cache nodejs yarn && yarn global add https://github.com/ibi-group/otp-runner.git && otp-runner /var/opentripplanner/"
+    command: "apk add --no-cache nodejs yarn && yarn global add https://github.com/ibi-group/otp-runner.git && otp-runner /var/opentripplanner/otp-runner-graph-build-manifest.json"
     volumes:
       - type: bind
         source: ./otp
