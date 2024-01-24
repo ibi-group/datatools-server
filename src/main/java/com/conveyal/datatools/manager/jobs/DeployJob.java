@@ -814,6 +814,11 @@ public class DeployJob extends MonitorableJob {
             // Spin up remaining servers which will download the graph from S3.
             List<MonitorServerStatusJob> remainingServerMonitorJobs = new ArrayList<>();
             List<Instance> remainingInstances = new ArrayList<>();
+            
+            // Manually insert new server if we are using a prebuilt graph
+            if (deployType.equals(DeployType.USE_PREBUILT_GRAPH)) {
+                status.numServersRemaining = Math.max(otpServer.ec2Info.instanceCount, 1);
+            }
             if (status.numServersRemaining > 0) {
                 // Spin up remaining EC2 instances.
                 status.message = String.format("Spinning up remaining %d instance(s).", status.numServersRemaining);
