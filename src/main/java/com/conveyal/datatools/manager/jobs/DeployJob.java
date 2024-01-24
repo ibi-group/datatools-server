@@ -814,7 +814,7 @@ public class DeployJob extends MonitorableJob {
             // Spin up remaining servers which will download the graph from S3.
             List<MonitorServerStatusJob> remainingServerMonitorJobs = new ArrayList<>();
             List<Instance> remainingInstances = new ArrayList<>();
-            
+
             // Manually insert new server if we are using a prebuilt graph
             if (deployType.equals(DeployType.USE_PREBUILT_GRAPH)) {
                 status.numServersRemaining = Math.max(otpServer.ec2Info.instanceCount, 1);
@@ -1403,10 +1403,10 @@ public class DeployJob extends MonitorableJob {
           lines.add("git clone https://github.com/ibi-group/datatools-server");
           lines.add("cd datatools-server/");
           lines.add("git checkout otp-docker"); // TEMp
-          lines.add("cd docker-stuff/"); // TEMP
+          lines.add("cd otp-docker/");
           lines.add("mkdir /root/.aws");
 
-          lines.add(String.format("echo S3_URI=%s >> /root/datatools-server/docker-stuff/.env", joinToS3FolderUri()));
+          lines.add(String.format("echo S3_URI=%s >> /root/datatools-server/otp-docker/.env", joinToS3FolderUri()));
           lines.add("docker-compose -f ./otp-compose.yml up");
         } else {
             lines.add("#!/bin/bash");
