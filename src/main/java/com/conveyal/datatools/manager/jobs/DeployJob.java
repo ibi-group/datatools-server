@@ -1387,7 +1387,7 @@ public class DeployJob extends MonitorableJob {
         );
 
         List<String> lines = new ArrayList<>();
-        if (graphAlreadyBuilt && docker) {
+        if (docker) {
           lines.add("#!/bin/sh");
           lines.add("yum update -y");
           lines.add("yum install git -y");
@@ -1407,7 +1407,12 @@ public class DeployJob extends MonitorableJob {
           lines.add("mkdir /root/.aws");
 
           lines.add(String.format("echo S3_URI=%s >> /root/datatools-server/otp-docker/.env", joinToS3FolderUri()));
-          lines.add("docker-compose -f ./otp-compose.yml up");
+          if (graphAlreadyBuilt) {
+              lines.add("docker-compose -f ./otp-compose.yml up");
+          } else {
+              lines.add("docker-compose -f ./otp-graph-build-compose.yml up");
+          }
+
         } else {
             lines.add("#!/bin/bash");
 
