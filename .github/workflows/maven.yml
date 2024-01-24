@@ -32,11 +32,11 @@ jobs:
         with:
           java-version: 19
           distribution: 'temurin'
-      # Install Node 20.11.0 (LTS) for running e2e tests (and for maven-semantic-release).
+      # Install node 20 for running e2e tests (and for maven-semantic-release).
       - name: Use Node.js 20.x
         uses: actions/setup-node@v1
         with:
-          node-version: 20.11.0
+          node-version: 20.x
       - name: Start MongoDB
         uses: supercharge/mongodb-github-action@1.3.0
         with:
@@ -101,7 +101,7 @@ jobs:
       - name: Use Node.js 20.x
         uses: actions/setup-node@v1
         with:
-          node-version: 20.11.0
+          node-version: 20.x
       - name: Run maven-semantic-release
         if: env.SAVE_JAR_TO_S3 == 'true'
         env:
