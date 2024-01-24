@@ -15,7 +15,7 @@ services:
       download-bundle:
         condition: service_completed_successfully
     image: alpine:latest
-    command: /bin/sh -c "mkdir -p /var/otp/graphs/ && mkdir -p /opt/otp/ && apk add --no-cache java nodejs git yarn && yarn global add https://github.com/ibi-group/otp-runner.git && otp-runner /var/opentripplanner/otp-runner-graph-build-manifest.json"
+    command: /bin/sh -c "mkdir -p /var/otp/graphs/ && mkdir -p /opt/otp/ && apk add --no-cache aws-cli openjdk21 nodejs git yarn && yarn global add https://github.com/ibi-group/otp-runner.git && otp-runner /var/opentripplanner/otp-runner-graph-build-manifest.json"
     volumes:
       - type: bind
         source: ./otp
