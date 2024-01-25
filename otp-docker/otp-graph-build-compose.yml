@@ -15,7 +15,7 @@ services:
     command: /bin/sh -c "apk add jq && touch /etc/caddy/static/status-new.json && jq '.serverStarted = \"true\"' /etc/caddy/static/status.json > /etc/caddy/static/status-new.json && rm /etc/caddy/static/status.json && mv /etc/caddy/static/status-new.json /etc/caddy/static/status.json"
     depends_on:
       upload-bundle:
-        condition: service_healthy
+        condition: service_completed_successfully
     volumes:
       - type: bind
         source: ./caddy
