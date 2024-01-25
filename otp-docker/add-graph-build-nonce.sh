@@ -10,4 +10,4 @@ mv /etc/caddy/static/status-new.json /etc/caddy/static/status.json
 mkdir /var/opentripplanner/GTFS
 jq -r ".baseFolderDownloads[] | .uri" /var/opentripplanner/otp-runner-graph-build-manifest.json | while read uri; do aws s3 cp $uri /var/opentripplanner/ || true; done
 jq -r ".baseFolderDownloads[] | .uri" /var/opentripplanner/otp-runner-graph-build-manifest.json | while read uri; do curl "$uri" -O /var/opentripplanner/ || true; done
-mv /var/opentripplanner/*.zip /var/opentripplanner/GTFS/
+for gtfs in *.zip; do echo gtfs GTFS_$gtfs; done
