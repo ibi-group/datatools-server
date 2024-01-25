@@ -22,7 +22,7 @@ services:
         target: /etc/caddy/
   add-status-json-nonce:
     image: alpine
-    command: /bin/sh -e "mv /var/opentripplanner/otp-runner-graph-build-manifest.json /var/opentripplanner/otp-runner-server-only-manifest.json && /add-nonce.sh"
+    command: "/bin/sh -e ./add-nonce.sh"
     depends_on:
       download-bundle:
         condition: service_completed_successfully
