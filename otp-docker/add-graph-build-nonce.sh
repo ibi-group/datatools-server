@@ -1,5 +1,5 @@
 #!/bin/sh
-apk add jq aws-cli
+apk add jq aws-cli curl
 export nonce=$(jq -r .nonce /var/opentripplanner/otp-runner-graph-build-manifest.json)
 touch /etc/caddy/static/status-new.json
 cat /etc/caddy/static/status.json | jq --arg n $nonce '.nonce = $n' > /etc/caddy/static/status-new.json
