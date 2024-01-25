@@ -12,7 +12,7 @@ services:
   #        target: /root/.aws
   mark-status-json-as-complete:
     image: alpine
-    command: /bin/sh -c "apk add jq && touch /etc/caddy/static/status-new.json && jq '.serverStarted = \"true\"' /etc/caddy/static/status.json > /etc/caddy/static/status-new.json && rm /etc/caddy/static/status.json && mv /etc/caddy/static/status-new.json /etc/caddy/static/status.json"
+    command: /bin/sh -c "apk add jq && touch /etc/caddy/static/status-new.json && jq '.graphUploaded = \"true\"' /etc/caddy/static/status.json > /etc/caddy/static/status-new.json && rm /etc/caddy/static/status.json && mv /etc/caddy/static/status-new.json /etc/caddy/static/status.json"
     depends_on:
       upload-bundle:
         condition: service_completed_successfully
