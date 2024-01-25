@@ -8,6 +8,6 @@ mv /etc/caddy/static/status-new.json /etc/caddy/static/status.json
 
 # Download files
 jq -r ".baseFolderDownloads[] | .uri" /var/opentripplanner/otp-runner-graph-build-manifest.json | while read uri; do aws s3 cp $uri /var/opentripplanner/ || true; done
-jq -r ".baseFolderDownloads[] | .uri" /var/opentripplanner/otp-runner-graph-build-manifest.json | while read uri; do curl "$uri" -O /var/opentripplanner/ || true; done
+jq -r ".baseFolderDownloads[] | .uri" /var/opentripplanner/otp-runner-graph-build-manifest.json | while read uri; do curl "$uri" -O --output-dir /var/opentripplanner || true; done
 # OTP only reads zip files with GTFS in the filename
 find ./ -type f -name '*.zip' | xargs -I '{}' mv '{}' '{}'.GTFS.zip
