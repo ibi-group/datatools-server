@@ -34,8 +34,8 @@ services:
         source: ./caddy
         target: /etc/caddy/
       - type: bind
-        source: ./add-graph-build-nonce.sh.sh
-        target: /add-graph-build-nonce.sh.sh
+        source: ./add-graph-build-nonce.sh
+        target: /add-graph-build-nonce.sh
   otp-build:
     depends_on:
       add-status-json-nonce:
