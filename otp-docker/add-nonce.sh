@@ -1,8 +1,5 @@
 #!/bin/sh
 apk add jq
-# This fails sometimes, but that's ok
-mv /var/opentripplanner/otp-runner-graph-build-manifest.json /var/opentripplanner/otp-runner-server-only-manifest.json
-
 export nonce=$(jq -r .nonce /var/opentripplanner/otp-runner-server-only-manifest.json)
 touch /etc/caddy/static/status-new.json
 cat /etc/caddy/static/status.json | jq --arg n $nonce '.nonce = $n' > /etc/caddy/static/status-new.json
