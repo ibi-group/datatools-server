@@ -10,19 +10,56 @@ services:
   #      - type: bind
   #        source: ~/.aws
   #        target: /root/.aws
-  otp-graph-build:
+  mark-status-json-as-complete:
+    image: alpine
+    command: /bin/sh -c "apk add jq && touch /etc/caddy/static/status-new.json && jq '.serverStarted = \"true\"' /etc/caddy/static/status.json > /etc/caddy/static/status-new.json && rm /etc/caddy/static/status.json && mv /etc/caddy/static/status-new.json /etc/caddy/static/status.json"
+    depends_on:
+      upload-bundle:
+        condition: service_healthy
+    volumes:
+      - type: bind
+        source: ./caddy
+        target: /etc/caddy/
+  add-status-json-nonce:
+    image: alpine
+    command: "/bin/sh -e ./add-nonce.sh"
     depends_on:
       download-bundle:
         condition: service_completed_successfully
-    image: alpine:latest
-    command: /bin/sh -c "mkdir -p /var/otp/graphs/ && mkdir -p /opt/otp/ && apk add --no-cache aws-cli openjdk21 nodejs git yarn && yarn global add https://github.com/ibi-group/otp-runner.git && otp-runner /var/opentripplanner/otp-runner-graph-build-manifest.json"
+    volumes:
+      - type: bind
+        source: ./otp
+        target: /var/opentripplanner/
+      - type: bind
+        source: ./caddy
+        target: /etc/caddy/
+      - type: bind
+        source: ./add-nonce.sh
+        target: /add-nonce.sh
+  otp-build:
+    depends_on:
+      add-status-json-nonce:
+        condition: service_completed_successfully
+        # TO do it dynamically: https://stackoverflow.com/a/50201232
+    image: opentripplanner/opentripplanner:latest
+    ports:
+      - "8080:8080"
+    command: "--build --save"
+    restart: no
     volumes:
       - type: bind
         source: ./otp
         target: /var/opentripplanner
+  upload-bundle:
+    depends_on:
+      otp-build:
+        condition: service_completed_successfully
+    image: amazon/aws-cli
+    command: "s3 cp /var/opentripplanner/graph.obj ${S3_URI}/graph.obj"
+    volumes:
       - type: bind
-        source: ./caddy/static
-        target: /usr/share/nginx/client/
+        source: ./otp
+        target: /var/opentripplanner
   caddy:
     image: caddy:latest
     restart: unless-stopped
