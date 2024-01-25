@@ -22,7 +22,7 @@ services:
         target: /etc/caddy/
   add-status-json-nonce:
     image: alpine
-    command: "/bin/sh -e ./add-graph-build-nonce.sh.sh"
+    command: "/bin/sh -e ./add-graph-build-nonce.sh"
     depends_on:
       download-bundle:
         condition: service_completed_successfully
