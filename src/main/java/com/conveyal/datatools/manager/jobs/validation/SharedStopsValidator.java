@@ -137,7 +137,7 @@ public class SharedStopsValidator extends FeedValidator {
                             .findFirst()
                             .orElse(syntheticStop), NewGTFSErrorType.MULTIPLE_SHARED_STOPS_GROUPS
                         );
-                    }else {
+                    } else {
                         seenStopIds.add(stopId);
                     }
                 }
