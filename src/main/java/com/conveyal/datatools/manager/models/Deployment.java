@@ -49,6 +49,7 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
+import static com.conveyal.datatools.manager.utils.HttpUtils.downloadFileFromURL;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 
@@ -209,7 +210,9 @@ public class Deployment extends Model implements Serializable {
     public String routerId;
 
     public String customBuildConfig;
+    public String customBuildConfigUrl;
     public String customRouterConfig;
+    public String customRouterConfigUrl;
 
     public List<CustomFile> customFiles = new ArrayList<>();
 
@@ -414,14 +417,42 @@ public class Deployment extends Model implements Serializable {
         out.close();
     }
 
-    /** Generate build config for deployment as byte array (for writing to file output stream). */
-    public byte[] generateBuildConfig() {
-        Project project = this.parentProject();
+    /** Download config from provided URL. */
+    public String downloadConfig(String configUrl) throws IOException {
+        if (configUrl != null) {
+            try {
+                // TODO: validate JSON?
+                return new String(downloadFileFromURL(new URL(configUrl)), StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                String message = String.format("Could not download config file from %s.", configUrl);
+                LOG.error(message);
+                throw new IOException(message, e);
+            }
+        }
+        return null;
+    }
+
+    /** Generate build config for deployment as byte array (for writing to file output stream). If an external build
+     * config is available and is successfully downloaded, use this instead of the deployment build config. If there is
+     * no deployment build config, use the project build config. */
+    public byte[] generateBuildConfig() throws IOException {
+        String downloadedConfig = downloadConfig(customBuildConfigUrl);
+        if (downloadedConfig != null) {
+            customBuildConfig = downloadedConfig;
+        }
         return customBuildConfig != null
             ? customBuildConfig.getBytes(StandardCharsets.UTF_8)
-            : project.buildConfig != null
-                ? writeToBytes(project.buildConfig)
-                : null;
+            : getProjectBuildConfig();
+    }
+
+    /**
+     * If a project build config exists, return this as a byte array, or null if not available.
+     */
+    private byte[] getProjectBuildConfig() {
+        Project project = parentProject();
+        return project.buildConfig != null
+            ? writeToBytes(project.buildConfig)
+            : null;
     }
 
     public String generateBuildConfigAsString() {
@@ -451,15 +482,18 @@ public class Deployment extends Model implements Serializable {
 
     /** Generate router config for deployment as string. */
     public byte[] generateRouterConfig() throws IOException {
-        Project project = this.parentProject();
+        String downloadedConfig = downloadConfig(customRouterConfigUrl);
+        if (downloadedConfig != null) {
+            customRouterConfig = downloadedConfig;
+        }
 
         byte[] customRouterConfigString = customRouterConfig != null
-                ? customRouterConfig.getBytes(StandardCharsets.UTF_8)
-                : null;
+            ? customRouterConfig.getBytes(StandardCharsets.UTF_8)
+            : null;
 
-        byte[] routerConfigString = project.routerConfig != null
-                ? writeToBytes(project.routerConfig)
-                : null;
+        byte[] routerConfigString = parentProject().routerConfig != null
+            ? writeToBytes(parentProject().routerConfig)
+            : null;
 
         // If both router configs are present, merge the JSON before returning
         // Merger code from: https://stackoverflow.com/questions/35747813/how-to-merge-two-json-strings-into-one-in-java

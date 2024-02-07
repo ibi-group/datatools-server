@@ -16,6 +16,8 @@ import java.io.File;
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 
+import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
+
 /**
  * Publish the latest GTFS files for all public feeds in a project.
  */
@@ -23,6 +25,7 @@ public class PublishProjectFeedsJob extends MonitorableJob {
     public static final Logger LOG = LoggerFactory.getLogger(PublishProjectFeedsJob.class);
 
     private Project project;
+    private static final String dataSupportEmail = getConfigPropertyAsText("application.public_gtfs_contact_email");
 
     public PublishProjectFeedsJob(Project project, Auth0UserProfile owner) {
         super(owner, "Generating public html for " + project.name, JobType.MAKE_PROJECT_PUBLIC);
@@ -54,6 +57,9 @@ public class PublishProjectFeedsJob extends MonitorableJob {
         r.append("<body>\n");
         r.append("<h1>" + title + "</h1>\n");
         r.append("The following feeds, in GTFS format, are available for download and use.\n");
+        if (dataSupportEmail != null) {
+            r.append(String.format("If you have inquiries, please contact us at: <a href=\"mailto:%1$s\">%1$s</a>", dataSupportEmail));
+        }
         r.append("<ul>\n");
         status.update("Ensuring public GTFS files are up-to-date.", 50);
         project.retrieveProjectFeedSources().stream()

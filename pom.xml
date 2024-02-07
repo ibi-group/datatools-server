@@ -228,7 +228,7 @@
         <dependency>
             <groupId>ch.qos.logback</groupId>
             <artifactId>logback-classic</artifactId>
-            <version>1.2.3</version>
+            <version>1.2.13</version>
         </dependency>
 
         <!-- Used to connect to and import legacy editor MapDBs -->
@@ -262,7 +262,7 @@
         <dependency>
             <groupId>org.mobilitydata.gtfs-validator</groupId>
             <artifactId>gtfs-validator-main</artifactId>
-            <version>4.1.0</version>
+            <version>4.2.0</version>
         </dependency>
         <!-- Used for loading/fetching/validating/writing GTFS entities. gtfs-lib also provides access to:
          - commons-io - generic utilities
@@ -271,7 +271,8 @@
         <dependency>
             <groupId>com.github.ibi-group</groupId>
             <artifactId>gtfs-lib</artifactId>
-            <version>21d04ec0d0559f434e6a4378821b8fa2046f59c8</version>
+            <version>e83292580a44880e1efcf6a35d24c2d46044c6f1</version>
+            <!-- Latest dev-flex build on jitpack.io -->
             <!-- Exclusions added in order to silence SLF4J warnings about multiple bindings:
                 http://www.slf4j.org/codes.html#multiple_bindings
             -->
