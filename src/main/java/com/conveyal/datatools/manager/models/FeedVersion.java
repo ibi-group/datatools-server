@@ -423,7 +423,6 @@ public class FeedVersion extends Model implements Serializable {
             // Wait for the file to be entirely copied into the directory.
             // 5 seconds + ~1 second per 10mb
             Thread.sleep(5000 + (this.fileSize / 10000));
-            File gtfsZip = this.retrieveGtfsFile();
             // Namespace based folders avoid clash for validation being run on multiple versions of a feed.
             // TODO: do we know that there will always be a namespace?
             String validatorOutputDirectory = "/tmp/datatools_gtfs/" + this.namespace + "/";
@@ -431,7 +430,7 @@ public class FeedVersion extends Model implements Serializable {
             status.update("MobilityData Analysis...", 20);
             // Set up MobilityData validator.
             ValidationRunnerConfig.Builder builder = ValidationRunnerConfig.builder();
-            builder.setGtfsSource(gtfsZip.toURI());
+            builder.setGtfsSource(this.retrieveGtfsFile().toURI());
             builder.setOutputDirectory(Path.of(validatorOutputDirectory));
             ValidationRunnerConfig mbValidatorConfig = builder.build();
 
@@ -443,8 +442,10 @@ public class FeedVersion extends Model implements Serializable {
             status.update("MobilityData Analysis...", 80);
             // Read generated report and save to Mongo.
             String json;
-            try (FileReader fr = new FileReader(validatorOutputDirectory + "report.json")) {
-                BufferedReader in = new BufferedReader(fr);
+            try (
+                FileReader fr = new FileReader(validatorOutputDirectory + "report.json");
+                BufferedReader in = new BufferedReader(fr)
+            ) {
                 json = in.lines().collect(Collectors.joining(System.lineSeparator()));
             }
 

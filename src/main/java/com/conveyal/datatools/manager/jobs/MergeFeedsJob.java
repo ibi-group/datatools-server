@@ -18,8 +18,12 @@ import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.ErrorUtils;
 import com.conveyal.gtfs.loader.Feed;
+import com.conveyal.gtfs.loader.JdbcGtfsExporter;
 import com.conveyal.gtfs.loader.Table;
+import com.conveyal.gtfs.model.Location;
+import com.conveyal.gtfs.model.LocationShape;
 import com.conveyal.gtfs.model.StopTime;
+import com.conveyal.gtfs.util.GeoJsonUtil;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.collect.Lists;
@@ -38,13 +42,17 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import static com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType.SERVICE_PERIOD;
 import static com.conveyal.datatools.manager.jobs.feedmerge.MergeFeedsType.REGIONAL;
 import static com.conveyal.datatools.manager.jobs.feedmerge.MergeStrategy.CHECK_STOP_TIMES;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.REGIONAL_MERGE;
-import static com.conveyal.datatools.manager.utils.MergeFeedUtils.*;
+import static com.conveyal.datatools.manager.utils.MergeFeedUtils.getMergedVersion;
+import static com.conveyal.datatools.manager.utils.MergeFeedUtils.stopTimesMatchSimplified;
+import static com.conveyal.datatools.manager.utils.StringUtils.getCleanName;
+import static com.conveyal.gtfs.loader.Table.LOCATION_GEO_JSON_FILE_NAME;
 
 /**
  * This job handles merging two or more feed versions according to logic specific to the specified merge type.
@@ -204,6 +212,8 @@ public class MergeFeedsJob extends FeedSourceJob {
                 }
             }
 
+            mergeLocations(out);
+
             // Loop over GTFS tables and merge each feed one table at a time.
             for (int i = 0; i < numberOfTables; i++) {
                 Table table = tablesToMerge.get(i);
@@ -225,7 +235,7 @@ public class MergeFeedsJob extends FeedSourceJob {
             status.fail(message, e);
         } finally {
             try {
-                feedMergeContext.close();
+                if (feedMergeContext != null) feedMergeContext.close();
             } catch (IOException e) {
                 logAndReportToBugsnag(e, "Error closing FeedMergeContext object");
             }
@@ -242,6 +252,39 @@ public class MergeFeedsJob extends FeedSourceJob {
             // We must add this job in jobLogic (rather than jobFinished) because jobFinished is called after this job's
             // subJobs are run.
             addNextJob(new ProcessSingleFeedJob(mergedVersion, owner, true));
+        }
+    }
+
+    /**
+     * Merge locations.geojson files. These files are not compatible with the CSV merging strategy. Instead, the
+     * location.geojson file is flattened into locations and locations shapes. The location id is then updated with the
+     * scope id to keep feed locations unique, converted back into geojson and written to the zip file.
+     *
+     * Locations must be processed prior to other CSV files so the location ids are available for foreign reference
+     * checks.
+     */
+    void mergeLocations(ZipOutputStream out) throws IOException {
+        Set<Location> mergedLocations = new HashSet<>();
+        Set<LocationShape> mergedLocationShapes = new HashSet<>();
+        for (FeedToMerge feed : feedMergeContext.feedsToMerge) {
+            ZipEntry locationGeoJsonFile = feed.zipFile.getEntry(LOCATION_GEO_JSON_FILE_NAME);
+            if (locationGeoJsonFile != null) {
+                String idScope = getCleanName(feed.version.parentFeedSource().name) + feed.version.version;
+                List<Location> locations = GeoJsonUtil.getLocationsFromGeoJson(feed.zipFile, locationGeoJsonFile, null);
+                for (Location location : locations) {
+                    location.location_id = String.join(":", idScope, location.location_id);
+                    mergedLocations.add(location);
+                    feedMergeContext.locationIds.add(location.location_id);
+                }
+                List<LocationShape> locationShapes = GeoJsonUtil.getLocationShapesFromGeoJson(feed.zipFile, locationGeoJsonFile, null);
+                for (LocationShape locationShape : locationShapes) {
+                    locationShape.location_id = String.join(":", idScope, locationShape.location_id);
+                    mergedLocationShapes.add(locationShape);
+                }
+            }
+        }
+        if (!mergedLocations.isEmpty()) {
+            JdbcGtfsExporter.writeLocationsToFile(out, new ArrayList<>(mergedLocations), new ArrayList<>(mergedLocationShapes));
         }
     }
 
@@ -279,6 +322,10 @@ public class MergeFeedsJob extends FeedSourceJob {
         }
         if (tableName.equals(Table.PATTERNS.name) || tableName.equals(Table.PATTERN_STOP.name)) {
             LOG.warn("Skipping editor-only table {}.", tableName);
+            return true;
+        }
+        if (tableName.equals(Table.LOCATIONS.name) || tableName.equals(Table.LOCATION_SHAPES.name)) {
+            LOG.warn("{} detected. Skipping traditional merge in favour of bespoke merge.", LOCATION_GEO_JSON_FILE_NAME);
             return true;
         }
         return false;

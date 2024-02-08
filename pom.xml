@@ -271,8 +271,8 @@
         <dependency>
             <groupId>com.github.ibi-group</groupId>
             <artifactId>gtfs-lib</artifactId>
-            <!-- Latest dev build on jitpack.io -->
-            <version>5e24a64c4266c5cc9866eaa4b11a1231270a2498</version>
+            <version>2bd924c6e5f5244a279c9d94298c14c0b3d47b35</version>
+            <!-- Latest dev-flex build on jitpack.io -->
             <!-- Exclusions added in order to silence SLF4J warnings about multiple bindings:
                 http://www.slf4j.org/codes.html#multiple_bindings
             -->

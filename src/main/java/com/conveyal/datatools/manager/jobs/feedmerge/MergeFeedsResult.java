@@ -37,6 +37,12 @@ public class MergeFeedsResult implements Serializable {
     public Set<String> calendarDatesServiceIds = new HashSet<>();
 
     /**
+     * Track various table ids for resolving foreign references.
+     */
+    public Set<String> stopIds = new HashSet<>();
+    public Set<String> stopAreaIds = new HashSet<>();
+
+    /**
      * Track the set of route IDs to end up in the merged feed in order to determine which route_attributes
      * records should be retained in the merged result.
      */
