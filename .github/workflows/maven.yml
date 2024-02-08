@@ -32,7 +32,7 @@ jobs:
         with:
           java-version: 19
           distribution: 'temurin'
-      # Install node 14 for running e2e tests (and for maven-semantic-release).
+      # Install node 20 for running e2e tests (and for maven-semantic-release).
       - name: Use Node.js 20.x
         uses: actions/setup-node@v1
         with:
