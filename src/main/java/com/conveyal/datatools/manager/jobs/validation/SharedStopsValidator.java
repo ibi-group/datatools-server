@@ -127,17 +127,19 @@ public class SharedStopsValidator extends FeedValidator {
 
                 // Check for SS_01 (stop id appearing in multiple stop groups).
                 // Make sure this error is only returned if we are inside the feed that is being checked.
-                if (seenStopIds.contains(stopId)) {
-                    if (feedId.equals(sharedStopFeedId)) {
+                Stop syntheticStop = new Stop();
+                syntheticStop.stop_id = stopId;
+                if (feedId.equals(sharedStopFeedId)) {
+                    if (seenStopIds.contains(stopId)) {
                         registerError(stops
                             .stream()
                             .filter(stop -> stop.stop_id.equals(stopId))
                             .findFirst()
-                            .orElse(new Stop()), NewGTFSErrorType.MULTIPLE_SHARED_STOPS_GROUPS
+                            .orElse(syntheticStop), NewGTFSErrorType.MULTIPLE_SHARED_STOPS_GROUPS
                         );
+                    } else {
+                        seenStopIds.add(stopId);
                     }
-                } else {
-                    seenStopIds.add(stopId);
                 }
 
                 // Check for SS_02 (multiple primary stops per stop group).
