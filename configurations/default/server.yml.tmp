@@ -18,6 +18,8 @@ application:
 modules:
   enterprise:
     enabled: false
+    # Setting this to true will upload all feeds to S3 instead of linking to their URL
+    prefer_s3_links: false
   editor:
     enabled: true
   deployment:
