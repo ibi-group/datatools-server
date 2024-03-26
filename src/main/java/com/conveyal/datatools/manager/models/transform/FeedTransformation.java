@@ -32,7 +32,8 @@ import java.io.Serializable;
     @JsonSubTypes.Type(value = ReplaceFileFromVersionTransformation.class, name = "ReplaceFileFromVersionTransformation"),
     @JsonSubTypes.Type(value = ReplaceFileFromStringTransformation.class, name = "ReplaceFileFromStringTransformation"),
     @JsonSubTypes.Type(value = PreserveCustomFieldsTransformation.class, name = "PreserveCustomFieldsTransformation"),
-    @JsonSubTypes.Type(value = AddCustomFileFromStringTransformation.class, name = "AddCustomFileTransformation")
+    @JsonSubTypes.Type(value = AddCustomFileFromStringTransformation.class, name = "AddCustomFileTransformation"),
+    @JsonSubTypes.Type(value = AppendToFileTransformation.class, name = "AppendToFileTransformation")
 })
 public abstract class FeedTransformation<Target extends FeedTransformTarget> implements Serializable {
     private static final long serialVersionUID = 1L;

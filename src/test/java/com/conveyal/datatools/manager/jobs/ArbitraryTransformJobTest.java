@@ -11,6 +11,7 @@ import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.models.Snapshot;
 import com.conveyal.datatools.manager.models.TableTransformResult;
 import com.conveyal.datatools.manager.models.transform.AddCustomFileFromStringTransformation;
+import com.conveyal.datatools.manager.models.transform.AppendToFileTransformation;
 import com.conveyal.datatools.manager.models.transform.DeleteRecordsTransformation;
 import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
 import com.conveyal.datatools.manager.models.transform.FeedTransformation;
@@ -193,6 +194,37 @@ public class ArbitraryTransformJobTest extends UnitTest {
     }
 
     @Test
+    void canAppendToStops() throws SQLException, IOException {
+        sourceVersion = createFeedVersion(
+                feedSource,
+                zipFolderFiles("fake-agency-with-only-calendar")
+        );
+        FeedTransformation transformation = AppendToFileTransformation.create(generateStopRow(), "stops");
+        FeedTransformRules transformRules = new FeedTransformRules(transformation);
+        feedSource.transformRules.add(transformRules);
+        Persistence.feedSources.replace(feedSource.id, feedSource);
+        // Create new target version (note: the folder has no stop_attributes.txt file)
+        targetVersion = createFeedVersion(
+                feedSource,
+                zipFolderFiles("fake-agency-with-only-calendar-dates")
+        );
+        LOG.info("Checking assertions.");
+        assertEquals(
+                6, // Magic number should match row count in string produced by generateFeedInfo
+                targetVersion.feedLoadResult.stops.rowCount,
+                "stops.txt row count should equal input csv data # of rows + 1 extra row"
+        );
+        // Check for presence of new stop id in database (one record).
+        assertThatSqlCountQueryYieldsExpectedCount(
+                String.format(
+                        "SELECT count(*) FROM %s.stops WHERE stop_id = '%s'",
+                        targetVersion.namespace,
+                        "new"
+                ),
+                1
+        );
+    }
+    @Test
     void canReplaceFeedInfo() throws SQLException, IOException {
         // Generate random UUID for feedId, which gets placed into the csv data.
         final String feedId = UUID.randomUUID().toString();
@@ -280,6 +312,10 @@ public class ArbitraryTransformJobTest extends UnitTest {
         return "stop_id,custom_column1,custom_column2"
             + "\n4u6g,customValue1,customValue2"
             + "\n1234567,customValue3,customValue4";
+    }
+
+    private static String generateStopRow() {
+        return "\nnew,new,appended stop,,37.06668,-122.07781,,,0,123,,";
     }
 
     private static String generateCustomCsvData() {
