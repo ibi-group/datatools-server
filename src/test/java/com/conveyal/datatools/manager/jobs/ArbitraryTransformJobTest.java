@@ -210,7 +210,7 @@ public class ArbitraryTransformJobTest extends UnitTest {
         );
         LOG.info("Checking assertions.");
         assertEquals(
-                6, // Magic number should match row count in string produced by generateFeedInfo
+                6, // Magic number should match row count of stops.txt with one extra
                 targetVersion.feedLoadResult.stops.rowCount,
                 "stops.txt row count should equal input csv data # of rows + 1 extra row"
         );
