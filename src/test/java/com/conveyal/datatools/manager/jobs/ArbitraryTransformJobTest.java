@@ -4,13 +4,13 @@ import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
-import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.models.Snapshot;
 import com.conveyal.datatools.manager.models.TableTransformResult;
 import com.conveyal.datatools.manager.models.transform.AddCustomFileFromStringTransformation;
+import com.conveyal.datatools.manager.models.transform.AppendToFileTransformation;
 import com.conveyal.datatools.manager.models.transform.DeleteRecordsTransformation;
 import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
 import com.conveyal.datatools.manager.models.transform.FeedTransformation;
@@ -26,17 +26,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.supercsv.io.CsvMapReader;
-import org.supercsv.prefs.CsvPreference;
 
-import java.io.File;
-import java.io.InputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -46,7 +40,6 @@ import static com.conveyal.datatools.TestUtils.assertThatSqlCountQueryYieldsExpe
 import static com.conveyal.datatools.TestUtils.createFeedVersion;
 import static com.conveyal.datatools.TestUtils.zipFolderFiles;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.MANUALLY_UPLOADED;
-import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.VERSION_CLONE;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -193,6 +186,37 @@ public class ArbitraryTransformJobTest extends UnitTest {
     }
 
     @Test
+    void canAppendToStops() throws SQLException, IOException {
+        sourceVersion = createFeedVersion(
+                feedSource,
+                zipFolderFiles("fake-agency-with-only-calendar")
+        );
+        FeedTransformation transformation = AppendToFileTransformation.create(generateStopRow(), "stops");
+        FeedTransformRules transformRules = new FeedTransformRules(transformation);
+        feedSource.transformRules.add(transformRules);
+        Persistence.feedSources.replace(feedSource.id, feedSource);
+        // Create new target version (note: the folder has no stop_attributes.txt file)
+        targetVersion = createFeedVersion(
+                feedSource,
+                zipFolderFiles("fake-agency-with-only-calendar-dates")
+        );
+        LOG.info("Checking assertions.");
+        assertEquals(
+                5 + 3, // Magic number should match row count of stops.txt with three extra
+                targetVersion.feedLoadResult.stops.rowCount,
+                "stops.txt row count should equal input csv data # of rows + 3 extra rows"
+        );
+        // Check for presence of new stop id in database (one record).
+        assertThatSqlCountQueryYieldsExpectedCount(
+                String.format(
+                        "SELECT count(*) FROM %s.stops WHERE stop_id = '%s'",
+                        targetVersion.namespace,
+                        "new"
+                ),
+                1
+        );
+    }
+    @Test
     void canReplaceFeedInfo() throws SQLException, IOException {
         // Generate random UUID for feedId, which gets placed into the csv data.
         final String feedId = UUID.randomUUID().toString();
@@ -280,6 +304,12 @@ public class ArbitraryTransformJobTest extends UnitTest {
         return "stop_id,custom_column1,custom_column2"
             + "\n4u6g,customValue1,customValue2"
             + "\n1234567,customValue3,customValue4";
+    }
+
+    private static String generateStopRow() {
+        return "new3,new3,appended stop,,37,-122,,,0,123,," +
+                "\nnew2,new2,appended stop,,37,-122,,,0,123,," +
+                "\nnew,new,appended stop,,37.06668,-122.07781,,,0,123,,";
     }
 
     private static String generateCustomCsvData() {
