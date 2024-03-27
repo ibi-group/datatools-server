@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.text.SimpleDateFormat;
 
 import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
+import static com.conveyal.datatools.manager.DataManager.hasConfigProperty;
 
 /**
  * Publish the latest GTFS files for all public feeds in a project.
@@ -67,7 +68,7 @@ public class PublishProjectFeedsJob extends MonitorableJob {
                 .forEach(fs -> {
                     // generate list item for feed source
                     String url;
-                    if (fs.url != null) {
+                    if (fs.url != null && !hasConfigProperty("modules.enterprise.prefer_s3_links")) {
                         url = fs.url.toString();
                     }
                     else {
