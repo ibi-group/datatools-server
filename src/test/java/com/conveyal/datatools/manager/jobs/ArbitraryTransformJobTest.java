@@ -4,7 +4,6 @@ import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
-import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
@@ -27,17 +26,11 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.supercsv.io.CsvMapReader;
-import org.supercsv.prefs.CsvPreference;
 
-import java.io.File;
-import java.io.InputStream;
 import java.io.IOException;
-import java.io.InputStreamReader;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
@@ -47,7 +40,6 @@ import static com.conveyal.datatools.TestUtils.assertThatSqlCountQueryYieldsExpe
 import static com.conveyal.datatools.TestUtils.createFeedVersion;
 import static com.conveyal.datatools.TestUtils.zipFolderFiles;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.MANUALLY_UPLOADED;
-import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.VERSION_CLONE;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -210,9 +202,9 @@ public class ArbitraryTransformJobTest extends UnitTest {
         );
         LOG.info("Checking assertions.");
         assertEquals(
-                6, // Magic number should match row count of stops.txt with one extra
+                5 + 3, // Magic number should match row count of stops.txt with three extra
                 targetVersion.feedLoadResult.stops.rowCount,
-                "stops.txt row count should equal input csv data # of rows + 1 extra row"
+                "stops.txt row count should equal input csv data # of rows + 3 extra rows"
         );
         // Check for presence of new stop id in database (one record).
         assertThatSqlCountQueryYieldsExpectedCount(
@@ -315,7 +307,9 @@ public class ArbitraryTransformJobTest extends UnitTest {
     }
 
     private static String generateStopRow() {
-        return "\nnew,new,appended stop,,37.06668,-122.07781,,,0,123,,";
+        return "new3,new3,appended stop,,37,-122,,,0,123,," +
+                "\nnew2,new2,appended stop,,37,-122,,,0,123,," +
+                "\nnew,new,appended stop,,37.06668,-122.07781,,,0,123,,";
     }
 
     private static String generateCustomCsvData() {

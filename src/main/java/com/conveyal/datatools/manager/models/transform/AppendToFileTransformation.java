@@ -38,9 +38,11 @@ public class AppendToFileTransformation extends ZipTransformation {
     public void transform(FeedTransformZipTarget zipTarget, MonitorableJob.Status status) {
         String tableName = table + ".txt";
         Path targetZipPath = Paths.get(zipTarget.gtfsFile.getAbsolutePath());
+
         try (
-                FileSystem targetZipFs = FileSystems.newFileSystem(targetZipPath, (ClassLoader) null);
-                InputStream inputStream = new ByteArrayInputStream(csvData.getBytes(StandardCharsets.UTF_8));
+            FileSystem targetZipFs = FileSystems.newFileSystem(targetZipPath, (ClassLoader) null);
+            InputStream newLineStream = new ByteArrayInputStream("\n".getBytes(StandardCharsets.UTF_8));
+            InputStream inputStream = new ByteArrayInputStream(csvData.getBytes(StandardCharsets.UTF_8));
         ) {
             TransformType type = TransformType.TABLE_MODIFIED;
 
@@ -51,6 +53,9 @@ public class AppendToFileTransformation extends ZipTransformation {
 
             // Append CSV data into the target file in the temporary copy of file
             try (OutputStream os = new FileOutputStream(tempFile, true)) {
+                // Append a newline in case our data doesn't include one
+                // Having an extra newline is not a problem!
+                os.write(newLineStream.readAllBytes());
                 os.write(inputStream.readAllBytes());
             } catch (Exception e) {
                 status.fail("Failed to write to target file", e);
