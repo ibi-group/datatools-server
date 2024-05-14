@@ -216,6 +216,71 @@ public class ArbitraryTransformJobTest extends UnitTest {
                 1
         );
     }
+
+
+    @Test
+    void canAppendToStopsWithLeadingNewlineInData() throws SQLException, IOException {
+        sourceVersion = createFeedVersion(
+                feedSource,
+                zipFolderFiles("fake-agency-with-only-calendar-and-trailing-newlines")
+        );
+        FeedTransformation transformation = AppendToFileTransformation.create(generateStopRowWithLeadingNewline(), "stops");
+        FeedTransformRules transformRules = new FeedTransformRules(transformation);
+        feedSource.transformRules.add(transformRules);
+        Persistence.feedSources.replace(feedSource.id, feedSource);
+        // Create new target version (note: the folder has no stop_attributes.txt file)
+        targetVersion = createFeedVersion(
+                feedSource,
+                zipFolderFiles("fake-agency-with-only-calendar-dates")
+        );
+        LOG.info("Checking assertions.");
+        assertEquals(
+                5 + 3, // Magic number should match row count of stops.txt with three extra
+                targetVersion.feedLoadResult.stops.rowCount,
+                "stops.txt row count should equal input csv data # of rows + 3 extra rows"
+        );
+        // Check for presence of new stop id in database (one record).
+        assertThatSqlCountQueryYieldsExpectedCount(
+                String.format(
+                        "SELECT count(*) FROM %s.stops WHERE stop_id = '%s'",
+                        targetVersion.namespace,
+                        "new"
+                ),
+                1
+        );
+    }
+    @Test
+    void canAppendToStopsWithTrailingNewlineInData() throws SQLException, IOException {
+        sourceVersion = createFeedVersion(
+                feedSource,
+                zipFolderFiles("fake-agency-with-only-calendar-and-trailing-newlines")
+        );
+        FeedTransformation transformation = AppendToFileTransformation.create(generateStopRowWithTrailingNewline(), "stops");
+        FeedTransformRules transformRules = new FeedTransformRules(transformation);
+        feedSource.transformRules.add(transformRules);
+        Persistence.feedSources.replace(feedSource.id, feedSource);
+        // Create new target version (note: the folder has no stop_attributes.txt file)
+        targetVersion = createFeedVersion(
+                feedSource,
+                zipFolderFiles("fake-agency-with-only-calendar-dates")
+        );
+        LOG.info("Checking assertions.");
+        assertEquals(
+                5 + 3, // Magic number should match row count of stops.txt with three extra
+                targetVersion.feedLoadResult.stops.rowCount,
+                "stops.txt row count should equal input csv data # of rows + 3 extra rows"
+        );
+        // Check for presence of new stop id in database (one record).
+        assertThatSqlCountQueryYieldsExpectedCount(
+                String.format(
+                        "SELECT count(*) FROM %s.stops WHERE stop_id = '%s'",
+                        targetVersion.namespace,
+                        "new"
+                ),
+                1
+        );
+    }
+
     @Test
     void canReplaceFeedInfo() throws SQLException, IOException {
         // Generate random UUID for feedId, which gets placed into the csv data.
@@ -310,6 +375,16 @@ public class ArbitraryTransformJobTest extends UnitTest {
         return "new3,new3,appended stop,,37,-122,,,0,123,," +
                 "\nnew2,new2,appended stop,,37,-122,,,0,123,," +
                 "\nnew,new,appended stop,,37.06668,-122.07781,,,0,123,,";
+    }
+    private static String generateStopRowWithLeadingNewline() {
+        return "\nnew3,new3,appended stop,,37,-122,,,0,123,," +
+                "\nnew2,new2,appended stop,,37,-122,,,0,123,," +
+                "\nnew,new,appended stop,,37.06668,-122.07781,,,0,123,,";
+    }
+    private static String generateStopRowWithTrailingNewline() {
+        return "new3,new3,appended stop,,37,-122,,,0,123,," +
+                "\nnew2,new2,appended stop,,37,-122,,,0,123,," +
+                "\nnew,new,appended stop,,37.06668,-122.07781,,,0,123,,\n";
     }
 
     private static String generateCustomCsvData() {
