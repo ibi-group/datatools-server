@@ -27,10 +27,10 @@ public class ReferenceTableDiscovery {
                 Table.SCHEDULE_EXCEPTIONS.name
             )
         ),
-        STOP_AREA_STOP_ID_KEY(
+        LOCATION_GROUP_STOPS_STOP_ID_KEY(
             String.join(
                 REF_TABLE_SEPARATOR,
-                Table.STOP_AREAS.name,
+                Table.LOCATION_GROUP_STOPS.name,
                 "stop_id",
                 Table.STOPS.name,
                 Table.LOCATIONS.name
@@ -43,7 +43,7 @@ public class ReferenceTableDiscovery {
                 "stop_id",
                 Table.STOPS.name,
                 Table.LOCATIONS.name,
-                Table.STOP_AREAS.name
+                Table.LOCATION_GROUP_STOPS.name
             )
         );
 
@@ -112,25 +112,23 @@ public class ReferenceTableDiscovery {
     }
 
     /**
-     * Define the reference table for a stop area's area id. This will either be a stop or location.
+     * Define the reference table for a location group stop: stop id. This will either be a stop or null.
      */
-    public static Table getStopAreaAreaIdReferenceTable(
+    public static Table getLocationGroupStopReferenceTable(
         String fieldValue,
-        MergeFeedsResult mergeFeedsResult,
-        Set<String> locationIds
+        MergeFeedsResult mergeFeedsResult
     ) {
         if (mergeFeedsResult.stopIds.contains(fieldValue)) {
             return Table.STOPS;
-        } else if (locationIds.contains(fieldValue)) {
-            return Table.LOCATIONS;
         }
         return null;
     }
 
     /**
-     * Define the reference table for a stop time's stop id. This will either be a stop, location or stop area.
+     * Define the reference table for a stop time's stop id. This will either be a stop, location or location group.
+     * TODO: In later PR's this will be redundant as a stop time: stop id will only reference a stop.
      */
-    public static Table getStopTimeStopIdReferenceTable(
+    public static Table getStopTimeReferenceTable(
         String fieldValue,
         MergeFeedsResult mergeFeedsResult,
         Set<String> locationIds
@@ -139,8 +137,8 @@ public class ReferenceTableDiscovery {
             return Table.STOPS;
         } else if (locationIds.contains(fieldValue)) {
             return Table.LOCATIONS;
-        } else if (mergeFeedsResult.stopAreaIds.contains(fieldValue)) {
-            return Table.STOP_AREAS;
+        } else if (mergeFeedsResult.locationGroupStopIds.contains(fieldValue)) {
+            return Table.LOCATION_GROUP_STOPS;
         }
         return null;
     }
