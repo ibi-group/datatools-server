@@ -1,2 +1,0 @@
-area_id,area_name
-Area One,"This is locationGroup one"
