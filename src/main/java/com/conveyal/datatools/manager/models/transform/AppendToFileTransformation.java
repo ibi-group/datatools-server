@@ -67,13 +67,13 @@ public class AppendToFileTransformation extends ZipTransformation {
 
             // Re-write file without extra line breaks
             try (
-                    OutputStream noNewlineOs = new FileOutputStream(tempFileWithStrippedNewlines, false);
-                    FileReader fr = new FileReader(tempFile);
-                    BufferedReader br = new BufferedReader(fr);
+                OutputStream noNewlineOs = new FileOutputStream(tempFileWithStrippedNewlines, false);
+                FileReader fr = new FileReader(tempFile);
+                BufferedReader br = new BufferedReader(fr);
             ) {
-                String line = null;
+                String line;
                 while ((line = br.readLine()) != null) {
-                    if (line.matches("\n") || line.equals("")) {
+                    if (line.matches("\n") || line.isEmpty()) {
                         continue;
                     }
 
