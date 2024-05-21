@@ -3,7 +3,7 @@ name: Create and publish a Docker image
 
 on:
   push:
-    branches: ['dev', 'master', 'dev-flex']
+    branches: ['dev', 'master', 'dev-flex', 'feature/DT-423-rename-stop-areas-location-groups']
 
 env:
   REGISTRY: ghcr.io
