@@ -5,9 +5,11 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.models.TableTransformResult;
 import com.conveyal.datatools.manager.models.TransformType;
 
+import java.io.BufferedReader;
 import java.io.ByteArrayInputStream;
 import java.io.File;
 import java.io.FileOutputStream;
+import java.io.FileReader;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
@@ -49,20 +51,40 @@ public class AppendToFileTransformation extends ZipTransformation {
             Path targetTxtFilePath = getTablePathInZip(tableName, targetZipFs);
 
             final File tempFile = File.createTempFile(tableName + "-temp", ".txt");
+            final File tempFileWithStrippedNewlines = File.createTempFile(tableName + "-temp-no-newlines", ".txt");
             Files.copy(targetTxtFilePath, tempFile.toPath(), StandardCopyOption.REPLACE_EXISTING);
 
             // Append CSV data into the target file in the temporary copy of file
             try (OutputStream os = new FileOutputStream(tempFile, true)) {
-                // Append a newline in case our data doesn't include one
-                // Having an extra newline is not a problem!
                 os.write(newLineStream.readAllBytes());
                 os.write(inputStream.readAllBytes());
+                os.flush();
+
             } catch (Exception e) {
                 status.fail("Failed to write to target file", e);
             }
 
+
+            // Re-write file without extra line breaks
+            try (
+                OutputStream noNewlineOs = new FileOutputStream(tempFileWithStrippedNewlines, false);
+                FileReader fr = new FileReader(tempFile);
+                BufferedReader br = new BufferedReader(fr);
+            ) {
+                String line;
+                while ((line = br.readLine()) != null) {
+                    if (line.matches("\n") || line.isEmpty()) {
+                        continue;
+                    }
+
+                    noNewlineOs.write(line.getBytes());
+                    noNewlineOs.write("\n".getBytes());
+                }
+                noNewlineOs.flush();
+            }
+
             // Copy modified file into zip
-            Files.copy(tempFile.toPath(), targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
+            Files.copy(tempFileWithStrippedNewlines.toPath(), targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
 
             final int NEW_LINE_CHARACTER_CODE = 10;
             int lineCount = (int) csvData.chars().filter(c -> c == NEW_LINE_CHARACTER_CODE).count();
