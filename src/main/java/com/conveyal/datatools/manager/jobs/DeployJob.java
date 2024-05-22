@@ -7,6 +7,7 @@ import com.amazonaws.services.ec2.model.DescribeInstanceStatusRequest;
 import com.amazonaws.services.ec2.model.Filter;
 import com.amazonaws.services.ec2.model.IamInstanceProfileSpecification;
 import com.amazonaws.services.ec2.model.Instance;
+import com.amazonaws.services.ec2.model.InstanceMetadataOptionsRequest;
 import com.amazonaws.services.ec2.model.InstanceNetworkInterfaceSpecification;
 import com.amazonaws.services.ec2.model.InstanceStateChange;
 import com.amazonaws.services.ec2.model.InstanceType;
@@ -1009,6 +1010,7 @@ public class DeployJob extends MonitorableJob {
                 .withKeyName(otpServer.ec2Info.keyName)
                 // This will have the instance terminate when it is shut down.
                 .withInstanceInitiatedShutdownBehavior("terminate")
+                .withMetadataOptions(new InstanceMetadataOptionsRequest().withHttpTokens("optional").withHttpEndpoint("enabled"))
                 .withUserData(Base64.encodeBase64String(userData.getBytes()));
         List<Instance> instances;
         try {
@@ -1383,6 +1385,7 @@ public class DeployJob extends MonitorableJob {
 
         List<String> lines = new ArrayList<>();
         lines.add("#!/bin/bash");
+        lines.add("mkdir /opt/otp/");
         // NOTE: user data output is logged to `/var/log/cloud-init-output.log` automatically with ec2 instances
         // Add some items to the $PATH as the $PATH with user-data scripts differs from the ssh $PATH.
         lines.add("export PATH=\"$PATH:/home/ubuntu/.yarn/bin\"");
