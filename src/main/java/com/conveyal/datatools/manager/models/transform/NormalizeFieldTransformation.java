@@ -28,6 +28,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
 
 import static com.conveyal.datatools.manager.DataManager.getConfigProperty;
@@ -219,6 +220,11 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             // (This should also trigger a system IO update event, so subsequent IO calls pick up the correct file.
             Files.move(tempZipPath, originalZipPath, StandardCopyOption.REPLACE_EXISTING);
             LOG.info("Field normalization transformation successful, {} row(s) changed.", modifiedRowCount);
+        } catch (ZipException ze) {
+            status.fail(
+                String.format("'Normalize Field' failed because the GTFS archive is corrupted (%s).", ze.getMessage()),
+                ze
+            );
         } catch (Exception e) {
             status.fail("Unknown error encountered while transforming zip file", e);
         }
