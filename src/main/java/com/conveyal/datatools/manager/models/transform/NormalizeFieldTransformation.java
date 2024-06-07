@@ -231,7 +231,13 @@ public class NormalizeFieldTransformation extends ZipTransformation {
     }
 
     /** Write csv input stream into the zip file, replacing the existing file. */
-    private void writeCsvContent(FeedTransformZipTarget zipTarget, Path tempZipPath, StringWriter stringWriter, String tableName, int modifiedRowCount) throws IOException {
+    private void writeCsvContent(
+        FeedTransformZipTarget zipTarget,
+        Path tempZipPath,
+        StringWriter stringWriter,
+        String tableName,
+        int modifiedRowCount
+    ) throws IOException {
         try (
             // Modify target zip file that we just read.
             FileSystem targetZipFs = FileSystems.newFileSystem(tempZipPath, (ClassLoader) null);
