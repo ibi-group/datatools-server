@@ -15,6 +15,7 @@ import org.supercsv.io.CsvListWriter;
 import org.supercsv.prefs.CsvPreference;
 
 import java.io.ByteArrayInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringWriter;
 import java.nio.charset.StandardCharsets;
@@ -27,6 +28,7 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
+import java.util.zip.ZipException;
 import java.util.zip.ZipFile;
 
 import static com.conveyal.datatools.manager.DataManager.getConfigProperty;
@@ -143,7 +145,7 @@ public class NormalizeFieldTransformation extends ZipTransformation {
     public void validateParameters(MonitorableJob.Status status) {
         // fieldName must not be null
         if (fieldName == null) {
-            status.fail("Field name must not be null");
+            status.fail("'Normalize Field' Transformation failed because the field name parameter is not set.");
             return;
         }
 
@@ -193,66 +195,99 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             Files.copy(originalZipPath, tempZipPath, StandardCopyOption.REPLACE_EXISTING);
 
             Table gtfsTable = GtfsUtils.getGtfsTable(table);
+            if (gtfsTable == null) {
+                status.fail(String.format("Unsupported GTFS file '%s'", tableName));
+                return;
+            }
             CsvReader csvReader = gtfsTable.getCsvReader(new ZipFile(tempZipPath.toAbsolutePath().toString()), null);
+            if (csvReader == null) {
+                status.fail(String.format("'Normalize Field' failed because file '%s' was not found in the GTFS archive", tableName));
+                return;
+            }
             final String[] headers = csvReader.getHeaders();
             Field[] fieldsFoundInZip = gtfsTable.getFieldsFromFieldHeaders(headers, null);
             int transformFieldIndex = getFieldIndex(fieldsFoundInZip, fieldName);
-
-            int modifiedRowCount = 0;
-
-            // Write headers and processed CSV rows.
-            writer.write(headers);
-            while (csvReader.readRecord()) {
-                String originalValue = csvReader.get(transformFieldIndex);
-                String transformedValue = originalValue;
-
-                // Convert to title case, if requested.
-                if (capitalize) {
-                    if (capitalizationStyle == CapitalizationStyle.TITLE_CASE) {
-                        transformedValue = convertToTitleCase(transformedValue);
-                    }
-                    // TODO: Implement other capitalization styles.
-                }
-
-                // Perform substitutions if any.
-                transformedValue = performSubstitutions(transformedValue);
-
-                // Re-assemble the CSV line and place in buffer.
-                String[] csvValues = csvReader.getValues();
-                csvValues[transformFieldIndex] = transformedValue;
-
-                // Write line to table (plus new line char).
-                writer.write(csvValues);
-
-                // Count number of CSV rows changed.
-                if (!originalValue.equals(transformedValue)) {
-                    modifiedRowCount++;
-                }
-            } // End of iteration over each row.
-            csvReader.close();
-            writer.flush();
-
-            // Copy csv input stream into the zip file, replacing the existing file.
-            try (
-                // Modify target zip file that we just read.
-                FileSystem targetZipFs = FileSystems.newFileSystem(tempZipPath, (ClassLoader) null);
-                // Stream for file copy operation.
-                InputStream inputStream =  new ByteArrayInputStream(stringWriter.toString().getBytes(StandardCharsets.UTF_8))
-            ) {
-                Path targetTxtFilePath = getTablePathInZip(tableName, targetZipFs);
-                Files.copy(inputStream, targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
-                zipTarget.feedTransformResult.tableTransformResults.add(
-                    new TableTransformResult(tableName, 0, modifiedRowCount, 0)
-                );
+            if (transformFieldIndex == -1) {
+                status.fail(String.format("'Normalize Field' failed because field '%s' was not found in file '%s' in the GTFS archive", fieldName, tableName));
+                return;
             }
+
+            int modifiedRowCount = generateCsvContent(writer, headers, csvReader, transformFieldIndex);
+
+            writeCsvContent(zipTarget, tempZipPath, stringWriter, tableName, modifiedRowCount);
 
             // Replace original zip file with temporary working zip file.
             // (This should also trigger a system IO update event, so subsequent IO calls pick up the correct file.
             Files.move(tempZipPath, originalZipPath, StandardCopyOption.REPLACE_EXISTING);
             LOG.info("Field normalization transformation successful, {} row(s) changed.", modifiedRowCount);
+        } catch (ZipException ze) {
+            status.fail(
+                String.format("'Normalize Field' failed because the GTFS archive is corrupted (%s).", ze.getMessage()),
+                ze
+            );
         } catch (Exception e) {
             status.fail("Unknown error encountered while transforming zip file", e);
         }
+    }
+
+    /** Write csv input stream into the zip file, replacing the existing file. */
+    private void writeCsvContent(
+        FeedTransformZipTarget zipTarget,
+        Path tempZipPath,
+        StringWriter stringWriter,
+        String tableName,
+        int modifiedRowCount
+    ) throws IOException {
+        try (
+            // Modify target zip file that we just read.
+            FileSystem targetZipFs = FileSystems.newFileSystem(tempZipPath, (ClassLoader) null);
+            // Stream for file copy operation.
+            InputStream inputStream = new ByteArrayInputStream(stringWriter.toString().getBytes(StandardCharsets.UTF_8))
+        ) {
+            Path targetTxtFilePath = getTablePathInZip(tableName, targetZipFs);
+            Files.copy(inputStream, targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
+            zipTarget.feedTransformResult.tableTransformResults.add(
+                new TableTransformResult(tableName, 0, modifiedRowCount, 0)
+            );
+        }
+    }
+
+    /** Generates content for the GTFS table, returns the number of rows modified. */
+    private int generateCsvContent(CsvListWriter writer, String[] headers, CsvReader csvReader, int transformFieldIndex) throws IOException {
+        int modifiedRowCount = 0;
+
+        // Write headers and processed CSV rows.
+        writer.write(headers);
+        while (csvReader.readRecord()) {
+            String originalValue = csvReader.get(transformFieldIndex);
+            String transformedValue = originalValue;
+
+            // Convert to title case, if requested.
+            if (capitalize) {
+                if (capitalizationStyle == CapitalizationStyle.TITLE_CASE) {
+                    transformedValue = convertToTitleCase(transformedValue);
+                }
+                // TODO: Implement other capitalization styles.
+            }
+
+            // Perform substitutions if any.
+            transformedValue = performSubstitutions(transformedValue);
+
+            // Re-assemble the CSV line and place in buffer.
+            String[] csvValues = csvReader.getValues();
+            csvValues[transformFieldIndex] = transformedValue;
+
+            // Write line to table (plus new line char).
+            writer.write(csvValues);
+
+            // Count number of CSV rows changed.
+            if (!originalValue.equals(transformedValue)) {
+                modifiedRowCount++;
+            }
+        } // End of iteration over each row.
+        csvReader.close();
+        writer.flush();
+        return modifiedRowCount;
     }
 
     /**
