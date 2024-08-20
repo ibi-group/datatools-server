@@ -1,0 +1,2 @@
+network_id,network_name
+1,Forbidden because network id is defined in routes

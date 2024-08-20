@@ -262,7 +262,7 @@
         <dependency>
             <groupId>org.mobilitydata.gtfs-validator</groupId>
             <artifactId>gtfs-validator-main</artifactId>
-            <version>4.2.0</version>
+            <version>5.0.0</version>
         </dependency>
         <!-- Used for loading/fetching/validating/writing GTFS entities. gtfs-lib also provides access to:
          - commons-io - generic utilities
@@ -272,7 +272,7 @@
             <groupId>com.github.ibi-group</groupId>
             <artifactId>gtfs-lib</artifactId>
             <!-- Latest dev build on jitpack.io -->
-            <version>a8a376c82b</version>
+            <version>5dd609bfb5</version>
             <!-- Exclusions added in order to silence SLF4J warnings about multiple bindings:
                 http://www.slf4j.org/codes.html#multiple_bindings
             -->
