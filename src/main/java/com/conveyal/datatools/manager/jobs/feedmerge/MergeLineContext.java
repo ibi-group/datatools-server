@@ -272,13 +272,8 @@ public class MergeLineContext {
                     getTableScopedValue(Table.CALENDAR_DATES, fieldContext.getValue())
                 );
             case STOP_TIMES_STOP_ID_KEY:
-                return ReferenceTableDiscovery.getStopTimeReferenceTable(
-                    fieldContext.getValueToWrite(),
-                    mergeFeedsResult,
-                    feedMergeContext.locationIds
-                );
             case LOCATION_GROUP_STOPS_STOP_ID_KEY:
-                return ReferenceTableDiscovery.getLocationGroupStopReferenceTable(
+                return ReferenceTableDiscovery.getStopReferenceTable(
                     fieldContext.getValueToWrite(),
                     mergeFeedsResult
                 );

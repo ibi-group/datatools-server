@@ -3,7 +3,6 @@ package com.conveyal.datatools.manager.jobs.feedmerge;
 import com.conveyal.gtfs.loader.Field;
 import com.conveyal.gtfs.loader.Table;
 
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import static com.conveyal.datatools.manager.jobs.feedmerge.MergeLineContext.SERVICE_ID;
@@ -32,8 +31,7 @@ public class ReferenceTableDiscovery {
                 REF_TABLE_SEPARATOR,
                 Table.LOCATION_GROUP_STOPS.name,
                 "stop_id",
-                Table.STOPS.name,
-                Table.LOCATIONS.name
+                Table.STOPS.name
             )
         ),
         STOP_TIMES_STOP_ID_KEY(
@@ -41,9 +39,7 @@ public class ReferenceTableDiscovery {
                 REF_TABLE_SEPARATOR,
                 Table.STOP_TIMES.name,
                 "stop_id",
-                Table.STOPS.name,
-                Table.LOCATIONS.name,
-                Table.LOCATION_GROUP_STOPS.name
+                Table.STOPS.name
             )
         );
 
@@ -112,33 +108,11 @@ public class ReferenceTableDiscovery {
     }
 
     /**
-     * Define the reference table for a location group stop: stop id. This will either be a stop or null.
+     * Defines the reference table as a stop if the field value matches a stop id.
      */
-    public static Table getLocationGroupStopReferenceTable(
-        String fieldValue,
-        MergeFeedsResult mergeFeedsResult
-    ) {
+    public static Table getStopReferenceTable(String fieldValue, MergeFeedsResult mergeFeedsResult) {
         if (mergeFeedsResult.stopIds.contains(fieldValue)) {
             return Table.STOPS;
-        }
-        return null;
-    }
-
-    /**
-     * Define the reference table for a stop time's stop id. This will either be a stop, location or location group.
-     * TODO: In later PR's this will be redundant as a stop time: stop id will only reference a stop.
-     */
-    public static Table getStopTimeReferenceTable(
-        String fieldValue,
-        MergeFeedsResult mergeFeedsResult,
-        Set<String> locationIds
-    ) {
-        if (mergeFeedsResult.stopIds.contains(fieldValue)) {
-            return Table.STOPS;
-        } else if (locationIds.contains(fieldValue)) {
-            return Table.LOCATIONS;
-        } else if (mergeFeedsResult.locationGroupStopIds.contains(fieldValue)) {
-            return Table.LOCATION_GROUP_STOPS;
         }
         return null;
     }
