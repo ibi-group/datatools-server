@@ -1,0 +1,97 @@
+fare_product_id,fare_product_name,fare_media_id,amount,currency
+prod_boat_zone_1,Ferry Zone 1 one-way fare,cash,6.50,USD
+prod_boat_zone_1,Ferry Zone 1 one-way fare,credit_debit,6.50,USD
+prod_boat_zone_1,Ferry Zone 1 one-way fare,mticket,6.50,USD
+prod_boat_zone_1a,Ferry Zone 1A one-way fare,cash,2.40,USD
+prod_boat_zone_1a,Ferry Zone 1A one-way fare,credit_debit,2.40,USD
+prod_boat_zone_1a,Ferry Zone 1A one-way fare,mticket,2.40,USD
+prod_boat_zone_2,Ferry Zone 2 one-way fare,cash,7.00,USD
+prod_boat_zone_2,Ferry Zone 2 one-way fare,credit_debit,7.00,USD
+prod_boat_zone_2,Ferry Zone 2 one-way fare,mticket,7.00,USD
+prod_cape_buzzards_hyannis_fare,CapeFLYER Middleborough/Lakeville one-way fare,cash,5.00,USD
+prod_cape_buzzards_hyannis_fare,CapeFLYER Middleborough/Lakeville one-way fare,credit_debit,5.00,USD
+prod_cape_buzzards_hyannis_fare,CapeFLYER Middleborough/Lakeville one-way fare,mticket,5.00,USD
+prod_cape_sbb_buzzards_fare,CapeFLYER Bourne one-way fare,cash,20.00,USD
+prod_cape_sbb_buzzards_fare,CapeFLYER Bourne one-way fare,credit_debit,20.00,USD
+prod_cape_sbb_buzzards_fare,CapeFLYER Bourne one-way fare,mticket,20.00,USD
+prod_cape_sbb_hyannis_fare,CapeFLYER Hyannis one-way fare,cash,22.00,USD
+prod_cape_sbb_hyannis_fare,CapeFLYER Hyannis one-way fare,credit_debit,22.00,USD
+prod_cape_sbb_hyannis_fare,CapeFLYER Hyannis one-way fare,mticket,22.00,USD
+prod_cr_inter_1,Commuter Rail Interzone 1 one-way fare,cash,2.75,USD
+prod_cr_inter_1,Commuter Rail Interzone 1 one-way fare,credit_debit,2.75,USD
+prod_cr_inter_1,Commuter Rail Interzone 1 one-way fare,mticket,2.75,USD
+prod_cr_inter_10,Commuter Rail Interzone 10 one-way fare,cash,7.25,USD
+prod_cr_inter_10,Commuter Rail Interzone 10 one-way fare,credit_debit,7.25,USD
+prod_cr_inter_10,Commuter Rail Interzone 10 one-way fare,mticket,7.25,USD
+prod_cr_inter_2,Commuter Rail Interzone 2 one-way fare,cash,3.25,USD
+prod_cr_inter_2,Commuter Rail Interzone 2 one-way fare,credit_debit,3.25,USD
+prod_cr_inter_2,Commuter Rail Interzone 2 one-way fare,mticket,3.25,USD
+prod_cr_inter_3,Commuter Rail Interzone 3 one-way fare,cash,3.50,USD
+prod_cr_inter_3,Commuter Rail Interzone 3 one-way fare,credit_debit,3.50,USD
+prod_cr_inter_3,Commuter Rail Interzone 3 one-way fare,mticket,3.50,USD
+prod_cr_inter_4,Commuter Rail Interzone 4 one-way fare,cash,4.25,USD
+prod_cr_inter_4,Commuter Rail Interzone 4 one-way fare,credit_debit,4.25,USD
+prod_cr_inter_4,Commuter Rail Interzone 4 one-way fare,mticket,4.25,USD
+prod_cr_inter_5,Commuter Rail Interzone 5 one-way fare,cash,4.75,USD
+prod_cr_inter_5,Commuter Rail Interzone 5 one-way fare,credit_debit,4.75,USD
+prod_cr_inter_5,Commuter Rail Interzone 5 one-way fare,mticket,4.75,USD
+prod_cr_inter_6,Commuter Rail Interzone 6 one-way fare,cash,5.25,USD
+prod_cr_inter_6,Commuter Rail Interzone 6 one-way fare,credit_debit,5.25,USD
+prod_cr_inter_6,Commuter Rail Interzone 6 one-way fare,mticket,5.25,USD
+prod_cr_inter_7,Commuter Rail Interzone 7 one-way fare,cash,5.75,USD
+prod_cr_inter_7,Commuter Rail Interzone 7 one-way fare,credit_debit,5.75,USD
+prod_cr_inter_7,Commuter Rail Interzone 7 one-way fare,mticket,5.75,USD
+prod_cr_inter_8,Commuter Rail Interzone 8 one-way fare,cash,6.25,USD
+prod_cr_inter_8,Commuter Rail Interzone 8 one-way fare,credit_debit,6.25,USD
+prod_cr_inter_8,Commuter Rail Interzone 8 one-way fare,mticket,6.25,USD
+prod_cr_inter_9,Commuter Rail Interzone 9 one-way fare,cash,6.75,USD
+prod_cr_inter_9,Commuter Rail Interzone 9 one-way fare,credit_debit,6.75,USD
+prod_cr_inter_9,Commuter Rail Interzone 9 one-way fare,mticket,6.75,USD
+prod_cr_zone_1,Commuter Rail Zone 1 one-way fare,cash,6.50,USD
+prod_cr_zone_1,Commuter Rail Zone 1 one-way fare,credit_debit,6.50,USD
+prod_cr_zone_1,Commuter Rail Zone 1 one-way fare,mticket,6.50,USD
+prod_cr_zone_10,Commuter Rail Zone 10 one-way fare,cash,13.25,USD
+prod_cr_zone_10,Commuter Rail Zone 10 one-way fare,credit_debit,13.25,USD
+prod_cr_zone_10,Commuter Rail Zone 10 one-way fare,mticket,13.25,USD
+prod_cr_zone_1a,Commuter Rail Zone 1A one-way fare,cash,2.40,USD
+prod_cr_zone_1a,Commuter Rail Zone 1A one-way fare,credit_debit,2.40,USD
+prod_cr_zone_1a,Commuter Rail Zone 1A one-way fare,mticket,2.40,USD
+prod_cr_zone_2,Commuter Rail Zone 2 one-way fare,cash,7.00,USD
+prod_cr_zone_2,Commuter Rail Zone 2 one-way fare,credit_debit,7.00,USD
+prod_cr_zone_2,Commuter Rail Zone 2 one-way fare,mticket,7.00,USD
+prod_cr_zone_3,Commuter Rail Zone 3 one-way fare,cash,8.00,USD
+prod_cr_zone_3,Commuter Rail Zone 3 one-way fare,credit_debit,8.00,USD
+prod_cr_zone_3,Commuter Rail Zone 3 one-way fare,mticket,8.00,USD
+prod_cr_zone_4,Commuter Rail Zone 4 one-way fare,cash,8.75,USD
+prod_cr_zone_4,Commuter Rail Zone 4 one-way fare,credit_debit,8.75,USD
+prod_cr_zone_4,Commuter Rail Zone 4 one-way fare,mticket,8.75,USD
+prod_cr_zone_5,Commuter Rail Zone 5 one-way fare,cash,9.75,USD
+prod_cr_zone_5,Commuter Rail Zone 5 one-way fare,credit_debit,9.75,USD
+prod_cr_zone_5,Commuter Rail Zone 5 one-way fare,mticket,9.75,USD
+prod_cr_zone_6,Commuter Rail Zone 6 one-way fare,cash,10.50,USD
+prod_cr_zone_6,Commuter Rail Zone 6 one-way fare,credit_debit,10.50,USD
+prod_cr_zone_6,Commuter Rail Zone 6 one-way fare,mticket,10.50,USD
+prod_cr_zone_7,Commuter Rail Zone 7 one-way fare,cash,11.00,USD
+prod_cr_zone_7,Commuter Rail Zone 7 one-way fare,credit_debit,11.00,USD
+prod_cr_zone_7,Commuter Rail Zone 7 one-way fare,mticket,11.00,USD
+prod_cr_zone_8,Commuter Rail Zone 8 one-way fare,cash,12.25,USD
+prod_cr_zone_8,Commuter Rail Zone 8 one-way fare,credit_debit,12.25,USD
+prod_cr_zone_8,Commuter Rail Zone 8 one-way fare,mticket,12.25,USD
+prod_cr_zone_9,Commuter Rail Zone 9 one-way fare,cash,12.75,USD
+prod_cr_zone_9,Commuter Rail Zone 9 one-way fare,credit_debit,12.75,USD
+prod_cr_zone_9,Commuter Rail Zone 9 one-way fare,mticket,12.75,USD
+prod_express_bus,Express Bus cash fare,cash,4.25,USD
+prod_ferry_east_boston,East Boston Ferry one-way fare,mticket,2.40,USD
+prod_ferry_f1,Hingham/Hull Ferry one-way fare,cash,9.75,USD
+prod_ferry_f1,Hingham/Hull Ferry one-way fare,credit_debit,9.75,USD
+prod_ferry_f1,Hingham/Hull Ferry one-way fare,mticket,9.75,USD
+prod_ferry_f4,Charlestown Ferry one-way fare,cash,3.70,USD
+prod_ferry_f4,Charlestown Ferry one-way fare,credit_debit,3.70,USD
+prod_ferry_f4,Charlestown Ferry one-way fare,mticket,3.70,USD
+prod_foxboro_event_fare,Foxboro Event Service round-trip fare,cash,20.00,USD
+prod_foxboro_event_fare,Foxboro Event Service round-trip fare,credit_debit,20.00,USD
+prod_foxboro_event_fare,Foxboro Event Service round-trip fare,mticket,20.00,USD
+prod_free_fare,Free fare,,0.00,USD
+prod_local_bus,Local Bus cash fare,cash,1.70,USD
+prod_rapid_transit_cash,Subway cash fare,cash,2.40,USD
+prod_rapid_transit_quick_subway,Subway Quick Ticket,charlieticket,2.40,USD
