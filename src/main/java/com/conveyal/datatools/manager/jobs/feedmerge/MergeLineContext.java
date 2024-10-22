@@ -246,8 +246,8 @@ public class MergeLineContext {
             case "stops":
                 mergeFeedsResult.stopIds.add(getIdWithScope(keyValue));
                 break;
-            case "stop_areas":
-                mergeFeedsResult.stopAreaIds.add(getIdWithScope(keyValue));
+            case "location_group_stops":
+                mergeFeedsResult.locationGroupStopIds.add(getIdWithScope(keyValue));
                 break;
             default:
                 // nothing.
@@ -272,16 +272,10 @@ public class MergeLineContext {
                     getTableScopedValue(Table.CALENDAR_DATES, fieldContext.getValue())
                 );
             case STOP_TIMES_STOP_ID_KEY:
-                return ReferenceTableDiscovery.getStopTimeStopIdReferenceTable(
+            case LOCATION_GROUP_STOPS_STOP_ID_KEY:
+                return ReferenceTableDiscovery.getStopReferenceTable(
                     fieldContext.getValueToWrite(),
-                    mergeFeedsResult,
-                    feedMergeContext.locationIds
-                );
-            case STOP_AREA_STOP_ID_KEY:
-                return ReferenceTableDiscovery.getStopAreaAreaIdReferenceTable(
-                    fieldContext.getValueToWrite(),
-                    mergeFeedsResult,
-                    feedMergeContext.locationIds
+                    mergeFeedsResult
                 );
             default:
                 return null;

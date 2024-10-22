@@ -97,7 +97,6 @@ public class FlexMergeFeedsJobTest extends UnitTest {
 
         // Ensure the feed has the row counts we expect.
         assertRowCount(r1.agency, r2.agency, merged.agency, "Agency");
-        assertRowCount(r1.area, r2.area, merged.area, "Area");
         assertRowCount(r1.attributions, r2.attributions, merged.attributions, "Attributions");
         assertRowCount(r1.bookingRules, r2.bookingRules, merged.bookingRules, "Booking rules");
         assertRowCount(r1.calendar, r2.calendar, merged.calendar, "Calendar");
@@ -106,11 +105,12 @@ public class FlexMergeFeedsJobTest extends UnitTest {
         assertRowCount(r1.fareRules, r2.fareRules, merged.fareRules, "Fare rules");
         assertRowCount(r1.frequencies, r2.frequencies, merged.frequencies, "Frequencies");
         assertRowCount(r1.locations, r2.locations, merged.locations, "Locations");
+        assertRowCount(r1.locationGroup, r2.locationGroup, merged.locationGroup, "Location Groups");
+        assertRowCount(r1.locationGroupStops, r2.locationGroupStops, merged.locationGroupStops, "Location Group Stops");
         assertRowCount(r1.locationShapes, r2.locationShapes, merged.locationShapes, "Location shapes");
         assertRowCount(r1.routes, r2.routes, merged.routes, "Routes");
         assertRowCount(r1.shapes, r2.shapes, merged.shapes, "Shapes");
         assertRowCount(r1.stops, r2.stops, merged.stops, "Stops");
-        assertRowCount(r1.stopAreas, r2.stopAreas, merged.stopAreas, "Stop areas");
         assertRowCount(r1.stopTimes, r2.stopTimes, merged.stopTimes, "Stop times");
         assertRowCount(r1.trips, r2.trips, merged.trips, "Trips");
         assertRowCount(r1.translations, r2.translations, merged.translations, "Translations");

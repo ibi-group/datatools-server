@@ -210,12 +210,11 @@ public class DataManager {
             // NOTE: fare_attributes controller handles updates to nested table fare_rules.
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.FARE_ATTRIBUTES, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.FEED_INFO, DataManager.GTFS_DATA_SOURCE);
-            // NOTE: AREA and STOP_AREAS are additions for GTFS Flex but belong to the Fares v2 specification:
-            new EditorControllerImpl(EDITOR_API_PREFIX, Table.STOP_AREAS, DataManager.GTFS_DATA_SOURCE);
-            new EditorControllerImpl(EDITOR_API_PREFIX, Table.AREA, DataManager.GTFS_DATA_SOURCE);
             // NOTE: Booking rules, locations and location shapes are GTFS Flex additions.
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.BOOKING_RULES, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.LOCATIONS, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.LOCATION_GROUP, DataManager.GTFS_DATA_SOURCE);
+            new EditorControllerImpl(EDITOR_API_PREFIX, Table.LOCATION_GROUP_STOPS, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.LOCATION_SHAPES, DataManager.GTFS_DATA_SOURCE);
             new EditorControllerImpl(EDITOR_API_PREFIX, Table.ROUTES, DataManager.GTFS_DATA_SOURCE);
             // NOTE: Patterns controller handles updates to nested tables shapes, pattern stops, and frequencies.

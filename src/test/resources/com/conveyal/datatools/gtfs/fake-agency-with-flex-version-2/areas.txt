@@ -1,4 +1,0 @@
-area_id,area_name
-1,"Area referencing a stop"
-2,"Area referencing a location"
-3,"Multi areas"

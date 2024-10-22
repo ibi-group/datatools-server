@@ -40,7 +40,7 @@ public class MergeFeedsResult implements Serializable {
      * Track various table ids for resolving foreign references.
      */
     public Set<String> stopIds = new HashSet<>();
-    public Set<String> stopAreaIds = new HashSet<>();
+    public Set<String> locationGroupStopIds = new HashSet<>();
 
     /**
      * Track the set of route IDs to end up in the merged feed in order to determine which route_attributes

@@ -5,7 +5,7 @@
       "id": "area_1469-2",
       "properties": {
         "stop_name": "Templeboy to Ballisodare",
-        "stop_desc": "Templeboy to Ballisodare Door-to-door pickup area"
+        "stop_desc": "Templeboy to Ballisodare Door-to-door pickup locationGroup"
       },
       "type": "Feature",
       "geometry": {
@@ -25,7 +25,7 @@
       "id": "area_1469-1",
       "properties": {
         "stop_name": "Dromore West to Templeboy",
-        "stop_desc": "Dromore West to Templeboy Door-to-door pickup area"
+        "stop_desc": "Dromore West to Templeboy Door-to-door pickup locationGroup"
       },
       "type": "Feature",
       "geometry": {
@@ -172,7 +172,7 @@
 	  "id": "area_246",
       "properties": {
         "stop_name": "Moville to Letterkenny",
-        "stop_desc": "Moville to Letterkenny Door-to-door pickup area"
+        "stop_desc": "Moville to Letterkenny Door-to-door pickup locationGroup"
       },
       "type": "Feature",
       "geometry": {
@@ -187,7 +187,7 @@
       "id": "area_251",
       "properties": {
         "stop_name": "Muff to Moville",
-        "stop_desc": "Muff to Moville Door-to-door pickup area"
+        "stop_desc": "Muff to Moville Door-to-door pickup locationGroup"
       },
       "type": "Feature",
       "geometry": {
