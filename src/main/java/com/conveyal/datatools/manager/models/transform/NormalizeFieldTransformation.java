@@ -6,6 +6,7 @@ import com.conveyal.datatools.manager.utils.GtfsUtils;
 import com.conveyal.datatools.manager.utils.json.JsonUtil;
 import com.conveyal.gtfs.loader.Field;
 import com.conveyal.gtfs.loader.Table;
+import com.conveyal.gtfs.util.CsvReaderUtil;
 import com.csvreader.CsvReader;
 import org.apache.commons.lang3.StringUtils;
 import org.apache.commons.text.WordUtils;
@@ -198,7 +199,11 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             Files.copy(originalZipPath, tempZipPath, StandardCopyOption.REPLACE_EXISTING);
 
             Table gtfsTable = GtfsUtils.getGtfsTable(table);
-            CsvReader csvReader = gtfsTable.getCsvReader(new ZipFile(tempZipPath.toAbsolutePath().toString()), null);
+            CsvReader csvReader = CsvReaderUtil.getCsvReaderAccordingToFileName(
+                gtfsTable,
+                new ZipFile(tempZipPath.toAbsolutePath().toString()),
+                null
+            );
             final String[] headers = csvReader.getHeaders();
             Field[] fieldsFoundInZip = gtfsTable.getFieldsFromFieldHeaders(headers, null);
             int transformFieldIndex = getFieldIndex(fieldsFoundInZip, fieldName);
