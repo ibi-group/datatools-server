@@ -15,6 +15,7 @@ import com.conveyal.gtfs.error.NewGTFSErrorType;
 import com.conveyal.gtfs.loader.Field;
 import com.conveyal.gtfs.loader.Table;
 import com.conveyal.gtfs.model.StopTime;
+import com.conveyal.gtfs.util.CsvReaderUtil;
 import com.csvreader.CsvReader;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -45,7 +46,7 @@ public class MergeFeedUtils {
     public static Set<String> getIdsForTable(ZipFile zipFile, Table table) throws IOException {
         Set<String> ids = new HashSet<>();
         String keyField = table.getKeyFieldName();
-        CsvReader csvReader = table.getCsvReader(zipFile, null);
+        CsvReader csvReader = CsvReaderUtil.getCsvReaderAccordingToFileName(table, zipFile, null);
         if (csvReader == null) {
             LOG.warn("Table {} not found in zip file: {}", table.name, zipFile.getName());
             return ids;
@@ -117,7 +118,7 @@ public class MergeFeedUtils {
         Set<Field> sharedFields = new HashSet<>();
         // First, iterate over each feed to collect the shared fields that need to be output in the merged table.
         for (FeedToMerge feed : feedsToMerge) {
-            CsvReader csvReader = table.getCsvReader(feed.zipFile, null);
+            CsvReader csvReader = CsvReaderUtil.getCsvReaderAccordingToFileName(table, feed.zipFile, null);
             // If csv reader is null, the table was not found in the zip file.
             if (csvReader == null) {
                 continue;
