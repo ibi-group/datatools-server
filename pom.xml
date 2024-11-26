@@ -262,7 +262,7 @@
             <groupId>com.github.ibi-group</groupId>
             <artifactId>gtfs-lib</artifactId>
             <!-- Latest dev build on jitpack.io -->
-            <version>29827a0441a5d0c7e50583a63e0df12b8216b7bd</version>
+            <version>mtc-temp-merge-hack-SNAPSHOT</version>
             <!-- Exclusions added in order to silence SLF4J warnings about multiple bindings:
                 http://www.slf4j.org/codes.html#multiple_bindings
             -->
