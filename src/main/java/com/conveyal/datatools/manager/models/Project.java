@@ -47,10 +47,6 @@ public class Project extends Model {
 
     public boolean useCustomOsmBounds;
 
-    public OtpBuildConfig buildConfig;
-
-    public OtpRouterConfig routerConfig;
-
     public String organizationId;
 
     /** Last successful auto deploy. **/
@@ -111,8 +107,6 @@ public class Project extends Model {
 
 
     public Project() {
-        this.buildConfig = new OtpBuildConfig();
-        this.routerConfig = new OtpRouterConfig();
         this.useCustomOsmBounds = false;
     }
 
