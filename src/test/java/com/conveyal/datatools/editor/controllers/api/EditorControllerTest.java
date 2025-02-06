@@ -30,7 +30,9 @@ import java.util.Date;
 import java.util.stream.Stream;
 
 import static com.conveyal.datatools.TestUtils.assertThatSqlCountQueryYieldsExpectedCount;
+import static com.conveyal.datatools.TestUtils.createFeedVersion;
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
+import static com.conveyal.datatools.TestUtils.zipFolderFiles;
 import static com.conveyal.datatools.manager.auth.Auth0Users.USERS_API_PATH;
 import static com.conveyal.datatools.manager.controllers.api.UserController.TEST_AUTH0_DOMAIN;
 import static io.restassured.RestAssured.given;
@@ -47,6 +49,7 @@ public class EditorControllerTest extends UnitTest {
     private static FeedSource feedSourceCascadeDelete;
     private static FeedVersion feedVersion;
     private static FeedVersion feedVersionCascadeDelete;
+    private static FeedVersion faresV2Version;
     private static final ObjectMapper mapper = new ObjectMapper();
 
     /**
@@ -72,12 +75,19 @@ public class EditorControllerTest extends UnitTest {
         feedSourceCascadeDelete.projectId = project.id;
         Persistence.feedSources.create(feedSourceCascadeDelete);
 
+        FeedSource faresV2FeedSource = new FeedSource("FaresV2");
+        faresV2FeedSource.projectId = project.id;
+        Persistence.feedSources.create(faresV2FeedSource);
+
         feedVersion = createFeedVersionFromGtfsZip(feedSource, "bart_old.zip");
         feedVersionCascadeDelete = createFeedVersionFromGtfsZip(feedSourceCascadeDelete, "bart_old.zip");
 
+        faresV2Version = createFeedVersion(faresV2FeedSource, zipFolderFiles("fake-agency-with-fares-v2"));
+
         // Create and run snapshot jobs
-        crateAndRunSnapshotJob(feedVersion.name, feedSource.id, feedVersion.namespace);
-        crateAndRunSnapshotJob(feedVersionCascadeDelete.name, feedSourceCascadeDelete.id, feedVersionCascadeDelete.namespace);
+        createAndRunSnapshotJob(feedVersion.name, feedSource.id, feedVersion.namespace);
+        createAndRunSnapshotJob(feedVersionCascadeDelete.name, feedSourceCascadeDelete.id, feedVersionCascadeDelete.namespace);
+        createAndRunSnapshotJob(faresV2Version.name, faresV2FeedSource.id, faresV2Version.namespace);
         LOG.info("{} setup completed in {} ms", EditorControllerTest.class.getSimpleName(), System.currentTimeMillis() - startTime);
     }
 
@@ -91,7 +101,7 @@ public class EditorControllerTest extends UnitTest {
     /**
      * Create and run a snapshot job in the current thread (so tests do not run until this is complete).
      */
-    private static void crateAndRunSnapshotJob(String feedVersionName, String feedSourceId, String namespace) {
+    private static void createAndRunSnapshotJob(String feedVersionName, String feedSourceId, String namespace) {
         Snapshot snapshot = new Snapshot("Snapshot of " + feedVersionName, feedSourceId, namespace);
         CreateSnapshotJob createSnapshotJob =
             new CreateSnapshotJob(Auth0UserProfile.createTestAdminUser(), snapshot, true, false, false);
@@ -201,6 +211,28 @@ public class EditorControllerTest extends UnitTest {
         assertThatSqlCountQueryYieldsExpectedCount(stopCountSql, 0);
         assertThatSqlCountQueryYieldsExpectedCount(stopTimesCountSql, 0);
         assertThatSqlCountQueryYieldsExpectedCount(patternStopsCountSql, 0);
+    }
+
+    /**
+     * Confirm that an existing fare product can be updated.
+     */
+    @Test
+    void canUpdateFareProduct() throws IOException {
+        String path = String.format(
+            "/api/editor/secure/fareproduct/%s?feedId=%s&sessionId=test",
+            2,
+            faresV2Version.feedSourceId
+        );
+        String response = given()
+            .port(DataManager.PORT)
+            .body("{\"id\":2,\"fare_product_id\":\"AERIAL_TRAM_ROUND_TRIP\",\"fare_product_name\":\"Portland Aerial Tram Single Round Trip\",\"fare_media_id\":\"1\",\"amount\":\"13.5\",\"currency\":\"USD\"}")
+            .put(path)
+            .then()
+            .extract()
+            .response()
+            .asString();
+        JsonNode json = mapper.readTree(response);
+        assertEquals("AERIAL_TRAM_ROUND_TRIP", json.get("fare_product_id").asText());
     }
 
     /**
