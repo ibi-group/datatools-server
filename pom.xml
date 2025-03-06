@@ -262,7 +262,7 @@
         <dependency>
             <groupId>org.mobilitydata.gtfs-validator</groupId>
             <artifactId>gtfs-validator-main</artifactId>
-            <version>4.2.0</version>
+            <version>6.0.0</version>
         </dependency>
         <!-- Used for loading/fetching/validating/writing GTFS entities. gtfs-lib also provides access to:
          - commons-io - generic utilities
