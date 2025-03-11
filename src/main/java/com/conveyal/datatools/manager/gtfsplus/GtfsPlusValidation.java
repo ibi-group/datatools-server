@@ -34,6 +34,7 @@ public class GtfsPlusValidation implements Serializable {
     private static final Logger LOG = LoggerFactory.getLogger(GtfsPlusValidation.class);
     private static final FeedStore gtfsPlusStore = new FeedStore(DataManager.GTFS_PLUS_SUBDIR);
     private static final String NOT_FOUND = "not found in GTFS";
+    public static final String DIRECTIONS_TXT = "directions.txt";
 
     // Public fields to appear in validation JSON.
     public final String feedVersionId;
@@ -97,11 +98,22 @@ public class GtfsPlusValidation implements Serializable {
         int gtfsPlusTableCount = 0;
         ZipFile zipFile = new ZipFile(file);
         final Enumeration<? extends ZipEntry> entries = zipFile.entries();
+
+        ZipEntry realtimeRoutesEntry = null;
+        ZipEntry directionsEntry = null;
         while (entries.hasMoreElements()) {
             final ZipEntry entry = entries.nextElement();
-            JsonNode tableNode = findNode(DataManager.gtfsPlusConfig, "name", entry.getName());
-            if (tableNode != null) {
-                LOG.info("Validating GTFS+ table: " + entry.getName());
+            String entryName = entry.getName();
+            if ("realtime_routes.txt".equals(entryName)) {
+                realtimeRoutesEntry = entry;
+            }
+            boolean isDirectionsTable = DIRECTIONS_TXT.equals(entryName);
+            if (isDirectionsTable) {
+                directionsEntry = entry;
+            }
+            JsonNode tableNode = findNode(DataManager.gtfsPlusConfig, "name", entryName);
+            if (tableNode != null && !isDirectionsTable) {
+                LOG.info("Validating GTFS+ table: {}", entryName);
                 gtfsPlusTableCount++;
                 // Skip any byte order mark that may be present. Files must be UTF-8,
                 // but the GTFS spec says that "files that include the UTF byte order mark are acceptable".
@@ -109,6 +121,25 @@ public class GtfsPlusValidation implements Serializable {
                 validateTable(validation.issues, tableNode, bis, gtfsFeed);
             }
         }
+
+        if (directionsEntry != null) {
+            gtfsPlusTableCount++;
+            JsonNode tableNode = findNode(DataManager.gtfsPlusConfig, "name", DIRECTIONS_TXT);
+
+            Set<String> gtfsRoutes;
+            if (realtimeRoutesEntry != null) {
+                // Extract all "enabled" realtime routes
+                InputStream bis = new BOMInputStream(zipFile.getInputStream(realtimeRoutesEntry));
+                gtfsRoutes = extractEnabledRealtimeRouteIds(bis);
+            }
+            else {
+                // Copy the gtfs routes into a set so that we can "check them off" (remove them).
+                gtfsRoutes = new HashSet<>(gtfsFeed.routes.keySet());
+            }
+            InputStream bis = new BOMInputStream(zipFile.getInputStream(directionsEntry));
+            validateDirectionsTable(validation.issues, tableNode, bis, gtfsFeed, gtfsRoutes);
+        }
+
         gtfsFeed.close();
         LOG.info("GTFS+ tables found: {}/{}", gtfsPlusTableCount, DataManager.gtfsPlusConfig.size());
         return validation;
@@ -187,6 +218,141 @@ public class GtfsPlusValidation implements Serializable {
         csvReader.close();
 
         if (tableIsDirections && !gtfsRoutes.isEmpty()) {
+            // After we're done validating all the table values, check if every route was checked off in directions.txt
+            issues.add(new ValidationIssue(tableId, null, -1, "Directions file doesn't define directions for all routes listed in routes.txt"));
+        }
+        // Add issues for wrong number of columns and for empty rows after processing all rows.
+        // Note: We considered adding an issue for each row, but opted for the single error approach because there's no
+        // concept of a row-level issue in the UI right now. So we would potentially need to add that to the UI
+        // somewhere. Also, there's the trouble of reporting the issue at the row level, but not really giving the user
+        // a great way to resolve the issue in the GTFS+ editor. Essentially, all rows with the wrong number of
+        // columns can be resolved simply by clicking the "Save and Revalidate" button -- so the resolution is more at
+        // the table level than the row level (like, for example, a bad value for a field would be).
+        if (rowsWithWrongNumberOfColumns > 0) {
+            issues.add(new ValidationIssue(tableId, null, -1, rowsWithWrongNumberOfColumns + " row(s) do not contain the same number of fields as there are headers. (File may need to be edited manually.)"));
+        }
+        if (emptyRows > 0) {
+            issues.add(new ValidationIssue(tableId, null, -1, emptyRows + " row(s) are empty. (File may need to be edited manually.)"));
+        }
+    }
+
+    /**
+     * Validate a single GTFS+ table using the table specification found in gtfsplus.yml.
+     */
+    private static Set<String> extractEnabledRealtimeRouteIds(
+        InputStream inputStreamToValidate
+    ) throws IOException {
+        // Read in table data from input stream.
+        CsvReader csvReader = new CsvReader(inputStreamToValidate, ',', StandardCharsets.UTF_8);
+        // Don't skip empty records (this is set to true by default on CsvReader. We want to check for empty records
+        // during table load, so that they are logged as validation issues (rows with wrong number of columns).
+        csvReader.setSkipEmptyRecords(false);
+        csvReader.readHeaders();
+
+        String[] inputHeaders = csvReader.getHeaders();
+        List<String> fieldList = Arrays.asList(inputHeaders);
+
+        // Find the route_id and realtime_enabled index from the headers.
+        int idIndex = fieldList.indexOf("route_id");
+        int enabledIndex = fieldList.indexOf("realtime_enabled");
+
+        if (idIndex == -1 || enabledIndex == -1) {
+            return new HashSet<>();
+        }
+
+        Set<String> routeIds = new HashSet<>();
+
+        // Iterate over each row and collect the id if the enabled = 1.
+        while (csvReader.readRecord()) {
+            // First, check that row has the correct number of fields.
+            int recordColumnCount = csvReader.getColumnCount();
+            String[] rowValues = csvReader.getValues();
+            if (recordColumnCount == 1 && Strings.isBlank(rowValues[0])) {
+                // If row is empty (technically, the row has one column with a blank value),
+                // report that as such (and skip validating column values).
+            } else {
+                String idValue = rowValues[idIndex];
+                String enabledValue = rowValues[enabledIndex];
+
+                if ("1".equals(enabledValue) && !Strings.isBlank(idValue)) {
+                    routeIds.add(idValue);
+                }
+            }
+        }
+        csvReader.close();
+
+        return routeIds;
+    }
+
+    /**
+     * Validate the directions.txt table using the table specification found in gtfsplus.yml.
+     */
+    private static void validateDirectionsTable(
+        Collection<ValidationIssue> issues,
+        JsonNode specTable,
+        InputStream inputStreamToValidate,
+        GTFSFeed gtfsFeed,
+        Set<String> gtfsRoutes
+    ) throws IOException {
+        String tableId = specTable.get("id").asText();
+        // Read in table data from input stream.
+        CsvReader csvReader = new CsvReader(inputStreamToValidate, ',', StandardCharsets.UTF_8);
+        // Don't skip empty records (this is set to true by default on CsvReader. We want to check for empty records
+        // during table load, so that they are logged as validation issues (rows with wrong number of columns).
+        csvReader.setSkipEmptyRecords(false);
+        csvReader.readHeaders();
+
+        String[] inputHeaders = csvReader.getHeaders();
+        List<String> fieldList = Arrays.asList(inputHeaders);
+        JsonNode[] fieldsFound = new JsonNode[inputHeaders.length];
+        JsonNode specFields = specTable.get("fields");
+        // Iterate over spec fields and check that there are no missing required fields.
+        for (int i = 0; i < specFields.size(); i++) {
+            JsonNode specField = specFields.get(i);
+            String fieldName = specField.get("name").asText();
+            int index = fieldList.indexOf(fieldName);
+            if (index != -1) {
+                // Add spec field for each field found.
+                fieldsFound[index] = specField;
+            } else if (isRequired(specField)) {
+                // If spec field not found, check that missing field was not required.
+                issues.add(new ValidationIssue(tableId, fieldName, -1, "Required column missing."));
+            }
+        }
+
+        // Iterate over each row and validate each field value.
+        int rowIndex = 0;
+        int rowsWithWrongNumberOfColumns = 0;
+        int emptyRows = 0;
+        while (csvReader.readRecord()) {
+            // First, check that row has the correct number of fields.
+            int recordColumnCount = csvReader.getColumnCount();
+            String[] rowValues = csvReader.getValues();
+            if (recordColumnCount == 1 && Strings.isBlank(rowValues[0])) {
+                // If row is empty (technically, the row has one column with a blank value),
+                // report that as such (and skip validating column values).
+                emptyRows++;
+            } else {
+                if (recordColumnCount != fieldsFound.length) {
+                    rowsWithWrongNumberOfColumns++;
+                }
+                // Validate each value in row. Note: we iterate over the fields and not values because a row may be missing
+                // columns, but we still want to validate that missing value (e.g., if it is missing a required field).
+                for (int f = 0; f < fieldsFound.length; f++) {
+                    JsonNode specField = fieldsFound[f];
+                    // If value exists for index, use that. Otherwise, default to null to avoid out of bounds exception.
+                    String val = f < recordColumnCount ? rowValues[f] : null;
+                    validateTableValue(issues, tableId, rowIndex, rowValues, val, fieldsFound, specField, gtfsFeed, gtfsRoutes, true);
+
+                    // "Check off" the route_id in directions.txt from the list to verify every route id has a direction
+                    if (specField.get("name").asText().equals("route_id")) gtfsRoutes.remove(val);
+                }
+            }
+            rowIndex++;
+        }
+        csvReader.close();
+
+        if (!gtfsRoutes.isEmpty()) {
             // After we're done validating all the table values, check if every route was checked off in directions.txt
             issues.add(new ValidationIssue(tableId, null, -1, "Directions file doesn't define directions for all routes listed in routes.txt"));
         }
@@ -316,6 +482,7 @@ public class GtfsPlusValidation implements Serializable {
                 break;
         }
 
+        // TODO: Move somewhere else
         // "Check off" the route_id in directions.txt from the list to verify every route id has a direction
         if (tableIsDirections && fieldName.equals("route_id")) gtfsRoutes.remove(value);
     }
