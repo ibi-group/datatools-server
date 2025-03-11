@@ -55,7 +55,7 @@ public class SparkUtils {
         raw.setContentType("application/octet-stream");
         raw.setHeader("Content-Disposition", "attachment; filename=" + filename);
         // Override the gzip content encoding applied to standard API responses.
-        res.header("Content-Encoding", "identity");
+        raw.setHeader("Content-Encoding", "identity");
         try (
             FileInputStream fileInputStream = new FileInputStream(file);
             ServletOutputStream outputStream = raw.getOutputStream()
