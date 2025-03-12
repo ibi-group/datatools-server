@@ -99,13 +99,15 @@ public class GtfsPlusValidation implements Serializable {
         ZipFile zipFile = new ZipFile(file);
         final Enumeration<? extends ZipEntry> entries = zipFile.entries();
 
-        ZipEntry realtimeRoutesEntry = null;
         ZipEntry directionsEntry = null;
+        RealtimeRoutesScanner realtimeRoutesScanner = null;
         while (entries.hasMoreElements()) {
             final ZipEntry entry = entries.nextElement();
+            TableScanner tableScanner = null;
+
             String entryName = entry.getName();
             if ("realtime_routes.txt".equals(entryName)) {
-                realtimeRoutesEntry = entry;
+                tableScanner = realtimeRoutesScanner = new RealtimeRoutesScanner();
             }
             boolean isDirectionsTable = DIRECTIONS_TXT.equals(entryName);
             if (isDirectionsTable) {
@@ -118,7 +120,7 @@ public class GtfsPlusValidation implements Serializable {
                 // Skip any byte order mark that may be present. Files must be UTF-8,
                 // but the GTFS spec says that "files that include the UTF byte order mark are acceptable".
                 InputStream bis = new BOMInputStream(zipFile.getInputStream(entry));
-                validateTable(validation.issues, tableNode, bis, gtfsFeed);
+                validateTable(validation.issues, tableNode, bis, gtfsFeed, tableScanner);
             }
         }
 
@@ -127,10 +129,8 @@ public class GtfsPlusValidation implements Serializable {
             JsonNode tableNode = findNode(DataManager.gtfsPlusConfig, "name", DIRECTIONS_TXT);
 
             Set<String> gtfsRoutes;
-            if (realtimeRoutesEntry != null) {
-                // Extract all "enabled" realtime routes
-                InputStream bis = new BOMInputStream(zipFile.getInputStream(realtimeRoutesEntry));
-                gtfsRoutes = extractEnabledRealtimeRouteIds(bis);
+            if (realtimeRoutesScanner != null) {
+                gtfsRoutes = new HashSet<>(realtimeRoutesScanner.getEnabledRouteIds());
             }
             else {
                 // Copy the gtfs routes into a set so that we can "check them off" (remove them).
@@ -152,7 +152,9 @@ public class GtfsPlusValidation implements Serializable {
         Collection<ValidationIssue> issues,
         JsonNode specTable,
         InputStream inputStreamToValidate,
-        GTFSFeed gtfsFeed
+        GTFSFeed gtfsFeed,
+        TableScanner tableScanner
+
     ) throws IOException {
         String tableId = specTable.get("id").asText();
         boolean tableIsDirections = tableId.equals("directions");
@@ -187,6 +189,10 @@ public class GtfsPlusValidation implements Serializable {
                 issues.add(new ValidationIssue(tableId, fieldName, -1, "Required column missing."));
             }
         }
+        // Perform any additional table-level actions if needed.
+        if (tableScanner != null) {
+            tableScanner.setFields(fieldList);
+        }
 
         // Iterate over each row and validate each field value.
         int rowIndex = 0;
@@ -212,6 +218,10 @@ public class GtfsPlusValidation implements Serializable {
                     String val = f < recordColumnCount ? rowValues[f] : null;
                     validateTableValue(issues, tableId, rowIndex, rowValues, val, fieldsFound, specField, gtfsFeed, gtfsRoutes, tableIsDirections);
                 }
+                // Perform any additional row-level actions if needed.
+                if (tableScanner != null) {
+                    tableScanner.scanRecord(rowValues);
+                }
             }
             rowIndex++;
         }
@@ -234,54 +244,6 @@ public class GtfsPlusValidation implements Serializable {
         if (emptyRows > 0) {
             issues.add(new ValidationIssue(tableId, null, -1, emptyRows + " row(s) are empty. (File may need to be edited manually.)"));
         }
-    }
-
-    /**
-     * Validate a single GTFS+ table using the table specification found in gtfsplus.yml.
-     */
-    private static Set<String> extractEnabledRealtimeRouteIds(
-        InputStream inputStreamToValidate
-    ) throws IOException {
-        // Read in table data from input stream.
-        CsvReader csvReader = new CsvReader(inputStreamToValidate, ',', StandardCharsets.UTF_8);
-        // Don't skip empty records (this is set to true by default on CsvReader. We want to check for empty records
-        // during table load, so that they are logged as validation issues (rows with wrong number of columns).
-        csvReader.setSkipEmptyRecords(false);
-        csvReader.readHeaders();
-
-        String[] inputHeaders = csvReader.getHeaders();
-        List<String> fieldList = Arrays.asList(inputHeaders);
-
-        // Find the route_id and realtime_enabled index from the headers.
-        int idIndex = fieldList.indexOf("route_id");
-        int enabledIndex = fieldList.indexOf("realtime_enabled");
-
-        if (idIndex == -1 || enabledIndex == -1) {
-            return new HashSet<>();
-        }
-
-        Set<String> routeIds = new HashSet<>();
-
-        // Iterate over each row and collect the id if the enabled = 1.
-        while (csvReader.readRecord()) {
-            // First, check that row has the correct number of fields.
-            int recordColumnCount = csvReader.getColumnCount();
-            String[] rowValues = csvReader.getValues();
-            if (recordColumnCount == 1 && Strings.isBlank(rowValues[0])) {
-                // If row is empty (technically, the row has one column with a blank value),
-                // report that as such (and skip validating column values).
-            } else {
-                String idValue = rowValues[idIndex];
-                String enabledValue = rowValues[enabledIndex];
-
-                if ("1".equals(enabledValue) && !Strings.isBlank(idValue)) {
-                    routeIds.add(idValue);
-                }
-            }
-        }
-        csvReader.close();
-
-        return routeIds;
     }
 
     /**
