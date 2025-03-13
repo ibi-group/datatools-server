@@ -146,12 +146,25 @@ public class GtfsPlusValidation implements Serializable {
         GtfsPlusValidation validation
     ) {
         if (directionsScanner != null) {
-            Set<String> expectedRoutes = realtimeRoutesScanner != null
-                ? realtimeRoutesScanner.getEnabledRouteIds()
-                : gtfsFeed.routes.keySet();
+            String routeTableText;
+            Set<String> expectedRoutes;
+            if (realtimeRoutesScanner != null) {
+                expectedRoutes = realtimeRoutesScanner.getEnabledRouteIds();
+                routeTableText = String.format("all realtime-enabled routes from %s", REALTIME_ROUTES_TXT);
+            } else {
+                expectedRoutes = gtfsFeed.routes.keySet();
+                routeTableText = "all routes from routes.txt";
+            }
 
             if (!directionsScanner.getRouteIds().containsAll(expectedRoutes)) {
-                validation.issues.add(new ValidationIssue(DIRECTIONS_TABLE_ID, null, -1, "Directions file doesn't define directions for all routes listed in routes.txt"));
+                validation.issues.add(
+                    new ValidationIssue(
+                        DIRECTIONS_TABLE_ID,
+                        null,
+                        -1,
+                        String.format("%s does not cover %s.", DIRECTIONS_TXT, routeTableText)
+                    )
+                );
             }
         }
     }

@@ -174,9 +174,10 @@ public class GtfsPlusValidationTest extends UnitTest {
         );
     }
 
-    @Test
-    void shouldReportIncompleteDirectionsUsingRoutesFile() throws Exception {
-        FeedVersion ggfIncompleteDirections = createFeedVersionFromGtfsZip(goldenGateFerry, "golden-gate-ferry-incomplete-directions.zip");
+    @ParameterizedTest
+    @MethodSource("createIncompleteDirectionsCases")
+    void shouldReportIncompleteDirections(String zipFile, String message) throws Exception {
+        FeedVersion ggfIncompleteDirections = createFeedVersionFromGtfsZip(goldenGateFerry, zipFile);
 
         LOG.info("Validating GTFS+ directions.txt in Golden Gate Ferry feed should produce errors");
         GtfsPlusValidation validation = GtfsPlusValidation.validate(ggfIncompleteDirections.id);
@@ -190,7 +191,20 @@ public class GtfsPlusValidationTest extends UnitTest {
         );
         assertThat(
             "Should have the error regarding directions.txt not referencing all routes.",
-            validation.issues.get(0).description, equalTo("Directions file doesn't define directions for all routes listed in routes.txt")
+            validation.issues.get(0).description, equalTo(message)
+        );
+    }
+
+    private static Stream<Arguments> createIncompleteDirectionsCases() {
+        return Stream.of(
+            Arguments.of(
+                "golden-gate-ferry-incomplete-directions.zip",
+                "directions.txt does not cover all realtime-enabled routes from realtime_routes.txt."
+            ),
+            Arguments.of(
+                "golden-gate-ferry-incomplete-directions-vs-routes.zip",
+                "directions.txt does not cover all routes from routes.txt."
+            )
         );
     }
 
@@ -201,7 +215,7 @@ public class GtfsPlusValidationTest extends UnitTest {
         LOG.info("Validating GTFS+ directions.txt in Golden Gate Ferry using incomplete realtime_routes.txt should produce no errors");
         GtfsPlusValidation validation = GtfsPlusValidation.validate(ggfIncompleteDirections.id);
         assertThat(
-            "Should have one GTFS+ validation issue on the directions.txt table",
+            "Should have no GTFS+ validation issue on the directions.txt table",
             validation.issues.size(), equalTo(0)
         );
     }
