@@ -34,6 +34,7 @@ public class GtfsPlusValidation implements Serializable {
     private static final FeedStore gtfsPlusStore = new FeedStore(DataManager.GTFS_PLUS_SUBDIR);
     private static final String NOT_FOUND = "not found in GTFS";
     public static final String DIRECTIONS_TXT = "directions.txt";
+    public static final String REALTIME_ROUTES_TXT = "realtime_routes.txt";
 
     // Public fields to appear in validation JSON.
     public final String feedVersionId;
@@ -108,11 +109,10 @@ public class GtfsPlusValidation implements Serializable {
             String entryName = entry.getName();
             JsonNode tableNode = findNode(DataManager.gtfsPlusConfig, "name", entryName);
 
-            if ("realtime_routes.txt".equals(entryName)) {
+            if (REALTIME_ROUTES_TXT.equals(entryName)) {
                 tableScanner = realtimeRoutesScanner = new RealtimeRoutesScanner();
             }
-            boolean isDirectionsTable = DIRECTIONS_TXT.equals(entryName);
-            if (isDirectionsTable) {
+            if (DIRECTIONS_TXT.equals(entryName)) {
                 tableScanner = directionsScanner = new DirectionsScanner();
                 directionsTableNode = tableNode;
             }
