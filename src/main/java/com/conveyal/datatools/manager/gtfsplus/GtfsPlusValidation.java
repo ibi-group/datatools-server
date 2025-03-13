@@ -96,34 +96,37 @@ public class GtfsPlusValidation implements Serializable {
             LOG.info("GTFS+ Validation -- Validating user-saved GTFS+ data (unpublished)");
         }
         int gtfsPlusTableCount = 0;
-        ZipFile zipFile = new ZipFile(file);
-        final Enumeration<? extends ZipEntry> entries = zipFile.entries();
 
         RealtimeRoutesScanner realtimeRoutesScanner = null;
         DirectionsScanner directionsScanner = null;
         JsonNode directionsTableNode = null;
-        while (entries.hasMoreElements()) {
-            final ZipEntry entry = entries.nextElement();
-            TableScanner tableScanner = null;
 
-            String entryName = entry.getName();
-            JsonNode tableNode = findNode(DataManager.gtfsPlusConfig, "name", entryName);
+        try (ZipFile zipFile = new ZipFile(file)) {
+            final Enumeration<? extends ZipEntry> entries = zipFile.entries();
+            while (entries.hasMoreElements()) {
+                final ZipEntry entry = entries.nextElement();
+                TableScanner tableScanner = null;
 
-            if (REALTIME_ROUTES_TXT.equals(entryName)) {
-                tableScanner = realtimeRoutesScanner = new RealtimeRoutesScanner();
-            }
-            if (DIRECTIONS_TXT.equals(entryName)) {
-                tableScanner = directionsScanner = new DirectionsScanner();
-                directionsTableNode = tableNode;
-            }
+                String entryName = entry.getName();
+                JsonNode tableNode = findNode(DataManager.gtfsPlusConfig, "name", entryName);
 
-            if (tableNode != null) {
-                LOG.info("Validating GTFS+ table: {}", entryName);
-                gtfsPlusTableCount++;
-                // Skip any byte order mark that may be present. Files must be UTF-8,
-                // but the GTFS spec says that "files that include the UTF byte order mark are acceptable".
-                InputStream bis = new BOMInputStream(zipFile.getInputStream(entry));
-                validateTable(validation.issues, tableNode, bis, gtfsFeed, tableScanner);
+                if (REALTIME_ROUTES_TXT.equals(entryName)) {
+                    tableScanner = realtimeRoutesScanner = new RealtimeRoutesScanner();
+                }
+                if (DIRECTIONS_TXT.equals(entryName)) {
+                    tableScanner = directionsScanner = new DirectionsScanner();
+                    directionsTableNode = tableNode;
+                }
+
+                if (tableNode != null) {
+                    LOG.info("Validating GTFS+ table: {}", entryName);
+                    gtfsPlusTableCount++;
+                    // Skip any byte order mark that may be present. Files must be UTF-8,
+                    // but the GTFS spec says that "files that include the UTF byte order mark are acceptable".
+                    try (InputStream bis = new BOMInputStream(zipFile.getInputStream(entry))) {
+                        validateTable(validation.issues, tableNode, bis, gtfsFeed, tableScanner);
+                    }
+                }
             }
         }
 
