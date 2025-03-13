@@ -33,8 +33,9 @@ public class GtfsPlusValidation implements Serializable {
     private static final Logger LOG = LoggerFactory.getLogger(GtfsPlusValidation.class);
     private static final FeedStore gtfsPlusStore = new FeedStore(DataManager.GTFS_PLUS_SUBDIR);
     private static final String NOT_FOUND = "not found in GTFS";
-    public static final String DIRECTIONS_TXT = "directions.txt";
-    public static final String REALTIME_ROUTES_TXT = "realtime_routes.txt";
+    private static final String DIRECTIONS_TABLE_ID = "directions";
+    private static final String DIRECTIONS_TXT = "directions.txt";
+    private static final String REALTIME_ROUTES_TXT = "realtime_routes.txt";
 
     // Public fields to appear in validation JSON.
     public final String feedVersionId;
@@ -99,28 +100,25 @@ public class GtfsPlusValidation implements Serializable {
 
         RealtimeRoutesScanner realtimeRoutesScanner = null;
         DirectionsScanner directionsScanner = null;
-        JsonNode directionsTableNode = null;
 
         try (ZipFile zipFile = new ZipFile(file)) {
             final Enumeration<? extends ZipEntry> entries = zipFile.entries();
             while (entries.hasMoreElements()) {
                 final ZipEntry entry = entries.nextElement();
-                TableScanner tableScanner = null;
-
                 String entryName = entry.getName();
                 JsonNode tableNode = findNode(DataManager.gtfsPlusConfig, "name", entryName);
-
-                if (REALTIME_ROUTES_TXT.equals(entryName)) {
-                    tableScanner = realtimeRoutesScanner = new RealtimeRoutesScanner();
-                }
-                if (DIRECTIONS_TXT.equals(entryName)) {
-                    tableScanner = directionsScanner = new DirectionsScanner();
-                    directionsTableNode = tableNode;
-                }
-
                 if (tableNode != null) {
                     LOG.info("Validating GTFS+ table: {}", entryName);
                     gtfsPlusTableCount++;
+
+                    TableScanner tableScanner = null;
+                    if (REALTIME_ROUTES_TXT.equals(entryName)) {
+                        tableScanner = realtimeRoutesScanner = new RealtimeRoutesScanner();
+                    }
+                    if (DIRECTIONS_TXT.equals(entryName)) {
+                        tableScanner = directionsScanner = new DirectionsScanner();
+                    }
+
                     // Skip any byte order mark that may be present. Files must be UTF-8,
                     // but the GTFS spec says that "files that include the UTF byte order mark are acceptable".
                     try (InputStream bis = new BOMInputStream(zipFile.getInputStream(entry))) {
@@ -130,21 +128,32 @@ public class GtfsPlusValidation implements Serializable {
             }
         }
 
-        if (directionsScanner != null && directionsTableNode != null) {
-            Set<String> expectedRoutes = realtimeRoutesScanner != null
-                ? realtimeRoutesScanner.getEnabledRouteIds()
-                : gtfsFeed.routes.keySet();
-
-            // Ensure that the directions.txt table covers all routes that have been extracted from either the
-            // static routes table or the realtime-enabled routes table.
-            if (!directionsScanner.getRouteIds().containsAll(expectedRoutes)) {
-                validation.issues.add(new ValidationIssue(directionsTableNode.get("id").asText(), null, -1, "Directions file doesn't define directions for all routes listed in routes.txt"));
-            }
-        }
+        validateDirectionsRoutes(directionsScanner, realtimeRoutesScanner, gtfsFeed, validation);
 
         gtfsFeed.close();
         LOG.info("GTFS+ tables found: {}/{}", gtfsPlusTableCount, DataManager.gtfsPlusConfig.size());
         return validation;
+    }
+
+    /**
+     * Ensure that the directions.txt table covers all routes that have been extracted from either the
+     * static routes table or the realtime-enabled routes table.
+     */
+    private static void validateDirectionsRoutes(
+        DirectionsScanner directionsScanner,
+        RealtimeRoutesScanner realtimeRoutesScanner,
+        GTFSFeed gtfsFeed,
+        GtfsPlusValidation validation
+    ) {
+        if (directionsScanner != null) {
+            Set<String> expectedRoutes = realtimeRoutesScanner != null
+                ? realtimeRoutesScanner.getEnabledRouteIds()
+                : gtfsFeed.routes.keySet();
+
+            if (!directionsScanner.getRouteIds().containsAll(expectedRoutes)) {
+                validation.issues.add(new ValidationIssue(DIRECTIONS_TABLE_ID, null, -1, "Directions file doesn't define directions for all routes listed in routes.txt"));
+            }
+        }
     }
 
     /**
