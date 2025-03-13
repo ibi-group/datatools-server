@@ -21,7 +21,6 @@ import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Enumeration;
-import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Set;
@@ -58,7 +57,7 @@ public class GtfsPlusValidation implements Serializable {
         if (!DataManager.isModuleEnabled("gtfsplus")) {
             throw new IllegalStateException("GTFS+ module must be enabled in server.yml to run GTFS+ validation.");
         }
-        LOG.info("Validating GTFS+ for " + feedVersionId);
+        LOG.info("Validating GTFS+ for {}", feedVersionId);
 
         FeedVersion feedVersion = Persistence.feedVersions.getById(feedVersionId);
         // Load the main GTFS file.
@@ -101,19 +100,23 @@ public class GtfsPlusValidation implements Serializable {
 
         RealtimeRoutesScanner realtimeRoutesScanner = null;
         DirectionsScanner directionsScanner = null;
+        JsonNode directionsTableNode = null;
         while (entries.hasMoreElements()) {
             final ZipEntry entry = entries.nextElement();
             TableScanner tableScanner = null;
 
             String entryName = entry.getName();
+            JsonNode tableNode = findNode(DataManager.gtfsPlusConfig, "name", entryName);
+
             if ("realtime_routes.txt".equals(entryName)) {
                 tableScanner = realtimeRoutesScanner = new RealtimeRoutesScanner();
             }
             boolean isDirectionsTable = DIRECTIONS_TXT.equals(entryName);
             if (isDirectionsTable) {
                 tableScanner = directionsScanner = new DirectionsScanner();
+                directionsTableNode = tableNode;
             }
-            JsonNode tableNode = findNode(DataManager.gtfsPlusConfig, "name", entryName);
+
             if (tableNode != null) {
                 LOG.info("Validating GTFS+ table: {}", entryName);
                 gtfsPlusTableCount++;
@@ -124,22 +127,15 @@ public class GtfsPlusValidation implements Serializable {
             }
         }
 
-        if (directionsScanner != null) {
-            gtfsPlusTableCount++;
-            JsonNode tableNode = findNode(DataManager.gtfsPlusConfig, "name", DIRECTIONS_TXT);
+        if (directionsScanner != null && directionsTableNode != null) {
+            Set<String> expectedRoutes = realtimeRoutesScanner != null
+                ? realtimeRoutesScanner.getEnabledRouteIds()
+                : gtfsFeed.routes.keySet();
 
-            Set<String> gtfsRoutes;
-            if (realtimeRoutesScanner != null) {
-                gtfsRoutes = new HashSet<>(realtimeRoutesScanner.getEnabledRouteIds());
-            }
-            else {
-                // Copy the gtfs routes into a set so that we can "check them off" (remove them).
-                gtfsRoutes = new HashSet<>(gtfsFeed.routes.keySet());
-            }
-
-            // After we're done validating all the table values, check if every route was checked off in directions.txt
-            if (!directionsScanner.getRouteIds().containsAll(gtfsRoutes)) {
-                validation.issues.add(new ValidationIssue(tableNode.get("id").asText(), null, -1, "Directions file doesn't define directions for all routes listed in routes.txt"));
+            // Ensure that the directions.txt table covers all routes that have been extracted from either the
+            // static routes table or the realtime-enabled routes table.
+            if (!directionsScanner.getRouteIds().containsAll(expectedRoutes)) {
+                validation.issues.add(new ValidationIssue(directionsTableNode.get("id").asText(), null, -1, "Directions file doesn't define directions for all routes listed in routes.txt"));
             }
         }
 
@@ -257,13 +253,12 @@ public class GtfsPlusValidation implements Serializable {
         if (specField == null) return;
         String fieldName = specField.get("name").asText();
 
-        if (isRequired(specField)) {
-            if (value == null || value.length() == 0) {
-                issues.add(new ValidationIssue(tableId, fieldName, rowIndex, "Required field missing value"));
-            }
+        if (isRequired(specField) && Strings.isBlank(value)) {
+            issues.add(new ValidationIssue(tableId, fieldName, rowIndex, "Required field missing value"));
         }
 
-        switch(specField.get("inputType").asText()) {
+
+        switch (specField.get("inputType").asText()) {
             case "DROPDOWN":
                 boolean invalid = true;
                 ArrayNode options = (ArrayNode) specField.get("options");
