@@ -112,10 +112,10 @@ public class GtfsPlusValidation implements Serializable {
                     gtfsPlusTableCount++;
 
                     TableScanner tableScanner = null;
-                    if (REALTIME_ROUTES_TXT.equals(entryName)) {
+                    if (REALTIME_ROUTES_TXT.equalsIgnoreCase(entryName)) {
                         tableScanner = realtimeRoutesScanner = new RealtimeRoutesScanner();
                     }
-                    if (DIRECTIONS_TXT.equals(entryName)) {
+                    if (DIRECTIONS_TXT.equalsIgnoreCase(entryName)) {
                         tableScanner = directionsScanner = new DirectionsScanner();
                     }
 
