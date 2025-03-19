@@ -23,10 +23,7 @@ import java.util.Date;
 import java.util.Objects;
 import java.util.stream.Stream;
 
-import static com.conveyal.datatools.TestUtils.createFeedVersion;
 import static com.conveyal.datatools.TestUtils.createFeedVersionFromGtfsZip;
-import static com.conveyal.datatools.TestUtils.getGtfsResourcePath;
-import static com.conveyal.datatools.TestUtils.zipFolderFiles;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.equalTo;
 
