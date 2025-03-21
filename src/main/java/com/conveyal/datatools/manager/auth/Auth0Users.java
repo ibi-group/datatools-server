@@ -302,25 +302,57 @@ public class Auth0Users {
         return builder;
     }
 
+    private static boolean isAuthDisabled() {
+        if (Auth0Connection.isAuthDisabled()) {
+            LOG.warn("Auth is disabled. Skipping Auth0 request for subscribed users.");
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Get admin users.
+     */
+    public static String getAdminUsers() {
+        return isAuthDisabled()
+            ? ""
+            : getAuth0Users("app_metadata.datatools.permissions.type:administer-application");
+    }
+
     /**
      * Get users subscribed to a given target ID.
      */
     public static String getUsersBySubscription(String subscriptionType, String target) {
-        if (Auth0Connection.isAuthDisabled()) {
-            LOG.warn("Auth is disabled. Skipping Auth0 request for subscribed users.");
-            return "";
-        }
-        return getAuth0Users("app_metadata.datatools.subscriptions.type:" + subscriptionType + " AND app_metadata.datatools.subscriptions.target:" + target);
+        return isAuthDisabled()
+            ? ""
+            : getAuth0Users(String.format(
+                "app_metadata.datatools.subscriptions.type:%s AND app_metadata.datatools.subscriptions.target:%s",
+                subscriptionType,
+                target
+            ));
+    }
+
+    public static Set<String> getVerifiedEmailsForAdmins() {
+        return getVerifiedEmails(getAdminUsers());
     }
 
     public static Set<String> getVerifiedEmailsBySubscription(String subscriptionType, String target) {
-        String json = getUsersBySubscription(subscriptionType, target);
-        JsonNode firstNode;
+        return getVerifiedEmails(getUsersBySubscription(subscriptionType, target));
+    }
+
+    /**
+     * Extract and return a list of verified emails from the json payload.
+     */
+    private static Set<String> getVerifiedEmails(String json) {
         Set<String> emails = new HashSet<>();
+        if (json == null) {
+            return emails;
+        }
+        JsonNode firstNode;
         try {
             firstNode = mapper.readTree(json);
         } catch (IOException e) {
-            LOG.error("Subscribed users list for type={}, target={} is null or unparseable.", subscriptionType, target);
+            LOG.error("Users list is null or unparseable.");
             return emails;
         }
         for (JsonNode user : firstNode) {
@@ -329,14 +361,12 @@ public class Auth0Users {
             }
             String email = user.get("email").asText();
             boolean emailVerified = user.get("email_verified").asBoolean();
-            // only send email if address has been verified
             if (!emailVerified) {
                 LOG.warn("Skipping user {}. User's email address has not been verified.", email);
             } else {
                 emails.add(email);
             }
         }
-
         return emails;
     }
 
