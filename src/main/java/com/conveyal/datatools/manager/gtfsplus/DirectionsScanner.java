@@ -9,7 +9,7 @@ import java.util.Set;
 /**
  * Helper class to collect listed routes in directions.txt
  */
-public class DirectionsScanner extends TableScanner {
+public class DirectionsScanner implements TableScanner {
     private final Set<String> routeIds = new HashSet<>();
     private int idIndex;
 
@@ -18,7 +18,7 @@ public class DirectionsScanner extends TableScanner {
         idIndex = fields.indexOf("route_id");
     }
 
-    private boolean canUseHeaders() {
+    public boolean canUseHeaders() {
         return idIndex != -1;
     }
 

@@ -9,7 +9,7 @@ import java.util.Set;
 /**
  * Helper class to collect enabled routes from realtime_routes.txt
  */
-public class RealtimeRoutesScanner extends TableScanner {
+public class RealtimeRoutesScanner implements TableScanner {
     private final Set<String> enabledRouteIds = new HashSet<>();
     private int idIndex;
     private int enabledIndex;
@@ -20,7 +20,7 @@ public class RealtimeRoutesScanner extends TableScanner {
         enabledIndex = fields.indexOf("realtime_enabled");
     }
 
-    private boolean canUseHeaders() {
+    public boolean canUseHeaders() {
         return idIndex != -1 && enabledIndex != -1;
     }
 

@@ -3,13 +3,16 @@ package com.conveyal.datatools.manager.gtfsplus;
 import java.util.List;
 
 /**
- * Abstract class for collecting data from a GTFS+ table
+ * Interface for collecting data from a GTFS+ table
  */
-public abstract class TableScanner {
+public interface TableScanner {
 
     /** Called to set up fields for a table */
-    public abstract void setFields(List<String> fields);
+    void setFields(List<String> fields);
 
     /** Called to scan/process a record in a table */
-    public abstract void scanRecord(String[] rowValues);
+    void scanRecord(String[] rowValues);
+
+    /** Whether the headers can be used (e.g. are there required columns missing) */
+    boolean canUseHeaders();
 }
