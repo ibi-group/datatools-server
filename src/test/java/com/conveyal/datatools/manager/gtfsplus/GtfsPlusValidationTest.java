@@ -33,6 +33,7 @@ public class GtfsPlusValidationTest extends UnitTest {
     private static FeedVersion bartVersion1;
     private static FeedVersion bartVersion1WithQuotedValues;
     private static FeedVersion lavtaVersion1;
+    private static FeedSource goldenGateFerry;
     private static Project project;
     private static JsonNode routeAttributesFieldsNode;
 
@@ -61,6 +62,10 @@ public class GtfsPlusValidationTest extends UnitTest {
         lavta.projectId = project.id;
         Persistence.feedSources.create(lavta);
         lavtaVersion1 = createFeedVersionFromGtfsZip(lavta, "lavta-cal-attributes.zip");
+
+        goldenGateFerry = new FeedSource("Golden Gate Ferry");
+        goldenGateFerry.projectId = project.id;
+        Persistence.feedSources.create(goldenGateFerry);
     }
 
     @AfterAll
@@ -163,6 +168,52 @@ public class GtfsPlusValidationTest extends UnitTest {
         assertThat(
             "Should have the GTFS+ 'empty row' validation issue on the calendar_attributes table",
             validation.issues.get(0).description, equalTo("1 row(s) are empty. (File may need to be edited manually.)")
+        );
+    }
+
+    @ParameterizedTest
+    @MethodSource("createIncompleteDirectionsCases")
+    void shouldReportIncompleteDirections(String zipFile, String message) throws Exception {
+        FeedVersion ggfIncompleteDirections = createFeedVersionFromGtfsZip(goldenGateFerry, zipFile);
+
+        LOG.info("Validating GTFS+ directions.txt in Golden Gate Ferry feed should produce errors");
+        GtfsPlusValidation validation = GtfsPlusValidation.validate(ggfIncompleteDirections.id);
+        assertThat(
+            "Should have one GTFS+ validation issue on the directions.txt table",
+            validation.issues.size(), equalTo(1)
+        );
+        assertThat(
+            "Should have the validation issue on the calendar_attributes table",
+            validation.issues.get(0).tableId, equalTo("directions")
+        );
+        assertThat(
+            "Should have the error regarding directions.txt not referencing all routes.",
+            validation.issues.get(0).description, equalTo(message)
+        );
+    }
+
+    private static Stream<Arguments> createIncompleteDirectionsCases() {
+        return Stream.of(
+            Arguments.of(
+                "golden-gate-ferry-incomplete-directions.zip",
+                "directions.txt does not cover all realtime-enabled routes from realtime_routes.txt."
+            ),
+            Arguments.of(
+                "golden-gate-ferry-incomplete-directions-vs-routes.zip",
+                "directions.txt does not cover all routes from routes.txt."
+            )
+        );
+    }
+
+    @Test
+    void shouldReportCompleteDirectionsRealtimeRoutesFile() throws Exception {
+        FeedVersion ggfIncompleteDirections = createFeedVersionFromGtfsZip(goldenGateFerry, "golden-gate-ferry-incomplete-directions-realtime-routes.zip");
+
+        LOG.info("Validating GTFS+ directions.txt in Golden Gate Ferry using incomplete realtime_routes.txt should produce no errors");
+        GtfsPlusValidation validation = GtfsPlusValidation.validate(ggfIncompleteDirections.id);
+        assertThat(
+            "Should have no GTFS+ validation issue on the directions.txt table",
+            validation.issues.size(), equalTo(0)
         );
     }
 }
