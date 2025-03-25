@@ -4,7 +4,6 @@ import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
-import com.conveyal.datatools.manager.utils.JobUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,50 +14,42 @@ public class NotifyUsersForSubscriptionJob extends NotifyUsersJob {
 
     public static final Logger LOG = LoggerFactory.getLogger(NotifyUsersForSubscriptionJob.class);
     private final String subscriptionType;
-    private final String target;
-    private final String message;
 
     private NotifyUsersForSubscriptionJob(String subscriptionType, String target, String message) {
+        super(target, message);
         this.subscriptionType = subscriptionType;
-        this.target = target;
-        this.message = message;
     }
 
     /**
      * Convenience method to create and schedule a notification job to notify subscribed users.
      */
     public static void createNotification(String subscriptionType, String target, String message) {
-        if (hasInvalidApplicationURL()) {
-            return;
-        }
-        NotifyUsersForSubscriptionJob notifyJob = new NotifyUsersForSubscriptionJob(subscriptionType, target, message);
-        JobUtils.lightExecutor.execute(notifyJob);
-        LOG.info("Notification job scheduled in light executor");
+        createNotification(new NotifyUsersForSubscriptionJob(subscriptionType, target, message));
     }
 
     public void notifyUsers() {
         String subject;
         String subjectTemplate = "%s Notification: %s (%s)";
         String html = String.format("<p>%s</p>", this.message);
-        String subscriptionToString = this.subscriptionType.replace("-", " ");
-        String[] subType = this.subscriptionType.split("-");
+        String subscriptionToString = subscriptionType.replace("-", " ");
+        String[] subType = subscriptionType.split("-");
         switch (subType[0]) {
             case "feed":
-                FeedSource fs = Persistence.feedSources.getById(this.target);
+                FeedSource fs = Persistence.feedSources.getById(target);
                 // Format subject header
                 subject = String.format(subjectTemplate, applicationName, subscriptionToString, fs.name);
                 // Add action text.
                 html += String.format("<p>View <a href='%s/feed/%s'>this feed</a>.</p>", APPLICATION_URL, fs.id);
                 break;
             case "project":
-                Project p = Persistence.projects.getById(this.target);
+                Project p = Persistence.projects.getById(target);
                 // Format subject header
                 subject = String.format(subjectTemplate, applicationName, subscriptionToString, p.name);
                 // Add action text.
                 html += String.format("<p>View <a href='%s/project/%s'>this project</a>.</p>", APPLICATION_URL, p.id);
                 break;
             case "deployment":
-                Deployment deployment = Persistence.deployments.getById(this.target);
+                Deployment deployment = Persistence.deployments.getById(target);
                 // Format subject header
                 subject = String.format(
                     subjectTemplate,

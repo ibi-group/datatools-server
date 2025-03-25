@@ -304,14 +304,14 @@ public class Auth0Users {
 
     private static boolean isAuthDisabled() {
         if (Auth0Connection.isAuthDisabled()) {
-            LOG.warn("Auth is disabled. Skipping Auth0 request for subscribed users.");
+            LOG.warn("Auth is disabled. Skipping Auth0 request.");
             return true;
         }
         return false;
     }
 
     /**
-     * Get admin users.
+     * Get admin users. Payload will contain a JSON array of admin user information.
      */
     public static String getAdminUsers() {
         return isAuthDisabled()
@@ -320,7 +320,7 @@ public class Auth0Users {
     }
 
     /**
-     * Get users subscribed to a given target ID.
+     * Get users subscribed to a given target ID. Payload will contain a JSON array of admin user information.
      */
     public static String getUsersBySubscription(String subscriptionType, String target) {
         return isAuthDisabled()
