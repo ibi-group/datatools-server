@@ -35,14 +35,10 @@ public class ReplaceFileFromStringTransformation extends ZipTransformation {
 
     @Override
     public void transform(FeedTransformZipTarget zipTarget, MonitorableJob.Status status) {
-        // if (csvData == null) {
-        //     TODO: If this is a null value, delete the table (not yet supported).
-        // }
-
         String tableName = table + ".txt";
         // Run the replace transformation
         Path targetZipPath = Paths.get(zipTarget.gtfsFile.getAbsolutePath());
-        try( FileSystem targetZipFs = FileSystems.newFileSystem(targetZipPath, (ClassLoader) null) ){
+        try(FileSystem targetZipFs = FileSystems.newFileSystem(targetZipPath, (ClassLoader) null) ) {
             // Convert csv data to input stream.
             InputStream inputStream = new ByteArrayInputStream(csvData.getBytes(StandardCharsets.UTF_8));
             Path targetTxtFilePath = getTablePathInZip(tableName, targetZipFs);

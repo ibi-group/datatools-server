@@ -420,13 +420,10 @@ public class FeedSource extends Model implements Cloneable {
      */
     @JsonIgnore
     public FeedVersion retrieveLatest() {
-        FeedVersion newestVersion = Persistence.feedVersions
-                .getOneFiltered(eq("feedSourceId", this.id), Sorts.descending("version"));
-        if (newestVersion == null) {
-            // Is this what happens if there are none?
-            return null;
-        }
-        return newestVersion;
+        return Persistence.feedVersions.getOneFiltered(
+            eq("feedSourceId", this.id),
+            Sorts.descending("version")
+        );
     }
 
     /**

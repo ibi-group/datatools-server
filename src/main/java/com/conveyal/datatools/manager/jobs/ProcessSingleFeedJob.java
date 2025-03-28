@@ -111,6 +111,7 @@ public class ProcessSingleFeedJob extends FeedVersionJob {
 
         // Next, validate the feed.
         addNextJob(new ValidateFeedJob(feedVersion, owner, isNewVersion));
+        addNextJob(new ValidateMobilityDataFeedJob(feedVersion, owner, isNewVersion));
 
         // We only need to snapshot the feed if there are transformations at the database level. In the case that there
         // are, the snapshot namespace will be the target of these modifications. If we were to apply the modifications
@@ -132,7 +133,8 @@ public class ProcessSingleFeedJob extends FeedVersionJob {
             snapshot.feedTransformResult = dbTarget.feedTransformResult;
             // If the user has selected to create a new version from the resulting snapshot, do so here.
             if (rules.createNewVersion) {
-                addNextJob(new CreateFeedVersionFromSnapshotJob(feedSource, snapshot, owner));
+                // Publishing the proprietary files will preserve the pattern names in the newly created feed version.
+                addNextJob(new CreateFeedVersionFromSnapshotJob(feedSource, snapshot, owner, true));
             }
         }
 

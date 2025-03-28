@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.gtfsplus;
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.jobs.MergeFeedsJobTest;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -45,6 +46,7 @@ public class GtfsPlusValidationTest extends UnitTest {
     public static void setUp() throws IOException {
         // Start server if it isn't already running.
         DatatoolsTest.setUp();
+        Auth0Connection.setAuthDisabled(true);
         // Create a project, feed sources, and feed versions to merge.
         project = new Project();
         project.name = String.format("Test %s", new Date());
@@ -70,6 +72,7 @@ public class GtfsPlusValidationTest extends UnitTest {
 
     @AfterAll
     static void tearDown() {
+        Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
         project.delete();
     }
 
@@ -77,8 +80,8 @@ public class GtfsPlusValidationTest extends UnitTest {
     void canValidateCleanGtfsPlus() throws Exception {
         LOG.info("Validation BART GTFS+");
         GtfsPlusValidation validation = GtfsPlusValidation.validate(bartVersion1.id);
-        // Expect issues to be zero.
-        assertThat("Clean BART feed and incomplete directions.txt results in one issue.", validation.issues.size(), equalTo(1));
+        // Expect issues to be only one with directions.txt file
+        assertThat("Clean BART feed and incomplete directions.txt results in one issue", validation.issues.size(), equalTo(1));
     }
 
     @Test

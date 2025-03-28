@@ -20,6 +20,8 @@ import java.util.List;
 
 import static com.mongodb.client.model.Filters.eq;
 import static com.mongodb.client.model.Filters.in;
+import static com.mongodb.client.model.Projections.fields;
+import static com.mongodb.client.model.Projections.include;
 import static com.mongodb.client.model.Updates.pull;
 
 /**
@@ -147,6 +149,16 @@ public class TypedPersistence<T extends Model> {
     }
 
     /**
+     * Get first matching object populating only the included fields.
+     */
+    public T getByIdLimitedFields (String id, String... includedFields) {
+        return mongoCollection
+            .find(eq(id))
+            .projection(fields(include(includedFields)))
+            .first();
+    }
+
+    /**
      * This is not memory efficient.
      * TODO: Always use iterators / streams, always perform selection of subsets on the Mongo server side ("where clause").
      */
@@ -169,7 +181,27 @@ public class TypedPersistence<T extends Model> {
      * We should really have a bit more abstraction here.
      */
     public List<T> getFiltered (Bson filter) {
-        return mongoCollection.find(filter).into(new ArrayList<>());
+        return getFiltered(filter, null);
+    }
+
+    /**
+     * Get all objects satisfying the supplied Mongo filter and sort by.
+     */
+    public List<T> getFiltered (Bson filter, Bson sortBy) {
+        return (sortBy != null)
+        ? mongoCollection.find(filter).sort(sortBy).into(new ArrayList<>())
+        : mongoCollection.find(filter).into(new ArrayList<>());
+    }
+
+    /**
+     * Get all objects populating only the included fields satisfying the supplied Mongo filter and sort by.
+     */
+    public List<T> getFilteredLimitedFields(Bson filter, Bson sortBy, String... includedFields) {
+        return mongoCollection
+            .find(filter)
+            .projection(fields(include(includedFields)))
+            .sort(sortBy)
+            .into(new ArrayList<>());
     }
 
     /**

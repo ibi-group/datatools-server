@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.jobs;
 import com.amazonaws.services.s3.model.S3ObjectSummary;
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
+import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -52,6 +53,7 @@ public class AutoPublishJobTest extends UnitTest {
     public static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
+        Auth0Connection.setAuthDisabled(true);
 
         // Create a project, feed sources, and feed versions to merge.
         project = new Project();
@@ -76,6 +78,7 @@ public class AutoPublishJobTest extends UnitTest {
 
     @AfterAll
     public static void tearDown() {
+        Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
         if (project != null) {
             project.delete();
         }

@@ -7,8 +7,6 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
 import com.fasterxml.jackson.databind.type.CollectionType;
-import org.apache.http.HttpResponse;
-import org.apache.http.util.EntityUtils;
 import spark.Request;
 
 import java.io.IOException;

@@ -4,6 +4,7 @@ import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.jobs.ProcessSingleFeedJob;
 import com.conveyal.datatools.manager.jobs.ValidateFeedJob;
+import com.conveyal.datatools.manager.jobs.ValidateMobilityDataFeedJob;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.ExternalFeedSourceProperty;
 import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
@@ -354,18 +355,17 @@ public class DumpController {
                 // If the force option is not true and the validation result did not fail, re-validate.
                 continue;
             }
-            MonitorableJob job;
             if (filterFeedId != null && !version.feedSourceId.equals(filterFeedId)) {
                 // Skip all feeds except Cortland for now.
                 continue;
             }
             Auth0UserProfile systemUser = Auth0UserProfile.createSystemUser();
             if (load) {
-                job = new ProcessSingleFeedJob(version, systemUser, false);
+                JobUtils.heavyExecutor.execute(new ProcessSingleFeedJob(version, systemUser, false));
             } else {
-                job = new ValidateFeedJob(version, systemUser, false);
+                JobUtils.heavyExecutor.execute(new ValidateFeedJob(version, systemUser, false));
+                JobUtils.heavyExecutor.execute(new ValidateMobilityDataFeedJob(version, systemUser, false));
             }
-            JobUtils.heavyExecutor.execute(job);
         }
         // ValidateAllFeedsJob validateAllFeedsJob = new ValidateAllFeedsJob("system", force, load);
         return true;

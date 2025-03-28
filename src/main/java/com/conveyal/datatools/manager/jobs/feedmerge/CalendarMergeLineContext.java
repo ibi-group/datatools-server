@@ -111,6 +111,7 @@ public class CalendarMergeLineContext extends MergeLineContext {
         // If service is going to be cloned, add to the output service ids.
         if (!shouldSkipRecord && fieldContext.nameEquals(SERVICE_ID)) {
             mergeFeedsResult.serviceIds.add(fieldContext.getValueToWrite());
+            mergeFeedsResult.calendarServiceIds.add(fieldContext.getValueToWrite());
         }
 
         return !shouldSkipRecord;

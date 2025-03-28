@@ -14,7 +14,7 @@ tmp/
 deploy/
 
 # Configurations
-configurations/*
+configurations/*.yml
 !configurations/default
 !configurations/test
 

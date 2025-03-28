@@ -10,6 +10,7 @@ RUN cp target/dt*.jar /datatools/
 RUN mv dt*.jar datatools-server.jar
 
 RUN mkdir -p /var/datatools_gtfs/gtfsplus
+# MTC (QA and prod) uses the folder below.
 RUN mkdir -p /var/gtfs/manager/gtfs/gtfsplus
 
 # Launch server

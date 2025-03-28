@@ -33,6 +33,19 @@ public class Note extends Model implements Serializable {
     public boolean adminOnly;
 
     /**
+     * Create a new note with provided id.
+     */
+    public Note(String id, String body, boolean adminOnly) {
+        super();
+        this.id = id;
+        this.body = body;
+        this.adminOnly = adminOnly;
+    }
+
+    public Note() {
+    }
+
+    /**
      * The types of object that can have notes recorded on them.
      */
     public enum NoteType {

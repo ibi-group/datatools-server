@@ -1,11 +1,13 @@
 package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.DatatoolsTest;
+import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.*;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.google.common.io.Files;
 
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
@@ -33,6 +35,9 @@ public class DeploymentGisExportJobTest extends GisExportJobTest {
         while (e.hasMoreElements()) {
             ZipEntry entry = e.nextElement();
             File destinationPath = new File(destDir, entry.getName());
+            if (!destinationPath.toPath().normalize().startsWith(destDir.toPath().normalize())) {
+                throw new RuntimeException("Bad zip entry");
+            }
             // Create parent directories
             destinationPath.getParentFile().mkdirs();
 
@@ -60,6 +65,7 @@ public class DeploymentGisExportJobTest extends GisExportJobTest {
     @BeforeAll
     public static void setUp() throws IOException {
         DatatoolsTest.setUp();
+        Auth0Connection.setAuthDisabled(true);
         // Calling GisExportJobTest.setUp() creates project and feeds
         GisExportJobTest.setUp();
         user = Auth0UserProfile.createTestAdminUser();
@@ -67,6 +73,11 @@ public class DeploymentGisExportJobTest extends GisExportJobTest {
         deployment.feedVersionIds.add(calTrainVersion.id);
         deployment.feedVersionIds.add(hawaiiVersion.id);
         Persistence.deployments.create(deployment);
+    }
+
+    @AfterAll
+    public static void tearDown() {
+        Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
     }
 
     /**
