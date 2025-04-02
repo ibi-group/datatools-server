@@ -134,7 +134,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
             // load has completed successfully. Wait a maximum of 20 minutes to load the graph and for the router to
             // become available.
             TimeTracker routerCheckTracker = new TimeTracker(20, TimeUnit.MINUTES);
-            String routerUrl = String.join("/", ipUrl, "otp/routers/default");
+            String routerUrl = String.join("/", ipUrl, "otp/actuators/health");
             boolean routerIsAvailable = false;
             while (!routerIsAvailable) {
                 // If the request was successful, the graph build is complete!
