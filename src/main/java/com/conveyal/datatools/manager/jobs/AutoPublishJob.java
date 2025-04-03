@@ -67,6 +67,7 @@ public class AutoPublishJob extends MonitorableJobWithResourceLock<FeedSource> {
             );
             NotifyUsersForSubscriptionJob.createNotification("feed-updated", feedSource.id, message);
             NotifyUsersForSubscriptionJob.createNotification("project-updated", feedSource.projectId, message);
+            NotifyAdminUsersJob.createNotification(feedSource.projectId, message);
         }
     }
 }
