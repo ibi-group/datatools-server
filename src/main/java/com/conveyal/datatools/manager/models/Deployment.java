@@ -666,7 +666,18 @@ public class Deployment extends Model implements Serializable {
     }
 
     public enum TripPlannerVersion {
-        OTP_1, OTP_2
+        OTP_1("otp/routers/default"),
+        OTP_2("otp/actuators/health");
+
+        private final String uptimeCheckUrl;
+
+        TripPlannerVersion(String uptimeCheckUrl) {
+            this.uptimeCheckUrl = uptimeCheckUrl;
+        }
+
+        public static String getUptimeCheckUrl(TripPlannerVersion version) {
+            return (version == OTP_2) ? OTP_2.uptimeCheckUrl : OTP_1.uptimeCheckUrl;
+        }
     }
 
     /**
