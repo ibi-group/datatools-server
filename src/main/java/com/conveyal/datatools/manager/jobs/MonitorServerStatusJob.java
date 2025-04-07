@@ -136,7 +136,7 @@ public class MonitorServerStatusJob extends MonitorableJob {
             // become available.
             TimeTracker routerCheckTracker = new TimeTracker(20, TimeUnit.MINUTES);
 
-            String routerUrl = String.join("/", ipUrl, deployment.tripPlannerVersion.equals(TripPlannerVersion.OTP_2) ? "otp/actuators/health" : "otp/routers/default");
+            String routerUrl = String.join("/", ipUrl, TripPlannerVersion.getUptimeCheckUrl(deployment.tripPlannerVersion));
             boolean routerIsAvailable = false;
             while (!routerIsAvailable) {
                 // If the request was successful, the graph build is complete!
