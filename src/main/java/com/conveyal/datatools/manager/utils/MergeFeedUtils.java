@@ -168,8 +168,8 @@ public class MergeFeedUtils {
                 activeTime.departure_time != futureTime.departure_time ||
                 activeTime.stop_sequence != futureTime.stop_sequence ||
                 !activeTime.stop_id.equals(futureTime.stop_id) ||
-                !activeTime.location_group_id.equals(futureTime.location_group_id) ||
-                !activeTime.location_id.equals(futureTime.location_id)
+                !Objects.equals(activeTime.location_group_id, futureTime.location_group_id) ||
+                !Objects.equals(activeTime.location_id, futureTime.location_id)
             ) {
                 return false;
             }
