@@ -13,6 +13,7 @@ import com.amazonaws.services.elasticloadbalancingv2.model.TargetHealthDescripti
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
+import com.conveyal.datatools.manager.models.Deployment.TripPlannerVersion;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.utils.ErrorUtils;
 import com.conveyal.datatools.manager.utils.SimpleHttpResponse;
@@ -134,7 +135,8 @@ public class MonitorServerStatusJob extends MonitorableJob {
             // load has completed successfully. Wait a maximum of 20 minutes to load the graph and for the router to
             // become available.
             TimeTracker routerCheckTracker = new TimeTracker(20, TimeUnit.MINUTES);
-            String routerUrl = String.join("/", ipUrl, "otp/routers/default");
+
+            String routerUrl = String.join("/", ipUrl, TripPlannerVersion.getUptimeCheckUrl(deployment.tripPlannerVersion));
             boolean routerIsAvailable = false;
             while (!routerIsAvailable) {
                 // If the request was successful, the graph build is complete!
