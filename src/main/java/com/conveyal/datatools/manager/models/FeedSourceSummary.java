@@ -42,6 +42,9 @@ public class FeedSourceSummary {
     public boolean deployable;
     public boolean isPublic;
 
+    /** An optional display filename for the feed in the bundle, e.g. "agency_transit.zip" */
+    public String filename;
+
     @JsonSerialize(using = JacksonSerializers.LocalDateIsoSerializer.class)
     @JsonDeserialize(using = JacksonSerializers.LocalDateIsoDeserializer.class)
     public LocalDate lastUpdated;
@@ -89,6 +92,8 @@ public class FeedSourceSummary {
         // Convert to local date type for consistency.
         this.lastUpdated = getLocalDateFromDate(feedSourceDocument.getDate("lastUpdated"));
         this.url = feedSourceDocument.getString("url");
+        // Get optional filename.
+        this.filename = feedSourceDocument.getString("filename");
     }
 
     /**
@@ -131,6 +136,7 @@ public class FeedSourceSummary {
                         "lastUpdated": 1,
                         "labelIds": 1,
                         "url": 1,
+                        "filename": 1,
                         "noteIds": 1
                     }
                 },
@@ -154,6 +160,7 @@ public class FeedSourceSummary {
                     "lastUpdated",
                     "labelIds",
                     "url",
+                    "filename",
                     "noteIds")
                 )
             ),

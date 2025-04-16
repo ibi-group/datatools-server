@@ -355,7 +355,19 @@ public class Deployment extends Model implements Serializable {
                 LOG.error("Could not retrieve file for {}", v.name);
                 throw new RuntimeException(e1);
             }
-            ZipEntry e = new ZipEntry(gtfsFile.getName());
+            // Determine the entry name for the zip file.
+            String entryName;
+            FeedSource fs = v.parentFeedSource();
+            if (fs != null && fs.filename != null && !fs.filename.trim().isEmpty()) {
+                // Use FeedSource filename if available, ensuring it ends with .zip
+                entryName = fs.filename.endsWith(".zip") ? fs.filename : fs.filename + ".zip";
+                LOG.info("Using FeedSource filename for zip entry: {}", entryName);
+            } else {
+                // Fallback to the original GTFS filename derived from FeedVersion
+                entryName = gtfsFile.getName();
+                LOG.info("Using FeedVersion filename for zip entry: {}", entryName);
+            }
+            ZipEntry e = new ZipEntry(entryName);
             out.putNextEntry(e);
             ByteStreams.copy(in, out);
             try {
