@@ -430,19 +430,17 @@ public class Deployment extends Model implements Serializable {
      * @return The calculated entry name for the zip file.
      */
     public String getFeedSourceBundleFilename(FeedVersion feedVersion, File gtfsFile) {
-        String entryName;
+        String gtfsFileName = gtfsFile.getName();
         FeedSource fs = feedVersion.parentFeedSource();
 
         if (fs != null && !Strings.isBlank(fs.filename)) {
             // Use FeedSource filename if available, ensuring it ends with .zip
-            entryName = fs.filename.endsWith(".zip") ? fs.filename : fs.filename + ".zip";
-            LOG.info("Using FeedSource filename for zip entry: {}", entryName);
-        } else {
-            // Fallback to the original GTFS filename derived from FeedVersion
-            entryName = gtfsFile.getName();
-            LOG.info("Using FeedVersion filename for zip entry: {}", entryName);
-        }
-        return entryName;
+            LOG.info("Using FeedSource filename for zip entry: {}", gtfsFileName);
+            return fs.filename.endsWith(".zip") ? fs.filename : fs.filename + ".zip";
+        } 
+        // Fallback to the original GTFS filename derived from FeedVersion
+        LOG.info("Using FeedVersion filename for zip entry: {}", gtfsFileName);
+        return gtfsFileName;
     }
 
     /** Download config from provided URL. */
