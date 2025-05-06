@@ -8,6 +8,7 @@ application:
   notifications_enabled: false
   docs_url: http://conveyal-data-tools.readthedocs.org
   support_email: support@ibigroup.com
+  public_gtfs_contact_email: public-gtfs-support-email@yourdomain.com
   port: 4000
   data:
     gtfs: /tmp
@@ -17,6 +18,8 @@ application:
 modules:
   enterprise:
     enabled: false
+    # Setting this to true will upload all feeds to S3 instead of linking to their URL
+    prefer_s3_links: false
   editor:
     enabled: true
   deployment:
@@ -24,6 +27,8 @@ modules:
     ec2:
       enabled: false
       default_ami: ami-your-ami-id
+      tag_key: a-tag-key-to-add-to-all-instances
+      tag_value: a-tag-value-to-add-to-all-instances
     # Note: using a cloudfront URL for these download URLs will greatly
     # increase download/deploy speed.
     otp_download_url: https://optional-otp-repo.com

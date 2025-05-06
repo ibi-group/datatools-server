@@ -11,6 +11,7 @@ public class TableTransformResult implements Serializable {
     public int deletedCount;
     public int updatedCount;
     public int addedCount;
+    public int customColumnsAdded;
     public TransformType transformType;
     public String tableName;
 
@@ -19,6 +20,22 @@ public class TableTransformResult implements Serializable {
     public TableTransformResult(String tableName, TransformType transformType) {
         this.tableName = tableName;
         this.transformType = transformType;
+    }
+
+    public TableTransformResult(
+            String tableName,
+            TransformType transformType,
+            int deletedCount,
+            int updatedCount,
+            int addedCount,
+            int customColumnsAdded
+    ) {
+        this.tableName = tableName;
+        this.transformType = transformType;
+        this.deletedCount = deletedCount;
+        this.updatedCount = updatedCount;
+        this.addedCount = addedCount;
+        this.customColumnsAdded = customColumnsAdded;
     }
 
     public TableTransformResult(String tableName, int deletedCount, int updatedCount, int addedCount) {

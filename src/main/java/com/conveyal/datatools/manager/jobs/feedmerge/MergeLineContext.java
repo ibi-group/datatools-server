@@ -237,10 +237,36 @@ public class MergeLineContext {
             .collect(Collectors.toList());
     }
 
+    /**
+     * Determine which reference table to use. If there is only one reference use this. If there are multiple references
+     * determine the context and then the correct reference table to use.
+     */
+    private Table getReferenceTable(FieldContext fieldContext, Field field) {
+        if (field.referenceTables.size() == 1) {
+            return field.referenceTables.iterator().next();
+        }
+
+        switch (ReferenceTableDiscovery.getReferenceTableKey(field, table)) {
+            case TRIP_SERVICE_ID_KEY:
+                return ReferenceTableDiscovery.getTripServiceIdReferenceTable(
+                    fieldContext.getValueToWrite(),
+                    mergeFeedsResult,
+                    getTableScopedValue(Table.CALENDAR, fieldContext.getValue()),
+                    getTableScopedValue(Table.CALENDAR_DATES, fieldContext.getValue())
+                );
+            // Include other cases as multiple references are added e.g. flex!.
+            default:
+                return null;
+        }
+    }
+
     public boolean checkForeignReferences(FieldContext fieldContext) throws IOException {
         Field field = fieldContext.getField();
         if (field.isForeignReference()) {
-            String key = getTableScopedValue(field.referenceTable, fieldContext.getValue());
+            Table refTable = getReferenceTable(fieldContext, field);
+            String key = (refTable != null)
+                ? getTableScopedValue(refTable, fieldContext.getValue())
+                : "unknown";
             // Check if we're performing a service period merge, this ref field is a service_id, and it
             // is not found in the list of service_ids (e.g., it was removed).
             boolean isValidServiceId = mergeFeedsResult.serviceIds.contains(fieldContext.getValueToWrite());

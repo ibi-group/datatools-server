@@ -172,14 +172,16 @@ public class FeedVersionController  {
     private static boolean createFeedVersionFromSnapshot (Request req, Response res) {
 
         Auth0UserProfile userProfile = req.attribute("user");
+        Boolean publishProprietaryFiles = Boolean.parseBoolean(req.queryParams("publishProprietaryFiles"));
         // TODO: Should the ability to create a feedVersion from snapshot be controlled by the 'edit-gtfs' privilege?
         FeedSource feedSource = requestFeedSourceById(req, Actions.MANAGE);
         Snapshot snapshot = Persistence.snapshots.getById(req.queryParams("snapshotId"));
         if (snapshot == null) {
             logMessageAndHalt(req, 400, "Must provide valid snapshot ID");
         }
+        // Publishing the proprietary files will preserve the pattern names in the newly published feed version.
         CreateFeedVersionFromSnapshotJob createFromSnapshotJob =
-            new CreateFeedVersionFromSnapshotJob(feedSource, snapshot, userProfile);
+            new CreateFeedVersionFromSnapshotJob(feedSource, snapshot, userProfile, publishProprietaryFiles);
         JobUtils.heavyExecutor.execute(createFromSnapshotJob);
 
         return true;

@@ -1,6 +1,5 @@
 package com.conveyal.datatools.manager.controllers.api;
 
-import com.amazonaws.AmazonServiceException;
 import com.amazonaws.services.s3.AmazonS3URI;
 import com.amazonaws.services.s3.model.DeleteObjectRequest;
 import com.conveyal.datatools.common.status.MonitorableJob;
@@ -14,6 +13,7 @@ import com.conveyal.datatools.manager.jobs.GisExportJob;
 import com.conveyal.datatools.manager.jobs.DeploymentGisExportJob;
 import com.conveyal.datatools.manager.jobs.PeliasUpdateJob;
 import com.conveyal.datatools.manager.models.Deployment;
+import com.conveyal.datatools.manager.models.DeploymentSummary;
 import com.conveyal.datatools.manager.models.EC2InstanceSummary;
 import com.conveyal.datatools.manager.models.FeedDownloadToken;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -231,6 +231,19 @@ public class DeploymentController {
             }
             return Persistence.deployments.getAll();
         }
+    }
+
+    private static Collection<DeploymentSummary> getAllDeploymentSummaries(Request req, Response res) {
+        Auth0UserProfile userProfile = req.attribute("user");
+        String projectId = req.queryParams("projectId");
+        Project project = Persistence.projects.getById(projectId);
+        if (project == null) {
+            logMessageAndHalt(req, 400, "Must provide valid projectId value.");
+        }
+        if (!userProfile.canAdministerProject(project)) {
+            logMessageAndHalt(req, 401, "User not authorized to view project deployments.");
+        }
+        return project.retrieveDeploymentSummaries();
     }
 
     /**
@@ -594,6 +607,7 @@ public class DeploymentController {
         get(apiPrefix + "secure/deployments/:id", DeploymentController::getDeployment, fullJson::write);
         delete(apiPrefix + "secure/deployments/:id", DeploymentController::deleteDeployment, fullJson::write);
         get(apiPrefix + "secure/deployments", DeploymentController::getAllDeployments, slimJson::write);
+        get(apiPrefix + "secure/deploymentSummaries", DeploymentController::getAllDeploymentSummaries, slimJson::write);
         post(apiPrefix + "secure/deployments", DeploymentController::createDeployment, fullJson::write);
         put(apiPrefix + "secure/deployments/:id", DeploymentController::updateDeployment, fullJson::write);
         post(apiPrefix + "secure/deployments/fromfeedsource/:id", DeploymentController::createDeploymentFromFeedSource, fullJson::write);

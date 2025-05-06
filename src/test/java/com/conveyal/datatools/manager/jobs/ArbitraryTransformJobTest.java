@@ -2,15 +2,19 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
+import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
-import com.conveyal.datatools.manager.models.FeedRetrievalMethod;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.models.Snapshot;
+import com.conveyal.datatools.manager.models.TableTransformResult;
+import com.conveyal.datatools.manager.models.transform.AddCustomFileFromStringTransformation;
+import com.conveyal.datatools.manager.models.transform.AppendToFileTransformation;
 import com.conveyal.datatools.manager.models.transform.DeleteRecordsTransformation;
 import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
 import com.conveyal.datatools.manager.models.transform.FeedTransformation;
+import com.conveyal.datatools.manager.models.transform.PreserveCustomFieldsTransformation;
 import com.conveyal.datatools.manager.models.transform.ReplaceFileFromStringTransformation;
 import com.conveyal.datatools.manager.models.transform.ReplaceFileFromVersionTransformation;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -36,7 +40,6 @@ import static com.conveyal.datatools.TestUtils.assertThatSqlCountQueryYieldsExpe
 import static com.conveyal.datatools.TestUtils.createFeedVersion;
 import static com.conveyal.datatools.TestUtils.zipFolderFiles;
 import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.MANUALLY_UPLOADED;
-import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.VERSION_CLONE;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -56,6 +59,7 @@ public class ArbitraryTransformJobTest extends UnitTest {
     public static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
+        Auth0Connection.setAuthDisabled(true);
 
         // Create a project, feed sources, and feed versions to merge.
         project = new Project();
@@ -72,6 +76,7 @@ public class ArbitraryTransformJobTest extends UnitTest {
      */
     @AfterAll
     public static void tearDown() {
+        Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
         // Project delete cascades to feed sources.
         project.delete();
     }
@@ -101,7 +106,7 @@ public class ArbitraryTransformJobTest extends UnitTest {
      * into the target version's GTFS file.
      */
     @Test
-    public void canReplaceGtfsPlusFileFromVersion() throws IOException {
+    void canReplaceGtfsPlusFileFromVersion() throws IOException {
         final String table = "stop_attributes";
         // Create source version (folder contains stop_attributes file).
         sourceVersion = createFeedVersion(
@@ -126,7 +131,7 @@ public class ArbitraryTransformJobTest extends UnitTest {
     }
 
     @Test
-    public void canDeleteTrips() throws IOException {
+    void canDeleteTrips() throws IOException {
         // Add delete trips transformation.
         List<String> routeIds = new ArrayList<>();
         // Collect route_id values.
@@ -148,7 +153,7 @@ public class ArbitraryTransformJobTest extends UnitTest {
         );
         // Fetch snapshot where modifications were made and create new version from it.
         Snapshot snapshotWithModifications = feedSource.retrieveSnapshots().iterator().next();
-        CreateFeedVersionFromSnapshotJob newVersionJob = new CreateFeedVersionFromSnapshotJob(feedSource, snapshotWithModifications, user);
+        CreateFeedVersionFromSnapshotJob newVersionJob = new CreateFeedVersionFromSnapshotJob(feedSource, snapshotWithModifications, user, false);
         newVersionJob.run();
         // Grab the modified version and check that the trips count matches expectation.
         FeedVersion newVersion = feedSource.retrieveLatest();
@@ -160,7 +165,7 @@ public class ArbitraryTransformJobTest extends UnitTest {
     }
 
     @Test
-    public void replaceGtfsPlusFileFailsIfSourceIsMissing() throws IOException {
+    void replaceGtfsPlusFileFailsIfSourceIsMissing() throws IOException {
         sourceVersion = createFeedVersion(
             feedSource,
             zipFolderFiles("fake-agency-with-only-calendar")
@@ -181,7 +186,103 @@ public class ArbitraryTransformJobTest extends UnitTest {
     }
 
     @Test
-    public void canReplaceFeedInfo() throws SQLException, IOException {
+    void canAppendToStops() throws SQLException, IOException {
+        sourceVersion = createFeedVersion(
+                feedSource,
+                zipFolderFiles("fake-agency-with-only-calendar")
+        );
+        FeedTransformation transformation = AppendToFileTransformation.create(generateStopRow(), "stops");
+        FeedTransformRules transformRules = new FeedTransformRules(transformation);
+        feedSource.transformRules.add(transformRules);
+        Persistence.feedSources.replace(feedSource.id, feedSource);
+        // Create new target version (note: the folder has no stop_attributes.txt file)
+        targetVersion = createFeedVersion(
+                feedSource,
+                zipFolderFiles("fake-agency-with-only-calendar-dates")
+        );
+        LOG.info("Checking assertions.");
+        assertEquals(
+                5 + 3, // Magic number should match row count of stops.txt with three extra
+                targetVersion.feedLoadResult.stops.rowCount,
+                "stops.txt row count should equal input csv data # of rows + 3 extra rows"
+        );
+        // Check for presence of new stop id in database (one record).
+        assertThatSqlCountQueryYieldsExpectedCount(
+                String.format(
+                        "SELECT count(*) FROM %s.stops WHERE stop_id = '%s'",
+                        targetVersion.namespace,
+                        "new"
+                ),
+                1
+        );
+    }
+
+
+    @Test
+    void canAppendToStopsWithLeadingNewlineInData() throws SQLException, IOException {
+        sourceVersion = createFeedVersion(
+                feedSource,
+                zipFolderFiles("fake-agency-with-only-calendar-and-trailing-newlines")
+        );
+        FeedTransformation transformation = AppendToFileTransformation.create(generateStopRowWithLeadingNewline(), "stops");
+        FeedTransformRules transformRules = new FeedTransformRules(transformation);
+        feedSource.transformRules.add(transformRules);
+        Persistence.feedSources.replace(feedSource.id, feedSource);
+        // Create new target version (note: the folder has no stop_attributes.txt file)
+        targetVersion = createFeedVersion(
+                feedSource,
+                zipFolderFiles("fake-agency-with-only-calendar-dates")
+        );
+        LOG.info("Checking assertions.");
+        assertEquals(
+                5 + 3, // Magic number should match row count of stops.txt with three extra
+                targetVersion.feedLoadResult.stops.rowCount,
+                "stops.txt row count should equal input csv data # of rows + 3 extra rows"
+        );
+        // Check for presence of new stop id in database (one record).
+        assertThatSqlCountQueryYieldsExpectedCount(
+                String.format(
+                        "SELECT count(*) FROM %s.stops WHERE stop_id = '%s'",
+                        targetVersion.namespace,
+                        "new"
+                ),
+                1
+        );
+    }
+    @Test
+    void canAppendToStopsWithTrailingNewlineInData() throws SQLException, IOException {
+        sourceVersion = createFeedVersion(
+                feedSource,
+                zipFolderFiles("fake-agency-with-only-calendar-and-trailing-newlines")
+        );
+        FeedTransformation transformation = AppendToFileTransformation.create(generateStopRowWithTrailingNewline(), "stops");
+        FeedTransformRules transformRules = new FeedTransformRules(transformation);
+        feedSource.transformRules.add(transformRules);
+        Persistence.feedSources.replace(feedSource.id, feedSource);
+        // Create new target version (note: the folder has no stop_attributes.txt file)
+        targetVersion = createFeedVersion(
+                feedSource,
+                zipFolderFiles("fake-agency-with-only-calendar-dates")
+        );
+        LOG.info("Checking assertions.");
+        assertEquals(
+                5 + 3, // Magic number should match row count of stops.txt with three extra
+                targetVersion.feedLoadResult.stops.rowCount,
+                "stops.txt row count should equal input csv data # of rows + 3 extra rows"
+        );
+        // Check for presence of new stop id in database (one record).
+        assertThatSqlCountQueryYieldsExpectedCount(
+                String.format(
+                        "SELECT count(*) FROM %s.stops WHERE stop_id = '%s'",
+                        targetVersion.namespace,
+                        "new"
+                ),
+                1
+        );
+    }
+
+    @Test
+    void canReplaceFeedInfo() throws SQLException, IOException {
         // Generate random UUID for feedId, which gets placed into the csv data.
         final String feedId = UUID.randomUUID().toString();
         final String feedInfoContent = generateFeedInfo(feedId);
@@ -215,11 +316,80 @@ public class ArbitraryTransformJobTest extends UnitTest {
         );
     }
 
+    @Test
+    void canPreserveCustomFieldsInStops() throws IOException {
+        String stops = generateStopsWithCustomFields();
+        FeedTransformation transformation = PreserveCustomFieldsTransformation.create(stops, "stops");
+        FeedTransformRules transformRules = new FeedTransformRules(transformation);
+        feedSource.transformRules.add(transformRules);
+        Persistence.feedSources.replace(feedSource.id, feedSource);
+        targetVersion = createFeedVersion(
+            feedSource,
+            zipFolderFiles("fake-agency-with-only-calendar-dates")
+        );
+        TableTransformResult transformResult = targetVersion.feedTransformResult.tableTransformResults.get(0);
+        assertEquals(
+                2,
+                transformResult.customColumnsAdded,
+                "stops.txt custom column count should equal input csv data # of custom columns"
+        );
+        assertEquals(
+                2,
+                transformResult.updatedCount,
+                "stops.txt row count modified with custom content should equal input csv data # of custom columns"
+        );
+    }
+
+    @Test
+    void canAddCustomFile() throws IOException {
+        String customCsv = generateCustomCsvData();
+        FeedTransformation transformation = AddCustomFileFromStringTransformation.create(customCsv, "custom-file");
+        FeedTransformRules transformRules = new FeedTransformRules(transformation);
+        feedSource.transformRules.add(transformRules);
+        Persistence.feedSources.replace(feedSource.id, feedSource);
+        targetVersion = createFeedVersion(
+            feedSource,
+            zipFolderFiles("fake-agency-with-only-calendar-dates")
+        );
+        assertEquals(
+                2,
+                targetVersion.feedTransformResult.tableTransformResults.get(0).addedCount,
+                "custom-file.txt custom row count should equal input csv data # of rows"
+        );
+    }
+
     private static String generateFeedInfo(String feedId) {
         // Add feed_info csv data (purposefully with two rows, even though this is not valid GTFS).
         return String.format(
             "feed_id,feed_publisher_name,feed_publisher_url,feed_lang\n%s,BART,https://www.bart.gov/,en\n2,abc,https://example.com",
             feedId
         );
+    }
+    private static String generateStopsWithCustomFields() {
+        return "stop_id,custom_column1,custom_column2"
+            + "\n4u6g,customValue1,customValue2"
+            + "\n1234567,customValue3,customValue4";
+    }
+
+    private static String generateStopRow() {
+        return "new3,new3,appended stop,,37,-122,,,0,123,," +
+                "\nnew2,new2,appended stop,,37,-122,,,0,123,," +
+                "\nnew,new,appended stop,,37.06668,-122.07781,,,0,123,,";
+    }
+    private static String generateStopRowWithLeadingNewline() {
+        return "\nnew3,new3,appended stop,,37,-122,,,0,123,," +
+                "\nnew2,new2,appended stop,,37,-122,,,0,123,," +
+                "\nnew,new,appended stop,,37.06668,-122.07781,,,0,123,,";
+    }
+    private static String generateStopRowWithTrailingNewline() {
+        return "new3,new3,appended stop,,37,-122,,,0,123,," +
+                "\nnew2,new2,appended stop,,37,-122,,,0,123,," +
+                "\nnew,new,appended stop,,37.06668,-122.07781,,,0,123,,\n";
+    }
+
+    private static String generateCustomCsvData() {
+        return "custom_column1,custom_column2,custom_column3"
+            + "\ncustomValue1,customValue2,customValue3"
+            + "\ncustomValue4,customValue5,customValue6";
     }
 }

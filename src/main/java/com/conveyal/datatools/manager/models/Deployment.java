@@ -41,11 +41,15 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
+import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
+import static com.conveyal.datatools.manager.utils.HttpUtils.downloadFileFromURL;
 import static com.mongodb.client.model.Filters.and;
 import static com.mongodb.client.model.Filters.eq;
 
@@ -62,7 +66,8 @@ public class Deployment extends Model implements Serializable {
 
     public String name;
 
-    public static final String DEFAULT_OTP_VERSION = "otp-v1.4.0";
+    //OTP v1.4 is a historical version that was previously used as a fallback. Only use if application default not configured.
+    public static final String DEFAULT_OTP_VERSION = getConfigPropertyAsText("application.default_otp_version", "otp-v1.4.0");
 
     /** What server is this currently deployed to? */
     public String deployedTo;
@@ -76,6 +81,8 @@ public class Deployment extends Model implements Serializable {
     /* Pelias fields, used to determine where/if to send data to the Pelias webhook */
     public boolean peliasResetDb;
     public List<String> peliasCsvFiles = new ArrayList<>();
+
+    public String peliasSynonymsBase64;
 
     /**
      * Get parent project for deployment. Note: at one point this was a JSON property of this class, but severe
@@ -181,7 +188,7 @@ public class Deployment extends Model implements Serializable {
      * {@link Deployment#DEFAULT_OTP_VERSION}. This is used to determine what jar file to download and does not have an
      * exact match to actual numbered/tagged releases.
      */
-    public String otpVersion;
+    public String otpVersion = DEFAULT_OTP_VERSION;
 
     public boolean buildGraphOnly;
 
@@ -203,7 +210,9 @@ public class Deployment extends Model implements Serializable {
     public String routerId;
 
     public String customBuildConfig;
+    public String customBuildConfigUrl;
     public String customRouterConfig;
+    public String customRouterConfigUrl;
 
     public List<CustomFile> customFiles = new ArrayList<>();
 
@@ -394,32 +403,55 @@ public class Deployment extends Model implements Serializable {
                 out.closeEntry();
             }
         }
+
+        // Include shared_stops.csv, if present
+        if (parentProject().sharedStopsConfig != null) {
+            byte[] sharedStopsConfigAsBytes = parentProject().sharedStopsConfig.getBytes(StandardCharsets.UTF_8);
+            ZipEntry sharedStopsEntry = new ZipEntry("shared_stops.csv");
+            out.putNextEntry(sharedStopsEntry);
+            out.write(sharedStopsConfigAsBytes);
+            out.closeEntry();
+        }
+
         // Finally close the zip output stream. The dump file is now complete.
         out.close();
     }
 
-    /** Generate build config for deployment as byte array (for writing to file output stream). */
-    public byte[] generateBuildConfig() {
-        Project project = this.parentProject();
+    /** Download config from provided URL. */
+    public String downloadConfig(String configUrl) throws IOException {
+        if (configUrl != null) {
+            try {
+                // TODO: validate JSON?
+                return new String(downloadFileFromURL(new URL(configUrl)), StandardCharsets.UTF_8);
+            } catch (IOException e) {
+                String message = String.format("Could not download config file from %s.", configUrl);
+                LOG.error(message);
+                throw new IOException(message, e);
+            }
+        }
+        return null;
+    }
+
+    /** Generate build config for deployment as byte array (for writing to file output stream). If an external build
+     * config is available and is successfully downloaded, use this instead of the deployment build config. If there is
+     * no deployment build config, use the project build config. */
+    public byte[] generateBuildConfig() throws IOException {
+        String downloadedConfig = downloadConfig(customBuildConfigUrl);
+        if (downloadedConfig != null) {
+            customBuildConfig = downloadedConfig;
+        }
         return customBuildConfig != null
             ? customBuildConfig.getBytes(StandardCharsets.UTF_8)
-            : project.buildConfig != null
-                ? writeToBytes(project.buildConfig)
-                : null;
+            : null;
     }
 
     public String generateBuildConfigAsString() {
-        if (customBuildConfig != null) return customBuildConfig;
-        return writeToString(this.parentProject().buildConfig);
-    }
-
-    /** Convenience method to write serializable object (primarily for router/build config objects) to byte array. */
-    private <O extends Serializable> byte[] writeToBytes(O object) {
         try {
-            return otpConfigMapper.writer().writeValueAsBytes(object);
-        } catch (JsonProcessingException e) {
-            LOG.error("Value contains malformed JSON", e);
-            return null;
+            return new String(generateBuildConfig(), StandardCharsets.UTF_8);
+            // TODO: Correctly generate default build config
+        } catch (Exception e) {
+            LOG.error("Failed to generate build config: ", e);
+            return "";
         }
     }
 
@@ -434,19 +466,26 @@ public class Deployment extends Model implements Serializable {
     }
 
     /** Generate router config for deployment as string. */
-    public byte[] generateRouterConfig() {
-        Project project = this.parentProject();
+    public byte[] generateRouterConfig() throws IOException {
+        String downloadedConfig = downloadConfig(customRouterConfigUrl);
+        if (downloadedConfig != null) {
+            customRouterConfig = downloadedConfig;
+        }
+
         return customRouterConfig != null
             ? customRouterConfig.getBytes(StandardCharsets.UTF_8)
-            : project.routerConfig != null
-                ? writeToBytes(project.routerConfig)
-                : null;
+            : null;
     }
 
     /** Generate router config for deployment as byte array (for writing to file output stream). */
     public String generateRouterConfigAsString() {
-        if (customRouterConfig != null) return customRouterConfig;
-        return writeToString(this.parentProject().routerConfig);
+            try {
+                return new String(generateRouterConfig(), StandardCharsets.UTF_8);
+                // TODO: Correctly generate default router config
+            } catch (Exception e) {
+                LOG.error("Failed to generate router config: ", e);
+                return "";
+        }
     }
 
     /**
@@ -627,7 +666,18 @@ public class Deployment extends Model implements Serializable {
     }
 
     public enum TripPlannerVersion {
-        OTP_1, OTP_2
+        OTP_1("otp/routers/default"),
+        OTP_2("otp/actuators/health");
+
+        private final String uptimeCheckUrl;
+
+        TripPlannerVersion(String uptimeCheckUrl) {
+            this.uptimeCheckUrl = uptimeCheckUrl;
+        }
+
+        public static String getUptimeCheckUrl(TripPlannerVersion version) {
+            return (version == OTP_2) ? OTP_2.uptimeCheckUrl : OTP_1.uptimeCheckUrl;
+        }
     }
 
     /**

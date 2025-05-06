@@ -7,32 +7,11 @@ import java.util.Collection;
 
 /**
  * Created by demory on 3/8/15.
+ *
+ * TODO: Figure out how to remove this class without causing problems in the DB migration
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class OtpRouterConfig implements Serializable {
     private static final long serialVersionUID = 1L;
-    public Integer numItineraries;
 
-    public Double  walkSpeed;
-
-    public Double stairsReluctance;
-
-    public Double carDropoffTime;
-
-    public Collection<Updater> updaters;
-
-    public static class Updater implements Serializable {
-        private static final long serialVersionUID = 1L;
-        public String type;
-
-        public Integer frequencySec;
-
-        public String sourceType;
-
-        public String url;
-
-        public String defaultAgencyId;
-    }
-    
-    public String requestLogFile;
 }

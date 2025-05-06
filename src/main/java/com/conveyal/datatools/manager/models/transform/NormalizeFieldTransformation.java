@@ -207,10 +207,6 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             final String[] headers = csvReader.getHeaders();
             Field[] fieldsFoundInZip = gtfsTable.getFieldsFromFieldHeaders(headers, null);
             int transformFieldIndex = getFieldIndex(fieldsFoundInZip, fieldName);
-            if (transformFieldIndex == -1) {
-                status.fail(String.format("'Normalize Field' failed because field '%s' was not found in file '%s' in the GTFS archive", fieldName, tableName));
-                return;
-            }
 
             int modifiedRowCount = generateCsvContent(writer, headers, csvReader, transformFieldIndex);
 
@@ -252,12 +248,22 @@ public class NormalizeFieldTransformation extends ZipTransformation {
         }
     }
 
-    /** Generates content for the GTFS table, returns the number of rows modified. */
+    /** Generates headers and content for the GTFS table, returns the number of rows modified. */
     private int generateCsvContent(CsvListWriter writer, String[] headers, CsvReader csvReader, int transformFieldIndex) throws IOException {
         int modifiedRowCount = 0;
 
-        // Write headers and processed CSV rows.
-        writer.write(headers);
+        // Write headers.
+        // If the index is -1, this is a new column, and we need to add it accordingly.
+        if (transformFieldIndex == -1) {
+            // MTC merge note: previously, for MTC, we would fail this transformation with the message:
+            // "'Normalize Field' failed because field '%s' was not found in file '%s' in the GTFS archive"
+            // (See https://github.com/ibi-group/datatools-server/pull/598)
+            writer.write(expandArray(headers, fieldName));
+        } else {
+            writer.write(headers);
+        }
+
+        // Write processed CSV rows.
         while (csvReader.readRecord()) {
             String originalValue = csvReader.get(transformFieldIndex);
             String transformedValue = originalValue;
@@ -275,10 +281,16 @@ public class NormalizeFieldTransformation extends ZipTransformation {
 
             // Re-assemble the CSV line and place in buffer.
             String[] csvValues = csvReader.getValues();
-            csvValues[transformFieldIndex] = transformedValue;
 
-            // Write line to table (plus new line char).
-            writer.write(csvValues);
+            // If the index is -1, this is a new column, and we need to add it accordingly.
+            if (transformFieldIndex == -1) {
+                writer.write(expandArray(csvValues, transformedValue));
+            } else {
+                csvValues[transformFieldIndex] = transformedValue;
+
+                // Write line to table (plus new line char).
+                writer.write(csvValues);
+            }
 
             // Count number of CSV rows changed.
             if (!originalValue.equals(transformedValue)) {
@@ -321,5 +333,15 @@ public class NormalizeFieldTransformation extends ZipTransformation {
             result = substitution.replaceAll(result);
         }
         return result;
+    }
+
+    /**
+     * Copies a fixed length array, and appends a new element at the end.
+     */
+    private String[] expandArray(String[] array, String value) {
+        String[] expanded = new String[array.length + 1];
+        System.arraycopy(array, 0, expanded, 0, array.length);
+        expanded[array.length] = value;
+        return expanded;
     }
 }

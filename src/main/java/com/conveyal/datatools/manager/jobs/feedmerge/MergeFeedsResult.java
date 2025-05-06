@@ -21,10 +21,21 @@ public class MergeFeedsResult implements Serializable {
     /** Contains the set of IDs for records that were excluded in the merged feed */
     public Set<String> skippedIds = new HashSet<>();
     /**
-     * Track the set of service IDs to end up in the merged feed in order to determine which calendar_dates and trips
-     * records should be retained in the merged result.
+     * Track the set of service IDs to end up in the merged feed in order to determine which calendar, calendar_dates and
+     * trip records should be retained in the merged result.
      */
     public Set<String> serviceIds  = new HashSet<>();
+
+    /**
+     * Track the set of service IDs obtained from calendar records.
+     */
+    public Set<String> calendarServiceIds = new HashSet<>();
+
+    /**
+     * Track the set of service IDs obtained from calendar date records.
+     */
+    public Set<String> calendarDatesServiceIds = new HashSet<>();
+
     /**
      * Track the set of route IDs to end up in the merged feed in order to determine which route_attributes
      * records should be retained in the merged result.

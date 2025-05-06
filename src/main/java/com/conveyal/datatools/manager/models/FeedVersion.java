@@ -3,13 +3,17 @@ package com.conveyal.datatools.manager.models;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.jobs.ValidateFeedJob;
+import com.conveyal.datatools.manager.jobs.ValidateMobilityDataFeedJob;
 import com.conveyal.datatools.manager.jobs.validation.RouteTypeValidatorBuilder;
+import com.conveyal.datatools.manager.jobs.validation.SharedStopsValidator;
 import com.conveyal.datatools.manager.persistence.FeedStore;
 import com.conveyal.datatools.manager.persistence.Persistence;
 import com.conveyal.datatools.manager.utils.HashUtils;
 import com.conveyal.gtfs.BaseGTFSCache;
 import com.conveyal.gtfs.GTFS;
 import com.conveyal.gtfs.error.NewGTFSErrorType;
+import com.conveyal.gtfs.graphql.fetchers.JDBCFetcher;
 import com.conveyal.gtfs.loader.Feed;
 import com.conveyal.gtfs.loader.FeedLoadResult;
 import com.conveyal.gtfs.validator.MTCValidator;
@@ -20,14 +24,22 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonInclude.Include;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonView;
+import org.bson.Document;
 import org.bson.codecs.pojo.annotations.BsonProperty;
+import org.mobilitydata.gtfsvalidator.runner.ApplicationType;
+import org.mobilitydata.gtfsvalidator.runner.ValidationRunner;
+import org.mobilitydata.gtfsvalidator.runner.ValidationRunnerConfig;
+import org.mobilitydata.gtfsvalidator.util.VersionResolver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.BufferedReader;
 import java.io.File;
+import java.io.FileReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.Serializable;
+import java.nio.file.Path;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -253,6 +265,8 @@ public class FeedVersion extends Model implements Serializable {
      * */
     public Date processedByExternalPublisher;
 
+    public Document mobilityDataResult;
+
     public String formattedTimestamp() {
         SimpleDateFormat format = new SimpleDateFormat(HUMAN_READABLE_TIMESTAMP_FORMAT);
         return format.format(this.updated);
@@ -344,24 +358,97 @@ public class FeedVersion extends Model implements Serializable {
         // Sometimes this method is called when no status object is available.
         if (status == null) status = new MonitorableJob.Status();
 
-        // VALIDATE GTFS feed
+        // VALIDATE GTFS feed.
         try {
             LOG.info("Beginning validation...");
+
             // FIXME: pass status to validate? Or somehow listen to events?
             status.update("Validating feed...", 33);
 
             // Validate the feed version.
-            // Certain extensions, if enabled, have extra validators
+            // Certain extensions, if enabled, have extra validators.
             if (isExtensionEnabled("mtc")) {
                 validationResult = GTFS.validate(feedLoadResult.uniqueIdentifier, DataManager.GTFS_DATA_SOURCE,
                     RouteTypeValidatorBuilder::buildRouteValidator,
                     MTCValidator::new
                 );
             } else {
-                validationResult = GTFS.validate(feedLoadResult.uniqueIdentifier, DataManager.GTFS_DATA_SOURCE,
-                    RouteTypeValidatorBuilder::buildRouteValidator
+                FeedSource fs = Persistence.feedSources.getById(this.feedSourceId);
+
+                /*
+                  Get feed_id from feed version
+
+                  This could potentially happen inside gtfs-lib, however
+                  because this functionality is specific to datatools and the
+                  shared stops feature, it lives only here instead. Changes to
+                  gtfs-lib have been avoided, so that gtfs-lib isn't being modified
+                  to support proprietary features.
+                 */
+                JDBCFetcher feedFetcher = new JDBCFetcher("feed_info");
+                Object gtfsFeedId = new Object();
+                try {
+                    gtfsFeedId = feedFetcher.getResults(this.namespace, null, null).get(0).get("feed_id");
+                } catch (RuntimeException e) {
+                    LOG.warn("RuntimeException occurred while fetching feedId");
+                }
+                String feedId = gtfsFeedId == null ? "" : gtfsFeedId.toString();
+                SharedStopsValidator ssv = new SharedStopsValidator(fs.retrieveProject(), feedId);
+
+                validationResult = GTFS.validate(
+                        feedLoadResult.uniqueIdentifier,
+                        DataManager.GTFS_DATA_SOURCE,
+                        RouteTypeValidatorBuilder::buildRouteValidator,
+                        ssv::buildSharedStopsValidator
                 );
             }
+        } catch (Exception e) {
+            status.fail(String.format("Unable to validate feed %s", this.id), e);
+            // FIXME create validation result with new constructor?
+            validationResult = new ValidationResult();
+            validationResult.fatalException = "failure!";
+        }
+    }
+
+    public void validateMobility(MonitorableJob.Status status) {
+
+        // Sometimes this method is called when no status object is available.
+        if (status == null) status = new MonitorableJob.Status();
+
+        // VALIDATE GTFS feed
+        try {
+            LOG.info("Beginning MobilityData validation...");
+            status.update("MobilityData Analysis...", 11);
+
+            // Wait for the file to be entirely copied into the directory.
+            // 5 seconds + ~1 second per 10mb
+            Thread.sleep(5000 + (this.fileSize / 10000));
+            File gtfsZip = this.retrieveGtfsFile();
+            // Namespace based folders avoid clash for validation being run on multiple versions of a feed.
+            // TODO: do we know that there will always be a namespace?
+            String validatorOutputDirectory = "/tmp/datatools_gtfs/" + this.namespace + "/";
+
+            status.update("MobilityData Analysis...", 20);
+            // Set up MobilityData validator.
+            ValidationRunnerConfig.Builder builder = ValidationRunnerConfig.builder();
+            builder.setGtfsSource(gtfsZip.toURI());
+            builder.setOutputDirectory(Path.of(validatorOutputDirectory));
+            ValidationRunnerConfig mbValidatorConfig = builder.build();
+
+            status.update("MobilityData Analysis...", 40);
+            // Run MobilityData validator
+            ValidationRunner runner = new ValidationRunner(new VersionResolver(ApplicationType.CLI));
+            runner.run(mbValidatorConfig);
+
+            status.update("MobilityData Analysis...", 80);
+            // Read generated report and save to Mongo.
+            String json;
+            try (FileReader fr = new FileReader(validatorOutputDirectory + "report.json")) {
+                BufferedReader in = new BufferedReader(fr);
+                json = in.lines().collect(Collectors.joining(System.lineSeparator()));
+            }
+
+            // This will persist the document to Mongo.
+            this.mobilityDataResult = Document.parse(json);
         } catch (Exception e) {
             status.fail(String.format("Unable to validate feed %s", this.id), e);
             // FIXME create validation result with new constructor?
@@ -429,7 +516,9 @@ public class FeedVersion extends Model implements Serializable {
             NewGTFSErrorType.SERVICE_WITHOUT_DAYS_OF_WEEK,
             NewGTFSErrorType.TABLE_MISSING_COLUMN_HEADERS,
             NewGTFSErrorType.TABLE_IN_SUBDIRECTORY,
-            NewGTFSErrorType.WRONG_NUMBER_OF_FIELDS
+            NewGTFSErrorType.WRONG_NUMBER_OF_FIELDS,
+            NewGTFSErrorType.MULTIPLE_SHARED_STOPS_GROUPS,
+            NewGTFSErrorType.SHARED_STOP_GROUP_MULTIPLE_PRIMARY_STOPS
         ));
     }
 
@@ -557,5 +646,20 @@ public class FeedVersion extends Model implements Serializable {
      */
     public boolean isSameAs(FeedVersion otherVersion) {
         return otherVersion != null && this.hash.equals(otherVersion.hash);
+    }
+
+    /**
+     * {@link ValidateFeedJob} and {@link ValidateMobilityDataFeedJob} both require to save a feed version after their
+     * subsequent validation checks have completed. Either could finish first, therefore this method makes sure that
+     * only one instance is saved (the last to finish updates).
+     */
+    public void persistFeedVersionAfterValidation(boolean isNewVersion) {
+        if (isNewVersion && Persistence.feedVersions.getById(id) == null) {
+            int count = parentFeedSource().feedVersionCount();
+            version = count + 1;
+            Persistence.feedVersions.create(this);
+        } else {
+            Persistence.feedVersions.replace(id, this);
+        }
     }
 }

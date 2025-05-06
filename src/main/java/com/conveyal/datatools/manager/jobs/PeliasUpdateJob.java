@@ -142,6 +142,7 @@ public class PeliasUpdateJob extends MonitorableJob {
         PeliasWebhookRequestBody peliasWebhookRequestBody = new PeliasWebhookRequestBody();
         peliasWebhookRequestBody.gtfsFeeds = gtfsFeeds;
         peliasWebhookRequestBody.csvFiles = deployment.peliasCsvFiles;
+        peliasWebhookRequestBody.peliasSynonymsBase64 = deployment.peliasSynonymsBase64;
         peliasWebhookRequestBody.logUploadUrl = logUploadS3URI.toString();
         peliasWebhookRequestBody.deploymentId = deployment.id;
         peliasWebhookRequestBody.resetDb = deployment.peliasResetDb;
@@ -218,6 +219,8 @@ public class PeliasUpdateJob extends MonitorableJob {
         public String logUploadUrl;
         public String deploymentId;
         public boolean resetDb;
+
+        public String peliasSynonymsBase64;
     }
 
     /**

@@ -18,14 +18,19 @@ import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.models.Snapshot;
 import com.mongodb.ConnectionString;
 import com.mongodb.MongoClientSettings;
+import com.mongodb.client.AggregateIterable;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoDatabase;
+import org.bson.Document;
 import org.bson.codecs.configuration.CodecRegistries;
 import org.bson.codecs.configuration.CodecRegistry;
 import org.bson.codecs.pojo.PojoCodecProvider;
+import org.bson.conversions.Bson;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.List;
 
 import static com.conveyal.datatools.manager.DataManager.getConfigPropertyAsText;
 
@@ -128,5 +133,19 @@ public class Persistence {
 //        feedVersions.getMongoCollection().createIndex(Indexes.descending("feedSourceId", "version"));
 //        snapshots.getMongoCollection().createIndex(Indexes.descending("feedSourceId", "version"));
     }
-    
+
+    /**
+     * Provide a direct link to the Mongo database which is not tied to a specific entity type.
+     */
+    public static MongoDatabase getMongoDatabase() {
+        return mongoDatabase;
+    }
+
+    /**
+     * Get all bespoke documents matching query. These documents are tailored to the query response and are not tied
+     * directly to a persistence type.
+     */
+    public static AggregateIterable<Document> getDocuments(String collection, List<Bson> stages) {
+        return getMongoDatabase().getCollection(collection).aggregate(stages);
+    }
 }

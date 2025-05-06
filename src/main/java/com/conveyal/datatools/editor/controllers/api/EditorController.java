@@ -29,8 +29,10 @@ import javax.sql.DataSource;
 import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
@@ -40,8 +42,8 @@ import java.util.stream.Stream;
 import static com.conveyal.datatools.common.utils.SparkUtils.formatJSON;
 import static com.conveyal.datatools.common.utils.SparkUtils.getObjectNode;
 import static com.conveyal.datatools.common.utils.SparkUtils.logMessageAndHalt;
-import static com.conveyal.datatools.editor.controllers.EditorLockController.sessionsForFeedIds;
 import static com.conveyal.datatools.manager.controllers.api.UserController.inTestingEnvironment;
+import static org.eclipse.jetty.http.HttpStatus.OK_200;
 import static spark.Spark.delete;
 import static spark.Spark.options;
 import static spark.Spark.patch;
@@ -129,6 +131,10 @@ public abstract class EditorController<T extends Entity> {
         if ("pattern".equals(classToLowercase)) {
             put(ROOT_ROUTE + ID_PARAM + "/stop_times", this::updateStopTimesFromPatternStops, json::write);
             delete(ROOT_ROUTE + ID_PARAM + "/trips", this::deleteTripsForPattern, json::write);
+        }
+
+        if ("stop".equals(classToLowercase)) {
+            delete(ROOT_ROUTE + ID_PARAM + "/cascadeDeleteStop", this::cascadeDeleteStop, json::write);
         }
     }
 
@@ -260,6 +266,81 @@ public abstract class EditorController<T extends Entity> {
     }
 
     /**
+     * HTTP endpoint to delete a stop and all references in stop times and pattern stops given a string stop_id (i.e. not
+     * the integer ID field). Then normalize the stop times for all updated patterns (i.e. the ones where the stop has
+     * been deleted).
+     */
+    private String cascadeDeleteStop(Request req, Response res) {
+        // Table writer closes the database connection after use, so a new one is required for each task.
+        JdbcTableWriter tableWriter;
+        long startTime = System.currentTimeMillis();
+        String namespace = getNamespaceAndValidateSession(req);
+        String stopIdColumnName = "stop_id";
+
+        // NOTE: This is a string stop ID, not the integer ID that other HTTP endpoints use.
+        String stopId = req.params("id");
+        if (stopId == null) {
+            logMessageAndHalt(req, 400, "Must provide a valid stopId.");
+        }
+
+        try (
+            Connection connection = datasource.getConnection();
+            PreparedStatement statement = connection.prepareStatement(
+                String.format("select id, stop_sequence from %s.pattern_stops where %s = ?", namespace, stopIdColumnName)
+            )
+        ) {
+            // Get the patterns to be normalized before the related stop is deleted.
+            statement.setString(1, stopId);
+            ResultSet resultSet = statement.executeQuery();
+            Map<Integer, Integer> patternsToBeNormalized = new HashMap<>();
+            while (resultSet.next()) {
+                patternsToBeNormalized.put(
+                    resultSet.getInt("id"),
+                    resultSet.getInt("stop_sequence")
+                );
+            }
+
+            tableWriter = new JdbcTableWriter(Table.STOP_TIMES, datasource, namespace);
+            int deletedCountStopTimes = tableWriter.deleteWhere(stopIdColumnName, stopId, true);
+
+            int deletedCountPatternStops = 0;
+            if (!patternsToBeNormalized.isEmpty()) {
+                tableWriter = new JdbcTableWriter(Table.PATTERN_STOP, datasource, namespace);
+                deletedCountPatternStops = tableWriter.deleteWhere(stopIdColumnName, stopId, true);
+                if (deletedCountPatternStops > 0) {
+                    for (Map.Entry<Integer, Integer> patternStop : patternsToBeNormalized.entrySet()) {
+                        tableWriter = new JdbcTableWriter(Table.PATTERN_STOP, datasource, namespace);
+                        int stopSequence = patternStop.getValue();
+                        // Begin with the stop prior to the one deleted, unless at the beginning.
+                        int beginWithSequence = (stopSequence != 0) ? stopSequence - 1 : stopSequence;
+                        tableWriter.normalizeStopTimesForPattern(patternStop.getKey(), beginWithSequence, false);
+                    }
+                }
+            }
+
+            tableWriter = new JdbcTableWriter(Table.STOPS, datasource, namespace);
+            int deletedCountStop = tableWriter.deleteWhere(stopIdColumnName, stopId, true);
+
+            return formatJSON(
+                String.format(
+                    "Deleted %d stop, %d pattern stops and %d stop times.",
+                    deletedCountStop,
+                    deletedCountPatternStops,
+                    deletedCountStopTimes),
+                OK_200
+            );
+        } catch (InvalidNamespaceException e) {
+            logMessageAndHalt(req, 400, "Invalid namespace.", e);
+            return null;
+        } catch (Exception e) {
+            logMessageAndHalt(req, 500, "Error deleting entity.", e);
+            return null;
+        } finally {
+            LOG.info("Cascade delete of stop operation took {} msec.", System.currentTimeMillis() - startTime);
+        }
+    }
+
+    /**
      * Currently designed to delete multiple trips in a single transaction. Trip IDs should be comma-separated in a query
      * parameter. TODO: Implement this for other entity types?
      */
@@ -325,8 +406,9 @@ public abstract class EditorController<T extends Entity> {
         int patternId = getIdFromRequest(req);
         try {
             int beginStopSequence = Integer.parseInt(req.queryParams("stopSequence"));
+            boolean interpolateStopTimes = Boolean.parseBoolean(req.queryParams("interpolateStopTimes"));
             JdbcTableWriter tableWriter = new JdbcTableWriter(table, datasource, namespace);
-            int stopTimesUpdated = tableWriter.normalizeStopTimesForPattern(patternId, beginStopSequence);
+            int stopTimesUpdated = tableWriter.normalizeStopTimesForPattern(patternId, beginStopSequence, interpolateStopTimes);
             return SparkUtils.formatJSON("updateResult", stopTimesUpdated + " stop times updated.");
         } catch (Exception e) {
             logMessageAndHalt(req, 400, "Error normalizing stop times", e);
@@ -394,7 +476,7 @@ public abstract class EditorController<T extends Entity> {
             if (isCreating) {
                 return tableWriter.create(jsonBody, true);
             } else {
-                return tableWriter.update(id, jsonBody, true);
+                return update(tableWriter, id, jsonBody);
             }
         } catch (InvalidNamespaceException e) {
             logMessageAndHalt(req, 400, "Invalid namespace");
@@ -407,6 +489,30 @@ public abstract class EditorController<T extends Entity> {
             LOG.info("{} operation took {} msec", operation, System.currentTimeMillis() - startTime);
         }
         return null;
+    }
+
+    /**
+     * Handle specific entity updates.
+     */
+    private String update(JdbcTableWriter tableWriter, Integer id, String jsonBody) throws IOException, SQLException {
+        try {
+            return tableWriter.update(id, jsonBody, true);
+        } catch (SQLException e) {
+            if (table.name.equals(Table.TRIPS.name)) {
+                // If an exception is thrown updating a trip, provide additional information to help rectify the
+                // issue.
+                JsonNode trip = mapper.readTree(jsonBody);
+                throw new SQLException(
+                    String.format(
+                        "Trip id %s conflicts with an existing trip id.",
+                        trip.get("trip_id").asText()
+                    )
+                );
+            } else {
+                // Continue to pass the exception to the frontend.
+                throw e;
+            }
+        }
     }
 
     /**
@@ -425,21 +531,9 @@ public abstract class EditorController<T extends Entity> {
         // Only check for editing session if not in testing environment.
         // TODO: Add way to mock session.
         if (!inTestingEnvironment()) {
-            EditorLockController.EditorSession currentSession = sessionsForFeedIds.get(feedId);
-            if (currentSession == null) {
-                logMessageAndHalt(req, 400, "There is no active editing session for user.");
-            }
-            if (!currentSession.sessionId.equals(sessionId)) {
-                // This session does not match the current active session for the feed.
-                Auth0UserProfile userProfile = req.attribute("user");
-                if (currentSession.userEmail.equals(userProfile.getEmail())) {
-                    LOG.warn("User {} already has editor session {} for feed {}. Same user cannot make edits on session {}.", currentSession.userEmail, currentSession.sessionId, feedId, req.session().id());
-                    logMessageAndHalt(req, 400, "You have another editing session open for " + feedSource.name);
-                } else {
-                    LOG.warn("User {} already has editor session {} for feed {}. User {} cannot make edits on session {}.", currentSession.userEmail, currentSession.sessionId, feedId, userProfile.getEmail(), req.session().id());
-                    logMessageAndHalt(req, 400, "Somebody else is editing the " + feedSource.name + " feed.");
-                }
-            } else {
+            Auth0UserProfile userProfile = req.attribute("user");
+            EditorLockController.EditorSession currentSession = EditorLockController.getSession(feedId);
+            if (EditorLockController.checkUserHasActiveSession(req, sessionId, userProfile.getEmail(), currentSession)) {
                 currentSession.lastEdit = System.currentTimeMillis();
                 LOG.info("Updating session {} last edit time to {}", sessionId, currentSession.lastEdit);
             }

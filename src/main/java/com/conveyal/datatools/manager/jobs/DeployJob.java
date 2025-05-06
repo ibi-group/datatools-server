@@ -7,6 +7,7 @@ import com.amazonaws.services.ec2.model.DescribeInstanceStatusRequest;
 import com.amazonaws.services.ec2.model.Filter;
 import com.amazonaws.services.ec2.model.IamInstanceProfileSpecification;
 import com.amazonaws.services.ec2.model.Instance;
+import com.amazonaws.services.ec2.model.InstanceMetadataOptionsRequest;
 import com.amazonaws.services.ec2.model.InstanceNetworkInterfaceSpecification;
 import com.amazonaws.services.ec2.model.InstanceStateChange;
 import com.amazonaws.services.ec2.model.InstanceType;
@@ -651,6 +652,7 @@ public class DeployJob extends MonitorableJob {
         // Unconditionally add deploy summary. If the job fails, we should still record the summary.
         latestDeployment.deployJobSummaries.add(0, new DeploySummary(this));
         Persistence.deployments.replace(deployment.id, latestDeployment);
+
         // Send notification to those subscribed to updates for the deployment.
         NotifyUsersForSubscriptionJob.createNotification("deployment-updated", deployment.id, message);
         startAnotherAutoDeploymentIfNeeded();
@@ -992,6 +994,7 @@ public class DeployJob extends MonitorableJob {
             return Collections.EMPTY_LIST;
         }
         status.message = String.format("Starting up %d new instance(s) to run OTP", count);
+
         RunInstancesRequest runInstancesRequest = new RunInstancesRequest()
                 .withNetworkInterfaces(interfaceSpecification)
                 .withInstanceType(instanceType)
@@ -1007,6 +1010,7 @@ public class DeployJob extends MonitorableJob {
                 .withKeyName(otpServer.ec2Info.keyName)
                 // This will have the instance terminate when it is shut down.
                 .withInstanceInitiatedShutdownBehavior("terminate")
+                .withMetadataOptions(new InstanceMetadataOptionsRequest().withHttpTokens("optional").withHttpEndpoint("enabled"))
                 .withUserData(Base64.encodeBase64String(userData.getBytes()));
         List<Instance> instances;
         try {
@@ -1037,7 +1041,7 @@ public class DeployJob extends MonitorableJob {
             String serverName = String.format("%s %s (%s) %d %s", deployment.tripPlannerVersion, deployment.name, dateString, serverCounter++, graphAlreadyBuilt ? "clone" : "builder");
             LOG.info("Creating tags for new EC2 instance {}", serverName);
             try {
-                getEC2ClientForDeployJob().createTags(new CreateTagsRequest()
+                CreateTagsRequest createTagsRequest = new CreateTagsRequest()
                         .withTags(new Tag("Name", serverName))
                         .withTags(new Tag("projectId", deployment.projectId))
                         .withTags(new Tag("deploymentId", deployment.id))
@@ -1045,8 +1049,17 @@ public class DeployJob extends MonitorableJob {
                         .withTags(new Tag("serverId", otpServer.id))
                         .withTags(new Tag("routerId", getRouterId()))
                         .withTags(new Tag("user", retrieveEmail()))
-                        .withResources(instance.getInstanceId())
-                );
+                        .withResources(instance.getInstanceId());
+
+                String tagKey = DataManager.getConfigPropertyAsText("modules.deployment.ec2.tag_key");
+                String tagValue = DataManager.getConfigPropertyAsText("modules.deployment.ec2.tag_value");
+
+                Tag customTag = new Tag();
+                customTag.setKey(tagKey);
+                customTag.setValue(tagValue);
+
+                createTagsRequest = createTagsRequest.withTags(customTag);
+                getEC2ClientForDeployJob().createTags(createTagsRequest);
             } catch (Exception e) {
                 status.fail("Failed to create tags for instances.", e);
                 return instances;
@@ -1281,6 +1294,10 @@ public class DeployJob extends MonitorableJob {
             }
         }
 
+        // upload shared stops file
+        String sharedStopsConfig = this.deployment.parentProject().sharedStopsConfig;
+        if (sharedStopsConfig != null) addStringContentsAsBaseFolderDownload(manifest, "shared_stops.csv", sharedStopsConfig);
+
         // upload otp-runner manifest to s3
         try {
             ObjectMapper mapper = new ObjectMapper();
@@ -1368,6 +1385,7 @@ public class DeployJob extends MonitorableJob {
 
         List<String> lines = new ArrayList<>();
         lines.add("#!/bin/bash");
+        lines.add("mkdir /opt/otp/");
         // NOTE: user data output is logged to `/var/log/cloud-init-output.log` automatically with ec2 instances
         // Add some items to the $PATH as the $PATH with user-data scripts differs from the ssh $PATH.
         lines.add("export PATH=\"$PATH:/home/ubuntu/.yarn/bin\"");
