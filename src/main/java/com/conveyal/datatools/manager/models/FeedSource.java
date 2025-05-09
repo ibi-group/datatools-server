@@ -97,6 +97,9 @@ public class FeedSource extends Model implements Cloneable {
     /** The name of this feed source, e.g. MTA New York City Subway */
     public String name;
 
+    /** An optional display filename for the feed in the bundle, e.g. "agency_transit.zip" */
+    public String filename;
+
     /** Is this feed public, i.e. should it be listed on the
      * public feeds page for download?
      */
