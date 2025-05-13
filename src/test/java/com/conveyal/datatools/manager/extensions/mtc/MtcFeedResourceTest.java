@@ -175,7 +175,7 @@ class MtcFeedResourceTest extends UnitTest {
         // with AgencyId value set to null.
         String agencyIdProp = createExternalFeedSourceProperties("AgencyId", null);
         // Trigger the feed update process (it should not upload anything to S3).
-        FeedVersion feedVersion = createFeedVersion(feedSource,  zipFolderFiles("mini-bart-new"));
+        FeedVersion feedVersion = createFeedVersion(feedSource,  zipFolderFiles("mtc-feed-resource-test"));
         MtcFeedResource mtcFeedResource = new MtcFeedResource();
         assertDoesNotThrow(() -> mtcFeedResource.feedVersionCreated(feedVersion, null));
         Persistence.externalFeedSourceProperties.removeById(agencyIdProp);
@@ -186,7 +186,7 @@ class MtcFeedResourceTest extends UnitTest {
         String primaryPrefixPropId = createExternalFeedSourceProperties(STOP_CODE_PRIMARY_PREFIX_FIELD_NAME, "primary-1");
         String secondaryPrefixesPropId = createExternalFeedSourceProperties(STOP_CODE_SECONDARY_PREFIXES_FIELD_NAME, "secondary-1,secondary-2");
 
-        FeedVersion feedVersion = createFeedVersion(feedSource,  zipFolderFiles("mini-bart-new"));
+        FeedVersion feedVersion = createFeedVersion(feedSource,  zipFolderFiles("mtc-feed-resource-test"));
         MtcFeedResource mtcFeedResource = new MtcFeedResource();
         assertDoesNotThrow(() -> mtcFeedResource.feedVersionCreated(feedVersion, null));
         SqlAssert sqlAssert = new SqlAssert(feedVersion);
