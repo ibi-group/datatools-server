@@ -12,6 +12,7 @@ import com.conveyal.datatools.manager.models.transform.DbTransformation;
 import com.conveyal.datatools.manager.models.transform.FeedTransformDbTarget;
 import com.conveyal.datatools.manager.models.transform.FeedTransformRules;
 import com.conveyal.datatools.manager.models.transform.FeedTransformZipTarget;
+import com.conveyal.datatools.manager.models.transform.RemoveNonRevenueTripsTransformation;
 import com.conveyal.datatools.manager.models.transform.ZipTransformation;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import com.fasterxml.jackson.annotation.JsonProperty;
@@ -91,6 +92,9 @@ public class ProcessSingleFeedJob extends FeedVersionJob {
         if (shouldTransform) {
             // Run zip transformations before load to handle any operations that must be applied directly to the zip file.
             List<ZipTransformation> zipTransformations = rules.getActiveTransformations(feedVersion, ZipTransformation.class);
+            if (DataManager.isExtensionEnabled("mtc")) {
+                zipTransformations.add(new RemoveNonRevenueTripsTransformation());
+            }
             FeedTransformZipTarget zipTarget = new FeedTransformZipTarget(feedVersion.retrieveGtfsFile());
             for (ZipTransformation transformation : zipTransformations) {
                 ArbitraryTransformJob zipTransform = new ArbitraryTransformJob(owner, zipTarget, transformation);
