@@ -25,7 +25,6 @@ import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.Iterator;
 import java.util.List;
@@ -348,6 +347,6 @@ public class MtcFeedResource implements ExternalFeedResource {
 
     public static List<String> getSecondaryStopCodePrefixes(Map<String, Map<String, String>> properties) {
         String secondaryStopPrefixValue = MtcFeedResource.getFieldValue(properties, MtcFeedResource.STOP_CODE_SECONDARY_PREFIXES_FIELD_NAME);
-        return  (secondaryStopPrefixValue == null) ? null :  Arrays.asList(secondaryStopPrefixValue.split(","));
+        return  (secondaryStopPrefixValue == null) ? null :  List.of(secondaryStopPrefixValue.split(","));
     }
 }
