@@ -347,6 +347,6 @@ public class MtcFeedResource implements ExternalFeedResource {
 
     public static List<String> getSecondaryStopCodePrefixes(Map<String, Map<String, String>> properties) {
         String secondaryStopPrefixValue = MtcFeedResource.getFieldValue(properties, MtcFeedResource.STOP_CODE_SECONDARY_PREFIXES_FIELD_NAME);
-        return  (secondaryStopPrefixValue == null) ? null :  List.of(secondaryStopPrefixValue.split(","));
+        return (secondaryStopPrefixValue == null) ? null : List.of(secondaryStopPrefixValue.split(","));
     }
 }
