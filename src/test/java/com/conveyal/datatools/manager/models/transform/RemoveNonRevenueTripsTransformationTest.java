@@ -1,54 +1,96 @@
 package com.conveyal.datatools.manager.models.transform;
 
 import com.conveyal.datatools.UnitTest;
+import com.conveyal.datatools.common.status.MonitorableJob;
 import com.csvreader.CsvReader;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.params.provider.MethodSource;
 
+import java.io.File;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.StringReader;
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
 
+import static com.conveyal.datatools.TestUtils.zipFolderFiles;
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 
-public class RemoveNonRevenueTripsTransformationTest extends UnitTest {
+class RemoveNonRevenueTripsTransformationTest extends UnitTest {
 
-    // Fields: trip_id,arrival_time,departure_time,stop_id,stop_sequence,
-    //         continuous_pickup,continuous_drop_off
-    private static final String STOP_TIMES_NONREVENUE =
-            "nonrevenue-trip1,08:00:00,08:00:00,4u6g,1,1,1\n" +
-            "nonrevenue-trip2,08:01:00,08:01:00,johv,2,1,1\n" +
-            "nonrevenue-trip3,08:02:00,08:02:00,4u6g,3,1,1\n" +
-            "nonrevenue-trip4,08:03:00,08:03:00,johv,4,1,1\n";
-    private static final String STOP_TIMES_REVENUE =
-            "mixed-trip1,07:00:00,07:00:00,4u6g,1,0,0\n" +
-            "mixed-trip2,07:01:00,07:01:00,johv,2,1,1\n" +
-            "mixed-trip3,07:02:00,07:02:00,4u6g,3,0,0\n" +
-            "mixed-trip4,07:03:00,07:03:00,johv,4,1,1\n";
-
-    private static RemoveNonRevenueTripsTransformation trans =
-            new RemoveNonRevenueTripsTransformation();
+    private static final RemoveNonRevenueTripsTransformation trans = new RemoveNonRevenueTripsTransformation();
 
     @Test
-    public void testNonRevenueStopTimes() throws IOException {
-        Map<String, List<String[]>> stopTimes = trans.getAllRevenueStopTimes(
-            new CsvReader(new StringReader(STOP_TIMES_NONREVENUE)),
-            0, 5, 6 // trip_id, continuous_pickup, continuous_drop_off
+    void testNonRevenueTripRemoval() throws IOException {
+        final List<String> stopTimesNonRevenue = List.of(
+            "non-revenue-trip1,1,",
+            "non-revenue-trip1,1,1",
+            "non-revenue-trip1,1,1",
+            "non-revenue-trip1,1,"
         );
-        assertEquals(0, stopTimes.size());    
+
+        final List<String> stopTimesRevenue = List.of(
+            "revenue-trip,0,0",
+            "revenue-trip,1,1",
+            "revenue-trip,1,1",
+            "revenue-trip,0,0"
+        );
+
+        // Fields: trip_id, continuous_pickup, continuous_drop_off.
+        final String stopTimesRows = Stream
+            .concat(stopTimesNonRevenue.stream(), stopTimesRevenue.stream())
+            .collect(Collectors.joining("\n"));
+
+        Map<String, List<String[]>> stopTimes = trans.getAllRevenueStopTimes(
+            new CsvReader(new StringReader(stopTimesRows)),
+            0,
+            1,
+            2
+        );
+        assertEquals(1, stopTimes.size());
+        assertEquals(stopTimesRevenue.size(), stopTimes.get("revenue-trip").size());
     }
 
     @Test
-    public void testRevenueStopTimes() throws IOException {
-        Map<String, List<String[]>> stopTimes = trans.getAllRevenueStopTimes(
-            new CsvReader(new StringReader(STOP_TIMES_REVENUE)),
-            0, 5, 6 // trip_id, continuous_pickup, continuous_drop_off
-        );
-        assertEquals(2, stopTimes.size());    
-        assertTrue(stopTimes.containsKey("mixed-trip1"));
-        assertTrue(stopTimes.containsKey("mixed-trip3"));
+    void testEndToEndNonRevenueTripRemoval() throws Exception {
+        File zip = zipFolderFiles("non-revenue-trips");
+        FeedTransformZipTarget zipTarget = new FeedTransformZipTarget(zip);
+        trans.transform(zipTarget, new MonitorableJob.Status());
+        assertFalse(zipTarget.feedTransformResult.tableTransformResults.isEmpty());
+        assertFalse(hasNonRevenueTrips(zipTarget));
+    }
+
+    private boolean hasNonRevenueTrips(FeedTransformZipTarget zipTarget) throws IOException {
+        try (ZipFile gtfsZipfile = new ZipFile(zipTarget.gtfsFile.getAbsolutePath())) {
+            for (String tableName : List.of("stop_times.txt", "trips.txt")) {
+                ZipEntry entry = gtfsZipfile.getEntry(tableName);
+
+                if (entry == null) {
+                    throw new AssertionError(
+                        String.format("Expected table %s not found in outputted zip file", tableName)
+                    );
+                }
+
+                try (InputStream zipInputStream = gtfsZipfile.getInputStream(entry)) {
+                    CsvReader csvReader = new CsvReader(zipInputStream, ',', StandardCharsets.UTF_8);
+                    try {
+                        csvReader.readHeaders();
+                        while (csvReader.readRecord()) {
+                            if ("non-revenue-trip1".equals(csvReader.get("tripId"))) {
+                                return true;
+                            }
+                        }
+                    } finally {
+                        csvReader.close();
+                    }
+                }
+            }
+        }
+        return false;
     }
 }

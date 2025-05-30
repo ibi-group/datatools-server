@@ -35,8 +35,8 @@ import static com.conveyal.gtfs.loader.Field.getFieldIndex;
 /**
  * This transformation removes non revenue trips from a feed by:
  * - Establishing trips where _all_ related stop times have continuous_pickup and continuous_drop_off types set to 1
- * "No pickup available",
- * - Then remove these trips and stop times from the feed.
+ * (or empty) "No pickup available",
+ * - Then remove these stop times and related trips the feed.
  * "Non revenue" stops are kept because the transit ops systems use these stops in the published feed for all trips.
  */
 public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
@@ -95,7 +95,6 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
 
             writeToFile(
                 zipTarget,
-                tempZipPath,
                 "stop_times.txt",
                 revenueStopTimes.values().stream().flatMap(List::stream).collect(Collectors.toList()),
                 headersForStopTime
@@ -103,7 +102,6 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
 
             writeToFile(
                 zipTarget,
-                tempZipPath,
                 "trips.txt",
                 revenueTrips,
                 headersForTrips
@@ -112,41 +110,6 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
             status.fail("Unknown error encountered while transforming zip file", e);
         }
 
-    }
-
-    /**
-     * Write the updated content to file.
-     */
-    private void writeToFile(
-        FeedTransformZipTarget zipTarget,
-        Path tempZipPath,
-        String tableName,
-        List<String[]> rows,
-        String[] headers
-    ) throws IOException {
-        try(
-            // Hold output before writing to ZIP
-            StringWriter stringWriter = new StringWriter();
-            // CSV writer used to write to zip file.
-            CsvListWriter writer = new CsvListWriter(stringWriter, CsvPreference.STANDARD_PREFERENCE)
-        ) {
-            writer.write(headers);
-            writer.write(rows);
-
-            // Copy csv input stream into the zip file, replacing the existing file.
-            try (
-                // Modify target zip file that we just read.
-                FileSystem targetZipFs = FileSystems.newFileSystem(tempZipPath, (ClassLoader) null);
-                // Stream for file copy operation.
-                InputStream inputStream =  new ByteArrayInputStream(stringWriter.toString().getBytes(StandardCharsets.UTF_8))
-            ) {
-                Path targetTxtFilePath = getTablePathInZip(tableName, targetZipFs);
-                Files.copy(inputStream, targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
-                zipTarget.feedTransformResult.tableTransformResults.add(
-                    new TableTransformResult(tableName, 0, 0, 0)
-                );
-            }
-        }
     }
 
     /**
@@ -159,8 +122,7 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
     ) throws IOException {
         List<String[]> revenueTripRows = new ArrayList<>();
         while (csvReader.readRecord()) {
-            String tripId = csvReader.get(tripIdFieldIndex);
-            if (revenueTrips.contains(tripId)) {
+            if (revenueTrips.contains(csvReader.get(tripIdFieldIndex))) {
                 revenueTripRows.add(csvReader.getValues());
             }
         }
@@ -185,11 +147,13 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
             String dropOff = csvReader.get(continuousDropOffFieldIndex);
             String[] currentRecord = csvReader.getValues();
 
-            if ("1".equals(pickup) && "1".equals(dropOff)) {
+            if (("1".equals(pickup) || pickup.isEmpty()) && ("1".equals(dropOff) || dropOff.isEmpty())) {
                 // Candidate for non revenue trip.
                 if (!revenueTrips.containsKey(tripId)) {
                     // Only add to non-revenue trips if it's not already marked as a revenue trip.
                     nonRevenueTrips.computeIfAbsent(tripId, k -> new ArrayList<>()).add(currentRecord);
+                } else {
+                    revenueTrips.computeIfAbsent(tripId, k -> new ArrayList<>()).add(currentRecord);
                 }
             } else {
                 // Candidate for revenue trip.
@@ -203,6 +167,43 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
             }
         }
         return revenueTrips;
+    }
+
+    /**
+     * Write the updated content to file.
+     */
+    private void writeToFile(
+        FeedTransformZipTarget zipTarget,
+        String tableName,
+        List<String[]> rows,
+        String[] headers
+    ) throws IOException {
+        try(
+            StringWriter stringWriter = new StringWriter();
+            CsvListWriter writer = new CsvListWriter(stringWriter, CsvPreference.STANDARD_PREFERENCE)
+        ) {
+            writer.write(headers);
+            if (!rows.isEmpty()) {
+                for (String[] row : rows) {
+                    writer.write(row);
+                }
+            }
+            writer.flush();
+
+            // Copy csv input stream into the zip file, replacing the existing file.
+            try (
+                // Modify target zip file that we just read.
+                FileSystem targetZipFs = FileSystems.newFileSystem(Paths.get(zipTarget.gtfsFile.getAbsolutePath()), (ClassLoader) null);
+                // Stream for file copy operation.
+                InputStream inputStream = new ByteArrayInputStream(stringWriter.toString().getBytes(StandardCharsets.UTF_8))
+            ) {
+                Path targetTxtFilePath = getTablePathInZip(tableName, targetZipFs);
+                Files.copy(inputStream, targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
+                zipTarget.feedTransformResult.tableTransformResults.add(
+                    new TableTransformResult(tableName, 0, 0, 0)
+                );
+            }
+        }
     }
 
     @Override
