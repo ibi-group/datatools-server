@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.jobs;
 
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
+import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.FeedSource;
@@ -51,6 +52,8 @@ public class ArbitraryTransformJobTest extends UnitTest {
     private static FeedSource feedSource;
     private FeedVersion sourceVersion;
     private FeedVersion targetVersion;
+    private static String mtcEnabledField = "extensions.mtc.enabled";
+    private static String prevMtcEnabled = DataManager.getConfigPropertyAsText(mtcEnabledField);
 
     /**
      * Initialize Data Tools and set up a simple feed source and project.
@@ -60,6 +63,8 @@ public class ArbitraryTransformJobTest extends UnitTest {
         // start server if it isn't already running
         DatatoolsTest.setUp();
         Auth0Connection.setAuthDisabled(true);
+
+        DataManager.overrideConfigProperty(mtcEnabledField, "false");
 
         // Create a project, feed sources, and feed versions to merge.
         project = new Project();
@@ -79,6 +84,8 @@ public class ArbitraryTransformJobTest extends UnitTest {
         Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
         // Project delete cascades to feed sources.
         project.delete();
+        DataManager.overrideConfigProperty(mtcEnabledField, prevMtcEnabled);
+
     }
 
     /**
