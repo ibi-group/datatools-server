@@ -1,3 +1,3 @@
 route_id,service_id,trip_id
-1,WKDY,non-revenue-trip1
-2,WKDY,revenue-trip1
+1,WKDY,non-revenue-trip
+2,WKDY,revenue-trip

@@ -46,10 +46,6 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
     private static final String CONTINUOUS_PICKUP_FIELD_NAME = "continuous_pickup";
     private static final String CONTINUOUS_DROP_OFF_FIELD_NAME = "continuous_drop_off";
 
-    /** no-arg constructor for de/serialization */
-    public RemoveNonRevenueTripsTransformation() {
-    }
-
     @Override
     public void transform(FeedTransformZipTarget zipTarget, MonitorableJob.Status status) throws Exception {
         try {
@@ -61,10 +57,10 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
             Table gtfsTable = GtfsUtils.getGtfsTable("stop_times");
             CsvReader csvReaderForStopTimes = gtfsTable.getCsvReader(new ZipFile(tempZipPath.toAbsolutePath().toString()), null);
             final String[] headersForStopTime = csvReaderForStopTimes.getHeaders();
-            Field[] fieldsFoundInZip = gtfsTable.getFieldsFromFieldHeaders(headersForStopTime, null);
-            int tripIdFieldIndex = getFieldIndex(fieldsFoundInZip, TRIP_ID_FIELD_NAME);
-            int continuousPickupFieldIndex = getFieldIndex(fieldsFoundInZip, CONTINUOUS_PICKUP_FIELD_NAME);
-            int continuousDropOffFieldIndex = getFieldIndex(fieldsFoundInZip, CONTINUOUS_DROP_OFF_FIELD_NAME);
+            Field[] fieldsFoundInStopTimes = gtfsTable.getFieldsFromFieldHeaders(headersForStopTime, null);
+            int tripIdFieldIndex = getFieldIndex(fieldsFoundInStopTimes, TRIP_ID_FIELD_NAME);
+            int continuousPickupFieldIndex = getFieldIndex(fieldsFoundInStopTimes, CONTINUOUS_PICKUP_FIELD_NAME);
+            int continuousDropOffFieldIndex = getFieldIndex(fieldsFoundInStopTimes, CONTINUOUS_DROP_OFF_FIELD_NAME);
             if (tripIdFieldIndex == -1 || continuousPickupFieldIndex == -1 || continuousDropOffFieldIndex == -1) {
                 status.error = true;
                 status.fail("Unable to remove non revenue trips because the stop times file does not contain all required fields.");
@@ -81,8 +77,8 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
             gtfsTable = GtfsUtils.getGtfsTable("trips");
             CsvReader csvReaderForTrips = gtfsTable.getCsvReader(new ZipFile(tempZipPath.toAbsolutePath().toString()), null);
             final String[] headersForTrips = csvReaderForTrips.getHeaders();
-            fieldsFoundInZip = gtfsTable.getFieldsFromFieldHeaders(headersForTrips, null);
-            tripIdFieldIndex = getFieldIndex(fieldsFoundInZip, TRIP_ID_FIELD_NAME);
+            Field[] fieldsFoundInStopTrips = gtfsTable.getFieldsFromFieldHeaders(headersForTrips, null);
+            tripIdFieldIndex = getFieldIndex(fieldsFoundInStopTrips, TRIP_ID_FIELD_NAME);
             if (tripIdFieldIndex == -1) {
                 status.error = true;
                 status.fail("Unable to remove non revenue trips because the trips file does not contain the required trip id field.");
@@ -100,14 +96,9 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
                 headersForStopTime
             );
 
-            writeToFile(
-                zipTarget,
-                "trips.txt",
-                revenueTrips,
-                headersForTrips
-            );
+            writeToFile(zipTarget, "trips.txt", revenueTrips, headersForTrips);
         } catch (Exception e) {
-            status.fail("Unknown error encountered while transforming zip file", e);
+            status.fail("Unknown error encountered while attempting to remove non revenue trip from zip file.", e);
         }
 
     }
@@ -193,14 +184,16 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
             // Copy csv input stream into the zip file, replacing the existing file.
             try (
                 // Modify target zip file that we just read.
-                FileSystem targetZipFs = FileSystems.newFileSystem(Paths.get(zipTarget.gtfsFile.getAbsolutePath()), (ClassLoader) null);
+                FileSystem targetZipFile = FileSystems.newFileSystem(
+                    Paths.get(zipTarget.gtfsFile.getAbsolutePath()),
+                    (ClassLoader) null
+                );
                 // Stream for file copy operation.
                 InputStream inputStream = new ByteArrayInputStream(stringWriter.toString().getBytes(StandardCharsets.UTF_8))
             ) {
-                Path targetTxtFilePath = getTablePathInZip(tableName, targetZipFs);
-                Files.copy(inputStream, targetTxtFilePath, StandardCopyOption.REPLACE_EXISTING);
+                Files.copy(inputStream, getTablePathInZip(tableName, targetZipFile), StandardCopyOption.REPLACE_EXISTING);
                 zipTarget.feedTransformResult.tableTransformResults.add(
-                    new TableTransformResult(tableName, 0, 0, 0)
+                    new TableTransformResult(tableName, rows.size(), 0, 0)
                 );
             }
         }
@@ -208,6 +201,6 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
 
     @Override
     public void validateParameters(MonitorableJob.Status status) {
-
+        // No required.
     }
 }

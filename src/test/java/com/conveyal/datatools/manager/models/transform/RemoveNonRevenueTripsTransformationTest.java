@@ -46,14 +46,14 @@ class RemoveNonRevenueTripsTransformationTest extends UnitTest {
             .concat(stopTimesNonRevenue.stream(), stopTimesRevenue.stream())
             .collect(Collectors.joining("\n"));
 
-        Map<String, List<String[]>> stopTimes = trans.getAllRevenueStopTimes(
+        Map<String, List<String[]>> revenueStopTimes = trans.getAllRevenueStopTimes(
             new CsvReader(new StringReader(stopTimesRows)),
             0,
             1,
             2
         );
-        assertEquals(1, stopTimes.size());
-        assertEquals(stopTimesRevenue.size(), stopTimes.get("revenue-trip").size());
+        assertEquals(1, revenueStopTimes.size());
+        assertEquals(stopTimesRevenue.size(), revenueStopTimes.get("revenue-trip").size());
     }
 
     @Test
@@ -61,7 +61,9 @@ class RemoveNonRevenueTripsTransformationTest extends UnitTest {
         File zip = zipFolderFiles("non-revenue-trips");
         FeedTransformZipTarget zipTarget = new FeedTransformZipTarget(zip);
         trans.transform(zipTarget, new MonitorableJob.Status());
-        assertFalse(zipTarget.feedTransformResult.tableTransformResults.isEmpty());
+        assertEquals(2, zipTarget.feedTransformResult.tableTransformResults.size());
+        assertEquals(4, zipTarget.feedTransformResult.tableTransformResults.get(0).deletedCount);
+        assertEquals(1, zipTarget.feedTransformResult.tableTransformResults.get(1).deletedCount);
         assertFalse(hasNonRevenueTrips(zipTarget));
     }
 
@@ -72,7 +74,7 @@ class RemoveNonRevenueTripsTransformationTest extends UnitTest {
 
                 if (entry == null) {
                     throw new AssertionError(
-                        String.format("Expected table %s not found in outputted zip file", tableName)
+                        String.format("Expected table %s not found in outputted zip file.", tableName)
                     );
                 }
 
