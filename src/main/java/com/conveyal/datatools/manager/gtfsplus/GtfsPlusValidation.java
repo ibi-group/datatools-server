@@ -282,7 +282,6 @@ public class GtfsPlusValidation implements Serializable {
             issues.add(new ValidationIssue(tableId, fieldName, rowIndex, "Required field missing value"));
         }
 
-
         switch (specField.get("inputType").asText()) {
             case "DROPDOWN":
                 boolean invalid = true;
