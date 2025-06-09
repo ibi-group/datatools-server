@@ -14,7 +14,7 @@ public class DirectionsScanner implements TableScanner {
     private int idIndex;
 
     public void setFields(List<String> fields) {
-        // Find the route_id and realtime_enabled index from the headers.
+        // Find the route_id index from the headers.
         idIndex = fields.indexOf("route_id");
     }
 
