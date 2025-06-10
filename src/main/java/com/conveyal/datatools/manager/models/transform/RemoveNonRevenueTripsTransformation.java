@@ -33,18 +33,18 @@ import java.util.zip.ZipFile;
 import static com.conveyal.gtfs.loader.Field.getFieldIndex;
 
 /**
- * This transformation removes non revenue trips from a feed by:
- * - Establishing trips where _all_ related stop times have continuous_pickup and continuous_drop_off types set to 1
- * (or empty) "No pickup available",
- * - Then remove these stop times and related trips the feed.
- * "Non revenue" stops are kept because the transit ops systems use these stops in the published feed for all trips.
+ * This transformation removes non revenue trips from a feed. Establishing trips where _all_ related stop times have
+ * "no pickup available" or "no continuous stopping pickup". Then remove these stop times and related trips from the
+ * feed. "Non revenue" stops are kept because the transit ops systems use these in the published feed for all trips.
  */
 public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
     private static final Logger LOG = LoggerFactory.getLogger(RemoveNonRevenueTripsTransformation.class);
 
-    private static final String TRIP_ID_FIELD_NAME = "trip_id";
-    private static final String CONTINUOUS_PICKUP_FIELD_NAME = "continuous_pickup";
-    private static final String CONTINUOUS_DROP_OFF_FIELD_NAME = "continuous_drop_off";
+    public static final String TRIP_ID_FIELD_NAME = "trip_id";
+    public static final String PICKUP_FIELD_NAME = "pickup_type";
+    public static final String DROP_OFF_FIELD_NAME = "drop_off_type";
+    public static final String CONTINUOUS_PICKUP_FIELD_NAME = "continuous_pickup";
+    public static final String CONTINUOUS_DROP_OFF_FIELD_NAME = "continuous_drop_off";
 
     @Override
     public void transform(FeedTransformZipTarget zipTarget, MonitorableJob.Status status) throws Exception {
@@ -58,10 +58,8 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
             CsvReader csvReaderForStopTimes = gtfsTable.getCsvReader(new ZipFile(tempZipPath.toAbsolutePath().toString()), null);
             final String[] headersForStopTime = csvReaderForStopTimes.getHeaders();
             Field[] fieldsFoundInStopTimes = gtfsTable.getFieldsFromFieldHeaders(headersForStopTime, null);
-            int tripIdFieldIndex = getFieldIndex(fieldsFoundInStopTimes, TRIP_ID_FIELD_NAME);
-            int continuousPickupFieldIndex = getFieldIndex(fieldsFoundInStopTimes, CONTINUOUS_PICKUP_FIELD_NAME);
-            int continuousDropOffFieldIndex = getFieldIndex(fieldsFoundInStopTimes, CONTINUOUS_DROP_OFF_FIELD_NAME);
-            if (tripIdFieldIndex == -1 || continuousPickupFieldIndex == -1 || continuousDropOffFieldIndex == -1) {
+            Map<String, Integer> fieldIndexes = getFieldIndexes(fieldsFoundInStopTimes);
+            if (!hasRequiredFields(fieldIndexes)) {
                 status.error = true;
                 status.fail("Unable to remove non revenue trips because the stop times file does not contain all required fields.");
                 return;
@@ -69,16 +67,14 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
 
             Map<String, List<String[]>> revenueStopTimes = getAllRevenueStopTimes(
                 csvReaderForStopTimes,
-                tripIdFieldIndex,
-                continuousPickupFieldIndex,
-                continuousDropOffFieldIndex
+                fieldIndexes
             );
 
             gtfsTable = GtfsUtils.getGtfsTable("trips");
             CsvReader csvReaderForTrips = gtfsTable.getCsvReader(new ZipFile(tempZipPath.toAbsolutePath().toString()), null);
             final String[] headersForTrips = csvReaderForTrips.getHeaders();
             Field[] fieldsFoundInStopTrips = gtfsTable.getFieldsFromFieldHeaders(headersForTrips, null);
-            tripIdFieldIndex = getFieldIndex(fieldsFoundInStopTrips, TRIP_ID_FIELD_NAME);
+            int  tripIdFieldIndex = getFieldIndex(fieldsFoundInStopTrips, TRIP_ID_FIELD_NAME);
             if (tripIdFieldIndex == -1) {
                 status.error = true;
                 status.fail("Unable to remove non revenue trips because the trips file does not contain the required trip id field.");
@@ -104,6 +100,40 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
     }
 
     /**
+     * Get the index of required fields from available fields in stop times.
+     */
+    private static Map<String, Integer> getFieldIndexes(Field[] fieldsFoundInStopTimes) {
+        Map<String, Integer> fieldIndexes = new HashMap<>();
+        fieldIndexes.put(TRIP_ID_FIELD_NAME, getFieldIndex(fieldsFoundInStopTimes, TRIP_ID_FIELD_NAME));
+        fieldIndexes.put(PICKUP_FIELD_NAME, getFieldIndex(fieldsFoundInStopTimes, PICKUP_FIELD_NAME));
+        fieldIndexes.put(DROP_OFF_FIELD_NAME, getFieldIndex(fieldsFoundInStopTimes, DROP_OFF_FIELD_NAME));
+        fieldIndexes.put(CONTINUOUS_PICKUP_FIELD_NAME, getFieldIndex(fieldsFoundInStopTimes, CONTINUOUS_PICKUP_FIELD_NAME));
+        fieldIndexes.put(CONTINUOUS_DROP_OFF_FIELD_NAME, getFieldIndex(fieldsFoundInStopTimes, CONTINUOUS_DROP_OFF_FIELD_NAME));
+        return fieldIndexes;
+    }
+
+    /**
+     * The minimum required fields to determine revenue stop times.
+     */
+    private boolean hasRequiredFields(Map<String, Integer> fieldIndexes) {
+        return
+            fieldIndexes.get(TRIP_ID_FIELD_NAME) != -1 &&
+            fieldIndexes.get(PICKUP_FIELD_NAME) != -1 &&
+            fieldIndexes.get(DROP_OFF_FIELD_NAME) != -1;
+    }
+
+    /**
+     * Check if continuous fields are available. These can be checked if pickup and drop off are non revenue.
+     */
+    private boolean hasContinuousFields(Map<String, Integer> fieldIndexes) {
+        return
+            fieldIndexes.get(CONTINUOUS_PICKUP_FIELD_NAME) != null &&
+            fieldIndexes.get(CONTINUOUS_DROP_OFF_FIELD_NAME) != null &&
+            fieldIndexes.get(CONTINUOUS_PICKUP_FIELD_NAME) != -1 &&
+            fieldIndexes.get(CONTINUOUS_DROP_OFF_FIELD_NAME) != -1;
+    }
+
+    /**
      * Get all trips that have revenue stop times.
      */
     public List<String[]> getAllRevenueTrips(
@@ -122,31 +152,20 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
 
     /**
      * Get only the trips (and related rows) for revenue stop times. These are stop times were at least one stop time
-     * has a continuous pickup or drop off. This will have the effect off removing non revenue trips.
+     * has a pickup, drop off, continuous pickup or continuous drop off. This will have the effect of removing non
+     * revenue trips.
      */
     public Map<String, List<String[]>> getAllRevenueStopTimes(
         CsvReader csvReader,
-        int tripIdFieldIndex,
-        int continuousPickupFieldIndex,
-        int continuousDropOffFieldIndex
+        Map<String, Integer> fieldIndexes
     ) throws IOException {
         Map<String, List<String[]>> nonRevenueTrips = new HashMap<>();
         Map<String, List<String[]>> revenueTrips = new HashMap<>();
         while (csvReader.readRecord()) {
-            String tripId = csvReader.get(tripIdFieldIndex);
-            String pickup = csvReader.get(continuousPickupFieldIndex);
-            String dropOff = csvReader.get(continuousDropOffFieldIndex);
+            String tripId = csvReader.get(fieldIndexes.get(TRIP_ID_FIELD_NAME));
             String[] currentRecord = csvReader.getValues();
 
-            if (("1".equals(pickup) || pickup.isEmpty()) && ("1".equals(dropOff) || dropOff.isEmpty())) {
-                // Candidate for non revenue trip.
-                if (!revenueTrips.containsKey(tripId)) {
-                    // Only add to non-revenue trips if it's not already marked as a revenue trip.
-                    nonRevenueTrips.computeIfAbsent(tripId, k -> new ArrayList<>()).add(currentRecord);
-                } else {
-                    revenueTrips.computeIfAbsent(tripId, k -> new ArrayList<>()).add(currentRecord);
-                }
-            } else {
+            if (isRevenueStopTime(csvReader, fieldIndexes, hasContinuousFields(fieldIndexes))) {
                 // Candidate for revenue trip.
                 List<String[]> nonRevenueRecords = nonRevenueTrips.remove(tripId);
                 if (nonRevenueRecords != null) {
@@ -155,9 +174,53 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
                 }
                 // Add the current record as a revenue trip.
                 revenueTrips.computeIfAbsent(tripId, k -> new ArrayList<>()).add(currentRecord);
+            } else {
+                // Candidate for non revenue trip.
+                if (!revenueTrips.containsKey(tripId)) {
+                    // Only add to non-revenue trips if it's not already marked as a revenue trip.
+                    nonRevenueTrips.computeIfAbsent(tripId, k -> new ArrayList<>()).add(currentRecord);
+                } else {
+                    revenueTrips.computeIfAbsent(tripId, k -> new ArrayList<>()).add(currentRecord);
+                }
             }
         }
         return revenueTrips;
+    }
+
+    /**
+     * Determine if a stop time meets the criteria of a revenue stop time.
+     */
+    private boolean isRevenueStopTime(
+        CsvReader csvReader,
+        Map<String, Integer> fieldIndexes,
+        boolean hasContinuousFields
+    ) throws IOException {
+        boolean isRevenue = isRevenuePickupDropOff(csvReader, fieldIndexes);
+        if (!isRevenue && hasContinuousFields) {
+            isRevenue = isRevenueContinuousPickupDropOff(csvReader, fieldIndexes);
+        }
+        return isRevenue;
+    }
+
+    /**
+     * If pickup or drop off is not 1 (No pickup available) it is considered a revenue stop time.
+     */
+    private boolean isRevenuePickupDropOff(CsvReader csvReader, Map<String, Integer> fieldIndexes) throws IOException {
+        String pickup = csvReader.get(fieldIndexes.get(PICKUP_FIELD_NAME));
+        String dropOff = csvReader.get(fieldIndexes.get(DROP_OFF_FIELD_NAME));
+        return !"1".equals(pickup) && !"1".equals(dropOff);
+    }
+
+    /**
+     * If continuous pickup or drop off is not empty or 1 (No continuous stopping pickup) it is considered a revenue
+     * stop time.
+     */
+    private boolean isRevenueContinuousPickupDropOff(CsvReader csvReader, Map<String, Integer> fieldIndexes) throws IOException {
+        String continuousPickup = csvReader.get(fieldIndexes.get(CONTINUOUS_PICKUP_FIELD_NAME));
+        String continuousDropOff = csvReader.get(fieldIndexes.get(CONTINUOUS_DROP_OFF_FIELD_NAME));
+        return
+            (!continuousPickup.isEmpty() && !"1".equals(continuousPickup)) ||
+            (!continuousDropOff.isEmpty() && !"1".equals(continuousDropOff));
     }
 
     /**

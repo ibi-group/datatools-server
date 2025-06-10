@@ -2,14 +2,19 @@ package com.conveyal.datatools.manager.models.transform;
 
 import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.manager.models.TableTransformResult;
 import com.csvreader.CsvReader;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
 
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.StringReader;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -18,6 +23,11 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
 import static com.conveyal.datatools.TestUtils.zipFolderFiles;
+import static com.conveyal.datatools.manager.models.transform.RemoveNonRevenueTripsTransformation.CONTINUOUS_DROP_OFF_FIELD_NAME;
+import static com.conveyal.datatools.manager.models.transform.RemoveNonRevenueTripsTransformation.CONTINUOUS_PICKUP_FIELD_NAME;
+import static com.conveyal.datatools.manager.models.transform.RemoveNonRevenueTripsTransformation.DROP_OFF_FIELD_NAME;
+import static com.conveyal.datatools.manager.models.transform.RemoveNonRevenueTripsTransformation.PICKUP_FIELD_NAME;
+import static com.conveyal.datatools.manager.models.transform.RemoveNonRevenueTripsTransformation.TRIP_ID_FIELD_NAME;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 
@@ -25,35 +35,74 @@ class RemoveNonRevenueTripsTransformationTest extends UnitTest {
 
     private static final RemoveNonRevenueTripsTransformation trans = new RemoveNonRevenueTripsTransformation();
 
-    @Test
-    void testNonRevenueTripRemoval() throws IOException {
-        final List<String> stopTimesNonRevenue = List.of(
-            "non-revenue-trip1,1,",
-            "non-revenue-trip1,1,1",
-            "non-revenue-trip1,1,1",
-            "non-revenue-trip1,1,"
-        );
-
-        final List<String> stopTimesRevenue = List.of(
-            "revenue-trip,0,0",
-            "revenue-trip,1,1",
-            "revenue-trip,1,1",
-            "revenue-trip,0,0"
-        );
-
-        // Fields: trip_id, continuous_pickup, continuous_drop_off.
+    @ParameterizedTest
+    @MethodSource("createNonRevenueCases")
+    void testNonRevenueTripRemoval(
+        List<String> stopTimesNonRevenue,
+        List<String> stopTimesRevenue,
+        Map<String, Integer> fieldIndexes
+    ) throws IOException {
         final String stopTimesRows = Stream
             .concat(stopTimesNonRevenue.stream(), stopTimesRevenue.stream())
             .collect(Collectors.joining("\n"));
 
+        CsvReader csvReader = new CsvReader(new StringReader(stopTimesRows));
         Map<String, List<String[]>> revenueStopTimes = trans.getAllRevenueStopTimes(
-            new CsvReader(new StringReader(stopTimesRows)),
-            0,
-            1,
-            2
+            csvReader,
+            fieldIndexes
         );
+        csvReader.close();
         assertEquals(1, revenueStopTimes.size());
         assertEquals(stopTimesRevenue.size(), revenueStopTimes.get("revenue-trip").size());
+    }
+
+    static Stream<Arguments> createNonRevenueCases() {
+
+        Map<String, Integer> fieldIndexes = new HashMap<>();
+        fieldIndexes.put(TRIP_ID_FIELD_NAME, 0);
+        fieldIndexes.put(PICKUP_FIELD_NAME, 1);
+        fieldIndexes.put(DROP_OFF_FIELD_NAME, 2);
+
+        Map<String, Integer> allFieldIndexes = new HashMap<>();
+        allFieldIndexes.put(TRIP_ID_FIELD_NAME, 0);
+        allFieldIndexes.put(PICKUP_FIELD_NAME, 1);
+        allFieldIndexes.put(DROP_OFF_FIELD_NAME, 2);
+        allFieldIndexes.put(CONTINUOUS_PICKUP_FIELD_NAME, 3);
+        allFieldIndexes.put(CONTINUOUS_DROP_OFF_FIELD_NAME, 4);
+
+        return Stream.of(
+            Arguments.of(
+                List.of(
+                    "non-revenue-trip1,1,",
+                    "non-revenue-trip1,1,1",
+                    "non-revenue-trip1,1,1",
+                    "non-revenue-trip1,1,"
+                ),
+                List.of(
+                    "revenue-trip,0,0",
+                    "revenue-trip,1,1",
+                    "revenue-trip,1,1",
+                    "revenue-trip,0,0"
+                ),
+                fieldIndexes
+            ),
+            Arguments.of(
+                List.of(
+                    "non-revenue-trip1,1,1,1,1",
+                    "non-revenue-trip1,1,1,1,1",
+                    "non-revenue-trip1,1,1,,",
+                    "non-revenue-trip1,1,1,1,1"
+                ),
+                // Non revenue pickup and drop off, but revenue continuous pickup/drop off.
+                List.of(
+                    "revenue-trip,0,0,2,2",
+                    "revenue-trip,0,0,1,1",
+                    "revenue-trip,0,0,2,2",
+                    "revenue-trip,0,0,2,2"
+                ),
+                allFieldIndexes
+            )
+        );
     }
 
     @Test
@@ -61,9 +110,10 @@ class RemoveNonRevenueTripsTransformationTest extends UnitTest {
         File zip = zipFolderFiles("non-revenue-trips");
         FeedTransformZipTarget zipTarget = new FeedTransformZipTarget(zip);
         trans.transform(zipTarget, new MonitorableJob.Status());
-        assertEquals(2, zipTarget.feedTransformResult.tableTransformResults.size());
-        assertEquals(4, zipTarget.feedTransformResult.tableTransformResults.get(0).deletedCount);
-        assertEquals(1, zipTarget.feedTransformResult.tableTransformResults.get(1).deletedCount);
+        List<TableTransformResult> tableTransformResults = zipTarget.feedTransformResult.tableTransformResults;
+        assertEquals(2, tableTransformResults.size());
+        assertEquals(4, tableTransformResults.get(0).deletedCount);
+        assertEquals(1, tableTransformResults.get(1).deletedCount);
         assertFalse(hasNonRevenueTrips(zipTarget));
     }
 
