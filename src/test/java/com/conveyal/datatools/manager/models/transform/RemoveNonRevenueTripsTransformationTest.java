@@ -1,9 +1,18 @@
 package com.conveyal.datatools.manager.models.transform;
 
+import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.common.status.MonitorableJob;
+import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.auth.Auth0Connection;
+import com.conveyal.datatools.manager.models.FeedSource;
+import com.conveyal.datatools.manager.models.FeedVersion;
+import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.models.TableTransformResult;
+import com.conveyal.datatools.manager.persistence.Persistence;
 import com.csvreader.CsvReader;
+import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
@@ -22,7 +31,10 @@ import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipFile;
 
+import static com.conveyal.datatools.TestUtils.appendDate;
+import static com.conveyal.datatools.TestUtils.createFeedVersion;
 import static com.conveyal.datatools.TestUtils.zipFolderFiles;
+import static com.conveyal.datatools.manager.models.FeedRetrievalMethod.MANUALLY_UPLOADED;
 import static com.conveyal.datatools.manager.models.transform.RemoveNonRevenueTripsTransformation.CONTINUOUS_DROP_OFF_FIELD_NAME;
 import static com.conveyal.datatools.manager.models.transform.RemoveNonRevenueTripsTransformation.CONTINUOUS_PICKUP_FIELD_NAME;
 import static com.conveyal.datatools.manager.models.transform.RemoveNonRevenueTripsTransformation.DROP_OFF_FIELD_NAME;
@@ -33,7 +45,35 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 
 class RemoveNonRevenueTripsTransformationTest extends UnitTest {
 
+    private static Project project;
+    private static FeedSource feedSource;
     private static final RemoveNonRevenueTripsTransformation trans = new RemoveNonRevenueTripsTransformation();
+    private static final String MTC_ENABLED_FIELDS = "extensions.mtc.enabled";
+    private static final String PREV_MTC_ENABLED = DataManager.getConfigPropertyAsText(MTC_ENABLED_FIELDS);
+
+    @BeforeAll
+    static void setUp() throws IOException {
+        // start server if it isn't already running
+        DatatoolsTest.setUp();
+        Auth0Connection.setAuthDisabled(true);
+
+        DataManager.overrideConfigProperty(MTC_ENABLED_FIELDS, "true");
+
+        project = new Project();
+        project.name = appendDate("Test");
+        Persistence.projects.create(project);
+
+        feedSource = new FeedSource(appendDate("Test Feed"), project.id, MANUALLY_UPLOADED);
+        Persistence.feedSources.create(feedSource);
+    }
+
+    @AfterAll
+    static void tearDown() {
+        Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
+        // Project delete cascades to feed sources.
+        project.delete();
+        DataManager.overrideConfigProperty(MTC_ENABLED_FIELDS, PREV_MTC_ENABLED);
+    }
 
     @ParameterizedTest
     @MethodSource("createNonRevenueCases")
@@ -107,18 +147,31 @@ class RemoveNonRevenueTripsTransformationTest extends UnitTest {
 
     @Test
     void testEndToEndNonRevenueTripRemoval() throws Exception {
+        FeedVersion sourceVersion = createFeedVersion(
+            feedSource,
+            zipFolderFiles("non-revenue-trips")
+        );
+        hadExpectTransformResults(sourceVersion.feedTransformResult.tableTransformResults);
+        assertFalse(hasNonRevenueTrips(sourceVersion.retrieveGtfsFile().getAbsolutePath()));
+    }
+
+    @Test
+    void testDirectNonRevenueTripRemovalTransformation() throws Exception {
         File zip = zipFolderFiles("non-revenue-trips");
         FeedTransformZipTarget zipTarget = new FeedTransformZipTarget(zip);
         trans.transform(zipTarget, new MonitorableJob.Status());
-        List<TableTransformResult> tableTransformResults = zipTarget.feedTransformResult.tableTransformResults;
-        assertEquals(2, tableTransformResults.size());
-        assertEquals(4, tableTransformResults.get(0).deletedCount);
-        assertEquals(1, tableTransformResults.get(1).deletedCount);
-        assertFalse(hasNonRevenueTrips(zipTarget));
+        hadExpectTransformResults(zipTarget.feedTransformResult.tableTransformResults);
+        assertFalse(hasNonRevenueTrips(zipTarget.gtfsFile.getAbsolutePath()));
     }
 
-    private boolean hasNonRevenueTrips(FeedTransformZipTarget zipTarget) throws IOException {
-        try (ZipFile gtfsZipfile = new ZipFile(zipTarget.gtfsFile.getAbsolutePath())) {
+    private void hadExpectTransformResults(List<TableTransformResult> tableTransformResults) {
+        assertEquals(2, tableTransformResults.size());
+        assertEquals(4, tableTransformResults.get(0).addedCount);
+        assertEquals(1, tableTransformResults.get(1).addedCount);
+    }
+
+    private boolean hasNonRevenueTrips(String pathToZip) throws IOException {
+        try (ZipFile gtfsZipfile = new ZipFile(pathToZip)) {
             for (String tableName : List.of("stop_times.txt", "trips.txt")) {
                 ZipEntry entry = gtfsZipfile.getEntry(tableName);
 

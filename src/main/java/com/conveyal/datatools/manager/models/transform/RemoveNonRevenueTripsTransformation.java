@@ -256,7 +256,7 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
             ) {
                 Files.copy(inputStream, getTablePathInZip(tableName, targetZipFile), StandardCopyOption.REPLACE_EXISTING);
                 zipTarget.feedTransformResult.tableTransformResults.add(
-                    new TableTransformResult(tableName, rows.size(), 0, 0)
+                    new TableTransformResult(tableName, 0, 0, rows.size())
                 );
             }
         }

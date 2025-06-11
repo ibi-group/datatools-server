@@ -93,7 +93,10 @@ public class ProcessSingleFeedJob extends FeedVersionJob {
         List<ZipTransformation> zipTransformations = new ArrayList<>();
 
         if (DataManager.isExtensionEnabled("mtc")) {
-            zipTransformations.add(new RemoveNonRevenueTripsTransformation());
+            RemoveNonRevenueTripsTransformation removeNonRevenueTripsTransformation = new RemoveNonRevenueTripsTransformation();
+            // A valid (but arbitrary) table name to prevent transformation failing because this is not set.
+            removeNonRevenueTripsTransformation.table = "trips";
+            zipTransformations.add(removeNonRevenueTripsTransformation);
         }
 
         if (shouldTransform) {
