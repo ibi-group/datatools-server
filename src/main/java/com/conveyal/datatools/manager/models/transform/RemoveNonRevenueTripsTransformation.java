@@ -74,7 +74,7 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
             CsvReader csvReaderForTrips = gtfsTable.getCsvReader(new ZipFile(tempZipPath.toAbsolutePath().toString()), null);
             final String[] headersForTrips = csvReaderForTrips.getHeaders();
             Field[] fieldsFoundInStopTrips = gtfsTable.getFieldsFromFieldHeaders(headersForTrips, null);
-            int  tripIdFieldIndex = getFieldIndex(fieldsFoundInStopTrips, TRIP_ID_FIELD_NAME);
+            int tripIdFieldIndex = getFieldIndex(fieldsFoundInStopTrips, TRIP_ID_FIELD_NAME);
             if (tripIdFieldIndex == -1) {
                 status.error = true;
                 status.fail("Unable to remove non revenue trips because the trips file does not contain the required trip id field.");
@@ -159,32 +159,32 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
         CsvReader csvReader,
         Map<String, Integer> fieldIndexes
     ) throws IOException {
-        Map<String, List<String[]>> nonRevenueTrips = new HashMap<>();
-        Map<String, List<String[]>> revenueTrips = new HashMap<>();
+        Map<String, List<String[]>> nonRevenueStopTimes = new HashMap<>();
+        Map<String, List<String[]>> revenueStopTimes = new HashMap<>();
         while (csvReader.readRecord()) {
             String tripId = csvReader.get(fieldIndexes.get(TRIP_ID_FIELD_NAME));
             String[] currentRecord = csvReader.getValues();
 
             if (isRevenueStopTime(csvReader, fieldIndexes, hasContinuousFields(fieldIndexes))) {
                 // Candidate for revenue trip.
-                List<String[]> nonRevenueRecords = nonRevenueTrips.remove(tripId);
+                List<String[]> nonRevenueRecords = nonRevenueStopTimes.remove(tripId);
                 if (nonRevenueRecords != null) {
                     // Move all previously flagged non-revenue trips to revenue trips.
-                    revenueTrips.computeIfAbsent(tripId, k -> new ArrayList<>()).addAll(nonRevenueRecords);
+                    revenueStopTimes.computeIfAbsent(tripId, k -> new ArrayList<>()).addAll(nonRevenueRecords);
                 }
                 // Add the current record as a revenue trip.
-                revenueTrips.computeIfAbsent(tripId, k -> new ArrayList<>()).add(currentRecord);
+                revenueStopTimes.computeIfAbsent(tripId, k -> new ArrayList<>()).add(currentRecord);
             } else {
                 // Candidate for non revenue trip.
-                if (!revenueTrips.containsKey(tripId)) {
+                if (!revenueStopTimes.containsKey(tripId)) {
                     // Only add to non-revenue trips if it's not already marked as a revenue trip.
-                    nonRevenueTrips.computeIfAbsent(tripId, k -> new ArrayList<>()).add(currentRecord);
+                    nonRevenueStopTimes.computeIfAbsent(tripId, k -> new ArrayList<>()).add(currentRecord);
                 } else {
-                    revenueTrips.computeIfAbsent(tripId, k -> new ArrayList<>()).add(currentRecord);
+                    revenueStopTimes.computeIfAbsent(tripId, k -> new ArrayList<>()).add(currentRecord);
                 }
             }
         }
-        return revenueTrips;
+        return revenueStopTimes;
     }
 
     /**

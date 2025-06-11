@@ -19,6 +19,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
@@ -89,12 +90,18 @@ public class ProcessSingleFeedJob extends FeedVersionJob {
         LOG.info("Processing feed for {}", feedVersion.id);
         FeedTransformRules rules = feedSource.getRulesForRetrievalMethod(feedVersion.retrievalMethod);
         boolean shouldTransform = rules != null;
+        List<ZipTransformation> zipTransformations = new ArrayList<>();
+
+        if (DataManager.isExtensionEnabled("mtc")) {
+            zipTransformations.add(new RemoveNonRevenueTripsTransformation());
+        }
+
         if (shouldTransform) {
+            zipTransformations.addAll(rules.getActiveTransformations(feedVersion, ZipTransformation.class));
+        }
+
+        if (!zipTransformations.isEmpty()) {
             // Run zip transformations before load to handle any operations that must be applied directly to the zip file.
-            List<ZipTransformation> zipTransformations = rules.getActiveTransformations(feedVersion, ZipTransformation.class);
-            if (DataManager.isExtensionEnabled("mtc")) {
-                zipTransformations.add(new RemoveNonRevenueTripsTransformation());
-            }
             FeedTransformZipTarget zipTarget = new FeedTransformZipTarget(feedVersion.retrieveGtfsFile());
             for (ZipTransformation transformation : zipTransformations) {
                 ArbitraryTransformJob zipTransform = new ArbitraryTransformJob(owner, zipTarget, transformation);
