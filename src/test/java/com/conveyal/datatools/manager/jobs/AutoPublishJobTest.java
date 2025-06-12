@@ -53,6 +53,11 @@ public class AutoPublishJobTest extends UnitTest {
     public static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
+
+        // Enabled MTC extension, but disable the transformations.
+        ProcessSingleFeedJob.ENABLE_MTC_TRANSFORMATIONS = false;
+        DatatoolsTest.enableMTCExtension();
+
         Auth0Connection.setAuthDisabled(true);
 
         // Create a project, feed sources, and feed versions to merge.
@@ -83,6 +88,8 @@ public class AutoPublishJobTest extends UnitTest {
             project.delete();
         }
         Persistence.externalFeedSourceProperties.removeById(agencyIdProp.id);
+        DatatoolsTest.resetMTCExtension();
+        ProcessSingleFeedJob.ENABLE_MTC_TRANSFORMATIONS = true;
     }
 
     /**
