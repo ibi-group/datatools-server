@@ -3,7 +3,6 @@ package com.conveyal.datatools.manager.models.transform;
 import com.conveyal.datatools.DatatoolsTest;
 import com.conveyal.datatools.UnitTest;
 import com.conveyal.datatools.common.status.MonitorableJob;
-import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.auth.Auth0Connection;
 import com.conveyal.datatools.manager.models.FeedSource;
 import com.conveyal.datatools.manager.models.FeedVersion;
@@ -48,21 +47,16 @@ class RemoveNonRevenueTripsTransformationTest extends UnitTest {
     private static Project project;
     private static FeedSource feedSource;
     private static final RemoveNonRevenueTripsTransformation trans = new RemoveNonRevenueTripsTransformation();
-    private static final String MTC_ENABLED_FIELDS = "extensions.mtc.enabled";
-    private static final String PREV_MTC_ENABLED = DataManager.getConfigPropertyAsText(MTC_ENABLED_FIELDS);
 
     @BeforeAll
     static void setUp() throws IOException {
         // start server if it isn't already running
         DatatoolsTest.setUp();
+        DatatoolsTest.enableMTCExtension();
         Auth0Connection.setAuthDisabled(true);
-
-        DataManager.overrideConfigProperty(MTC_ENABLED_FIELDS, "true");
-
         project = new Project();
         project.name = appendDate("Test");
         Persistence.projects.create(project);
-
         feedSource = new FeedSource(appendDate("Test Feed"), project.id, MANUALLY_UPLOADED);
         Persistence.feedSources.create(feedSource);
     }
@@ -72,7 +66,7 @@ class RemoveNonRevenueTripsTransformationTest extends UnitTest {
         Auth0Connection.setAuthDisabled(Auth0Connection.getDefaultAuthDisabled());
         // Project delete cascades to feed sources.
         project.delete();
-        DataManager.overrideConfigProperty(MTC_ENABLED_FIELDS, PREV_MTC_ENABLED);
+        DatatoolsTest.resetMTCExtension();
     }
 
     @ParameterizedTest

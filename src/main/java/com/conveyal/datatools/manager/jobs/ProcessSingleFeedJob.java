@@ -37,6 +37,9 @@ public class ProcessSingleFeedJob extends FeedVersionJob {
     private static final Logger LOG = LoggerFactory.getLogger(ProcessSingleFeedJob.class);
     private final FeedSource feedSource;
 
+    // Used in testing when the MTC extension is needed but transformations are not.
+    public static boolean ENABLE_MTC_TRANSFORMATIONS = true;
+
     /**
      * Create a job for the given feed version.
      */
@@ -92,7 +95,7 @@ public class ProcessSingleFeedJob extends FeedVersionJob {
         boolean shouldTransform = rules != null;
         List<ZipTransformation> zipTransformations = new ArrayList<>();
 
-        if (DataManager.isExtensionEnabled("mtc")) {
+        if (ENABLE_MTC_TRANSFORMATIONS && DataManager.isExtensionEnabled("mtc")) {
             RemoveNonRevenueTripsTransformation removeNonRevenueTripsTransformation = new RemoveNonRevenueTripsTransformation();
             // A valid (but arbitrary) table name to prevent transformation failing because this is not set.
             removeNonRevenueTripsTransformation.table = "trips";
