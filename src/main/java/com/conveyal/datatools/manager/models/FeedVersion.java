@@ -2,6 +2,7 @@ package com.conveyal.datatools.manager.models;
 
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.Scheduler;
+import com.conveyal.datatools.common.utils.aws.CheckedAWSException;
 import com.conveyal.datatools.manager.DataManager;
 import com.conveyal.datatools.manager.jobs.ValidateFeedJob;
 import com.conveyal.datatools.manager.jobs.ValidateMobilityDataFeedJob;
@@ -16,6 +17,7 @@ import com.conveyal.gtfs.error.NewGTFSErrorType;
 import com.conveyal.gtfs.graphql.fetchers.JDBCFetcher;
 import com.conveyal.gtfs.loader.Feed;
 import com.conveyal.gtfs.loader.FeedLoadResult;
+import com.conveyal.gtfs.util.InvalidNamespaceException;
 import com.conveyal.gtfs.validator.MTCValidator;
 import com.conveyal.gtfs.validator.ValidationResult;
 import com.conveyal.gtfs.validator.model.Priority;
@@ -599,6 +601,16 @@ public class FeedVersion extends Model implements Serializable {
         } catch (Exception e) {
             LOG.warn("Error deleting version", e);
         }
+    }
+
+    /**
+     * Delete resources related to this orphaned feed version. Then delete the orphaned feed version.
+     */
+    public void deleteOrphan() throws SQLException, InvalidNamespaceException, CheckedAWSException {
+        feedStore.deleteFeed(id);
+        GTFS.delete(namespace, DataManager.GTFS_DATA_SOURCE);
+        LOG.info("Dropped feed version's GTFS tables from Postgres.");
+        Persistence.feedVersions.removeById(id);
     }
 
     /**
