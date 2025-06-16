@@ -27,6 +27,7 @@ class DataSanitizerTest {
 
     private static Project project;
     private static FeedVersion feedVersionOrphan;
+    private static FeedVersion feedVersionWithParent;
 
     @BeforeAll
     static void setUp() throws IOException {
@@ -38,8 +39,14 @@ class DataSanitizerTest {
         Persistence.projects.create(project);
         FeedSource feedSource = new FeedSource(appendDate("Test Feed"), project.id, MANUALLY_UPLOADED);
         Persistence.feedSources.create(feedSource);
+        FeedSource feedSourceParent = new FeedSource(appendDate("Test Feed 2"), project.id, MANUALLY_UPLOADED);
+        Persistence.feedSources.create(feedSourceParent);
         feedVersionOrphan = createFeedVersion(
             feedSource,
+            zipFolderFiles("fake-agency-with-only-calendar")
+        );
+        feedVersionWithParent = createFeedVersion(
+            feedSourceParent,
             zipFolderFiles("fake-agency-with-only-calendar")
         );
         // Delete feed source to orphan feed version.
@@ -60,11 +67,13 @@ class DataSanitizerTest {
     void canIdentifyOrphanedFeedVersion() {
         assertEquals(1, DataSanitizer.sanitizeFeedVersions(false));
         assertNotNull(Persistence.feedVersions.getById(feedVersionOrphan.id));
+        assertNotNull(Persistence.feedVersions.getById(feedVersionWithParent.id));
     }
 
     @Test
     void canRemoveOrphanedFeedVersion() {
         assertEquals(1, DataSanitizer.sanitizeFeedVersions(true));
         assertNull(Persistence.feedVersions.getById(feedVersionOrphan.id));
+        assertNotNull(Persistence.feedVersions.getById(feedVersionWithParent.id));
     }
 }
