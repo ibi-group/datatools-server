@@ -103,7 +103,6 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
         } catch (Exception e) {
             status.fail("Unknown error encountered while attempting to remove non revenue trip from zip file.", e);
         }
-
     }
 
     /**
@@ -160,7 +159,7 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
     }
 
     /**
-     * Get only the trips (and related rows) for revenue stop times. These are stop times were at least one stop time
+     * Get only the trips (and related rows) for revenue stop times. These are stop times where at least one stop time
      * has a pickup, drop off, continuous pickup or continuous drop off. This will have the effect of removing non
      * revenue trips.
      */
