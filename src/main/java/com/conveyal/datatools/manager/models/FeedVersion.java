@@ -3,6 +3,7 @@ package com.conveyal.datatools.manager.models;
 import com.conveyal.datatools.common.status.MonitorableJob;
 import com.conveyal.datatools.common.utils.Scheduler;
 import com.conveyal.datatools.manager.DataManager;
+import com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource;
 import com.conveyal.datatools.manager.jobs.ValidateFeedJob;
 import com.conveyal.datatools.manager.jobs.ValidateMobilityDataFeedJob;
 import com.conveyal.datatools.manager.jobs.validation.RouteTypeValidatorBuilder;
@@ -48,6 +49,8 @@ import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.time.LocalDate;
 import java.util.Date;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -365,15 +368,24 @@ public class FeedVersion extends Model implements Serializable {
             // FIXME: pass status to validate? Or somehow listen to events?
             status.update("Validating feed...", 33);
 
+            FeedSource fs = Persistence.feedSources.getById(this.feedSourceId);
+
             // Validate the feed version.
             // Certain extensions, if enabled, have extra validators.
             if (isExtensionEnabled("mtc")) {
+                Map<String, Map<String, String>> properties = fs.externalProperties();
+                String primaryStopCodePrefix = MtcFeedResource.getFieldValue(properties, MtcFeedResource.STOP_CODE_PRIMARY_PREFIX_FIELD_NAME);
+                List<String> secondaryStopCodePrefixes = MtcFeedResource.getSecondaryStopCodePrefixes(properties);
                 validationResult = GTFS.validate(feedLoadResult.uniqueIdentifier, DataManager.GTFS_DATA_SOURCE,
                     RouteTypeValidatorBuilder::buildRouteValidator,
-                    MTCValidator::new
+                    (feed, errorStorage) -> new MTCValidator(
+                        feed,
+                        errorStorage,
+                        primaryStopCodePrefix,
+                        secondaryStopCodePrefixes
+                    )
                 );
             } else {
-                FeedSource fs = Persistence.feedSources.getById(this.feedSourceId);
 
                 /*
                   Get feed_id from feed version
@@ -512,13 +524,14 @@ public class FeedVersion extends Model implements Serializable {
         return hasSpecificErrorTypes(Stream.of(
             NewGTFSErrorType.ILLEGAL_FIELD_VALUE,
             NewGTFSErrorType.MISSING_COLUMN,
+            NewGTFSErrorType.MISSING_STOP_CODE_PREFIX,
+            NewGTFSErrorType.MULTIPLE_SHARED_STOPS_GROUPS,
             NewGTFSErrorType.REFERENTIAL_INTEGRITY,
             NewGTFSErrorType.SERVICE_WITHOUT_DAYS_OF_WEEK,
-            NewGTFSErrorType.TABLE_MISSING_COLUMN_HEADERS,
+            NewGTFSErrorType.SHARED_STOP_GROUP_MULTIPLE_PRIMARY_STOPS,
             NewGTFSErrorType.TABLE_IN_SUBDIRECTORY,
-            NewGTFSErrorType.WRONG_NUMBER_OF_FIELDS,
-            NewGTFSErrorType.MULTIPLE_SHARED_STOPS_GROUPS,
-            NewGTFSErrorType.SHARED_STOP_GROUP_MULTIPLE_PRIMARY_STOPS
+            NewGTFSErrorType.TABLE_MISSING_COLUMN_HEADERS,
+            NewGTFSErrorType.WRONG_NUMBER_OF_FIELDS
         ));
     }
 

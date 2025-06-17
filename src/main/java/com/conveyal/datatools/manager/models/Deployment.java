@@ -18,6 +18,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.common.io.ByteStreams;
 import com.mongodb.client.FindIterable;
+import org.apache.logging.log4j.util.Strings;
 import org.bson.codecs.pojo.annotations.BsonIgnore;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -355,7 +356,9 @@ public class Deployment extends Model implements Serializable {
                 LOG.error("Could not retrieve file for {}", v.name);
                 throw new RuntimeException(e1);
             }
-            ZipEntry e = new ZipEntry(gtfsFile.getName());
+            // Determine the entry name for the zip file.
+            String entryName = getFeedSourceBundleFilename(v, gtfsFile);
+            ZipEntry e = new ZipEntry(entryName);
             out.putNextEntry(e);
             ByteStreams.copy(in, out);
             try {
@@ -415,6 +418,29 @@ public class Deployment extends Model implements Serializable {
 
         // Finally close the zip output stream. The dump file is now complete.
         out.close();
+    }
+
+    /**
+     * Determine the entry name for a GTFS file within the deployment bundle.
+     * This prioritizes the FeedSource filename if available and valid, otherwise falls back
+     * to the original GTFS filename derived from the FeedVersion.
+     *
+     * @param feedVersion The FeedVersion being processed.
+     * @param gtfsFile    The GTFS file associated with the FeedVersion.
+     * @return The calculated entry name for the zip file.
+     */
+    public String getFeedSourceBundleFilename(FeedVersion feedVersion, File gtfsFile) {
+        String gtfsFileName = gtfsFile.getName();
+        FeedSource fs = feedVersion.parentFeedSource();
+
+        if (fs != null && !Strings.isBlank(fs.filename)) {
+            // Use FeedSource filename if available, ensuring it ends with .zip
+            LOG.info("Using FeedSource filename for zip entry: {}", gtfsFileName);
+            return fs.filename.endsWith(".zip") ? fs.filename : fs.filename + ".zip";
+        } 
+        // Fallback to the original GTFS filename derived from FeedVersion
+        LOG.info("Using FeedVersion filename for zip entry: {}", gtfsFileName);
+        return gtfsFileName;
     }
 
     /** Download config from provided URL. */
@@ -666,7 +692,18 @@ public class Deployment extends Model implements Serializable {
     }
 
     public enum TripPlannerVersion {
-        OTP_1, OTP_2
+        OTP_1("otp/routers/default"),
+        OTP_2("otp/actuators/health");
+
+        private final String uptimeCheckUrl;
+
+        TripPlannerVersion(String uptimeCheckUrl) {
+            this.uptimeCheckUrl = uptimeCheckUrl;
+        }
+
+        public static String getUptimeCheckUrl(TripPlannerVersion version) {
+            return (version == OTP_2) ? OTP_2.uptimeCheckUrl : OTP_1.uptimeCheckUrl;
+        }
     }
 
     /**

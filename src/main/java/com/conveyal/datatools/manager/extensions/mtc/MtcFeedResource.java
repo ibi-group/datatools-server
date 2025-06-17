@@ -51,6 +51,8 @@ public class MtcFeedResource implements ExternalFeedResource {
     public static final String TEST_AGENCY = "test-agency";
     public static final String AGENCY_ID_FIELDNAME = "AgencyId";
     public static final String RESOURCE_TYPE = "MTC";
+    public static final String STOP_CODE_PRIMARY_PREFIX_FIELD_NAME = "PrimaryPrefix";
+    public static final String STOP_CODE_SECONDARY_PREFIXES_FIELD_NAME = "SecondaryPrefixes";
 
     private String rtdApi, s3Bucket, s3Prefix;
 
@@ -336,5 +338,15 @@ public class MtcFeedResource implements ExternalFeedResource {
     static String convertRtdString(String s) {
         if ("null".equals(s)) return "";
         return s;
+    }
+
+    public static String getFieldValue(Map<String, Map<String, String>> properties, String fieldName) {
+        Map<String, String> values = properties.get(RESOURCE_TYPE);
+        return values.get(fieldName);
+    }
+
+    public static List<String> getSecondaryStopCodePrefixes(Map<String, Map<String, String>> properties) {
+        String secondaryStopPrefixValue = MtcFeedResource.getFieldValue(properties, MtcFeedResource.STOP_CODE_SECONDARY_PREFIXES_FIELD_NAME);
+        return (secondaryStopPrefixValue == null) ? null : List.of(secondaryStopPrefixValue.split(","));
     }
 }

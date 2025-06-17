@@ -9,6 +9,8 @@ import com.conveyal.datatools.common.utils.aws.EC2Utils;
 import com.conveyal.datatools.manager.auth.Auth0UserProfile;
 import com.conveyal.datatools.manager.models.Deployment;
 import com.conveyal.datatools.manager.models.EC2Info;
+import com.conveyal.datatools.manager.models.FeedSource;
+import com.conveyal.datatools.manager.models.FeedVersion;
 import com.conveyal.datatools.manager.models.OtpServer;
 import com.conveyal.datatools.manager.models.Project;
 import com.conveyal.datatools.manager.persistence.Persistence;
@@ -18,6 +20,7 @@ import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Date;
@@ -26,6 +29,7 @@ import java.util.List;
 import static com.conveyal.datatools.TestUtils.getBooleanEnvVar;
 import static com.zenika.snapshotmatcher.SnapshotMatcher.matchesSnapshot;
 import static org.hamcrest.MatcherAssert.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
@@ -88,6 +92,41 @@ public class DeployJobTest extends UnitTest {
 
         deployment.customRouterConfigUrl = "http://www.google.com";
         assertNotNull(deployment.downloadConfig(deployment.customRouterConfigUrl));
+    }
+
+    /**
+     * Tests that the bundle filename is correctly determined.
+     */
+    @Test
+    public void canGetFeedSourceBundleFilename() throws IOException {
+        FeedSource feedSource = new FeedSource("Test FeedSource");
+        feedSource.projectId = project.id;
+        FeedVersion feedVersion = new FeedVersion(feedSource);
+        File gtfsFile = File.createTempFile("test-gtfs-", ".zip");
+        var gtfsFileName = gtfsFile.getName();
+        gtfsFile.deleteOnExit();
+
+        feedSource.filename = "gtfs_from_source.zip";
+        Persistence.feedSources.create(feedSource);
+        assertEquals("gtfs_from_source.zip", deployment.getFeedSourceBundleFilename(feedVersion, gtfsFile));
+
+        feedSource.filename = "gtfs_from_source";
+        Persistence.feedSources.replace(feedSource.id, feedSource);
+        assertEquals("gtfs_from_source.zip", deployment.getFeedSourceBundleFilename(feedVersion, gtfsFile));
+
+        feedSource.filename = " ";
+        Persistence.feedSources.replace(feedSource.id, feedSource);
+        assertEquals(gtfsFileName, deployment.getFeedSourceBundleFilename(feedVersion, gtfsFile));
+
+        feedSource.filename = null;
+        Persistence.feedSources.replace(feedSource.id, feedSource);
+        assertEquals(gtfsFileName, deployment.getFeedSourceBundleFilename(feedVersion, gtfsFile));
+
+        FeedVersion versionWithNullSource = new FeedVersion();
+        assertEquals(gtfsFileName, deployment.getFeedSourceBundleFilename(versionWithNullSource, gtfsFile));
+
+        Persistence.feedVersions.removeById(feedVersion.id);
+        Persistence.feedSources.removeById(feedSource.id);
     }
 
     /**

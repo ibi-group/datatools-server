@@ -97,7 +97,10 @@ public class ProcessSingleFeedJob extends FeedVersionJob {
                 // Run transform job in line so we can monitor the error status before load/validate begins.
                 zipTransform.run();
                 // Short circuit the feed load/validate if a pre-load transform fails.
-                if (zipTransform.status.error) return;
+                if (zipTransform.status.error) {
+                    status.fail("Feed transformation failed, see details below.");
+                    return;
+                }
             }
             // Assign transform result from zip target.
             feedVersion.feedTransformResult = zipTarget.feedTransformResult;

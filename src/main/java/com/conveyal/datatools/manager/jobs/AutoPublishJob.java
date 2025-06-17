@@ -54,10 +54,20 @@ public class AutoPublishJob extends MonitorableJobWithResourceLock<FeedSource> {
             }
         }
 
-        // If validation successful, just execute the feed updating process.
         if (!status.error) {
+            // Validation successful, just execute the feed updating process.
             FeedVersionController.publishToExternalResource(latestFeedVersion);
             LOG.info("Auto-published feed source {} to external resource.", feedSource.id);
+        } else {
+            // Notify feed and project subscribed users of failure.
+            String message = String.format(
+                "WARNING: Auto-published feed source %s failed to deploy. Error: %s.",
+                feedSource.name,
+                status.message
+            );
+            NotifyUsersForSubscriptionJob.createNotification("feed-updated", feedSource.id, message);
+            NotifyUsersForSubscriptionJob.createNotification("project-updated", feedSource.projectId, message);
+            NotifyAdminUsersJob.createNotification(feedSource.projectId, message);
         }
     }
 }
