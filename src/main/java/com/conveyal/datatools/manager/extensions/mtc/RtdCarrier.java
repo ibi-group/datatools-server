@@ -9,6 +9,8 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 
 import java.lang.reflect.Field;
 
+import static com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource.STOP_CODE_PRIMARY_PREFIX_FIELD_NAME;
+import static com.conveyal.datatools.manager.extensions.mtc.MtcFeedResource.STOP_CODE_SECONDARY_PREFIXES_FIELD_NAME;
 import static com.conveyal.datatools.manager.models.ExternalFeedSourceProperty.constructId;
 
 /**
@@ -70,6 +72,12 @@ public class RtdCarrier {
     @JsonProperty
     String EditedDate;
 
+    @JsonProperty
+    String PrimaryPrefix;
+
+    @JsonProperty
+    String SecondaryPrefixes;
+
     /** Empty constructor needed for serialization (also used to create empty carrier). */
     public RtdCarrier() {
     }
@@ -94,6 +102,8 @@ public class RtdCarrier {
         AgencyEmail = getValueForField(source, "AgencyEmail");
         AgencyUrl = getValueForField(source, "AgencyUrl");
         AgencyFareUrl = getValueForField(source, "AgencyFareUrl");
+        PrimaryPrefix = getValueForField(source, STOP_CODE_PRIMARY_PREFIX_FIELD_NAME);
+        SecondaryPrefixes = getValueForField(source, STOP_CODE_SECONDARY_PREFIXES_FIELD_NAME);
     }
 
     private String getPropId(FeedSource source, String fieldName) {
