@@ -278,7 +278,7 @@ public class RemoveNonRevenueTripsTransformation extends ZipTransformation {
 
     @Override
     public void validateParameters(MonitorableJob.Status status) {
-        // No required.
+        // Not required.
     }
 
     /**
