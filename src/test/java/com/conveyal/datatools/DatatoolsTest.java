@@ -65,7 +65,7 @@ public abstract class DatatoolsTest {
         LOG.info("Starting server");
         try {
             DataManager.main(args);
-            // Disable the MTC extension by default. This is to prevent MTC transformations being triggered in
+            // Disable the MTC extension by default. This is to prevent MTC transformations from being triggered in
             // ProcessSingleFeedJob.
             DataManager.overrideConfigProperty("extensions.mtc.enabled", "false");
             setUpIsDone = true;

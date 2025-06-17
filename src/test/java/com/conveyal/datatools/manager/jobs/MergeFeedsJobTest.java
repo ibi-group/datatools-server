@@ -88,7 +88,7 @@ public class MergeFeedsJobTest extends UnitTest {
         // start server if it isn't already running
         DatatoolsTest.setUp();
 
-        // Enabled MTC extension, but disable the transformations.
+        // Enable MTC extension, but disable the transformations.
         ProcessSingleFeedJob.ENABLE_MTC_TRANSFORMATIONS = false;
         DatatoolsTest.enableMTCExtension();
         Auth0Connection.setAuthDisabled(true);
